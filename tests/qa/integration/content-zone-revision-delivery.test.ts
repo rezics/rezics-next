@@ -8,7 +8,8 @@ import { readZoneConfiguration, type ZoneSitePublicationReceipt }
 import { isZonePublishedPageRevision } from '../../../services/main/src/modules/zone/publication.ts';
 import { startMediaStack } from './media-support.ts';
 
-interface Draft { revisionId: string; variantId: string; byteDigest: string }
+interface Draft { revisionId: string; variantId: string; byteDigest: string;
+  sourcePosition: { dataEpoch: string } }
 interface Exact { reference: { resourceId: string; revisionId: string; byteDigest: string };
   serializedJson: string; body: { body: string; document: unknown } }
 
@@ -72,12 +73,12 @@ async function fixture() {
       '/v1/content-drafts', { profile: 'content-text-v1', resourceId: created.zone, variantId,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
         expectedHead, document, actingSubject: actor }), 201);
-    const firstDocument = fromPlainText('Selected exact site document');
+    const firstDocument = fromPlainText('Selected exact site document', 'blocks');
     const first = await draft(firstDocument, null);
-    const later = await draft(fromPlainText('Unpublished replacement document'), first.revisionId);
     const publish = async (saved: Draft) => json<ZoneSitePublicationReceipt>(await call('POST',
       `/v1/zones/${created.zone.slice(-36)}/site-publications`, {
-        pages: [{ page: created.zone, variantId, revisionId: saved.revisionId }],
+        pages: [{ page: created.zone, variantId, revisionId: saved.revisionId,
+          byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch }],
         routesRevision: created.navigationRevision, navigationRevision: created.navigationRevision,
         expectedHead: (await readZoneConfiguration(stack.env, created.zone)).revision, actingSubject: actor,
       }), 201);
@@ -93,7 +94,7 @@ async function fixture() {
       return { pending, reached, release: barrier.release };
     };
     return { ...stack, ...created, actor, otherActor, editorPrincipalId: member.principalId,
-      firstDocument, first, later, publish, read, pauseRead };
+      firstDocument, first, draft, publish, read, pauseRead };
   } catch (error) { await stack.stop(); throw error; }
 }
 
@@ -110,11 +111,13 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
     try { await healthy.reached; } finally { healthy.release(); await healthy.pending; }
     expect(await json<Exact>(await healthy.pending)).toEqual(privateExact);
     expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, f.first.revisionId)).toBe(true);
+    // A site pin requires the current draft head, so the replacement is saved after the first publication.
+    const later = await f.draft(fromPlainText('Unpublished replacement document', 'blocks'), f.first.revisionId);
 
     const bundle = f.pauseRead(f.first);
     try {
       await bundle.reached;
-      await f.publish(f.later);
+      await f.publish(later);
       expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, f.first.revisionId)).toBe(false);
     } finally { bundle.release(); await bundle.pending; }
     const withdrawn = await bundle.pending;
@@ -150,7 +153,7 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
         expect(body).not.toContain('Selected exact site document');
         expect(body).not.toContain('serializedJson');
         // Editor withdrawal does not withdraw the distinct live public bundle.
-        expect((await f.read(f.later)).status).toBe(200);
+        expect((await f.read(later)).status).toBe(200);
       } finally {
         if (revokedIds.length) {
           // Revoked mandates are immutable; recovery installs a fresh controller proof.
