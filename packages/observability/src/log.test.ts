@@ -175,6 +175,7 @@ test('a nested checkout fault names its worker tick and drops a tick that is dat
   expect(JSON.parse(named!)).toEqual({
     level: 'error',
     event: 'worker_fault',
+    time: expect.any(String),
     'rezics.worker.name': 'main.database.nested-checkout',
     'error.class': 'NestedPoolCheckoutError',
     'rezics.checkout.inner': 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
@@ -183,6 +184,7 @@ test('a nested checkout fault names its worker tick and drops a tick that is dat
   expect(JSON.parse(dropped!)).toEqual({
     level: 'error',
     event: 'worker_fault',
+    time: expect.any(String),
     'rezics.worker.name': 'main.database.nested-checkout',
     'error.class': 'NestedPoolCheckoutError',
     'rezics.checkout.inner': 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
