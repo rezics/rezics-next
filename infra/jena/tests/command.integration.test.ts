@@ -147,10 +147,12 @@ beforeAll(async () => {
   expect(health?.publicSearchWriteEpoch).toMatch(/^(0|[1-9][0-9]*)$/);
   expect(health?.publicSearchWriteActive).toBe(false);
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
-  await fixtureUpdate([...Object.values(graphs), searchGraph, 'urn:rezics:search:probe']
-    .map(graph => `CLEAR SILENT GRAPH <${graph}>`).join('; '));
-  await initializeFreshGraph(new FusekiClient(base),
-    { dataEpoch: crypto.randomUUID(), routingEpoch: '0' });
+  // Named-graph CLEAR cannot remove the server-owned proof graph, and a
+  // shared model Fuseki may already hold one. Bootstrap admits only an empty dataset.
+  const fuseki = new FusekiClient(base, process.env.FUSEKI_MAINTENANCE_TOKEN,
+    process.env.FUSEKI_COMMAND_TOKEN);
+  await fuseki.resetDataset();
+  await initializeFreshGraph(fuseki, { dataEpoch: crypto.randomUUID(), routingEpoch: '0' });
   await lineage();
 });
 
@@ -498,7 +500,13 @@ test('SYS02: normal command cannot remove control record and reopen bootstrap', 
     WHERE { GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ${JSON.stringify(epoch)} ;
       rv:routingEpoch ${JSON.stringify(routing)} ; rv:sequence ?n ; ?p ?o }
       BIND(?n + 1 AS ?next) }`;
-  expect((await command(receipt,update)).status).toBe('invalid');
+  // A variable predicate on the control graph can delete server-stamped stream
+  // fields, so the closed envelope refuses it before any write.
+  const refused = await fetch(`${base}/command`, { method: 'POST', headers: { 'content-type': 'application/json',
+    authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}` },
+    body: JSON.stringify({ receipt, digest: receipt, update, validations: [], deadlineMs: 10000 }) });
+  expect(refused.status).toBe(400);
+  expect(await refused.text()).toContain('relay stream fields are server-owned');
   await absent(receipt);
   const bootstrap = `urn:rezics:receipt:bootstrap:${nonce}`;
   const retry = `PREFIX rv: <${rv}> INSERT { GRAPH <${graphs.receipts}> {
