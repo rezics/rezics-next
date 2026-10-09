@@ -67,8 +67,19 @@ test('G324: text reviews become grouped, live, spoiler-safe Work cards', async (
     };
     const first = await stack.publicWork(author, ['en'], 'First reviewed book');
     const second = await stack.publicWork(author, ['en'], 'Second reviewed book');
-    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(first.work)} a schema:Book . ${iri(second.work)} a schema:Book . } }`);
+    // interests=books reads schema:Book. The type command advances each head;
+    // this test never compares those heads, and the relay checkpoint below
+    // starts after both edits.
+    const recordBook = async (work: string) => {
+      await grant(`work:edit:${work}`, 'work.edit');
+      const head = (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
+      await json(await call('PUT', `/v1/works/${work.slice(-36)}/type`, {
+        profile: 'work-type-v2', expectedHead: head, types: ['https://schema.org/Book'],
+        actingSubject: author }, a.token));
+    };
+    await recordBook(first.work);
+    await recordBook(second.work);
     await grant('space:create:root', 'space.create');
     const realm = await json<{ realm: string }>(await call('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name: 'Book readers', capabilities: ['realm'], actingSubject: author }, a.token), 201);
