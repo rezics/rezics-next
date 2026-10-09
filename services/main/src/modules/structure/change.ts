@@ -1525,11 +1525,20 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   // The graph projection must still match the retained head before it is extended.
   // Changed nodes are sought by placement IRI; unchanged neighbours stay in the order tree.
+  // That seek does not carry a qualifier. The profile hydrates it, which is also how the
+  // change loaded the occurrence. Comparing the bare placement would reject every qualified line.
   const retained = await recordTree(objects).lookup(manifest.records,
     changedExisting.map(state => state.occurrence), cost);
-  const graphRecords = new Map((changedExisting.length ? await readPlacements(env, header.generation,
-    { occurrences: changedExisting.map(state => state.occurrence) }, header.profile) : [])
-    .map(state => [state.occurrence, placementRecord(state)]));
+  const graphStates = changedExisting.length ? await readPlacements(env, header.generation,
+    { occurrences: changedExisting.map(state => state.occurrence) }, header.profile) : [];
+  const hydrateQualifier = structureProfileFor(header.profile).hydrateQualifier;
+  if (hydrateQualifier) {
+    for (const state of graphStates) {
+      const qualifier = await hydrateQualifier(env, state);
+      if (qualifier) state.qualifier = qualifier;
+    }
+  }
+  const graphRecords = new Map(graphStates.map(state => [state.occurrence, placementRecord(state)]));
   for (const old of changedExisting) {
     const canonical = (record: OccurrenceRecord | undefined) => record && JSON.stringify({ ...record,
       ...(record.qualifier ? { qualifier: record.qualifier.type === 'ingredient-line'
