@@ -67,7 +67,9 @@ test('a fresh QA stack opens a closed group only through the platform grant help
   mkdirSync(logs, { recursive: true });
   const accountLog = join(logs, 'platform-bootstrap-account.log');
   const mainLog = join(logs, 'platform-bootstrap-main.log');
-  const env = { ...process.env, ...runtime };
+  // This stack proves a grant is the only way to open saved-views. The QA
+  // stack otherwise opens every platform group.
+  const env = { ...process.env, ...runtime, REZICS_PLATFORM_OPEN_GROUPS: '' };
   let account: ChildProcess | undefined;
   let main: ChildProcess | undefined;
   try {

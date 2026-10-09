@@ -60,7 +60,9 @@ test('Selected capability gates retain closed refusals through HTTP owners and r
     return typeof value === 'function' ? value.bind(target) : value;
   } });
   const work = { environment: f.env, account: f.account.verifier, access: f.access,
-    platformAccess: new AccessExposure(f.accessPool), exports: new ExportStore(f.pool),
+    // Selected capabilities stay closed until this case grants them. The QA
+    // stack's open-groups setting stays off for this owner.
+    platformAccess: new AccessExposure(f.accessPool, { REZICS_PLATFORM_OPEN_GROUPS: '' }), exports: new ExportStore(f.pool),
     contentPrivateSearch: { content, access: deliveryAccess, settlement: new PrivateSearchSettlement(f.accessPool) },
   } as MainWorkDependencies;
   const app = new Elysia().use(queryRoutes(f.env.fuseki, work)).use(graphQueryRoutes(work))

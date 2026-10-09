@@ -2,9 +2,11 @@ import { Elysia, type AnyElysia } from 'elysia';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { problem } from '../../routes/problems.ts';
+import { defaultPlatformOpenGroups } from '../../infrastructure/platform-open-groups.ts';
 import {
   type AccessExposure,
   type ExposureDeclarations,
+  platformGroupOpened,
   PlatformClosed,
   validExposure,
 } from './exposure.ts';
@@ -33,6 +35,22 @@ export const platformExposureProblem = (error: unknown): Response => {
   return problem(503, 'platform_access_unavailable', 'Platform access is unavailable');
 };
 
+const unauthenticated = (): Response =>
+  problem(401, 'unauthorized', 'Authentication is required', { 'www-authenticate': 'Bearer' });
+
+const appealUnavailable = (): Response =>
+  problem(404, 'appeal_unavailable', 'Appeal is unavailable');
+
+/** A closed ban or appeal read uses the same 404 as a missing one. Any other
+ * status would reveal that the capability exists. */
+export function platformExistenceHidden(method: string, path: string): boolean {
+  if (method.toUpperCase() !== 'GET') return false;
+  return (
+    /^\/v1\/realms\/(?:\{realm\}|[^/]+)\/member-ban$/.test(path) ||
+    /^\/v1\/realms\/(?:\{realm\}|[^/]+)\/member-receipts\/(?:\{receiptId\}|[^/]+)\/appeal$/.test(path)
+  );
+}
+
 /** Bind declarations to route hooks once, before Elysia compiles them. Each
  * compiled hook retains only its exposure and identity; requests do not consult
  * an operation registry. ~routes is the pinned Elysia compiler input, including
@@ -40,7 +58,7 @@ export const platformExposureProblem = (error: unknown): Response => {
 export function bindPlatformExposure(
   work: {
     account: Pick<AccountAssertionVerifier, 'verify'>;
-    platformAccess?: Pick<AccessExposure, 'require'>;
+    platformAccess?: Pick<AccessExposure, 'require'> & Partial<Pick<AccessExposure, 'groupOpened'>>;
   },
   declarations: readonly ExposureDeclarations[],
 ) {
@@ -72,20 +90,23 @@ export function bindPlatformExposure(
         : [];
       hooks.beforeHandle = [
         async function enforcePlatformExposure({ request }: { request: Request }) {
-          // An anonymous probe of a member's own ban must get the same absence as
-          // no ban. platform_closed would be a different answer.
-          const memberBan = request.method === 'GET'
-            && /\/v1\/realms\/[^/]+\/member-ban$/.test(new URL(request.url).pathname);
           if (exposure === 'public') return;
+          const access = work.platformAccess;
+          // An open group is the stack setting, not a grant. Skip the grant read.
+          const opened = typeof access?.groupOpened === 'function'
+            ? access.groupOpened(exposure)
+            : platformGroupOpened(exposure, defaultPlatformOpenGroups());
+          if (opened) return;
+          const hidden = platformExistenceHidden(request.method, new URL(request.url).pathname);
+          // Anonymous and invalid bearers answer before any grant lookup.
+          if (!request.headers.has('authorization'))
+            return hidden ? appealUnavailable() : unauthenticated();
           try {
-            if (!exposure || !work.platformAccess) throw new PlatformClosed();
-            const principal = request.headers.has('authorization')
-              ? await work.account.verify(request, [])
-              : undefined;
-            await work.platformAccess.require(principal, exposure, operationId);
+            const principal = await work.account.verify(request, []);
+            if (!exposure || !access) throw new PlatformClosed();
+            await access.require(principal, exposure, operationId);
           } catch (error) {
-            if (memberBan && error instanceof PlatformClosed)
-              return problem(404, 'appeal_unavailable', 'Appeal is unavailable');
+            if (hidden && error instanceof PlatformClosed) return appealUnavailable();
             return platformExposureProblem(error);
           }
         },

@@ -13,7 +13,8 @@ current facade; `task urls` and `task env` show running addresses and masked
 configuration. For a development stack and its cleanup, follow
 [installation](../operations/installation.md). The [disposable local web auth
 fixture](local-web-auth.md) has its own run procedure, as does the optional
-[local real-world dataset corpus](local-datasets.md).
+[local real-world dataset corpus](local-datasets.md). Closed platform
+operations and the test-stack exception are in [platform gates](platform-gates.md).
 
 To discard and recreate this checkout's dev data, run `task dev:reset -- --yes` (it prints the exact volumes and directories first).
 

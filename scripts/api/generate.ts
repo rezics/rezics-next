@@ -4,7 +4,8 @@ import { openapi } from '@elysia/openapi';
 import type { MainWorkDependencies } from '../../services/main/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { attachCapabilities, operationTools, type CapabilityDeclarations } from '../../services/main/src/modules/mcp/capabilities.ts';
-import { assertRouteExposures, exposureSdkSource, platformClosedResponse } from './exposure.ts';
+import { assertRouteExposures, exposureSdkSource, platformClosedResponse, platformUnauthenticatedResponse } from './exposure.ts';
+import { platformExistenceHidden } from '../../services/main/src/modules/access/exposure-routes.ts';
 import { type Exposure, validExposure } from '../../services/main/src/modules/access/exposure.ts';
 
 const artifact = 'generated/openapi/main/public.json';
@@ -284,8 +285,16 @@ export async function buildMainOpenApi(): Promise<string> {
         if (!operation) throw new Error(`routes/${file} declares a missing OpenAPI operation: ${method} ${path}`);
         if (!validExposure(declared.exposure)) throw new Error(`routes/${file} lacks exposure: ${method} ${path}`);
         operation['x-rezics-exposure'] = declared.exposure;
-        if (declared.exposure !== 'public') operation.responses = { ...operation.responses,
-          '403': platformClosedResponse(operation.responses?.['403']) };
+        if (declared.exposure !== 'public') {
+          // Ban and appeal reads stay a single 404, so they do not advertise 401.
+          operation.responses = {
+            ...operation.responses,
+            '403': platformClosedResponse(operation.responses?.['403']),
+            ...(platformExistenceHidden(method, path) ? {} : {
+              '401': platformUnauthenticatedResponse(operation.responses?.['401']),
+            }),
+          };
+        }
         if (declared.exposure !== 'public' || declared.bearer === true) {
           operation.security = [{ bearerAuth: [] }];
         } else if (declared.bearer === 'optional') {

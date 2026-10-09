@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { readEnv, replacePrivate } from '../dev/config.ts';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { applySqlMigration, sqlMigration } from '../lib/concurrent-index.ts';
 import { Client } from 'pg';
@@ -66,5 +67,14 @@ try {
     await admin.query(`CREATE DATABASE ${owner}_tpl WITH TEMPLATE ${owner} OWNER ${owner}`);
   }
 } finally { await admin.end(); }
+
+// The runner snapshots apps.env before this process starts. In-process Main
+// reads the variable from this file when its own environment does not set it.
+// Production preflight refuses the same variable.
+const stackEnv = join(dirname(process.argv[2]!), 'apps.env');
+const savedApps = readEnv(stackEnv);
+if (savedApps.REZICS_PLATFORM_OPEN_GROUPS !== '*') {
+  replacePrivate(stackEnv, { ...savedApps, REZICS_PLATFORM_OPEN_GROUPS: '*' });
+}
 
 console.log('QA owner templates and Fuseki graph initialized');

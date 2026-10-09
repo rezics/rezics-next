@@ -3,20 +3,26 @@ import { Elysia, t } from 'elysia';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { exposureDeclarations } from '../src/modules/access/exposure-declarations.ts';
+import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import {
   anonymousPlatformAccess,
   exposureAllows,
+  PLATFORM_OPEN_GROUPS,
   PlatformClosed,
+  qaStackPlatformOpenGroups,
+  readPlatformOpenGroups,
   requireSelectedPlatformCapability,
 } from '../src/modules/access/exposure.ts';
 import {
   bindPlatformExposure,
   exposureOperationId,
+  platformExistenceHidden,
 } from '../src/modules/access/exposure-routes.ts';
 import {
   assertRouteExposures,
   exposureSdkSource,
   platformClosedResponse,
+  platformUnauthenticatedResponse,
 } from '../../../scripts/api/exposure.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { platformFoundationOperations } from './platform-foundation.ts';
@@ -53,17 +59,36 @@ test('OpenAPI retains the resource refusal when documenting a platform refusal',
 
 test('undeclared routes fail the static gate and deny before their handler', async () => {
   let calls = 0;
+  let grants = 0;
+  // Closed on purpose: a QA stack that opens every group must not change this case.
   const app = new Elysia()
     .get('/undeclared', () => {
       calls++;
       return 'effect';
     })
-    .use(bindPlatformExposure({ account: { verify: async () => principal } }, []));
+    .use(bindPlatformExposure({
+      account: { verify: async () => principal },
+      platformAccess: {
+        groupOpened: () => false,
+        require: async () => {
+          grants++;
+          throw new PlatformClosed();
+        },
+      },
+    }, []));
   expect(() => assertRouteExposures(app.routes)).toThrow('no exposure declaration');
-  const response = await app.handle(new Request('http://main.test/undeclared'));
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+  const anonymous = await app.handle(new Request('http://main.test/undeclared'));
+  expect(anonymous.status).toBe(401);
+  expect(await anonymous.json()).toMatchObject({ code: 'unauthorized' });
+  expect(grants).toBe(0);
+  const signed = await app.handle(new Request('http://main.test/undeclared', {
+    headers: { authorization: 'Bearer reader' },
+  }));
+  expect(signed.status).toBe(403);
+  expect(await signed.json()).toMatchObject({ code: 'platform_closed' });
   expect(calls).toBe(0);
+  // A missing declaration is closed without reading grants.
+  expect(grants).toBe(0);
 });
 
 test('opening exposure still requires the handler resource authority', async () => {
@@ -229,6 +254,7 @@ test('every served Main route, including transports, has a reviewed exposure', (
   const sdk = exposureSdkSource(app.routes);
   expect(sdk).toContain('platformOperationOpen');
   expect(sdk).toContain('platform:saved-views');
+  expect(sdk).toContain('platformClosedAnonymousStatus = 401');
 });
 
 test('operation IDs retain OpenAPI parameter and hyphen spelling', () => {
@@ -272,4 +298,168 @@ test('the complete lockout foundation remains public on a stack with no platform
   }
   const anonymous = await app.handle(new Request('http://main.test/health/live'));
   expect(anonymous.status).toBe(200);
+});
+
+const closedGate = () => {
+  let grants = 0;
+  const platformAccess = {
+    groupOpened: () => false,
+    require: async () => {
+      grants++;
+      throw new PlatformClosed();
+    },
+  };
+  const app = new Elysia()
+    .get('/closed', () => 'open')
+    .get('/v1/realms/:realm/member-ban', () => 'ban')
+    .get('/v1/realms/:realm/member-receipts/:receiptId/appeal', () => 'appeal')
+    .use(bindPlatformExposure({
+      account: {
+        verify: async (request) => {
+          if (request.headers.get('authorization') === 'Bearer bad')
+            throw new AccountAssertionDenied('Bearer required');
+          return principal;
+        },
+      },
+      platformAccess,
+    }, [{
+      '/closed': { get: { exposure: 'platform:saved-views' } },
+      '/v1/realms/{realm}/member-ban': { get: { exposure: 'platform:realm-appeals' } },
+      '/v1/realms/{realm}/member-receipts/{receiptId}/appeal': { get: { exposure: 'platform:realm-appeals' } },
+    }]));
+  return { app, grants: () => grants };
+};
+
+test('a closed operation answers 401 before a grant check when the caller is anonymous', async () => {
+  const gate = closedGate();
+  const missing = await gate.app.handle(new Request('http://main.test/closed'));
+  expect(missing.status).toBe(401);
+  expect(await missing.json()).toMatchObject({ code: 'unauthorized' });
+  const invalid = await gate.app.handle(new Request('http://main.test/closed', {
+    headers: { authorization: 'Bearer bad' },
+  }));
+  expect(invalid.status).toBe(401);
+  expect(await invalid.json()).toMatchObject({ code: 'invalid_account_assertion' });
+  expect(gate.grants()).toBe(0);
+});
+
+test('an authenticated caller without the grant still receives platform_closed', async () => {
+  const gate = closedGate();
+  const response = await gate.app.handle(new Request('http://main.test/closed', {
+    headers: { authorization: 'Bearer reader' },
+  }));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+  expect(gate.grants()).toBe(1);
+});
+
+test('an open platform group returns 200 without a grant check', async () => {
+  let grants = 0;
+  const app = new Elysia()
+    .get('/closed', () => 'open')
+    .use(bindPlatformExposure({
+      account: { verify: async () => principal },
+      platformAccess: {
+        groupOpened: (exposure) => exposure === 'platform:saved-views',
+        require: async () => {
+          grants++;
+          throw new PlatformClosed();
+        },
+      },
+    }, [{ '/closed': { get: { exposure: 'platform:saved-views' } } }]));
+  const response = await app.handle(new Request('http://main.test/closed', {
+    headers: { 'x-rezics-platform-open-groups': '*' },
+  }));
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe('open');
+  expect(grants).toBe(0);
+});
+
+test('a missing platform owner follows the open-groups setting', async () => {
+  const previous = process.env[PLATFORM_OPEN_GROUPS];
+  const had = Object.hasOwn(process.env, PLATFORM_OPEN_GROUPS);
+  process.env[PLATFORM_OPEN_GROUPS] = '*';
+  try {
+    await requireSelectedPlatformCapability(undefined, principal, {
+      exposure: 'platform:dataset-dumps',
+      operationId: 'postV1Exports',
+    });
+  } finally {
+    if (had) process.env[PLATFORM_OPEN_GROUPS] = previous;
+    else delete process.env[PLATFORM_OPEN_GROUPS];
+  }
+  await expect(requireSelectedPlatformCapability(undefined, principal, {
+    exposure: 'platform:dataset-dumps',
+    operationId: 'postV1Exports',
+  })).rejects.toBeInstanceOf(PlatformClosed);
+});
+
+test('a request cannot open a closed platform group', async () => {
+  const gate = closedGate();
+  const response = await gate.app.handle(new Request('http://main.test/closed', {
+    headers: {
+      authorization: 'Bearer reader',
+      'x-rezics-platform-open-groups': '*',
+      [PLATFORM_OPEN_GROUPS]: '*',
+    },
+  }));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+});
+
+test('closed ban and appeal reads stay 404 for anonymous and ungranted callers', async () => {
+  const gate = closedGate();
+  const ban = await gate.app.handle(new Request('http://main.test/v1/realms/00000000-0000-4000-8000-000000000001/member-ban'));
+  expect(ban.status).toBe(404);
+  expect(await ban.json()).toMatchObject({ code: 'appeal_unavailable' });
+  const appeal = await gate.app.handle(new Request(
+    'http://main.test/v1/realms/00000000-0000-4000-8000-000000000001/member-receipts/00000000-0000-4000-8000-000000000002/appeal',
+  ));
+  expect(appeal.status).toBe(404);
+  expect(await appeal.json()).toMatchObject({ code: 'appeal_unavailable' });
+  const signed = await gate.app.handle(new Request(
+    'http://main.test/v1/realms/00000000-0000-4000-8000-000000000001/member-ban',
+    { headers: { authorization: 'Bearer reader' } },
+  ));
+  expect(signed.status).toBe(404);
+  expect(await signed.json()).toMatchObject({ code: 'appeal_unavailable' });
+  const invalid = await gate.app.handle(new Request(
+    'http://main.test/v1/realms/00000000-0000-4000-8000-000000000001/member-receipts/00000000-0000-4000-8000-000000000002/appeal',
+    { headers: { authorization: 'Bearer bad' } },
+  ));
+  expect(invalid.status).toBe(401);
+  expect(platformExistenceHidden('GET', '/v1/realms/{realm}/member-ban')).toBe(true);
+  expect(platformExistenceHidden('POST', '/v1/realms/{realm}/member-receipts/{receiptId}/appeal')).toBe(false);
+});
+
+test('the open-groups setting accepts only an environment value', () => {
+  expect(readPlatformOpenGroups({})).toBeUndefined();
+  expect(readPlatformOpenGroups({ [PLATFORM_OPEN_GROUPS]: '' })).toBeUndefined();
+  expect(readPlatformOpenGroups({ [PLATFORM_OPEN_GROUPS]: '*' })).toBe('*');
+  expect(readPlatformOpenGroups({ [PLATFORM_OPEN_GROUPS]: 'saved-views, events' })).toEqual([
+    'saved-views',
+    'events',
+  ]);
+  expect(() => readPlatformOpenGroups({ [PLATFORM_OPEN_GROUPS]: 'Saved' })).toThrow(PLATFORM_OPEN_GROUPS);
+  let reads = 0;
+  const read = (path: string) => {
+    reads++;
+    expect(path).toContain('/.temp/stack/rezics-qa-run1/apps.env');
+    return `${PLATFORM_OPEN_GROUPS}=*\nMAIN_PORT=1\n`;
+  };
+  expect(qaStackPlatformOpenGroups({
+    NODE_ENV: 'production', REZICS_QA_RUN_ID: 'run1',
+  }, read, '/work')).toBeUndefined();
+  expect(qaStackPlatformOpenGroups({ REZICS_QA_RUN_ID: '../secrets' }, read, '/work')).toBeUndefined();
+  expect(reads).toBe(0);
+  expect(qaStackPlatformOpenGroups({ REZICS_QA_RUN_ID: 'run1' }, read, '/work')).toBe('*');
+  expect(reads).toBe(1);
+  const closed = platformUnauthenticatedResponse();
+  expect(closed.description).toContain('Authentication required');
+  expect(closed.content['application/problem+json'].schema).toMatchObject({
+    anyOf: [
+      { properties: { status: { const: 401 }, code: { const: 'unauthorized' } } },
+      { properties: { code: { const: 'invalid_account_assertion' } } },
+    ],
+  });
 });

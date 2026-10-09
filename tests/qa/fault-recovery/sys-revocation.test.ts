@@ -183,7 +183,8 @@ beforeAll(async () => {
   } }) as AccessAdmissionRegistry;
   // Export delivery asks this owner for the selected profile. A public semantic
   // type stays public. Source and package routes on the Main app use it too.
-  const platformAccess = new AccessExposure(accessPool);
+  // Revocation must close the capability. The QA stack's open-groups setting stays off here.
+  const platformAccess = new AccessExposure(accessPool, { REZICS_PLATFORM_OPEN_GROUPS: '' });
   const work = { environment, account: account.verifier, access,
     actingContexts: new AccessActingContexts(accessPool),
     sourceAcquisitions, exports, exportRights, packageNpmResolutions: npm, packageLocks: locks,

@@ -35,7 +35,8 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
   try {
     const seeded = await seedHome(home);
     // The route stays platform:saved-views. This reader holds that use grant.
-    // A fresh exposure cache sees the grant; the unsigned call below stays closed.
+    // The QA stack also opens the group, so a missing session authenticates
+    // at the route instead of stopping at platform_closed.
     Object.assign(home.deps, { platformAccess: new AccessExposure(home.stack.accessPool),
       judgments: new AccessJudgments(home.stack.accessPool) });
     await grantRecordedPlatformUse(home.stack.accessPool, home.reader.principalId, ['saved-views']);
@@ -78,14 +79,15 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
     }
     await home.project();
 
-    // Denied: no session is the closed capability; another person's Agent is refused.
+    // The QA stack opens saved-views, so a missing session is authentication,
+    // not a closed capability. Another person's Agent is still refused.
     const empty = await list();
     expect(empty.items).toEqual([]);
     expect(empty.cursor).toBeNull();
     expect(empty.complete).toBe(true);
     const unsigned = await call('GET', signed('/v1/me/saved-filters'));
-    expect(unsigned.status).toBe(403);
-    expect(await unsigned.json()).toMatchObject({ code: 'platform_closed' });
+    expect(unsigned.status).toBe(401);
+    expect(await unsigned.json()).toMatchObject({ code: 'account_assertion_denied' });
     expect((await call('GET', `/v1/me/saved-filters?actingSubject=${encodeURIComponent(seeded.author)}`, undefined,
       token)).status).toBe(403);
 

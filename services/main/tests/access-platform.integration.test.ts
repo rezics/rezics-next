@@ -134,7 +134,9 @@ beforeAll(async () => {
     () => undefined,
   );
   grants = new AccessGrants(pool);
-  exposure = new AccessExposure(pool);
+  // This suite proves a grant opens and closes the group. The QA stack's
+  // open-groups setting stays off for this process.
+  exposure = new AccessExposure(pool, { REZICS_PLATFORM_OPEN_GROUPS: '' });
   app = buildApp();
 }, 60_000);
 

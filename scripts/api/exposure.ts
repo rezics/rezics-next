@@ -57,6 +57,44 @@ export function platformClosedResponse(existing?: {
   };
 }
 
+/** Anonymous callers of a closed operation authenticate before any grant check.
+ * Preserve an existing 401 schema beside the two platform authentication codes. */
+export function platformUnauthenticatedResponse(existing?: {
+  description?: string;
+  content?: Record<string, unknown>;
+}) {
+  const content = { ...existing?.content };
+  const media = content['application/problem+json'] ?? content['application/json'];
+  const prior = media && typeof media === 'object' ? (media as Record<string, unknown>) : undefined;
+  delete content['application/json'];
+  const problem = (code: string) => ({
+    type: 'object',
+    required: ['type', 'status', 'code', 'title'],
+    properties: {
+      type: { type: 'string' },
+      status: { const: 401 },
+      code: { const: code },
+      title: { type: 'string' },
+    },
+  });
+  const unauthenticated = {
+    anyOf: [problem('unauthorized'), problem('invalid_account_assertion')],
+  };
+  return {
+    ...existing,
+    description: [existing?.description, 'Authentication required before a closed capability is checked']
+      .filter(Boolean)
+      .join('; '),
+    content: {
+      ...content,
+      'application/problem+json': {
+        ...prior,
+        schema: prior?.schema ? { anyOf: [prior.schema, unauthenticated] } : unauthenticated,
+      },
+    },
+  };
+}
+
 /** SDK metadata is derived from route-owned declarations, never another policy
  * source. External clients can compare it with the private viewer summary. */
 export function exposureSdkSource(routes: readonly ExposedRoute[]): string {
@@ -79,6 +117,8 @@ export function exposureSdkSource(routes: readonly ExposedRoute[]): string {
     'export interface PlatformAccessSummary { groups: readonly string[]; operations: readonly string[]; generation: string }\n' +
     'export function platformOperationOpen(operation: PlatformOperationId, viewer: PlatformAccessSummary): boolean {\n' +
     '  const exposure: string = operationExposures[operation];\n' +
-    "  return exposure === 'public' || viewer.groups.includes(exposure.slice('platform:'.length)) || viewer.operations.includes(operation);\n}\n"
+    "  return exposure === 'public' || viewer.groups.includes(exposure.slice('platform:'.length)) || viewer.operations.includes(operation);\n}\n" +
+    '/** A closed operation answers this status before a grant check when the caller is anonymous. */\n' +
+    'export const platformClosedAnonymousStatus = 401;\n'
   );
 }

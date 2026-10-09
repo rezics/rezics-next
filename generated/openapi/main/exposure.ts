@@ -792,3 +792,5 @@ export function platformOperationOpen(operation: PlatformOperationId, viewer: Pl
   const exposure: string = operationExposures[operation];
   return exposure === 'public' || viewer.groups.includes(exposure.slice('platform:'.length)) || viewer.operations.includes(operation);
 }
+/** A closed operation answers this status before a grant check when the caller is anonymous. */
+export const platformClosedAnonymousStatus = 401;

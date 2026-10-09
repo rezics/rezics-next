@@ -3,11 +3,21 @@ import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import type { RateLimitFamily } from '../rate-limit/budgets.ts';
 import {
+  defaultPlatformOpenGroups,
+  PLATFORM_OPEN_GROUPS,
+  qaStackPlatformOpenGroups,
+  readPlatformOpenGroups,
+  type PlatformOpenGroups,
+} from '../../infrastructure/platform-open-groups.ts';
+import {
   PLATFORM_COST,
   PLATFORM_SCOPE,
   PlatformAccessUnavailable,
   readPlatformPermissions,
 } from './platform-permissions.ts';
+
+export { PLATFORM_OPEN_GROUPS, qaStackPlatformOpenGroups, readPlatformOpenGroups };
+export type { PlatformOpenGroups };
 
 export type Exposure = 'public' | `platform:${string}`;
 export interface ExposureSummary {
@@ -41,6 +51,16 @@ export function validExposure(value: unknown): value is Exposure {
   );
 }
 
+/** See docs/development/platform-gates.md. `*` is every platform group. */
+export function platformGroupOpened(
+  exposure: Exposure | undefined,
+  open: PlatformOpenGroups | undefined,
+): boolean {
+  if (!open || !exposure || exposure === 'public' || !validExposure(exposure)) return false;
+  const group = exposure.slice('platform:'.length);
+  return open === '*' || open.includes(group);
+}
+
 /** Missing declarations always deny, even an individually granted operation. */
 export function exposureAllows(
   exposure: Exposure | undefined,
@@ -63,7 +83,16 @@ interface CachedSummary {
 }
 export class AccessExposure {
   private readonly cache = new Map<string, CachedSummary>();
-  constructor(private readonly pool: Pool) {}
+  private readonly openGroups: PlatformOpenGroups | undefined;
+  /** An explicit environment, including an empty value, stays closed and does
+   * not consult the QA stack file. The default follows the process, then that file. */
+  constructor(private readonly pool: Pool, env?: NodeJS.ProcessEnv) {
+    this.openGroups = env ? readPlatformOpenGroups(env) : defaultPlatformOpenGroups();
+  }
+
+  groupOpened(exposure: Exposure | undefined): boolean {
+    return platformGroupOpened(exposure, this.openGroups);
+  }
 
   /** One exact principal/generation read on a cache hit. Misses read only the
    * bounded platform grants, and expire at the earliest grant deadline. */
@@ -142,21 +171,32 @@ export class AccessExposure {
     exposure: Exposure | undefined,
     operationId: string,
   ): Promise<void> {
-    if (exposure === 'public') return;
+    if (exposure === 'public' || this.groupOpened(exposure)) return;
     if (!exposure || !exposureAllows(exposure, operationId, await this.summary(principal)))
       throw new PlatformClosed();
   }
 }
 
+export type PlatformGate = {
+  require: AccessExposure['require'];
+  groupOpened?: AccessExposure['groupOpened'];
+};
+
 /** Called after the owner resolves a template, profile, command, source or block.
  * The owner supplies its selected capability; HTTP body fields never select it.
  * An operation-specific grant can open that operation's selected capability. */
 export async function requireSelectedPlatformCapability(
-  owner: Pick<AccessExposure, 'require'> | undefined,
+  owner: PlatformGate | undefined,
   principal: VerifiedPrincipal | undefined,
   selected: { exposure: Exposure; operationId: string },
 ): Promise<void> {
   if (selected.exposure === 'public') return;
-  if (!owner) throw new PlatformClosed();
+  if (owner?.groupOpened?.(selected.exposure)) return;
+  // Route tests that never construct an exposure owner still follow the stack
+  // setting. An owner that exists decides from its own groups.
+  if (!owner) {
+    if (platformGroupOpened(selected.exposure, defaultPlatformOpenGroups())) return;
+    throw new PlatformClosed();
+  }
   await owner.require(principal, selected.exposure, selected.operationId);
 }
