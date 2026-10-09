@@ -78,7 +78,7 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
   return (work, options = {}) => {
     if (!Slot) return platform(work, options, true);
     const catalogue = pkg?.catalogue;
-    // The platform row would name the creating account. A catalogue card does not.
+    // The platform row would name the creating account and chip the status the fact line already states.
     const fallback = platform(catalogue ? cataloguePlatformWork(work) : work, options, false);
     const card = catalogue && options.facts === undefined
       ? <CatalogueSlotCard zone={zone} work={work} options={options} locale={locale} count={catalogue.count}

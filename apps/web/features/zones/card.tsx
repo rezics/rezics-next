@@ -34,10 +34,11 @@ const name = (text: ZoneText) => ({ value: text.value, language: text.lang, dire
 /**
  * The platform row under a catalogue card. A byline names a credited creator.
  * The account that created or imported the Work is not one, so it is left off
- * until a credit role is what the card shows.
+ * until a credit role is what the card shows. Status stays on the catalogue
+ * fact line; the platform chip would repeat it.
  */
 export function cataloguePlatformWork(work: ZoneWork): ZoneWork {
-  return { ...work, author: null, authorHref: null };
+  return { ...work, author: null, authorHref: null, status: null };
 }
 
 export function catalogueWork(work: ZoneWork): CatalogueWork {

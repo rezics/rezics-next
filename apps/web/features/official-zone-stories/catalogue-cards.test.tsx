@@ -129,6 +129,20 @@ test('a catalogue card does not name the account that created the Work', () => {
   expect(panel).not.toContain('catalogue-editor');
 });
 
+test('a catalogue card states status on the fact line, without the platform chip', () => {
+  const work = catalogueWork('long', 'Long series', 'ja', 'completed');
+  const row = createElement(ZoneWorkRow, {
+    work: cataloguePlatformWork(work), locale: 'en', messages: zoneMessagesFor('en'), whyHere: false,
+  });
+  const card = draw(createElement(AnimeCard, {
+    zone: catalogueZone('anime', 'en'), Link, layout: 'row', nextVolume: null, fallback: row,
+    work, facts: catalogueFacts('TV', [1980], 1155),
+  }));
+  expect(card.match(/Completed/g)).toEqual(['Completed']);
+  expect(card).toContain('data-catalogue-fact="status"');
+  expect(card).not.toContain('rounded-full');
+});
+
 test('a reviewed property name labels the count, and the counted phrase stays the package\'s', () => {
   const anime = draw(createElement(AnimeCataloguePanel, {
     zone: catalogueZone('anime', 'en'), Link, fallback: null, credits: null,

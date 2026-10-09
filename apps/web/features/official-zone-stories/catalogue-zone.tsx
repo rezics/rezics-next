@@ -61,7 +61,7 @@ export function CatalogueZoneFrame({ slug, pkg, locale, children }: {
   const zone = catalogueZone(slug, locale);
   const render = cardRenderer(zone, pkg, locale, zoneMessagesFor(locale));
   return <RealmPageStory zone={zone} pkg={pkg} execution={{ mode: 'package', slug }} locale={locale} site>
-    {children(zone, (work, facts) => render(work, { facts }))}
+    {children(zone, (work, facts) => render(work, { facts, layout: 'row' }))}
   </RealmPageStory>;
 }
 
