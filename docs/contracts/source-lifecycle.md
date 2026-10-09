@@ -22,11 +22,22 @@ See [content governance](content-governance.md#rights-complaints) and [erasure](
 ## Platform imports and user contributions
 
 Decision 55, maintainer, 2026-10-09. The platform answers for what it imports
-itself. An operator import publishes facts only, such as titles, dates, numbers,
-staff and relations, and never the source's user-written text such as summaries.
-Every imported fact carries a visible mark naming its source, with a link. The
-first case is the Bangumi Archive wiki export behind the launch anime and manga
-catalogue; on 2026-10-09 its repository stated no data licence.
+itself. An operator import publishes what the source licenses, and facts only
+where the licence is unknown. It never imports posts the source's users wrote
+for themselves, such as reviews, blogs or comments. Every imported fact or text
+shows a mark naming its source and licence, with a link.
+
+The first case is Bangumi. Its [copyright page](https://bgm.tv/about/copyright),
+checked on 2026-10-09, puts subject information under CC BY-SA 3.0, and
+character information as well. Subject information includes summaries and chapter
+information. Users' original blogs, posts and images stay with their authors.
+So the import takes subject and character information, summaries included,
+crediting Bangumi with the licence and a link to the subject page. An edited or
+translated summary is an adaptation and stays under CC BY-SA, so the licence
+travels with the text through reads and exports.
+
+Covers are left out even though the page lists them under the same licence. The
+art belongs to its publishers, and users who uploaded it could not license it.
 
 What a user enters is that user's contribution and responsibility, even when
 they bring it in with the platform's tools. The tools only prompt them to record

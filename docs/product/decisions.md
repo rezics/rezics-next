@@ -96,7 +96,7 @@ Maintainer, 2026-10-05.
 
 Maintainer, 2026-10-09.
 
-55. <a id="decision-55"></a>[Platform imports and user contributions](../contracts/source-lifecycle.md#platform-imports-and-user-contributions): platform imports publish marked facts only; users answer for what they enter, and the tools only prompt for its source.
+55. <a id="decision-55"></a>[Platform imports and user contributions](../contracts/source-lifecycle.md#platform-imports-and-user-contributions): platform imports publish what the source licenses (facts only when unknown), marked with source and licence, never the source's user posts; users answer for what they enter, and the tools only prompt for its source.
 
 Settled research, also adopted on 2026-09-29:
 
