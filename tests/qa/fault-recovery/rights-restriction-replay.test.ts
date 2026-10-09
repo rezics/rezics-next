@@ -1,10 +1,11 @@
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { claimFixture, fixtureReasons } from '../integration/g-565-decision-support.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { copyRecoveryTree } from '../support/recovery-copy.ts';
@@ -42,11 +43,8 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function migrateAccess(pool: Pool): Promise<void> {
-  const directory = join(root, 'services/main/migrations/access');
-  for (const file of schemaFiles(root, 'access')) {
-    await pool.query(readFileSync(join(directory, file), 'utf8'));
-  }
+async function migrateAccess(url: string): Promise<void> {
+  await applyQaSqlMigrations(url, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
 }
 
 test('GOV25: replaying an Access backup preserves its restriction fence through counter-notice and decision replay', async () => {
@@ -68,7 +66,7 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     const compose = readEnv(join(stack, 'compose.env'));
     const access = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
     pools.push(access);
-    await migrateAccess(access);
+    await migrateAccess(apps.ACCESS_DATABASE_URL!);
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     await initializeFreshGraph(fuseki, lineage);

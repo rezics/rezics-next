@@ -58,6 +58,7 @@ import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
+import { stageQaBootstrap } from './bootstrap.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
 import { qaMemoryDeadline, qaMemoryNeed, type StartupSlotGate } from './memory-admission.ts';
 import { admitIntegrationWorkScope, runQaStartupChildAsync } from './stack-startup.ts';
@@ -461,20 +462,11 @@ async function runShardWork(
       }
     }
     const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
-    apps = readEnv(join(stackDir, 'apps.env'));
+    const staged = stageQaBootstrap(stackDir);
+    apps = staged.apps;
     compose = readEnv(join(stackDir, 'compose.env'));
-    const appsPath = join(stackDir, 'qa-apps.json');
-    const composePath = join(stackDir, 'qa-compose.json');
-    writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
-    writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
     record.stage = 'bootstrap';
-    const bootstrap = await commandAsync(
-      root,
-      'bun',
-      ['scripts/qa/bootstrap.ts', appsPath, composePath],
-      180_000,
-      environment,
-    );
+    const bootstrap = await commandAsync(root, 'bun', staged.args, 180_000, environment);
     record.bootstrapMs = bootstrap.elapsedMs;
     if (!bootstrap.ok) {
       errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
@@ -948,13 +940,9 @@ try {
           continue;
         }
         const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
-        const apps = readEnv(join(stackDir, 'apps.env'));
-        const compose = readEnv(join(stackDir, 'compose.env'));
-        const appsPath = join(stackDir, 'qa-apps.json');
-        const composePath = join(stackDir, 'qa-compose.json');
-        writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
-        writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
-        const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+        const staged = stageQaBootstrap(stackDir);
+        const appsPath = staged.args[1]!;
+        const bootstrap = command(root, 'bun', staged.args, 180_000);
         if (!bootstrap.ok) {
           errors.push('e2e stack bootstrap failed');
           writeFileSync(join(logs, 'e2e-bootstrap.log'), bootstrap.output);
@@ -1022,14 +1010,9 @@ try {
       const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
-      const apps = readEnv(join(stackDir, 'apps.env'));
+      const staged = stageQaBootstrap(stackDir);
       const compose = readEnv(join(stackDir, 'compose.env'));
-      const appsPath = join(stackDir, 'qa-apps.json');
-      const composePath = join(stackDir, 'qa-compose.json');
-      writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
-      writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
-      const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath],
-        Math.min(180_000, remainingPreparation()));
+      const bootstrap = command(root, 'bun', staged.args, Math.min(180_000, remainingPreparation()));
       if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
       const fixtureResults = await Promise.all(fixturePlan.map(async item => {
         startedFixtureProjects.push(item.runId);
@@ -1061,7 +1044,7 @@ try {
       const budget = 300_000;
       const result = await commandAsync(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
-      { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
+      { ...process.env, ...staged.apps, REZICS_QA_RUN_ID: projectRunId,
         REZICS_S3_GATE_PROJECT: projectRunId,
         REZICS_QA_ARTIFACT_DIR: directory,
         ...Object.fromEntries(fixturePlan.map(item =>

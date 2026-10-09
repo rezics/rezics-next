@@ -1,8 +1,7 @@
-import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -26,12 +25,12 @@ import { readNativeChildRetirement } from '../../../services/main/src/modules/so
 
 const root = resolve(import.meta.dir, '../../..');
 async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
+  const args = [action, '--profile', 'qa', '--run-id', runId];
   const result = action === 'stack:up'
-    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
-    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+    ? await runQaStartupChildAsync(root, args, 180_000)
+    : await runQaAdmissionChildAsync(root, 'bun', ['scripts/dev/cli.ts', ...args], 180_000);
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
-  return 'admissionWaitMs' in result ? result.admissionWaitMs : 0;
+  return result.admissionWaitMs;
 }
 
 test('LIVE04: native subject child and human retirement survive held graph recovery', async () => {
