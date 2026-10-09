@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Pool } from 'pg';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { ContentErasureInvalid } from '../src/modules/erasure/content.ts';
@@ -115,4 +117,91 @@ test('tombstone digests keep Content revision URNs and accept graph revision IRI
   expect(canonicalErasureTargets([revision, first])).toEqual([
     revision, `urn:rezics:content:revision:${first}`]);
   expect(() => canonicalErasureTargets([`urn:rezics:content:revision:${first}`])).toThrow();
+});
+
+/** Classes the identity query erases. Every other rv:*Revision class is closed below. */
+const ERASABLE_REVISION_CLASSES = ['ReleaseRevision', 'SemanticRevision', 'StructureRevision'] as const;
+
+/** A new rv:*Revision class fails until it is erasable or listed here with a reason. */
+const CLOSED_REVISION_CLASSES: Record<string, string> = {
+  AcceptedTargetRatingObservationRevision: 'An accepted-target rating revision is not an erasure target.',
+  AgentPublicProfileRevision: 'An agent profile revision is not an erasure target.',
+  AuthorCreditRevision: 'An author-credit revision is not an erasure target.',
+  BallotRevision: 'A ballot revision is not an erasure target.',
+  ClaimRevision: 'A claim revision is not an erasure target.',
+  CollectionNameRevision: 'A collection name revision is not an erasure target.',
+  CollectionRevision: 'A collection revision is not an erasure target.',
+  ContextDefinitionEquivalenceRevision: 'A context revision is not an erasure target.',
+  ContextPreferenceRevision: 'A context revision is not an erasure target.',
+  ContextSelectionRevision: 'A context revision is not an erasure target.',
+  ContextSemanticRevision: 'A context revision is not an erasure target.',
+  DailyRatingObservationRevision: 'A daily rating revision is not an erasure target.',
+  DefinitionLifecycleRevision: 'A definition lifecycle revision is not an erasure target.',
+  DefinitionRevision: 'Identity resolution excludes it from the generic anchor and does not erase it.',
+  DynamicCollectionRevision: 'A dynamic collection revision is not an erasure target.',
+  EditorialControlRevision: 'Identity resolution excludes it from the generic anchor and does not erase it.',
+  EditorialFieldControlRevision: 'An editorial field revision is not an erasure target.',
+  EditorialFieldRevision: 'An editorial field revision is not an erasure target.',
+  ElectorateCharterRevision: 'An electorate charter revision is not an erasure target.',
+  ErasedRevision: 'It is the erasure marker, not a product revision.',
+  EventTimeRevision: 'An event-time revision is not an erasure target.',
+  ExperienceRatingObservationRevision: 'An experience rating revision is not an erasure target.',
+  FiniteRuleRevision: 'A finite-rule revision is not an erasure target.',
+  FirstPartyThemeRevision: 'A first-party theme revision is not an erasure target.',
+  FixedRevision: 'A fixed-bytes revision is not an erasure target.',
+  GlobalRatingObservationRevision: 'A global rating revision is not an erasure target.',
+  HolderCharterRevision: 'A holder charter revision is not an erasure target.',
+  LanguageTaggedTargetRatingObservationRevision: 'A language-tagged rating revision is not an erasure target.',
+  NativeAgentCreditRevision: 'A native agent credit revision is not an erasure target.',
+  NativeChildRevision: 'A native child revision is not an erasure target.',
+  PollQuestionRevision: 'A poll revision is not an erasure target.',
+  PresentationRevision: 'A presentation revision is not an erasure target.',
+  ProjectionRevision: 'A projection revision is not an erasure target.',
+  ProposalRevision: 'A proposal revision is not an erasure target.',
+  ProtectionRevision: 'A protection revision is not an erasure target.',
+  ProxyRouteRevision: 'A proxy route revision is not an erasure target.',
+  RatingObservationRevision: 'A rating observation revision is not an erasure target.',
+  RatingPolicyRevision: 'A rating policy revision is not an erasure target.',
+  RatingQuestionPresentationRevision: 'A rating question presentation revision is not an erasure target.',
+  RatingQuestionPresentationV2Revision: 'A rating question presentation revision is not an erasure target.',
+  RealizationRevision: 'Identity resolution excludes it from the generic anchor and does not erase it.',
+  RealmModeratorChoiceRevision: 'A realm revision is not an erasure target.',
+  RealmPublicProfileRevision: 'A realm revision is not an erasure target.',
+  RelationOccurrenceRevision: 'A relation occurrence revision is not an erasure target.',
+  ReleaseRatingObservationRevision: 'A release rating observation revision is not an erasure target.',
+  RightsOfferingRevision: 'A rights revision is not an erasure target.',
+  RightsRecognitionRevision: 'A rights revision is not an erasure target.',
+  ScopedTargetRatingObservationRevision: 'A scoped rating revision is not an erasure target.',
+  StatementRevision: 'A statement revision is not an erasure target.',
+  TargetRatingObservationRevision: 'A target rating revision is not an erasure target.',
+  ThemePackageRevision: 'A theme revision is not an erasure target.',
+  VotingCharterRevision: 'A voting charter revision is not an erasure target.',
+  WorkMetadataDetailsV2Revision: 'A work-metadata revision is not an erasure target.',
+  WorkMetadataRevision: 'A work-metadata revision is not an erasure target.',
+  ZoneRevision: 'A zone capability revision is not an erasure target.',
+};
+
+test('every revision class is erasable or explicitly closed', () => {
+  const definitions = resolve(import.meta.dir, '../../../model/definitions');
+  const found = new Set<string>();
+  for (const file of readdirSync(definitions)) {
+    if (!file.endsWith('.ttl')) continue;
+    for (const match of readFileSync(resolve(definitions, file), 'utf8').matchAll(/\brv:([A-Z][A-Za-z0-9]*Revision)\b/g)) {
+      found.add(match[1]!);
+    }
+  }
+  const source = readFileSync(resolve(import.meta.dir, '../src/modules/erasure/revision-kind.ts'), 'utf8');
+  for (const name of found) {
+    if ((ERASABLE_REVISION_CLASSES as readonly string[]).includes(name)) {
+      expect(source).toContain(`rv:${name}`);
+      expect(CLOSED_REVISION_CLASSES[name]).toBeUndefined();
+    } else {
+      expect(CLOSED_REVISION_CLASSES[name], `${name} is neither erasable nor closed`).toBeString();
+    }
+  }
+  for (const name of Object.keys(CLOSED_REVISION_CLASSES)) expect(found.has(name), name).toBe(true);
+  for (const name of ERASABLE_REVISION_CLASSES) expect(found.has(name), name).toBe(true);
+  expect(source).toContain('rv:RevisionAnchor');
+  expect(source).toContain('work_head');
+  expect(source).toContain('text_contribution_draft');
 });
