@@ -56,6 +56,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'g-939-discovery',
     'g-954-reading-position',
     'g-1051-query-scale',
+    'g-1014-structure-cost',
     'g-1026-community-cost',
     'g-828-zone-browse',
     'g-856-zones',
