@@ -9,7 +9,7 @@ import { startRestoredFixture } from '../../../scripts/fixture/restore.ts';
 import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
-import { GiB, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
+import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup, withQaStackStartup,
   type MemoryReading } from '../../../scripts/qa/memory-admission.ts';
 
@@ -351,6 +351,27 @@ test('memory admission deadline reports both shortages and never admits late rea
   await expect(waitForMemory(need, { env: qaEnv, deadline: 10, now: () => now, announce: () => {},
     read: async remaining => { expect(remaining).toBe(10); now = 10; return plenty; },
   })).rejects.toThrow('deadline reached');
+});
+
+test('memory admission waits without a reading and admits only a measured one', async () => {
+  let now = 0, reads = 0;
+  const messages: string[] = [];
+  await waitForMemory(need, {
+    env: qaEnv, deadline: 30, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10,
+    announce: message => messages.push(message),
+    read: async () => {
+      if (++reads === 1) throw new Error('no reading yet');
+      return plenty;
+    },
+  });
+  expect(messages[0]).toContain('free unknown');
+  expect(messages[0]).toContain('available unknown');
+  expect(messages[1]).toBe('Admitted; ' + measuredAdmissionMessage(need, plenty));
+  expect(messages[1]).toContain('free 19.00 GiB');
+  expect(messages[1]).not.toContain('unknown');
+  expect(measuredAdmissionMessage(need, plenty)).not.toContain('unknown');
+  expect(() => measuredAdmissionMessage(need, { vmTotal: Number.NaN, vmUsed: 0, hostAvailable: 1 }))
+    .toThrow('Invalid memory reading');
 });
 
 test('unavailable readings fail closed, retry and retain the reason at the deadline', async () => {

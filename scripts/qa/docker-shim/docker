@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # rezics-docker-shim
 # QA puts this directory first on PATH. run and create gain the reap-owner label
-# and one key-only label for every scope in the runner chain. Before those
-# labels are added, an empty marker file is created for each scope (and `.owner`
-# when the owner label is added) under REZICS_REAP_STATE, so cleanup can see
-# that a container was actually requested. Every other docker command, including
-# compose, is executed unchanged.
+# and one key-only label for every scope in the runner chain. compose up, create,
+# run, scale and watch get the same labels from an override file, because Compose
+# talks to the engine itself and would otherwise start unlabelled containers.
+# Before those labels are added, an empty marker file is created for each scope
+# (and `.owner` when the owner label is added) under REZICS_REAP_STATE, so cleanup
+# can see that a container was actually requested.
 # The binary is the next docker on PATH whose file is not itself a shim. A stub
 # placed before or between shims is the one that runs, including a shim from
 # another worktree.
@@ -38,8 +39,151 @@ takes_value() {
   return 1
 }
 
+record_reap_markers() {
+  if [[ -n ${REZICS_REAP_STATE:-} ]]; then
+    mkdir -p -- "$REZICS_REAP_STATE"
+  fi
+  if [[ -n ${REZICS_REAP_OWNER:-} && -n ${REZICS_REAP_STATE:-} ]]; then
+    : > "${REZICS_REAP_STATE}/.owner"
+  fi
+  if [[ -n ${REZICS_REAP_SCOPES:-} && -n ${REZICS_REAP_STATE:-} ]]; then
+    local scope_id
+    IFS=',' read -r -a scope_ids <<< "$REZICS_REAP_SCOPES"
+    for scope_id in "${scope_ids[@]}"; do
+      [[ -n $scope_id && $scope_id =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || continue
+      : > "${REZICS_REAP_STATE}/${scope_id}"
+    done
+  fi
+}
+
+append_label_yaml() {
+  local name=$1
+  printf '  %s:\n    labels:\n' "$name"
+  if [[ -n ${REZICS_REAP_OWNER:-} ]]; then
+    printf '      rezics.reap-owner: "%s"\n' "$REZICS_REAP_OWNER"
+  fi
+  if [[ -n ${REZICS_REAP_SCOPES:-} ]]; then
+    local scope_id
+    IFS=',' read -r -a scope_ids <<< "$REZICS_REAP_SCOPES"
+    for scope_id in "${scope_ids[@]}"; do
+      [[ -n $scope_id && $scope_id =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || continue
+      printf '      rezics.reap-scope.%s: "1"\n' "$scope_id"
+    done
+  fi
+}
+
+# Compose creates containers through the engine API. An override is the only
+# place those containers, and the volumes and networks that would outlive them,
+# can receive the same labels as docker run.
+label_compose() {
+  local -a compose_global=() rest=("${args[@]:compose_at+1}")
+  local arg skip=0 subcommand='' sub_index=-1 i
+  for i in "${!rest[@]}"; do
+    arg=${rest[$i]}
+    if (( skip )); then
+      compose_global+=("$arg")
+      skip=0
+      continue
+    fi
+    case $arg in
+      --ansi|--env-file|--file|--parallel|--profile|--progress|--project-directory|--project-name|-f|-p)
+        compose_global+=("$arg")
+        skip=1
+        continue ;;
+      --ansi=*|--env-file=*|--file=*|--parallel=*|--profile=*|--progress=*|--project-directory=*|--project-name=*|-f?*|-p?*)
+        compose_global+=("$arg")
+        continue ;;
+      --all-resources|--compatibility|--dry-run)
+        compose_global+=("$arg")
+        continue ;;
+      --)
+        continue ;;
+      -*)
+        printf '%s\n' "docker shim: unrecognized compose option: $arg" >&2
+        exit 1 ;;
+      *)
+        subcommand=$arg
+        sub_index=$i
+        break ;;
+    esac
+  done
+  case $subcommand in
+    up|create|run|scale|watch) ;;
+    *) exec "$real" "${args[@]}" ;;
+  esac
+  if [[ -n ${REZICS_REAP_OWNER:-} && ! ${REZICS_REAP_OWNER} =~ ^[0-9]+:[0-9]+$ ]]; then
+    printf '%s\n' 'docker shim: unsafe reap owner' >&2
+    exit 1
+  fi
+  local services='' volumes='' networks='' status
+  services=$("$real" compose --ansi never "${compose_global[@]}" config --services)
+  status=$?
+  if (( status != 0 )); then exit "$status"; fi
+  volumes=$("$real" compose --ansi never "${compose_global[@]}" config --volumes)
+  status=$?
+  if (( status != 0 )); then exit "$status"; fi
+  networks=$("$real" compose --ansi never "${compose_global[@]}" config --networks)
+  status=$?
+  if (( status != 0 )); then exit "$status"; fi
+  services=${services//$'\r'/}
+  volumes=${volumes//$'\r'/}
+  networks=${networks//$'\r'/}
+  local name recognized=0
+  local -a service_names=() volume_names=() network_names=()
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    if [[ ! $name =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+      printf '%s\n' "docker shim: unsafe compose service: $name" >&2
+      exit 1
+    fi
+    service_names+=("$name")
+    recognized=1
+  done <<< "$services"
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    if [[ ! $name =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+      printf '%s\n' "docker shim: unsafe compose volume: $name" >&2
+      exit 1
+    fi
+    volume_names+=("$name")
+    recognized=1
+  done <<< "$volumes"
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    if [[ ! $name =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+      printf '%s\n' "docker shim: unsafe compose network: $name" >&2
+      exit 1
+    fi
+    network_names+=("$name")
+    recognized=1
+  done <<< "$networks"
+  # An empty project creates nothing, so it stays a plain compose command.
+  if (( recognized == 0 )); then exec "$real" "${args[@]}"; fi
+  record_reap_markers
+  local state=${REZICS_REAP_STATE:-${TMPDIR:-/tmp}/rezics-reap}
+  mkdir -p -- "$state"
+  local override="${state}/labels-$$-${RANDOM}.yml"
+  {
+    if (( ${#service_names[@]} )); then
+      printf 'services:\n'
+      for name in "${service_names[@]}"; do append_label_yaml "$name"; done
+    fi
+    if (( ${#volume_names[@]} )); then
+      printf 'volumes:\n'
+      for name in "${volume_names[@]}"; do append_label_yaml "$name"; done
+    fi
+    if (( ${#network_names[@]} )); then
+      printf 'networks:\n'
+      for name in "${network_names[@]}"; do append_label_yaml "$name"; done
+    fi
+  } > "$override"
+  local -a head=("${args[@]:0:compose_at+1}")
+  exec "$real" "${head[@]}" "${compose_global[@]}" -f "$override" "${rest[@]:sub_index}"
+}
+
 args=("$@")
 index=-1
+compose_at=-1
 word=0
 skip=0
 after_container=0
@@ -65,32 +209,34 @@ for i in "${!args[@]}"; do
     after_container=1
     continue
   fi
+  if (( word == 1 )) && [[ $arg == compose ]]; then
+    compose_at=$i
+    break
+  fi
   if [[ $arg == run || $arg == create ]] && { (( word == 1 )) || (( after_container )); }; then
     index=$i
   fi
   break
 done
 
+if (( compose_at >= 0 )); then
+  label_compose
+fi
+
 if (( index < 0 )); then
   exec "$real" "$@"
 fi
 
 labels=()
-if [[ -n ${REZICS_REAP_STATE:-} ]]; then
-  mkdir -p -- "$REZICS_REAP_STATE"
-fi
+record_reap_markers
 if [[ -n ${REZICS_REAP_OWNER:-} ]]; then
   labels+=(--label "rezics.reap-owner=${REZICS_REAP_OWNER}")
-  if [[ -n ${REZICS_REAP_STATE:-} ]]; then : > "${REZICS_REAP_STATE}/.owner"; fi
 fi
 if [[ -n ${REZICS_REAP_SCOPES:-} ]]; then
   IFS=',' read -r -a scope_ids <<< "$REZICS_REAP_SCOPES"
   for scope_id in "${scope_ids[@]}"; do
     [[ -n $scope_id ]] || continue
     labels+=(--label "rezics.reap-scope.${scope_id}=1")
-    if [[ -n ${REZICS_REAP_STATE:-} && $scope_id =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
-      : > "${REZICS_REAP_STATE}/${scope_id}"
-    fi
   done
 fi
 head=("${args[@]:0:index+1}")

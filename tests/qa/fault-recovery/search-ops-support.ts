@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { composeProcessEnvironment, projectName, readEnv, stackDirectory,
   type StackOptions } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
 import { docker, type FusekiStateRunner } from '../../../scripts/operations/search-state.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -180,23 +181,24 @@ export async function standaloneFuseki(env: NodeJS.ProcessEnv, input: { name: st
   volume: string; secrets: Record<string, string>; mounts?: string[]; command?: string[] }): Promise<StandaloneFuseki> {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}/rezics/`;
+  const owned = preserveReapEnvironment(env);
   docker(['run', '-d', '--name', input.name, '--publish', `127.0.0.1:${port}:3030`,
     '--volume', `${input.volume}:/fuseki/databases`,
     ...(input.mounts ?? []).flatMap(mount => ['--volume', mount]),
     ...Object.entries(input.secrets).flatMap(([key, value]) => ['--env', `${key}=${value}`]),
-    input.image, ...(input.command ?? [])], env, 60_000);
+    input.image, ...(input.command ?? [])], owned, 60_000);
   await waitForFuseki(url);
   return { name: input.name, url,
     runner: {
-      exec: script => docker(['exec', input.name, 'sh', '-ec', script], env),
+      exec: script => docker(['exec', input.name, 'sh', '-ec', script], owned),
       offline: script => docker(['run', '--rm', '--network', 'none', '--volume', `${input.volume}:/fuseki/databases`,
         ...(input.mounts ?? []).flatMap(mount => ['--volume', mount]),
-        '--entrypoint', 'sh', input.image, '-ec', script], env, 300_000),
-      stop: () => { docker(['stop', input.name], env, 60_000); },
-      start: async () => { docker(['start', input.name], env, 60_000); await waitForFuseki(url); },
-      container: () => docker(['ps', '-q', '--no-trunc', '--filter', `name=^${input.name}$`], env, 10_000).trim(),
+        '--entrypoint', 'sh', input.image, '-ec', script], owned, 300_000),
+      stop: () => { docker(['stop', input.name], owned, 60_000); },
+      start: async () => { docker(['start', input.name], owned, 60_000); await waitForFuseki(url); },
+      container: () => docker(['ps', '-q', '--no-trunc', '--filter', `name=^${input.name}$`], owned, 10_000).trim(),
     },
-    remove: () => { spawnSync('docker', ['rm', '-f', input.name], { env, timeout: 60_000 }); },
+    remove: () => { spawnSync('docker', ['rm', '-f', input.name], { env: preserveReapEnvironment(owned), timeout: 60_000 }); },
   };
 }
 

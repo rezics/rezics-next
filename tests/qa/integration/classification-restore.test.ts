@@ -56,7 +56,7 @@ test('product classification restore preserves retained meaning and decision CAS
   let accessPool: Pool | undefined, relayPool: Pool | undefined;
   let env: WorkActivationEnvironment | undefined;
   try {
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const apps = stack.apps, fuseki = stack.fuseki;
     expect(stack.composeEnv.REZICS_STACK_RAW_UPDATE).toBe('0');
     expect(stack.runner.exec('cat /fuseki/fuseki-text.ttl'))
@@ -326,6 +326,6 @@ test('product classification restore preserves retained meaning and decision CAS
     await accessPool?.end();
     await relayPool?.end();
     if (env) rmSync(env.objectDirectory, { recursive: true, force: true });
-    rootCommand(['stack:reset', ...stack.args], 120_000);
+    await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
 }, 360_000);

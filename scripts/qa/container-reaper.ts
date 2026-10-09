@@ -172,6 +172,33 @@ export function reapOwnerEnvironment(env: NodeJS.ProcessEnv, pid = process.pid):
   return next;
 }
 
+/** Project files and partial Docker environments must not replace a runner's owner. */
+const reapEnvironmentKeys = ['REZICS_REAP_OWNER', 'REZICS_REAP_SCOPE', 'REZICS_REAP_SCOPES', 'REZICS_REAP_STATE'] as const;
+
+/**
+ * Keep the reap owner, its scope chain and the shim on PATH. A saved project
+ * file binds stack settings; it must not become the identity the sweep uses.
+ * An owner is never minted here: a short-lived CLI must not label the dev stack.
+ */
+export function preserveReapEnvironment(inherited: NodeJS.ProcessEnv,
+  overlay?: Record<string, string>): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...inherited };
+  if (overlay) {
+    for (const [key, value] of Object.entries(overlay)) {
+      if (key === 'PATH' || (reapEnvironmentKeys as readonly string[]).includes(key)) continue;
+      merged[key] = value;
+    }
+  }
+  if (inherited !== process.env) {
+    for (const key of reapEnvironmentKeys) {
+      if (merged[key] === undefined && process.env[key] !== undefined) merged[key] = process.env[key];
+    }
+    if (merged.PATH === undefined && process.env.PATH !== undefined) merged.PATH = process.env.PATH;
+  }
+  if (!merged.REZICS_REAP_OWNER && !merged.REZICS_REAP_SCOPES) return merged;
+  return reapOwnerEnvironment(merged);
+}
+
 export function newReapScope(): string {
   return randomUUID();
 }
@@ -199,7 +226,8 @@ export function reapOwnerAssignment(env: NodeJS.ProcessEnv, pid = process.pid): 
 }
 
 function dockerOutput(args: string[]): string | undefined {
-  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: dockerTimeoutMs });
+  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: dockerTimeoutMs,
+    env: preserveReapEnvironment(process.env) });
   if (result.error || result.status !== 0) return undefined;
   return result.stdout ?? '';
 }
@@ -212,7 +240,8 @@ function removeLabelledContainers(filter: string): void {
   const listed = dockerOutput(['ps', '-aq', '--filter', filter]);
   if (listed === undefined) return;
   const ids = containerIds(listed);
-  if (ids.length) spawnSync('docker', ['rm', '-f', ...ids], { encoding: 'utf8', timeout: dockerTimeoutMs });
+  if (ids.length) spawnSync('docker', ['rm', '-f', ...ids], { encoding: 'utf8', timeout: dockerTimeoutMs,
+    env: preserveReapEnvironment(process.env) });
 }
 
 export function removeOwnedContainers(owner: string): void {
@@ -307,30 +336,69 @@ export function startOrphanSweep(): void {
   child.unref();
 }
 
-function removeDeadOwnerState(): void {
+/** Owner directories that already existed. A marker written while this sweep runs must stay for that runner's own cleanup. */
+function ownerStateSnapshot(): Map<string, number> {
+  const snapshot = new Map<string, number>();
   let names: string[];
-  try { names = readdirSync(reapStateRoot()); } catch { return; }
+  try { names = readdirSync(reapStateRoot()); } catch { return snapshot; }
   for (const name of names) {
-    if (!/^\d+:\d+$/.test(name) || reapOwnerAlive(name)) continue;
-    try { rmSync(join(reapStateRoot(), name), { recursive: true, force: true }); } catch { /* the next sweep retries */ }
+    if (!/^\d+:\d+$/.test(name)) continue;
+    try { snapshot.set(name, statSync(join(reapStateRoot(), name)).mtimeMs); } catch { /* removed while listing */ }
+  }
+  return snapshot;
+}
+
+function removeDeadOwnerState(snapshot: Map<string, number>): void {
+  for (const [name, seenAt] of snapshot) {
+    if (reapOwnerAlive(name)) continue;
+    const dir = join(reapStateRoot(), name);
+    try {
+      // Creating a marker updates the directory mtime. That runner has not listed yet.
+      if (statSync(dir).mtimeMs > seenAt) continue;
+    } catch { continue; }
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* the next sweep retries */ }
   }
 }
 
 /** Remove containers whose labelled process is gone or has a different start time. Unlabelled containers are never listed. */
 export function sweepOrphanContainers(): void {
+  const stateBefore = ownerStateSnapshot();
   try {
     const listed = dockerOutput(['ps', '-aq', '--filter', `label=${reapOwnerLabel}`]);
-    if (listed === undefined) return;
-    const stale: string[] = [];
-    for (const id of containerIds(listed)) {
-      const owner = dockerOutput(['inspect', '--format', `{{index .Config.Labels "${reapOwnerLabel}"}}`, id]);
-      if (owner === undefined) continue;
-      if (!reapOwnerAlive(owner.trim())) stale.push(id);
+    if (listed !== undefined) {
+      const stale: string[] = [];
+      for (const id of containerIds(listed)) {
+        const owner = dockerOutput(['inspect', '--format', `{{index .Config.Labels "${reapOwnerLabel}"}}`, id]);
+        if (owner === undefined) continue;
+        if (!reapOwnerAlive(owner.trim())) stale.push(id);
+      }
+      if (stale.length) spawnSync('docker', ['rm', '-f', ...stale], { encoding: 'utf8', timeout: dockerTimeoutMs,
+        env: preserveReapEnvironment(process.env) });
     }
-    if (stale.length) spawnSync('docker', ['rm', '-f', ...stale], { encoding: 'utf8', timeout: dockerTimeoutMs });
+    removeStaleReapResources(['volume', 'ls', '-q', '--filter', `label=${reapOwnerLabel}`],
+      id => ['volume', 'inspect', '--format', `{{index .Labels "${reapOwnerLabel}"}}`, id],
+      ids => ['volume', 'rm', '-f', ...ids]);
+    removeStaleReapResources(['network', 'ls', '-q', '--filter', `label=${reapOwnerLabel}`],
+      id => ['network', 'inspect', '--format', `{{index .Labels "${reapOwnerLabel}"}}`, id],
+      ids => ['network', 'rm', ...ids]);
   } finally {
-    removeDeadOwnerState();
+    removeDeadOwnerState(stateBefore);
   }
+}
+
+/** Volumes and networks survive `docker rm`. A dead owner loses those too. */
+function removeStaleReapResources(listArgs: string[],
+  inspectArgs: (id: string) => string[], removeArgs: (ids: string[]) => string[]): void {
+  const listed = dockerOutput(listArgs);
+  if (listed === undefined) return;
+  const stale: string[] = [];
+  for (const id of containerIds(listed)) {
+    const owner = dockerOutput(inspectArgs(id));
+    if (owner === undefined) continue;
+    if (!reapOwnerAlive(owner.trim())) stale.push(id);
+  }
+  if (stale.length) spawnSync('docker', removeArgs(stale), { encoding: 'utf8', timeout: dockerTimeoutMs,
+    env: preserveReapEnvironment(process.env) });
 }
 
 function adoptReapEnvironment(environment: NodeJS.ProcessEnv): void {

@@ -3,6 +3,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { command } from '../../../scripts/qa/core.ts';
+import { composeProcessEnvironment } from '../../../scripts/dev/config.ts';
+import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import {
   dockerShimDirectory, processStartTime, reapChildScope, reapCreatedOwner, reapOwnerAlive, reapOwnerAssignment,
   reapOwnerEnvironment, reapOwnerLabel, reapScopeLabel, reapStateDirectory, removeScopedContainers, settleReap,
@@ -792,3 +794,152 @@ test('orphan', () => {
     rmSync(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('project settings cannot replace the reap owner a docker environment already carries', () => {
+  const inherited = {
+    PATH: `${dockerShimDirectory()}:${process.env.PATH ?? ''}`,
+    REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPES: 'shard-a', DOCKER_HOST: 'unix:///run/docker.sock',
+  };
+  const saved = { PATH: '/usr/bin', REZICS_REAP_OWNER: '1:1', POSTGRES_PASSWORD: 'secret' };
+  const composed = composeProcessEnvironment(inherited, saved);
+  expect(composed.REZICS_REAP_OWNER).toBe('9:8');
+  expect(composed.REZICS_REAP_SCOPES).toBe('shard-a');
+  expect(composed.PATH?.startsWith(`${dockerShimDirectory()}:`)).toBe(true);
+  expect(composed.POSTGRES_PASSWORD).toBe('secret');
+  expect(composed.DOCKER_HOST).toBe('unix:///run/docker.sock');
+  const previous = process.env.REZICS_REAP_OWNER;
+  process.env.REZICS_REAP_OWNER = '9:8';
+  try {
+    const loaded = loadDockerEnvironment({ DOCKER_HOST: 'unix:///run/docker.sock' }, () => true);
+    expect(loaded.REZICS_REAP_OWNER).toBe('9:8');
+    expect(loaded.PATH?.split(':')[0]).toBe(dockerShimDirectory());
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_REAP_OWNER;
+    else process.env.REZICS_REAP_OWNER = previous;
+  }
+});
+
+test('a stack started through qaStack carries the owner label and a killed owner leaves nothing', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'reap-qastack-'));
+  const bin = join(directory, 'bin');
+  mkdirSync(bin);
+  const state = join(directory, 'containers.json');
+  const log = join(directory, 'calls.jsonl');
+  const runId = `own${process.pid.toString(16).slice(0, 6)}${Date.now().toString(16).slice(-4)}`;
+  writeFileSync(state, JSON.stringify({ containers: [] }));
+  writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(process.env.LOG, JSON.stringify(args) + '\\n');
+const statePath = process.env.STATE;
+const load = () => JSON.parse(readFileSync(statePath, 'utf8'));
+const save = (value) => writeFileSync(statePath, JSON.stringify(value));
+const [command] = args;
+if (command === 'info') { console.log('28.0.0'); process.exit(0); }
+if (command === 'compose' && args.includes('--services')) { console.log('postgres'); process.exit(0); }
+if (command === 'compose' && args.includes('config')) process.exit(0);
+if (command === 'compose' && args.includes('up')) {
+  let owner = '';
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === '-f' || args[i] === '--file') && args[i + 1]) {
+      try {
+        const match = /rezics\\.reap-owner:\\s*"([^"]+)"/.exec(readFileSync(args[i + 1], 'utf8'));
+        if (match) owner = match[1];
+      } catch { /* the compose file itself has no reap label */ }
+    }
+  }
+  const saved = load();
+  saved.containers.push({ id: 'qa-stack', owner, removed: false });
+  save(saved);
+  process.exit(0);
+}
+if (command === 'ps') {
+  const filter = args[args.indexOf('--filter') + 1] ?? '';
+  if (filter !== 'label=${reapOwnerLabel}') process.exit(0);
+  console.log(load().containers.filter(container => !container.removed).map(container => container.id).join('\\n'));
+  process.exit(0);
+}
+if (command === 'inspect') {
+  const id = args.at(-1);
+  console.log(load().containers.find(container => container.id === id)?.owner ?? '');
+  process.exit(0);
+}
+if (command === 'rm') {
+  const ids = new Set(args.filter(id => id !== '-f' && id !== 'rm'));
+  const saved = load();
+  for (const container of saved.containers) if (ids.has(container.id)) container.removed = true;
+  save(saved);
+  process.exit(0);
+}
+process.exit(0);
+`);
+  chmodSync(join(bin, 'docker'), 0o755);
+  const childSource = join(directory, 'start-stack.ts');
+  writeFileSync(childSource, `import { reapOwnerAssignment } from ${JSON.stringify(join(root, 'scripts/qa/container-reaper.ts'))};
+import { ensureSecrets } from ${JSON.stringify(join(root, 'scripts/dev/config.ts'))};
+import { qaStack } from ${JSON.stringify(join(root, 'tests/qa/fault-recovery/search-ops-support.ts'))};
+const assigned = reapOwnerAssignment(process.env);
+for (const [key, value] of Object.entries(assigned.environment)) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}
+const runId = process.env.RUN_ID;
+ensureSecrets(process.env.ROOT, { profile: 'qa', runId, persistent: true });
+const result = qaStack(runId).compose(['up', '-d']);
+if (result.status !== 0) {
+  console.error(result.output);
+  process.exit(1);
+}
+setInterval(() => {}, 1_000);
+`);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, STATE: state, LOG: log, RUN_ID: runId, ROOT: root,
+  };
+  delete env.REZICS_REAP_OWNER;
+  delete env.REZICS_REAP_SCOPE;
+  delete env.REZICS_REAP_SCOPES;
+  delete env.REZICS_REAP_STATE;
+  delete env.REZICS_REAP_PRELOAD;
+  const child = spawn('bun', [childSource], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  child.stderr?.on('data', chunk => { stderr += String(chunk); });
+  const savedPath = process.env.PATH;
+  const savedState = process.env.STATE;
+  const savedLog = process.env.LOG;
+  let owner = '';
+  try {
+    const deadline = Date.now() + 45_000;
+    let containers: { id: string; owner: string; removed: boolean }[] = [];
+    while (Date.now() < deadline) {
+      containers = JSON.parse(readFileSync(state, 'utf8')).containers;
+      if (containers.length) break;
+      if (child.exitCode !== null) break;
+      await Bun.sleep(50);
+    }
+    expect(containers, stderr).toHaveLength(1);
+    owner = containers[0]!.owner;
+    expect(owner).toBe(`${child.pid}:${processStartTime(child.pid!)}`);
+    expect(containers[0]!.removed).toBe(false);
+    child.kill('SIGKILL');
+    await new Promise(resolve => child.once('close', resolve));
+    expect(reapOwnerAlive(owner)).toBe(false);
+    expect(JSON.parse(readFileSync(state, 'utf8')).containers[0].removed).toBe(false);
+    process.env.PATH = `${bin}:${savedPath ?? ''}`;
+    process.env.STATE = state;
+    process.env.LOG = log;
+    sweepOrphanContainers();
+    const after = JSON.parse(readFileSync(state, 'utf8')).containers as { id: string; removed: boolean }[];
+    expect(after.filter(container => !container.removed)).toEqual([]);
+    expect(after.some(container => container.id === 'qa-stack' && container.removed)).toBe(true);
+  } finally {
+    child.kill('SIGKILL');
+    process.env.PATH = savedPath;
+    if (savedState === undefined) delete process.env.STATE;
+    else process.env.STATE = savedState;
+    if (savedLog === undefined) delete process.env.LOG;
+    else process.env.LOG = savedLog;
+    rmSync(directory, { recursive: true, force: true });
+    rmSync(join(root, '.temp', 'stack', `rezics-qa-${runId}`), { recursive: true, force: true });
+    if (owner) rmSync(reapStateDirectory(owner) ?? join(root, '.temp', 'reap', 'missing'), { recursive: true, force: true });
+  }
+}, 60_000);

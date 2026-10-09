@@ -111,4 +111,8 @@ export const repositoryGuards = [
     file: 'scripts/static/one-language-parser-debt.test.ts',
     reason: 'Language-tag parsing outside the display-language module stays at the frozen violations.',
   },
+  {
+    file: 'scripts/static/docker-ownership.test.ts',
+    reason: 'Every QA docker spawn must keep the reap owner, and the frozen exceptions stay exact.',
+  },
 ] as const;

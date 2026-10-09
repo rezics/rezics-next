@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Database } from 'bun:sqlite';
+import { preserveReapEnvironment } from './container-reaper.ts';
 import { qaResourceClasses, type QaResourceClass } from './resource-classes.ts';
 
 export const GiB = 1024 ** 3;
@@ -83,8 +84,9 @@ const execute = promisify(execFile);
 export async function readMemory(remainingMs: number, env: NodeJS.ProcessEnv = process.env): Promise<MemoryReading> {
   const timeout = Math.max(1, Math.min(10_000, remainingMs));
   const [info, stats] = await Promise.all([
-    execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout, env }),
-    execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'], { timeout, env, maxBuffer: 4 * 1024 ** 2 }),
+    execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout, env: preserveReapEnvironment(env) }),
+    execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'],
+      { timeout, env: preserveReapEnvironment(env), maxBuffer: 4 * 1024 ** 2 }),
   ]);
   return parseMemoryReading(info.stdout, stats.stdout, readFileSync('/proc/meminfo', 'utf8'));
 }
@@ -279,6 +281,17 @@ function admissionMessage(need: MemoryNeed, reading?: MemoryReading): string {
     + `available ${reading ? gib(reading.hostAvailable) : 'unknown'}`;
 }
 
+/** The wait line may say "unknown" before a reading exists. Admission cannot. */
+export function measuredAdmissionMessage(need: MemoryNeed, reading: MemoryReading): string {
+  if (Object.values(reading).some(value => !Number.isFinite(value) || value < 0)
+    || (need.vm + need.vmReserve > 0 && reading.vmTotal === 0)) {
+    throw new Error('Invalid memory reading');
+  }
+  const message = admissionMessage(need, reading);
+  if (message.includes('unknown')) throw new Error('Memory admission requires a reading');
+  return message;
+}
+
 /** A slot authorizes concurrency; only a fresh measured reading admits the work. */
 export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions): Promise<void> {
   if (!await isLocalQaRun(options.root, options.env)) return;
@@ -298,9 +311,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
     let reading: MemoryReading;
     try {
       reading = await read(options.deadline - now());
-      if (Object.values(reading).some(value => !Number.isFinite(value) || value < 0) || needsVm && reading.vmTotal === 0)
-        throw new Error('Invalid memory reading');
-      message = admissionMessage(need, reading);
+      message = measuredAdmissionMessage(need, reading);
       if (now() < options.deadline && reading.vmTotal - reading.vmUsed >= need.vm + need.vmReserve
         && reading.hostAvailable >= need.host + need.hostReserve) {
         publishWait();

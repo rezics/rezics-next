@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { preserveReapEnvironment } from '../qa/container-reaper.ts';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -159,7 +160,7 @@ function unquoteEnv(value: string, where: string): string {
  * project setting to its own process so an enclosing QA stack cannot replace it. */
 export function composeProcessEnvironment(inherited: NodeJS.ProcessEnv,
   saved: Record<string, string>): NodeJS.ProcessEnv {
-  return { ...inherited, ...saved };
+  return preserveReapEnvironment(inherited, saved);
 }
 
 export function savePrivate(path: string, values: Record<string, string | number>): void {

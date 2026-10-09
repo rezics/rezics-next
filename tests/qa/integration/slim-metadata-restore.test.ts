@@ -8,6 +8,7 @@ import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { migrateAccount } from '../../../scripts/ops/migrate.ts';
 import { docker } from '../../../scripts/operations/search-state.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
@@ -63,6 +64,10 @@ import { freePort, fusekiSecrets, migrateAccess, pinnedImage, qaStack, rootComma
 import { nativeId } from './context-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+function ownedDockerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return preserveReapEnvironment(env);
+}
 const defaultGraph = 'urn:x-arq:DefaultGraphNode';
 
 /** Only the stopped isolated copy reconstructs a saved graph or a racing prestate. */
@@ -91,11 +96,11 @@ async function promotedPostgres(stack: QaStack, directory: string) {
     execFileSync('docker', ['exec', '-u', 'postgres', container, 'sh', '-ec',
       `mkdir -p /var/lib/postgresql/.temp
 PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`],
-    { cwd: root, env: stack.dockerEnv, timeout: 65_000 });
-    execFileSync('docker', ['cp', `${container}:${remote}`, data], { cwd: root, env: stack.dockerEnv, timeout: 60_000 });
+    { cwd: root, env: ownedDockerEnv(stack.dockerEnv), timeout: 65_000 });
+    execFileSync('docker', ['cp', `${container}:${remote}`, data], { cwd: root, env: ownedDockerEnv(stack.dockerEnv), timeout: 60_000 });
   } finally {
     execFileSync('docker', ['exec', '-u', 'postgres', container, 'rm', '-rf', remote],
-      { cwd: root, env: stack.dockerEnv, timeout: 10_000 });
+      { cwd: root, env: ownedDockerEnv(stack.dockerEnv), timeout: 10_000 });
   }
   execFileSync('pg_verifybackup', ['--no-parse-wal', data], { cwd: root, timeout: 15_000 });
   appendFileSync(resolve(data, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
@@ -123,13 +128,13 @@ PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -
 /** Keep a separately running original graph for the retained erasure owner.
  * Both copies use the product assembler; the copy occurs with its writer stopped. */
 async function originalGraphCopy(stack: QaStack, volume: string) {
-  docker(['volume', 'create', volume], stack.dockerEnv);
+  docker(['volume', 'create', volume], ownedDockerEnv(stack.dockerEnv));
   stack.runner.stop();
   try {
     docker(['run', '--rm', '--user', '0', '--network', 'none', '--volume', `${stack.stateVolume}:/from:ro`,
-      '--volume', `${volume}:/to`, '--entrypoint', 'sh', pinnedImage(), '-ec', 'cp -a /from/rezics /to/rezics'], stack.dockerEnv);
+      '--volume', `${volume}:/to`, '--entrypoint', 'sh', pinnedImage(), '-ec', 'cp -a /from/rezics /to/rezics'], ownedDockerEnv(stack.dockerEnv));
   } finally { await stack.runner.start(); }
-  return standaloneFuseki(stack.dockerEnv, { name: `${volume}-server`, image: pinnedImage(), volume,
+  return standaloneFuseki(ownedDockerEnv(stack.dockerEnv), { name: `${volume}-server`, image: pinnedImage(), volume,
     secrets: fusekiSecrets(stack.composeEnv) });
 }
 
@@ -977,7 +982,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await capturedRelayPool?.end();
     postgres?.stop();
     originalGraph?.remove();
-    try { execFileSync('docker', ['volume', 'rm', originalVolume], { cwd: root, env: stack.dockerEnv, timeout: 20_000, stdio:'pipe' }); }
+    try { execFileSync('docker', ['volume', 'rm', originalVolume], { cwd: root, env: ownedDockerEnv(stack.dockerEnv), timeout: 20_000, stdio:'pipe' }); }
     catch (error) { if (originalGraph) throw error; }
     rmSync(recoveryDirectory,{recursive:true,force:true});
     if (env) rmSync(env.objectDirectory,{recursive:true,force:true});
@@ -1263,9 +1268,9 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
     await Promise.allSettled([accessPool?.end(), accountPool?.end(), contentPool?.end(), relayPool?.end()]);
     postgres?.stop();
     if (originalGraph) originalGraph.runner.stop();
-    docker(['rm', '-f', `${originalVolume}-server`], stack.dockerEnv);
-    docker(['volume', 'rm', '-f', originalVolume], stack.dockerEnv);
-    try { await rootCommand(['stack:down', ...stack.args], 90_000); } catch { /* retain product failure */ }
+    docker(['rm', '-f', `${originalVolume}-server`], ownedDockerEnv(stack.dockerEnv));
+    docker(['volume', 'rm', '-f', originalVolume], ownedDockerEnv(stack.dockerEnv));
+    await rootCommand(['stack:reset', ...stack.args], 120_000);
     rmSync(recoveryDirectory, { recursive: true, force: true });
   }
 }, 600_000);
