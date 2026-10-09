@@ -26,7 +26,7 @@ const originalPins = {
   'relation-occurrence-v1': '27269b50a2a7c632a6fa4a96bcc94d4e623f3b00e19b36926727c229bca099c6',
   'realm-reply-placement-v1': 'b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511',
   'space-zone-v1': 'dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803',
-  'erasure-graph-v1': '4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505',
+  'erasure-graph-v1': 'bd9971be037b45f57efd2077d835acd861617add61d6cd10a968a15243b26ea5',
   'statement-decision-v1': 'f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490',
   'classification-proposition-v2': '22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6',
   'correction-proposal-v1': '9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5',

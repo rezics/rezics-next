@@ -405,7 +405,7 @@ export const profileRegistry = {
     ]
   },
   "erasure-graph-v1": {
-    "sha256": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
+    "sha256": "bd9971be037b45f57efd2077d835acd861617add61d6cd10a968a15243b26ea5",
     "file": "shapes/erasure-graph-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/erasure-graph-v1/tombstone-shape"

@@ -1,5 +1,7 @@
-# An erased exact graph revision retains only non-sensitive identity and the relay erasure epoch.
-# Native commands refuse later inserts naming this exact IRI.
+# An erased revision carries rv:ErasedRevision and one relay erasure epoch.
+# A revision IRI that already exists keeps its other statements, including its
+# earlier type; reads hide it once ErasedRevision is present. A Content revision
+# URN is only this tombstone. Native commands refuse later inserts naming this IRI.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -7,5 +9,5 @@
 
 <https://rezics.com/definition/erasure-graph-v1/tombstone-shape>
     a sh:NodeShape ;
-    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:ErasedRevision ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ErasedRevision ] ;
     sh:property [ sh:path rv:erasureEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

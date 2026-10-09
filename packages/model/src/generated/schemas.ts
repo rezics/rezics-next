@@ -314,7 +314,7 @@ export const DefinitionPresentationV1RevisionShapeSchema = Type.Object({ "@id": 
 
 export type DefinitionPresentationV1RevisionShape = Static<typeof DefinitionPresentationV1RevisionShapeSchema>;
 
-export const ErasureGraphV1TombstoneShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/ErasedRevision"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:erasureEpoch": Type.Array(Type.Integer({"minimum":1}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+export const ErasureGraphV1TombstoneShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/ErasedRevision") }), "rv:erasureEpoch": Type.Array(Type.Integer({"minimum":1}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type ErasureGraphV1TombstoneShape = Static<typeof ErasureGraphV1TombstoneShapeSchema>;
 

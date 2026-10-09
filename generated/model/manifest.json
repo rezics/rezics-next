@@ -249,7 +249,7 @@
     },
     {
       "id": "erasure-graph-v1",
-      "sha256": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
+      "sha256": "bd9971be037b45f57efd2077d835acd861617add61d6cd10a968a15243b26ea5",
       "file": "shapes/erasure-graph-v1.ttl"
     },
     {
@@ -4055,7 +4055,7 @@
     "shapes/correction-proposal-v1.ttl": "9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5",
     "shapes/definition-key-v1.ttl": "156050d35d5a7723cd89361e3ae919b1b6ec4f2f19592a0782ad45816dc09e5f",
     "shapes/definition-presentation-v1.ttl": "e4aa036bbed4bb52762f8c0ec858120e86586d3d795cfd44fd21c6bd8fe6e3a7",
-    "shapes/erasure-graph-v1.ttl": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
+    "shapes/erasure-graph-v1.ttl": "bd9971be037b45f57efd2077d835acd861617add61d6cd10a968a15243b26ea5",
     "shapes/event-time-v1.ttl": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
     "shapes/first-party-bundle-v1.ttl": "a41754111c9fd3150ef4f1666b9fce2221f5e58b7aa463022d85e87b6e7bf00e",
     "shapes/fixed-native-text-release-v1.ttl": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
@@ -4157,8 +4157,8 @@
     "shapes/zone-capability-v1.ttl": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "14d57a59dbce88d55d813ff2cec90bb093062822215f66d891d9deb83c90e5a3",
-    "packages/model/src/generated/schemas.ts": "5104bfdf6424c9419779d1cffd222de86b492e3eb7940567e48591c8f1bc5515",
+    "packages/model/src/generated/profiles.ts": "f8790555e5f18966663905f5a570546a316975282f161ff74f4eec581294efad",
+    "packages/model/src/generated/schemas.ts": "eb524986bfa343d9c2baa3b55d69db8dbed0027eb62ff628cce143363416fe53",
     "packages/model/src/generated/vocabulary.ts": "4c4fc439d80563bfe248ca77ebb8e3fdd541fcea346b5ecd2343c92c4b927dfd"
   }
 }
