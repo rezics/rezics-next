@@ -21,6 +21,7 @@ import { RealmSubmissionReads } from '../../../services/main/src/modules/realm-s
 import type { RoleCommand } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import type { SubmissionInput, SubmissionView } from '../../../services/main/src/modules/realm-submission/schema.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { fixtureReasons } from './g-565-decision-support.ts';
 import { REALM_JOIN_COST } from '../../../services/main/src/modules/access/realm-management-joining-contract.ts';
 import { REALM_ROSTER_COST } from '../../../services/main/src/modules/access/roster.ts';
 import { MANAGED_REALMS_COST } from '../../../services/main/src/modules/access/realm-management-managed.ts';
@@ -310,7 +311,8 @@ test('G314 moderation basis: retained private statement, exact evidence and rule
       actingSubject: s.owner.actor,outcome: 'restrict',targets: [{ owner: 'graph',resource: work.work,component: 'title',locator: null,
         scopeKind: 'exact_revision',revision: head,expectedHead: basis.reports[0]!.evidence[0]!.expectedHead,effect: 'disclosure' }],
       rule: { ref: basis.ruleBasis.ref,revision: basis.ruleBasis.revision,digest: basis.ruleBasis.digest },evidenceDigest: report.evidenceDigest,
-      reversesDecisionId: null,answersStepId: null,rationale: 'Violates the Realm rule',disclosure: 'private',idempotencyKey: key };
+      reversesDecisionId: null,answersStepId: null,rationale: 'Violates the Realm rule',disclosure: 'private',
+      reasons: fixtureReasons,idempotencyKey: key };
     await json(await s.call(s.owner,'POST','/v1/moderation/decisions',decision,key),202);
     await json(await s.call(s.owner,'POST','/v1/moderation/decisions',decision,key),200);
     expect(await json(await s.read(s.owner,`${s.root}/moderation`)))
@@ -377,7 +379,8 @@ test('G314 cost: exact queue aggregates stay constant across history growth and 
     }
     const queue = await json<{ items: { id: string }[] }>(await s.read(s.owner,`${s.root}/moderation?state=open&type=content_report`));
     const caseId = queue.items[0]!.id;
-    await json(await s.call(s.owner,'POST',`${s.root}/escalations`,{ actingSubject: s.owner.actor,expectedGeneration: '0',
+    const generation = (await json<{ generation: string }>(await s.read(s.owner,`${s.root}/roles`))).generation;
+    await json(await s.call(s.owner,'POST',`${s.root}/escalations`,{ actingSubject: s.owner.actor,expectedGeneration: generation,
       reason: 'Owner disposition needed',itemKind: 'report',itemId: caseId,expectedItemGeneration: '0' }),201);
     expect((await readCounts()).item.escalatedCount.value).toBe(1);
     await s.stack.accessPool.query(`UPDATE access.governance_case SET state = 'closed',closed_at = clock_timestamp()
