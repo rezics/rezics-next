@@ -98,6 +98,11 @@ export const repositoryGuards = [
     reason: 'The mechanism map has one owner per concept and resolvable entry points.',
   },
   {
+    file: 'scripts/static/mechanism-dependencies.test.ts',
+    reason:
+      "Code outside a mechanism owner may import only that owner's entry points and named adapter files.",
+  },
+  {
     file: 'scripts/static/mechanism-writers.test.ts',
     reason:
       'Only the Rights and Governance owners write assessment, obligation and enforcement-fence state.',

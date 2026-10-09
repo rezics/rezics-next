@@ -12,7 +12,9 @@ export interface Mechanism {
   ownedState: readonly string[];
   /** Effects only this owner may perform. */
   protectedEffects: readonly string[];
-  /** Adapter roles that may carry or project the owner's data without deciding it. */
+  /** Adapter roles that may carry or project the owner's data without deciding it.
+   * A file in the owner directory with this name is an additional import surface.
+   */
   allowedAdapters: readonly string[];
   /** Tests that keep the owner's behaviour. */
   conformanceTests: readonly string[];

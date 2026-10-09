@@ -1,0 +1,2354 @@
+[
+  {
+    "importer": "scripts/api/exposure.ts",
+    "imported": "services/main/src/modules/access/exposure-routes.ts"
+  },
+  {
+    "importer": "scripts/api/exposure.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "scripts/api/generate.ts",
+    "imported": "services/main/src/modules/access/exposure-routes.ts"
+  },
+  {
+    "importer": "scripts/api/generate.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "scripts/datasets/bootstrap.ts",
+    "imported": "services/main/src/modules/access/platform-administrator.ts"
+  },
+  {
+    "importer": "scripts/dev/web-auth-bootstrap.ts",
+    "imported": "services/main/src/modules/access/join-fixture-consent.ts"
+  },
+  {
+    "importer": "scripts/load/corpus.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "scripts/load/slim-command-measure.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "scripts/ops/backup.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "scripts/ops/platform-governance.ts",
+    "imported": "services/main/src/modules/access/platform-governance.ts"
+  },
+  {
+    "importer": "services/account/src/index.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/access-capture-fence.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/app.ts",
+    "imported": "services/main/src/modules/access/exposure-declarations.ts"
+  },
+  {
+    "importer": "services/main/src/app.ts",
+    "imported": "services/main/src/modules/access/exposure-routes.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/contexts.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/download-leases.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/eligible-org-member-set.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/groups.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/managed-organizations.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/membership-consents.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/memberships.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/org-realm-participation.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/organization-moderation.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/platform-administrator.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/policy-owner.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/private-memberships.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/private-recipients.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/protection-admission.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/realm-management-joining.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/realm-management-managed.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/realm-management-recovery.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/realm-management.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/represented-membership-authority.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/roles.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/roster.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/access/session-agent.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/governance/composition.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/governance/evidence.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/governance/notices-mail.ts"
+  },
+  {
+    "importer": "services/main/src/composition.ts",
+    "imported": "services/main/src/modules/rights/counter-notice-worker.ts"
+  },
+  {
+    "importer": "services/main/src/modules/access/contexts.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/access/realm-management-settings.ts",
+    "imported": "services/main/src/modules/governance/rules.ts"
+  },
+  {
+    "importer": "services/main/src/modules/account/verify-assertion.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/address/registry.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/address/resolution.ts",
+    "imported": "services/main/src/modules/display-language/public-request.ts"
+  },
+  {
+    "importer": "services/main/src/modules/address/resolution.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/address/write.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/agent/localized-name.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/agent/profile.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/agent/profile.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/agent/provision.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalog/commands.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalogue-intake/schema.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalogue-intake/search.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalogue-intake/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalogue-intake/store.ts",
+    "imported": "services/main/src/modules/access/platform-administrator.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalogue-intake/store.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/catalogue-intake/verification.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/context-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/context.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/decision-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/decision.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/proposition-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/proposition.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/tag-proposal.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/classification/vocabulary.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/collection/dynamic.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/collection/names.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/collection/names.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/commerce/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/comment.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/draft.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/draft.ts",
+    "imported": "services/main/src/modules/access/zone-content-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/eligibility-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/eligibility.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/publish-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/publish-admitted.ts",
+    "imported": "services/main/src/modules/access/zone-content-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/publish.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/reply-draft.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/search-private.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/search-private.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/content-publication/title-projection.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/definition-state.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/equivalence.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/graph.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/outbox-event.ts",
+    "imported": "services/main/src/modules/access/receipt-families.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/preferences.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/private-selection.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/context/rule.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/continue/chapters.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/continue/read.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/create-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/draft.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/edit-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/edit.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/history.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/private-delivery-fence.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/private-search-settlement.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/private-search-socket.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/private-search-socket.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/publish-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/publish.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/search-private.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/contribution/search-private.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/disclosure/read.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/disclosure/viewer.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/discovery/audience.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/discovery/audience.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/discovery/reader.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/discovery/reader.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/discovery/refresh-store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/admission.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/admission.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/admission.ts",
+    "imported": "services/main/src/modules/access/work-edit-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/authority.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/authority.ts",
+    "imported": "services/main/src/modules/access/memberships.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/authority.ts",
+    "imported": "services/main/src/modules/access/role-proof.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/authority.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/command-journal.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/owner-authority.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/runtime.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/editorial-review/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/entity-page/relations.ts",
+    "imported": "services/main/src/modules/access/semantic-disclosure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/erasure/reconcile.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/erasure/request.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/event/observation-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/event/observation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/operations.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/operations.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/operations.ts",
+    "imported": "services/main/src/modules/access/platform-permissions.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/readers.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/readers.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/export/wiki.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/frame.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/frame.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/personal.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/personal.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/ranking-admission.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/read.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/read.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/target-index.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/feed/trending.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/authority.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/authority.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/authority.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/memberships.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/memberships.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/merge-handler.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/read.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/recovery.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/recovery.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/follows/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/composition.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/evidence.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/realm-sanction-appeal.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/realm-sanction-appeal.ts",
+    "imported": "services/main/src/modules/access/realm-management-members.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/report-review.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/rules.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/store.ts",
+    "imported": "services/main/src/modules/access/platform-administrator.ts"
+  },
+  {
+    "importer": "services/main/src/modules/governance/store.ts",
+    "imported": "services/main/src/modules/rights/counter-notice.ts"
+  },
+  {
+    "importer": "services/main/src/modules/graph-layout/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/graph-query/schema.ts",
+    "imported": "services/main/src/modules/access/semantic-disclosure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/hub/admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/hub/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/identity-merge/pair-authority.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/identity-merge/pair-authority.ts",
+    "imported": "services/main/src/modules/access/memberships.ts"
+  },
+  {
+    "importer": "services/main/src/modules/identity-merge/pair-authority.ts",
+    "imported": "services/main/src/modules/access/represented-work-proof.ts"
+  },
+  {
+    "importer": "services/main/src/modules/identity-merge/pair-authority.ts",
+    "imported": "services/main/src/modules/access/role-proof.ts"
+  },
+  {
+    "importer": "services/main/src/modules/identity-merge/person-effect.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/judgment/access.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/judgment/hint.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/lexicon/render.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/lexicon/schema.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/library/follows.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/library/follows.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/library/merge-handler.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/library/stats.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/library/status.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/management-reads/decision-basis.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/management-reads/decision-basis.ts",
+    "imported": "services/main/src/modules/access/realm-management-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/management-reads/decision-basis.ts",
+    "imported": "services/main/src/modules/governance/rules.ts"
+  },
+  {
+    "importer": "services/main/src/modules/management-reads/read-store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/management-reads/read-store.ts",
+    "imported": "services/main/src/modules/governance/realm-sanction-appeal.ts"
+  },
+  {
+    "importer": "services/main/src/modules/mcp/capabilities.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/access-batch.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/access-batch.ts",
+    "imported": "services/main/src/modules/access/author-baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/access-batch.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/access-batch.ts",
+    "imported": "services/main/src/modules/access/policy-transaction.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/access-batch.ts",
+    "imported": "services/main/src/modules/access/semantic-disclosure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/commands.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/summary-contract.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/summary.ts",
+    "imported": "services/main/src/modules/access/semantic-disclosure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/summary.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/media/visibility.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification-producers/editorial.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification-producers/producer.ts",
+    "imported": "services/main/src/modules/governance/notices-mail.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification-producers/subjects.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification/display.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification/subjects.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification/watch.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/notification/watch.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/onboarding/ensure.ts",
+    "imported": "services/main/src/modules/access/contexts.ts"
+  },
+  {
+    "importer": "services/main/src/modules/onboarding/persons.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/onboarding/suggestions.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/owner/operations.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/package/release-recommendation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/post/identification.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/preferences/languages.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/preferences/languages.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/preferences/languages.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/preferences/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/preferences/store.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/preferences/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/pro-site/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/access.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/access.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/access.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/credits.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/listing.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/listing.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/read.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/visibility.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/profiles/visibility.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/progress/completion.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/progress/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/projection/command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/projection/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/proposal/access.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/proposal/access.ts",
+    "imported": "services/main/src/modules/access/authority-witness.ts"
+  },
+  {
+    "importer": "services/main/src/modules/proposal/execute.ts",
+    "imported": "services/main/src/modules/access/managed-organizations.ts"
+  },
+  {
+    "importer": "services/main/src/modules/proposal/graph.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/protection/admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/protection/reconcile-restored.ts",
+    "imported": "services/main/src/modules/access/protection-admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/protection/reconcile-restored.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/protection/work.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/protection/work.ts",
+    "imported": "services/main/src/modules/access/protection-admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/protection/work.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/public-report/owners.ts",
+    "imported": "services/main/src/modules/governance/evidence.ts"
+  },
+  {
+    "importer": "services/main/src/modules/public-report/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/public-report/store.ts",
+    "imported": "services/main/src/modules/rights/counter-notice.ts"
+  },
+  {
+    "importer": "services/main/src/modules/query/compile.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/query/resources.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/query/seek-index.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/quota/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rankings/realm-threads.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rankings/retirement.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rate-limit/routes.ts",
+    "imported": "services/main/src/modules/access/exposure-declarations.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/context-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/context.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/experience-aggregate.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/experience-aggregate.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/global-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/global-aggregate.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/global-aggregate.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/global.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/legacy-reconstruction.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/observation-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/observation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/policy-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/policy.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/populations.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation-context.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation-read.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation-schema.ts",
+    "imported": "services/main/src/modules/access/rating-question-presentation.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation-schema.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation-schema.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/question-presentation.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/release-aggregate.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/release.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/rollup-api.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/target-aggregate.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/target-api.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/target-inventory.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rating/target.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/reading-position/read.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/reading-position/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/reading-settings/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realization/command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-admin/history.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-admin/join-requests.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-admin/join-requests.ts",
+    "imported": "services/main/src/modules/access/realm-management-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-admin/join-requests.ts",
+    "imported": "services/main/src/modules/access/realm-management-search.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-directory/read.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-directory/vocabulary.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-profile/commands.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-profile/commands.ts",
+    "imported": "services/main/src/modules/governance/rules.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-profile/schema.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reads/read-realm.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reads/read-realm.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reply/content-store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reply/graph.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reply/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reply/store.ts",
+    "imported": "services/main/src/modules/access/realm-management-policy.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reply/thread-store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-reply/thread-store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/graph.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/graph.ts",
+    "imported": "services/main/src/modules/access/receipt-families.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/reads.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/reads.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/resource.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/store.ts",
+    "imported": "services/main/src/modules/access/author-baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/store.ts",
+    "imported": "services/main/src/modules/access/realm-management-policy.ts"
+  },
+  {
+    "importer": "services/main/src/modules/realm-submission/store.ts",
+    "imported": "services/main/src/modules/access/realm-management-settings.ts"
+  },
+  {
+    "importer": "services/main/src/modules/recommendation/derived-generation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/recommendation/ranking.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/relation/work-authority.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/relation/work-authority.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/release/command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/release/languages.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/review/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/review/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rights/offering.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/rights/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/safety-queue/participation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/safety-queue/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/saved-filter/feed.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/saved-filter/feed.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/saved-filter/match.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/saved-filter/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/saved-filter/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/search-disclosure/content-read-lease.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/search-disclosure/content-socket.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/search-disclosure/content-socket.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/search/result-cards.ts",
+    "imported": "services/main/src/modules/display-language/public-request.ts"
+  },
+  {
+    "importer": "services/main/src/modules/semantic/admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/semantic/admitted.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/semantic/command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/semantic/selected-capability.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/semantic/staging.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/semantic/staging.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/session/series-read.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/session/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/author-credit.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/author-credit.ts",
+    "imported": "services/main/src/modules/access/work-edit-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/child-native-support.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/child-native-support.ts",
+    "imported": "services/main/src/modules/access/work-edit-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/child-native.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/child-retirement.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/field-application.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/field-control-native.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/native-work-adoption.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/native-work-adoption.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/native-work-attachment.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/native-work-attachment.ts",
+    "imported": "services/main/src/modules/access/work-edit-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/native-work-attachment.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/support-attach.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/source/support-attach.ts",
+    "imported": "services/main/src/modules/access/work-edit-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create-admitted.ts",
+    "imported": "services/main/src/modules/access/realm-management.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create-zone.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create-zone.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create.ts",
+    "imported": "services/main/src/modules/access/realm-initialization.ts"
+  },
+  {
+    "importer": "services/main/src/modules/space/create.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/statement/graph.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/statement/upgrade.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/structure/bootstrap.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/structure/change-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/structure/change.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/structure/outbox-event.ts",
+    "imported": "services/main/src/modules/access/receipt-families.ts"
+  },
+  {
+    "importer": "services/main/src/modules/structure/profiles.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/studio/access.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/studio/access.ts",
+    "imported": "services/main/src/modules/access/author-baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/studio/access.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/suitability/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/suitability/store.ts",
+    "imported": "services/main/src/modules/access/platform-administrator.ts"
+  },
+  {
+    "importer": "services/main/src/modules/suitability/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/suitability/store.ts",
+    "imported": "services/main/src/modules/access/work-edit-authority.ts"
+  },
+  {
+    "importer": "services/main/src/modules/theme/activation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/theme/first-party-lifecycle.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/types/store.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/types/store.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/verification/claim-fold.ts",
+    "imported": "services/main/src/modules/access/assessment-history.ts"
+  },
+  {
+    "importer": "services/main/src/modules/verification/graph.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/verification/operations.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/verification/operations.ts",
+    "imported": "services/main/src/modules/access/assessment-history.ts"
+  },
+  {
+    "importer": "services/main/src/modules/vote/access.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/vote/access.ts",
+    "imported": "services/main/src/modules/access/authority-witness.ts"
+  },
+  {
+    "importer": "services/main/src/modules/vote/admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/web-publication/command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/wiki/apply-runtime.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/wiki/apply.ts",
+    "imported": "services/main/src/modules/access/role-proof.ts"
+  },
+  {
+    "importer": "services/main/src/modules/wiki/history-read.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/wiki/read.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/activate.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/activate.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/author-credit-retirement.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/author-credit.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/catalogue-import.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/catalogue-import.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/create-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/derivations.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/edit-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/edit.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/fixed-release.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/history.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/maintainer-proof.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/maintainer-proof.ts",
+    "imported": "services/main/src/modules/access/baseline.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/maintainers.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/maintainers.ts",
+    "imported": "services/main/src/modules/access/controller-continuity.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/maintainers.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/merge-command.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/metadata-command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/organization-publication-evidence.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/organization-publication-evidence.ts",
+    "imported": "services/main/src/modules/access/organization-publication.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/organization-rejection-schemas.ts",
+    "imported": "services/main/src/modules/access/organization-publication.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/read-contract.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/read-session.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/read-session.ts",
+    "imported": "services/main/src/modules/display-language/public-request.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/read-session.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/realm-variant-recommendation.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reconcile-restored.ts",
+    "imported": "services/main/src/modules/access/organization-moderation.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reconcile-restored.ts",
+    "imported": "services/main/src/modules/access/organization-publication.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reconcile-restored.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reconcile-title-control.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reconcile-title-control.ts",
+    "imported": "services/main/src/modules/access/title-admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reconcile-title-control.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reject-organization-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reject-organization-admitted.ts",
+    "imported": "services/main/src/modules/access/organization-moderation.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reject-organization-admitted.ts",
+    "imported": "services/main/src/modules/access/organization-publication.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reject-realm-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reject-realm.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/reject-realm.ts",
+    "imported": "services/main/src/modules/access/organization-publication.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/seal.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/search-grouped.ts",
+    "imported": "services/main/src/modules/access/semantic-disclosure.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/select-main-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/select-main.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/select-realm-admitted.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/select-realm.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/strong-revoke.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/title-control.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/title-control.ts",
+    "imported": "services/main/src/modules/access/title-admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/title-control.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/translation-links.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/work/type-command.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone-modules/editor-lists.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/configuration.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/owner-create.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/owner-create.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/presentation-format.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/publication.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/read-name.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/read-name.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/realm-attachment-list.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/realm-attachment-withdrawal.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/realm-attachment.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/route.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/route.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/modules/zone/showcase-disclosure.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/operations/format-upgrade.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/private-search-pending.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/realm-policy.ts",
+    "imported": "services/main/src/modules/access/realm-management-recovery.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-authority.ts",
+    "imported": "services/main/src/modules/access/group-intent.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-authority.ts",
+    "imported": "services/main/src/modules/access/groups.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-authority.ts",
+    "imported": "services/main/src/modules/access/managed-org-authority.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-authority.ts",
+    "imported": "services/main/src/modules/access/managed-org-schemas.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-authority.ts",
+    "imported": "services/main/src/modules/access/org-realm-authority.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-authority.ts",
+    "imported": "services/main/src/modules/access/platform-grants.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-memberships.ts",
+    "imported": "services/main/src/modules/access/group-intent.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-policy.ts",
+    "imported": "services/main/src/modules/access/group-intent.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-policy.ts",
+    "imported": "services/main/src/modules/access/policy-decisions.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-policy.ts",
+    "imported": "services/main/src/modules/access/policy-errors.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-policy.ts",
+    "imported": "services/main/src/modules/access/policy-owner.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-read.ts",
+    "imported": "services/main/src/modules/access/policy-errors.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-roles.ts",
+    "imported": "services/main/src/modules/access/group-intent.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-topology.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-topology.ts",
+    "imported": "services/main/src/modules/access/group-intent.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-topology.ts",
+    "imported": "services/main/src/modules/access/invitation-schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-topology.ts",
+    "imported": "services/main/src/modules/access/invitation.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-topology.ts",
+    "imported": "services/main/src/modules/access/policy-errors.ts"
+  },
+  {
+    "importer": "services/main/src/routes/access-topology.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/acting-contexts.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/claims.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/collections.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/content-private-search.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/content-private-search.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/content.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/content.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/contexts.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/contexts.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/eligible-org-member-set.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/groups.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/managed-organizations.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/membership-consents.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/memberships.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/org-realm-participation.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/organization-moderation.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/private-memberships.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/private-recipients.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/protection-admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/realm-management-joining.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/realm-management-managed.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/realm-management.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/represented-membership-authority.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/roles.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/roster.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/access/session-agent.ts"
+  },
+  {
+    "importer": "services/main/src/routes/dependencies.ts",
+    "imported": "services/main/src/modules/governance/rules.ts"
+  },
+  {
+    "importer": "services/main/src/routes/editorial-proposals.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/editorial-proposals.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/events.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/exports.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/feed.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/follows.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/follows.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/graph-queries.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/graph-queries.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/lexicon.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/lexicon.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/managed-realms.ts",
+    "imported": "services/main/src/modules/access/realm-management-joining-contract.ts"
+  },
+  {
+    "importer": "services/main/src/routes/mcp.ts",
+    "imported": "services/main/src/modules/access/exposure-routes.ts"
+  },
+  {
+    "importer": "services/main/src/routes/mcp.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/media.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/media.ts",
+    "imported": "services/main/src/modules/access/download-leases.ts"
+  },
+  {
+    "importer": "services/main/src/routes/notifications.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/onboarding-interests.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/owners.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/package-install-requests.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/platform-access.ts",
+    "imported": "services/main/src/modules/access/exposure-routes.ts"
+  },
+  {
+    "importer": "services/main/src/routes/platform-access.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/platform-access.ts",
+    "imported": "services/main/src/modules/access/platform-permissions.ts"
+  },
+  {
+    "importer": "services/main/src/routes/polls.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/preferences.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/contexts.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/exposure-routes.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/groups.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/managed-org-authority.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/memberships.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/org-realm-authority.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/private-recipients.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
+  },
+  {
+    "importer": "services/main/src/routes/problems.ts",
+    "imported": "services/main/src/modules/access/roles.ts"
+  },
+  {
+    "importer": "services/main/src/routes/profiles.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/projections.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/proposals.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/proposals.ts",
+    "imported": "services/main/src/modules/access/managed-org-authority.ts"
+  },
+  {
+    "importer": "services/main/src/routes/proposals.ts",
+    "imported": "services/main/src/modules/access/managed-org-schemas.ts"
+  },
+  {
+    "importer": "services/main/src/routes/protection.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/public-reports.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/publication.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/query.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/rating-global.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/rating-question-presentations.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/rating-question-presentations.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/ratings.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/realm-admin.ts",
+    "imported": "services/main/src/modules/access/realm-management-joining-contract.ts"
+  },
+  {
+    "importer": "services/main/src/routes/realm-admin.ts",
+    "imported": "services/main/src/modules/access/realm-management.ts"
+  },
+  {
+    "importer": "services/main/src/routes/realm-appeals.ts",
+    "imported": "services/main/src/modules/governance/realm-sanction-appeal.ts"
+  },
+  {
+    "importer": "services/main/src/routes/recipe-qualifiers.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/recipes.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/reports.ts",
+    "imported": "services/main/src/modules/governance/rules.ts"
+  },
+  {
+    "importer": "services/main/src/routes/resource-relations.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/resources.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/resources.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/reviews.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/rights.ts",
+    "imported": "services/main/src/modules/rights/offering.ts"
+  },
+  {
+    "importer": "services/main/src/routes/search.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/search.ts",
+    "imported": "services/main/src/modules/access/exposure.ts"
+  },
+  {
+    "importer": "services/main/src/routes/search.ts",
+    "imported": "services/main/src/modules/display-language/public-request.ts"
+  },
+  {
+    "importer": "services/main/src/routes/source-runs.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/source-supports.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/spaces.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  },
+  {
+    "importer": "services/main/src/routes/spaces.ts",
+    "imported": "services/main/src/modules/display-language/select.ts"
+  },
+  {
+    "importer": "services/main/src/routes/studio.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/suitability.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/suitability.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/themes.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/types.ts",
+    "imported": "services/main/src/modules/access/topology-control.ts"
+  },
+  {
+    "importer": "services/main/src/routes/zones.ts",
+    "imported": "services/main/src/modules/access/admission.ts"
+  },
+  {
+    "importer": "services/main/src/routes/zones.ts",
+    "imported": "services/main/src/modules/display-language/schema.ts"
+  }
+]
