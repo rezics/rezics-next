@@ -30,6 +30,12 @@ export function graphErasureReceipt(erasureId: string): string {
 
 const GRAPH_REVISION =
   /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const INDEX_UNIT_URN = /^urn:rezics:[a-z0-9:-]+$/;
+
+/** Private draft units are URNs. A published selection's match unit is a revision IRI. */
+function erasureIndexUnit(unit: string): boolean {
+  return INDEX_UNIT_URN.test(unit) || GRAPH_REVISION.test(unit);
+}
 
 /**
  * One ordered target list for the shared tombstone digest.
@@ -126,7 +132,7 @@ async function indexedUnits(fuseki: FusekiClient, targets: readonly string[]): P
     units.some(
       (unit) =>
         ![PUBLIC, PRIVATE].includes(unit.graph) ||
-        !/^urn:rezics:[a-z0-9:-]+$/.test(unit.unit) ||
+        !erasureIndexUnit(unit.unit) ||
         !accepted.has(unit.target),
     )
   ) {
@@ -647,7 +653,7 @@ async function erasureIndexedUnits(
         row.graph?.type !== 'uri' ||
         row.unit?.type !== 'uri' ||
         ![PUBLIC, PRIVATE].includes(row.graph.value) ||
-        !/^urn:rezics:[a-z0-9:-]+$/.test(row.unit.value),
+        !erasureIndexUnit(row.unit.value),
     )
   )
     throw new GraphErasureUnavailable('exact held unit inventory is unavailable');
@@ -828,7 +834,7 @@ export function buildHeldGraphErasureCommand(
     new Set(units.map((unit) => `${unit.graph}\0${unit.unit}`)).size !== units.length ||
     units.some(
       (unit) =>
-        ![PUBLIC, PRIVATE].includes(unit.graph) || !/^urn:rezics:[a-z0-9:-]+$/.test(unit.unit),
+        ![PUBLIC, PRIVATE].includes(unit.graph) || !erasureIndexUnit(unit.unit),
     )
   )
     throw new GraphErasureConflict('invalid held erasure signing input');
