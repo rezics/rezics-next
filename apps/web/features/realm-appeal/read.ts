@@ -2,13 +2,11 @@ import { cookies } from 'next/headers';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serviceOrigin } from '../api/origins.ts';
-import { operationOpen, type PlatformOperationId } from '../api/platform-access.ts';
+import { operationOpen } from '../api/platform-access.ts';
 import { readPlatformAccess } from '../api/main.ts';
 import { SERVER_READ_LIMITS } from '../api/server-fetch.ts';
 import { serverRead } from '../api/server-read.ts';
 import { readingFromBanResponse, type BanReading } from './reading.ts';
-
-const memberBanRead = 'getV1RealmsByRealmMember-ban' satisfies PlatformOperationId;
 
 /**
  * The member's own ban: `GET /v1/realms/{realm}/member-ban?actingSubject=`.
@@ -22,7 +20,7 @@ export async function readOwnRealmBan(realm: string, actingSubject: string): Pro
   const id = realm.slice(-36);
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   try {
-    if (!operationOpen(memberBanRead, await readPlatformAccess())) return null;
+    if (!operationOpen('getV1RealmsByRealmMember-ban', await readPlatformAccess())) return null;
     const token = (await cookies()).get(ACCESS_COOKIE)?.value;
     if (!token) return null;
     const url = new URL(`/v1/realms/${id}/member-ban`, serviceOrigin('MAIN_ORIGIN'));

@@ -106,5 +106,5 @@ test('the zone read becomes links in structure order', () => {
   expect(parsed).toEqual({ head, links: [link('charts', charts, 'charts', 1)] });
   expect(pageNameOf({ name: { original: 'en', labels: { en: 'Harbor charts' } } })).toBe('Harbor charts');
   expect(pageNameOf({ title: { value: 'Harbor tides' } })).toBe('Harbor tides');
-  expect(pageNameOf({ value: 'Harbor charts', language: 'en', direction: 'ltr', basis: 'requested' })).toBe('Harbor charts');
+  expect(pageNameOf({ value: 'Harbor charts', language: 'en', direction: 'rtl' as const, basis: 'requested' })).toBe('Harbor charts');
 });
