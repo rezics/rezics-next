@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { generate } from '../model/compiler/generate.ts';
 import { stampFusekiImage } from './dev/fuseki-image.ts';
@@ -16,3 +17,8 @@ stampFusekiImage(root, check);
 // Main imports generated model modules (profiles, Facets), so load it only once they exist.
 const { generateMainOpenApi } = await import('./api/generate.ts');
 await generateMainOpenApi(root, check);
+// The toolchain page lists the pinned images, so it follows the pins. Land and merge
+// regenerate through this script, so the page cannot go stale behind a new pin.
+const inventory = spawnSync('python3', ['scripts/documentation/toolchain_inventory.py', check ? '--check' : '--write'],
+  { cwd: root, encoding: 'utf8' });
+if (inventory.status !== 0) throw new Error(`toolchain inventory: ${(inventory.stderr || inventory.stdout).trim()}`);

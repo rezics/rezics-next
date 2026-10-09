@@ -398,7 +398,6 @@ tasks:
     desc: Regenerate model, OpenAPI and pinned-image artifacts and the toolchain inventory.
     cmds:
       - bun scripts/generate.ts
-      - python3 scripts/documentation/toolchain_inventory.py --write
 
   gen:check:
     desc: Fail if generated artifacts are stale.
