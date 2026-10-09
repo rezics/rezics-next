@@ -87,8 +87,7 @@ afterAll(async () => {
   graph?.remove();
   if (qa) {
     const { spawnSync } = await import('node:child_process');
-    const { preserveReapEnvironment } = await import('../../../scripts/qa/container-reaper.ts');
-    spawnSync('docker', ['volume', 'rm', '-f', volume], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 60_000 });
+    spawnSync('docker', ['volume', 'rm', '-f', volume], { env: qa.dockerEnv, timeout: 60_000 });
   }
   await databases?.close();
   rmSync(directory, { recursive: true, force: true });

@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { docker, OFFLINE_INDEX_SCRIPT, OWNER_ENTRYPOINT } from '../../../scripts/operations/search-state.ts';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { activateMetadataWork, DATASET, GRAPHS, iri, initializeFreshGraph,
   metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { assertPublicTextReady } from '../../../services/main/src/modules/work/search-readiness.ts';
@@ -25,7 +24,7 @@ test('OPS13: a second JVM on the active TDB2 directory is refused and the owner 
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!, routingEpoch: stack.apps.MAIN_ROUTING_EPOCH! };
     await initializeFreshGraph(fuseki, lineage);
     const container = stack.runner.container();
-    const inspected = JSON.parse(docker(['inspect', container], preserveReapEnvironment(stack.dockerEnv), 10_000))[0] as { Path: string };
+    const inspected = JSON.parse(docker(['inspect', container], stack.dockerEnv, 10_000))[0] as { Path: string };
     expect(inspected.Path).toBe(OWNER_ENTRYPOINT);
     const before = await assertPublicTextReady(fuseki, lineage);
     const state = () => stack.runner.exec('cd /fuseki/databases/rezics && ls -A | sort').trim().split('\n');

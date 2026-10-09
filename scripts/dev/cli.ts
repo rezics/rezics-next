@@ -39,6 +39,20 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.e
   return result.stdout.trim();
 }
 
+/** `down --volumes` misses volumes already detached from the project. */
+function removeProjectVolumes(project: string, env: NodeJS.ProcessEnv): void {
+  const names = new Set(run('docker', ['volume', 'ls', '-q', '--filter',
+    `label=com.docker.compose.project=${project}`], env).split('\n').map(name => name.trim())
+    .filter(name => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)));
+  for (const kind of ['postgres_data', 'fuseki_data', 'rustfs_data']) names.add(`${project}_${kind}`);
+  for (const name of names) {
+    const removed = spawnSync('docker', ['volume', 'rm', '-f', name],
+      { cwd: root, env, encoding: 'utf8', timeout: 180_000 });
+    if ((removed.error || removed.status !== 0) && !(removed.stderr ?? '').includes('No such volume'))
+      throw new Error(`docker volume rm ${name} failed: ${(removed.stderr || removed.error?.message || '').trim()}`);
+  }
+}
+
 function runtimeEnv(): NodeJS.ProcessEnv {
   try {
     run('docker', ['info', '--format', '{{.ServerVersion}}']);
@@ -659,8 +673,10 @@ async function main(): Promise<void> {
       if (command === 'stack:reset') forgetQaStack(options);
       console.log(`${projectName(options)} has no saved stack`); return;
     }
-    compose(options, command === 'stack:reset' ? ['down', '--volumes', '--remove-orphans'] : ['down'], runtimeEnv());
+    const env = runtimeEnv();
+    compose(options, command === 'stack:reset' ? ['down', '--volumes', '--remove-orphans'] : ['down'], env);
     if (command === 'stack:reset') {
+      removeProjectVolumes(projectName(options), env);
       const apps = readEnv(join(dir, 'apps.env'));
       rmSync(apps.MAIN_OBJECT_DIRECTORY, { recursive: true, force: true });
       rmSync(apps.MAIN_CANDIDATE_DIRECTORY, { recursive: true, force: true });

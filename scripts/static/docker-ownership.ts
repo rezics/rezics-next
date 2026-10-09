@@ -114,7 +114,7 @@ function tokenize(text: string): Token[] {
       continue;
     }
     const paired = char === '=' && text[i + 1] === '>' ? '=>' : char;
-    if ('()[]{}.,:=<>?'.includes(char) || paired === '=>') {
+    if ('()[]{}.,:;=<>?'.includes(char) || paired === '=>') {
       const token: Token = { kind: 'punct', text: paired, start: i, end: i + paired.length };
       tokens.push(token);
       previous = token;
@@ -124,6 +124,19 @@ function tokenize(text: string): Token[] {
     i += 1;
   }
   return tokens;
+}
+
+/** Index of the token after `=>`, skipping a return-type annotation. */
+function arrowBody(tokens: Token[], close: number): number | undefined {
+  let depth = 0;
+  for (let i = close + 1; i < tokens.length && i < close + 40; i++) {
+    const text = tokens[i]!.text;
+    if ('<({['.includes(text)) depth += 1;
+    else if ('>)}]'.includes(text)) depth -= 1;
+    else if (text === '=>' && depth === 0) return i + 1;
+    else if ((text === ';' || text === ',') && depth === 0) return undefined;
+  }
+  return undefined;
 }
 
 function matching(tokens: Token[], open: number, start: string, end: string): number {
@@ -181,7 +194,9 @@ function isDockerSpawn(name: string, tokens: Token[], open: number): boolean {
   return command === 'docker' || command === 'docker-compose';
 }
 
-function bindings(tokens: Token[]): { fns: Set<string>; vars: Set<string> } {
+function bindings(tokens: Token[]): {
+  fns: Set<string>; vars: Set<string>; helpers: Set<string>; owners: Set<string>; spawning: Set<string>;
+} {
   const fns = new Set<string>(reapEnvironmentBuilders);
   const vars = new Set<string>();
   const functions: { name: string; from: number; to: number }[] = [];
@@ -198,16 +213,15 @@ function bindings(tokens: Token[]): { fns: Set<string>; vars: Set<string> } {
     const name = tokens[i + 1];
     if (name?.kind !== 'id' || tokens[i + 2]?.text !== '=') continue;
     const value = i + 3;
-    if (tokens[value]?.text === '(' || tokens[value]?.text === 'async' || tokens[value]?.kind === 'id'
-      && tokens[value + 1]?.text === '=>') {
-      const arrow = tokens.slice(value, value + 8).findIndex(item => item.text === '=>');
-      if (arrow >= 0) {
-        const body = value + arrow + 1;
-        if (tokens[body]?.text === '{') {
-          functions.push({ name: name.text, from: body, to: matching(tokens, body, '{', '}') });
-        } else functions.push({ name: name.text, from: body, to: statementEnd(tokens, body) });
-        continue;
-      }
+    let cursor = value;
+    if (tokens[cursor]?.text === 'async') cursor += 1;
+    const body = tokens[cursor]?.text === '(' ? arrowBody(tokens, matching(tokens, cursor, '(', ')'))
+      : tokens[cursor]?.kind === 'id' && tokens[cursor + 1]?.text === '=>' ? cursor + 2 : undefined;
+    if (body !== undefined) {
+      if (tokens[body]?.text === '{') {
+        functions.push({ name: name.text, from: body, to: matching(tokens, body, '{', '}') });
+      } else functions.push({ name: name.text, from: body, to: statementEnd(tokens, body) });
+      continue;
     }
     aliases.push({ name: name.text, from: value, to: statementEnd(tokens, value) });
   }
@@ -230,13 +244,34 @@ function bindings(tokens: Token[]): { fns: Set<string>; vars: Set<string> } {
       if (vars.has(item.name)) continue;
       const call = calleeAt(tokens, item.from);
       const ident = tokens[item.from];
-      if ((call && fns.has(call.name)) || (ident?.kind === 'id' && vars.has(ident.text))) {
+      if ((call && fns.has(call.name)) || (ident?.kind === 'id' && vars.has(ident.text))
+        || callsBuilder(item.from, item.to, fns)) {
         vars.add(item.name);
         changed = true;
       }
     }
   }
-  return { fns, vars };
+  // A local helper owns calls of its name when its own docker spawn passes a builder.
+  const helpers = new Set<string>();
+  const owners = new Set<string>();
+  const spawning = new Set<string>();
+  for (const item of functions) {
+    if (item.name === 'docker') helpers.add(item.name);
+    let spawn = false;
+    let owned = false;
+    for (let i = item.from; i <= item.to; i++) {
+      const call = calleeAt(tokens, i);
+      if (call && call.open <= item.to && fns.has(call.name)) owned = true;
+      if (tokens[i]?.kind === 'id' && vars.has(tokens[i]!.text)) owned = true;
+      if (!call || call.open > item.to || !isDockerSpawn(call.name, tokens, call.open)) continue;
+      spawn = true;
+      const close = matching(tokens, call.open, '(', ')');
+      if (close <= item.to && callPreserves(tokens, call.open, close, fns, vars)) owned = true;
+    }
+    if (spawn) spawning.add(item.name);
+    if (owned) owners.add(item.name);
+  }
+  return { fns, vars, helpers, owners, spawning };
 }
 
 function statementEnd(tokens: Token[], from: number): number {
@@ -256,7 +291,7 @@ function callPreserves(tokens: Token[], open: number, close: number, fns: Set<st
   for (let i = open; i <= close; i++) {
     const call = calleeAt(tokens, i);
     if (call && call.open <= close && fns.has(call.name)) return true;
-    if (tokens[i]?.kind === 'id' && vars.has(tokens[i]!.text)) return true;
+    if (tokens[i]?.kind === 'id' && (vars.has(tokens[i]!.text) || tokens[i]!.text === 'dockerEnv' && tokens[i - 1]?.text === '.')) return true;
   }
   return false;
 }
@@ -273,6 +308,9 @@ export function scanDockerSpawnFiles(root: string, files: readonly string[]): Do
     const bound = bindings(tokens);
     for (let i = 0; i < tokens.length; i++) {
       const call = calleeAt(tokens, i);
+      if (tokens[i - 1]?.text === 'function') continue;
+      if (call && bound.owners.has(call.name)) continue;
+      if (call?.name === 'docker' && bound.helpers.has(call.name) && !bound.spawning.has(call.name)) continue;
       if (!call || !isDockerSpawn(call.name, tokens, call.open)) continue;
       const close = matching(tokens, call.open, '(', ')');
       if (callPreserves(tokens, call.open, close, bound.fns, bound.vars)) continue;

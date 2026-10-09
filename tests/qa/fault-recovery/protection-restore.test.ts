@@ -11,7 +11,6 @@ import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { Pool } from 'pg';
 import { projectName, readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -57,12 +56,12 @@ function backup(runId: string, directory: string): string {
   const remote = `/tmp/rezics-sys13-${randomUUID()}`;
   const local = join(directory, 'backup');
   try {
-    docker(preserveReapEnvironment(process.env), ['exec', '-u', 'postgres', container, 'sh', '-ec',
+    docker(['exec', '-u', 'postgres', container, 'sh', '-ec',
       `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`]);
-    docker(preserveReapEnvironment(process.env), ['cp', `${container}:${remote}`, local]);
+    docker(['cp', `${container}:${remote}`, local]);
     if (!readFileSync(join(local, 'PG_VERSION'), 'utf8').trim()) throw new Error('empty PostgreSQL backup');
     return local;
-  } finally { try { docker(preserveReapEnvironment(process.env), ['exec', container, 'rm', '-rf', remote]); } catch { /* backup error */ } }
+  } finally { try { docker(['exec', container, 'rm', '-rf', remote]); } catch { /* backup error */ } }
 }
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -75,9 +74,9 @@ async function freePort(): Promise<number> {
     });
   });
 }
-function docker(env: NodeJS.ProcessEnv, args: string[], owned = preserveReapEnvironment(env)) {
+function docker(args: string[]) {
   const result = spawnSync('docker', args,
-  { cwd: root, env: preserveReapEnvironment(owned), encoding: 'utf8', timeout: 120_000, maxBuffer: 2_000_000 });
+  { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 120_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`docker ${args[0]}: ${(
     result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
 }
@@ -85,7 +84,7 @@ const copyImage = readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')
   .match(/^  postgres:\n    image: (postgres:18\.6-trixie@sha256:[0-9a-f]{64})$/m)?.[1];
 if (!copyImage) throw new Error('pinned PostgreSQL copy image is unavailable');
 function copyVolume(from: string, to: string, replace = false) {
-  docker(preserveReapEnvironment(process.env), ['run', '--rm', '--network', 'none', '--user', '0:0',
+  docker(['run', '--rm', '--network', 'none', '--user', '0:0',
     '--volume', `${from}:/from:ro`, '--volume', `${to}:/to`,
     '--entrypoint', 'sh', copyImage!, '-ec',
     `${replace ? 'find /to -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; ' : ''}cp -a /from/. /to/`]);
@@ -98,7 +97,7 @@ function stopGraph(runId: string) {
   { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 10_000 });
   const container = result.stdout.trim();
   if (result.status !== 0 || !container) throw new Error('Fuseki owner container is unavailable');
-  docker(preserveReapEnvironment(process.env), ['stop', container]);
+  docker(['stop', container]);
 }
 async function migrate(pool: Pool, owner: 'access' | 'relay') {
   const directory = join(root, `services/main/migrations/${owner}`);
@@ -184,7 +183,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     const work = created.work;
     await grant(0, `work:read:${work}`, 'work.read');
     // The graph owner cut is stopped and copied before the later correction commits.
-    stopGraph(sourceId); docker(preserveReapEnvironment(process.env), ['volume', 'create', cutVolume]);
+    stopGraph(sourceId); docker(['volume', 'create', cutVolume]);
     copyVolume(sourceVolume, cutVolume); await stack('stack:up', sourceId);
     await grant(0, `work:protect:${work}`, 'work.protection.tighten');
     await grant(0, `work:correct:${work}`, 'work.correction.propose');
@@ -354,7 +353,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       try { await stack('stack:reset', runId); }
       catch (error) { console.error('SYS13 stack cleanup failed:', error); }
     }
-    try { docker(preserveReapEnvironment(process.env), ['volume', 'rm', '-f', cutVolume]); } catch { /* preserve test error */ }
+    try { docker(['volume', 'rm', '-f', cutVolume]); } catch { /* preserve test error */ }
     rmSync(recoveryDir, { recursive: true, force: true });
   }
 }, qaStartupTestTimeout(600_000));

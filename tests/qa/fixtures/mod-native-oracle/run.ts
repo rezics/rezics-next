@@ -4,7 +4,6 @@ import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { solveModCaptures, type ModCapture }
   from '../../../../services/main/src/modules/package/mod-profile.ts';
-import { preserveReapEnvironment } from '../../../../scripts/qa/container-reaper.ts';
 
 const fixture = import.meta.dir;
 const root = join(fixture, '../../../..');
@@ -17,9 +16,9 @@ const lock = await Bun.file(join(fixture, 'lock.json')).json() as {
 const sha = async (path: string): Promise<string> => createHash('sha256')
   .update(new Uint8Array(await Bun.file(path).arrayBuffer())).digest('hex');
 const run = async (args: string[], cwd = root): Promise<string> => {
-  const child = Bun.spawn(args, { cwd, env: preserveReapEnvironment(process.env), stdout: 'pipe', stderr: 'pipe' });
+  const process = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+    new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited,
   ]);
   if (code !== 0) throw new Error(`${args.join(' ')} failed (${code})\n${stdout}\n${stderr}`);
   return `${stdout}\n${stderr}`;
@@ -27,7 +26,7 @@ const run = async (args: string[], cwd = root): Promise<string> => {
 const check = (output: string, expected: string): void => {
   if (!output.includes(expected)) throw new Error(`native oracle missing ${expected}\n${output}`);
 };
-const containerArgs = (directory: string, command: string[]): string[] => [
+const docker = (directory: string, command: string[]): string[] => [
   'docker', 'run', '--rm', '--network', 'none', '--hostname', 'localhost',
   '-v', `${directory}:/work`, '-w', '/work', lock.image, ...command,
 ];
@@ -77,7 +76,7 @@ for (const owner of ['forge', 'neo'] as const) {
 await Bun.write(join(work, 'FabricOracle.java'), await Bun.file(join(fixture, 'FabricOracle.java')).text());
 await Bun.write(join(work, 'FabricDiscoveryOracle.java'),
   await Bun.file(join(fixture, 'FabricDiscoveryOracle.java')).text());
-await run(containerArgs(work, ['javac', '-proc:none', '-cp', 'fabric-loader-0.19.4.jar',
+await run(docker(work, ['javac', '-proc:none', '-cp', 'fabric-loader-0.19.4.jar',
   '-d', '.', 'FabricOracle.java', 'FabricDiscoveryOracle.java']));
 const json = async (name: string, value: unknown): Promise<void> => {
   await Bun.write(join(work, name), JSON.stringify(value));
@@ -96,7 +95,7 @@ await json('soft.json', { schemaVersion: 1, id: 'soft', version: '1.0.0',
   conflicts: { other: '*' } });
 await json('hard.json', { schemaVersion: 1, id: 'hard', version: '1.0.0',
   breaks: { other: '*' } });
-const fabric = async (...args: string[]): Promise<string> => run(containerArgs(work,
+const fabric = async (...args: string[]): Promise<string> => run(docker(work,
   ['java', '-cp', '.:fabric-loader-0.19.4.jar', 'FabricOracle', ...args]));
 check(await fabric('CLIENT', 'root.json', 'other.json'), 'SELECTED [other, root]');
 check(await fabric('SERVER', 'root.json', 'other.json'), 'SELECTED [other]');
@@ -115,7 +114,7 @@ await json('ranged-alias-user.json', { schemaVersion: 1, id: 'alias_user',
 check(await fabric('CLIENT', 'provider.json', 'alias-user.json', 'array-user.json'),
   'SELECTED [alias_user, array_user, provider]');
 check(await fabric('CLIENT', 'provider.json', 'ranged-alias-user.json'), 'REJECTED');
-const fabricDiscovery = async (...args: string[]): Promise<string> => run(containerArgs(work,
+const fabricDiscovery = async (...args: string[]): Promise<string> => run(docker(work,
   ['java', '-cp', 'fabric-loader-0.19.4.jar:.:forge/lib/*', 'FabricDiscoveryOracle', ...args]));
 const physicalDiscovery = await fabricDiscovery('CLIENT', 'parent.json', 'child.json');
 check(physicalDiscovery, 'DISCOVERED [child, java, parent]');
@@ -143,8 +142,8 @@ await json('client-child.json', { schemaVersion: 1, id: 'child', version: '1.0.0
 check(await fabricDiscovery('SERVER', 'parent.json', 'client-child.json'),
   'DISCOVERED [java, parent]');
 const forge = join(work, 'forge');
-await run(containerArgs(forge, ['javac', '-proc:none', '-cp', 'lib/*', 'ForgeOracle.java']));
-const forgeOutput = await run(containerArgs(forge,
+await run(docker(forge, ['javac', '-proc:none', '-cp', 'lib/*', 'ForgeOracle.java']));
+const forgeOutput = await run(docker(forge,
   ['java', '-cp', '.:lib/*', 'ForgeOracle', 'root']));
 for (const expected of ['CLIENT_SIDE_ONLY true', 'FEATURE_CLIENT_3_1 false',
   'FEATURE_SERVER_3_1 true', 'DEPENDENCY other CLIENT BEFORE true [2.0,3.0)']) {
@@ -161,8 +160,8 @@ for (const id of ['minecraft', 'forge']) await writeMod('forge', id, modToml(id,
 await writeMod('forge', 'other', modToml('other', '2.1.0', '52'));
 await Bun.write(join(forge, 'ForgeSortOracle.java'),
   await Bun.file(join(fixture, 'ForgeSortOracle.java')).text());
-await run(containerArgs(forge, ['javac', '-proc:none', '-cp', 'lib/*', 'ForgeSortOracle.java']));
-const forgeSort = async (side: string): Promise<string> => run(containerArgs(forge,
+await run(docker(forge, ['javac', '-proc:none', '-cp', 'lib/*', 'ForgeSortOracle.java']));
+const forgeSort = async (side: string): Promise<string> => run(docker(forge,
   ['java', '-cp', '.:lib/*', 'ForgeSortOracle', side, 'minecraft', 'forge', 'root', 'other']));
 check(await forgeSort('CLIENT'), 'SORTED [minecraft, forge, root, other]');
 check(await forgeSort('CLIENT'), 'ERRORS 0');
@@ -172,8 +171,8 @@ await writeMod('forge', 'other', modToml('other', '2.1.0', '52',
 check(await forgeSort('CLIENT'), 'CYCLE_FAILURE NullPointerException sortedList');
 check(await forgeSort('DEDICATED_SERVER'), 'CYCLE_FAILURE NullPointerException sortedList');
 const neo = join(work, 'neo');
-await run(containerArgs(neo, ['javac', '-proc:none', '-cp', 'lib/*', 'NeoOracle.java']));
-const neoOutput = await run(containerArgs(neo,
+await run(docker(neo, ['javac', '-proc:none', '-cp', 'lib/*', 'NeoOracle.java']));
+const neoOutput = await run(docker(neo,
   ['java', '-cp', '.:lib/*', 'NeoOracle', 'root', 'other']));
 for (const expected of ['FEATURE_CLIENT_3_1 false', 'FEATURE_SERVER_3_1 true',
   'DEPENDENCY other SERVER AFTER OPTIONAL [2.0,3.0)',
@@ -182,8 +181,8 @@ for (const expected of ['FEATURE_CLIENT_3_1 false', 'FEATURE_SERVER_3_1 true',
 for (const id of ['minecraft', 'neoforge']) await writeMod('neo', id, modToml(id, '1.0.0', '4'));
 await Bun.write(join(neo, 'NeoSortOracle.java'),
   await Bun.file(join(fixture, 'NeoSortOracle.java')).text());
-await run(containerArgs(neo, ['javac', '-proc:none', '-cp', 'lib/*', 'NeoSortOracle.java']));
-const neoSort = async (side: string): Promise<string> => run(containerArgs(neo,
+await run(docker(neo, ['javac', '-proc:none', '-cp', 'lib/*', 'NeoSortOracle.java']));
+const neoSort = async (side: string): Promise<string> => run(docker(neo,
   ['java', '-cp', '.:lib/*', 'NeoSortOracle', side, 'minecraft', 'neoforge', 'root', 'other']));
 check(await neoSort('CLIENT'), 'ERRORS false');
 check(await neoSort('DEDICATED_SERVER'), 'SORTED [minecraft, other, root, neoforge]');
@@ -196,9 +195,9 @@ for (const source of ['NeoMixinOracle.java', 'NeoTarget.java', 'NeoTargetMixin.j
 }
 await Bun.write(join(neo, 'root/root.mixins.json'),
   await Bun.file(join(fixture, 'root.mixins.json')).text());
-await run(containerArgs(neo, ['javac', '-proc:none', '-cp', 'lib/*', '-d', '.',
+await run(docker(neo, ['javac', '-proc:none', '-cp', 'lib/*', '-d', '.',
   'NeoMixinOracle.java', 'NeoTarget.java', 'NeoTargetMixin.java']));
-const mixin = async (required: 'present' | 'absent'): Promise<string> => run(containerArgs(neo,
+const mixin = async (required: 'present' | 'absent'): Promise<string> => run(docker(neo,
   ['java', '-cp', '.:lib/*', 'NeoMixinOracle', required]));
 const applied = await mixin('present');
 check(applied, 'REGISTERED [root.mixins.json]');

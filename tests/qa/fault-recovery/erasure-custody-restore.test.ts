@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -87,15 +86,15 @@ test('OPS12: a consistent pre-erasure cut replays Content suppression and proves
   const suffix = randomBytes(6).toString('hex');
   const volumes: string[] = [], containers: Awaited<ReturnType<typeof standaloneFuseki>>[] = [];
   const copies: string[] = [];
-  const docker = (env: NodeJS.ProcessEnv, args: string[], timeout = 60_000) => {
-    const result = spawnSync('docker', args, { env: preserveReapEnvironment(env), encoding: 'utf8', timeout });
+  const docker = (args: string[], timeout = 60_000) => {
+    const result = spawnSync('docker', args, { env: qa.dockerEnv, encoding: 'utf8', timeout });
     if (result.status !== 0) throw new Error(`isolated custody fixture operation failed: ${result.stderr.slice(-1500)}`);
   };
   const volume = (label: string) => {
     const name = `rezics-custody-${suffix}-${label}`;
-    volumes.push(name); docker(preserveReapEnvironment(qa.dockerEnv), ['volume', 'create', name]); return name;
+    volumes.push(name); docker(['volume', 'create', name]); return name;
   };
-  const copyGraph = (from: string, to: string) => docker(preserveReapEnvironment(qa.dockerEnv), ['run', '--rm', '--network', 'none',
+  const copyGraph = (from: string, to: string) => docker(['run', '--rm', '--network', 'none',
     '--user', '0:0', '--volume', `${from}:/from:ro`, '--volume', `${to}:/to`,
     '--entrypoint', 'sh', pinnedImage(), '-ec', 'cp -a /from/rezics /to/rezics']);
   const adminUrl = `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${qa.composeEnv.POSTGRES_PORT}/postgres`;
@@ -928,7 +927,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     await Promise.allSettled([...pools].map(value => value.end()));
     for (const name of copies.reverse()) await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
     await databases.close();
-    for (const name of volumes) spawnSync('docker', ['volume', 'rm', '-f', name], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 30_000 });
+    for (const name of volumes) spawnSync('docker', ['volume', 'rm', '-f', name], { env: qa.dockerEnv, timeout: 30_000 });
     rmSync(directory, { recursive: true, force: true });
   }
 }, 420_000);

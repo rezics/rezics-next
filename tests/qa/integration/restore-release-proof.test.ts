@@ -10,7 +10,6 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outb
 import { cutoverRestoredGraphLineage, readRestoredGraphReleaseProof, type RestoredGraphReleaseExpectation }
   from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { docker } from '../../../scripts/operations/search-state.ts';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki }
   from '../fault-recovery/search-ops-support.ts';
 
@@ -32,7 +31,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   graph?.remove();
-  if (qa) docker(['volume', 'rm', '-f', volume], preserveReapEnvironment(qa.dockerEnv));
+  if (qa) docker(['volume', 'rm', '-f', volume], qa.dockerEnv);
   rmSync(directory, { recursive: true, force: true });
 }, 120_000);
 

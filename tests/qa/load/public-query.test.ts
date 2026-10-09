@@ -4,7 +4,6 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, w
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { hostLoopbackAccess, loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { seedLoadCorpus, type LoadCase, type LoadCorpus } from './corpus.ts';
@@ -58,8 +57,8 @@ function checkSnapshot(snapshot: Record<string, any>, item: LoadCase, corpus: Lo
   }
 }
 
-async function k6Run(args: string[], env: NodeJS.ProcessEnv) {
-  const child = spawn('docker', args, { cwd: root, env: preserveReapEnvironment(env), stdio: ['ignore', 'pipe', 'pipe'] });
+async function k6Run(args: string[]) {
+  const child = spawn('docker', args, { cwd: root, env: loadDockerEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', chunk => { output += chunk.toString(); });
   child.stderr.on('data', chunk => { output += chunk.toString(); });
@@ -146,7 +145,7 @@ test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase loa
       '--volume', `${script}:/scripts/public-query.js:ro,Z`,
       '--volume', `${loadDir}:/artifacts:Z`, '--env', `MAIN_BASE_URL=http://${access.host}:${port}`,
       'grafana/k6:2.3.0', 'run', '--summary-export=/artifacts/k6-summary.json',
-      '/scripts/public-query.js'], dockerEnv);
+      '/scripts/public-query.js']);
     evidence.k6Exit = run.status;
     const image = spawnSync('docker', ['image', 'inspect', 'grafana/k6:2.3.0',
       '--format', '{{.Id}}'], { cwd: root, env: dockerEnv, encoding: 'utf8', timeout: 5_000 });

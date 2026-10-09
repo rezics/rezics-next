@@ -2,7 +2,6 @@ import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/q
 import { withQaStackStartup } from '../../../scripts/qa/memory-admission.ts';
 import { composeProcessEnvironment, projectName, readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
@@ -125,8 +124,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
   const project = projectName(options);
   const directory = stackDirectory(root, options);
   const dockerEnv = loadDockerEnvironment();
-  const docker = (env: NodeJS.ProcessEnv, args: string[], timeout = 120_000) => execFileSync('docker', args,
-    { cwd: root, env: preserveReapEnvironment(env), encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
+  const docker = (args: string[], timeout = 120_000) => execFileSync('docker', args,
+    { cwd: root, env: dockerEnv, encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
   const dockerLogs = (name: string) => {
     const result = spawnSync('docker', ['logs', name],
       { cwd: root, env: dockerEnv, encoding: 'utf8', timeout: 10_000, maxBuffer: 10_000_000 });
@@ -179,11 +178,11 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
   const saveGraph = (destination: string) => {
     mkdirSync(destination, { recursive: true });
     // The stopped owner has flushed both TDB2 and its Lucene commit.
-    docker(dockerEnv, ['cp', `${sourceFuseki}:/fuseki/databases/rezics`, destination]);
+    docker(['cp', `${sourceFuseki}:/fuseki/databases/rezics`, destination]);
   };
   const startFuseki = async (base: string, label: string) => {
     if (label !== 'live') {
-      docker(dockerEnv, ['run', '--rm', '--network', 'none', '--user', '0:0',
+      docker(['run', '--rm', '--network', 'none', '--user', '0:0',
         '--volume', `${base}:/from:ro`, '--volume', `${project}_fuseki_data:/to`,
         '--entrypoint', 'sh', postgresImage, '-ec',
         'find /to -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; cp -a /from/. /to/; chown -R 10001:10001 /to/rezics']);
@@ -198,14 +197,14 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
   const backupPg = (destination: string) => {
     const remote = `/var/lib/postgresql/.temp/recovery-${Bun.randomUUIDv7()}`;
     try {
-      docker(dockerEnv, ['exec', '-u', 'postgres', sourcePostgres, 'sh', '-ec',
+      docker(['exec', '-u', 'postgres', sourcePostgres, 'sh', '-ec',
         `mkdir -p /var/lib/postgresql/.temp
 PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast
 pg_verifybackup --no-parse-wal ${remote}`], 100_000);
       mkdirSync(resolve(destination, '..'), { recursive: true });
-      docker(dockerEnv, ['cp', `${sourcePostgres}:${remote}`, destination]);
+      docker(['cp', `${sourcePostgres}:${remote}`, destination]);
     } finally {
-      docker(dockerEnv, ['exec', '-u', 'postgres', sourcePostgres, 'rm', '-rf', remote], 10_000);
+      docker(['exec', '-u', 'postgres', sourcePostgres, 'rm', '-rf', remote], 10_000);
     }
   };
   const startPg = async (data: string, label: string) => {
@@ -228,12 +227,12 @@ pg_verifybackup --no-parse-wal ${remote}`], 100_000);
       await withQaStackStartup(root, admissionEnv(), undefined, async () => {
         // PostgreSQL in the pinned image owns its writable copy; no host server
         // or separately installed PostgreSQL/Jena runtime participates.
-        docker(dockerEnv, ['run', '--rm', '--network', 'none', '--user', '0:0',
+        docker(['run', '--rm', '--network', 'none', '--user', '0:0',
           '--volume', `${restoredData}:/recovery/data`,
           ...(archivedAccount ? ['--volume', `${accountArchive}:/recovery/archive`] : []),
           '--entrypoint', 'sh', postgresImage, '-ec',
           `chown -R postgres:postgres /recovery/data${archivedAccount ? ' /recovery/archive' : ''}; chmod 700 /recovery/data`]);
-        docker(dockerEnv, ['run', '-d', '--name', name, '--memory', '512m',
+        docker(['run', '-d', '--name', name, '--memory', '512m',
           '--label', `com.docker.compose.project=${project}`,
           '--label', `com.docker.compose.service=${label}`,
           '--label', 'com.docker.compose.oneoff=False',
@@ -271,7 +270,7 @@ pg_verifybackup --no-parse-wal ${remote}`], 100_000);
     saved = readEnv(join(directory, 'compose.env'));
     sourcePostgres = compose(['ps', '-q', 'postgres']).trim();
     sourceFuseki = compose(['ps', '-q', 'fuseki']).trim();
-    postgresImage = docker(dockerEnv, ['inspect', '--format', '{{.Config.Image}}', sourcePostgres]).trim();
+    postgresImage = docker(['inspect', '--format', '{{.Config.Image}}', sourcePostgres]).trim();
     graphUrl = readEnv(join(directory, 'apps.env')).FUSEKI_URL!;
     process.env.FUSEKI_MAINTENANCE_TOKEN = saved.FUSEKI_MAINTENANCE_TOKEN;
     process.env.FUSEKI_COMMAND_TOKEN = saved.FUSEKI_COMMAND_TOKEN;
@@ -680,13 +679,13 @@ pg_verifybackup --no-parse-wal ${remote}`], 100_000);
     };
     await accountPool.query('SELECT pg_switch_wal()');
     const accountWalArchived = () => {
-      try { docker(dockerEnv, ['exec', sourcePostgres, 'test', '-f', `/var/lib/postgresql/archive/${currentCoverage.accountPg.walFile}`], 10_000); return true; }
+      try { docker(['exec', sourcePostgres, 'test', '-f', `/var/lib/postgresql/archive/${currentCoverage.accountPg.walFile}`], 10_000); return true; }
       catch { return false; }
     };
     for (let attempt = 0; attempt < 120 && !accountWalArchived(); attempt++) {
       await Bun.sleep(100);
     }
-    docker(dockerEnv, ['cp', `${sourcePostgres}:/var/lib/postgresql/archive`, accountArchive]);
+    docker(['cp', `${sourcePostgres}:/var/lib/postgresql/archive`, accountArchive]);
     expect(existsSync(join(accountArchive, currentCoverage.accountPg.walFile))).toBe(true);
     await accountApp.stop();
     accountApp = undefined;
@@ -2091,7 +2090,7 @@ recovery_target_action = 'promote'
     await accountApp?.stop();
     await Promise.allSettled(pools.map(pool => pool.end()));
     const removed = await Promise.allSettled([...restoredContainers].map(async container =>
-      docker(dockerEnv, ['rm', '-f', container], 65_000)));
+      docker(['rm', '-f', container], 65_000)));
     for (const result of removed) if (result.status === 'rejected') console.error(result.reason);
     if (started) {
       const reset = execFileSync('bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs],
@@ -2101,7 +2100,7 @@ recovery_target_action = 'promote'
     if (restoredContainers.size > 0) {
       // Restore containers own these scratch bytes; give the worktree user its
       // directory back only after every server has been stopped.
-      docker(dockerEnv, ['run', '--rm', '--network', 'none', '--user', '0:0',
+      docker(['run', '--rm', '--network', 'none', '--user', '0:0',
         '--volume', `${state}:/recovery`, '--entrypoint', 'sh', postgresImage!, '-ec',
         `chown -R ${process.getuid!()}:${process.getgid!()} /recovery`]);
     }

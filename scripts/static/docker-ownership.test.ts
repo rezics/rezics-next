@@ -15,6 +15,11 @@ test('docker spawns outside the owner-preserving builders stay on the exact debt
   expect(staleDockerSpawnDebt(found, debt)).toEqual([]);
 });
 
+test('a local docker helper whose spawn passes a builder owns its callers', () => {
+  const found = scanDockerSpawnFiles(root, ['scripts/static/fixtures/docker-ownership/owned-helper.ts']);
+  expect(found).toEqual([]);
+});
+
 test('a fixture that spawns docker compose with a bare environment is caught', () => {
   const found = scanDockerSpawnFiles(root, ['scripts/static/fixtures/docker-ownership/bare-compose.ts']);
   expect(found.map(item => item.call)).toEqual([

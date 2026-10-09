@@ -3,8 +3,6 @@ import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -34,23 +32,6 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-/** Compose down keeps named volumes, and a later reset can miss ones already detached. */
-function dropProjectVolumes(project: string): void {
-  const env = preserveReapEnvironment(process.env);
-  const listed = spawnSync('docker', ['volume', 'ls', '-q', '--filter',
-    `label=com.docker.compose.project=${project}`], { env, encoding: 'utf8', timeout: 30_000 });
-  const labeled = (listed.stdout ?? '').split('\n').map(name => name.trim())
-    .filter(name => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name));
-  const names = [...new Set([...labeled, ...['postgres_data', 'fuseki_data', 'rustfs_data']
-    .map(kind => `${project}_${kind}`)])];
-  for (const name of names) {
-    const removed = spawnSync('docker', ['volume', 'rm', '-f', name], { env, encoding: 'utf8', timeout: 180_000 });
-    if (removed.status !== 0 && !(removed.stderr ?? '').includes('No such volume')) {
-      throw new Error(`Could not remove volume ${name}: ${(removed.stderr || removed.stdout || '').slice(-400)}`);
-    }
-  }
-}
-
 async function rootCommand(args: string[], timeout: number): Promise<string> {
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
@@ -72,7 +53,6 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
   const stackArgs = ['--profile', 'qa', '--run-id', runId, '--persistent', '--raw-update'];
   const startedAt = Date.now();
   let started = false;
-  let bodyError: unknown;
   try {
     started = true;
     await rootCommand(['stack:up', ...stackArgs], 180_000);
@@ -296,18 +276,7 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
     } finally {
       await Promise.all([contentPool.end(), accessPool.end()]);
     }
-  } catch (error) {
-    bodyError = error;
-    throw error;
   } finally {
-    if (started) {
-      const leaks: string[] = [];
-      try { await rootCommand(['stack:reset', ...stackArgs], 180_000); }
-      catch (error) { leaks.push(error instanceof Error ? error.message : String(error)); }
-      try { dropProjectVolumes(`rezics-qa-${runId}`); }
-      catch (error) { leaks.push(error instanceof Error ? error.message : String(error)); }
-      if (leaks.length) console.error(leaks.join('\n'));
-      if (!bodyError && leaks.length) throw new Error(leaks.join('\n'));
-    }
+    if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
 }, qaStartupTestTimeout(600_000));

@@ -2,7 +2,6 @@ import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync 
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -18,23 +17,6 @@ import { capturePrincipalHost, createStoppedRecoveryCut, qualifyManualFailover,
   removeRecoveryCut, restoreRecoveryCut, startRestoredHost, type RecoverySamples } from '../../../scripts/ops/failover.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-
-/** A fenced stack:down keeps data for the cut. Cleanup still removes the project volumes. */
-function dropProjectVolumes(project: string): void {
-  const env = preserveReapEnvironment(process.env);
-  const listed = spawnSync('docker', ['volume', 'ls', '-q', '--filter',
-    `label=com.docker.compose.project=${project}`], { env, encoding: 'utf8', timeout: 30_000 });
-  const labeled = (listed.stdout ?? '').split('\n').map(name => name.trim())
-    .filter(name => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name));
-  const names = [...new Set([...labeled, ...['postgres_data', 'fuseki_data', 'rustfs_data']
-    .map(kind => `${project}_${kind}`)])];
-  for (const name of names) {
-    const removed = spawnSync('docker', ['volume', 'rm', '-f', name], { env, encoding: 'utf8', timeout: 180_000 });
-    if (removed.status !== 0 && !(removed.stderr ?? '').includes('No such volume')) {
-      throw new Error(`Could not remove volume ${name}: ${(removed.stderr || removed.stdout || '').slice(-400)}`);
-    }
-  }
-}
 
 function command(program: string, args: string[], timeout = 120_000): string {
   const result = spawnSync(program, args, { cwd: root, encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
@@ -98,7 +80,6 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
   const second = options('b');
   const rollback = options('c');
   const id = `ops-${Bun.env.REZICS_QA_RUN_ID!.slice(-12)}`;
-  let bodyError: unknown;
   try {
     const artifact = command('bun', ['scripts/dev/release-artifact.ts', 'build'], 240_000);
     const installArgs = (target: StackOptions) => ['scripts/dev/release-artifact.ts', 'install', '--artifact', artifact,
@@ -180,19 +161,10 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
         account_subject: subject.rows[0]!.account_subject });
     } finally { await restoredAccess.end(); }
     expect(readFormatMarker(rollback)?.state).toBe('ready');
-  } catch (error) {
-    bodyError = error;
-    throw error;
   } finally {
-    const leaks: string[] = [];
-    const note = (error: unknown) => { leaks.push(error instanceof Error ? error.message : String(error)); };
     for (const target of [source, second, rollback]) {
-      try { stack('stack:reset', target); } catch (error) { note(error); }
-      try { dropProjectVolumes(`rezics-qa-${target.runId}`); } catch (error) { note(error); }
+      try { stack('stack:reset', target); } catch { /* Retain primary failure and QA logs. */ }
     }
-    try { removeRecoveryCut(id); } catch (error) { note(error); }
-    try { dropProjectVolumes(`rezics-ops-${id}`); } catch (error) { note(error); }
-    if (leaks.length) console.error(leaks.join('\n'));
-    if (!bodyError && leaks.length) throw new Error(leaks.join('\n'));
+    try { removeRecoveryCut(id); } catch { /* Retain primary failure and QA logs. */ }
   }
 }, qaStartupTestTimeout(330_000));

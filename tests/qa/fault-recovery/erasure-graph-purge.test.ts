@@ -2,7 +2,6 @@ import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -237,7 +236,7 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
   } finally {
     await relay?.end();
     candidate?.remove();
-    spawnSync('docker', ['rm', '-f', candidateName], { env: preserveReapEnvironment(stack.dockerEnv), timeout: 60_000 });
+    spawnSync('docker', ['rm', '-f', candidateName], { env: stack.dockerEnv, timeout: 60_000 });
     if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
 }, qaStartupTestTimeout(420_000));
