@@ -68,6 +68,7 @@ test('Discovery refresh expires already purged superseded generations and resume
       expect(await tick()).toBe('retry');
       expect(logged).toHaveBeenCalledTimes(1);
       expect(JSON.parse(String(logged.mock.calls[0]?.[0]))).toEqual({
+        time: expect.any(String),
         level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.discovery.refresh',
         'error.class': 'RecommendationUnavailable', 'error.code': '08006',
       });

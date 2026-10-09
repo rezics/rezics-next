@@ -59,6 +59,7 @@ test('ranking workers log the provider class and code without the message', asyn
       await worker.tick();
       expect(logged).toHaveBeenCalledTimes(1);
       expect(JSON.parse(String(logged.mock.calls[0]?.[0]))).toEqual({
+        time: expect.any(String),
         level: 'error',
         event: 'worker_fault',
         'rezics.worker.name': 'main.ranking.build',

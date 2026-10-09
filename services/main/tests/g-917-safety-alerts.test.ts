@@ -107,6 +107,7 @@ test('G917: missing responders and safety timeouts leave Access, editorial and r
       expect(calls).toEqual(['access', 'editorial', 'safety', 'relay']);
       const line = String(logged.mock.calls.at(-1)?.[0]);
       expect(JSON.parse(line)).toEqual({
+        time: expect.any(String),
         level: 'error',
         event: 'worker_fault',
         'rezics.worker.name': 'main.notification.safety-alerts',

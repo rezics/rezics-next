@@ -27,6 +27,7 @@ test('the deadlock observer selects only the direct SQLSTATE and runs before que
     expect(delivered).toBe(error);
     expect(lines.map((line) => JSON.parse(line))).toEqual([
       {
+        time: expect.any(String),
         level: 'error',
         event: 'worker_fault',
         'rezics.worker.name': 'main.database.deadlock',

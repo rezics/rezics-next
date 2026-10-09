@@ -33,6 +33,7 @@ async function capture(write: () => void | Promise<void>): Promise<string[]> {
 function expectFault(line: string | undefined, worker: string, code?: string) {
   expect(line).toBeDefined();
   expect(JSON.parse(line!)).toEqual({
+    time: expect.any(String),
     level: 'error', event: 'worker_fault', 'rezics.worker.name': worker,
     'error.class': code ? 'DatabaseError' : 'NestedPoolCheckoutError',
     ...(code ? { 'error.code': code } : {}),

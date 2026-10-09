@@ -167,6 +167,9 @@ export function telemetryLog(
 ) {
   attributes = publicAttributes(attributes);
   const span = trace.getSpanContext(context.active());
+  const traced = span && trace.isSpanContextValid(span)
+    ? { trace_id: span.traceId, span_id: span.spanId }
+    : {};
   logs.getLogger('rezics').emit({
     body: event,
     severityText: severity.toUpperCase(),
@@ -180,12 +183,16 @@ export function telemetryLog(
     context: context.active(),
   });
   const method = severity === 'info' ? 'info' : severity === 'warn' ? 'warn' : 'error';
+  const time = new Date().toISOString();
   const line = JSON.stringify({
+    time,
     level: severity,
     event,
     ...attributes,
-    ...(span?.traceId ? { trace_id: span.traceId, span_id: span.spanId } : {}),
+    ...traced,
   });
   // A composed line that still matches the sentinel is not written out.
-  console[method](logLineCarriesPersonalData(line) ? JSON.stringify({ level: 'error', event: 'worker_fault' }) : line);
+  console[method](logLineCarriesPersonalData(line)
+    ? JSON.stringify({ time, level: 'error', event: 'worker_fault' })
+    : line);
 }
