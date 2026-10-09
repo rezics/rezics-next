@@ -23,6 +23,7 @@ import {
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
+import { PINNED_FIXTURE_IDS } from '../fixture/stack.ts';
 import { processAlive, processAncestors } from './process/identity.ts';
 import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from './process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup, terminateProcessGroupSync } from './process/terminate.ts';
@@ -243,7 +244,7 @@ export function newRunId(): string {
   return `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).toLowerCase()}-${randomBytes(3).toString('hex')}`;
 }
 
-export const LOAD_FIXTURE_ID = 'fx-medium-c9f6e4fdcb52';
+export const LOAD_FIXTURE_ID = PINNED_FIXTURE_IDS[0];
 export const LOAD_PREPARATION_BUDGET_MS = 600_000;
 export const loadFixtureFiles = {
   OPS05: 'tests/qa/load/ops-phase-d.test.ts',

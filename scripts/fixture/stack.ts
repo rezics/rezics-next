@@ -11,6 +11,9 @@ export const root = resolve(import.meta.dir, '../..');
 export const composeFile = join(root, 'infra/dev/compose.yaml');
 export const VOLUME_KINDS = ['postgres_data', 'fuseki_data', 'rustfs_data'] as const;
 
+/** Generations a restore names by id. Prune keeps this list and does not infer pins from source text. */
+export const PINNED_FIXTURE_IDS = ['fx-medium-c9f6e4fdcb52'] as const;
+
 /** A worker with a checkout-local write boundary can override the shared backup directory. */
 export const fixtureRoot = (() => {
   if (process.env.REZICS_FIXTURE_ROOT) return resolve(process.env.REZICS_FIXTURE_ROOT);

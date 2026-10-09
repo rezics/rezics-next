@@ -2,11 +2,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { readManifest } from '../../../scripts/fixture/build.ts';
+import { PINNED_FIXTURE_IDS } from '../../../scripts/fixture/stack.ts';
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-export const PHASE_D_FIXTURE = 'fx-medium-c9f6e4fdcb52';
+export const PHASE_D_FIXTURE = PINNED_FIXTURE_IDS[0];
 
 export function assertPhaseDRestore(restore: FixtureRestoreEvidence,
   manifest: FixtureManifest | undefined, runId: string): asserts manifest is FixtureManifest {

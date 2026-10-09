@@ -1,32 +1,13 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { redactCommandOutput } from './command-output.ts';
 
 /** Compose project of the shared dev stack. Other `rezics-dev-*` projects are not this stack. */
 export const DEV_COMPOSE_PROJECT = 'rezics-dev';
 const FIXTURE_ID = /^fx-(small|medium)-[0-9a-f]{12}$/;
 const FIXTURE_LOCK = /^(fx-(?:small|medium)-[0-9a-f]{12})\.lock$/;
-const PIN_LINE =
-  /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(['"])(fx-(?:small|medium)-[0-9a-f]{12})\2\s*;?\s*(?:\/\/.*)?$/gm;
-const SKIP_DIRECTORIES = new Set([
-  'node_modules',
-  '.temp',
-  'dist',
-  'generated',
-  '.git',
-  'target',
-  'coverage',
-  '.artifacts',
-]);
 
 export const FIXTURE_KEEP_REASONS = ['current', 'pinned', 'retained', 'in-use'] as const;
 export type FixtureKeepReason = (typeof FIXTURE_KEEP_REASONS)[number];
-
-export interface FixturePin {
-  name: string;
-  id: string;
-  file: string;
-}
 
 /** One fixture generation as a prune command lists it, before any keep decision. */
 export interface ListedGeneration {
@@ -100,8 +81,7 @@ export interface PruneScope {
 /**
  * Keep a generation when a current consumer can still restore it.
  * `current` is the id `fixture:build` computes for that profile and seed.
- * `pinned` is a source constant whose value is a fixture id, such as
- * `LOAD_FIXTURE_ID`. `retained` is the newest manifest
+ * `pinned` is an id in `PINNED_FIXTURE_IDS`. `retained` is the newest manifest
  * `restoreCompatibility` accepts for that profile and seed: the backup
  * `compatibleFixture` selects, which erasure-campaign-qualification restores.
  * `in-use` means a running container mounts the generation, or its build lock
@@ -209,7 +189,7 @@ export function pruneTargets(
 export interface PruneOutcome {
   mode: 'dry-run' | 'apply';
   currentIds: readonly string[];
-  pins: readonly FixturePin[];
+  pins: readonly string[];
   decision: PruneDecision;
   removedIds: string[];
   failures: { target: string; error: string }[];
@@ -220,7 +200,7 @@ export function formatPruneReport(
 ): string {
   const lines = [`fixture prune: ${outcome.mode}`];
   for (const id of [...outcome.currentIds].sort()) lines.push(`current-id ${id}`);
-  for (const pin of outcome.pins) lines.push(`pin ${pin.id} ${pin.file} ${pin.name}`);
+  for (const id of outcome.pins) lines.push(`pin ${id}`);
   for (const generation of outcome.decision.keep) {
     lines.push(`keep ${generation.id} ${generation.reasons.join(',')}`);
   }
@@ -250,41 +230,6 @@ export function formatPruneReport(
   return lines.join('\n');
 }
 
-/** Module-level fixture id constants. Test files are not pins; names are not a list. */
-export function readFixturePins(directory: string): FixturePin[] {
-  const pins: FixturePin[] = [];
-  const walk = (current: string, relative: string) => {
-    let entries;
-    try {
-      entries = readdirSync(current, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.isSymbolicLink() || SKIP_DIRECTORIES.has(entry.name)) continue;
-      const path = join(current, entry.name);
-      const rel = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(path, rel);
-      else if (
-        entry.isFile() &&
-        /\.tsx?$/.test(entry.name) &&
-        !/\.d\.ts$/.test(entry.name) &&
-        !/\.test\.tsx?$/.test(entry.name)
-      ) {
-        const text = readFileSync(path, 'utf8');
-        for (const match of text.matchAll(PIN_LINE)) {
-          pins.push({ name: match[1]!, id: match[3]!, file: rel });
-        }
-      }
-    }
-  };
-  walk(directory, '');
-  pins.sort(
-    (left, right) => left.file.localeCompare(right.file) || left.name.localeCompare(right.name),
-  );
-  return pins;
-}
-
 function buildLockHeld(lockPath: string): boolean {
   if (!existsSync(lockPath)) return false;
   const holder = Number(readFileSync(lockPath, 'utf8'));
@@ -297,7 +242,7 @@ function buildLockHeld(lockPath: string): boolean {
   }
 }
 
-async function collectInventory(): Promise<{ inventory: PruneInventory; pins: FixturePin[] }> {
+async function collectInventory(): Promise<PruneInventory> {
   const {
     fixtureDirectory,
     fixtureProject,
@@ -306,6 +251,7 @@ async function collectInventory(): Promise<{ inventory: PruneInventory; pins: Fi
     listDockerVolumes,
     mountedVolumeNames,
     runningComposeProjects,
+    PINNED_FIXTURE_IDS,
     root,
   } = await import('./stack.ts');
   const { readManifest } = await import('./build.ts');
@@ -367,17 +313,13 @@ async function collectInventory(): Promise<{ inventory: PruneInventory; pins: Fi
     ({ profile, seed }) =>
       manifestIdentity(manifestCore(root, fixtureCorpus(profile, seed), fixtureOwners, engines)).id,
   );
-  const pins = readFixturePins(root);
   return {
-    pins,
-    inventory: {
-      generations,
-      volumes,
-      currentIds,
-      pins: pins.map((pin) => pin.id),
-      mountedVolumes,
-      liveQaProjects,
-    },
+    generations,
+    volumes,
+    currentIds,
+    pins: [...PINNED_FIXTURE_IDS],
+    mountedVolumes,
+    liveQaProjects,
   };
 }
 
@@ -389,7 +331,7 @@ function removalError(error: unknown): string {
 export async function executeFixturePrune(
   options: { apply: boolean } & PruneScope,
 ): Promise<PruneOutcome> {
-  const { pins, inventory } = await collectInventory();
+  const inventory = await collectInventory();
   const decision = decideFixturePrune(inventory);
   const targets = pruneTargets(decision, options);
   const failures: { target: string; error: string }[] = [];
@@ -438,7 +380,7 @@ export async function executeFixturePrune(
   return {
     mode: options.apply ? 'apply' : 'dry-run',
     currentIds: inventory.currentIds,
-    pins,
+    pins: inventory.pins,
     decision,
     removedIds,
     failures,

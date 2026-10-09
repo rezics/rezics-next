@@ -1,18 +1,15 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { parseDockerVolumeLines } from './stack.ts';
+import { LOAD_FIXTURE_ID } from '../qa/core.ts';
+import { PHASE_D_FIXTURE } from '../../tests/qa/load/fixture-phase-d.ts';
+import { parseDockerVolumeLines, PINNED_FIXTURE_IDS } from './stack.ts';
 import {
   decideFixturePrune,
   formatPruneReport,
   pruneTargets,
-  readFixturePins,
   type ListedGeneration,
   type ListedVolume,
   type PruneInventory,
 } from './prune.ts';
-
-const root = join(import.meta.dir, '../..');
 
 function generation(id: string, fields: Partial<ListedGeneration> = {}): ListedGeneration {
   return {
@@ -159,7 +156,7 @@ test('fixture prune removes superseded generations and abandoned projects, and l
   const report = formatPruneReport({
     mode: 'dry-run',
     currentIds: [current],
-    pins: [{ name: 'LOAD_FIXTURE_ID', id: pinned, file: 'scripts/qa/core.ts' }],
+    pins: [pinned],
     decision,
     failures: [],
   });
@@ -210,38 +207,20 @@ test('one generation can be current, pinned, retained and in use together', () =
   expect(decision.removeGenerations).toEqual([]);
 });
 
-test('source constants pin fixture ids and test files do not', () => {
-  const directory = mkdtempSync(join(root, '.temp', 'fixture-prune-'));
-  try {
-    mkdirSync(join(directory, 'scripts/qa'), { recursive: true });
-    mkdirSync(join(directory, 'tests/qa/load'), { recursive: true });
-    writeFileSync(
-      join(directory, 'scripts/qa/core.ts'),
-      "export const LOAD_FIXTURE_ID = 'fx-medium-c9f6e4fdcb52';\n",
-    );
-    writeFileSync(
-      join(directory, 'tests/qa/load/fixture-phase-d.ts'),
-      "export const PHASE_D_FIXTURE = 'fx-medium-c9f6e4fdcb52';\n",
-    );
-    writeFileSync(
-      join(directory, 'tests/qa/recorded.test.ts'),
-      "export const SAMPLE = 'fx-medium-605f041f8150';\n",
-    );
-    writeFileSync(
-      join(directory, 'scripts/qa/note.ts'),
-      "const note = 'see fx-medium-000000000000 in prose';\n",
-    );
-    expect(readFixturePins(directory)).toEqual([
-      { name: 'LOAD_FIXTURE_ID', id: 'fx-medium-c9f6e4fdcb52', file: 'scripts/qa/core.ts' },
-      {
-        name: 'PHASE_D_FIXTURE',
-        id: 'fx-medium-c9f6e4fdcb52',
-        file: 'tests/qa/load/fixture-phase-d.ts',
-      },
-    ]);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+test('declared pins are the ids load and phase D restore, and a test literal is not a pin', () => {
+  const recorded = 'fx-medium-605f041f8150';
+  expect(LOAD_FIXTURE_ID).toBe(PINNED_FIXTURE_IDS[0]);
+  expect(PHASE_D_FIXTURE).toBe(PINNED_FIXTURE_IDS[0]);
+  const decision = decideFixturePrune({
+    generations: [generation(PINNED_FIXTURE_IDS[0]), generation(recorded)],
+    volumes: [volume(PINNED_FIXTURE_IDS[0]), volume(recorded)],
+    currentIds: [],
+    pins: [...PINNED_FIXTURE_IDS],
+    mountedVolumes: [],
+    liveQaProjects: [],
+  });
+  expect(decision.keep).toEqual([{ id: PINNED_FIXTURE_IDS[0], reasons: ['pinned'] }]);
+  expect(decision.removeGenerations.map((item) => item.id)).toEqual([recorded]);
 });
 
 test('volume lines without a compose project stay unlabelled', () => {
