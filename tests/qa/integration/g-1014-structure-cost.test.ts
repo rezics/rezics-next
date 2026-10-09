@@ -18,6 +18,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 
 test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only its order segment and tree paths', async () => {
   const stack = await startMediaStack('g-1014-write-cost');
+  const originalFetch = globalThis.fetch;
   try {
     const member = await stack.member('structure-importer');
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
@@ -101,14 +102,51 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
       segmentRows += (result.results?.bindings ?? []).filter(row => row.segment && row.count).length;
       return result;
     };
+    const native = { focuses: 0, validationMs: 0, updateMs: 0, commands: 0 };
+    globalThis.fetch = async (input, init) => {
+      const response = await originalFetch(input, init);
+      const url = input instanceof Request ? input.url : String(input);
+      const body = typeof init?.body === 'string' ? init.body : '';
+      if (url.endsWith('/command') && body.includes('composition.change')) {
+        const counters = response.headers.get('x-rezics-command-work') ?? '';
+        const timing = response.headers.get('server-timing') ?? '';
+        const number = (source: string, name: string) => {
+          const match = new RegExp(`(?:^|,)\\s*${name}(?:=|;dur=)(\\d+(?:\\.\\d+)?)`).exec(source);
+          return match ? Number(match[1]) : Number.NaN;
+        };
+        native.focuses += number(counters, 'validation_focuses');
+        native.validationMs += number(timing, 'validation');
+        native.updateMs += number(timing, 'update');
+        native.commands++;
+      }
+      return response;
+    };
     for (const size of [100, 1000, 10000]) {
       const buildStarted = performance.now();
+      let mark = count;
+      let markAt = buildStarted;
+      const markNative = { ...native };
       while (count < size) {
         const batch = Math.min(16, size - count);
         const anchor = anchors[Math.floor(count / 16) % anchors.length]!;
         try { await change(Array.from({ length: batch }, () => insert({ after: anchor }))); }
         catch (error) { throw new Error(`API import failed at ${count} chapters`, { cause: error }); }
         count += batch;
+        if (count - mark >= 1000 || count === size) {
+          const commands = native.commands - markNative.commands;
+          console.log('G1014: build', JSON.stringify({
+            chapters: count, batchMs: Math.round(performance.now() - markAt),
+            commands,
+            validationMs: commands ? Math.round(native.validationMs - markNative.validationMs) : 0,
+            updateMs: commands ? Math.round(native.updateMs - markNative.updateMs) : 0,
+          }));
+          mark = count;
+          markAt = performance.now();
+          markNative.commands = native.commands;
+          markNative.validationMs = native.validationMs;
+          markNative.updateMs = native.updateMs;
+          markNative.focuses = native.focuses;
+        }
       }
       const samples = [];
       for (let sample = 0; sample < 3; sample++) {
@@ -134,5 +172,8 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
       console.log('G1014: single occurrence write profile', JSON.stringify(measurements.at(-1)));
     }
     expect(await readCompositionHeader(stack.env, composition.structure)).toMatchObject({ placementCount: 10000 });
-  } finally { await stack.stop(); }
+  } finally {
+    globalThis.fetch = originalFetch;
+    await stack.stop();
+  }
 }, 450_000);

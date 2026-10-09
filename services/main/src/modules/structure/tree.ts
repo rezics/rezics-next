@@ -18,12 +18,38 @@ export class StructureObjectCorrupt extends Error {}
 
 export const newCost = (): TreeCost => ({ pagesRead: 0, pagesWritten: 0 });
 
+/** Pages are immutable. One cost is one change, so a digest fetched while applying,
+ * checking, or indexing that change is the same bytes and is not fetched again. */
+const parsedPages = new WeakMap<TreeCost, Map<string, { level: number; entries: unknown[] }>>();
+
+function pagesOf(cost: TreeCost): Map<string, { level: number; entries: unknown[] }> {
+  let pages = parsedPages.get(cost);
+  if (!pages) {
+    pages = new Map();
+    parsedPages.set(cost, pages);
+  }
+  return pages;
+}
+
+function rememberPage(cost: TreeCost, page: string, parsed: { level: number; entries: unknown[] }): void {
+  const pages = pagesOf(cost);
+  pages.delete(page);
+  pages.set(page, parsed);
+  while (pages.size > 96) {
+    const oldest = pages.keys().next().value;
+    if (!oldest) break;
+    pages.delete(oldest);
+  }
+}
+
 export class StructureTree<T> {
   constructor(private readonly objects: ImmutableObjects, private readonly kind: TreeKind,
     private readonly keyOf: (entry: T) => string) {}
 
   private async load(page: string, cost: TreeCost): Promise<{ level: number; entries: unknown[] }> {
     if (!/^sha256:[0-9a-f]{64}$/.test(page)) throw new StructureObjectCorrupt('invalid page reference');
+    const cached = pagesOf(cost).get(page);
+    if (cached) return cached;
     let bytes: Uint8Array;
     try { bytes = await this.objects.get(page.slice(7)); }
     catch (error) {
@@ -39,7 +65,9 @@ export class StructureTree<T> {
       throw error;
     }
     if (parsed.tree !== this.kind) throw new StructureObjectCorrupt('page belongs to another tree');
-    return { level: parsed.level, entries: parsed.entries };
+    const loaded = { level: parsed.level, entries: parsed.entries };
+    rememberPage(cost, page, loaded);
+    return loaded;
   }
 
   private async write(level: number, entries: readonly unknown[], cost: TreeCost): Promise<string> {
@@ -48,7 +76,9 @@ export class StructureTree<T> {
       tree: this.kind, level, entries }));
     checkStructurePage(bytes);
     cost.pagesWritten++;
-    return `sha256:${await this.objects.put(bytes)}`;
+    const page = `sha256:${await this.objects.put(bytes)}`;
+    rememberPage(cost, page, { level, entries: [...entries] });
+    return page;
   }
 
   /** Split entries into pages bounded by both entry count and serialized bytes. */
@@ -72,21 +102,15 @@ export class StructureTree<T> {
   }
 
   private async writeLeaves(entries: readonly T[], cost: TreeCost): Promise<Child[]> {
-    const children: Child[] = [];
-    for (const chunk of this.chunks(entries)) {
-      children.push({ page: await this.write(0, chunk, cost), count: chunk.length,
-        first: this.keyOf(chunk[0]!) });
-    }
-    return children;
+    const chunks = this.chunks(entries);
+    return Promise.all(chunks.map(async chunk => ({ page: await this.write(0, chunk, cost),
+      count: chunk.length, first: this.keyOf(chunk[0]!) })));
   }
 
   private async writeInterior(level: number, children: readonly Child[], cost: TreeCost): Promise<Child[]> {
-    const parents: Child[] = [];
-    for (const chunk of this.chunks(children)) {
-      parents.push({ page: await this.write(level, chunk, cost),
-        count: chunk.reduce((total, child) => total + child.count, 0), first: chunk[0]!.first });
-    }
-    return parents;
+    const chunks = this.chunks(children);
+    return Promise.all(chunks.map(async chunk => ({ page: await this.write(level, chunk, cost),
+      count: chunk.reduce((total, child) => total + child.count, 0), first: chunk[0]!.first })));
   }
 
   async empty(cost: TreeCost): Promise<TreeRoot> {
@@ -117,11 +141,11 @@ export class StructureTree<T> {
       const index = this.childIndex(children, change[0]);
       grouped.set(index, [...grouped.get(index) ?? [], change]);
     }
-    const next: Child[] = [];
-    for (const [index, child] of children.entries()) {
+    const rewritten = await Promise.all(children.map(async (child, index) => {
       const own = grouped.get(index);
-      next.push(...own ? await this.rewrite(child.page, own, cost) : [child]);
-    }
+      return own ? this.rewrite(child.page, own, cost) : [child];
+    }));
+    const next = rewritten.flat();
     return next.length ? this.writeInterior(node.level, next, cost) : [];
   }
 

@@ -825,6 +825,9 @@ class Working {
   private readonly soughtSegments = new Map<string, SegmentState | null>();
   /** Order keys read from the order tree, so placing a sibling does not load every member. */
   private readonly orderKeys = new Map<string, string>();
+  /** One tree for this change, so repeated walks of the same page are fetched once. */
+  private recordIndex: ReturnType<typeof recordTree> | undefined;
+  private orderIndex: ReturnType<typeof orderTree> | undefined;
   private allocated = 0;
   activeDelta = 0;
   rebalanced = 0;
@@ -857,6 +860,14 @@ class Working {
     }
   }
 
+  private records(): ReturnType<typeof recordTree> {
+    return this.recordIndex ??= recordTree(structureObjects(this.env));
+  }
+
+  private orders(): ReturnType<typeof orderTree> {
+    return this.orderIndex ??= orderTree(structureObjects(this.env));
+  }
+
   orderKey(occurrence: string): string | undefined {
     return this.placements.get(occurrence)?.orderKey ?? this.orderKeys.get(occurrence);
   }
@@ -867,7 +878,7 @@ class Working {
    * absence from both is a missing occurrence. */
   async get(occurrence: string): Promise<PlacementState | undefined> {
     if (this.placements.has(occurrence)) return this.placements.get(occurrence);
-    const record = (await recordTree(structureObjects(this.env)).lookup(this.manifest.records,
+    const record = (await this.records().lookup(this.manifest.records,
       [occurrence], this.cost)).get(occurrence);
     if (!record) {
       const graph = await readPlacements(this.env, this.header.generation,
@@ -946,7 +957,7 @@ class Working {
     const seekKey = `${parent}\0${key ?? ''}\0${reverse}`;
     let stored = this.soughtSegments.get(seekKey) ?? undefined;
     while (!this.soughtSegments.has(seekKey)) {
-      const [entry] = await orderTree(structureObjects(this.env)).range(this.manifest.order,
+      const [entry] = await this.orders().range(this.manifest.order,
         from, to, 1, this.cost, reverse);
       if (!entry) { this.soughtSegments.set(seekKey, null); break; }
       const segment = await this.indexedSegment(entry);
@@ -967,7 +978,7 @@ class Working {
 
   async hasChildren(parent: string): Promise<boolean> {
     if ([...this.placements.values()].some(state => state.active && state.parent === parent)) return true;
-    const entries = await orderTree(structureObjects(this.env)).range(this.manifest.order,
+    const entries = await this.orders().range(this.manifest.order,
       `${parent}\u0001`, `${parent}\u0002`, MAX_OPERATIONS + 1, this.cost);
     for (const entry of entries) {
       const pending = this.placements.get(entry.occurrence);
@@ -981,7 +992,7 @@ class Working {
     let list = this.members.get(id);
     if (!list) {
       const segment = this.segment(id);
-      const entries = await orderTree(structureObjects(this.env)).range(this.manifest.order,
+      const entries = await this.orders().range(this.manifest.order,
         `${segment.parent}\u0001${segment.key}\u0001`, `${segment.parent}\u0001${segment.key}\u0002`,
         STRUCTURE_LIMITS.segmentMembers + 1, this.cost);
       if (entries.length > STRUCTURE_LIMITS.segmentMembers
