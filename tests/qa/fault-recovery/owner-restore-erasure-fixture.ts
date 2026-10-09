@@ -94,7 +94,7 @@ import { ratingAccount } from '../../../tests/qa/support/rating-account.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
-import { cloneQaOwnerDatabases } from '../../../tests/qa/support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { copyRecoveryTree } from '../../../tests/qa/support/recovery-copy.ts';
 import { seedContent } from '../../../tests/qa/load/corpus.ts';
 import {
@@ -138,7 +138,7 @@ export async function ownerRestoreErasureFixture() {
   const qa = qaStack(runId);
   const image = pinnedImage();
   const apps = readEnv(join(qa.directory, 'apps.env'));
-  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
   const suffix = randomBytes(6).toString('hex');
   const directory = join(root, '.temp', `owner-erasure-restore-${suffix}`);
   const socketDirectory = join(root, '.temp', 's');

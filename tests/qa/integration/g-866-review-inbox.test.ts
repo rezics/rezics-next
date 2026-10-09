@@ -13,7 +13,7 @@ import {
 } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
-import { cloneQaOwnerDatabases, FakeDeliveryProvider } from '../support/fake-delivery.ts';
+import { FakeDeliveryProvider } from '../support/fake-delivery.ts';
 import { NotificationDigestWorker } from '../../../services/main/src/modules/notification/digest.ts';
 import { editorialNotificationSubjectReader, EDITORIAL_NOTIFICATION_TOPICS } from '../../../services/main/src/modules/notification-producers/editorial.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
@@ -25,6 +25,7 @@ import {
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { configureDisclosurePool, disclosurePoolReader } from '../../../services/main/src/modules/disclosure/read.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('G-866: review journey reaches recipients, triage is independent and revocation hides exact destinations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
@@ -32,7 +33,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
     preparation = Date.now();
   const scopes =
     'openid work:create work:edit work:read work:correct work:review notification:manage';
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content'], 'owner');
   let f: Awaited<ReturnType<typeof authorCreditFixture>>;
   try {
     // The editorial cursor, inbox, deliveries and digest days belong to this

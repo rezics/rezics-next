@@ -7,7 +7,7 @@ import {
   readRatingAggregateInventory,
 } from '../../../services/main/src/modules/access/rating-aggregate-inventory.ts';
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 interface Plan {
@@ -20,7 +20,7 @@ const nodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(nodes
  * Native graph/manifest and reviewed owner reconciliation remain covered by
  * g-836-sao-public-api and the rating aggregate suites. */
 test('G924: indexed merged inventory stays bounded through masked votes, 100/101 and growing retained history', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const context = id(),
     work = id(),

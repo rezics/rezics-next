@@ -14,7 +14,7 @@ import { EventQueryUnavailable, EventTemporalQueries }
 import { GRAPHS, ID, iri, RV, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -27,7 +27,7 @@ test('RATE09: Access recovery hold and a missing event manifest fail closed, the
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN,
     Bun.env.FUSEKI_COMMAND_TOKEN);
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 4 });
   const env: WorkActivationEnvironment = { fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },

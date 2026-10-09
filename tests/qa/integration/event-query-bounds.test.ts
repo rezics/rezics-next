@@ -19,7 +19,7 @@ import { cancelSemanticAdmission } from '../../../services/main/src/modules/sema
 import { profileValidations } from '../../../services/main/src/infrastructure/profile.ts';
 import { eventEffectFence, eventIntentEffect, hasEventEffects, registerEventPublication } from '../../../services/main/src/modules/event/effects.ts';
 import { EVENT_SOURCE_BATCH_SQL, EVENT_SOURCE_MEMBERS_SQL, EVENT_SOURCE_COST, readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys } from '../../../services/main/src/modules/event/source.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = () => `${ID}${randomUUID()}`;
 const PROFILE = 'https://rezics.com/definition/event-time-v1';
@@ -46,7 +46,7 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     || !Bun.env.MAIN_ROUTING_EPOCH) throw new Error('Run through the isolated QA integration tier');
   const directory = resolve('.temp', `event-query-bounds-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'relay'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 4 });
   const relay = new Pool({ connectionString: databases.urls.relay, max: 4 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN,

@@ -11,7 +11,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { readMainOutboxEnvelope, readNextMainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -21,7 +21,7 @@ test('GOV04: ending one offering does not change another recognition or reopen t
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
   const directory = join(root, '.temp', `rights-offering-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 5 });
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
     Record<string, string>, 'openid work:create work:read rights:offer rights:decide');

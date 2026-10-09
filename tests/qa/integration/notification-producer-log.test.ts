@@ -11,14 +11,14 @@ import {
   PRODUCER_COST,
 } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import type { NotificationEvent } from '../../../services/main/src/modules/notification/store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let access: Pool;
 
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access'], 'owner');
   access = new Pool({ connectionString: databases.urls.access, max: 8 });
 }, 30_000);
 

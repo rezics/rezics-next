@@ -18,7 +18,7 @@ import {
 import { SafetyAlertProvider } from '../../../services/main/src/modules/safety-alerts/provider.ts';
 import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
 import { SafetyDecisionMail } from '../../../services/main/src/modules/governance/notices-mail.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { safetyFixture, png, nciiDeclaration, json } from './g-744-support.ts';
 
@@ -30,7 +30,7 @@ async function fixture(label: string) {
     'content',
     'relay',
     'account',
-  ]);
+  ], 'owner');
   const f = await safetyFixture(label, true, databases.urls);
   const pool = new Pool({ connectionString: databases.urls.account });
   const account = await ratingAccount({

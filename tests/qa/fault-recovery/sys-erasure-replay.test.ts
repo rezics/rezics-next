@@ -23,7 +23,7 @@ import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/o
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { offlineTextIndex } from '../../../scripts/operations/search-state.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki }
   from './search-ops-support.ts';
@@ -40,7 +40,7 @@ test('SYS07: older Account, Access, Content, graph and object copies replay with
     throw new Error('Run through the isolated fault/recovery QA tier');
   }
 
-  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
   const qa = qaStack(runId);
   const stack = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
   const apps = readEnv(join(stack, 'apps.env'));

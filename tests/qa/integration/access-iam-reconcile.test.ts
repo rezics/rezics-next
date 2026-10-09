@@ -15,7 +15,7 @@ import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable,
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scope = 'openid work:create access:manage';
@@ -61,7 +61,7 @@ async function withOwners(label: string, work: (owners: Owners) => Promise<void>
   }
   const state = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 12 });
   const port = await freePort();

@@ -13,16 +13,16 @@ import {
   RecommendationDenied,
 } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import {
-  cloneOwners,
   grantAgent,
   nativeId,
   requireQa,
   retainBatch,
   slotOf,
 } from './recommendation-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('G939: public ranking pages reuse admitted scores and fence generation movement', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'relay'], 'privileged');
   const access = new Pool({ connectionString: owners.urls.access }),
     relay = new Pool({ connectionString: owners.urls.relay });
   try {

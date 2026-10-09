@@ -18,7 +18,7 @@ import { AccessRepresentedMembershipAuthority } from '../../../services/main/src
 import { AccessMemberships, REPRESENTED_ORG_MANAGER_SQL } from '../../../services/main/src/modules/access/memberships.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -43,7 +43,7 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
   const state = join(root, '.temp', `representation-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   // Operator bootstrap is once per database; authority epochs also belong to this fixture.
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();
@@ -274,7 +274,7 @@ test('IAM26: exact P-to-A mandate and B-to-A grant change only B roster with pri
   }
   const state = join(root, '.temp', `represented-org-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();

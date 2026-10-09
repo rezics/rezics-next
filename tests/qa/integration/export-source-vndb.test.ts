@@ -16,7 +16,7 @@ import { exportRoutes } from '../../../services/main/src/routes/exports.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { captureVndbFixtureRun, vndbConceptBodies } from '../fixtures/vndb-concept.ts';
 import { accessWithBaseline } from '../fixtures/access-baseline.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
 
@@ -27,7 +27,7 @@ test('LIVE01/LIVE07: frozen VNDB concept evidence exports exact source dispositi
   if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Use the isolated QA integration tier');
   }
-  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content']);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   const objectDirectory = resolve('.temp', `export-vndb-${randomUUID()}`);

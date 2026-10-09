@@ -13,7 +13,7 @@ import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV,
   type WorkActivationReceipt } from '../../../services/main/src/modules/work/activate.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -34,7 +34,7 @@ test('G-591: text contribution publication requires the source basis, including 
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the QA integration tier');
   }
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   const directory = `.temp/g-591-${randomUUID()}`;

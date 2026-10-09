@@ -19,7 +19,7 @@ import { AccessMembershipConsents } from '../../../services/main/src/modules/acc
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 async function freePort(): Promise<number> {
@@ -42,7 +42,7 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
   }
   const state = join(root, '.temp', `membership-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();

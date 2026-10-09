@@ -12,7 +12,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 export const POLICY_SCOPES = 'openid access:manage access:grant work:read work:edit work:create comment:create';
@@ -23,7 +23,7 @@ export async function policyHarness() {
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access, max: 12 });
   const costs = { calls: 0, rows: 0, writes: 0 };
   const count = (sql: string, result: { rows: unknown[]; rowCount: number | null }) => {

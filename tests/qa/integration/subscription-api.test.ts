@@ -11,7 +11,7 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { COMMERCE_SCOPE, CommerceStore, GIFT_ACTION, giftScope, HttpPaymentProvider, SUBSCRIBE_ACTION }
   from '../../../services/main/src/modules/commerce/store.ts';
 import type { CommerceRouteDependencies } from '../../../services/main/src/routes/commerce.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { startFakePaymentProvider } from '../support/fake-payment.ts';
 
 // SUB01-SUB03 through the real Main routes, a cloned Access PostgreSQL owner
@@ -46,7 +46,7 @@ beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   close = databases.close;
   pool = countingPool(new Pool({ connectionString: databases.urls.access, max: 8 }));
   const settlementPrincipal = randomUUID();

@@ -10,7 +10,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   graphContentReferences } from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // A pre-erasure dump is an ordinary backup, not a destroyed original. Restoring
 // it and replaying the same journal entry is what removes the source text.
@@ -100,7 +100,7 @@ test('an original backup keeps source text until the same journal entry is repla
     const runId = Bun.env.REZICS_QA_RUN_ID;
     const fusekiUrl = Bun.env.FUSEKI_URL;
     if (!runId || !fusekiUrl) throw new Error('signed catalog comparison requires the qualified native stack');
-    const databases = await cloneQaOwnerDatabases(runId, ['content']);
+    const databases = await cloneQaOwnerDatabases(runId, ['content'], 'owner');
     const contentPool = new Pool({ connectionString: databases.urls.content, max: 2 });
     let snapshot: Pool | undefined;
     try {

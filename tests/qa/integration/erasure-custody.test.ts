@@ -18,7 +18,7 @@ import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, CONTENT_WAL_DOMAIN,
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { assertGraphAdmissionOpen } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 interface Report {
@@ -56,7 +56,7 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     || !apps.MAIN_ROUTING_EPOCH || !apps.CONTENT_DATABASE_URL || !apps.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const databases = await cloneQaAccountAccessDatabases(apps.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(apps.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
   const relayPool = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });

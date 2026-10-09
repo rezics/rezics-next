@@ -15,7 +15,7 @@ import { FusekiClient, type CommandEnvelope, type CommandResult,
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ThemeStore } from '../../../services/main/src/modules/theme/store.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = (id: string) => 'https://rezics.com/id/' + id;
@@ -66,7 +66,7 @@ test('VIEW09: changed dependencies and expired approval require a new exact them
     || !Bun.env.ACCOUNT_MAIN_RESOURCE) throw new Error('Run through the isolated QA integration tier');
   const state = join(root, '.temp', 'theme-activation-' + randomUUID());
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });

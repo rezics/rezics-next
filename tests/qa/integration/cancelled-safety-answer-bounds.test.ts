@@ -13,7 +13,7 @@ import {
   SAFETY_ALERT_COST,
   SAFETY_ALERT_SOURCE_SQL,
 } from '../../../services/main/src/modules/safety-alerts/store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { json, nciiDeclaration, png, safetyFixture } from './g-744-support.ts';
 
 type Fixture = Awaited<ReturnType<typeof safetyFixture>>;
@@ -218,7 +218,7 @@ test('admission, due queue and alert checks seek one answer across thousands of 
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('cancelled-answer-bounds', true, databases.urls);
   try {
     await migrate(f.stack.accessPool);
@@ -350,7 +350,7 @@ test('automatic counter-notice continuation seeks the current attempt without re
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('counter-answer-bounds', true, databases.urls);
   let fault: ReturnType<typeof spyOn> | undefined;
   try {

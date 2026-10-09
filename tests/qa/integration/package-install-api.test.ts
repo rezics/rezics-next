@@ -20,7 +20,7 @@ import { PackageArtifactStore } from '../../../services/main/src/modules/package
 import { PackageLockStore, strongestIntegrity } from '../../../services/main/src/modules/package/lock.ts';
 import { NpmResolutionStore } from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { npmRegistryRequest } from '../fixtures/npm-registry-scenarios.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { qaEnvironment, startAccount } from './account-boundary-fixture.ts';
 import { archiveNpmFetcher, packageFiles, type ArchiveRegistry } from './package-install-fixtures.ts';
 
@@ -530,7 +530,7 @@ test('PKG17: Account consent withdrawal fences a staged rollback through the rea
   await json(await apply(f, id, g2.generation), 200);
 
   const env = qaEnvironment();
-  const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   const account = await startAccount({ pool: { connectionString: databases.urls.account, max: 8 },
     secret: env.secret, resource: env.resource });
   try {

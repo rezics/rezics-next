@@ -12,7 +12,7 @@ import {
   ratingMergeHandler,
 } from '../../../services/main/src/modules/rating/merge-handler.ts';
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const zero = '00000000-0000-0000-0000-000000000000';
@@ -36,7 +36,7 @@ const grainKey = ({ principal, context }: Grain) => `${principal}|${context}`;
 // These private incidence fixtures exercise planning only. Exact graph pairs,
 // sealed effect receipts and compensation remain covered by their owner suites.
 test('rating merge seeks bounded raw indexed grains and completely resumes sparse duplicate histories', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const personPrefix = randomUUID().slice(0, 24), contextPrefix = randomUUID().slice(0, 24);
   const people = Array.from({ length: 10_000 }, (_, n) =>

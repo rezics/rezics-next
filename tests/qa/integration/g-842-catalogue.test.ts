@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { cloneOwners } from './recommendation-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { RankingGenerations, RANKING_PROFILE } from '../../../services/main/src/modules/recommendation/ranking.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { graphZeroSnapshot } from '../../../services/main/src/modules/recommendation/zero-candidates.ts';
@@ -31,7 +31,7 @@ type Created = { work: string; workRevision: string; mainVersion: string; replay
 test('G842: multilingual candidate receipts, grain guard, quota races, replay and reviewed trust through HTTP', async () => {
   const stack = await startMediaStack('g842-intake');
   let relay: Pool | undefined;
-  let relayOwner: Awaited<ReturnType<typeof cloneOwners>> | undefined;
+  let relayOwner: Awaited<ReturnType<typeof cloneQaOwnerDatabases>> | undefined;
   try {
     const editor = await stack.member('new-editor');
     const reviewer = await stack.member('reviewer');
@@ -44,7 +44,7 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
     await editor.grant('work:create:root', 'work.create');
     await reviewer.grant('catalogue:verify:root', 'catalogue.verify');
     await reviewer.grant(MANAGE_SCOPE, MANAGE_ACTION);
-    relayOwner = await cloneOwners(Bun.env.REZICS_QA_RUN_ID!, ['relay']);
+    relayOwner = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['relay'], 'privileged');
     relay = new Pool({ connectionString: relayOwner.urls.relay, max: 2 });
     let rankingCandidates: string[] = [];
     const recommendations = new RankingGenerations({ access: stack.accessPool, relay,

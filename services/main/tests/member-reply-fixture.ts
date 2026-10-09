@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { expect } from 'bun:test';
 import { Pool } from 'pg';
 import { agentProvisionHarness } from '../../../tests/qa/integration/agent-provision-support.ts';
-import { cloneQaAccountAccessDatabases } from '../../../tests/qa/support/databases.ts';
+import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
 import { ContentCore } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { createMainApp } from '../src/app.ts';
@@ -17,7 +17,7 @@ const scopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'commen
 export const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 
 export async function memberFixture() {
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const prior = { account: Bun.env.ACCOUNT_DATABASE_URL, access: Bun.env.ACCESS_DATABASE_URL };
   Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;
   Bun.env.ACCESS_DATABASE_URL = databases.urls.access;

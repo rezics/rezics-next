@@ -25,7 +25,7 @@ import { AccessGroups } from '../../../services/main/src/modules/access/groups.t
 import { AccessRepresentations } from '../../../services/main/src/modules/access/representations.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scopes =
@@ -70,7 +70,7 @@ export async function startAgentControlHarness(label: string) {
   }
   const state = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content'], 'owner');
   const contentPool = new Pool({ connectionString: databases.urls.content });
   const accountPool = new Pool({ connectionString: databases.urls.account });
   let accountClosed = false;

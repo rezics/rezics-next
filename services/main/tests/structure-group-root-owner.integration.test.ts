@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 import { objectStore as recoveryObjectStore } from '../../../scripts/ops/backup.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
-import { cloneQaOwnerDatabases } from '../../../tests/qa/support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
 import {
   fusekiSecrets,
   pinnedImage,
@@ -162,7 +162,7 @@ test('Structure custody: restored GroupRole and qualifier mappings and exact S3 
   const directory = resolve('.temp', `structure-group-owner-${suffix}`);
   const volume = `rezics-structure-group-owner-${suffix}`;
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
   const pools = new Set<Pool>();
   const pool = (url: string) => {
     const value = new Pool({

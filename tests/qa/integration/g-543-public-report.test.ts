@@ -11,14 +11,14 @@ import { principalClasses, rateLimitBudgets } from '../../../services/main/src/m
 import { AccountAssertionUnavailable } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 interface Receipt { caseId: string; reportId: string; credential: string }
 
 test('G-543/G-564: an exhausted writer files a real public report, reads its status and appeals independently', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run with the QA integration tier');
   const directory = `.temp/g-543-joint-${randomUUID()}`;
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay'], 'owner');
   const f = await authorCreditFixture({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account,
     ACCESS_DATABASE_URL: databases.urls.access, CONTENT_DATABASE_URL: databases.urls.content } as Record<string, string>,
   directory, 'openid work:create work:read work:edit agent:create governance:report');

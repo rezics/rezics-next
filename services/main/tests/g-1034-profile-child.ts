@@ -26,11 +26,13 @@ const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
 const { GRAPHS, iri, lit } = await import('../src/modules/work/activate.ts');
-const { cloneOwners, requireQa } =
+const { cloneQaOwnerDatabases } = await import('../../../tests/qa/support/databases.ts');
+
+const { requireQa } =
   await import('../../../tests/qa/integration/recommendation-support.ts');
 // The administrator is an immutable singleton, and recovery tests fence Access.
 // Own all SQL state while retaining the shard's graph and its current position.
-const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
 Object.assign(process.env, {
   ACCESS_DATABASE_URL: owners.urls.access,
   CONTENT_DATABASE_URL: owners.urls.content,

@@ -10,7 +10,7 @@ import { AccessProposalExecutions } from '../../../services/main/src/modules/pro
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { proposalDigest } from '../../../services/main/src/modules/proposal/execute.ts';
 import { GRAPHS, ID, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { seedOrgRealm } from '../support/org-realm.ts';
 import { seedManagedOrganization } from '../support/managed-organization.ts';
 import { ratingAccount } from '../support/rating-account.ts';
@@ -21,7 +21,7 @@ const native = () => ID + randomUUID();
 
 test('GOV23: adopted proposal executes one scoped roster effect and recovers the same operation ID', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
     Record<string, string>, 'openid vote:manage access:manage');

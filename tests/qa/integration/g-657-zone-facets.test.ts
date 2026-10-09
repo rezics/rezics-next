@@ -13,7 +13,7 @@ import { SerialStatisticsProjection } from '../../../services/main/src/modules/w
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { startMediaStack } from './media-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const book = 'https://schema.org/Book';
@@ -22,7 +22,7 @@ type Page = { items: { id: string; mod?: unknown }[]; facets: Record<string, unk
 // Real owner commands create the Fiction population. A fixed, restore-fenced composition
 // projection fixture isolates query admission from the separate Content relay pipeline.
 test('G657: registry Facets drive Fiction browse and Query; removed and unsupported inputs read no graph', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'owner');
   const stack = await startMediaStack('g-657-zone-facets', { ownerUrls: databases.urls })
     .catch(async error => { await databases.close(); throw error; });
   const relay = new Pool({ connectionString: databases.urls.relay });

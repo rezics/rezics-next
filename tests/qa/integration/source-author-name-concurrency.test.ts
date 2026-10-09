@@ -7,13 +7,13 @@ import {
   SourceIntakeStore,
   SourceIntakeConflict,
 } from '../../../services/main/src/modules/source/intake.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let pool: Pool;
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['content']);
+  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['content'], 'owner');
   pool = new Pool({ connectionString: databases.urls.content, max: 8 });
   await migrateContent(pool);
 }, 60_000);

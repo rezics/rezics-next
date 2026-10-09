@@ -20,7 +20,7 @@ import { activateMetadataWork, ID, metadataWorkRequestDigest,
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
 import type { CommerceRouteDependencies } from '../../../services/main/src/routes/commerce.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // SUB07 on the real graph and Access owner. Graph state is seeded through the
 // native command modules with synthetic claimed admissions, as the public
@@ -36,7 +36,7 @@ test('SUB07: a fixed site with sparse Realm candidates never falls back to gener
   }
   const state = join(root, '.temp', `pro-site-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   cleanups.push(async () => { await pool.end(); await databases.close(); });
   const actor = ID + randomUUID();

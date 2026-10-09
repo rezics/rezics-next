@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { AccessVotes, voteReceiptIri, type VoteAuthority } from '../../../services/main/src/modules/vote/access.ts';
 import { pollScopeId } from '../../../services/main/src/modules/vote/schema.ts';
 import { AccessRevocations } from '../../../services/main/src/modules/access/revocation-requests.ts';
@@ -9,7 +9,7 @@ import { AccessRevocations } from '../../../services/main/src/modules/access/rev
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 async function fixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const principalId = randomUUID(), actor = native(), poll = native(), scope = pollScopeId(poll);
   const principal = { issuer: 'https://vote-authority.test', subject: randomUUID() };

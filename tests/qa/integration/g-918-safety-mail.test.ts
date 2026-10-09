@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { Pool } from 'pg';
 import { safetyFixture, png, json } from './g-744-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import {
   SafetyDecisionMail,
@@ -23,7 +23,7 @@ test('SAFETY07 G918: mandatory private mail reaches a suspended uploader and ano
     'content',
     'relay',
     'account',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('g918-private-mail', true, databases.urls);
   const pool = new Pool({ connectionString: databases.urls.account });
   const account = await ratingAccount({
@@ -204,7 +204,7 @@ test('SAFETY07 G918: accepted decisions queue once before effect completion; can
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('g918-current', true, databases.urls);
   try {
     const image = await f.author.upload(png(82, 82));

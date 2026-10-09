@@ -9,7 +9,7 @@ import {
 import { KnownEffectFailure } from '../../../services/main/src/modules/governance/effects.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { SAFETY_ALERT_BASIS } from '../../../services/main/src/modules/safety-alerts/store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { safetyFixture, png, json, nciiDeclaration } from './g-744-support.ts';
 
 for (const state of ['accepted', 'failed', 'partial'] as const) {
@@ -18,7 +18,7 @@ for (const state of ['accepted', 'failed', 'partial'] as const) {
       'access',
       'content',
       'relay',
-    ]);
+    ], 'owner');
     const f = await safetyFixture(`cancelled-answer-${state}`, true, databases.urls);
     let probe: ReturnType<typeof spyOn> | undefined;
     try {

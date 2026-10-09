@@ -46,7 +46,7 @@ import { sealRecoveryPayload } from '../../../services/account/src/recovery-enve
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { offlineTextIndex } from '../../../scripts/operations/search-state.ts';
 import { authorCreditFixture, nativeId } from '../fixtures/author-credit.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki } from './search-ops-support.ts';
 
 class DirectoryObjects implements ImmutableObjects {
@@ -72,7 +72,7 @@ test('OPS12: a consistent pre-erasure cut replays Content suppression and proves
   const root = resolve(import.meta.dir, '../../..');
   const qa = qaStack(runId);
   const apps = readEnv(join(qa.directory, 'apps.env'));
-  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
   const directory = join(root, '.temp', `erasure-custody-restore-${randomUUID()}`);
   const backupObjects = join(directory, 'pre-erasure-objects');
   const objects = new DirectoryObjects(join(directory, 'live-objects'));

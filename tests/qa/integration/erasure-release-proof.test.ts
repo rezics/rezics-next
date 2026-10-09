@@ -15,7 +15,7 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outb
 import { DATASET, GRAPHS, RV, hash, initializeFreshGraph, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage, readGraphRecoverySource } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki } from '../fault-recovery/search-ops-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 type ReleaseExpectation = ReleasedGraphErasureProof['released'];
 type Native = Awaited<ReturnType<typeof standaloneFuseki>>;
@@ -129,7 +129,7 @@ beforeAll(async () => {
   const started = Date.now(), runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated QA integration tier');
   qa = qaStack(runId);
-  databases = await cloneQaOwnerDatabases(runId, ['access', 'relay']);
+  databases = await cloneQaOwnerDatabases(runId, ['access', 'relay'], 'owner');
   const pool = (url: string) => new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 1500 });
   access = pool(databases.urls.access); relay = pool(databases.urls.relay);
   relayObserver = new Client({ connectionString: databases.urls.relay });

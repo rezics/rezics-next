@@ -3,19 +3,19 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { AccountAssertionDenied, AccountAssertionVerifier }
   from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { type AccountOwner, countStatements, databaseName, decodePayload, mainWithAccount,
   qaEnvironment, representAgents, startAccount } from './account-boundary-fixture.ts';
 
 const env = qaEnvironment();
-let databases: Awaited<ReturnType<typeof cloneQaAccountAccessDatabases>>;
+let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let accessPool: Pool;
 let account: AccountOwner;
 let verifierClient: { client_id: string; client_secret?: string };
 let verifier: AccountAssertionVerifier;
 
 beforeAll(async () => {
-  databases = await cloneQaAccountAccessDatabases(env.runId);
+  databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   account = await startAccount({ pool: { connectionString: databases.urls.account, max: 8 },
     secret: env.secret, resource: env.resource });

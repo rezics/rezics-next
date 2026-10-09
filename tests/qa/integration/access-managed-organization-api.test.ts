@@ -17,7 +17,7 @@ import { AccessManagedOrganizations, type ManagedGrantChangeResult, type OrgRost
 import { MANAGED_ORG_ACTION } from '../../../services/main/src/modules/access/managed-org-authority.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { seedOrgRealm } from '../support/org-realm.ts';
 import { seedManagedOrganization } from '../support/managed-organization.ts';
 
@@ -40,7 +40,7 @@ test('IAM24/IAM23/IAM06: explicit managed organization grants protect a real ros
   }
   const state = join(root, '.temp', `managed-org-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();

@@ -103,13 +103,13 @@ test('SUB08: a pre-revocation Content restore cannot pass the retained review cu
 
 test('SUB08: an older gift restore differs from the retained Commerce revocation cut', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated QA fault recovery');
-  const { cloneQaAccountAccessDatabases } = await import('../support/databases.ts');
+  const { cloneQaOwnerDatabases } = await import('../support/databases.ts');
   const { readEnv } = await import('../../../scripts/dev/config.ts');
   const { CommerceStore, commerceIntentDigest, giftScope, GIFT_ACTION, SUBSCRIBE_ACTION } =
     await import('../../../services/main/src/modules/commerce/store.ts');
   const { captureCommerceRecoveryCoverage, assertCommerceRecoveryCoverage } =
     await import('../../../services/main/src/modules/commerce/recovery-coverage.ts');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const stack = join(root, '.temp', 'stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
   const compose = readEnv(join(stack, 'compose.env'));
   const admin = new Pool({ connectionString:

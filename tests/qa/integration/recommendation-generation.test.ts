@@ -12,15 +12,16 @@ import { RankingBuildWorker } from '../../../services/main/src/modules/recommend
 import { RANKING_PROFILE, type RankingBasis, RankingGenerations }
   from '../../../services/main/src/modules/recommendation/ranking.ts';
 import type { RecommendationDependencies } from '../../../services/main/src/routes/recommendations.ts';
-import { cloneOwners, grantAgent, meteredPool, nativeId, type RatingSignal, requireQa, retainBatch, slotOf,
+import { grantAgent, meteredPool, nativeId, type RatingSignal, requireQa, retainBatch, slotOf,
   startAccount } from './recommendation-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // Real Account tokens, Main HTTP handlers and isolated Access/relay clones. Relay
 // envelopes are bulk-retained as the relay handoff writes them; each scenario
 // uses its own data epoch, so one scenario's source faults never reach another.
 const root = resolve(import.meta.dir, '../../..');
 const state = join(root, '.temp', `recommendation-api-${randomUUID()}`);
-let owners: Awaited<ReturnType<typeof cloneOwners>>;
+let owners: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let account: Awaited<ReturnType<typeof startAccount>>;
 let access: Pool;
 let relay: Pool;
@@ -39,7 +40,7 @@ let rater: Awaited<ReturnType<typeof grantAgent>>;
 
 beforeAll(async () => {
   const runId = requireQa();
-  owners = await cloneOwners(runId, ['access', 'relay']);
+  owners = await cloneQaOwnerDatabases(runId, ['access', 'relay'], 'privileged');
   access = new Pool({ connectionString: owners.urls.access, max: 8 });
   relay = new Pool({ connectionString: owners.urls.relay, max: 4 });
   registry = new AccessAdmissionRegistry(access);

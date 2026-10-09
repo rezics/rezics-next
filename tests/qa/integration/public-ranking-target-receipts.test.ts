@@ -10,8 +10,9 @@ import { graphZeroCandidates, graphZeroSnapshot, WORK_CANDIDATE_MEMBERSHIP_COST 
   from '../../../services/main/src/modules/recommendation/zero-candidates.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
-import { cloneOwners, meteredPool, requireQa } from './recommendation-support.ts';
+import { meteredPool, requireQa } from './recommendation-support.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 interface Health {
   status: string; generation: string | null; sequenceLag: string | null; stale: boolean;
@@ -19,7 +20,7 @@ interface Health {
 }
 
 test('public ranking counts target-form Work receipts, skips non-Works and reports strict failures until recovery', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   let stack: MediaStack | undefined;
   const relay = new Pool({ connectionString: owners.urls.relay });
   try {

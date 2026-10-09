@@ -10,14 +10,15 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
 import { startMediaStack } from './media-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const subject = '<http://www.w3.org/1999/02/22-rdf-syntax-ns#subject>';
 
 test('discovery activates under a steady stream of unrelated votes and shelf changes, and a vote on its Work reports it stale until a delta covers it', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const f = await startMediaStack('discovery-continuous', { ownerUrls: owners.urls });
   const relay = new Pool({ connectionString: owners.urls.relay });
   const statement = native();

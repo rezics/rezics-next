@@ -11,7 +11,7 @@ import { ORG_REALM_ACTION } from '../../../services/main/src/modules/access/org-
 import { AccessManagedOrganizations } from '../../../services/main/src/modules/access/managed-organizations.ts';
 import { MANAGED_ORG_ACTION } from '../../../services/main/src/modules/access/managed-org-authority.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { seedOrgRealm } from '../support/org-realm.ts';
 import { seedManagedOrganization } from '../support/managed-organization.ts';
 import { ratingAccount } from '../support/rating-account.ts';
@@ -19,7 +19,7 @@ import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history and bounded receipts', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as Record<string, string>,

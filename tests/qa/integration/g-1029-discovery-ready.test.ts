@@ -14,9 +14,10 @@ import { graphZeroCandidates, graphZeroSnapshot } from '../../../services/main/s
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
-import { cloneOwners, meteredPool, requireQa } from './recommendation-support.ts';
+import { meteredPool, requireQa } from './recommendation-support.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 async function until<T>(read: () => Promise<T | null>, label: string): Promise<T> {
@@ -33,7 +34,7 @@ interface Health { status: string; generation: string | null; sequenceLag: strin
 interface Sections { items: { id: string; page: { items: { id: string }[] } }[] }
 
 test('G1029: restored migrated owners bootstrap and resume the public ranking, then replace it without an availability gap', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const compose = readEnv(resolve(root, '.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`, 'compose.env'));
   const admin = new Client({ connectionString: `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${compose.POSTGRES_PORT}/postgres` });
   const restored: string[] = [];

@@ -16,7 +16,7 @@ import {
   type AssessmentRecordInput,
 } from '../../../services/main/src/modules/verification/graph.ts';
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('Committed native assessment without Access acknowledgement or Content producer remains unresolved original custody', async () => {
   const run = Bun.env.REZICS_QA_RUN_ID,
@@ -25,7 +25,7 @@ test('Committed native assessment without Access acknowledgement or Content prod
     routingEpoch = Bun.env.MAIN_ROUTING_EPOCH;
   if (!run || !fusekiUrl || !dataEpoch || !routingEpoch)
     throw new Error('Run through isolated QA integration');
-  const databases = await cloneQaOwnerDatabases(run, ['access', 'content']);
+  const databases = await cloneQaOwnerDatabases(run, ['access', 'content'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 1 });
   const content = new Pool({ connectionString: databases.urls.content, max: 1 });
   const directory = join(

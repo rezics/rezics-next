@@ -7,7 +7,7 @@ import { prepareLibraryShelves, readShelfMetadata, SHELF_METADATA_COST } from '.
 import { ReaderLibraryStatusStore, STATUS_SHELF_COST, type ReadingStatus, type ShelfOrder, type ShelfSort }
   from '../../../services/main/src/modules/library/status.ts';
 import { meterStatements, startHomeStack } from './feed-read-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { fixtureDeadline, fixturePages } from '../../../services/main/tests/g-1009-fixture-guards.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -22,7 +22,7 @@ const keys = { added: 'changed_at', title: 'title_key COLLATE "C"', rating: 'own
 type Page = { items: { work: string; card: { id: string } | null }[]; nextCursor: string | null };
 
 async function startLibraryStack(label: string) {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'owner');
   const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
   let home: Awaited<ReturnType<typeof startHomeStack>>;
   try {

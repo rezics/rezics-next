@@ -18,7 +18,7 @@ import {
   mailSuppressionApi,
   unsubscribeToken,
 } from '../../../services/account/src/mail-suppression.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const deadlineFor = (receivedAt: string) => new Date(Date.parse(receivedAt) + 48 * 3600_000);
@@ -27,7 +27,7 @@ async function alertFixture(label: string) {
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   try {
     const f = await safetyFixture(label, true, databases.urls);
     return {
@@ -324,7 +324,7 @@ test('SAFETY03/SAFETY08: G917 open-case scan excludes closed and answered histor
 
 test('SAFETY03/SAFETY08: G917 mandatory Account mail, lost acknowledgement, SMTP failure and confirmed delivery', async () => {
   const f = await alertFixture('g917-account');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.account });
   const account = await ratingAccount({
     ...Bun.env,

@@ -3,10 +3,10 @@ import { expect, test } from 'bun:test';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('A verified creator reads a newly private Work without a manual work.read grant', async () => {
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const accountUrl = Bun.env.ACCOUNT_DATABASE_URL;
   const accessUrl = Bun.env.ACCESS_DATABASE_URL;
   Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;

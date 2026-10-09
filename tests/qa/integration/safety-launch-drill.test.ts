@@ -23,7 +23,7 @@ import {
 } from '../../../services/main/src/modules/safety-alerts/store.ts';
 import { SafetyAlertProvider } from '../../../services/main/src/modules/safety-alerts/provider.ts';
 import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { safetyFixture, json, png, sha, nciiDeclaration, type Receipt } from './g-744-support.ts';
 import { startMediaStack } from './media-support.ts';
@@ -35,7 +35,7 @@ test('SAFETY01: launch intake and private correspondence use real suspended Acco
     'content',
     'relay',
     'account',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('launch-intake', true, databases.urls);
   const pool = new Pool({ connectionString: databases.urls.account });
   let account: Awaited<ReturnType<typeof ratingAccount>> | undefined;
@@ -133,7 +133,7 @@ for (const fault of ['before-copy-closure', 'after-copy-closure'] as const) {
       'access',
       'content',
       'relay',
-    ]);
+    ], 'owner');
     const f = await safetyFixture(`launch-${fault}`, true, databases.urls);
     let probe: ReturnType<typeof spyOn> | undefined;
     try {
@@ -324,7 +324,7 @@ test('SAFETY02: recovery of an older original receipt installs its missing copy 
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('launch-original-receipt', true, databases.urls);
   try {
     const bytes = png(110, 110);
@@ -413,7 +413,7 @@ test('SAFETY03: accepted and cancelled answers remain in the due queue and deliv
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('launch-cancelled-answer', true, databases.urls);
   try {
     const image = await f.author.upload(png(109, 109));
@@ -480,7 +480,7 @@ test('launch configured matcher outage and recovery bind clearance to exact synt
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const directory = `.temp/safety-launch-matcher-${randomUUID()}`;
   mkdirSync(directory, { recursive: true });
   const corpus = `${directory}/corpus.json`;
@@ -574,7 +574,7 @@ test('SAFETY03/SAFETY08: active responder absence delivers backup mail at thirty
     'content',
     'relay',
     'account',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('launch-active-absence', true, databases.urls);
   const pool = new Pool({ connectionString: databases.urls.account });
   const account = await ratingAccount({

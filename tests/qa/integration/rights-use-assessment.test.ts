@@ -12,7 +12,7 @@ import { RightsInvalid, RightsStore, rightsExportUseScope, sourceRetentionScope,
 import { planExport, type VerifiedExportMember } from '../../../services/main/src/modules/export/planner.ts';
 import { rightsRoutes } from '../../../services/main/src/routes/rights.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
@@ -22,7 +22,7 @@ const provider = { scopeKind: 'source_provider', provider: 'open-library', names
 test('LIVE13/LIVE14/LIVE15/LIVE16/LIVE17: scoped rights, retention limits and combined export obligations stay exact',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-    const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
+    const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content'], 'owner');
     const access = new Pool({ connectionString: databases.urls.access, max: 4 });
     const content = new Pool({ connectionString: databases.urls.content, max: 4 });
     try {

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
 import { AccessInvitations } from '../../../services/main/src/modules/access/invitation.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
@@ -25,7 +25,7 @@ async function waitsOnLock(pool: Pool, pid: number) {
 }
 async function fixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const actor = native(), recipient = native(), principalId = randomUUID();
   const principal = { issuer: 'https://authority-concurrency.test', subject: randomUUID() };

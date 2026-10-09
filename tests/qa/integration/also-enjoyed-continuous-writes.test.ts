@@ -10,13 +10,14 @@ import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/lib
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
 import { startMediaStack } from './media-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 
 test('scheduled co-readers activate under continuous shelf writes, retain stale signals, and withhold privacy changes until covered', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const stack = await startMediaStack('also-enjoyed-continuous', { ownerUrls: owners.urls });
   try {
     const manager = await stack.member('manager');

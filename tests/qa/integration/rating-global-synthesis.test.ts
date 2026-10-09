@@ -13,7 +13,7 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
 import { GLOBAL_CONTEXT_SCOPE, GLOBAL_RATING_POPULATION_OWNER }
   from '../../../services/main/src/modules/rating/global.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -32,7 +32,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
   const nonce = randomUUID().slice(0, 8);
   const state = join(root, '.temp', `rating-global-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 5 });
   let identity: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   try {

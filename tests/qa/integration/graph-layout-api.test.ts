@@ -11,12 +11,13 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { GRAPH_LAYOUT_ACTION, GRAPH_LAYOUT_SCOPE, GraphLayouts }
   from '../../../services/main/src/modules/graph-layout/store.ts';
 import type { GraphLayoutDependencies } from '../../../services/main/src/routes/graph-layouts.ts';
-import { cloneOwners, grantAgent, meteredPool, nativeId, requireQa, startAccount }
+import { grantAgent, meteredPool, nativeId, requireQa, startAccount }
   from './recommendation-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const state = join(root, '.temp', `graph-layout-api-${randomUUID()}`);
-let owners: Awaited<ReturnType<typeof cloneOwners>>;
+let owners: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let account: Awaited<ReturnType<typeof startAccount>>;
 let access: Pool;
 let contentPool: Pool;
@@ -29,7 +30,7 @@ let outsiderToken = '';
 let fuseki: FusekiClient;
 
 beforeAll(async () => {
-  owners = await cloneOwners(requireQa(), ['access', 'content']);
+  owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content'], 'privileged');
   access = new Pool({ connectionString: owners.urls.access });
   contentPool = new Pool({ connectionString: owners.urls.content });
   await migrateContent(contentPool);

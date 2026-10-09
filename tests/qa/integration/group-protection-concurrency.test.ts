@@ -23,7 +23,7 @@ import {
   ControlStale,
   ControlConflict,
 } from '../../../services/main/src/modules/access/topology-control.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const work = 'work:create:root';
 const inventory = 'access:group-inventory';
@@ -97,7 +97,7 @@ async function blockedBy(monitor: Pool, waiting: number, holder: number) {
 
 async function fixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use isolated goalctl integration QA');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const config = { connectionString: databases.urls.access, max: 1 };
   const monitor = boundedPool(config),
     left = boundedPool(config),

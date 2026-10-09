@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { readFeed } from '../../../services/main/src/modules/feed/read.ts';
 import { WorkReadMoved, WorkReadSession, workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { seedHome, startHomeStack } from './feed-read-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('G-593: All matches followed cards once and fences their inventory; Following keeps its cursor head', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'owner');
   const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
   let home: Awaited<ReturnType<typeof startHomeStack>>;
   try {

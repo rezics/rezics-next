@@ -21,7 +21,7 @@ import { DATASET, GRAPHS, RV, hash, initializeFreshGraph, iri, lit, prepareWorkC
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { RevisionCorrupt, RevisionUnavailable } from '../../../services/main/src/modules/work/history.ts';
 import { accessStateCoverage, captureGraphRecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 class CountingObjects extends S3ImmutableObjects {
   puts = 0;
@@ -122,7 +122,7 @@ test('exact original model custody backfills retained generations with bounded r
   const nonce = randomUUID();
   const directory = resolve('.temp', `model-custody-backfill-${nonce}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay'], 'owner');
   const account = new Pool({ connectionString: databases.urls.account, max: 2 });
   const access = new Pool({ connectionString: databases.urls.access, max: 2 });
   const content = new Pool({ connectionString: databases.urls.content, max: 2 });

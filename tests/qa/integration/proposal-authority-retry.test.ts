@@ -15,7 +15,7 @@ import {
   governanceBodyScopeId,
   proposalExecutionAction,
 } from '../../../services/main/src/modules/proposal/schema.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const requestDigest = 'a'.repeat(64);
@@ -23,7 +23,7 @@ const authorityDenied = 'current body mandate and capability grant required';
 
 async function fixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const principalId = randomUUID(),
     body = native(),

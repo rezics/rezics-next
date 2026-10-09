@@ -7,7 +7,7 @@ import type { Assessed } from '../../../services/main/src/modules/suitability/co
 import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { WorkReaderStats } from '../../../services/main/src/modules/work/read-stats.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
@@ -17,7 +17,7 @@ import { relayContentProjectionOnce } from '../../../services/main/src/modules/c
 import { png } from './media-support.ts';
 
 test('G-897 H1: interactive reads return rated payload while public previews retain anonymous presentation', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'owner');
   const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
   let home: Awaited<ReturnType<typeof startHomeStack>>;
   try {

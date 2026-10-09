@@ -7,11 +7,12 @@ import { DiscoveryRefreshWorker } from '../../../services/main/src/modules/disco
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { RecommendationUnavailable } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
-import { cloneOwners, meteredPool, requireQa } from './recommendation-support.ts';
+import { meteredPool, requireQa } from './recommendation-support.ts';
 import { startMediaStack } from './media-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('Discovery refresh expires already purged superseded generations and resumes a ready checkpoint', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const f = await startMediaStack('discovery-retirement', { ownerUrls: owners.urls });
   const relay = new Pool({ connectionString: owners.urls.relay });
   try {

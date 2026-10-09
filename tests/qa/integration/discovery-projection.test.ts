@@ -14,8 +14,9 @@ import { resolveClassification } from '../../../services/main/src/modules/classi
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
 import { isolateDiscoveryProbeGraph } from './discovery-projection-fixture.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -34,7 +35,7 @@ const uuid = () => `https://rezics.com/id/${randomUUID()}`;
 // This probe owns its graph inventory and Access fences, including in a
 // sequential regression run after other files.
 test('Discovery projection: native scoped reads, durable builds, disclosure, cursor and source fences', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const stack = await startMediaStack('discovery', { ownerUrls: owners.urls });
   const restoreGraph = await isolateDiscoveryProbeGraph(stack.env);
   try {

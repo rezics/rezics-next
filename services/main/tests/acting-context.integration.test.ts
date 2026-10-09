@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { expect, test } from 'bun:test';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
-import { cloneQaAccountAccessDatabases } from '../../../tests/qa/support/databases.ts';
+import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
 import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
 import { createAccountApp } from '../../account/src/app.ts';
 import { installConsentRefreshFence } from '../../account/src/consent-fence.ts';
@@ -38,7 +38,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const databases = await cloneQaAccountAccessDatabases(runId);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account, max: 8 });
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 8 });
   const accountPort = await freePort();

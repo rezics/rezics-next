@@ -13,7 +13,7 @@ import { ExportStore } from '../../../services/main/src/modules/export/store.ts'
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { StaleSession } from '../../../services/main/src/modules/session/contract.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -21,7 +21,7 @@ const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 test('G-896: export, cancellation and reading session positions remain contiguous through the real Content relay', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.FUSEKI_URL) throw new Error('Use the isolated QA integration tier');
-  const databases = await cloneQaOwnerDatabases(runId, ['content']);
+  const databases = await cloneQaOwnerDatabases(runId, ['content'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.content, max: 4 });
   try {
     await migrateContent(pool);
@@ -93,7 +93,7 @@ test('G-896: export, cancellation and reading session positions remain contiguou
 test('G-896: helper receipt and event commit together without a position, roll back together and are numbered after commit', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Use the isolated QA integration tier');
-  const databases = await cloneQaOwnerDatabases(runId, ['content']);
+  const databases = await cloneQaOwnerDatabases(runId, ['content'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.content, max: 4 });
   try {
     await migrateContent(pool);

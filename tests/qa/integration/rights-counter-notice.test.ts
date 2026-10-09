@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { safetyFixture, png, json, type Receipt } from './g-744-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { PublicReports } from '../../../services/main/src/modules/public-report/store.ts';
 import { publicReportOwners } from '../../../services/main/src/modules/public-report/owners.ts';
 import {
@@ -88,7 +88,7 @@ test('Copyright counter-notices reach the claimant once; receipt deadlines resto
     'content',
     'relay',
     'account',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('rights-counter-notice', true, databases.urls);
   const accountPool = new Pool({ connectionString: databases.urls.account });
   let now = new Date('2026-10-02T14:37:12Z');
@@ -628,7 +628,7 @@ test('Upgrade forwards previously signed counter-notices once and preserves thei
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('rights-counter-notice-upgrade', true, databases.urls);
   let now = new Date();
   f.setClock(now);
@@ -810,7 +810,7 @@ test('Deadline restoration resumes a lost owner acknowledgement without duplicat
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('rights-restoration-recovery', true, databases.urls);
   let now = new Date('2026-10-02T12:00:00Z');
   f.setClock(now);

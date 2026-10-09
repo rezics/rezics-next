@@ -35,7 +35,7 @@ import {
 } from '../../../services/main/src/modules/erasure/replay-graph.ts';
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import {
   pinnedImage,
   qaStack,
@@ -104,7 +104,7 @@ test('OPS10: real held native HTTP replay authenticates exact bytes, preserves t
     join(evidence, 'resources.json'),
     JSON.stringify({ name, copy: `${name}-copy`, volume }),
   );
-  const databases = await cloneQaAccountAccessDatabases(runId);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 1 });
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 1 });
   const ids = Array.from({ length: 5 }, () => randomUUID());

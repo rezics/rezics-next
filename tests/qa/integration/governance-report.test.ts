@@ -23,7 +23,7 @@ import { editAdmittedMetadataWork } from '../../../services/main/src/modules/wor
 import { readCompositionPage } from '../../../services/main/src/modules/structure/read.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { png } from './media-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -34,7 +34,7 @@ async function governanceStack(name: string) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
   const directory = join(root, '.temp', `governance-${name}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access, max: 8 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   await migrateContent(contentPool);

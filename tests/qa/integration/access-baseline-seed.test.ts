@@ -31,14 +31,14 @@ import { AgentVanityHandles } from '../../../services/main/src/modules/agent/van
 import { AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 
 test.each(['member', 'administrator'] as const)(
   'baseline seed %s journey: full native plan partitions replay with exact authority',
   async (journey) => {
     const root = resolve(import.meta.dir, '../../..');
-    const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+    const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
     const oldAccount = Bun.env.ACCOUNT_DATABASE_URL;
     const oldAccess = Bun.env.ACCESS_DATABASE_URL;
     Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;

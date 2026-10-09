@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -132,7 +132,7 @@ test('G-585: a v1 analyzer volume stays closed until a resumable profile upgrade
   const secrets = Object.fromEntries(['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY']
     .map(key => [key, randomBytes(32).toString('hex')]));
   // The standalone graph has its own epoch; never pair it with the first test's publications.
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['content'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.content });
   let server: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
   const original = '魔法禁書目錄 ガラス ＲＵＳＴ', unit = `urn:rezics:g585:${identity}`;

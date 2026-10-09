@@ -4,10 +4,10 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { rewritePrincipalSubjectFormat } from '../../../services/main/src/operations/format-upgrade.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('G924: offline subject rewrite retains audit values, dependent views and grants; a stopped copy restores v1', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'owner');
   let pool = new Pool({ connectionString: databases.urls.access });
   const principal = randomUUID(),
     caseId = randomUUID(),
@@ -109,7 +109,7 @@ test('G924: offline subject rewrite retains audit values, dependent views and gr
 });
 
 test('G924: an unknown subject-dependent view fails closed and rolls the audit projection back atomically', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   try {
     await pool.query(

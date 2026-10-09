@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { qaEnvironment, startAccount } from './account-boundary-fixture.ts';
 
 test('IAM02: authorization-code exchanges above the Account pool size stay bounded and leave refused codes redeemable', async () => {
   const env = qaEnvironment();
-  const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   const database = new URL(databases.urls.account);
   // Guards drawn from this three-connection owner pool would hold every
   // connection the exchanges need; the separate two-connection guard pool

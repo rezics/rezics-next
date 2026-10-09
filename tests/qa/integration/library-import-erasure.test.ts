@@ -7,7 +7,7 @@ import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { deleteLibraryUploads, eraseLibraryImportsForPrincipals } from
   '../../../services/main/src/modules/library-import/privacy.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -27,7 +27,7 @@ let access: Pool;
 beforeAll(async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated QA integration tier');
-  databases = await cloneQaOwnerDatabases(runId, ['access', 'content']);
+  databases = await cloneQaOwnerDatabases(runId, ['access', 'content'], 'owner');
   content = new Pool({ connectionString: databases.urls.content, max: 4, connectionTimeoutMillis: 1_500 });
   access = new Pool({ connectionString: databases.urls.access, max: 4, connectionTimeoutMillis: 1_500 });
   // The QA content template is empty; Access is already migrated.

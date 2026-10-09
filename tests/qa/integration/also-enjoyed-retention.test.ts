@@ -4,10 +4,11 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { automaticCoReaders } from '../../../services/main/src/modules/also-enjoyed/automation.ts';
 import { AlsoEnjoyedStore, ALSO_ENJOYED_COST } from '../../../services/main/src/modules/also-enjoyed/store.ts';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('co-reader retention purges expired, cancelled and failed rows in bounded resumable batches', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content'], 'privileged');
   const access = new Pool({ connectionString: owners.urls.access });
   const content = new Pool({ connectionString: owners.urls.content });
   let now = Date.now();

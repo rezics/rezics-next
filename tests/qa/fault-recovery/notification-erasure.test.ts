@@ -8,14 +8,15 @@ import { NotificationDispatcher } from '../../../services/main/src/modules/notif
 import { NotificationStore, type NotificationEvent } from '../../../services/main/src/modules/notification/store.ts';
 import { contentSubjectReader } from '../../../services/main/src/modules/notification/subjects.ts';
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
-import { cloneQaOwnerDatabases, FakeDeliveryProvider } from '../support/fake-delivery.ts';
+import { FakeDeliveryProvider } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const issuer = 'https://account.notification-erasure.test';
 
 test('GOV07/OPS11: erased subjects and recipients stay erased across history pins and a restored Access backup', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA fault/recovery tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content', 'relay'], 'owner');
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   const relay = new Pool({ connectionString: databases.urls.relay, max: 2 });
   const provider = new FakeDeliveryProvider();

@@ -21,7 +21,7 @@ import { settleAccountErasures } from '../../../services/main/src/modules/erasur
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 interface Receipt { reportId: string; caseId: string; credential: string; receivedAt: string; replayed: boolean }
 interface Step { id: string; kind: string; dueAt: string | null; occurredAt: string; contentLanguage: string | null;
@@ -32,7 +32,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run with the QA integration tier');
   const preparation = Date.now();
   const directory = `.temp/g-564-${randomUUID()}`;
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay'], 'owner');
   const apps = { ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account,
     ACCESS_DATABASE_URL: databases.urls.access, CONTENT_DATABASE_URL: databases.urls.content } as Record<string, string>;
   const preservationPool = new Pool({ connectionString: databases.urls.access });

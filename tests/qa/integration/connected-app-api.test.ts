@@ -11,7 +11,7 @@ import { AccountAssertionVerifier } from '../../../services/main/src/modules/acc
 import { ConnectedAppStore } from '../../../services/main/src/modules/connected-apps/store.ts';
 import type { McpHttpResponse, McpTransport, McpTransportRequest }
   from '../../../services/main/src/modules/connected-apps/protocol.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { startControlledMcpServer } from '../support/mcp-server.ts';
 import { type AccountOwner, qaEnvironment, startAccount } from './account-boundary-fixture.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
@@ -46,7 +46,7 @@ let environment: { fuseki: FusekiClient; lineage: { dataEpoch: string; routingEp
 
 beforeAll(async () => {
   const env = qaEnvironment();
-  const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   closeDatabases = databases.close;
   contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 8 });
   accessPool = new Pool({ connectionString: databases.urls.access, max: 8 });

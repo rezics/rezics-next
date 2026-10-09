@@ -9,7 +9,7 @@ import {
 } from '../../../services/main/src/modules/governance/store.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { RightsCounterNotices } from '../../../services/main/src/modules/rights/counter-notice-worker.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { json, png, safetyFixture, sha } from './g-744-support.ts';
 
 type Fixture = Awaited<ReturnType<typeof safetyFixture>>;
@@ -156,7 +156,7 @@ test('cancelled counter-notice restoration replaces accepted and partial answers
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('counter-answer-recovery', true, databases.urls);
   let fault: ReturnType<typeof spyOn> | undefined;
   try {
@@ -291,7 +291,7 @@ test('a claimant action stays replacement of a cancelled counter-notice restorat
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('counter-answer-stay', true, databases.urls);
   try {
     const c = await dueCounter(f, 142);

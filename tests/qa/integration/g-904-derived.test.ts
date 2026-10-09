@@ -23,7 +23,7 @@ import {
 } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
 import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 type Page = {
   items: { id: string; work?: string; chapterCount?: number | null; wordCount?: number | null }[];
@@ -34,7 +34,7 @@ const native = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (ref: string) => ref.slice(-36);
 
 test('G-904: interactive derived inventories retain rated targets and enforce current Access fences; sitemap keeps anonymous suitability', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'owner');
   const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
   let home: Awaited<ReturnType<typeof startHomeStack>>;
   try {

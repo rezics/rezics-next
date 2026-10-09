@@ -1,4 +1,4 @@
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { mandatoryMailRecovery } from './g-925-safety-recovery.ts';
 import { expect, test } from 'bun:test';
 import { safetyFixture, json, png, nciiDeclaration } from './g-744-support.ts';
@@ -8,7 +8,7 @@ test('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the primary
     'access',
     'content',
     'relay',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('g744-deadline', true, databases.urls);
   try {
     const image = await f.author.upload(png(60, 60));

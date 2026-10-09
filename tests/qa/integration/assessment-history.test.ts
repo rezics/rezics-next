@@ -13,7 +13,7 @@ import {
   readVerificationAssessmentHistory,
   type AssessmentHistoryPage,
 } from '../../../services/main/src/modules/access/assessment-history.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const action = 'verification.claim-assess';
 const scope = 'verification:assess:global';
@@ -77,7 +77,7 @@ afterAll(() => {
 
 async function fixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated QA integration');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const principal = randomUUID(),
     subject = `https://rezics.com/id/${randomUUID()}`;

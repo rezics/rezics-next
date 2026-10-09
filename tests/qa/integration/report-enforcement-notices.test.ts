@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { safetyFixture, json, type Receipt } from './g-744-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { fixtureReasons } from './g-565-decision-support.ts';
 import { ownerModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
@@ -24,7 +24,7 @@ test('report enforcement reaches two authors and three private reporters across 
     'content',
     'relay',
     'account',
-  ]);
+  ], 'owner');
   const f = await safetyFixture('report-enforcement', true, databases.urls);
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const account = await ratingAccount({

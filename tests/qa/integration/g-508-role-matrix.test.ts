@@ -18,14 +18,14 @@ import { SourceIntakeStore } from '../../../services/main/src/modules/source/int
 import { workScalarEditDigest } from '../../../services/main/src/modules/work/edit.ts';
 import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
 import { workKinds } from '../../../services/main/src/modules/work/work-kinds.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 
 const scopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'source:acquire', 'source:intake', 'access:role'];
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 
 test('G508: role matrix gates kinds, retyping, every import entry point and public catalogue editing', async () => {
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const original = { account: Bun.env.ACCOUNT_DATABASE_URL, access: Bun.env.ACCESS_DATABASE_URL };
   let h: Awaited<ReturnType<typeof agentProvisionHarness>>;
   try {

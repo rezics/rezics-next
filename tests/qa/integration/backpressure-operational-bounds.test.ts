@@ -8,7 +8,7 @@ import { AccessActingContexts } from '../../../services/main/src/modules/access/
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds, assessOperationalBounds,
   OperationalBoundsInvalid } from '../../../services/main/src/operations/bounds.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const issuer = 'https://qa-operational-bounds.test';
 const SCOPE = 'work:create:root';
@@ -86,7 +86,7 @@ async function problemCode(response: Response): Promise<string> {
 }
 
 test('IAM35: high branching, negative checks, bulk work and a reduced operational limit stay bounded and typed', async () => {
-  const databases = await cloneQaAccountAccessDatabases(requireTier());
+  const databases = await cloneQaOwnerDatabases(requireTier(), ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const subjects = new Map<string, string>();
   try {
@@ -254,7 +254,7 @@ test('IAM35: high branching, negative checks, bulk work and a reduced operationa
 }, 180_000);
 
 test('OPS05: discovery work stays within its derived bound across candidate and unrelated growth', async () => {
-  const databases = await cloneQaAccountAccessDatabases(requireTier());
+  const databases = await cloneQaOwnerDatabases(requireTier(), ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const subjects = new Map<string, string>();
   try {

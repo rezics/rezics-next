@@ -21,7 +21,7 @@ import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, CONTENT_WAL_DOMAIN, comple
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { relayContentProjectionOnce } from
   '../../../services/main/src/modules/content-publication/relay.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -58,7 +58,7 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const databases = await cloneQaAccountAccessDatabases(runId);
+  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });

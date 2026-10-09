@@ -8,11 +8,12 @@ import { MediaRenditionWorker } from '../../../services/main/src/modules/media-r
 import { LocalImageTransformer } from '../../../services/main/src/modules/media-rendition/transform.ts';
 import { CAMPAIGN_ART_CREATE_COST } from '../../../services/main/src/modules/media/commands.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= (async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   try {
     const fixture = await startMediaStack('zone-campaign-art', { ownerUrls: owners.urls });
     return { ...fixture, stop: async () => { try { await fixture.stop(); } finally { await owners.close(); } } };

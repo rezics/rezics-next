@@ -11,7 +11,7 @@ import {
   type ThreadSibling,
   type ThreadSiblingKey,
 } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -75,7 +75,7 @@ function expectKeys(actual: readonly ThreadSiblingKey[], expected: readonly Thre
 test('Realm continuations reach sibling 192 and branch 33 with bounded indexed reads after a removed anchor', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through goalctl test');
-  const databases = await cloneQaOwnerDatabases(runId, ['access', 'content']);
+  const databases = await cloneQaOwnerDatabases(runId, ['access', 'content'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 2 });
   const content = new Pool({ connectionString: databases.urls.content, max: 2 });
   const epoch = randomUUID(), realm = native(90000), work = native(90001);

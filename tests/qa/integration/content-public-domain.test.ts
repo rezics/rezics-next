@@ -35,7 +35,7 @@ import {
   activateMetadataWork,
   metadataWorkRequestDigest,
 } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('PUBLIC-DOMAIN: accepted Work assessment admits sourced text; withdrawal suppresses search and reads', async () => {
   if (
@@ -46,7 +46,7 @@ test('PUBLIC-DOMAIN: accepted Work assessment admits sourced text; withdrawal su
   ) {
     throw new Error('Use the QA integration tier');
   }
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   try {

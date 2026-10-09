@@ -13,7 +13,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -37,7 +37,7 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
   }
   const state = join(root, '.temp', `role-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();
@@ -47,6 +47,8 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
     resource: Bun.env.ACCOUNT_MAIN_RESOURCE, pool: accountPool, operatorUserIds: operators });
   const account = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port });
   try {
+    expect((await accountPool.query<{ role: string }>('SELECT current_user AS role')).rows[0]?.role).toBe('account');
+    expect((await accessPool.query<{ role: string }>('SELECT current_user AS role')).rows[0]?.role).toBe('access');
     async function signUp(name: string) {
       const email = `roles-${name}-${randomUUID()}@example.test`;
       const password = randomBytes(24).toString('base64url');

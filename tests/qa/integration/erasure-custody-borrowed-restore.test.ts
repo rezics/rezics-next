@@ -19,7 +19,7 @@ import { ensureModelGeneration } from '../../../services/main/src/modules/semant
 import { hash, initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { captureGraphRecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki } from '../fault-recovery/search-ops-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 class DirectoryObjects implements ImmutableObjects {
   constructor(readonly directory: string) { mkdirSync(directory, { recursive: true }); }
@@ -53,7 +53,7 @@ beforeAll(async () => {
   const started = Date.now(), runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated QA integration tier');
   qa = qaStack(runId);
-  databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay']);
+  databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
   const pool = (url: string) => new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 1500 });
   access = pool(databases.urls.access); relay = pool(databases.urls.relay);
   account = pool(databases.urls.account); content = pool(databases.urls.content);

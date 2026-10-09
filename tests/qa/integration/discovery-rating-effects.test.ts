@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import type { Pool, PoolClient } from 'pg';
 import { startMediaStack } from './media-support.ts';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
 import { isolateDiscoveryProbeGraph } from './discovery-projection-fixture.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import {
@@ -20,6 +20,7 @@ import { discoveryChanges } from '../../../services/main/src/modules/discovery/c
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 async function json<T>(response: Response, status = 201): Promise<T> {
@@ -31,7 +32,7 @@ async function json<T>(response: Response, status = 201): Promise<T> {
 /** Native background triples isolate refresh cost. Rating values and inventory
  * heads use the real API; receipt fixtures cover the target-only event contract. */
 test('Target ratings advance only relevant Work aggregates at 1k/10k, and inventory restores recover readiness', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const f = await startMediaStack('discovery-rating-effects', { ownerUrls: owners.urls });
   const restoreGraph = await isolateDiscoveryProbeGraph(f.env);
   const evidence: unknown[] = [];

@@ -5,7 +5,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { planExport } from '../../../services/main/src/modules/export/planner.ts';
 import { ExportConflict, ExportStore, exportTerminal } from '../../../services/main/src/modules/export/store.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -15,7 +15,7 @@ test('LIVE07/COMP08/FACT05: Content export terminal is exact, concurrent, idempo
   async () => {
     const runId = Bun.env.REZICS_QA_RUN_ID;
     if (!runId) throw new Error('Use the isolated QA integration tier');
-    const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content']);
+    const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content'], 'owner');
     const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
     const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
     let account: Awaited<ReturnType<typeof ratingAccount>> | undefined;

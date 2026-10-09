@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 test('IAM02: separate local Account issuers keep each newly issued assertion active', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the QA integration tier');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   try {
     for (let issuer = 0; issuer < 12; issuer++) {
       const scopes = issuer % 2 === 0 ? 'openid access:manage work:create'

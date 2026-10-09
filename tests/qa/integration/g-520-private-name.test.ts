@@ -1,7 +1,7 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -25,7 +25,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 
 test('G-520: private Account names never provision or appear in public Person, handle, credits search, roster or Jena', async () => {
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const original = [Bun.env.ACCOUNT_DATABASE_URL, Bun.env.ACCESS_DATABASE_URL];
   let h: Awaited<ReturnType<typeof agentProvisionHarness>> | undefined;
   let storage: Awaited<ReturnType<typeof startMediaStack>> | undefined;

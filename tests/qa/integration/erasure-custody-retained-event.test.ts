@@ -11,7 +11,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { hash, initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki } from '../fault-recovery/search-ops-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let graph: Awaited<ReturnType<typeof standaloneFuseki>>;
@@ -28,7 +28,7 @@ beforeAll(async () => {
   const started = Date.now(), runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated QA integration tier');
   qa = qaStack(runId);
-  databases = await cloneQaOwnerDatabases(runId, ['relay']);
+  databases = await cloneQaOwnerDatabases(runId, ['relay'], 'owner');
   const pool = () => new Pool({ connectionString: databases.urls.relay, max: 1, connectionTimeoutMillis: 1500 });
   relay = pool(); writer = pool();
   graph = await standaloneFuseki(qa.dockerEnv, { name: volume, volume,

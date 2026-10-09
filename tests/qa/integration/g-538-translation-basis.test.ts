@@ -12,7 +12,7 @@ import { PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial, RightsStore }
   from '../../../services/main/src/modules/rights/store.ts';
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV,
   type WorkActivationReceipt } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -33,7 +33,7 @@ test('G-538: translation publication basis guards Works and chapters in both ord
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the QA integration tier');
   }
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   const directory = `.temp/g-538-${randomUUID()}`;

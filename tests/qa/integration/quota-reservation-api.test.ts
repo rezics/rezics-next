@@ -8,7 +8,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { QUOTA_ACTION, QUOTA_SCOPE, QuotaStore } from '../../../services/main/src/modules/quota/store.ts';
 import type { CommerceRouteDependencies } from '../../../services/main/src/routes/commerce.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // SUB04 through the real Main route and a cloned Access PostgreSQL owner.
 // Only Account token verification is replaced by fixture bearers.
@@ -26,7 +26,7 @@ beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
   }
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   close = databases.close;
   pool = new Pool({ connectionString: databases.urls.access, max: 12 });
   pool.on('connect', client => {

@@ -15,8 +15,9 @@ import { NotificationStore, type NotificationEvent } from '../../../services/mai
 import { contentSubjectReader, contentWorkDisclosureBasis, currentContentSubjectReader }
   from '../../../services/main/src/modules/notification/subjects.ts';
 import { NotificationRealtimeHub } from '../../../services/main/src/modules/notification/realtime.ts';
-import { cloneQaOwnerDatabases, FakeDeliveryProvider, signProviderEvent } from '../support/fake-delivery.ts';
+import { FakeDeliveryProvider, signProviderEvent } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const secret = 'fake-provider-callback-secret';
@@ -57,7 +58,7 @@ async function notificationStack(name: string) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
   const directory = join(root, '.temp', `notification-${name}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access, max: 8 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   await migrateContent(contentPool);

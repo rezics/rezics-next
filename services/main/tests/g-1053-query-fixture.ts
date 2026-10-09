@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { startHomeStack, type HomeStack } from '../../../tests/qa/integration/feed-read-support.ts';
-import { cloneOwners, requireQa } from '../../../tests/qa/integration/recommendation-support.ts';
+import { requireQa } from '../../../tests/qa/integration/recommendation-support.ts';
 import { projectDiscoveryBatch } from '../src/modules/discovery/source.ts';
 import type { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { workRead } from '../src/modules/work/read-session.ts';
+import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
 
 /** Independent policy/recovery, Content and relay owners share the shard's
  * immutable graph and objects. No preceding file's singleton or SQL projection
@@ -11,7 +12,7 @@ import { workRead } from '../src/modules/work/read-session.ts';
 export async function startQueryHome(label: string, retainedOwners = false) {
   const owners = retainedOwners
     ? undefined
-    : await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+    : await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   if (owners)
     Object.assign(process.env, {
       ACCESS_DATABASE_URL: owners.urls.access,

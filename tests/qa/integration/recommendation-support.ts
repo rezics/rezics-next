@@ -1,19 +1,15 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { expect } from 'bun:test';
-import { Client, Pool, type PoolClient } from 'pg';
-import { readEnv } from '../../../scripts/dev/config.ts';
+import { Pool, type PoolClient } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // Shared fixtures for the G-058 ranking and graph-layout API tests: isolated
 // owner clones, a real Account issuer, retained relay envelopes and SQL meters.
-
-const root = resolve(import.meta.dir, '../../..');
-type Owner = 'account' | 'access' | 'relay' | 'content';
 
 export function requireQa(): string {
   const runId = Bun.env.REZICS_QA_RUN_ID;
@@ -22,37 +18,6 @@ export function requireQa(): string {
     throw new Error('Run through the isolated QA integration tier');
   }
   return runId;
-}
-
-/** Clone migrated owner templates so this file never writes shared QA owners. */
-export async function cloneOwners(runId: string, owners: Owner[]): Promise<{
-  urls: Record<Owner, string>; close: () => Promise<void>;
-}> {
-  const stack = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
-  const compose = readEnv(join(stack, 'compose.env'));
-  const adminUrl = `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${compose.POSTGRES_PORT}/postgres`;
-  const suffix = randomBytes(5).toString('hex');
-  const urls = {} as Record<Owner, string>;
-  const names: string[] = [];
-  const admin = new Client({ connectionString: adminUrl });
-  await admin.connect();
-  try {
-    for (const owner of owners) {
-      const name = `g058_${suffix}_${owner}`;
-      await admin.query(`CREATE DATABASE ${name} WITH TEMPLATE ${owner}_tpl`);
-      names.push(name);
-      const url = new URL(adminUrl);
-      url.pathname = `/${name}`;
-      urls[owner] = url.toString();
-    }
-  } finally { await admin.end(); }
-  return { urls, close: async () => {
-    const cleanup = new Client({ connectionString: adminUrl });
-    await cleanup.connect();
-    try {
-      for (const name of names) await cleanup.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-    } finally { await cleanup.end(); }
-  } };
 }
 
 async function freePort(): Promise<number> {
@@ -73,7 +38,7 @@ export interface AccountUser { id: string; email: string; password: string; cook
 export async function startAccount(scope: string) {
   // Operator bootstrap is once per database, not once per issuer. Each issuer
   // needs its own owner so an earlier file cannot consume its bootstrap or fence it.
-  const owners = await cloneOwners(requireQa(), ['account']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['account'], 'privileged');
   const accountPool = new Pool({ connectionString: owners.urls.account });
   let account: ReturnType<typeof createAccountApp> | undefined;
   try {

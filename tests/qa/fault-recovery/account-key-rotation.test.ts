@@ -9,7 +9,7 @@ import { AccountAssertionDenied, AccountAssertionVerifier }
   from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { countStatements, databaseName, decodeHeader, decodePayload, mainWithAccount, qaEnvironment,
   representAgents, startAccount } from '../integration/account-boundary-fixture.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 type Generation = { kid: string; generation: string; state: string; retiredReason: string | null;
@@ -17,7 +17,7 @@ type Generation = { kid: string; generation: string; state: string; retiredReaso
 
 test('OPS07: signing keys rotate and retire while sessions and jobs run; retired keys, audience and validity stay enforced', async () => {
   const env = qaEnvironment();
-  const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const account = await startAccount({ pool: { connectionString: databases.urls.account, max: 12 },
     secret: env.secret, resource: env.resource });

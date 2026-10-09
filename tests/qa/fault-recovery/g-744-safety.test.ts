@@ -13,7 +13,7 @@ import {
   imagePresentation,
   type MediaImageViewer,
 } from '../../../packages/ui/src/components/media-image.tsx';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { fixtureReasons } from '../integration/g-565-decision-support.ts';
 import {
@@ -27,7 +27,7 @@ import {
 
 test('SAFETY01: anonymous and really suspended Account bearers can report and correspond without posting authority', async () => {
   const f = await safetyFixture('g744-intake');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   let account: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   try {

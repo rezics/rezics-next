@@ -15,7 +15,7 @@ import { withPreservationFence, type PreservationFence } from
   '../../../services/main/src/modules/public-report/preservation.ts';
 import { accessOutboxCoverage, accessStateCoverage } from
   '../../../services/main/src/modules/work/access-recovery-coverage.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let access: Pool, relay: Pool, accessObserver: Client, relayObserver: Client;
@@ -23,7 +23,7 @@ let access: Pool, relay: Pool, accessObserver: Client, relayObserver: Client;
 beforeAll(async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated QA integration tier');
-  databases = await cloneQaOwnerDatabases(runId, ['access', 'relay']);
+  databases = await cloneQaOwnerDatabases(runId, ['access', 'relay'], 'owner');
   access = new Pool({ connectionString: databases.urls.access, max: 1, connectionTimeoutMillis: 1500 });
   relay = new Pool({ connectionString: databases.urls.relay, max: 1, connectionTimeoutMillis: 1500 });
   accessObserver = new Client({ connectionString: databases.urls.access });

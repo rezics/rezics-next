@@ -17,7 +17,7 @@ import { AccessMembershipConsents } from '../../../services/main/src/modules/acc
 import { AccessMemberships, SELECTED_ORG_MEMBER_SET_MANAGER_SQL }
   from '../../../services/main/src/modules/access/memberships.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 async function freePort(): Promise<number> {
@@ -40,7 +40,7 @@ test('IAM25: B grants the exact eligible A-member set; P exercises it as P', asy
   }
   const state = join(root, '.temp', `eligible-org-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();

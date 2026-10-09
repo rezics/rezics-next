@@ -14,7 +14,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -38,7 +38,7 @@ test('IAM05/IAM30/IAM36: group changes and independent impact approval preserve 
   }
   const state = join(root, '.temp', `group-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();

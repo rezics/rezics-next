@@ -5,13 +5,13 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
 import { startMediaStack, png, sha } from './media-support.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
 async function fixture() {
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const original = [Bun.env.ACCOUNT_DATABASE_URL, Bun.env.ACCESS_DATABASE_URL];
   Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;
   Bun.env.ACCESS_DATABASE_URL = databases.urls.access;

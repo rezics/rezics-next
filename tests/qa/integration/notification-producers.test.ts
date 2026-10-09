@@ -8,13 +8,14 @@ import { NotificationDispatcher } from '../../../services/main/src/modules/notif
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { notificationProducerSubjectReader } from '../../../services/main/src/modules/notification-producers/subjects.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaOwnerDatabases, FakeDeliveryProvider } from '../support/fake-delivery.ts';
+import { FakeDeliveryProvider } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
 test('G-297: Access and relay producers replay once per recipient, respect preferences and hide revoked targets', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'relay'], 'owner');
   const access = boundedPool({ connectionString: databases.urls.access, max: 8 });
   const relay = new Pool({ connectionString: databases.urls.relay, max: 2 });
   try {
@@ -426,7 +427,7 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
 
 test('broadcast batches seek raw audiences, survive an empty first batch and resume across a database restart', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access'], 'owner');
   let access = boundedPool({ connectionString: databases.urls.access, max: 1 });
   const id = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
   try {
@@ -581,7 +582,7 @@ function measuredRecipients(access: Pool, plans: RecipientPlan[]): Pool {
 
 test('many Space aliases have bounded discovery and independently resumable recipient seeks', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access'], 'owner');
   let access = boundedPool({ connectionString: databases.urls.access, max: 1 });
   const id = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
   try {
@@ -650,7 +651,7 @@ test('many Space aliases have bounded discovery and independently resumable reci
 
 test('editorial batches examine bounded watchers and involved parties when almost everyone is uninvolved', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access'], 'owner');
   const access = boundedPool({ connectionString: databases.urls.access, max: 1 });
   const id = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
   try {

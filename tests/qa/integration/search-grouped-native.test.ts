@@ -16,13 +16,13 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { searchRoutes } from '../../../services/main/src/routes/search.ts';
 import { contextFixture, nativeId } from './context-fixture.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { referenceDisclosureFixture } from '../fixtures/reference-disclosure.ts';
 import { referenceReader } from '../../../services/main/src/modules/semantic/admitted.ts';
 
 async function groupedFixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   try {
     const fixture = await contextFixture({ ...Bun.env,
       ACCOUNT_DATABASE_URL: databases.urls.account,

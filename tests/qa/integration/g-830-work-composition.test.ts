@@ -18,7 +18,7 @@ import { CompositionConflict, compositionRestoreDigest } from '../../../services
 import { structureProfileFor } from '../../../services/main/src/modules/structure/profiles.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { queryPublicMainPhrase } from '../../../services/main/src/modules/work/search-public.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { fixtureDeadline, fixturePages } from '../../../services/main/tests/g-1009-fixture-guards.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 
@@ -31,7 +31,7 @@ interface Parts { parts: Part[]; next: string | null; revision: string;
   completion: { status: string; evidence: string[] } }
 
 async function compositionFixture(scopes?: string) {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'content', 'relay'], 'owner');
   const apps = { ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account,
     CONTENT_DATABASE_URL: databases.urls.content, ACCOUNT_RELAY_DATABASE_URL: databases.urls.relay } as Record<string, string>;
   // Access retains the shared graph's global Rating Context inventory. This

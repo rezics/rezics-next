@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { Client, type Pool, type PoolClient } from 'pg';
-import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { requireQa } from './recommendation-support.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -46,9 +46,10 @@ import {
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('one guarded Access connection projects and reads mandatory-review Realm discussions with live withdrawal', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const mode = nestedPoolCheckoutMode();
   setNestedPoolCheckoutMode('throw');
   const accessPool = boundedPool({ connectionString: owners.urls.access, max: 1 });

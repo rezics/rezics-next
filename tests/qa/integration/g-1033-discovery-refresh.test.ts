@@ -16,17 +16,18 @@ import { WorkReadUnavailable } from '../../../services/main/src/modules/work/rea
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
 import type { OwnedDiscoveryBasis } from '../../../services/main/src/modules/discovery/contract.ts';
-import { cloneOwners, meteredPool, requireQa } from './recommendation-support.ts';
+import { meteredPool, requireQa } from './recommendation-support.ts';
 import { startMediaStack } from './media-support.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 interface Health { status: string; generation: string | null;
   refresh: { items: { scopeKey: string; status: string; reason: string }[]; truncated: boolean } }
 
 test('G1033: deleted and ineligible Realm bases are skipped beside healthy public projections and ranking', async () => {
-  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const f = await startMediaStack('g-1033-isolation', { ownerUrls: owners.urls });
   const relay = new Pool({ connectionString: owners.urls.relay });
   try {

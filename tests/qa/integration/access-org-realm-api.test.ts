@@ -14,7 +14,7 @@ import { AccessOrgRealmParticipation } from '../../../services/main/src/modules/
 import { ORG_REALM_ACTION } from '../../../services/main/src/modules/access/org-realm-authority.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { seedOrgRealm } from '../support/org-realm.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -36,7 +36,7 @@ test('IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact 
   }
   const state = join(root, '.temp', `org-realm-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();

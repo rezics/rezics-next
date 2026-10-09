@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { HOME_READ_BUDGET, meterStatements, seedHome, startHomeStack } from './feed-read-support.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 test('G407: Continue seeks the next chapter in a 60-chapter Book within its read budget', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'owner');
   const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
   let home: Awaited<ReturnType<typeof startHomeStack>>;
   try {

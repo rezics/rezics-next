@@ -11,7 +11,7 @@ import { AccessJudgments } from '../../../services/main/src/modules/judgment/acc
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // Source writers, builders and fences are the production code on real Access
 // and Content PostgreSQL. Only the held transactions are paused by the test.
@@ -23,9 +23,11 @@ const digest = () => randomUUID().replaceAll('-', '').repeat(2);
 
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content'], 'owner');
   access = new Pool({ connectionString: databases.urls.access, max: 12 });
   content = new Pool({ connectionString: databases.urls.content, max: 8 });
+  expect((await access.query<{ role: string }>('SELECT current_user AS role')).rows[0]?.role).toBe('access');
+  expect((await content.query<{ role: string }>('SELECT current_user AS role')).rows[0]?.role).toBe('content');
   await migrateContent(content);
 }, 60_000);
 

@@ -15,7 +15,7 @@ import { SUPPORT_METHOD, SUMMARY_POLICY } from '../../../services/main/src/modul
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
 import { exportRoutes } from '../../../services/main/src/routes/exports.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 
@@ -28,7 +28,7 @@ test('FACT05: exact claim and assessment export retains method output while reda
     if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
       throw new Error('Use the isolated QA integration tier');
     }
-    const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content']);
+    const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content'], 'owner');
     const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
     const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
     const directory = join(root, '.temp', `export-verification-${randomUUID()}`);

@@ -21,14 +21,16 @@ const { readZoneConfiguration } = await import('../src/modules/zone/configuratio
 const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
 const { captureFusekiQueryPlan } = await import('../../../scripts/load/fuseki-plan.ts');
 const { startFusekiMeter } = await import('../../../scripts/load/measurement.ts');
-const { cloneOwners, requireQa } = await import('../../../tests/qa/integration/recommendation-support.ts');
+const { cloneQaOwnerDatabases } = await import('../../../tests/qa/support/databases.ts');
+
+const { requireQa } = await import('../../../tests/qa/integration/recommendation-support.ts');
 
 const started = performance.now();
 const corpusKey = `g1026:${randomUUID()}`;
 const artifacts = process.env.G1026_ARTIFACT_DIR ?? '.temp/work-profiles';
 // The platform role is an immutable singleton. Each probe owns its SQL owners;
 // the shared graph remains intact, and both projections start at its current cut.
-const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
 Object.assign(process.env, {
   ACCESS_DATABASE_URL: owners.urls.access,
   CONTENT_DATABASE_URL: owners.urls.content,

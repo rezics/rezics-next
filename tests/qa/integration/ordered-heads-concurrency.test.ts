@@ -29,7 +29,7 @@ import {
 } from '../../../services/main/src/modules/governance/store.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { WorkReadMoved } from '../../../services/main/src/modules/work/read-session.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let access: Pool, content: Pool;
@@ -40,7 +40,7 @@ const principalId = randomUUID(),
 
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
-  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content'], 'owner');
   access = new Pool({ connectionString: databases.urls.access, max: 8 });
   content = new Pool({ connectionString: databases.urls.content, max: 8 });
   await migrateContent(content);

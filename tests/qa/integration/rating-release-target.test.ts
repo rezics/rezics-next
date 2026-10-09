@@ -29,7 +29,7 @@ import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDr
   reconcileRetainedStandingRating, reconcileRetainedWorkCreate }
   from '../../../services/main/src/modules/work/reconcile-restored.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -61,7 +61,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
   const preparation = Date.now();
   const state = join(root, '.temp', `rating-release-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 5 });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });

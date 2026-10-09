@@ -6,7 +6,7 @@ import { hostLoopbackAccess, loadDockerEnvironment } from '../../../scripts/load
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { freePort, mainWithAccount, qaEnvironment, representAgents, startAccount }
   from '../integration/account-boundary-fixture.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 // The adopted QA fault proxy (docs/development/toolchain.md).
 const TOXIPROXY = 'ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e';
@@ -26,7 +26,7 @@ test('OPS08: remote Account placement isolates network partition, Account databa
   };
   const suffix = randomBytes(4).toString('hex');
   const hops = { edge: `rezics-ops08-edge-${suffix}`, db: `rezics-ops08-db-${suffix}` };
-  const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const started: string[] = [];
   let account: Awaited<ReturnType<typeof startAccount>> | undefined;

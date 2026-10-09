@@ -15,7 +15,7 @@ import { MediaAccessBatchReader } from '../../../services/main/src/modules/media
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 import { startMediaStack, png, sha } from './media-support.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
@@ -25,7 +25,7 @@ const digest = (s: string) => createHash('sha256').update(s).digest('hex');
 const short = (s: string) => s.slice(-36);
 
 async function fixture() {
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const original = [Bun.env.ACCOUNT_DATABASE_URL, Bun.env.ACCESS_DATABASE_URL];
   Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;
   Bun.env.ACCESS_DATABASE_URL = databases.urls.access;

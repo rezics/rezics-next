@@ -26,7 +26,7 @@ import { classificationContextDigest, createClassificationContext }
   from '../../../services/main/src/modules/classification/context.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
@@ -57,7 +57,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
       throw error;
     }
   };
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay']);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 8 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   const relay = new Pool({ connectionString: databases.urls.relay, max: 4 });
