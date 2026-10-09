@@ -4,10 +4,9 @@
   "ignoreWorkspaces": ["apps/web", "packages/ui"],
   "workspaces": {
     ".": {
-      // Root scripts start through `bun <path>`; tests and the Eden client
-      // compile or run as their own entry points.
+      // Tests and the Eden client compile or run as their own entry points.
+      // Script launchers are added by scripts/static/knip.ts.
       "entry": [
-        "scripts/**/*.ts",
         "tests/**/*.test.ts",
         "tests/qa/client/main-contract.ts",
         // Native oracle runners are started by path from their tests.
@@ -18,8 +17,10 @@
         // The model compiler discovers authored profiles by directory scan.
         "model/definitions/*.ts"
       ],
-      "project": ["scripts/**/*.ts", "tests/**/*.ts", "model/**/*.ts"],
-      "ignore": ["scripts/research/**", "tests/fixtures/**"],
+      "project": ["tests/**/*.ts", "model/**/*.ts"],
+      // The rewriter is unreached. The composition root and Main app still name it,
+      // and those files belong to other changes, so this gate cannot delete it.
+      "ignore": ["scripts/research/**", "scripts/goal/normalize-app.ts", "tests/fixtures/**"],
       // Static tools run from node_modules/.bin in the check runner.
       "ignoreDependencies": ["dependency-cruiser", "oxfmt", "oxlint", "oxlint-tsgolint"]
     },
@@ -41,7 +42,8 @@
         "src/modules/*/merge-handler.ts",
         "tests/g-865-*-fixture.ts",
         // Tests spawn isolated process fixtures by path rather than importing them.
-        "tests/**/*-child.ts"
+        "tests/**/*-child.ts",
+        "tests/discovery-nested-checkout-startup.ts"
       ],
       "project": ["src/**/*.ts", "tests/**/*.ts"],
       // Consumed by the root OpenAPI generator, Eden type gate and remote MCP QA client.
@@ -105,7 +107,7 @@
     "packages/model": { "project": ["src/**/*.ts", "tests/**/*.ts"] },
     "packages/document": {
       "entry": ["src/index.ts", "scripts/schema.ts", "tests/**/*.test.ts"],
-      "project": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+      "project": ["src/**/*.ts", "tests/**/*.ts"]
     },
     "packages/observability": {
       "entry": [
