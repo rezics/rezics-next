@@ -60,15 +60,15 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
 import { qaMemoryDeadline, qaMemoryNeed, type StartupSlotGate } from './memory-admission.ts';
-import { runQaStartupChildAsync } from './stack-startup.ts';
+import { admitIntegrationWorkScope, runQaStartupChildAsync } from './stack-startup.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
-import { commandOnlyIntegrationFiles, exclusiveWriterStartupFiles } from './isolated-integration-files.ts';
+import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
 import { filesKeptAfterResetFailure, integrationResetHarnessFailure } from './integration-reset.ts';
-import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
+import { exclusiveWorkScopeAssembler, integrationStackAdmitsWorkScope, qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
@@ -91,6 +91,7 @@ const errors: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
 const rawUpdateProjects = new Set<string>();
+const durableFusekiProjects = new Set<string>();
 const childStackRegistries = new Set<string>();
 const faultFixtureEnvironment: NodeJS.ProcessEnv = {};
 const inventory = caseInventory(root);
@@ -393,6 +394,14 @@ async function runShardWork(
   // qualification keeps its closed raw-update endpoint in every storage mode.
   const rawUpdate = persistent && !files.some(file => commandOnlyIntegrationFiles.has(file));
   if (rawUpdate) rawUpdateProjects.add(projectRunId);
+  const admitsWorkScope = tier === 'integration' && integrationStackAdmitsWorkScope(files, rawUpdate);
+  if (admitsWorkScope) environment.REZICS_FUSEKI_ASSEMBLER = exclusiveWorkScopeAssembler;
+  // Admission restarts Fuseki. The ordinary QA tmpfs would discard the text
+  // generation, so this stack keeps that database on the project volume.
+  if (admitsWorkScope && !persistent) {
+    environment.REZICS_FUSEKI_DURABLE_DATABASES = '1';
+    durableFusekiProjects.add(projectRunId);
+  }
   const stackArgs = ['--profile', 'qa', '--run-id', projectRunId,
     ...(persistent ? ['--persistent'] : []), ...(rawUpdate ? ['--raw-update'] : [])];
   const started = persistent ? startedFixtureProjects : startedProjects;
@@ -414,7 +423,7 @@ async function runShardWork(
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
     }
     if (!options.keep && needsStack) {
-      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000);
+      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000, environment);
       record.cleanupMs = down.elapsedMs;
       if (down.ok) started.splice(started.indexOf(projectRunId), 1);
     }
@@ -445,9 +454,11 @@ async function runShardWork(
         `rezics-qa-${projectRunId}-fuseki-1`], 10_000);
       let failure = inspected.ok ? '' : 'Could not inspect QA Fuseki allocation';
       if (inspected.ok) {
-        // Command-only files start a persistent stack in test mode too; check
-        // the storage that stack:up was asked for, not the mode's default.
-        try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output), persistent ? 'scale' : 'test'); }
+        // Command-only files start a persistent stack in test mode too. Work-scope
+        // admission also keeps the Fuseki database on a volume so a restart can
+        // see the text generation. Check the storage stack:up was asked for.
+        try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output),
+          persistent || environment.REZICS_FUSEKI_DURABLE_DATABASES === '1' ? 'scale' : 'test'); }
         catch (error) { failure = redactCommandOutput(error instanceof Error ? error.message : 'Invalid QA Fuseki allocation'); }
       }
       if (failure) {
@@ -479,20 +490,20 @@ async function runShardWork(
       return finish({ ok: false, timedOut: bootstrap.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output) });
     }
-    // Writer admission is part of Fuseki startup. Bootstrap has now stored the
-    // text generation, so one recreate lets that startup admit the exclusive writer.
-    if (files.some(file => exclusiveWriterStartupFiles.has(file))) {
-      const restarted = await commandAsync(root, 'docker', [
-        'compose', '--env-file', join(stackDir, 'compose.env'),
-        '-f', 'infra/dev/compose.yaml',
-        '--project-name', `rezics-qa-${projectRunId}`,
-        'up', '-d', '--wait', '--force-recreate', '--no-deps', 'fuseki',
-      ], 180_000, environment);
-      if (!restarted.ok) {
-        errors.push(`${tier} exclusive writer startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
-        writeFileSync(join(logs, `${label}-startup.log`), restarted.output);
-        return finish({ ok: false, timedOut: restarted.timedOut, noMatch: false,
-          xml: xmlForCommand(tier, false, restarted.elapsedMs, restarted.output) });
+    // The first Fuseki process started before bootstrap stored the text generation.
+    // Restart it so qualifyAtStartup can admit the writer, then finish the directory.
+    if (admitsWorkScope) {
+      try {
+        await admitIntegrationWorkScope({
+          root, projectRunId, fusekiUrl: apps.FUSEKI_URL!, maintenanceToken: apps.FUSEKI_MAINTENANCE_TOKEN,
+          environment,
+        });
+      } catch (error) {
+        const message = redactCommandOutput(error instanceof Error ? error.message : String(error));
+        errors.push(`${tier} exclusive writer startup failed: ${projectRunId}`);
+        writeFileSync(join(logs, `${label}-startup.log`), message);
+        return finish({ ok: false, timedOut: false, noMatch: false,
+          xml: xmlForCommand(tier, false, Date.now() - preparationStartedAt, message) });
       }
     }
   }
@@ -573,6 +584,21 @@ async function runShardWork(
         break;
       }
       apps = readEnv(join(stackDir, 'apps.env'));
+      // The reset emptied the dataset and withdrew the writer. The fresh graph is
+      // stored again; restart admits the writer and preparation completes the scope.
+      if (admitsWorkScope) {
+        try {
+          await admitIntegrationWorkScope({
+            root, projectRunId, fusekiUrl: apps.FUSEKI_URL!, maintenanceToken: apps.FUSEKI_MAINTENANCE_TOKEN,
+            environment,
+          });
+        } catch (error) {
+          const message = redactCommandOutput(error instanceof Error ? error.message : String(error));
+          output.push(message);
+          commandOk = false;
+          break;
+        }
+      }
     }
     const batch = batches[index]!;
     const batchFile =
@@ -1067,7 +1093,9 @@ try {
     errors.push(...(await resetChildStacks(registry)).map(error => `QA child stack cleanup failed: ${error}`));
   }
   if (!options.keep) for (const projectRunId of startedProjects) {
-    const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
+    const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000,
+      durableFusekiProjects.has(projectRunId)
+        ? { ...process.env, REZICS_FUSEKI_DURABLE_DATABASES: '1' } : process.env);
     if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
   }
   // Restored fixture copies hold large persistent volumes; removing one took over
