@@ -1,5 +1,9 @@
 -- A missing export head is unassessed, not an unprotected fact. change_indication
 -- is an export obligation. Keep every previous basis kind and obligation.
+-- Both new checks accept a superset of the old ones, so every existing row stays
+-- valid; the re-add scans export.rights_basis once under the migration's lock.
+-- The migration runs as one transaction, so splitting it into NOT VALID and
+-- VALIDATE would not shorten that lock.
 DO $$
 DECLARE
   basis_name text;
