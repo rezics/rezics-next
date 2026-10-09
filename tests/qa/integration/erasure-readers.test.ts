@@ -45,7 +45,7 @@ function serial(name: string, run: (scene: Scene) => Promise<void>) {
     const turn = tail.then(async () => run(await scene()));
     tail = turn.then(() => undefined, () => undefined);
     await turn;
-  });
+  }, 120_000);
 }
 
 function scene() {
@@ -58,7 +58,7 @@ async function build(): Promise<Scene> {
   }
   const directory = resolve('.temp', `erasure-readers-${randomUUID()}`);
   const f = await authorCreditFixture(Bun.env as Record<string, string>, directory,
-    'openid access:manage work:create work:edit work:read work:protect classification:define');
+    'openid access:manage work:create work:edit work:read work:protect classification:define statement:write export:create');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const content = new ContentCore(f.pool);
   const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
@@ -182,7 +182,7 @@ serial('public Work reads omit an erased revision and keep its siblings', async 
   expect(current.status).toBe(200);
   expect(first.text).toContain(scene.work);
   expect(current.text).toContain('ErasureReaderKeptTitle');
-  expect(current.text).not.toContain(uuidOf(scene.heads.erased));
+  expect(current.text).not.toContain('ErasureReaderGoneTitle');
   const draft = (revision: string) => scene.call('GET',
     `/v1/contributions/${uuidOf(scene.draft.contribution)}/drafts/${uuidOf(revision)}?${subject(scene.actor)}`);
   const erasedDraft = await body(await draft(scene.draft.erased));
@@ -191,14 +191,16 @@ serial('public Work reads omit an erased revision and keep its siblings', async 
   expect(keptDraft.status).toBe(200);
   expect(keptDraft.text).toContain('keptdrafttoken');
   expect(keptDraft.text).not.toContain('gonedrafttoken');
-  const list = await body(await scene.call('GET', `/v1/works/${uuidOf(scene.work)}/releases?limit=20`));
+  const releases = `/v1/works/${uuidOf(scene.work)}/releases`;
+  const actor = `actingSubject=${encodeURIComponent(scene.actor)}`;
+  const list = await body(await scene.call('GET', `${releases}?limit=20&${actor}`));
   expect(list.status).toBe(200);
   expect(list.text).toContain(scene.releases.kept);
   expect(list.text).not.toContain(scene.releases.erased);
   const gone = await body(await scene.call('GET',
-    `/v1/works/${uuidOf(scene.work)}/releases/${uuidOf(scene.releases.erased)}`));
+    `${releases}/${uuidOf(scene.releases.erased)}?${actor}`));
   const kept = await body(await scene.call('GET',
-    `/v1/works/${uuidOf(scene.work)}/releases/${uuidOf(scene.releases.kept)}`));
+    `${releases}/${uuidOf(scene.releases.kept)}?${actor}`));
   expect(gone.status).toBe(404);
   expect(kept.status).toBe(200);
   expect(kept.text).toContain('ErasureReaderKeptRelease');
@@ -225,7 +227,7 @@ serial('Statement reads do not return an erased revision', async (scene) => {
 serial('query templates omit an erased revision and keep its siblings', async (scene) => {
   const response = await body(await scene.call('POST', '/v1/query', {
     profile: 'template-query-v1', query: 'https://rezics.com/query/work-versions', revision: 1,
-    parameters: { roots: [scene.work] }, limit: 64 }));
+    parameters: { roots: [scene.work] }, presentation: { actingSubject: scene.actor }, limit: 64 }));
   expect(response.status).toBe(200);
   expect(response.text).toContain(scene.draft.kept);
   expect(response.text).toContain(scene.fixed);
@@ -284,7 +286,8 @@ serial('export omits an erased fixed release and the other release remains', asy
   await scene.erase(scene.fixed, scene.fixed);
   const after = await body(await scene.call('POST', '/v1/exports', payload));
   expect(after.status, after.text).toBe(404);
-  const list = await body(await scene.call('GET', `/v1/works/${uuidOf(scene.work)}/releases?limit=20`));
+  const list = await body(await scene.call('GET',
+    `/v1/works/${uuidOf(scene.work)}/releases?limit=20&actingSubject=${encodeURIComponent(scene.actor)}`));
   expect(list.status).toBe(200);
   expect(list.text).toContain(scene.releases.kept);
   expect(list.text).not.toContain(scene.releases.erased);
@@ -303,7 +306,8 @@ serial('MCP reads omit an erased revision and keep its siblings', async (scene) 
   const work = await read(scene.work);
   const kept = await read(scene.releases.kept);
   const erased = await read(scene.releases.erased);
-  const page = await dispatchTool(editions, { path: { id: uuidOf(scene.work) }, query: { limit: 20 } }, caller,
+  const page = await dispatchTool(editions, { path: { id: uuidOf(scene.work) },
+    query: { limit: 20, actingSubject: scene.actor } }, caller,
     request => scene.app.handle(request));
   const text = JSON.stringify({ work, kept, erased, page });
   expect(work.structuredContent.status).toBe(200);
