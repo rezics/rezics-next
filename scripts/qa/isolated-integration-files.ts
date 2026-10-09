@@ -215,7 +215,6 @@ export const rawSparqlIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/feed-group-votes.test.ts',
   'tests/qa/integration/feed-home.test.ts',
   'tests/qa/integration/feed-read-stability.test.ts',
-  'tests/qa/integration/feed-read-support.ts',
   'tests/qa/integration/feed-reviews.test.ts',
   'tests/qa/integration/follows-authors.test.ts',
   'tests/qa/integration/g-1001-work-cards.test.ts',

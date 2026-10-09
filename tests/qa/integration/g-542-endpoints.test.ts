@@ -122,6 +122,9 @@ test('G-542: endpoints enforce governance while returning rated content to unkno
     ];
     const check = async (visible: boolean) => {
       await projectContent();
+      // Media publication and governance move the graph after Home's seed
+      // projection. A thread read 503s until that projection is current.
+      await home.project();
       // Export currently advances Content's owner sequence without an outbox
       // event. Exercise its real endpoint last so that unrelated source gap
       // cannot prevent the search disclosure assertions.
@@ -197,10 +200,14 @@ test('G-542: endpoints enforce governance while returning rated content to unkno
     expect((await phrase()).total).toBe(2);
     for (const row of [reply, post]) {
       const restore = await restrict({ owner: 'content', resource: row.id, component: 'body', revision: row.draft_head }, seeded.realm.realm);
+      // A content restriction moves the thread projection; the disclosure 404
+      // is only visible once that projection is current.
+      await home.project();
       expect((await call('GET', `/v1/realms/${short(seeded.realm.realm)}/threads/${short(row.id)}`)).status).toBe(404);
       const feed = await (await call('GET', '/v1/feed?sort=new&scope=all&limit=20')).text();
       expect(feed).not.toContain(row.parent_reply ? 'A reviewed Home response' : 'A reviewed Home discussion');
       await restore();
+      await home.project();
       expect((await call('GET', `/v1/realms/${short(seeded.realm.realm)}/threads/${short(row.id)}`)).status).toBe(200);
     }
     const resolved = { resource: work.work, base: 'resource' as const, types: [], work: null,
