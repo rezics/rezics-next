@@ -8,6 +8,7 @@ import {
   type ZoneWork,
 } from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
+import { CatalogueYearForm } from '../catalogue-year.tsx';
 import { strings } from './strings.ts';
 
 // Slots of the official Anime Zone. They render only the facts the platform passes.
@@ -83,23 +84,12 @@ export function AnimeCataloguePanel({ zone, work, facts }: CataloguePanelSlotPro
   </section>;
 }
 
-/** Above the results: a publication year. The source credit stays in the footer, once. */
+/** Above the results: a publication year, in the browse row. The source credit stays in the footer, once. */
 export function AnimeBrowseHeader({ zone, year, Link }: BrowseHeaderSlotProps) {
   if (!year) return null;
   const t = strings(zone.locale);
-  return <div className="anime-browse-head">
-    <form action={year.action} method="get" className="anime-year" data-catalogue-year="">
-      {year.kept.map(item => <input key={`${item.name}=${item.value}`} type="hidden" name={item.name} value={item.value} />)}
-      <label className="anime-year-field">{t.yearLabel}
-        <input name="year" defaultValue={year.value} inputMode="numeric" autoComplete="off"
-          pattern="[1-9][0-9]{0,3}" />
-      </label>
-      <button type="submit">{t.yearSubmit}</button>
-      {year.clearHref ? <Link href={year.clearHref}>{t.yearClear}</Link> : null}
-      {year.directory ? null : <Link href={year.directoryHref}>{t.yearDirectory}</Link>}
-      {year.bounded ? <p className="anime-year-note">{t.yearBounded}</p> : null}
-    </form>
-  </div>;
+  return <CatalogueYearForm year={year} label={t.yearLabel} submit={t.yearSubmit} clear={t.yearClear}
+    directory={t.yearDirectory} bounded={t.yearBounded} Link={Link} />;
 }
 
 /** What this Zone covers, the export it names, and the manga Zone beside it. */

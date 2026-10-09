@@ -1,57 +1,14 @@
 /*
- * Manga lays the year control, the catalogue line and the fact panel in REZICS's shared color and type.
+ * Manga lays the catalogue line and the fact panel in REZICS's shared color and type.
  */
 @layer zone {
   @scope ([data-zone="manga"]) {
-    .manga-browse-head,
     .manga-card,
     .manga-panel {
       display: grid;
       gap: 0.75rem;
     }
 
-    .manga-year {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: 0.5rem 0.75rem;
-      font-family: var(--font-interface);
-    }
-
-    .manga-year-field {
-      display: grid;
-      gap: 0.25rem;
-      color: var(--foreground);
-      font-size: 0.875rem;
-    }
-
-    .manga-year input,
-    .manga-year button {
-      min-block-size: 2.75rem;
-      border: 1px solid var(--border);
-      border-radius: 0.5rem;
-      background: var(--card);
-      color: var(--foreground);
-      font: inherit;
-    }
-
-    .manga-year input {
-      inline-size: 6.5rem;
-      padding-inline: 0.625rem;
-    }
-
-    .manga-year button {
-      padding-inline: 0.875rem;
-      background: var(--primary);
-      color: var(--primary-foreground);
-    }
-
-    .manga-year a {
-      color: var(--primary);
-      text-underline-offset: 3px;
-    }
-
-    .manga-year-note,
     .manga-source {
       flex-basis: 100%;
       margin: 0;

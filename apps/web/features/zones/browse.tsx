@@ -128,8 +128,10 @@ function Segmented({ label, items }: { label: string;
 }
 
 /** The browse page of a Zone: search, sort and view above the results, Facets beside them. */
-export function ZoneBrowse({ model, card, messages }: {
+export function ZoneBrowse({ model, card, messages, header }: {
   model: BrowseModel; card: CardRenderer; messages: ZoneMessages;
+  /** A catalogue year control, in the same column and gutter as search and Filters. */
+  header?: ReactNode;
 }) {
   const chosen = model.chosen.length;
   const slot = slotRatio(model.items);
@@ -146,6 +148,7 @@ export function ZoneBrowse({ model, card, messages }: {
     </aside>
     <section aria-labelledby="browse-title" className="grid min-w-0 grid-cols-1 gap-4">
       <h2 id="browse-title" className="sr-only">{model.title}</h2>
+      {header}
       <BrowseSearch action={model.action} label={model.searchLabel} placeholder={model.placeholder}
         value={model.state.text} kept={model.kept} submit={messages.search} />
       <div className="flex flex-wrap items-center gap-2">

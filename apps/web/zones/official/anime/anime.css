@@ -1,57 +1,14 @@
 /*
- * Anime lays the year control, the catalogue line and the fact panel in REZICS's shared color and type.
+ * Anime lays the catalogue line and the fact panel in REZICS's shared color and type.
  */
 @layer zone {
   @scope ([data-zone="anime"]) {
-    .anime-browse-head,
     .anime-card,
     .anime-panel {
       display: grid;
       gap: 0.75rem;
     }
 
-    .anime-year {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: 0.5rem 0.75rem;
-      font-family: var(--font-interface);
-    }
-
-    .anime-year-field {
-      display: grid;
-      gap: 0.25rem;
-      color: var(--foreground);
-      font-size: 0.875rem;
-    }
-
-    .anime-year input,
-    .anime-year button {
-      min-block-size: 2.75rem;
-      border: 1px solid var(--border);
-      border-radius: 0.5rem;
-      background: var(--card);
-      color: var(--foreground);
-      font: inherit;
-    }
-
-    .anime-year input {
-      inline-size: 6.5rem;
-      padding-inline: 0.625rem;
-    }
-
-    .anime-year button {
-      padding-inline: 0.875rem;
-      background: var(--primary);
-      color: var(--primary-foreground);
-    }
-
-    .anime-year a {
-      color: var(--primary);
-      text-underline-offset: 3px;
-    }
-
-    .anime-year-note,
     .anime-source {
       flex-basis: 100%;
       margin: 0;

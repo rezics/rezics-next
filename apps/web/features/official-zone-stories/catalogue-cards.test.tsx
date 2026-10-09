@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AnimeBrowseHeader, AnimeCard, AnimeCataloguePanel, AnimeFooter } from '../../zones/official/anime/slots.tsx';
 import { MangaBrowseHeader, MangaCard, MangaCataloguePanel, MangaFooter } from '../../zones/official/manga/slots.tsx';
 import { installHostZoneAddresses } from '../zones/addresses.ts';
+import { ZoneBrowse } from '../zones/browse.tsx';
+import type { BrowseModel } from '../zones/browse-view.ts';
 import { cataloguePlatformWork, ZoneWorkRow } from '../zones/card.tsx';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { catalogueFacts, catalogueWork, catalogueZone } from './catalogue-zone.tsx';
@@ -97,6 +99,9 @@ test('the source credit is the footer, once, as the visual-novel Zone places its
     zone: catalogueZone('anime', 'en'), Link, fallback: null,
   }));
   expect(animeHead).not.toContain('Bangumi Archive');
+  expect(animeHead).toContain('min-h-11');
+  expect(animeHead).toContain('gap-2');
+  expect(animeHead).toContain('rounded-xl border border-border/80 bg-card px-4');
   expect(animeFoot).toContain('Bangumi Archive wiki export');
 
   const mangaHead = draw(createElement(MangaBrowseHeader, {
@@ -106,7 +111,49 @@ test('the source credit is the footer, once, as the visual-novel Zone places its
     zone: catalogueZone('manga', 'en'), Link, fallback: null,
   }));
   expect(mangaHead).not.toContain('Bangumi Archive');
+  expect(mangaHead).toContain('min-h-11');
+  expect(mangaHead).toContain('gap-2');
+  expect(mangaHead).toContain('rounded-xl border border-border/80 bg-card px-4');
   expect(mangaFoot).toContain('Bangumi Archive wiki export');
+});
+
+test('the year control sits in the browse column, in the same row as Filters', () => {
+  installHostZoneAddresses();
+  const year = { action: '/browse', value: '1980', kept: [], clearHref: '/browse', directoryHref: '/browse?years=1',
+    directory: false, bounded: false };
+  const header = createElement(AnimeBrowseHeader, {
+    zone: catalogueZone('anime', 'en'), Link, fallback: null, filter: null, filtered: false, year,
+  });
+  const model: BrowseModel = {
+    title: 'Browse', searchLabel: 'Search Anime', placeholder: 'Search', action: '/browse', kept: [],
+    state: { text: null, sort: null, view: 'list', filter: {}, cursor: null },
+    groups: [{ facet: 'status', label: 'Status', values: [] }],
+    chosen: [], filtersLabel: 'Filters', clearHref: null,
+    sorts: [{ sort: 'newest', label: 'Newest', href: '/browse', current: true }],
+    views: [
+      { view: 'list', label: 'List', href: '/browse', current: true },
+      { view: 'grid', label: 'Grid', href: '/browse?view=grid', current: false },
+    ],
+    results: '1 result', notes: [], items: [], next: null, first: null,
+  };
+  const html = draw(createElement(ZoneBrowse, {
+    model, messages: zoneMessagesFor('en'), card: () => null, header,
+  }));
+  const page = html.indexOf('px-4');
+  const yearAt = html.indexOf('data-catalogue-year');
+  const filtersAt = html.indexOf('<details');
+  expect(page).toBeGreaterThanOrEqual(0);
+  expect(yearAt).toBeGreaterThan(page);
+  expect(filtersAt).toBeGreaterThan(yearAt);
+  const yearRow = html.slice(yearAt, yearAt + 400);
+  const filtersRow = html.slice(filtersAt, filtersAt + 400);
+  expect(yearRow).toContain('min-h-11');
+  expect(yearRow).toContain('gap-2');
+  expect(yearRow).toContain('rounded-xl border border-border/80 bg-card px-4');
+  expect(filtersRow).toContain('rounded-xl border border-border/80 bg-card');
+  expect(filtersRow).toContain('h-11');
+  expect(filtersRow).toContain('gap-2');
+  expect(filtersRow).toContain('px-4');
 });
 
 test('a catalogue card does not name the account that created the Work', () => {

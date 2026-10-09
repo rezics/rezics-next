@@ -7,6 +7,7 @@ import type { RealmView } from '../realm/realm-page.tsx';
 import { readFacets, readZoneBrowse } from '../realm/read.ts';
 import type { ZoneBrowsePage } from '../realm/types.ts';
 import { ListFailure } from '../realm/views.tsx';
+import { PageContainer } from '../shell/page.tsx';
 import { ZoneBrowse } from './browse.tsx';
 import { browseHref, mainBrowseQuery, parseBrowseState } from './browse-state.ts';
 import { browseModel, type FacetCounts } from './browse-view.ts';
@@ -132,7 +133,8 @@ export async function CatalogueBrowse({ view, search }: {
   if (listing) {
     const roster = await members(view, { ...state, cursor: null });
     if (roster.failure) {
-      return <>{header}<ListFailure failure="unavailable" messages={view.messages} firstPage={base} /></>;
+      return <PageContainer className="grid gap-4">{header}<ListFailure failure="unavailable" messages={view.messages}
+        firstPage={base} /></PageContainer>;
     }
     const found: ZoneWork[] = [];
     let cursor: string | undefined;
@@ -140,7 +142,8 @@ export async function CatalogueBrowse({ view, search }: {
     for (let step = 0; step < YEAR_PAGES; step++) {
       const listed = await readPublicationYears(year === null ? {} : { fromYear: year, toYear: year }, cursor);
       if (!listed.ok) {
-        return <>{header}<ListFailure failure="unavailable" messages={view.messages} firstPage={base} /></>;
+        return <PageContainer className="grid gap-4">{header}<ListFailure failure="unavailable" messages={view.messages}
+          firstPage={base} /></PageContainer>;
       }
       for (const row of listed.data.items) {
         const work = roster.works.get(row.id);
@@ -174,5 +177,5 @@ export async function CatalogueBrowse({ view, search }: {
     // Every Work on a single-year page was listed for that year. The map holds any other years too.
     publicationYears: publicationYears.get(work.id) ?? (year !== null ? [year] : undefined),
   });
-  return <>{header}<ZoneBrowse model={model} messages={view.zoneMessages} card={card} /></>;
+  return <ZoneBrowse model={model} messages={view.zoneMessages} card={card} header={header} />;
 }

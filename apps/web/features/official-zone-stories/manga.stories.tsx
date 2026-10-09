@@ -22,18 +22,20 @@ function Page({ locale, bounded = false }: { locale: UiLocale; bounded?: boolean
   const results = materializeData(zoneMessagesFor(locale), { locale }).browseTitle({ zone: 'Manga' });
   return <CatalogueZoneFrame slug="manga" pkg={manga} locale={locale}>
     {(zone, card) => <>
-      <MangaBrowseHeader zone={zone} fallback={null} Link={catalogueLink} filter={null} filtered={false} year={{
-        action: browse, value: '1995', kept: [{ name: 'status', value: 'completed' }],
-        clearHref: browse, directoryHref: `${browse}?years=1`, directory: false, bounded,
-      }} />
-      <section aria-labelledby="manga-results">
-        <h2 id="manga-results" className="sr-only">{results}</h2>
-        <ul className="grid gap-3 p-4">
-          <li>{card(longSeries, catalogueFacts('Manga', [1995], 21))}</li>
-          <li>{card(yearless, catalogueFacts('One-shot', [], null))}</li>
-          <li>{card(cancelled, catalogueFacts('Manga', [1997], 3))}</li>
-        </ul>
-      </section>
+      <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 sm:px-6 lg:px-10">
+        <MangaBrowseHeader zone={zone} fallback={null} Link={catalogueLink} filter={null} filtered={false} year={{
+          action: browse, value: '1995', kept: [{ name: 'status', value: 'completed' }],
+          clearHref: browse, directoryHref: `${browse}?years=1`, directory: false, bounded,
+        }} />
+        <section aria-labelledby="manga-results">
+          <h2 id="manga-results" className="sr-only">{results}</h2>
+          <ul className="grid gap-3">
+            <li>{card(longSeries, catalogueFacts('Manga', [1995], 21))}</li>
+            <li>{card(yearless, catalogueFacts('One-shot', [], null))}</li>
+            <li>{card(cancelled, catalogueFacts('Manga', [1997], 3))}</li>
+          </ul>
+        </section>
+      </div>
       <div className="grid gap-4 p-4">
         <MangaCataloguePanel zone={zone} fallback={null} Link={catalogueLink} credits={null}
           work={longSeries} facts={catalogueFacts('Manga', [1995], 21)} />
