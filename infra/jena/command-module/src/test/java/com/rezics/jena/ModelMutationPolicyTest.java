@@ -80,6 +80,28 @@ public class ModelMutationPolicyTest {
         } finally { data.abort(); data.end(); }
     }
 
+    @Test public void erasureTombstoneLeavesHistoricalParentsUnstaged() {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String revision = "https://rezics.com/id/00000000-0000-4000-8000-0000000000e1";
+            Node node = uri(revision);
+            Node parent = uri("https://rezics.com/id/00000000-0000-4000-8000-0000000000e2");
+            Node revisions = uri(CommandPolicy.REVISIONS);
+            data.add(revisions, node, RDF.type.asNode(), uri(RV + "RevisionAnchor"));
+            data.add(revisions, parent, RDF.type.asNode(), uri(RV + "RevisionAnchor"));
+            data.add(revisions, parent, uri(RV + "selectedDraft"), node);
+            CommandPolicy.Plan plan = new CommandPolicy.Plan(null, Set.of(CommandPolicy.REVISIONS),
+                Set.of(), Set.of(revision), Set.of(), false, false, true);
+            ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(PROFILES, data, plan);
+            data.add(revisions, node, RDF.type.asNode(), uri(RV + "ErasedRevision"));
+            String receipt = "urn:rezics:receipt:erasure-graph:" + "ab".repeat(32);
+            assertNull(ModelMutationPolicy.check(PROFILES, data, plan, receipt, before));
+            assertEquals("uncanonical reverse revision dependency requires staged lifecycle: " + parent.getURI(),
+                report(ModelMutationPolicy.check(PROFILES, data, plan, "urn:receipt:probe", before)));
+        } finally { data.abort(); data.end(); }
+    }
+
     @Test public void model16UnknownHistoricalParentRejectsAChildTypeChange() {
         DatasetGraph data = data();
         try {

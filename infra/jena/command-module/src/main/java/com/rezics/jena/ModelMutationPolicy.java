@@ -131,6 +131,10 @@ final class ModelMutationPolicy {
             if (overflow != null) return CommandService.invalid(overflow);
         }
         for (var entry : before.revisions().entrySet()) {
+            // An erasure marker keeps the revision's earlier type. Historical
+            // parents still name that revision; reads hide it, so they are not
+            // restaged or revalidated in this command.
+            if (erasureTombstone(data, receipt, entry.getKey(), entry.getValue())) continue;
             String overflow = dependents(profiles, data, entry.getKey(), plan,
                 dependentCurrent, dependentRevisions, inboundQuads,
                 typeChanged(data, entry.getKey(), entry.getValue()), false);
@@ -349,6 +353,19 @@ final class ModelMutationPolicy {
 
     private static boolean typeChanged(DatasetGraph data, String name, Subject before) {
         return !before.types().equals(values(data, before.graph(), NodeFactory.createURI(name), RDF.type.asNode()));
+    }
+
+    /** The graph erasure command adds rv:ErasedRevision and leaves every prior type. */
+    private static boolean erasureTombstone(DatasetGraph data, String receipt, String name, Subject before) {
+        if (!before.graph().equals(REVISIONS)
+            || !receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}")) return false;
+        Node node = NodeFactory.createURI(name);
+        Node erased = NodeFactory.createURI(RV + "ErasedRevision");
+        if (!data.contains(REVISIONS, node, RDF.type.asNode(), erased)) return false;
+        for (Node type : before.types()) {
+            if (!data.contains(REVISIONS, node, RDF.type.asNode(), type)) return false;
+        }
+        return true;
     }
 
     /** Class-stable composition nodes. Inbound sh:class constraints read the type
