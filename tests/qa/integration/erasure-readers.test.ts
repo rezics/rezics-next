@@ -127,14 +127,13 @@ async function build(): Promise<Scene> {
       body: 'gonedrafttoken', actingSubject: f.actor }), 200);
   const releaseOf = async (title: string) => {
     const id = nativeId();
-    const written = await json<{ release: string; revision: string }>(await call('PUT',
+    return json<{ release: string; revision: string }>(await call('PUT',
       `/v1/works/${shortId(created.work)}/releases/${shortId(id)}`, { profile: 'release-v1',
         expectedHead: null, actingSubject: f.actor, id, kind: 'formal', status: 'official',
         contentLanguages: ['en'], isTranslation: false, originalLanguages: [], titleLanguage: 'en',
         tracklistLanguage: null, title: { value: title, language: 'en' }, editionStatement: null,
         publisher: 'Example', publicationYear: 2026, isbn13: null, originalUrl: null, fixedRelease: null,
         coverage: null, evidence: null }), 200);
-    return written.release;
   };
   const keptRelease = await releaseOf('ErasureReaderKeptRelease');
   const erasedRelease = await releaseOf('ErasureReaderGoneRelease');
@@ -145,7 +144,7 @@ async function build(): Promise<Scene> {
     actingSubject: f.actor }), 201);
   await erase(middle.revision, created.work);
   await erase(later.draftRevision, draft.contribution);
-  await erase(erasedRelease, erasedRelease);
+  await erase(erasedRelease.revision, erasedRelease.release);
   const fixedRows = (await f.nativeFuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
     GRAPH <${GRAPHS.revisions}> { <${sealed.release}> rv:dataEpoch ?epoch ; rv:sequence ?sequence }
   } LIMIT 2`)).results?.bindings ?? [];
@@ -156,7 +155,7 @@ async function build(): Promise<Scene> {
     app, actor: f.actor, token: f.account.tokenA, work: created.work, mainVersion: created.mainVersion,
     heads: { first: created.workRevision, erased: middle.revision, current: current.revision },
     draft: { contribution: draft.contribution, kept: draft.draftRevision, erased: later.draftRevision },
-    releases: { kept: keptRelease, erased: erasedRelease }, fixed: sealed.release,
+    releases: { kept: keptRelease.release, erased: erasedRelease.release }, fixed: sealed.release,
     fixedPosition: { dataEpoch: fixedEpoch, sequence: fixedSequence }, call, erase, grant: f.grant,
     close: async () => {
       await relay.end();
