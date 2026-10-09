@@ -157,6 +157,9 @@ final class ModelMutationPolicy {
                                                     String receipt, String name, Subject before, Set<Node> membershipLists) {
         CanonicalPolicy.Selection selected = before.selection();
         if (selected == null) return null;
+        // The erasure marker keeps this revision's product type. Its product
+        // shape rejects the added rv:ErasedRevision; the erasure profile checks it.
+        if (erasureTombstone(data, receipt, name, before)) return null;
         Node node = NodeFactory.createURI(name);
         if (!data.contains(before.graph(), node, RDF.type.asNode(), NodeFactory.createURI(selected.type()))) {
             if (nameProjectionRetired(data, receipt, name, before))
