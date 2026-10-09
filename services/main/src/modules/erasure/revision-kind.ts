@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, ID, RV, iri } from '../work/activate.ts';
-import { ContentErasureInvalid, MAX_CONTENT_ERASURE_TARGETS } from './content.ts';
+import { ContentErasureInvalid, MAX_CONTENT_ERASURE_TARGETS, readContentErasureTargets } from './content.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const RESOURCE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -48,11 +48,12 @@ export interface ResolvedErasureRevision {
   graphIri: string;
   /** The revision already carries `rv:ErasedRevision` or a Content tombstone. */
   erased: boolean;
+  /** Content pin state from the same statement as identity. Absent for a graph kind. */
+  content?: { availability: string; pendingPin: boolean; activePin: boolean;
+    erasureId: string | null; erasureEpoch: string | null };
 }
 
 type Queryable = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
-
-interface ContentRow { id: string; resource_id: string; availability: string }
 
 /** Canonical graph-command ids: Content UUIDs stay UUIDs; other kinds are their revision IRIs. */
 export function graphRevisionIds(targets: readonly { kind: string; ref: string }[]): string[] {
@@ -114,9 +115,8 @@ export async function resolveErasureRevisions(content: Queryable,
     || new Set(revisionIds).size !== revisionIds.length || revisionIds.some(id => !UUID.test(id))) {
     refuse('Erasure revision targets are invalid');
   }
-  const stored = (await content.query<ContentRow>(`SELECT r.id::text AS id, v.resource_id, r.availability
-    FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
-    WHERE r.id = ANY($1::uuid[])`, [revisionIds])).rows;
+  // Identity is the target read: owner, availability and pins, not a second statement.
+  const stored = await readContentErasureTargets(content, revisionIds);
   if (new Set(stored.map(row => row.id)).size !== stored.length) refuse('Erasure revision identity is ambiguous');
   const contentById = new Map(stored.map(row => [row.id, row]));
   for (const row of stored) {
@@ -151,7 +151,10 @@ export async function resolveErasureRevisions(content: Queryable,
     const row = contentById.get(ref);
     if (row) {
       return { kind: 'content_revision' as const, ref, resourceId: row.resource_id,
-        graphIri: `urn:rezics:content:revision:${ref}`, erased: row.availability === 'erased' };
+        graphIri: `urn:rezics:content:revision:${ref}`, erased: row.availability === 'erased',
+        content: { availability: row.availability, pendingPin: row.pending_pin === true,
+          activePin: row.active_pin === true, erasureId: row.erasure_id ?? null,
+          erasureEpoch: row.erasure_epoch ?? null } };
     }
     const resolved = graphById.get(ref);
     if (!resolved) refuse('Erasure revision is unknown');

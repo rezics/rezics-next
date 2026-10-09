@@ -55,7 +55,9 @@ test('a content revision resolves from its variant owner without a graph read', 
   const resolved = await resolveErasureRevisions(content([{ id: uuid(4), resource_id: owner,
     availability: 'available' }]), graph([], seen), owner, [uuid(4)]);
   expect(resolved).toEqual([{ kind: 'content_revision', ref: uuid(4), resourceId: owner,
-    graphIri: `urn:rezics:content:revision:${uuid(4)}`, erased: false }]);
+    graphIri: `urn:rezics:content:revision:${uuid(4)}`, erased: false,
+    content: { availability: 'available', pendingPin: false, activePin: false,
+      erasureId: null, erasureEpoch: null } }]);
   expect(seen).toEqual([]);
   expect(ERASURE_REVISION_RESOURCES.content_revision).toBe('work');
 });

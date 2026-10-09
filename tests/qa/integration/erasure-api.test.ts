@@ -29,12 +29,14 @@ const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
 interface Costs { calls: number; rows: number }
 
-/** Counts every SQL statement and returned row an owner adapter issues. */
+/** Counts every adapter call and returned row. A timeout command that shares a
+ * call with the operation it bounds is one call: the bound is on calls. */
 function counted(pool: Pool, costs: Costs): Pool {
-  const count = (result: QueryResult) => {
+  const count = (result: QueryResult | QueryResult[]) => {
     if (!isForegroundOperation()) return result;
+    const results = Array.isArray(result) ? result : [result];
     costs.calls++;
-    costs.rows += result.rows.length;
+    for (const item of results) costs.rows += item.rows.length;
     return result;
   };
   return { query: async (sql: string, values?: unknown[]) => count(await pool.query(sql, values)),

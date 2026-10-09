@@ -25,7 +25,7 @@ function slices<T>(items: readonly T[]): T[][] {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-interface TargetRow {
+export interface TargetRow {
   id: string;
   resource_id: string;
   availability: string;
@@ -42,20 +42,37 @@ function checkIds(revisionIds: readonly string[], limit = MAX_CONTENT_ERASURE_TA
   }
 }
 
-async function targetRows(client: Pool | PoolClient, revisionIds: readonly string[],
-  lock: boolean): Promise<TargetRow[]> {
-  return (await client.query<TargetRow>(`SELECT r.id, v.resource_id, r.availability,
+type Queryable = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
+
+function targetSql(ids: string, lock: boolean): string {
+  return `SELECT r.id::text AS id, v.resource_id, r.availability,
       EXISTS (SELECT 1 FROM content.publication_preparation p
         WHERE p.revision_id = r.id AND p.pin_active AND p.status = 'pending') AS pending_pin,
       EXISTS (SELECT 1 FROM content.publication_preparation p
         WHERE p.revision_id = r.id AND p.pin_active AND p.status = 'active'
           AND NOT EXISTS (SELECT 1 FROM content.publication_erasure_supersession s
             WHERE s.operation_id = p.operation_id)) AS active_pin,
-      t.erasure_id, t.erasure_epoch::text AS erasure_epoch
+      t.erasure_id::text AS erasure_id, t.erasure_epoch::text AS erasure_epoch
     FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
     LEFT JOIN content.revision_erasure t ON t.revision_id = r.id
-    WHERE r.id = ANY($1::uuid[]) ORDER BY r.id${lock ? ' FOR UPDATE OF r' : ''}`,
-  [revisionIds])).rows;
+    WHERE r.id = ANY(${ids}) ORDER BY r.id${lock ? ' FOR UPDATE OF r' : ''}`;
+}
+
+async function targetRows(client: Queryable, revisionIds: readonly string[],
+  lock: boolean): Promise<TargetRow[]> {
+  return (await client.query<TargetRow>(targetSql('$1::uuid[]', lock), [revisionIds])).rows;
+}
+
+/** Identity and the pre-journal pin check are this one read. */
+export function readContentErasureTargets(content: Queryable,
+  revisionIds: readonly string[]): Promise<TargetRow[]> {
+  return targetRows(content, revisionIds, false);
+}
+
+/** Apply the pre-journal pin rules to rows already loaded with identity. */
+export function assertFreshContentTargets(rows: readonly TargetRow[], revisionIds: readonly string[],
+  resourceId: string, allowActivePin: boolean): void {
+  assertTargets(rows, revisionIds, resourceId, null, null, allowActivePin);
 }
 
 function assertTargets(rows: readonly TargetRow[], revisionIds: readonly string[],
@@ -121,32 +138,55 @@ export async function applyContentErasure(content: Pool, command: ContentErasure
   return guarded.value;
 }
 
+function sqlUuid(id: string): string {
+  if (!UUID.test(id)) throw new ContentErasureInvalid('Content erasure targets are invalid');
+  return `'${id}'::uuid`;
+}
+
+function sqlUuidArray(ids: readonly string[]): string {
+  return `ARRAY[${ids.map(sqlUuid).join(',')}]`;
+}
+
+function sqlBigint(value: string): string {
+  if (!/^[1-9][0-9]{0,18}$/.test(value)) throw new ContentErasureInvalid('Content erasure journal identity is invalid');
+  return `${value}::bigint`;
+}
+
+function sqlText(value: string): string {
+  if (!/^[A-Za-z0-9:._-]{1,200}$/.test(value)) throw new ContentErasureInvalid('Content erasure proof is invalid');
+  return `'${value}'`;
+}
+
 async function eraseContent(content: Pool, command: ContentErasureCommand): Promise<{ applied: number }> {
   const client = await content.connect();
   try {
-    await client.query('BEGIN');
-    await client.query("SET LOCAL lock_timeout = '2s'");
-    await client.query("SET LOCAL statement_timeout = '5s'");
-    // One deadline for the whole transaction: it is recomputed before every operation, so no
-    // statement (or slice) runs with more than what is left of it.
+    // One call for the transaction preamble. Later operations share their call
+    // with the remaining budget: a separate timeout statement is another content
+    // call, and the request bound counts every call. The budget is still the
+    // first command, so the operation that follows cannot outlive what is left.
+    await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
     const started = Date.now();
-    const withinDeadline = async () => {
+    const bounded = async <T>(statement: string): Promise<{ rows: T[] }> => {
       const left = 5_000 - (Date.now() - started);
-      if (left < 1) throw new ContentErasureStale('Content erasure deadline passed');
-      await client.query("SELECT set_config('statement_timeout', $1, true)", [`${left}ms`]);
+      if (!Number.isInteger(left) || left < 1 || left > 5_000) {
+        throw new ContentErasureStale('Content erasure deadline passed');
+      }
+      // The timeout command finishes before the operation, so the operation cannot
+      // outlive the budget. One adapter call: the request bound counts calls.
+      const result = await client.query(
+        `SELECT set_config('statement_timeout', '${left}ms', true);\n${statement}`);
+      const last = Array.isArray(result) ? result[result.length - 1] : result;
+      return last as { rows: T[] };
     };
-    // Serialize with settlement. Preparation itself locks the revision before
+    const ids = sqlUuidArray(command.revisionIds);
+    // Revisions lock before preparations. Settlement locks the revision before
     // creating a pin, so no new pending pin can appear after these locks.
-    await withinDeadline();
-    await client.query(`SELECT id FROM content.revision WHERE id = ANY($1::uuid[])
-      ORDER BY id FOR UPDATE`, [command.revisionIds]);
-    await withinDeadline();
-    const preparations = (await client.query<{ operation_id: string; revision_id: string;
+    await bounded(`SELECT id FROM content.revision WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`);
+    const preparations = (await bounded<{ operation_id: string; revision_id: string;
       status: string; pin_active: boolean }>(`SELECT operation_id, revision_id, status, pin_active
-      FROM content.publication_preparation WHERE revision_id = ANY($1::uuid[])
-      ORDER BY operation_id FOR UPDATE`, [command.revisionIds])).rows;
-    await withinDeadline();
-    const rows = await targetRows(client, command.revisionIds, false);
+      FROM content.publication_preparation WHERE revision_id = ANY(${ids})
+      ORDER BY operation_id FOR UPDATE`)).rows;
+    const rows = (await bounded<TargetRow>(targetSql(ids, false))).rows;
     assertTargets(rows, command.revisionIds, command.resourceId, command.erasureId,
       command.erasureEpoch, Boolean(command.graphProof));
     if (preparations.some(p => p.status === 'pending' && p.pin_active)
@@ -155,36 +195,33 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
     }
     const pending = rows.filter(row => !row.erasure_id).map(row => row.id);
     if (pending.length) {
-      await withinDeadline();
-      await client.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
-        SELECT unnest($1::uuid[]), $2, $3`, [pending, command.erasureId, command.erasureEpoch]);
-      await withinDeadline();
-      await client.query(`UPDATE content.revision SET availability = 'erased',
+      const pendingIds = sqlUuidArray(pending);
+      const erasureId = sqlUuid(command.erasureId);
+      const epoch = sqlBigint(command.erasureEpoch);
+      await bounded(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        SELECT unnest(${pendingIds}), ${erasureId}, ${epoch}`);
+      await bounded(`UPDATE content.revision SET availability = 'erased',
           serialized_bytes = NULL, body = NULL
-        WHERE id = ANY($1::uuid[]) AND availability = 'available'`, [pending]);
-      if (command.graphProof) await withinDeadline();
-      if (command.graphProof) await client.query(`INSERT INTO content.publication_erasure_supersession
+        WHERE id = ANY(${pendingIds}) AND availability = 'available'`);
+      if (command.graphProof) await bounded(`INSERT INTO content.publication_erasure_supersession
         (operation_id, revision_id, erasure_id, erasure_epoch,
          graph_receipt, graph_data_epoch, graph_sequence)
-        SELECT p.operation_id, p.revision_id, $2, $3, $4, $5, $6::bigint
+        SELECT p.operation_id, p.revision_id, ${erasureId}, ${epoch},
+          ${sqlText(command.graphProof.receipt)}, ${sqlText(command.graphProof.dataEpoch)},
+          ${sqlBigint(command.graphProof.sequence)}
         FROM content.publication_preparation p
-        WHERE p.revision_id = ANY($1::uuid[]) AND p.status = 'active' AND p.pin_active`,
-      [pending, command.erasureId, command.erasureEpoch, command.graphProof.receipt,
-        command.graphProof.dataEpoch, command.graphProof.sequence]);
+        WHERE p.revision_id = ANY(${pendingIds}) AND p.status = 'active' AND p.pin_active`);
     }
     // Already-tombstoned revisions are not pending, but selectors that survived
     // an older erasure still clear under that same journal id and epoch.
+    const erasureId = sqlUuid(command.erasureId);
+    const epoch = sqlBigint(command.erasureEpoch);
     for (const slice of slices(command.revisionIds)) {
-      await withinDeadline();
-      await client.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
-        [slice, command.erasureId, command.erasureEpoch]);
+      await bounded(`SELECT content.erase_comment_sources(${sqlUuidArray(slice)}, ${erasureId}, ${epoch})`);
     }
     // The evidence function takes the journal bound itself: one call, same id and epoch.
-    await withinDeadline();
-    await client.query('SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, $3::bigint)',
-      [command.revisionIds, command.erasureId, command.erasureEpoch]);
-    await withinDeadline();
-    await client.query('COMMIT');
+    await bounded(`SELECT verification.erase_evidence_sources(${ids}, ${erasureId}, ${epoch})`);
+    await bounded('COMMIT');
     return { applied: pending.length };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);

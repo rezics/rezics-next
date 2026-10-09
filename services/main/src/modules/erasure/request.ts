@@ -5,7 +5,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { applyContentErasure, checkContentErasureTargets, ContentErasureGraphRequired,
+import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequired,
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
 import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from './revision-kind.ts';
 import { GraphErasureConflict, GraphErasureUnavailable, readGraphErasureProof,
@@ -184,9 +184,16 @@ export async function requestContentErasure(service: ErasureService,
       if (resolved.some(revision => revision.erased)) {
         throw new ContentErasureStale('Erasure revision is already erased');
       }
-      const contentIds = resolved.filter(revision => revision.kind === 'content_revision').map(revision => revision.ref);
-      if (contentIds.length) {
-        await checkContentErasureTargets(service.content, input.resourceId, contentIds, true);
+      const contentTargets = resolved.filter(revision => revision.kind === 'content_revision');
+      if (contentTargets.length) {
+        assertFreshContentTargets(contentTargets.map(revision => ({
+          id: revision.ref, resource_id: revision.resourceId,
+          availability: revision.content?.availability ?? '',
+          pending_pin: revision.content?.pendingPin === true,
+          active_pin: revision.content?.activePin === true,
+          erasure_id: revision.content?.erasureId ?? null,
+          erasure_epoch: revision.content?.erasureEpoch ?? null,
+        })), contentTargets.map(revision => revision.ref), input.resourceId, true);
       }
       const journaled = await journalErasure(service.relay, { operationId, requestDigest,
         kind: 'revision', principalId: registered.principalId, admissionId: registered.id,
