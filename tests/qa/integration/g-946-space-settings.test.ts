@@ -12,6 +12,9 @@ import { readResourceVisibility } from '../../../services/main/src/modules/space
 import { readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import type { SpaceSettings } from '../../../services/main/src/modules/realm-admin/contract.ts';
 
+/** Space creation publishes generation 1. Later commands move that generation. */
+const generationAfter = (generation: string, steps: number) => (BigInt(generation) + BigInt(steps)).toString();
+
 test('G-946: Space settings recheck authority, serialize CAS/retries, recover delivery, and disclose only a request page', async () => {
   const s = await startMediaStack('g-946-settings');
   try {
@@ -23,7 +26,6 @@ test('G-946: Space settings recheck authority, serialize CAS/retries, recover de
     expect(created.status).toBe(201);
     const { realm,space } = await created.json() as { realm: string; space: string };
     const admin = new AccessRealmManagement(s.accessPool);
-    await admin.initialize(owner.principal,realm,owner.actor,s.env);
     const requests = new RealmJoinRequests(s.accessPool,s.env);
     const app = createMainApp(s.fuseki,{ environment: s.env,access: s.access,realmAdmin: admin,realmJoinRequests: requests,
       governance: { store: { disclosure: new DisclosureStore(s.accessPool) }, rules: new GovernanceRules(s.accessPool) } as never,
@@ -37,14 +39,16 @@ test('G-946: Space settings recheck authority, serialize CAS/retries, recover de
       return { status: response.status,headers: response.headers,body: await response.json() as Record<string, any> };
     };
     const initial = await call('GET',settings);
-    expect(initial.body).toMatchObject({ generation: '0',settings: { visibility: 'public',listing: 'listed',history: 'everything',admission: 'invitation' } });
+    expect(initial.status,JSON.stringify(initial.body)).toBe(200);
+    const generation = initial.body.generation as string;
+    expect(initial.body).toMatchObject({ settings: { visibility: 'public',listing: 'listed',history: 'everything',admission: 'invitation' } });
     expect((await call('GET',settings,undefined,outsider)).status).toBe(403);
-    const input = { actingSubject: owner.actor,expectedGeneration: '0',reason: 'Link-only community',
+    const input = { actingSubject: owner.actor,expectedGeneration: generation,reason: 'Link-only community',
       settings: { visibility: 'public',listing: 'unlisted',history: 'everything',admission: 'open' } satisfies SpaceSettings };
     const key = randomUUID();
     const changed = await call('PUT',settings,input,owner,key);
     expect(changed.status,JSON.stringify(changed.body)).toBe(201);
-    expect((await call('PUT',settings,input,owner,key)).body).toMatchObject({ receiptId: changed.body.receiptId,generation: '1',replayed: true });
+    expect((await call('PUT',settings,input,owner,key)).body).toMatchObject({ receiptId: changed.body.receiptId,generation: generationAfter(generation,1),replayed: true });
     expect((await call('PUT',settings,input)).status).toBe(409);
     expect((await call('PUT',settings,{ ...input,reason: 'Different intent' },owner,key)).status).toBe(409);
     expect((await call('PUT',settings,{ ...input,actingSubject: outsider.actor },outsider)).status).toBe(403);
@@ -54,7 +58,7 @@ test('G-946: Space settings recheck authority, serialize CAS/retries, recover de
     expect(header.headers.get('referrer-policy')).toBe('no-referrer');
     expect(header.body).toMatchObject({ listing: 'unlisted',discovery: { indexable: false,robots: 'noindex',referrerPolicy: 'no-referrer' } });
     expect(await readResourceVisibility(s.env,space)).toMatchObject({ readable: true,findable: false });
-    const privateInput = { ...input,expectedGeneration: '1',settings: { visibility: 'private',listing: 'listed',
+    const privateInput = { ...input,expectedGeneration: generationAfter(generation,1),settings: { visibility: 'private',listing: 'listed',
       history: 'from-admission',admission: 'request' } satisfies SpaceSettings };
     const results = await Promise.all([1,2].map(() => call('PUT',settings,privateInput)));
     expect(results.map(result => result.status).sort()).toEqual([201,409]);
@@ -82,7 +86,7 @@ test('G-946: Space settings recheck authority, serialize CAS/retries, recover de
     expect(inbox.body.items).toHaveLength(1);
     expect((await s.accessPool.query('SELECT count(*)::int AS n FROM access.membership_consent WHERE principal_id = $1',[outsider.principalId])).rows[0].n).toBe(0);
     const accepted = await call('POST',`${root}/join-requests/${requested.body.requestId}/decisions`,{ actingSubject: owner.actor,
-      expectedGeneration: '2',expectedRequestGeneration: '0',decision: 'accepted',reason: 'Approve request' });
+      expectedGeneration: generationAfter(generation,2),expectedRequestGeneration: '0',decision: 'accepted',reason: 'Approve request' });
     expect(accepted.status,JSON.stringify(accepted.body)).toBe(201);
     expect((await call('GET',root,undefined,outsider)).status).toBe(200);
     expect((await call('GET',`${root}/join-requests`)).body.items).toEqual([]);
@@ -92,11 +96,11 @@ test('G-946: Space settings recheck authority, serialize CAS/retries, recover de
     // A graph failure leaves a durable intent; retry settles the same receipt.
     const command = s.fuseki.commandWithReceipt.bind(s.fuseki);
     s.fuseki.commandWithReceipt = async () => { throw new Error('Interrupted delivery'); };
-    const next = { ...input,expectedGeneration: '3',settings: { ...input.settings,admission: 'invitation' as const } };
+    const next = { ...input,expectedGeneration: generationAfter(generation,3),settings: { ...input.settings,admission: 'invitation' as const } };
     const nextKey = randomUUID();
     expect((await call('PUT',settings,next,owner,nextKey)).status).toBe(503);
     s.fuseki.commandWithReceipt = command;
-    expect((await call('PUT',settings,next,owner,nextKey)).body).toMatchObject({ replayed: true,generation: '4' });
+    expect((await call('PUT',settings,next,owner,nextKey)).body).toMatchObject({ replayed: true,generation: generationAfter(generation,4) });
     expect((await readRealmPolicy(s.env,realm))?.listing).toBe('unlisted');
     await s.accessPool.query(`UPDATE access.permission_grant SET active = false WHERE scope_id = $1
       AND recipient_subject = $2 AND action = 'realm.settings.manage'`,[`governance:realm:${realm}`,owner.actor]);

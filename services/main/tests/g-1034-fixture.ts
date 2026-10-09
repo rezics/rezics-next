@@ -190,11 +190,51 @@ export async function growRealmThreads(
       sourceRow!.root_target,
     ],
   );
+  // A reader's reply command cannot carry this many placements inside the
+  // preparation budget, so the scale fixture stays in SQL. Parent and thread
+  // are the rows the ranking projector writes for those replies: each filler
+  // hangs from the parent a reader named, and the thread is that parent's
+  // already stored thread.
+  const known = new Map<string, { thread: string; active: boolean }>();
+  const inBatch = new Set(entries.map((row) => row.reply));
+  const external = [...new Set(entries.flatMap((row) => row.parent && !inBatch.has(row.parent) ? [row.parent] : []))];
+  if (external.length) {
+    const found = await access.query<{ reply: string; thread: string; active: boolean }>(
+      `SELECT reply,thread,active FROM access.realm_thread_reference
+      WHERE data_epoch=$1 AND realm=$2 AND reply=ANY($3::text[])`,
+      [env.lineage.dataEpoch, realm, external],
+    );
+    for (const row of found.rows) known.set(row.reply, row);
+    if (external.some((reply) => !known.has(reply))) throw new Error('Realm thread parent is not indexed');
+  }
+  const mirrored = entries.map((row) => {
+    const above = row.parent ? known.get(row.parent) : undefined;
+    const thread = row.parent ? above?.thread ?? row.parent : row.reply;
+    const active = row.parent ? above?.active === true : true;
+    known.set(row.reply, { thread, active });
+    return { reply: row.reply, placement: row.placement, at: row.at, score: row.score,
+      parent: row.parent, thread, active };
+  });
   await access.query(
     `INSERT INTO access.realm_thread_reference(data_epoch,realm,reply,placement,parent,thread,work,
-    occurred_at,activity_at,active,score) SELECT $1,$2,x.reply,x.placement,NULL,x.reply,$4,x.at,x.at,true,x.score
-    FROM jsonb_to_recordset($3::jsonb) AS x(reply text,placement text,at timestamptz,score int)`,
-    [env.lineage.dataEpoch, realm, JSON.stringify(entries), sourceRow!.root_target],
+    occurred_at,activity_at,active,score) SELECT $1,$2,x.reply,x.placement,x.parent,x.thread,$4,x.at,x.at,x.active,x.score
+    FROM jsonb_to_recordset($3::jsonb) AS x(reply text,placement text,at timestamptz,score int,parent text,thread text,active boolean)`,
+    [env.lineage.dataEpoch, realm, JSON.stringify(mirrored), sourceRow!.root_target],
+  );
+  await access.query(
+    `UPDATE access.realm_thread_reference root
+    SET replies=GREATEST(0,root.replies+child.n),activity_at=GREATEST(root.occurred_at,child.latest)
+    FROM (SELECT thread,count(*)::int AS n,max(at) AS latest
+      FROM jsonb_to_recordset($3::jsonb) AS x(thread text,at timestamptz,parent text,active boolean)
+      WHERE parent IS NOT NULL AND active GROUP BY thread) child
+    WHERE root.data_epoch=$1 AND root.realm=$2 AND root.reply=child.thread`,
+    [env.lineage.dataEpoch, realm, JSON.stringify(mirrored)],
+  );
+  // The parent trigger queues every reply that already has a child. These rows
+  // are the projected chain, so that queue has nothing left to apply.
+  await access.query(
+    `DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind='parent' AND resource=ANY($2::text[])`,
+    [env.lineage.dataEpoch, mirrored.flatMap((row) => row.parent ? [row.reply, row.parent] : [row.reply])],
   );
   const owner = (
     await content.query<{ data_epoch: string; sequence: string }>(

@@ -2,6 +2,16 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { startMediaStack } from './media-support.ts';
+
+/** Space creation publishes generation 1. Later commands move that generation. */
+const generationAfter = (generation: string, steps: number) => (BigInt(generation) + BigInt(steps)).toString();
+async function openedGeneration(owner: { read: (path: string) => Promise<Response> }, space: string) {
+  const response = await owner.read(`/v1/spaces/${space.slice(-36)}/settings`);
+  const body = await response.json() as { generation?: string };
+  expect(response.status, JSON.stringify(body)).toBe(200);
+  if (!body.generation) throw new Error('Space settings did not report a generation');
+  return body.generation;
+}
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { pendingRealmPolicies, recoverRealmPolicies, RealmPolicyRecoveryWorker, settleRealmPolicy }
@@ -27,13 +37,14 @@ test('G-915: interrupted v2 policy resumes at startup; acknowledgement loss, con
     const created = await owner.send('POST', '/v1/spaces', { profile: 'space-realm-v2', name: 'Recovery Realm',
       handle: `recovery-${randomUUID().slice(0, 12)}`, topics: [], capabilities: ['realm'], actingSubject: owner.actor });
     expect(created.status).toBe(201);
-    const { realm } = await created.json() as { realm: string };
+    const { realm, space } = await created.json() as { realm: string; space: string };
     s.fuseki.commandWithReceipt = graphCommand;
     const admin = new AccessRealmManagement(s.accessPool);
-    await admin.initialize(owner.principal, realm, owner.actor, s.env);
     await owner.grant(`governance:realm:${realm}`, 'realm.owner');
     await owner.grant(`governance:realm:${realm}`, 'governance.rule.publish');
+    const generation = await openedGeneration(owner, space);
     const initial = await admin.settings(owner.principal, realm, owner.actor, s.env);
+    expect(initial.generation).toBe(generation);
     const input = { actingSubject: owner.actor, expectedGeneration: initial.generation,
       expectedRulesRevision: initial.ruleBasis.revision, reason: 'Recover interrupted publication',
       settings: { visibility: 'private' as const, reviewMode: 'open' as const, reviewRequired: false,
@@ -47,7 +58,7 @@ test('G-915: interrupted v2 policy resumes at startup; acknowledgement loss, con
     const key = randomUUID();
     await expect(admin.changeSettings(owner.principal, realm, input, key, s.env)).rejects.toThrow('pending');
     const pending = (await pendingRealmPolicies(s.accessPool)).items.find(item => item.realm === realm)!;
-    expect(pending).toMatchObject({ generation: '1', visibility: 'private', review_mode: 'open' });
+    expect(pending).toMatchObject({ generation: generationAfter(generation, 1), visibility: 'private', review_mode: 'open' });
     const held = await readRealmPolicy(s.env, realm);
     expect(held).toMatchObject({ revision: createdPolicy!.revision, visibility: createdPolicy!.visibility,
       reviewMode: createdPolicy!.reviewMode });
@@ -100,7 +111,7 @@ test('G-915: interrupted v2 policy resumes at startup; acknowledgement loss, con
     expect((await recoverRealmPolicies(s.accessPool, s.env)).items).toEqual([]);
     const final = await admin.settings(owner.principal, realm, owner.actor, s.env);
     await expect(admin.changeSettings(owner.principal, realm, { ...nextInput, expectedGeneration: final.generation,
-      expectedRulesRevision: final.ruleBasis.revision, settings: { ...nextInput.settings, visibility: 'restricted' } }, randomUUID(), s.env)).resolves.toMatchObject({ generation: '3' });
+      expectedRulesRevision: final.ruleBasis.revision, settings: { ...nextInput.settings, visibility: 'restricted' } }, randomUUID(), s.env)).resolves.toMatchObject({ generation: generationAfter(generation, 3) });
     expect(commands).toBe(3);
     expect(await readRealmPolicy(s.env, realm)).toMatchObject({ visibility: 'restricted' });
   } finally { await s.stop(); }
@@ -119,14 +130,16 @@ test('G-915: a failing publication remains observable and cannot starve the next
       const response = await owner.send('POST', '/v1/spaces', { profile: 'space-realm-v1',
         name, capabilities: ['realm'], actingSubject: owner.actor });
       expect(response.status).toBe(201);
-      const { realm } = await response.json() as { realm: string };
+      const { realm, space } = await response.json() as { realm: string; space: string };
       realms.push(realm);
-      await admin.initialize(owner.principal, realm, owner.actor, s.env);
       await owner.grant(`governance:realm:${realm}`, 'realm.owner');
       await owner.grant(`governance:realm:${realm}`, 'governance.rule.publish');
+      const generation = await openedGeneration(owner, space);
+      const opened = await admin.settings(owner.principal, realm, owner.actor, s.env);
+      expect(opened.generation).toBe(generation);
       s.fuseki.commandWithReceipt = async () => { throw new Error('Owner temporarily unavailable'); };
-      await expect(admin.changeSettings(owner.principal, realm, { actingSubject: owner.actor, expectedGeneration: '0',
-        expectedRulesRevision: null, reason: 'Publish policy', settings: { visibility: 'private', reviewMode: 'mandatory',
+      await expect(admin.changeSettings(owner.principal, realm, { actingSubject: owner.actor, expectedGeneration: generation,
+        expectedRulesRevision: opened.ruleBasis.revision, reason: 'Publish policy', settings: { visibility: 'private', reviewMode: 'mandatory',
           reviewRequired: true, whoMaySubmit: 'granted', rules: [] } }, randomUUID(), s.env)).rejects.toThrow('pending');
     }
     const firstRealm = realms.sort()[0]!;
