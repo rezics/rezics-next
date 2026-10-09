@@ -4714,7 +4714,10 @@ describe('heavy QA lock', () => {
         import { expect, mock, test } from 'bun:test';
         import { writeFileSync } from 'node:fs';
         const marker = process.env.QA_CLI_STARTUP_MARKER!;
+        // Keep the module's other exports so a new import in cli.ts does not break this stub.
+        const actual = await import(${JSON.stringify(startup)});
         mock.module(${JSON.stringify(startup)}, () => ({
+          ...actual,
           runQaStartupChildAsync: async () => {
             writeFileSync(marker, 'reached after QA slot admission');
             return { ok: false, timedOut: false, elapsedMs: 0, activeElapsedMs: 0, output: 'startup stubbed' };
