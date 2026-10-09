@@ -45,8 +45,14 @@ test('library consent fences personal owners while read consent retains every re
       publisher: null, publicationYear: null, isbn13: null, originalUrl: null,
       fixedRelease: null, coverage: null, evidence: null,
     }));
-    await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(work.work)} a <https://schema.org/Book> } }`);
+    // Book composition admits a Work the type command has recorded as a Book.
+    // This test never reads that new head back.
+    const workHead = (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
+    await json(await editor.send('PUT', `/v1/works/${work.work.slice(-36)}/type`, {
+      profile: 'work-type-v2', expectedHead: workHead, types: ['https://schema.org/Book'],
+      actingSubject: editor.actor,
+    }));
     const chapter = await stack.publicWork(editor.actor, ['en'], 'Library consent chapter');
     await editor.grant(`work:read:${chapter.work}`, 'work.read');
     const fixtureApp = createMainApp(stack.fuseki, { ...home.deps, account: {
