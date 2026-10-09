@@ -1,3 +1,4 @@
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
@@ -5,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Client, Pool } from 'pg';
+import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -45,14 +46,7 @@ async function rootCommand(args: string[], timeout: number): Promise<string> {
 }
 
 async function migrateAccess(url: string): Promise<void> {
-  const db = new Client({ connectionString: url });
-  await db.connect();
-  try {
-    const directory = join(root, 'services/main/migrations/access');
-    for (const file of schemaFiles(root, 'access')) {
-      await db.query(readFileSync(join(directory, file), 'utf8'));
-    }
-  } finally { await db.end(); }
+  await applyQaSqlMigrations(url, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
 }
 
 test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends search until rebuild', async () => {

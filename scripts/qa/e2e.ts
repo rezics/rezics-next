@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
+import { pollUntilDeadline } from './readiness.ts';
 import { adoptLeaseOwner, readDirectoryLease, releaseDirectoryLease, tryAcquireDirectoryLease } from './process/lease.ts';
 import { discoverJourneyPreparations, selectJourneyPreparations } from './e2e-preparation.ts';
 
@@ -287,21 +288,24 @@ async function runE2e(): Promise<void> {
   async function ready(name: string, url: string, child: ChildProcess, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     let last = 'no response';
-    while (Date.now() < deadline) {
+    const responded = await pollUntilDeadline(async remaining => {
       const launchError = launchErrors.get(child);
       if (launchError) throw new Error(`${name} could not start: ${launchError.message}`);
       if (child.exitCode !== null || child.signalCode !== null) {
         throw new Error(`${name} exited before readiness (code ${child.exitCode}, signal ${child.signalCode})`);
       }
       try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(Math.min(10_000, Math.max(1, deadline - Date.now()))) });
-        if (response.ok) return;
-        last = `HTTP ${response.status}`;
-        await response.body?.cancel();
-      } catch (error) { last = error instanceof Error ? error.message : String(error); }
-      await new Promise(resolveWait => setTimeout(resolveWait, 400));
-    }
-    throw new Error(`${name} did not become ready at ${url} within ${timeoutMs / 1000}s (${last})`);
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(Math.min(10_000, Math.max(1, remaining))),
+        });
+        if (!response.ok) last = `HTTP ${response.status}`;
+        return response;
+      } catch (error) {
+        last = error instanceof Error ? error.message : String(error);
+        return false;
+      }
+    }, deadline, 400);
+    if (!responded) throw new Error(`${name} did not become ready at ${url} within ${timeoutMs / 1000}s (${last})`);
   }
 
   async function completed(name: string, child: ChildProcess, timeoutMs: number): Promise<number> {

@@ -1,11 +1,11 @@
 import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { Client } from 'pg';
 import { composeProcessEnvironment, projectName, readEnv, stackDirectory,
   type StackOptions } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
@@ -50,14 +50,7 @@ export function lastJson<T>(output: string): T {
 }
 
 export async function migrateAccess(url: string): Promise<void> {
-  const db = new Client({ connectionString: url });
-  await db.connect();
-  try {
-    const directory = join(root, 'services/main/migrations/access');
-    for (const file of schemaFiles(root, 'access')) {
-      await db.query(readFileSync(join(directory, file), 'utf8'));
-    }
-  } finally { await db.end(); }
+  await applyQaSqlMigrations(url, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
 }
 
 export function pinnedImage(): string {

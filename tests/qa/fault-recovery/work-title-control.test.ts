@@ -1,9 +1,9 @@
-import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
+import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
@@ -20,12 +20,12 @@ import { readTitleControl } from '../../../services/main/src/modules/work/title-
 
 const root = resolve(import.meta.dir, '../../..');
 async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
+  const args = [action, '--profile', 'qa', '--run-id', runId];
   const result = action === 'stack:up'
-    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
-    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+    ? await runQaStartupChildAsync(root, args, 180_000)
+    : await runQaAdmissionChildAsync(root, 'bun', ['scripts/dev/cli.ts', ...args], 180_000);
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
-  return 'admissionWaitMs' in result ? result.admissionWaitMs : 0;
+  return result.admissionWaitMs;
 }
 
 test('LIVE03/OPS03: retained Source title restores exact epoch and receipt under graph-loss fence', async () => {
@@ -39,13 +39,11 @@ test('LIVE03/OPS03: retained Source title restores exact epoch and receipt under
     for (const run of [liveId, restoredId]) { started.push(run); admissionWaitMs += await stack('stack:up', run); }
     const apps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveId }), 'apps.env'));
     const restoredApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoredId }), 'apps.env'));
-    const access = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
     relay = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
-    for (const [owner, pool] of [['access', access], ['relay', relay]] as const) {
-      const path = join(root, `services/main/migrations/${owner}`);
-      for (const file of schemaFiles(root, owner)) await pool.query(readFileSync(join(path, file), 'utf8'));
-    }
-    await access.end();
+    await applyQaSqlMigrations(apps.ACCESS_DATABASE_URL!, join(root, 'services/main/migrations/access'),
+      schemaFiles(root, 'access'));
+    await applyQaSqlMigrations(apps.ACCOUNT_RELAY_DATABASE_URL!, join(root, 'services/main/migrations/relay'),
+      schemaFiles(root, 'relay'));
     fixture = await titleControlFixture({ ...apps, MAIN_ROUTING_EPOCH: '1' }, directory);
     const { env, propose, adoptWork, grantWork, apply, result, state, edit, returnControl,
       grant, json, accessPool, pool } = fixture;

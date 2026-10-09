@@ -1,10 +1,10 @@
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Client, Pool } from 'pg';
+import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -42,14 +42,7 @@ function interruptSettlement(content: ContentCore): { content: ContentCore; call
 }
 
 async function migrateAccess(url: string): Promise<void> {
-  const db = new Client({ connectionString: url });
-  await db.connect();
-  try {
-    const directory = join(root, 'services/main/migrations/access');
-    for (const file of schemaFiles(root, 'access')) {
-      await db.query(readFileSync(join(directory, file), 'utf8'));
-    }
-  } finally { await db.end(); }
+  await applyQaSqlMigrations(url, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
 }
 
 test('WORK10: ambiguous, active and rejected Content publication pins reconcile from exact graph receipts', async () => {

@@ -1,9 +1,9 @@
-import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
+import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
@@ -28,19 +28,16 @@ import { cutoverRestoredGraphLineage }
 const root = resolve(import.meta.dir, '../../..');
 
 async function stack(action: 'stack:up' | 'stack:reset', runId: string): Promise<void> {
+  const args = [action, '--profile', 'qa', '--run-id', runId];
   const command = action === 'stack:up'
-    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
-    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+    ? await runQaStartupChildAsync(root, args, 180_000)
+    : await runQaAdmissionChildAsync(root, 'bun', ['scripts/dev/cli.ts', ...args], 180_000);
   if (command.status !== 0 || command.error) throw new Error(`${action} failed: ${(
     command.stderr || command.stdout || command.error?.message || '').slice(-2000)}`);
 }
 
-async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
-  const directory = join(root, `services/main/migrations/${owner}`);
-  for (const file of schemaFiles(root, owner)) {
-    await pool.query(readFileSync(join(directory, file), 'utf8'));
-  }
+async function migrate(url: string, owner: 'access' | 'relay'): Promise<void> {
+  await applyQaSqlMigrations(url, join(root, `services/main/migrations/${owner}`), schemaFiles(root, owner));
 }
 
 test('WORK04/OPS03: graph loss replays only the original admitted multi-source, corrected and unresolved Work derivations', async () => {
@@ -66,8 +63,8 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
       restoreApps.FUSEKI_MAINTENANCE_TOKEN!, restoreApps.FUSEKI_COMMAND_TOKEN!);
     accessPool = new Pool({ connectionString: liveApps.ACCESS_DATABASE_URL, max: 4 });
     relayPool = new Pool({ connectionString: liveApps.ACCOUNT_RELAY_DATABASE_URL, max: 4 });
-    await migrate(accessPool, 'access');
-    await migrate(relayPool, 'relay');
+    await migrate(liveApps.ACCESS_DATABASE_URL!, 'access');
+    await migrate(liveApps.ACCOUNT_RELAY_DATABASE_URL!, 'relay');
     const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const live: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };

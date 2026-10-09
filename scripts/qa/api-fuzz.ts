@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { readEnv } from '../dev/config.ts';
 import { hostLoopbackAccess, loadDockerEnvironment } from '../load/docker-env.ts';
-import { command, newRunId } from './core.ts';
+import { stageQaBootstrap } from './bootstrap.ts';
+import { command, commandAsync, newRunId } from './core.ts';
+import { pollUntilDeadline } from './readiness.ts';
 import { runQaStartupChildAsync } from './stack-startup.ts';
 
 // Schema-driven API fuzzing of Main's generated public OpenAPI contract against an
@@ -72,14 +73,16 @@ export function fuzzTimeoutSeconds(options: FuzzOptions): number {
 }
 
 async function waitReady(url: string, name: string, child: ChildProcess): Promise<void> {
-  const until = Date.now() + 60_000;
-  while (Date.now() < until && child.exitCode === null) {
+  const deadline = Date.now() + 60_000;
+  const ready = await pollUntilDeadline(async remaining => {
+    if (child.exitCode !== null) {
+      throw new Error(`${name} did not become ready; see its log in the run directory`);
+    }
     try {
-      if ((await fetch(url, { signal: AbortSignal.timeout(2_000) })).ok) return;
-    } catch { /* still starting */ }
-    await Bun.sleep(250);
-  }
-  throw new Error(`${name} did not become ready; see its log in the run directory`);
+      return await fetch(url, { signal: AbortSignal.timeout(Math.max(1, Math.min(2_000, remaining))) });
+    } catch { return false; }
+  }, deadline, 250);
+  if (!ready) throw new Error(`${name} did not become ready; see its log in the run directory`);
 }
 
 if (import.meta.main) {
@@ -95,12 +98,9 @@ if (import.meta.main) {
     writeFileSync(join(directory, 'stack.log'), up.output);
     if (!up.ok) throw new Error('QA stack startup failed; see stack.log');
     const stackDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
-    const apps = readEnv(join(stackDir, 'apps.env'));
-    const appsPath = join(stackDir, 'qa-apps.json');
-    const composePath = join(stackDir, 'qa-compose.json');
-    writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
-    writeFileSync(composePath, JSON.stringify(readEnv(join(stackDir, 'compose.env'))), { mode: 0o600 });
-    const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+    const staged = stageQaBootstrap(stackDir);
+    const apps = staged.apps;
+    const bootstrap = await commandAsync(root, 'bun', staged.args, 180_000);
     writeFileSync(join(directory, 'bootstrap.log'), bootstrap.output);
     if (!bootstrap.ok) throw new Error('QA bootstrap failed; see bootstrap.log');
     for (const [name, entry, port] of [['account', 'services/account/src/index.ts', apps.ACCOUNT_PORT],

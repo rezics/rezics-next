@@ -42,6 +42,7 @@ for (const path of paths) {
     const result = await new Script(`(async () => { ${boundary} })()`).runInNewContext({
       root, Date: { now: () => at }, expect, started: [], liveId: 'live', restoredId: 'restored',
       spawnSync: () => ({ status: 0, stdout: '', stderr: '' }),
+      runQaAdmissionChildAsync: async () => ({ status: 0, stdout: '', stderr: '', admissionWaitMs: 0 }),
       runQaStartupChildAsync: async () => {
         starts++;
         let admissionWaitMs = 0;
