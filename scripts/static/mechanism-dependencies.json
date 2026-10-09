@@ -112,10 +112,6 @@
     "imported": "services/main/src/modules/access/receipt-families.ts"
   },
   {
-    "importer": "services/main/src/modules/editorial-review/admission.ts",
-    "imported": "services/main/src/modules/access/work-edit-authority.ts"
-  },
-  {
     "importer": "services/main/src/modules/editorial-review/authority.ts",
     "imported": "services/main/src/modules/access/role-proof.ts"
   },
@@ -216,22 +212,6 @@
     "imported": "services/main/src/modules/access/realm-management-settings.ts"
   },
   {
-    "importer": "services/main/src/modules/source/author-credit.ts",
-    "imported": "services/main/src/modules/access/work-edit-authority.ts"
-  },
-  {
-    "importer": "services/main/src/modules/source/child-native-support.ts",
-    "imported": "services/main/src/modules/access/work-edit-authority.ts"
-  },
-  {
-    "importer": "services/main/src/modules/source/native-work-attachment.ts",
-    "imported": "services/main/src/modules/access/work-edit-authority.ts"
-  },
-  {
-    "importer": "services/main/src/modules/source/support-attach.ts",
-    "imported": "services/main/src/modules/access/work-edit-authority.ts"
-  },
-  {
     "importer": "services/main/src/modules/space/create-admitted.ts",
     "imported": "services/main/src/modules/access/realm-management.ts"
   },
@@ -246,10 +226,6 @@
   {
     "importer": "services/main/src/modules/studio/access.ts",
     "imported": "services/main/src/modules/access/author-baseline.ts"
-  },
-  {
-    "importer": "services/main/src/modules/suitability/store.ts",
-    "imported": "services/main/src/modules/access/work-edit-authority.ts"
   },
   {
     "importer": "services/main/src/modules/verification/claim-fold.ts",

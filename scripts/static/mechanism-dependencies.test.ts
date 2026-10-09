@@ -199,6 +199,7 @@ test("the mechanism map's import surface is its entry-point files and named adap
       'services/main/src/modules/access/scope-gates.ts',
       'services/main/src/modules/access/semantic-disclosure.ts',
       'services/main/src/modules/access/topology-control.ts',
+      'services/main/src/modules/access/work-edit-authority.ts',
     ],
   });
   const rules = assessMechanismDependencies(mechanisms, root).rules;

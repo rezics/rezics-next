@@ -73,6 +73,7 @@ export const mechanisms = [
       'memberships.ts#AccessMemberships',
       'semantic-disclosure.ts#readReferenceDisclosure',
       'composition.ts#composeAccess',
+      'work-edit-authority.ts#withWorkEditAuthority',
     ],
     ownedState: ['access.scope_gate', 'access.representation', 'access.permission_grant', 'access.policy'],
     protectedEffects: ['write scope gate', 'write representation', 'write permission grant', 'write access policy'],
