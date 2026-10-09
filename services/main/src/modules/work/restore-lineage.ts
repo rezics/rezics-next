@@ -2,6 +2,8 @@ import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 import { StructureGroupRootStore } from '../structure/group-root.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { restoreCutoverCrashArmed, type RestoreCutoverCrashPoint }
+  from '../../infrastructure/restore-cutover-crash.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
 import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
@@ -31,6 +33,18 @@ import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage,
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
+
+export { RESTORE_CUTOVER_CRASH_FLAG, RESTORE_CUTOVER_CRASH_POINTS, restoreCutoverCrashArmed,
+  type RestoreCutoverCrashPoint } from '../../infrastructure/restore-cutover-crash.ts';
+
+/** Thrown only when the QA flag is set outside production and the caller names a crash point. */
+export class RestoreCutoverCrash extends Error {
+  readonly point: RestoreCutoverCrashPoint;
+  constructor(point: RestoreCutoverCrashPoint) {
+    super(`restore cutover stopped at ${point}`);
+    this.point = point;
+  }
+}
 
 export interface RestoreLineageCutover {
   prior: GraphLineage & { sequence: string };
@@ -472,9 +486,11 @@ async function control(fuseki: FusekiClient): Promise<{ dataEpoch: string; routi
     sequence: rows[0].sequence.value };
 }
 
-/** Run only on a fenced, isolated restored dataset before product admission. */
+/** Run only on a fenced, isolated restored dataset before product admission.
+ * `crashAt` is a QA-only stop after the command commits. Omitted, or present
+ * while the process is not armed, it does not read or write anything extra. */
 export async function cutoverRestoredGraphLineage(
-  fuseki: FusekiClient, cutover: RestoreLineageCutover,
+  fuseki: FusekiClient, cutover: RestoreLineageCutover, crashAt?: RestoreCutoverCrashPoint,
 ): Promise<{ lineage: GraphLineage; sequence: '0' | string; replayed: boolean }> {
   const { prior, next } = cutover;
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -542,6 +558,17 @@ export async function cutoverRestoredGraphLineage(
     throw new RestoreLineageConflict(updateError
       ? 'restore lineage update outcome is unknown'
       : `restored graph lineage was not activated (${updateStatus ?? 'no status'}: ${JSON.stringify(updateReport)})`);
+  }
+  if (restoreCutoverCrashArmed(crashAt)) {
+    const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ; rv:routingEpoch ${lit(next.routingEpoch)} ;
+        rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+      ${iri(marker)} a rv:RestoreCutover ; rv:priorDataEpoch ${lit(prior.dataEpoch)} .
+    } }`);
+    if (held.boolean !== true) {
+      throw new RestoreLineageConflict('restore cutover crash point was not reached');
+    }
+    throw new RestoreCutoverCrash(crashAt);
   }
   return { lineage: next, sequence: '0', replayed: false };
 }

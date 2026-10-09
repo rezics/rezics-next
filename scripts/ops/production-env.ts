@@ -142,6 +142,10 @@ export function checkProductionEnv(
   // it, and a production process must not start with it present.
   if (Object.hasOwn(env, 'REZICS_PLATFORM_OPEN_GROUPS'))
     throw new Error('Production forbids REZICS_PLATFORM_OPEN_GROUPS');
+  // Fault tests arm a restore-cutover crash seam with this variable. A request
+  // cannot set it, and a production process must not start with it present.
+  if (Object.hasOwn(env, 'REZICS_QA_RESTORE_CUTOVER_CRASH'))
+    throw new Error('Production forbids REZICS_QA_RESTORE_CUTOVER_CRASH');
   if (roles.includes('main')) requiredMatcherMode(env.MAIN_REQUIRED_MEDIA_MATCHER, true);
   telemetryConfig(env);
   assertClassifiedDefaults();
