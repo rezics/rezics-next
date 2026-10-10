@@ -41,3 +41,65 @@ Requalification retries a failed audit with back-off and logs each attempt the
 same way. An uncertain or rebuilding index stays unavailable even when graph
 reads work; the offline rebuild procedure is in
 [recovery](recovery.md#offline-lucene-rebuild).
+
+## Rebuild states
+
+`task search:rebuild` stores one job and moves it to `activated`. The public
+anchor is absent from quarantine until activation, and activation writes the
+new text generation and the anchor in the same command. A rerun starts from
+whatever receipts are already stored:
+
+| State | What is stored | What a rerun does |
+| --- | --- | --- |
+| not started | No quarantine receipt, anchor present | Quarantines and stores the Content owner cut |
+| quarantined | Anchor absent, quarantine receipt stored | Clears Content units |
+| cleared | Terminal clear receipt | Indexes when no offline record covers this generation and sequence. Units that returned while the anchor is absent are cleared again |
+| offline-indexed | Cleared-family receipt with the indexer digest for this generation and sequence | Replays from the stored cut |
+| replayed | Rebuild cursor at the stored cut | Activates |
+| activated | Activate receipt, control generation, and anchor agree | Promotes the SQL checkpoint |
+
+A `urn:rezics:content:match-unit:` subject that is not a MatchUnit with a
+Content projection still refuses with `Content units remain after terminal
+clear; offline rebuild refused`. That subject cannot be cleared. A live index,
+anchor present, is not rebuilt in place.
+
+Stdout names each step this process finished:
+
+```text
+content-rebuild step: quarantined
+content-rebuild step: cleared
+content-rebuild step: offline-indexed
+content-rebuild step: replayed
+content-rebuild step: activated
+```
+
+`quarantined` is printed again on a resume because the receipt is still the
+start of the job. `cleared` is printed when this process deleted Content units,
+including units that came back after an earlier clear. `offline-indexed` means
+the indexer ran in this process. A resume that already recorded that pass does
+not print it. The last line is the JSON result. `elapsedMs` is the measured
+time of this run.
+
+## Resuming the stuck development stack
+
+Stop the development server so Main is not writing, then rebuild, then start
+it again:
+
+```sh
+# stop the task dev process
+task search:rebuild
+# start task dev again
+```
+
+The shared stack's job file `.temp/stack/rezics-dev/content-rebuild.json`
+already holds the job id. The command resumes that id. Do not pass a new one.
+When that file is gone and the quarantine receipt has no job id, pass the id
+with `task search:rebuild -- --job <uuid>`.
+
+A resume prints the step lines above and then one JSON object whose
+`generation` is the activated text generation. The indexer command itself is
+limited to 300 seconds. The interrupted attempt on this stack stopped at 214
+seconds, before replay. Allow about 10 minutes for the full public graph and
+read `elapsedMs` for the run that actually finished. Search stays closed until
+the `activated` line; `GET /rezics/command?deltaSince=-1` then answers
+`available:true`.
