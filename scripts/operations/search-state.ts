@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 import type { ContentCore } from '../../services/content/src/core.ts';
 import type { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
-  quarantinePublicContentSearch, replayQuarantinedContentCut }
+  quarantinePublicContentSearch, readContentRebuildStep, replayQuarantinedContentCut }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
 import { RV, iri, textIndexProbePattern, type WorkActivationEnvironment }
   from '../../services/main/src/modules/work/activate.ts';
@@ -157,7 +157,7 @@ export async function inspectFusekiState(runner: FusekiStateRunner, env: NodeJS.
   if (JSON.stringify(serverFacts) !== JSON.stringify(facts)) {
     throw new SearchStateRefused('server and indexer assemblers open different state or analyzers');
   }
-  const moduleVersion = (await fuseki.commandHealth()).moduleVersion;
+  const moduleVersion = (await readContentRebuildStep('command health', () => fuseki.commandHealth())).moduleVersion;
   return { imageId: inspected.Image, stateVolume: mount[0]!.Name!, serverAssembler,
     serverAssemblerSha256: digests[0]!, indexerAssemblerSha256: digests[1]!,
     fusekiJarSha256: digests[2]!, commandJarSha256: digests[3]!,
@@ -276,10 +276,10 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   // A terminal clear receipt preserves partial replay on retry. It does not
   // prove this job completed an offline pass, so nonempty retries refuse.
   const assertNoContent = async () => {
-    const result = await input.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    const result = await readContentRebuildStep('rebuild command', () => input.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit ?predicate ?value
         FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")) }
-    }`);
+    }`));
     if (result.boolean !== false) {
       throw new SearchStateRefused('Content units remain after terminal clear; offline rebuild refused');
     }
@@ -294,12 +294,12 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   started = clock();
   const pins = await inspectFusekiState(input.runner, input.dockerEnv, input.env.fuseki);
   assertPinnedState(pins, input.expected);
-  const health = await input.env.fuseki.commandHealth() as { textIndexUncertain?: unknown };
+  const health = await readContentRebuildStep('command health', () => input.env.fuseki.commandHealth()) as { textIndexUncertain?: unknown };
   if (health.textIndexUncertain !== false) {
     throw new SearchStateRefused('rebuilt text index is still reported uncertain');
   }
-  const probe = await input.env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX text: <http://jena.apache.org/text#> ASK { ${textIndexProbePattern()} }`);
+  const probe = await readContentRebuildStep('probe', () => input.env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX text: <http://jena.apache.org/text#> ASK { ${textIndexProbePattern()} }`));
   if (probe.boolean !== true) throw new SearchStateRefused('rebuilt text index probe is absent');
   await assertNoContent();
   verify += clock() - started;

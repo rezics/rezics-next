@@ -16,8 +16,59 @@ const SOURCE_READ_BATCH = 4;
 const MAX_CLEAR_BATCHES = 2_000;
 const MAX_REPLAY_EVENTS = 100_000;
 const MAX_REBUILD_UNITS = 50_000;
+/** Variants or MatchUnits in one verification read. Measured pages of this size stay far under Fuseki's 10s query timeout. */
+export const CONTENT_REBUILD_PAGE = 64;
+/** One verification read must finish inside this budget, leaving margin under Fuseki's 10s query timeout. */
+export const CONTENT_REBUILD_READ_BUDGET_MS = 8_000;
 
 export class ContentRebuildUnavailable extends Error {}
+
+/** A Fuseki query abort, the server's 10s 503, or a compose wait that exceeded its clock. */
+export function contentRebuildStepTimedOut(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const name = 'name' in current ? String((current as { name: unknown }).name) : '';
+    if (name === 'TimeoutError' || name === 'AbortError') return true;
+    if ('code' in current && (current as { code?: unknown }).code === 'ETIMEDOUT') return true;
+    if (current instanceof Error) {
+      if (/the operation timed out|operation was aborted|ETIMEDOUT/i.test(current.message)
+        || current.message === 'Fuseki query returned 503') return true;
+      current = current.cause;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
+/** The CLI's one line for a rebuild failure. A raw timeout is never printed alone. */
+export function contentRebuildFailureLine(error: unknown): string | undefined {
+  if (error instanceof ContentRebuildUnavailable) return error.message;
+  if (contentRebuildStepTimedOut(error)) return 'rebuild: timed out';
+  return undefined;
+}
+
+/** Name the step when a read aborts or exceeds the per-read budget. */
+export async function readContentRebuildStep<T>(step: string, read: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  try {
+    const result = await read();
+    const elapsed = performance.now() - started;
+    if (elapsed > CONTENT_REBUILD_READ_BUDGET_MS) {
+      throw new ContentRebuildUnavailable(
+        `${step}: timed out after ${Math.round(elapsed)}ms (budget ${CONTENT_REBUILD_READ_BUDGET_MS}ms)`);
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof ContentRebuildUnavailable) throw error;
+    if (contentRebuildStepTimedOut(error)) {
+      throw new ContentRebuildUnavailable(`${step}: timed out`, { cause: error });
+    }
+    throw error;
+  }
+}
 
 export interface ContentRebuildJob {
   id: string;
@@ -71,8 +122,16 @@ async function command(env: WorkActivationEnvironment, phase: Phase, identity: s
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(operation)} ?p ?o } }
     BIND(?n + 1 AS ?next)
   }`;
-  const result = await env.fuseki.commandWithReceipt({ receipt: operation, digest,
-    update, validations: [], deadlineMs: 10_000 });
+  let result;
+  try {
+    result = await env.fuseki.commandWithReceipt({ receipt: operation, digest,
+      update, validations: [], deadlineMs: 10_000 });
+  } catch (error) {
+    if (contentRebuildStepTimedOut(error)) {
+      throw new ContentRebuildUnavailable('rebuild command: timed out', { cause: error });
+    }
+    throw error;
+  }
   if (result.status !== 'committed' || result.position.dataEpoch !== env.lineage.dataEpoch) {
     throw new ContentRebuildUnavailable(`Content rebuild ${phase} command ${result.status}`
       + (result.status === 'invalid' ? `: ${JSON.stringify(result.report)}` : ''));
@@ -80,11 +139,11 @@ async function command(env: WorkActivationEnvironment, phase: Phase, identity: s
 }
 
 async function readQuarantine(env: WorkActivationEnvironment, id: string): Promise<ContentPosition | null> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?sourceEpoch ?sourceSequence WHERE {
+  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?sourceEpoch ?sourceSequence WHERE {
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt('quarantine', id))} a rv:OperationReceipt ;
       rv:outcome rv:Succeeded ; rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
       rv:ownerDataEpoch ?sourceEpoch ; rv:ownerSequence ?sourceSequence . }
-  }`);
+  }`));
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) return null;
   const row = rows[0];
@@ -98,9 +157,9 @@ async function readQuarantine(env: WorkActivationEnvironment, id: string): Promi
 }
 
 async function isReceiptCommitted(env: WorkActivationEnvironment, phase: Phase, id: string): Promise<boolean> {
-  const answer = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
+  const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
     ${iri(receipt(phase, id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-      rv:dataEpoch ${lit(env.lineage.dataEpoch)} . } }`);
+      rv:dataEpoch ${lit(env.lineage.dataEpoch)} . } }`));
   return answer.boolean === true;
 }
 
@@ -108,11 +167,11 @@ async function isReceiptCommitted(env: WorkActivationEnvironment, phase: Phase, 
 export async function resumeActivatedContentRebuild(env: WorkActivationEnvironment,
   cursor: ContentProjectionCursor, id: string, publicConsumer: string): Promise<string | null> {
   rebuildId(id);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sourceEpoch
+  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sourceEpoch
     ?sourceSequence ?generation WHERE { GRAPH ${iri(GRAPHS.receipts)} {
     ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
       rv:dataEpoch ?epoch ; rv:ownerDataEpoch ?sourceEpoch ;
-      rv:ownerSequence ?sourceSequence ; rv:textIndexGeneration ?generation . } }`);
+      rv:ownerSequence ?sourceSequence ; rv:textIndexGeneration ?generation . } }`));
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) return null;
   const row = rows[0];
@@ -123,11 +182,11 @@ export async function resumeActivatedContentRebuild(env: WorkActivationEnvironme
     throw new ContentRebuildUnavailable('activated rebuild receipt is incomplete');
   }
   const generation = value(row!, 'generation')!;
-  const confirmed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+  const confirmed = await readContentRebuildStep('control', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:textIndexGeneration ${iri(generation)} . }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
-  }`);
+  }`));
   if (confirmed.boolean !== true) throw new ContentRebuildUnavailable('activated index control differs from receipt');
   await cursor.adoptRebuildCheckpoint(publicConsumer, `content-rebuild.${id}`,
     { owner: 'content', dataEpoch: value(row!, 'sourceEpoch')!, sequence: value(row!, 'sourceSequence')! });
@@ -135,8 +194,8 @@ export async function resumeActivatedContentRebuild(env: WorkActivationEnvironme
 }
 
 async function assertQuarantined(env: WorkActivationEnvironment): Promise<void> {
-  const answer = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-    ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`);
+  const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+    ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`));
   if (answer.boolean !== false) throw new ContentRebuildUnavailable('public search is not quarantined');
 }
 
@@ -185,11 +244,11 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
 }
 
 async function listContentUnits(env: WorkActivationEnvironment): Promise<string[]> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?unit WHERE {
+  const result = await readContentRebuildStep('clear page', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?unit WHERE {
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:projection ?projection .
       FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")
         && STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) }
-  } LIMIT ${CLEAR_BATCH}`);
+  } LIMIT ${CLEAR_BATCH}`));
   const rows = result.results?.bindings ?? [];
   const units = rows.map(row => row.unit?.value);
   if (units.some(unit => !unit || !unit.startsWith('urn:rezics:content:match-unit:'))
@@ -275,8 +334,134 @@ function textKey(unit: string, body: string, language: string): string {
   return `${unit}\0${language}\0${body}`;
 }
 
-/** Compare the whole bounded RDF projection, current public heads, exact Content bytes,
- * and the restarted Lucene reader. Outbox replay alone cannot certify this inventory. */
+type RebuildBinding = Record<string, { value: string; 'xml:lang'?: string }>;
+
+// Jena evaluates `>` on IRIs as a type error, so every row is dropped. The keyset compares the IRI string.
+function rebuildKeyset(variable: string, after: string | undefined): string {
+  return after ? `FILTER(STR(?${variable}) > ${lit(after)})` : '';
+}
+
+/** Declared public-search variants, one ordered keyset page. */
+export function contentRebuildDeclaredPageQuery(after: string | undefined): string {
+  return `PREFIX rv: <${RV}> SELECT ?variant WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
+      rv:publicSearchEligibilityHead ?eligibility .
+      ${rebuildKeyset('variant', after)} }
+  } ORDER BY STR(?variant) LIMIT ${CONTENT_REBUILD_PAGE}`;
+}
+
+/** Heads, decisions and receipts for one page of variants. Receipts are bound by variant, not scanned by predicate. */
+export function contentRebuildHeadsPageQuery(variants: readonly string[], dataEpoch: string): string {
+  return `PREFIX rv: <${RV}> SELECT ?variant ?resource ?decision ?eligibility
+    ?revision ?digest WHERE {
+    VALUES ?variant { ${variants.map(variant => iri(variant)).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ?resource ;
+      rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
+      rv:variant ?variant ; rv:resource ?resource ; rv:publicationDecision ?decision ;
+      rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public ;
+      rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?eligibilitySequence .
+      ?decision a rv:ContentPublicationDecision ; rv:contentRevision ?revision ;
+        rv:byteDigest ?digest ; rv:resource ?resource ; rv:component ?variant ;
+        rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
+        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?publicationSequence . }
+    GRAPH ${iri(GRAPHS.receipts)} {
+      ?publicationReceipt rv:variant ?variant ;
+        a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:publicationDecision ?decision ; rv:contentRevision ?revision ;
+        rv:byteDigest ?digest ; rv:resource ?resource ;
+        rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
+        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?publicationSequence .
+      ?eligibilityReceipt rv:variant ?variant ;
+        a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:eligibilityDecision ?eligibility ; rv:publicationDecision ?decision ;
+        rv:resource ?resource ;
+        rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public ;
+        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?eligibilitySequence . }
+    FILTER(?rightsBasis IN (rv:OriginalContribution, rv:PublicDomain))
+  } LIMIT ${CONTENT_REBUILD_PAGE}`;
+}
+
+/** Public MatchUnits, one ordered keyset page, including non-Content units the Lucene audit counts. */
+export function contentRebuildUnitsPageQuery(after: string | undefined): string {
+  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?unit ?body ?variant ?revision ?decision ?eligibility ?resource
+      ?resultWork ?resultMain ?chapterTitle ?book ?bookMain ?bookTitle WHERE {
+    GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+    ?unit a rv:MatchUnit .
+    ${rebuildKeyset('unit', after)}
+    OPTIONAL { ?unit rv:searchBody ?body . }
+    OPTIONAL { ?unit rv:resource ?resource . }
+    OPTIONAL { ?unit rv:projection ?projection ; rv:variant ?variant ;
+      rv:revision ?revision ; rv:publicationDecision ?decision ;
+      rv:eligibility ?eligibility . }
+    OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+      rv:searchChapterTitle ?chapterTitle . }
+  }
+  } ORDER BY STR(?unit) LIMIT ${CONTENT_REBUILD_PAGE}`;
+}
+
+function pageAdvanced(rows: RebuildBinding[], variable: string, after: string | undefined): string | undefined {
+  let previous = after;
+  for (const row of rows) {
+    const current = value(row, variable);
+    if (!current || (previous !== undefined && current <= previous)) return undefined;
+    previous = current;
+  }
+  return previous;
+}
+
+async function readDeclaredPages(env: WorkActivationEnvironment): Promise<RebuildBinding[]> {
+  const declared: RebuildBinding[] = [];
+  let after: string | undefined;
+  for (let ordinal = 0; ordinal <= MAX_REBUILD_UNITS; ordinal++) {
+    const page = (await readContentRebuildStep(`declared page ${ordinal}`, () => env.fuseki.query(
+      contentRebuildDeclaredPageQuery(after)))).results?.bindings ?? [];
+    if (page.length === 0) return declared;
+    const next = pageAdvanced(page, 'variant', after);
+    if (!next) throw new ContentRebuildUnavailable('declared eligibility inventory differs from exact public heads');
+    declared.push(...page);
+    if (declared.length > MAX_REBUILD_UNITS) throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
+    after = next;
+    if (page.length < CONTENT_REBUILD_PAGE) return declared;
+  }
+  throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
+}
+
+async function readHeadPages(env: WorkActivationEnvironment, declared: readonly RebuildBinding[]): Promise<RebuildBinding[]> {
+  const heads: RebuildBinding[] = [];
+  const variants = declared.map(row => value(row, 'variant')!);
+  for (let ordinal = 0, offset = 0; offset < variants.length; ordinal++, offset += CONTENT_REBUILD_PAGE) {
+    const rows = (await readContentRebuildStep(`heads page ${ordinal}`, () => env.fuseki.query(
+      contentRebuildHeadsPageQuery(variants.slice(offset, offset + CONTENT_REBUILD_PAGE), env.lineage.dataEpoch),
+    ))).results?.bindings ?? [];
+    heads.push(...rows);
+    if (heads.length > MAX_REBUILD_UNITS) throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
+  }
+  return heads;
+}
+
+async function readUnitPages(env: WorkActivationEnvironment): Promise<RebuildBinding[]> {
+  const units: RebuildBinding[] = [];
+  let after: string | undefined;
+  for (let ordinal = 0; ordinal <= MAX_REBUILD_UNITS; ordinal++) {
+    const page = (await readContentRebuildStep(`units page ${ordinal}`, () => env.fuseki.query(
+      contentRebuildUnitsPageQuery(after)))).results?.bindings ?? [];
+    if (page.length === 0) return units;
+    const next = pageAdvanced(page, 'unit', after);
+    if (!next) throw new ContentRebuildUnavailable('RDF MatchUnit inventory is ambiguous');
+    units.push(...page);
+    if (units.length > MAX_REBUILD_UNITS) throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
+    after = next;
+    if (page.length < CONTENT_REBUILD_PAGE) return units;
+  }
+  throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
+}
+
+/** Compare the bounded RDF projection, current public heads, exact Content bytes,
+ * and the restarted Lucene reader, one keyset page at a time. Outbox replay alone
+ * cannot certify this inventory. */
 export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, job: ContentRebuildJob): Promise<RebuildGraphSnapshot> {
   await assertQuarantined(env);
@@ -289,12 +474,12 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
     throw new ContentRebuildUnavailable('Content replay does not cover exact owner cut');
   }
   const control = async () => {
-    const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?routing ?sequence ?generation WHERE {
+    const result = await readContentRebuildStep('control', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?routing ?sequence ?generation WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:routingEpoch ?routing ; rv:sequence ?sequence ;
         rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ; rv:textIndexGeneration ?generation .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-    }`);
+    }`));
     const rows = result.results?.bindings ?? [];
     const row = rows[0];
     if (rows.length !== 1 || value(row!, 'epoch') !== env.lineage.dataEpoch
@@ -306,62 +491,17 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
     return { sequence: value(row!, 'sequence')!, generation: value(row!, 'generation')! };
   };
   const before = await control();
-  const [declaredResult, headsResult, rdfResult, indexResult, probeResult] = await Promise.all([
-    env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?variant WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
-        rv:publicSearchEligibilityHead ?eligibility . }
-    } LIMIT ${MAX_REBUILD_UNITS + 1}`),
-    env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?variant ?resource ?decision ?eligibility
-      ?revision ?digest WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ?resource ;
-        rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
-        rv:variant ?variant ; rv:resource ?resource ; rv:publicationDecision ?decision ;
-        rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?eligibilitySequence .
-        ?decision a rv:ContentPublicationDecision ; rv:contentRevision ?revision ;
-          rv:byteDigest ?digest ; rv:resource ?resource ; rv:component ?variant ;
-          rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?publicationSequence . }
-      GRAPH ${iri(GRAPHS.receipts)} {
-        ?publicationReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-          rv:publicationDecision ?decision ; rv:contentRevision ?revision ;
-          rv:byteDigest ?digest ; rv:resource ?resource ; rv:variant ?variant ;
-          rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?publicationSequence .
-        ?eligibilityReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-          rv:eligibilityDecision ?eligibility ; rv:publicationDecision ?decision ;
-          rv:resource ?resource ; rv:variant ?variant ;
-          rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?eligibilitySequence . }
-      FILTER(?rightsBasis IN (rv:OriginalContribution, rv:PublicDomain))
-    } LIMIT ${MAX_REBUILD_UNITS + 1}`),
-    env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-      SELECT ?unit ?body ?variant ?revision ?decision ?eligibility ?resource
-        ?resultWork ?resultMain ?chapterTitle ?book ?bookMain ?bookTitle WHERE {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-      ?unit a rv:MatchUnit .
-      OPTIONAL { ?unit rv:searchBody ?body . }
-      OPTIONAL { ?unit rv:resource ?resource . }
-      OPTIONAL { ?unit rv:projection ?projection ; rv:variant ?variant ;
-        rv:revision ?revision ; rv:publicationDecision ?decision ;
-        rv:eligibility ?eligibility . }
-      OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
-        rv:searchChapterTitle ?chapterTitle . }
-    }
-    } LIMIT ${MAX_REBUILD_UNITS + 1}`),
-    // The native audit compares graph-scoped identity and stored body/language,
-    // including legal bodies for which the analyzer emits no tokens.
-    env.fuseki.query(`PREFIX rv: <${RV}> SELECT (rv:publicTextInventory() AS ?population) WHERE {}`),
-    env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
-      ASK { ${textIndexProbePattern()} }`),
-  ]);
+  const probeResult = await readContentRebuildStep('probe', () => env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
+      ASK { ${textIndexProbePattern()} }`));
   if (probeResult.boolean !== true) throw new ContentRebuildUnavailable('rebuilt CJK index probe is absent');
-  const declared = declaredResult.results?.bindings ?? [];
-  const heads = headsResult.results?.bindings ?? [];
-  const rdf = rdfResult.results?.bindings ?? [];
+  // The native audit compares graph-scoped identity and stored body/language,
+  // including legal bodies for which the analyzer emits no tokens.
+  const indexResult = await readContentRebuildStep('inventory', () => env.fuseki.query(
+    `PREFIX rv: <${RV}> SELECT (rv:publicTextInventory() AS ?population) WHERE {}`));
   const indexedPopulation = Number(indexResult.results?.bindings?.[0]?.population?.value);
+  const declared = await readDeclaredPages(env);
+  const heads = await readHeadPages(env, declared);
+  const rdf = await readUnitPages(env);
   if ([declared.length, heads.length, rdf.length, indexedPopulation].some(size => size > MAX_REBUILD_UNITS)) {
     throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
   }
