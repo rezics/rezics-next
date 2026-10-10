@@ -8,7 +8,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readReplyRoot, replyRoot } from '../realm-reply/root.ts';
 import { targetRead } from '../target/resolve.ts';
-import { WorkReadMissing } from '../work/read-session.ts';
+import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { ContentDraftStale, contentDraftReceiptIri, sealContentDraftAdmission } from './draft.ts';
 import { authoredDocumentBody } from '../../../../content/src/document-body.ts';
@@ -63,8 +63,11 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
         session => (creating ? replyRoot : readReplyRoot)(session, input.rootTarget, input.rootRevision));
       if (!readable) throw new AdmissionDenied('reply root is unavailable');
     } catch (error) {
-      if (error instanceof WorkReadMissing) throw new AdmissionDenied('reply root is unavailable');
-      throw error;
+      if (!(error instanceof WorkReadMissing)) throw error;
+      // The first probe is before the key. An unseen root matches a missing id.
+      // A root lost after the key is claimed stays open for the same key.
+      if (!creating) throw error;
+      throw new WorkReadUnavailable('reply root is unavailable');
     }
   };
   await proveRoot(false);
@@ -114,6 +117,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   // binds the target's current root; an edit does not resolve it again.
   try { if (!priorReceipt && creating) await proveRoot(true); }
   catch (error) {
+    if (error instanceof WorkReadUnavailable) throw error;
     await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
     throw error;
   }

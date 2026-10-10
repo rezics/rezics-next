@@ -33,11 +33,11 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * The contexts readError mapper is a read path: read, no state.
  * post identification (routes/post-identification.ts): sealed no, listed. The
  * placement miss is thrown before any subcommand key.
- * realm reply route (routes/realm-replies.ts): sealed no. Launch, fixed locally.
- * The miss becomes a denial before create, so the key is never registered.
- * realm reply store create (modules/realm-reply/store.ts): sealed yes when the
- * miss happens inside create, because sealTerminal runs in finally. Launch,
- * listed, allowlisted below. Not edited.
+ * realm reply route (routes/realm-replies.ts): sealed no. An unseen root is
+ * 404 before create, so the key is never registered.
+ * realm reply store create (modules/realm-reply/store.ts): sealed no. A miss
+ * inside the write is an unsealed 503, and that outcome does not record a
+ * terminal.
  * native credit createNativeCredit (modules/profiles/credits.ts): sealed no,
  * fixed. A hidden Agent is refused before the key is registered, and a guard
  * miss while the Agent is hidden rethrows unsealed. Allowlisted because
@@ -52,16 +52,14 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * projection resolveProjection: sealed no, listed. A hidden frame refuses
  * before the projection key is registered.
  * member reply draft proveRoot (modules/content-publication/reply-draft.ts):
- * sealed yes. The miss is rewritten to a denial and the draft admission is
- * then sealed. The file is under another Goal's open claim; not edited.
+ * sealed no. An unseen root is 404 before the key exists. A root lost after
+ * the key is claimed is an unsealed 503.
  * Every other instanceof WorkReadMissing or TargetUnavailable under
  * services/main/src is a read or a read helper: read, no state.
  */
 const allowlist: Record<string, string> = {
   'modules/profiles/credits.ts#createNativeCredit':
     'The catch rethrows the visibility miss before any receipt. recordGraphOutcome runs only after a completed edit already has its terminal receipt.',
-  'modules/realm-reply/store.ts#create':
-    'Launch owns the reply command. The route answers before create, so a root that is not visible yet is never registered. The store still seals a miss that happens inside create.',
 };
 
 interface Body { name: string; start: number; end: number }

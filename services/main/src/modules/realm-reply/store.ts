@@ -39,13 +39,26 @@ export function realmReplyDigest(value: unknown): string {
  * recovery is `AdmissionUnavailable`, a different class from a closed gate.
  * Expiry, revocation, deactivation, participation and an unverified account
  * are `AdmissionExpired` or `AdmissionDenied`; the caller seals those. */
-function unavailableReply(error: unknown): RealmReplyUnavailable | null {
+const unavailableReply = (error: unknown): RealmReplyUnavailable | null => {
   if (error instanceof RealmReplyUnavailable) return error;
   if (error instanceof WorkReadUnavailable || error instanceof TargetUnavailable) {
     return new RealmReplyUnavailable(error.message);
   }
   return null;
-}
+};
+
+const replyVisibilityMiss = (error: unknown): WorkReadMissing | null => {
+  return error instanceof WorkReadMissing ? error : null;
+};
+
+/** A root the write can no longer read is not a decision about a visible root.
+ * The same key is answered again once that root can be read. */
+const unsealedReplyRoot = (error: unknown): RealmReplyUnavailable | null => {
+  const missed = replyVisibilityMiss(error);
+  if (!missed) return null;
+  const message = missed instanceof TargetUnavailable ? missed.message : 'Reply root is unavailable';
+  return new RealmReplyUnavailable(message);
+};
 
 function sealsReplyRefusal(error: unknown): boolean {
   if (unavailableReply(error) || error instanceof WorkReadMissing) return false;
@@ -223,6 +236,7 @@ export class RealmReplyStore {
       `reply:create:${input.rootTarget}`, key, digest, input.rootRevision);
     const admission = opened.registered;
     let graph = opened.graph;
+    let recordTerminal = true;
     try {
       const saved = await this.content.hasReceipt(admission.id, 'reply.create', digest);
       // The receipt is this admission's. A different idempotency key is a
@@ -257,16 +271,18 @@ export class RealmReplyStore {
       return result;
     }
     catch (error) {
-      // Shared root proofs answer false for a hidden or absent target. A target
-      // lost after this write started is an unsealed 503.
+      // A root lost after this write started is an unsealed 503. Recording a
+      // terminal would deny the same key after the root can be read again.
+      // The route already answered 404 when the caller could not see it.
+      const lost = unsealedReplyRoot(error);
+      if (lost) {
+        recordTerminal = false;
+        throw lost;
+      }
       const unavailable = unavailableReply(error);
       if (unavailable) throw unavailable;
-      // An erased question or other visible root miss is a refusal. A target
-      // the caller cannot see never reaches this catch: the route answered 404.
       // An expired admission is a refusal of a key that was admitted, not an outage.
-      const refusal = error instanceof WorkReadMissing
-        ? new RealmReplyDenied('Reply root is unavailable')
-        : expiredAdmission(error) ?? error;
+      const refusal = expiredAdmission(error) ?? error;
       if (sealsReplyRefusal(refusal)) {
         const refused = await this.refuseUncommittedCreate(admission, graph);
         graph = refused.terminal;
@@ -274,7 +290,7 @@ export class RealmReplyStore {
       }
       throw refusal;
     } finally {
-      await this.sealTerminal(admission, graph);
+      if (recordTerminal) await this.sealTerminal(admission, graph);
     }
   }
 
@@ -309,7 +325,8 @@ export class RealmReplyStore {
       const refusal = expiredAdmission(error) ?? error;
       const unavailable = unavailableReply(refusal);
       if (unavailable) throw unavailable;
-      if (refusal instanceof WorkReadMissing) throw refusal;
+      const missed = replyVisibilityMiss(refusal);
+      if (missed) throw missed;
       if (sealsReplyRefusal(refusal)) {
         // The native receipt lock chooses cancellation or the concurrent
         // winner. Transport failures do not imply either terminal outcome.

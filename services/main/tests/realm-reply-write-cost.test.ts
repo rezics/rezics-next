@@ -2,11 +2,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
-import { isForegroundOperation } from '../../../tests/qa/integration/support/operation-cost.ts';
+import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { currentWorkerTick } from '../src/worker-tick.ts';
 import { RealmReplyDenied } from '../src/modules/realm-reply/content-store.ts';
 import { TargetUnavailable } from '../src/modules/target/resolve.ts';
+import { WorkReadMissing } from '../src/modules/work/read-session.ts';
 import { growRealmThreads } from './g-1034-fixture.ts';
 import { realmVisibilityFixture } from './realm-visibility-fixture.ts';
 
@@ -18,11 +18,8 @@ export const REALM_REPLY_WRITE_COST = {
 } as const;
 
 /** True only while the measured request is the foreground caller. Background
- * schedulers and other work on these pools are not this request's cost. */
+ * schedulers, worker ticks and other work on these pools are not this request's cost. */
 const measuredRequest = new AsyncLocalStorage<true>();
-function foregroundCounted(): boolean {
-  return measuredRequest.getStore() === true && isForegroundOperation() && currentWorkerTick() === undefined;
-}
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -38,7 +35,7 @@ function tallyPool(pool: Pool) {
     seen.add(client);
     const query = client.query.bind(client) as (...args: unknown[]) => unknown;
     client.query = ((...args: unknown[]) => {
-      if (foregroundCounted()) count += 1;
+      if (measuredRequest.getStore() === true && foregroundCounted()) count += 1;
       return query(...args);
     }) as PoolClient['query'];
   };
@@ -63,7 +60,7 @@ function tallyFuseki(fuseki: FusekiClient) {
   for (const method of ['query', 'update', 'command', 'commandWithReceipt', 'commandHealth'] as const) {
     const original = fuseki[method].bind(fuseki) as (...args: unknown[]) => unknown;
     (fuseki as unknown as Record<string, (...args: unknown[]) => unknown>)[method] = (...args: unknown[]) => {
-      if (foregroundCounted()) count += 1;
+      if (measuredRequest.getStore() === true && foregroundCounted()) count += 1;
       return original(...args);
     };
   }
@@ -504,6 +501,133 @@ test('an expired admission retry is refused and sealed with the placement pin re
     await expectRefusedPlacement(fx, body, key, 409);
   } finally {
     restore();
+    await fx.close();
+  }
+}, 120_000);
+
+function watchAdmissionClaim(pool: Pool): { claimed: { on: boolean }; restore: () => void } {
+  const claimed = { on: false };
+  const connect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+  const seen = new WeakSet<object>();
+  const wrap = (client: PoolClient) => {
+    if (seen.has(client)) return;
+    seen.add(client);
+    const original = client.query.bind(client) as (...args: unknown[]) => unknown;
+    client.query = ((...args: unknown[]) => {
+      if (sqlText(args)?.includes("'admission.claimed'")) claimed.on = true;
+      return original(...args);
+    }) as PoolClient['query'];
+  };
+  pool.connect = ((...args: unknown[]) => {
+    if (typeof args[0] === 'function') {
+      const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
+      return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
+        if (client) wrap(client);
+        callback(error, client, done);
+      });
+    }
+    return Promise.resolve(connect()).then(client => {
+      wrap(client as PoolClient);
+      return client;
+    });
+  }) as Pool['connect'];
+  return { claimed, restore: () => { pool.connect = connect as Pool['connect']; } };
+}
+
+test('a reply draft keeps the same key open until its root is visible', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  try {
+    const input = fx.draftInput();
+    const key = randomUUID();
+    let hidden = true;
+    fx.fuseki.query = async (sparql, limit) => {
+      if (hidden && sparql.includes(input.rootTarget) && sparql.includes('rv:ErasedRevision')) {
+        hidden = false;
+        throw new WorkReadMissing('Reply root is unavailable');
+      }
+      return query(sparql, limit);
+    };
+    const first = await fx.call('POST', '/v1/member-reply-drafts', input, fx.actor, key);
+    expect(first.status, JSON.stringify(first.body)).toBe(404);
+    const admission = await fx.accessPool.query(
+      'SELECT id FROM access.admission WHERE idempotency_key = $1', [key]);
+    expect(admission.rowCount).toBe(0);
+    const retry = await fx.call('POST', '/v1/member-reply-drafts', input, fx.actor, key);
+    expect(retry.status, JSON.stringify(retry.body)).toBe(201);
+  } finally {
+    fx.fuseki.query = query;
+    await fx.close();
+  }
+}, 120_000);
+
+test('a reply draft lost after its key is claimed stays unsealed until the root is visible', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  const watch = watchAdmissionClaim(fx.accessPool);
+  try {
+    const input = fx.draftInput();
+    const key = randomUUID();
+    let failed = false;
+    fx.fuseki.query = async (sparql, limit) => {
+      if (watch.claimed.on && !failed && sparql.includes(input.rootTarget) && sparql.includes('rv:ErasedRevision')) {
+        failed = true;
+        throw new WorkReadMissing('Reply root is unavailable');
+      }
+      return query(sparql, limit);
+    };
+    const first = await fx.call('POST', '/v1/member-reply-drafts', input, fx.actor, key);
+    expect(first.status, JSON.stringify(first.body)).toBe(503);
+    const admission = await fx.accessPool.query<{ state: string; graph_outcome: string | null }>(
+      `SELECT state, graph_outcome FROM access.admission WHERE idempotency_key = $1 AND action = 'content.draft'`, [key]);
+    expect(admission.rowCount).toBe(1);
+    expect(admission.rows[0]!.graph_outcome).toBeNull();
+    expect(admission.rows[0]!.state).not.toBe('sealed');
+    const retry = await fx.call('POST', '/v1/member-reply-drafts', input, fx.actor, key);
+    expect(retry.status, JSON.stringify(retry.body)).toBe(200);
+    expect(retry.body.replayed).toBe(true);
+  } finally {
+    watch.restore();
+    fx.fuseki.query = query;
+    await fx.close();
+  }
+}, 120_000);
+
+test('a reply identity lost inside create stays unsealed until the root is visible', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  const watch = watchAdmissionClaim(fx.accessPool);
+  try {
+    const input = fx.draftInput();
+    const draft = await fx.call('POST', '/v1/member-reply-drafts', input);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    watch.claimed.on = false;
+    const body = {
+      profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, author: fx.actor, rootTarget: input.rootTarget,
+      rootRevision: input.rootRevision, parentReply: null, parentRevision: null, contextRevision: null,
+    };
+    const key = randomUUID();
+    let failed = false;
+    fx.fuseki.query = async (sparql, limit) => {
+      if (watch.claimed.on && !failed && sparql.includes('rv:ErasedRevision')) {
+        failed = true;
+        throw new WorkReadMissing('Reply root is unavailable');
+      }
+      return query(sparql, limit);
+    };
+    const first = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(first.status, JSON.stringify(first.body)).toBe(503);
+    const admission = await fx.accessPool.query<{ state: string; graph_outcome: string | null }>(
+      `SELECT state, graph_outcome FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [key]);
+    expect(admission.rowCount).toBe(1);
+    expect(admission.rows[0]!.graph_outcome).toBeNull();
+    expect(admission.rows[0]!.state).not.toBe('sealed');
+    const retry = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(retry.status, JSON.stringify(retry.body)).toBe(201);
+  } finally {
+    watch.restore();
+    fx.fuseki.query = query;
     await fx.close();
   }
 }, 120_000);
