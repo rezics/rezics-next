@@ -749,12 +749,13 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   const fenceTargets = disclosed.flatMap(item => {
     const source = final.get(item.id)!;
+    const workRevision = source.work ? session.workRevision(source.work) : undefined;
     return [{ owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
       resource: source.id, component: 'body' as const, revision: source.readerReview?.revision, work: source.work,
-      context: source.realm ?? undefined },
+      ...(workRevision ? { workRevision } : {}), context: source.realm ?? undefined },
     { owner: 'content' as const, resource: source.reply ?? source.contentTarget ?? source.target,
       component: 'body' as const, revision: source.contentRevision?.replace(/^urn:rezics:content:revision:/, '') ?? null,
-      work: source.work, context: source.realm ?? undefined }];
+      work: source.work, ...(workRevision ? { workRevision } : {}), context: source.realm ?? undefined }];
   });
   const policy = await session.disclosure(fenceTargets, 'feed');
   const hidden = new Set(disclosed.filter((_item, index) => policy[index * 2] !== 'visible'

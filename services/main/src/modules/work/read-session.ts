@@ -148,6 +148,9 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
+  /** Work heads already read by summary batches in this session. */
+  private readonly workRevisions = new Map<string, string>();
+  workRevision(work: string) { return this.workRevisions.get(work); }
   get viewer() { return this.principal ? disclosureViewer(this.principal, this.options.actingSubject)
     : this.options.publicViewer ?? disclosureViewer(null); }
   disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
@@ -227,6 +230,10 @@ export class WorkReadSession {
       languages: this.displayLanguages, localBasis, settleNonAgentNameOwners: true,
     });
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(!!this.options.localBasis));
+    const rememberWorkRevisions = (revisions: ReadonlyMap<string, string>) => {
+      for (const [work, revision] of revisions) this.workRevisions.set(work, revision);
+    };
+    rememberWorkRevisions(result.workRevisions);
     if (this.options.localBasis) {
       const key = `summaries:${JSON.stringify(resources)}`;
       const token = readDependencyToken([result.generation.graph, result.summaries]);
@@ -234,6 +241,7 @@ export class WorkReadSession {
       if (previous && previous.token !== token) throw new WorkReadMoved('Summary dependency changed');
       this.ownerDependencies.set(key, { token, read: async () => {
         const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(true));
+        rememberWorkRevisions(fresh.workRevisions);
         return [fresh.generation.graph, fresh.summaries];
       } });
     } else if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {

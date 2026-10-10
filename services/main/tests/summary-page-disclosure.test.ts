@@ -72,7 +72,10 @@ function page(kind: Case) {
       return { results: { bindings: [{ work: uri(work), main: uri(id(11)), head: uri(head) }] } };
     }
     if (query.includes('rv:descriptiveMetadataHead')) return { results: { bindings: [{ work: uri(work) }] } };
-    if (query.includes('SELECT ?work ?head ?owningWork')) return { results: { bindings: [{ work: uri(work), head: uri(head) }] } };
+    if (query.includes('SELECT ?work ?head ?owningWork')) {
+      unexpected.push('disclosure head probe');
+      throw new Error('Disclosure probed a work head the summary already read');
+    }
     if (query.includes('SELECT ?resource ?structure') || query.includes('MIN(STR(?realm))')
       || query.includes('SELECT ?work ?type') || query.includes('SELECT ?epoch ?hold ?context')) {
       return { results: { bindings: [] } };
@@ -139,8 +142,9 @@ test('home withholds a cover the viewer may not see', async () => {
   expect(feed.items).toHaveLength(1);
   expect(feed.items[0]!.target.cover.kind).toBe('fallback');
   expect(delivered(f.captured).every(summary => summary.disclosure === 'public')).toBe(true);
-  expect(f.evaluated.some(call => call.paired && call.targets.some(target =>
-    target.owner === 'media' && target.component === 'cover'))).toBe(true);
+  const passes = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name'));
+  expect(passes).toHaveLength(1);
+  expect(passes[0]!.targets.some(target => target.owner === 'media' && target.component === 'cover')).toBe(true);
 });
 
 test('home does not label a signed-in-only name public', async () => {
@@ -149,7 +153,9 @@ test('home does not label a signed-in-only name public', async () => {
   expect(feed.items.map(item => item.target.title.value)).not.toContain(title);
   const summaries = delivered(f.captured);
   expect(summaries.some(summary => summary.disclosure === 'restricted' && summary.name.value === title)).toBe(true);
-  expect(f.evaluated.some(call => call.paired && call.targets.some(target => target.component === 'name'))).toBe(true);
+  const passes = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name'));
+  expect(passes).toHaveLength(1);
+  expect(passes[0]!.targets.some(target => target.owner === 'media' && target.component === 'cover')).toBe(true);
 });
 
 test('ranking withholds a cover the viewer may not see', async () => {
@@ -161,8 +167,9 @@ test('ranking withholds a cover the viewer may not see', async () => {
   } as unknown as ReadRankingProjection, { realm: null, metric: 'reads', interval: 'day', order: 'score' });
   expect(ranking.items).toHaveLength(1);
   expect(ranking.items[0]!.cover.kind).toBe('fallback');
-  expect(f.evaluated.filter(call => call.paired && call.targets.some(target =>
-    target.owner === 'media' && target.component === 'cover'))).toHaveLength(2);
+  const passes = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name')
+    && call.targets.some(target => target.owner === 'media' && target.component === 'cover'));
+  expect(passes).toHaveLength(2);
 });
 
 test('ranking does not label a signed-in-only name public', async () => {
@@ -175,4 +182,7 @@ test('ranking does not label a signed-in-only name public', async () => {
   const summaries = delivered(f.captured);
   expect(summaries.some(summary => summary.disclosure === 'restricted' && summary.name.value === title)).toBe(true);
   expect(summaries.every(summary => summary.disclosure !== 'public')).toBe(true);
+  const passes = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name'));
+  expect(passes).toHaveLength(2);
+  expect(passes.every(call => call.targets.some(target => target.owner === 'media' && target.component === 'cover'))).toBe(true);
 });
