@@ -5,7 +5,7 @@ import { decisionInput, submissionInput, submissionPage, submissionQuery, submis
   submissionView, withdrawalInput, SubmissionInvalid, SubmissionMissing,
   SubmissionStale, SubmissionUnavailable } from '../modules/realm-submission/schema.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
-import { WorkReadInvalid, WorkReadMoved, WorkReadMissing, workRead } from '../modules/work/read-session.ts';
+import { WorkReadInvalid, WorkReadMoved, WorkReadMissing, WorkReadUnavailable, workRead } from '../modules/work/read-session.ts';
 import { readRealmPublications, realmPublicationPage } from '../modules/realm-submission/publications.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -24,7 +24,9 @@ function errorResponse(error: unknown) {
   if (error instanceof SubmissionInvalid || error instanceof WorkReadInvalid) return problem(400, 'invalid_submission', error.message);
   if (error instanceof SubmissionMissing || error instanceof WorkReadMissing) return problem(404, 'submission_unavailable', error.message);
   if (error instanceof SubmissionStale || error instanceof WorkReadMoved) return problem(409, 'submission_stale', error.message);
-  if (error instanceof SubmissionUnavailable) return problem(503, 'submission_pending', error.message);
+  // A candidate lost after the key is claimed is retried. A hidden candidate and
+  // an absent one share this answer, and the key is not sealed.
+  if (error instanceof WorkReadUnavailable || error instanceof SubmissionUnavailable) return problem(503, 'submission_pending', error.message);
   return commandError(error);
 }
 export const openApiOperations = {

@@ -264,6 +264,7 @@ test('a realm submission candidate miss is not in the terminal cancellation list
   const source = readFileSync(join(sourceRoot, 'modules/realm-submission/store.ts'), 'utf8');
   const cancellation = source.slice(source.indexOf('Only definite pre-commit'), source.indexOf('throw error;', source.indexOf('Only definite pre-commit')));
   expect(cancellation).not.toContain('WorkReadMissing');
-  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/graph.ts'), 'utf8')).toContain("throw new WorkReadMissing('Exact public candidate is unavailable')");
-  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/resource.ts'), 'utf8')).toContain("throw new WorkReadMissing('Exact Work or public Content publication is unavailable')");
+  expect(cancellation).not.toContain('WorkReadUnavailable');
+  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/graph.ts'), 'utf8')).toContain("throw new WorkReadUnavailable('Exact public candidate is unavailable')");
+  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/resource.ts'), 'utf8')).toContain("throw new WorkReadUnavailable('Exact Work or public Content publication is unavailable')");
 });
