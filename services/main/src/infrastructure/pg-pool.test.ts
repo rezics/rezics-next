@@ -462,7 +462,7 @@ test('a nested checkout names the worker tick and the request trace that held th
       });
       expect(faults).toContainEqual(expect.objectContaining({ 'rezics.checkout.tick': 'main.template.recovery' }));
       expect(faults).toContainEqual(expect.objectContaining({ trace_id: traceId }));
-      // The shared telemetry line carries time and trace_id (G-1570); the fault adds no second request or time field.
+      // The shared telemetry line carries time and trace_id; the fault adds no second request or time field.
       expect(faults.every(fault => !('request' in fault) && !('at' in fault))).toBe(true);
     });
   } finally {
