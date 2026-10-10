@@ -3,6 +3,9 @@
  * returns more items. Anonymous is 22 Postgres and 8 Fuseki. Signed is 28
  * Postgres and 8 Fuseki. Some signed Best corpus scales have no shelf read and
  * measure 26; the cap is the page that includes that pair.
+ * The earlier 18/24 (and ranking 12) predate summary disclosure and the
+ * source-binding lookup. Each line below is a check the page must keep, so the
+ * cap was rebaselined to it (program decision, 2026-10-10); growth with items stays forbidden.
  *
  * Anonymous Postgres:
  * 1-6 opening Access control read;
