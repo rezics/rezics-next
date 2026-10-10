@@ -135,12 +135,13 @@ export async function applyCatalogueYear({ view, search, model }: {
     }
     // Every match on a page this request read stays on the screen, so the read leaves nothing
     // unshown. Next carries the cursor where the read stopped when a further page remains.
-    // The same cursor again would re-read this page; an empty screen is not linked.
+    // The same cursor again would re-read this page. A screen with no match still links forward
+    // when the read advanced, so this Zone's Works further on stay reachable.
     const started = yearCursorOf(search.yearCursor);
     const resume = nextCursor && nextCursor !== started ? nextCursor : null;
     const listedHref = withFlags(plain, year, directory);
     model.items = found;
-    model.next = found.length > 0 && resume ? yearHref(listedHref, resume) : null;
+    model.next = resume ? yearHref(listedHref, resume) : null;
     model.first = started ? listedHref : null;
     yearControl.bounded = roster.incomplete || nextCursor !== null;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });

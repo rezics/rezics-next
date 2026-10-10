@@ -101,3 +101,35 @@ test('paging a year past one read reaches every Work once and never links an emp
   expect(seen).toEqual(ids);
   expect(search.yearCursor).toBe(`page-${YEAR_PAGES * 3}`);
 });
+
+test('a screen whose read found only other Zones\' Works still links forward to this Zone\'s Works', async () => {
+  // The year read is platform-wide, so whole screens can hold no member of this Zone.
+  const ours = [workId(1), workId(2)];
+  const others = YEAR_PAGES * 2;
+  const keys = Array.from({ length: others + ours.length }, (_, index) => (index === 0 ? '' : `page-${index}`));
+  const pages = new Map(keys.map((key, index) => [key, {
+    items: [{ id: index < others ? `${OTHER}-${index}` : ours[index - others]!, year: 2001,
+      statement: `https://rezics.com/id/statement-${index}` }],
+    nextCursor: index + 1 < keys.length ? `page-${index + 1}` : null,
+  }]));
+  const publicationYears = (async (_parameters, cursor) =>
+    ({ ok: true as const, data: pages.get(cursor ?? '') ?? { items: [], nextCursor: null } })) as typeof readPublicationYears;
+  const zoneBrowse = (async () => ({ ok: true as const, data: { items: ours.map(card), nextCursor: null } })) as unknown as typeof readZoneBrowse;
+
+  const seen: string[] = [];
+  const screens: number[] = [];
+  let search: Record<string, string> = { year: '2001' };
+  for (let step = 0; step < 6; step++) {
+    const page = model();
+    await applyCatalogueYear({ view, search, model: page }, { publicationYears, zoneBrowse });
+    screens.push(page.items.length);
+    seen.push(...page.items.map(item => item.id));
+    if (!page.next) break;
+    const yearCursor = new URL(page.next, 'https://rezics.local').searchParams.get('yearCursor');
+    expect(yearCursor).toBeTruthy();
+    expect(yearCursor).not.toBe(search.yearCursor ?? null);
+    search = { year: '2001', yearCursor: yearCursor! };
+  }
+  expect(screens[0]).toBe(0);
+  expect(seen).toEqual(ours);
+});

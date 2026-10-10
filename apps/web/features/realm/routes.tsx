@@ -133,7 +133,7 @@ async function realmRoute(
       locale={locale}
       search={search}
       address={site ? siteHref(locale, view.context.ref, tab === 'home' ? [] : [tab]) : undefined}
-      crumbs={site && tab === 'browse' ? [
+      crumbs={site && tab === 'browse' && view.pkg?.catalogue ? [
         { label: view.zone.name, href: spaceHref(view.context.ref, 'site') },
         { label: zoneContentText(view.zoneMessages.browseTab, locale), href: null },
       ] : undefined}
