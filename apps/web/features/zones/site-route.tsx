@@ -41,7 +41,6 @@ import { DocumentPage, DocumentUnavailable, IndexPage, PageNotAvailable } from '
 import { ZoneEntityPage } from './site-entity.tsx';
 import type { SiteCrumb } from './site-navigation.tsx';
 import { workBase, workTabOf, ZoneWorkPage } from './site-work.tsx';
-import { CatalogueBrowse } from './catalogue-browse.tsx';
 import { addressKey, siteMemberTarget, spaceHref, zoneMemberHref } from '../address/path.ts';
 import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
@@ -192,19 +191,6 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   };
   if (routed.ok && routed.data.kind === 'home') return SiteHomeRoute(communityProps);
   if (!routed.ok && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
-    const catalogueView = await loadRealmView(space, locale, search, 'site');
-    if (catalogueView.kind === 'view' && catalogueView.pkg?.catalogue) {
-      const address = siteHref(locale, catalogueView.context.ref, path);
-      return (
-        <RealmFrame view={catalogueView} tab={null} locale={locale} search={search} address={address}
-          crumbs={[
-            { label: catalogueView.zone.name, href: spaceHref(catalogueView.context.ref, 'site') },
-            { label: zoneContentText(catalogueView.zoneMessages.browseTab, locale), href: null },
-          ]}>
-          <CatalogueBrowse view={catalogueView} search={search} />
-        </RealmFrame>
-      );
-    }
     return RealmBrowseRoute(communityProps);
   }
   const view = await loadRealmView(space, locale, search, 'site');

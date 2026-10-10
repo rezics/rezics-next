@@ -27,6 +27,8 @@ import {
   parseReleaseFilter,
   releaseFilterActive,
 } from '../release-filter/state.ts';
+import { zoneContentText } from '../language/untagged.ts';
+import { applyCatalogueYear } from '../zones/catalogue-browse.tsx';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadHomeModules } from './modules.ts';
 import {
@@ -110,10 +112,11 @@ async function realmRoute(
   tab: CommunityPage,
   content: Content,
   site = false,
+  loadView: typeof loadRealmView = loadRealmView,
 ) {
   const [{ locale, realm }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
-  const view = await loadRealmView(realm, locale, search, site ? 'site' : 'community');
+  const view = await loadView(realm, locale, search, site ? 'site' : 'community');
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable')
     return <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure} reference={view.reference} />;
@@ -130,6 +133,10 @@ async function realmRoute(
       locale={locale}
       search={search}
       address={site ? siteHref(locale, view.context.ref, tab === 'home' ? [] : [tab]) : undefined}
+      crumbs={site && tab === 'browse' ? [
+        { label: view.zone.name, href: spaceHref(view.context.ref, 'site') },
+        { label: zoneContentText(view.zoneMessages.browseTab, locale), href: null },
+      ] : undefined}
     >
       {await content(view, locale, search)}
     </RealmFrame>
@@ -253,7 +260,7 @@ export function SiteHomeRoute(props: RealmRouteProps) {
  * release filter (`releaseFilter`) leads with it; once a condition is chosen the results are the
  * Works Main finds with one release meeting every condition, each saying which release matched.
  */
-export function RealmBrowseRoute(props: RealmRouteProps) {
+export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadRealmView) {
   return realmRoute(
     props,
     'browse',
@@ -332,6 +339,13 @@ export function RealmBrowseRoute(props: RealmRouteProps) {
           .filter((facet) => facet.current)
           .map((facet) => [facet.name, facet.labels[locale]] as const),
       );
+      const counts = facetCounts(page.data);
+      const catalogue = view.pkg?.catalogue;
+      if (catalogue) {
+        const formats = new Set(catalogue.formatNames);
+        counts.concept = counts.concept.filter(item =>
+          (item.name ? formats.has(item.name.value) : false) || state.filter.concept?.includes(item.value));
+      }
       const model = browseModel({
         base,
         zoneName: view.zone.name.value,
@@ -341,19 +355,31 @@ export function RealmBrowseRoute(props: RealmRouteProps) {
         messages: view.zoneMessages,
         page: {
           ...page.data,
-          facets: facetCounts(page.data),
+          facets: counts,
           sort: page.data.query.sort,
           items: page.data.items.map((item) => zoneWork(item, view.context, item.evidence)),
         },
       });
+      const year = catalogue ? await applyCatalogueYear({ view, search, model }) : null;
+      if (year?.failure) return <>
+        {year.header ? <PageContainer className="pb-0 sm:pb-0 lg:pb-0">{year.header}</PageContainer> : null}
+        {failure(view, 'browse', 'unavailable')}
+      </>;
+      const shown = year
+        ? (work: Parameters<typeof card>[0], options?: Parameters<typeof card>[1]) => card(work, {
+          ...options,
+          publicationYears: year.publicationYears.get(work.id) ?? (year.year !== null ? [year.year] : undefined),
+        })
+        : card;
       return (
         <>
           {header ? <PageContainer className="pb-0 sm:pb-0 lg:pb-0">{header}</PageContainer> : null}
-          <ZoneBrowse model={model} messages={view.zoneMessages} card={card} />
+          <ZoneBrowse model={model} messages={view.zoneMessages} card={shown} header={year?.header ?? undefined} />
         </>
       );
     },
     true,
+    loadView,
   );
 }
 
