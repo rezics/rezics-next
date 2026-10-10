@@ -7,7 +7,7 @@ import { zoneText } from '../realm/adapt.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { loadWork } from '../work-page/read.ts';
 import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
-import { type CatalogueFacts, publicationYearsOf, readCatalogueFacts } from './catalogue-facts.ts';
+import { type CatalogueFacts, readCatalogueFacts } from './catalogue-facts.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
 import {
   idOf,
@@ -98,9 +98,8 @@ export async function ZoneWorkPage({
   const catalogue = pkg?.catalogue;
   const read = tab === 'overview' && Panel && catalogue && zone
     ? await readCatalogueFacts(work.id, locale, catalogue.count, catalogue.formatNames) : null;
-  // The folded first-publication date is on the year template. The statement page may omit it.
-  const facts = read && !read.unavailable && read.years.length === 0
-    ? { ...read, years: await publicationYearsOf(work.id) } : read;
+  // The year is the Work's own accepted first-publication Statement; no year means none is recorded.
+  const facts = read;
   return (
     <WorkFrameView {...common} work={work.header} lead={lead}>
       {tab === 'overview' ? (

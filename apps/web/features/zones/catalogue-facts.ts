@@ -209,28 +209,6 @@ export function catalogueYears(stated: readonly number[], listed?: readonly numb
     .sort((left, right) => right - left);
 }
 
-/** Pages of the publication-year template, stopped when this Work appears. A failed page leaves what was found. */
-export async function publicationYearsOf(id: string): Promise<number[]> {
-  try {
-    const want = idOf(id) ?? id;
-    const years = new Set<number>();
-    let cursor: string | undefined;
-    for (let page = 0; page < 8; page++) {
-      const listed = await readPublicationYears({}, cursor);
-      if (!listed.ok) break;
-      for (const row of listed.data.items) {
-        if ((idOf(row.id) ?? row.id) === want) years.add(row.year);
-      }
-      if (years.size || !listed.data.nextCursor) break;
-      cursor = listed.data.nextCursor;
-    }
-    return catalogueYears([], [...years]);
-  } catch (error) {
-    console.error('Publication year read failed', error);
-    return [];
-  }
-}
-
 /** A year the address names, or null when it names none. A value outside 1..9999 is dropped, not guessed. */
 export function catalogueYearParam(value: string | string[] | undefined): number | null {
   const raw = Array.isArray(value) ? value[0] : value;
