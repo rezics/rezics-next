@@ -155,6 +155,15 @@ allowance for those commands and project turnover (up to 120 s cleanup and
 free slots retain their 480-second tier budget. These test deadlines leave
 the existing 600-second fixture preparation ceiling unchanged.
 
+[`tierTestTimeoutMs`](../../scripts/qa/core.ts) is the per-test timeout passed
+to `bun test`, beside those wall-clock budgets. Unit stays at 5 seconds.
+Owner is 30 seconds, and integration and fault/recovery are 60 seconds.
+Owner, integration, and fault/recovery start PostgreSQL, Fuseki, or a stack,
+and on a loaded host that startup alone exceeds bun's 5-second default. A
+case that sets its own timeout, or calls `setDefaultTimeout`, keeps that
+value. Cost and latency claims stay in the cost contracts and budget
+assertions.
+
 Other scale probes can select disk storage explicitly:
 
 ```sh

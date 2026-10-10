@@ -30,6 +30,30 @@ import { defaultStopGraceMs, terminateProcessGroup, terminateProcessGroupSync } 
 
 export type Tier = 'static' | 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
 export const implementedTiers: Tier[] = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
+
+/** Per-test `bun test --timeout`, beside each tier's wall-clock budget.
+ * Unit keeps 5 seconds. Owner, integration, and fault/recovery start PostgreSQL,
+ * Fuseki, or a stack; on a loaded host that startup alone exceeds 5 seconds.
+ * A case that sets its own timeout, or calls `setDefaultTimeout`, still wins:
+ * bun applies those after this flag. Cost and latency claims stay in the cost
+ * contracts and budget assertions. */
+export const tierTestTimeoutMs = {
+  unit: 5_000,
+  owner: 30_000,
+  integration: 60_000,
+  'fault/recovery': 60_000,
+} as const;
+export type TierTestTimeout = keyof typeof tierTestTimeoutMs;
+
+export function tierTestTimeoutArg(tier: TierTestTimeout): string {
+  return `--timeout=${tierTestTimeoutMs[tier]}`;
+}
+
+/** `bun test` arguments for one tier: its per-test timeout, then the caller's paths and flags. */
+export function tierBunTestArgs(tier: TierTestTimeout, args: readonly string[]): string[] {
+  return ['test', tierTestTimeoutArg(tier), ...args];
+}
+
 export const backendTiers: Tier[] = implementedTiers.filter(tier => tier !== 'e2e');
 export const uncoveredTiers: Tier[] = [];
 export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }

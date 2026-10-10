@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
-import { formatTierRunLine, goalSlotDirectory, implementedTiers, parseArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
+import { formatTierRunLine, goalSlotDirectory, implementedTiers, parseArgs, tierBunTestArgs, tierTestTimeoutArg, tierTestTimeoutMs, trackCommandProcess, untrackCommandProcess, type Tier, type TierTestTimeout } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -41,7 +41,27 @@ function combinedQaCommand(groups: TestGroup[]): [string, string[]] | undefined 
     ...group.files.flatMap(file => ['--file', file])])]];
 }
 
-export function selectTestGroups(args: string[]): TestGroup[] {
+/** The unit gate names the owner tier's per-test timeout on `task test`.
+ * The QA CLI passes that same table entry to bun, so a matching flag is
+ * checked here and left off the hosted command. */
+function assertPassedTierTimeout(groups: readonly TestGroup[], timeout: string): void {
+  const tiers = [...new Set(groups.map(group => group.tier))];
+  const tier = tiers.length === 1 ? tiers[0] : undefined;
+  if (!tier || !Object.hasOwn(tierTestTimeoutMs, tier) || timeout !== tierTestTimeoutArg(tier as TierTestTimeout)) {
+    throw new Error('--timeout must be the tier per-test timeout');
+  }
+}
+
+export function selectTestGroups(input: string[]): TestGroup[] {
+  const timeouts = input.filter(arg => /^--timeout=\d+$/.test(arg));
+  if (timeouts.length > 1) throw new Error('A tier passes one per-test --timeout');
+  const timeoutArg = timeouts[0];
+  const groups = selectParsedTestGroups(timeoutArg ? input.filter(arg => arg !== timeoutArg) : input);
+  if (timeoutArg) assertPassedTierTimeout(groups, timeoutArg);
+  return groups;
+}
+
+function selectParsedTestGroups(args: string[]): TestGroup[] {
   // Explicit tier runs still pass through goalctl's QA slot.
   if (args[0] === '--tier') {
     parseArgs(args);
@@ -77,7 +97,8 @@ export function selectTestGroups(args: string[]): TestGroup[] {
     return name !== undefined && hosted.has(name);
   })) {
     const allUnit = files.every(file => tier(file) === 'unit');
-    return [{ ...(allUnit ? { tier: 'unit' as const } : {}), files, command: ['bun', ['test', ...args]] }];
+    return [{ ...(allUnit ? { tier: 'unit' as const } : {}), files,
+      command: ['bun', allUnit ? tierBunTestArgs('unit', args) : ['test', ...args]] }];
   }
   const loose = files.filter(file => !tier(file));
   const groups: TestGroup[] = [];
@@ -86,7 +107,7 @@ export function selectTestGroups(args: string[]): TestGroup[] {
     const tierFiles = files.filter(file => tier(file) === name);
     if (!tierFiles.length) continue;
     groups.push({ tier: name, files: tierFiles,
-      command: name === 'unit' ? ['bun', ['test', ...tierFiles]] : hostedCommand(name, tierFiles) });
+      command: name === 'unit' ? ['bun', tierBunTestArgs('unit', tierFiles)] : hostedCommand(name, tierFiles) });
   }
   const other = args.filter(arg => !testFile.test(arg));
   if (other.length) {
@@ -151,7 +172,7 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
           ...files.flatMap((file) => ['--file', file])]] });
       }
       if (files.length) commands.push({ label: `unit (${files.length} files)`,
-        command: ['bun', ['test', ...files.map(file => `./${file}`)]] });
+        command: ['bun', tierBunTestArgs('unit', files.map(file => `./${file}`))] });
       continue;
     }
     if (widened) {

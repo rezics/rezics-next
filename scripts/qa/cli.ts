@@ -38,6 +38,7 @@ import {
   sourceIdentity,
   splitTestArgs,
   tierArtifactName,
+  tierBunTestArgs,
   uncoveredTiers,
   writeSummary,
   withQaMemory,
@@ -603,8 +604,11 @@ async function runShardWork(
     const batch = batches[index]!;
     const batchFile =
       batches.length === 1 ? outfile : outfile.replace(/\.xml$/, `-${index + 1}.xml`);
+    const batchArgs = tierBunTestArgs(tier, [
+      ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`,
+    ]);
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
-      root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
+      root, 'bun', batchArgs,
       Math.max(1, budget - activeTestMs()), environment, onLine, { runDeadline });
     const campaign = campaignQualificationShard(batch);
     const commandStartedAt = Date.now();
@@ -618,7 +622,7 @@ async function runShardWork(
       return campaignPhaseDeadline(sample, evidenceWatch.observe(campaignEvidenceRead(projectRunId, sample)));
     };
     const result = campaign
-      ? await commandAsync(root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
+      ? await commandAsync(root, 'bun', batchArgs,
         Math.max(1, budget - activeTestMs()), testEnvironment(), noteMemory,
         { runDeadline, phaseDeadline })
       : await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
@@ -885,13 +889,12 @@ try {
       await runBunTier(
         tier,
         'bun',
-        [
-          'test',
+        tierBunTestArgs(tier, [
           ...testArgs(tier, selection, chosenFor(tier)),
           ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
           '--reporter=junit',
           `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
-        ],
+        ]),
         tier === 'owner' ? ownerTierBudgetMs() : 180_000,
       );
     if (tier === 'model') {

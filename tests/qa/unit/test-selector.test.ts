@@ -92,7 +92,7 @@ test('ordinary explicit tests keep their existing dispatch without Storybook adm
 
 test('QA09: explicit unit paths still run without a service stack', () => {
   expect(selectTestCommand(['services/main/tests/command.test.ts', '-t', 'profile'])).toEqual([
-    'bun', ['test', 'services/main/tests/command.test.ts', '-t', 'profile'],
+    'bun', ['test', '--timeout=5000', 'services/main/tests/command.test.ts', '-t', 'profile'],
   ]);
 });
 

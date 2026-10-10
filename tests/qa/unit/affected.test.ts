@@ -137,7 +137,7 @@ test('a widened unit tier still runs affected unit tests outside the registered 
   expect(unit![1].slice(0, 3)).toEqual(['scripts/qa/cli.ts', '--tier', 'unit']);
   expect(unit![1]).not.toContain(nativeUnionTest);
   expect(unit![1]).not.toContain(erasureCampaignNativeTest);
-  expect(commands).toContainEqual(['bun', ['test', `./${outside}`]]);
+  expect(commands).toContainEqual(['bun', ['test', '--timeout=5000', `./${outside}`]]);
 });
 
 test('data files, deleted modules and spawned scripts reach tests without import edges', () => {

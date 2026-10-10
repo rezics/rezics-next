@@ -9,7 +9,7 @@ import { devStackStopArgs, rememberDevStack, startedDevStacks, stopDevSession }
   from '../../../scripts/dev/stack-session.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount } from '../../../scripts/qa/browser-budget.ts';
 import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
-import { acquireQaSlots, commandAsync, selfManagedFaultFiles } from '../../../scripts/qa/core.ts';
+import { acquireQaSlots, commandAsync, selfManagedFaultFiles, tierBunTestArgs } from '../../../scripts/qa/core.ts';
 import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
 import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
@@ -683,3 +683,54 @@ test('goalctl test routes explicit stories and tier runs to their owning runner'
   expect(selectTestCommand(['--tier', 'unit'])).toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'unit']]);
   expect(() => selectTestCommand(['--tier', 'made-up'])).toThrow();
 });
+
+test('each tier bun test command carries that tier timeout', () => {
+  expect(tierBunTestArgs('unit', ['tests/qa/unit'])).toEqual(['test', '--timeout=5000', 'tests/qa/unit']);
+  expect(tierBunTestArgs('owner', ['scripts/dev/seed/api.test.ts'])).toEqual([
+    'test', '--timeout=30000', 'scripts/dev/seed/api.test.ts']);
+  expect(tierBunTestArgs('integration', ['tests/qa/integration/shared-stack.test.ts'])).toEqual([
+    'test', '--timeout=60000', 'tests/qa/integration/shared-stack.test.ts']);
+  expect(tierBunTestArgs('fault/recovery', ['tests/qa/fault-recovery/lost-response.test.ts'])).toEqual([
+    'test', '--timeout=60000', 'tests/qa/fault-recovery/lost-response.test.ts']);
+  const cli = readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8');
+  expect(cli.match(/tierBunTestArgs\(/g)).toHaveLength(2);
+  expect(selectTestCommand(['--timeout=30000', 'scripts/dev/seed/api.test.ts'])).toEqual([
+    'bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file', 'scripts/dev/seed/api.test.ts']]);
+  expect(() => selectTestCommand(['--timeout=5000', 'scripts/dev/seed/api.test.ts']))
+    .toThrow('--timeout must be the tier per-test timeout');
+});
+
+test('a case sleeping 7s passes in owner and fails in unit', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'tier-test-timeout-'));
+  const plain = join(directory, 'plain.test.ts');
+  const explicit = join(directory, 'explicit.test.ts');
+  const raised = join(directory, 'raised.test.ts');
+  writeFileSync(plain, `import { test } from 'bun:test';\ntest('sleeps', async () => { await Bun.sleep(7_000); });\n`);
+  writeFileSync(explicit, `import { test } from 'bun:test';\ntest('sleeps', async () => { await Bun.sleep(7_000); }, 1_000);\n`);
+  writeFileSync(raised, `import { setDefaultTimeout, test } from 'bun:test';\nsetDefaultTimeout(20_000);\ntest('sleeps', async () => { await Bun.sleep(7_000); });\n`);
+  const env = { ...process.env };
+  delete env.AGENT;
+  delete env.CLAUDECODE;
+  delete env.REPL_ID;
+  const run = async (tier: 'unit' | 'owner', file: string) => {
+    const child = Bun.spawn([process.execPath, ...tierBunTestArgs(tier, [file])], {
+      cwd: root, env, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [stdout, stderr] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(),
+    ]);
+    return { status: await child.exited, output: `${stdout}\n${stderr}` };
+  };
+  try {
+    const [owner, unit, explicitOwner, raisedUnit] = await Promise.all([
+      run('owner', plain), run('unit', plain), run('owner', explicit), run('unit', raised),
+    ]);
+    expect(owner.status).toBe(0);
+    expect(unit.status).not.toBe(0);
+    expect(unit.output).toContain('timed out after 5000ms');
+    // A case timeout and setDefaultTimeout keep their own values.
+    expect(explicitOwner.status).not.toBe(0);
+    expect(explicitOwner.output).toContain('timed out after 1000ms');
+    expect(raisedUnit.status).toBe(0);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}, 45_000);

@@ -6,6 +6,7 @@ import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
+import { tierTestTimeoutArg } from '../qa/core.ts';
 import { formatPlan, nativeUnionTest, planAffected, type AffectedPlan } from '../qa/affected.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
@@ -3099,7 +3100,7 @@ process.exit(0);
     expect(ownerTierBudgetMs({ REZICS_QA_OWNER_BUDGET_MS: '970000' })).toBe(970_000);
     expect(() => ownerTierBudgetMs({ REZICS_QA_OWNER_BUDGET_MS: '600s' })).toThrow('positive integer');
     const stopped = await withOwnerStub('budget', 970_000);
-    expect(stopped.args).toEqual(['test', '--', 'slow.test.ts', 'later.test.ts']);
+    expect(stopped.args).toEqual(['test', '--', tierTestTimeoutArg('owner'), 'slow.test.ts', 'later.test.ts']);
     expect(Number(stopped.budget)).toBeGreaterThan(900_000);
     expect(Number(stopped.budget)).toBeLessThanOrEqual(970_000);
     // The running file is retried alone. The file with no header runs again with the rest of the shard.
@@ -3110,6 +3111,38 @@ process.exit(0);
     expect(failed.result.done).toBe(true);
     expect(failed.result.budgetExpired).toBeUndefined();
     expect(failed.result.failing).toEqual(['slow.test.ts']);
+  }, 20_000);
+
+  test('the unit gate passes the owner timeout', async () => {
+    const owner = await withOwnerStub('fail', 30_000);
+    expect(owner.args).toEqual(['test', '--', tierTestTimeoutArg('owner'), 'slow.test.ts', 'later.test.ts']);
+    const directory = mkdtempSync(join(tmpdir(), 'goalctl-unit-timeout-'));
+    const bin = join(directory, 'bin');
+    const log = join(directory, 'stub.log');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'task'), `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.GOAL_STUB_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+process.exit(0);
+`);
+    writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
+    chmodSync(join(bin, 'task'), 0o755);
+    chmodSync(join(bin, 'docker'), 0o755);
+    const previous = process.env.PATH;
+    process.env.PATH = `${bin}:${previous ?? ''}`;
+    process.env.GOAL_STUB_LOG = log;
+    try {
+      const result = await runUnitGate(directory, ['plain.test.ts'], 1);
+      expect(result.done).toBe(true);
+      const args = JSON.parse(readFileSync(log, 'utf8')) as string[];
+      expect(args[0]).toBe('goal:unit-files');
+      expect(args).toContain(tierTestTimeoutArg('unit'));
+    } finally {
+      if (previous === undefined) delete process.env.PATH;
+      else process.env.PATH = previous;
+      delete process.env.GOAL_STUB_LOG;
+      rmSync(directory, { recursive: true, force: true });
+    }
   }, 20_000);
 
   test('an outer kill names the owner file that was running', async () => {
