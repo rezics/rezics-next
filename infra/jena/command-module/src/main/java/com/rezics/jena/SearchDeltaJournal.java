@@ -1056,11 +1056,12 @@ final class SearchDeltaJournal {
     }
     private static long verifyContentSubject(DatasetGraph data, TextIndexLucene lucene, String subject) {
         var current = FilteredGraphTextIndex.contentBodyMetadataSource(data, subject);
-        if (current == null) throw new IllegalStateException("public Content authority is unavailable");
-        // Receipts admitted before the native source pin have no retained pin.
-        // Their stored body still has to equal RDF. A pin that is present and
-        // differs, or a body that differs, stays a refusal.
-        if (legacyUnpinnedContentReceipt(data, subject)) {
+        // A plain Jena body document from before the source pin has no rank
+        // context and no external text key. Its stored body still has to equal
+        // RDF. A rank-decorated or source-pinned document stays on the strict
+        // check, which refuses a missing or different pin.
+        if (current != null && plainStoredContentDocument(lucene, subject)
+            && legacyUnpinnedContentReceipt(data, subject)) {
             String recorded = latestContentSource(data, uri(subject));
             String recordedIdentity = latestContentBodyDigest(data, uri(subject));
             String identity = FilteredGraphTextIndex.contentBodyIdentity(data, subject);
@@ -1069,12 +1070,29 @@ final class SearchDeltaJournal {
                 throw new IllegalStateException("public Content differs from recorded delivery");
             return verifyLegacyContentBody(data, lucene, subject);
         }
-        String identity = currentContentBodyDigest(data, subject);
+        String identity = current == null ? "" : currentContentBodyDigest(data, subject);
         String source = latestContentSource(data, uri(subject)), body = latestContentBodyDigest(data, uri(subject));
-        if (source != null && !source.equals(current.encoded())
+        if (source != null && !source.equals(current == null ? "" : current.encoded())
             || body != null && !body.equals(identity))
             throw new IllegalStateException("public Content differs from recorded delivery");
         return FilteredGraphTextIndex.verifyContentBody(data, lucene, subject, identity, true);
+    }
+    /** Historical body rows store uri, graph, body, language and uid only. */
+    private static boolean plainStoredContentDocument(TextIndexLucene lucene, String subject) {
+        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            BooleanQuery exact = new BooleanQuery.Builder()
+                .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
+                .add(new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+                .add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.FILTER)
+                .build();
+            var hits = searcher.search(exact, 2);
+            if (hits.totalHits.value() != 1) return false;
+            Document stored = searcher.storedFields().document(hits.scoreDocs[0].doc);
+            return stored.get(FilteredGraphTextIndex.RANK_CONTEXT) == null
+                && stored.get(FilteredGraphTextIndex.RANK_GROUP) == null
+                && stored.get("externalTextKey") == null;
+        } catch (IOException unavailable) { return false; }
     }
     /** True only for one successful receipt whose metadata matches and which never received either native pin. */
     private static boolean legacyUnpinnedContentReceipt(DatasetGraph data, String unit) {

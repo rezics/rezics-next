@@ -21,9 +21,11 @@ RDF, a public MatchUnit absent from the index, and an index population that
 differs from the public MatchUnit count. I/O and text-index failures use the
 exception's short message, or the exception class when that message is long.
 A Content receipt written before the native source pin has no
-`searchDeltaContentSource`. Startup still qualifies that unit when its stored
-body equals the RDF body. A pin that differs from the current authority, or a
-stored body that differs from RDF, stays closed.
+`searchDeltaContentSource`. Startup still qualifies that unit when its Lucene
+document is the plain body row (no rank context and no external text key) and
+the stored body equals the RDF body. A rank-decorated document, a pin that
+differs from the current authority, or a stored body that differs from RDF
+stays closed.
 `journal invalidated` names the caller that dropped the in-memory baseline
 (`qualify`, `fenceBeforeWrite`, `qualifiedProof`, or the writer that withdrew
 it after a commit).
