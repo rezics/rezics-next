@@ -708,7 +708,7 @@ test('each tier bun test command carries that tier timeout', () => {
   expect(owner).toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file',
     'scripts/dev/seed/api.test.ts', '--timeout=60000']]);
   expect(parseArgs(owner[1].slice(1)).timeoutArgs).toEqual(['--timeout=60000']);
-  expect(tierBunTestArgs('owner', ['scripts/dev/seed/api.test.ts'], ['--timeout=60000'])).toEqual([
+  expect(tierBunTestArgs('owner', ['scripts/dev/seed/api.test.ts', '--timeout=60000'])).toEqual([
     'test', '--timeout=60000', 'scripts/dev/seed/api.test.ts']);
   const spaced = selectTestCommand(['scripts/dev/seed/api.test.ts', '--timeout', '45000'])[1];
   expect(spaced.slice(-2)).toEqual(['--timeout', '45000']);

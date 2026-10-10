@@ -49,35 +49,28 @@ export function tierTestTimeoutArg(tier: TierTestTimeout): string {
   return `--timeout=${tierTestTimeoutMs[tier]}`;
 }
 
-function withoutBunTimeout(args: readonly string[]): string[] {
+/** One caller `--timeout`, in either bun form. Absent when the tier default should apply. */
+export function splitCallerTimeout(args: readonly string[]): { timeout?: string[]; rest: string[] } {
   const rest: string[] = [];
+  let timeout: string[] | undefined;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    if (arg === '--timeout') { i++; continue; }
-    if (arg.startsWith('--timeout=')) continue;
-    rest.push(arg);
+    if (arg !== '--timeout' && !arg.startsWith('--timeout=')) { rest.push(arg); continue; }
+    if (timeout) throw new Error('Pass one --timeout');
+    if (arg === '--timeout') {
+      const value = args[++i];
+      if (value === undefined || !/^\d+$/.test(value)) throw new Error('--timeout needs a millisecond value');
+      timeout = ['--timeout', value];
+    } else if (!/^--timeout=\d+$/.test(arg)) throw new Error('--timeout needs a millisecond value');
+    else timeout = [arg];
   }
-  return rest;
+  return { ...(timeout ? { timeout } : {}), rest };
 }
 
-/** `bun test` arguments. A caller `--timeout` is the one flag; the tier default is added only when none was given. */
-export function tierBunTestArgs(tier: TierTestTimeout, args: readonly string[], callerTimeout: readonly string[] = []): string[] {
-  if (callerTimeout.length) return ['test', ...callerTimeout, ...withoutBunTimeout(args)];
-  if (args.some(arg => arg === '--timeout' || arg.startsWith('--timeout='))) return ['test', ...args];
-  return ['test', tierTestTimeoutArg(tier), ...args];
-}
-
-function takeTimeoutArg(args: readonly string[], index: number, already: boolean): { timeout: string[]; next: number } | undefined {
-  const arg = args[index];
-  if (arg !== '--timeout' && !arg?.startsWith('--timeout=')) return undefined;
-  if (already) throw new Error('Pass one --timeout');
-  if (arg === '--timeout') {
-    const value = args[index + 1];
-    if (value === undefined || !/^\d+$/.test(value)) throw new Error('--timeout needs a millisecond value');
-    return { timeout: ['--timeout', value], next: index + 2 };
-  }
-  if (!/^--timeout=\d+$/.test(arg)) throw new Error('--timeout needs a millisecond value');
-  return { timeout: [arg], next: index + 1 };
+/** `bun test` arguments from a tier and the caller's args. The caller's `--timeout` is the one flag; the tier default is added only when none was given. */
+export function tierBunTestArgs(tier: TierTestTimeout, args: readonly string[]): string[] {
+  const { timeout, rest } = splitCallerTimeout(args);
+  return ['test', ...(timeout ?? [tierTestTimeoutArg(tier)]), ...rest];
 }
 
 export const backendTiers: Tier[] = implementedTiers.filter(tier => tier !== 'e2e');
@@ -108,10 +101,12 @@ function tierFlagCount(args: string[]): number {
 function parseTierGroups(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
   files?: string[]; id?: string; backend?: boolean; storybook?: boolean; groups?: QaTierSelection[];
   timeoutArgs?: string[] } {
+  const split = splitCallerTimeout(args);
+  args = split.rest;
+  const timeoutArgs = split.timeout;
   let keep = false;
   let record = false;
   let backend = false;
-  let timeoutArgs: string[] | undefined;
   let onlyFailed: string | undefined;
   const groups: QaTierSelection[] = [];
   let current: QaTierSelection | undefined;
@@ -149,8 +144,6 @@ function parseTierGroups(args: string[]): { tier?: Tier; onlyFailed?: string; ke
     if (arg === '--record') { record = true; continue; }
     if (arg === '--backend') { backend = true; continue; }
     if (arg === '--storybook') throw new Error('--storybook requires the e2e tier');
-    const timeout = takeTimeoutArg(args, i, timeoutArgs !== undefined);
-    if (timeout) { timeoutArgs = timeout.timeout; i = timeout.next - 1; continue; }
     throw new Error(`Unsupported QA option: ${arg}`);
   }
   groups.sort((a, b) => implementedTiers.indexOf(a.tier) - implementedTiers.indexOf(b.tier));
@@ -165,13 +158,15 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
   /** Caller `--timeout`, passed through to bun instead of the tier default. */
   timeoutArgs?: string[] } {
   if (tierFlagCount(args) > 1) return parseTierGroups(args);
+  const split = splitCallerTimeout(args);
+  args = split.rest;
+  const timeoutArgs = split.timeout;
   let tier: Tier | undefined;
   let onlyFailed: string | undefined;
   let keep = false;
   let record = false;
   let backend = false;
   let storybook = false;
-  let timeoutArgs: string[] | undefined;
   const files: string[] = [];
   let id: string | undefined;
   for (let i = 0; i < args.length; i++) {
@@ -183,12 +178,7 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
     else if (args[i] === '--record') record = true;
     else if (args[i] === '--backend') backend = true;
     else if (args[i] === '--storybook') storybook = true;
-    else {
-      const timeout = takeTimeoutArg(args, i, timeoutArgs !== undefined);
-      if (!timeout) throw new Error(`Unsupported QA option: ${args[i]}`);
-      timeoutArgs = timeout.timeout;
-      i = timeout.next - 1;
-    }
+    else throw new Error(`Unsupported QA option: ${args[i]}`);
   }
   if (record && (tier || onlyFailed || files.length || id)) throw new Error('--record requires a full run');
   if (backend && tier === 'e2e') throw new Error('The backend scope has no e2e tier');

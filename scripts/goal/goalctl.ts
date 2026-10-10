@@ -15,7 +15,7 @@ import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcqu
   updateDirectoryLeaseNote, type AcquiredDirectoryLease, type DirectoryLeaseRecord } from '../qa/process/lease.ts';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
-import { qaArtifactDirectory, tierTestTimeoutArg } from '../qa/core.ts';
+import { qaArtifactDirectory, tierBunTestArgs } from '../qa/core.ts';
 import { parseAffectedArgs, testCommands } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
@@ -3358,10 +3358,12 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   mkdirSync(join(cwd, '.temp'), { recursive: true });
   const junitFile = invocation ? undefined : join(cwd, '.temp', 'unit-gate-junit', `${process.pid}-${randomUUID()}.xml`);
   if (junitFile) mkdirSync(dirname(junitFile), { recursive: true });
-  const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--', tierTestTimeoutArg('unit'),
-    `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
-    ...junitFile ? ['--reporter=junit', `--reporter-outfile=${junitFile}`] : [],
-    ...files.map(file => `./${file}`)], {
+  const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--',
+    ...tierBunTestArgs('unit', [
+      `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+      ...junitFile ? ['--reporter=junit', `--reporter-outfile=${junitFile}`] : [],
+      ...files.map(file => `./${file}`),
+    ]).slice(1)], {
     cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
   const stdout: string[] = [];
@@ -3467,7 +3469,7 @@ export function runOwnerShard(cwd: string, files: readonly string[], deadline: n
   env.REZICS_QA_OWNER_BUDGET_MS = String(budgetMs);
   env.REZICS_QA_PROGRESS_FILE = progressFile;
   return runUnitShard(cwd, files, deadline, {
-    args: ['test', '--', tierTestTimeoutArg('owner'), ...files], label: 'test', env, progressFile,
+    args: ['test', '--', ...tierBunTestArgs('owner', files).slice(1)], label: 'test', env, progressFile,
   });
 }
 
