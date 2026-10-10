@@ -1,6 +1,6 @@
 # State
 
-Checkpoint 2026-10-11 ~01:00 UTC (Asia/Taipei 09:00). Manager `kernel-sonnet` (Claude; tmux `goal-kernel`), which took over from the Sol manager on 2026-10-08 when both Codex accounts ran out. The Goal is active; C4-C6 and the completion criteria are not proven. The landed pieces below are component proofs, not whole contracts.
+Checkpoint 2026-10-10 17:10 UTC, paused for the Cursor quota (Program's rule: no dispatch, no resume, Codex wrap-up allowance is Program's). Manager `kernel-sonnet` (Claude; tmux `goal-kernel`), which took over from the Sol manager on 2026-10-08 when both Codex accounts ran out. The Goal is active; C4-C6 and the completion criteria are not proven. The landed pieces below are component proofs, not whole contracts.
 
 ## Routing
 
@@ -18,12 +18,22 @@ Workers are Cursor only, at most 4 live. Cursor sessions drop their connection o
 - No command seals an idempotency key on a current-visibility outcome (G-1623): the audit table and a source-scan guard are in `services/main/tests/seal-on-visibility.test.ts`. Reference shape: visibility checked before the write answers 404 with nothing written; a target lost inside the write answers 503 unsealed. `TargetUnavailable` stays the hidden==absent 404.
 - Erasure of every revision kind, rights T1, conversions, discovery and meter work (see the git history).
 
-## Next, in order
+## Paused tasks
 
-1. G-1593 provider identity (running), then G-1618 Claims are Statements (no compatibility layer; `/v1/claims` routes retired; assessment export gets the Statement shape).
-2. Field-disposition projector from `source.field_disposition`, targeting Statements (brief written after G-1618 settles).
-3. G-1603 year template `concept` parameter (native, depends on G-1593), G-1591 explicit public read `mode`, G-1582 discovery never-produced reads, G-1615 maintainer move (waits for Launch's realm-management change).
-4. One `task dev:refresh -- --wait` for pin `ce9c77bee5cd` (asked of Program).
+No kernel worktree is dirty and no task is half-done. Next step for each, when quota returns:
+
+| Task | What exists | What is missing | Next step |
+| --- | --- | --- | --- |
+| G-1593 provider identity | brief only; attempt 1 exited at the quota error with a clean worktree | all of it: observation-plus-allowlist lookup in `source/*`, tests, proof | `resume G-1593 --fresh`; native-free, expect one image-free landing |
+| G-1618 Claims are Statements | brief; depends on G-1593 | all of it | dispatch after G-1593 lands; no compatibility layer, `/v1/claims` retired |
+| field-disposition projector | decision only (targets Statements, from `source.field_disposition`) | the brief | write after G-1618 settles |
+| G-1603 year template `concept` | brief; native; depends on G-1593 | all; needs a pinned image build | after G-1593 |
+| G-1591 explicit public `mode` | brief (claims `query/**`) | all | after G-1618 (same files) |
+| G-1582 discovery never-produced reads | brief; depends on landed G-1579 | all | any time |
+| G-1615 maintainer move | brief | waits for Launch's change to `realm-management.ts` | after it lands |
+| G-1300 | old exited task; needs the original G847 integration | Launch wires production Statement seek | close when that lands |
+
+No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. One request to Program is open: `task dev:refresh -- --wait` for pin `ce9c77bee5cd`, when the stack is idle.
 
 ## Open
 
