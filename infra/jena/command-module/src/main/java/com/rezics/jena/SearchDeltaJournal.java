@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.text.DatasetGraphText;
@@ -79,7 +82,35 @@ final class SearchDeltaJournal {
         Recovery(DatasetGraph data) { dataset = new java.lang.ref.WeakReference<>(data); }
     }
 
+    private static final Logger LOG = LoggerFactory.getLogger(SearchDeltaJournal.class);
+    /** Same line SLF4J records. Tests set this; production leaves it null. */
+    static volatile Consumer<String> logged;
+
+    private static void record(String line, boolean warning) {
+        if (warning) LOG.warn(line); else LOG.info(line);
+        Consumer<String> sink = logged;
+        if (sink != null) sink.accept(line);
+    }
+    private static void auditFailed(String reason, String subject) {
+        // Reasons are fixed phrases. A subject, when present, is an IRI — never a stored field or body.
+        record(subject == null ? "startup-audit failed: " + reason
+            : "startup-audit failed: " + reason + " [" + subject + "]", true);
+    }
+    private static String auditReason(Throwable failure) {
+        String message = failure.getMessage();
+        if (message == null || message.isBlank()) return failure.getClass().getSimpleName();
+        String flat = message.replace('\r', ' ').replace('\n', ' ').trim();
+        return flat.length() > 160 ? failure.getClass().getSimpleName() : flat;
+    }
+    private static Qualification refuse(String reason, String subject) {
+        auditFailed(reason, subject);
+        return null;
+    }
     static void invalidate(DatasetGraph data) {
+        invalidate(data, "qualification withdrawn", callerLabel());
+    }
+    static void invalidate(DatasetGraph data, String reason, String caller) {
+        record("journal invalidated: " + reason + " [" + caller + "]", true);
         synchronized (qualified) { qualified.remove(data); }
         if (lucene(data) == null) return;
         synchronized (recovering) {
@@ -89,6 +120,23 @@ final class SearchDeltaJournal {
             recovering.put(data, recovery);
             schedule(recovery);
         }
+    }
+    /** First frame outside this class, so inlining cannot shift the caller name. */
+    private static String callerLabel() {
+        String ours = SearchDeltaJournal.class.getName();
+        return StackWalker.getInstance().walk(frames -> frames
+            .filter(frame -> {
+                String name = frame.getClassName();
+                return !name.equals(ours) && !name.startsWith(ours + "$");
+            })
+            .findFirst()
+            .map(SearchDeltaJournal::frameLabel)
+            .orElse("invalidate"));
+    }
+    private static String frameLabel(StackWalker.StackFrame frame) {
+        String type = frame.getClassName();
+        int dot = type.lastIndexOf('.');
+        return (dot < 0 ? type : type.substring(dot + 1)) + "." + frame.getMethodName();
     }
 
     private static void schedule(Recovery recovery) {
@@ -139,7 +187,8 @@ final class SearchDeltaJournal {
         try {
             if (nativeScope) PublicNameProjection.invalidateWorkScopeQualification(data);
             CommandInvariant.Control position = CommandInvariant.readControl(data);
-            if (position == null || position.textGeneration() == null) return false;
+            if (position == null) { auditFailed("control position missing", null); return false; }
+            if (position.textGeneration() == null) { auditFailed("control has no text generation", null); return false; }
             if (!data.contains(GRAPH, STATE, ORDINAL, Node.ANY)) initialize(data);
             CommitHalt.commit(data);
         } finally { data.end(); }
@@ -238,8 +287,11 @@ final class SearchDeltaJournal {
         synchronized (qualified) { baseline = qualified.get(data); }
         if (baseline == null) return;
         try (DirectoryReader reader = DirectoryReader.open(lucene(data).getDirectory())) {
-            if (reader.getIndexCommit().getGeneration() != baseline.luceneGeneration()) invalidate(data);
-        } catch (IOException | RuntimeException unavailable) { invalidate(data); }
+            if (reader.getIndexCommit().getGeneration() != baseline.luceneGeneration())
+                invalidate(data, "lucene generation drifted", "fenceBeforeWrite");
+        } catch (IOException | RuntimeException unavailable) {
+            invalidate(data, "lucene reader unavailable", "fenceBeforeWrite");
+        }
     }
 
     /** Startup/rebuild work, never a query-time population admission limit. The
@@ -249,8 +301,15 @@ final class SearchDeltaJournal {
         synchronized (qualified) { qualified.remove(data); }
         TextIndexLucene index = lucene(data);
         Qualification baseline = auditGeneration(data, index);
-        if (baseline == null) { invalidate(data); return false; }
+        if (baseline == null) {
+            invalidate(data, "startup audit returned no baseline", "qualify");
+            return false;
+        }
         synchronized (qualified) { qualified.put(data, baseline); }
+        record("search journal baseline installed: epoch=" + baseline.epoch()
+            + " generation=" + baseline.generation()
+            + " population=" + baseline.population()
+            + " luceneGeneration=" + baseline.luceneGeneration(), false);
         admitDeferred(data);
         return true;
     }
@@ -264,10 +323,14 @@ final class SearchDeltaJournal {
         if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
         try {
             CommandInvariant.Control position = CommandInvariant.readControl(data);
-            if (position == null || position.textGeneration() == null || lucene == null || position.held()
-                || requireAnchor && !data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor")))
-                return null;
-            if (!CanonicalPolicy.auditRealmOwners(data)) return null;
+            if (position == null) return refuse("control position missing", null);
+            if (position.textGeneration() == null) return refuse("control has no text generation", null);
+            if (lucene == null) return refuse("lucene index unavailable", null);
+            if (position.held()) return refuse("control position held", null);
+            if (requireAnchor && !data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor")))
+                return refuse("public anchor absent", null);
+            CanonicalPolicy.RealmOwnerRefusal realm = CanonicalPolicy.auditRealmOwnerRefusal(data);
+            if (realm != null) return refuse(realm.reason(), realm.subject());
             try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
                 IndexSearcher searcher = new IndexSearcher(reader);
                 boolean rankMetadata = org.apache.lucene.index.FieldInfos.getMergedFieldInfos(reader).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null;
@@ -284,25 +347,31 @@ final class SearchDeltaJournal {
                         if (rankMetadata && stored.getValues("publicTitle").length != 0 && subject != null
                             && !subject.startsWith(PublicNameProjection.PREFIX) && !subject.startsWith(PublicNameProjection.DIRECTORY)
                             && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, stored))
-                            throw new IllegalStateException("public title rank metadata differs from RDF");
+                            throw new AuditRefusal("public title rank metadata differs from RDF", subject);
                         if (stored.getValues("body").length == 0) return;
                         if (subject != null && !CanonicalPolicy.realmUnitOwnerValid(data, uri(subject)))
-                            throw new IllegalStateException("public body has a noncanonical Realm owner");
+                            throw new AuditRefusal("public body has a noncanonical Realm owner", subject);
                         if (subject == null || !seen.add(subject))
-                            throw new IllegalStateException("duplicate public body document");
+                            throw new AuditRefusal("duplicate public body document", subject);
                         if (contentUnit(subject)) {
-                            if (verifyContentSubject(data, lucene, subject) != reader.getIndexCommit().getGeneration())
-                                throw new IllegalStateException("public Content reader changed during audit");
+                            try {
+                                if (verifyContentSubject(data, lucene, subject) != reader.getIndexCommit().getGeneration())
+                                    throw new AuditRefusal("public Content reader changed during audit", subject);
+                            } catch (AuditRefusal refusal) {
+                                throw refusal;
+                            } catch (RuntimeException mismatch) {
+                                throw new AuditRefusal(auditReason(mismatch), subject);
+                            }
                         } else {
                             Node unit = uri(subject), body = one(data, PUBLIC, unit, BODY);
                             if (!data.contains(PUBLIC, unit, RDF.type.asNode(), MATCH_UNIT)
                                 || body == null || !body.isLiteral() || stored.getValues("body").length != 1
                                 || !body.getLiteralLexicalForm().equals(stored.get("body"))
                                 || !body.getLiteralLanguage().equalsIgnoreCase(stored.get("lang") == null ? "" : stored.get("lang")))
-                                throw new IllegalStateException("public index differs from RDF");
+                                throw new AuditRefusal("public index differs from RDF", subject);
                         }
                         if (rankMetadata && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, stored))
-                            throw new IllegalStateException("public rank metadata differs from RDF");
+                            throw new AuditRefusal("public rank metadata differs from RDF", subject);
                     }
                 });
                 long population = 0;
@@ -310,15 +379,19 @@ final class SearchDeltaJournal {
                 try {
                     while (units.hasNext()) {
                         Node unit = units.next().getSubject();
-                        if (!unit.isURI() || !seen.contains(unit.getURI())) return null;
+                        if (!unit.isURI()) return refuse("public MatchUnit is not an IRI", null);
+                        if (!seen.contains(unit.getURI())) return refuse("public MatchUnit absent from index", unit.getURI());
                         population++;
                     }
                 } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
-                if (population != seen.size()) return null;
+                if (population != seen.size())
+                    return refuse("index population differs from public MatchUnit count", null);
                 return new Qualification(position.epoch().getLiteralLexicalForm(),
                     position.textGeneration().getURI(), ordinal(data),
                     reader.getIndexCommit().getGeneration(), population, position.sequence().toString());
             } catch (IOException | IllegalStateException | TextIndexException ex) {
+                if (ex instanceof AuditRefusal refusal) auditFailed(refusal.getMessage(), refusal.subject);
+                else auditFailed(auditReason(ex), null);
                 return null;
             }
         } finally { if (ownsTransaction) data.end(); }
@@ -500,7 +573,7 @@ final class SearchDeltaJournal {
         if (!Boolean.TRUE.equals(replay.get("available"))
             || !baseline.epoch().equals(replay.get("dataEpoch"))
             || !baseline.generation().equals(replay.get("generation"))) {
-            invalidate(data);
+            invalidate(data, "qualified epoch or generation differs", "qualifiedProof");
             return Map.of("available", false);
         }
         @SuppressWarnings("unchecked")
@@ -516,7 +589,7 @@ final class SearchDeltaJournal {
         }
         long luceneGeneration = Long.parseLong((String) replay.get("luceneGeneration"));
         if (population < 0 || deltas.isEmpty() && luceneGeneration != baseline.luceneGeneration()) {
-            invalidate(data);
+            invalidate(data, "qualified population or lucene generation differs", "qualifiedProof");
             return Map.of("available", false);
         }
         Qualification next = new Qualification(baseline.epoch(), baseline.generation(),
@@ -990,5 +1063,14 @@ final class SearchDeltaJournal {
             throw new IllegalStateException("public Content differs from recorded delivery");
         return FilteredGraphTextIndex.verifyContentBody(data, lucene, subject, identity, true);
     }
+    /** Carries a fixed audit reason and, when the check names one, the subject IRI. The message is never a body. */
+    private static final class AuditRefusal extends IllegalStateException {
+        final String subject;
+        AuditRefusal(String reason, String subject) {
+            super(reason);
+            this.subject = subject;
+        }
+    }
+
     private SearchDeltaJournal() {}
 }

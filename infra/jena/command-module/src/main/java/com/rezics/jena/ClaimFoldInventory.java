@@ -357,8 +357,11 @@ final class ClaimFoldInventory {
                 try {
                     logical.end();
                     if(committed && tracksIndex) try {
-                        if(!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(logical,-1,publicWriteEpoch.get()+1).get("available"))) SearchDeltaJournal.invalidate(logical);
-                    } catch(RuntimeException unavailable) { SearchDeltaJournal.invalidate(logical); }
+                        if(!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(logical,-1,publicWriteEpoch.get()+1).get("available")))
+                            SearchDeltaJournal.invalidate(logical, "post-commit proof unavailable", "ClaimFoldInventory.retain");
+                    } catch(RuntimeException unavailable) {
+                        SearchDeltaJournal.invalidate(logical, "post-commit qualification failed", "ClaimFoldInventory.retain");
+                    }
                 } finally { if(tracksIndex) publicWriteEpoch.incrementAndGet(); }
             }
         }
@@ -781,8 +784,11 @@ final class ClaimFoldInventory {
                 try {
                     logical.end();
                     if(committed && tracksIndex) try {
-                        if(!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(logical,-1,publicWriteEpoch.get()+1).get("available"))) SearchDeltaJournal.invalidate(logical);
-                    } catch(RuntimeException unavailable) { SearchDeltaJournal.invalidate(logical); }
+                        if(!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(logical,-1,publicWriteEpoch.get()+1).get("available")))
+                            SearchDeltaJournal.invalidate(logical, "post-commit proof unavailable", "ClaimFoldInventory.sealClassification");
+                    } catch(RuntimeException unavailable) {
+                        SearchDeltaJournal.invalidate(logical, "post-commit qualification failed", "ClaimFoldInventory.sealClassification");
+                    }
                 } finally { if(tracksIndex) publicWriteEpoch.incrementAndGet(); }
             }
         }

@@ -12,6 +12,7 @@ for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 - [Recovery](recovery.md): offline backup/restore, epochs and Lucene rebuild.
 - [TDB2 integrity](tdb2-integrity.md): the node-table out-of-bounds fault, commit fail-stop, recovery and the index scan.
 - [Observability](observability.md): graph/text readiness, progress and diagnosis.
+- [Search index qualification](search-index.md): startup audit lines and what closes public text.
 - [Security](security.md): private service access, admission and disclosure.
 - [Trust and safety](trust-and-safety.md): launch restrictions, public intake, responders and urgent-harm procedures.
 - [Launch market gates](market-gates.md): six-market decisions, implemented controls, accepted risk and missing operator inputs.

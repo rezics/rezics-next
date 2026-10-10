@@ -61,14 +61,21 @@ final class CanonicalPolicy {
         Node revisions = graph(true);
         return context.equals(oneIri(data, revisions, selection, "context")) && main.equals(oneIri(data, revisions, selection, "mainVersion"));
     }
+    record RealmOwnerRefusal(String reason, String subject) {}
+
     /** Existing whole-generation qualification streams legacy/raw owners once
-     * before read traffic; ranked and delta reads use only exact owner keys. */
-    static boolean auditRealmOwners(DatasetGraph data) {
+     * before read traffic; ranked and delta reads use only exact owner keys.
+     * The refusal names the first slot and its fixed reason; the subject is the slot IRI. */
+    static RealmOwnerRefusal auditRealmOwnerRefusal(DatasetGraph data) {
         var rows = data.find(graph(false), Node.ANY, org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + "RealmPublicationSlot"));
         try { while (rows.hasNext()) {
             Node slot = rows.next().getSubject(); CommandWork.count("realm_owner_qualification_visits", 1);
-            if (realmSlotOwnerFailure(data, slot) != null) return false;
-        } return true; } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            String failure = realmSlotOwnerFailure(data, slot);
+            if (failure != null) return new RealmOwnerRefusal(failure, slot.isURI() ? slot.getURI() : null);
+        } return null; } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    static boolean auditRealmOwners(DatasetGraph data) {
+        return auditRealmOwnerRefusal(data) == null;
     }
 
 
