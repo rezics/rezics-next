@@ -408,8 +408,9 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               throw new AccountAssertionDenied('Principal is inactive');
             }
           }
-          // Opening and closing frames already hold the recovery fence. A trailing
-          // autocommit read sat outside every page cap that was set before it.
+          // The opening graph frame does not read the Access fence. A hold that
+          // begins after that frame must still refuse the completed read.
+          await deps.access.assertRecoveryOpen();
           signal.throwIfAborted();
           return complete ? complete(result, session) : result;
         } catch (error) {

@@ -163,5 +163,18 @@ test('a read that starts during a recovery hold answers unavailable', async () =
     expect(started).toBe(false);
     expect(queries).toHaveLength(1);
     expect(queries[0]).toContain('rv:restoreHold');
+
+    queries.length = 0;
+    graphHeld = false;
+    started = false;
+    const fence = { open: true };
+    await expect(workRead({ environment, account: {} as never,
+      access: recoveryAccess(fence) as never }, request, {}, async () => {
+      started = true;
+      fence.open = false;
+      return payload;
+    })).rejects.toBeInstanceOf(AdmissionUnavailable);
+    expect(started).toBe(true);
+    expect(queries.length).toBeGreaterThan(1);
   } finally { await server.stop(true); }
 });
