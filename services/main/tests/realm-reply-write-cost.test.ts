@@ -663,9 +663,10 @@ test('a reply identity lost inside create stays unsealed until the root is visib
     const key = randomUUID();
     let failed = false;
     fx.fuseki.query = async (sparql, limit) => {
-      if (watch.claimed.on && !failed && sparql.includes('rv:ErasedRevision')) {
+      if (foregroundCounted() && watch.claimed.on && !failed
+        && sparql.includes(input.rootTarget) && sparql.includes('rv:ErasedRevision')) {
         failed = true;
-        throw new WorkReadMissing('Reply root is unavailable');
+        throw new TargetUnavailable();
       }
       return query(sparql, limit);
     };
@@ -678,6 +679,59 @@ test('a reply identity lost inside create stays unsealed until the root is visib
     expect(admission.rows[0]!.state).not.toBe('sealed');
     const retry = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
     expect(retry.status, JSON.stringify(retry.body)).toBe(201);
+  } finally {
+    watch.restore();
+    fx.fuseki.query = query;
+    await fx.close();
+  }
+}, 120_000);
+
+test('a reply question lost after preflight seals a denial and cancels only that identity key', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  const watch = watchAdmissionClaim(fx.accessPool);
+  try {
+    const input = fx.draftInput();
+    const draft = await fx.call('POST', '/v1/member-reply-drafts', input);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    watch.claimed.on = false;
+    const body = {
+      profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, author: fx.actor, rootTarget: input.rootTarget,
+      rootRevision: input.rootRevision, parentReply: null, parentRevision: null,
+      contextRevision: `https://rezics.com/id/${randomUUID()}`,
+    };
+    let missed = false;
+    fx.fuseki.query = async (sparql, limit) => {
+      if (watch.claimed.on && sparql.includes('SELECT ?context') && sparql.includes(body.contextRevision)) {
+        missed = true;
+        throw new WorkReadMissing('Reply question is unavailable');
+      }
+      return query(sparql, limit);
+    };
+    const key = randomUUID();
+    const first = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(missed).toBe(true);
+    expect(first.status, JSON.stringify(first.body)).toBe(403);
+    expect(first.body.code).toBe('realm_reply_denied');
+    const admission = await fx.accessPool.query<{ id: string; state: string; graph_outcome: string }>(
+      `SELECT id, state, graph_outcome FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [key]);
+    expect(admission.rowCount).toBe(1);
+    expect(admission.rows[0]).toMatchObject({ state: 'sealed', graph_outcome: 'cancelled' });
+    const receipt = await fx.contentPool.query<{ outcome: string }>(
+      'SELECT outcome FROM content.receipt WHERE operation_id = $1', [admission.rows[0]!.id]);
+    expect(receipt.rows).toEqual([{ outcome: 'rejected' }]);
+    expect((await fx.contentPool.query(
+      'SELECT 1 FROM content.reply WHERE id = $1', [input.reply])).rowCount).toBe(0);
+    // Identity creation cannot leave a publication pin on its cancelled admission.
+    expect((await fx.contentPool.query(
+      'SELECT 1 FROM content.publication_preparation WHERE operation_id = $1 AND pin_active',
+      [admission.rows[0]!.id])).rowCount).toBe(0);
+    fx.fuseki.query = query;
+    const retry = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(retry.status, JSON.stringify(retry.body)).toBe(403);
+    const fresh = await fx.call('POST', '/v1/realm-replies', body);
+    expect(fresh.status, JSON.stringify(fresh.body)).toBe(201);
   } finally {
     watch.restore();
     fx.fuseki.query = query;

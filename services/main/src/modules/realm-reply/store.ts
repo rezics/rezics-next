@@ -54,10 +54,14 @@ const replyVisibilityMiss = (error: unknown): WorkReadMissing | null => {
 /** A root the write can no longer read is not a decision about a visible root.
  * The same key is answered again once that root can be read. */
 const unsealedReplyRoot = (error: unknown): RealmReplyUnavailable | null => {
-  const missed = replyVisibilityMiss(error);
-  if (!missed) return null;
-  const message = missed instanceof TargetUnavailable ? missed.message : 'Reply root is unavailable';
-  return new RealmReplyUnavailable(message);
+  return error instanceof TargetUnavailable ? new RealmReplyUnavailable(error.message) : null;
+};
+
+/** Root resolution has its own TargetUnavailable type. A missing question or
+ * context is a permanent refusal of the admitted reply, even after preflight. */
+const replyQuestionDenied = (error: unknown): RealmReplyDenied | null => {
+  return error instanceof WorkReadMissing && !(error instanceof TargetUnavailable)
+    ? new RealmReplyDenied(error.message) : null;
 };
 
 function sealsReplyRefusal(error: unknown): boolean {
@@ -282,7 +286,7 @@ export class RealmReplyStore {
       const unavailable = unavailableReply(error);
       if (unavailable) throw unavailable;
       // An expired admission is a refusal of a key that was admitted, not an outage.
-      const refusal = expiredAdmission(error) ?? error;
+      const refusal = expiredAdmission(error) ?? replyQuestionDenied(error) ?? error;
       if (sealsReplyRefusal(refusal)) {
         const refused = await this.refuseUncommittedCreate(admission, graph);
         graph = refused.terminal;
