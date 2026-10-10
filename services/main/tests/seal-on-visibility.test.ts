@@ -35,9 +35,10 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * placement miss is thrown before any subcommand key.
  * realm reply route (routes/realm-replies.ts): sealed no. An unseen root is
  * 404 before create, so the key is never registered.
- * realm reply store create (modules/realm-reply/store.ts): sealed no. A miss
- * inside the write is an unsealed 503, and that outcome does not record a
- * terminal.
+ * realm reply store create (modules/realm-reply/store.ts): A root lost inside
+ * create is an unsealed 503 with no terminal. A reply question or context
+ * missing after preflight is a refusal about a visible root and seals a denial
+ * by design; only the root, never the question, is a visibility outcome here.
  * native credit createNativeCredit (modules/profiles/credits.ts): sealed no,
  * fixed. A hidden Agent is refused before the key is registered, and a guard
  * miss while the Agent is hidden rethrows unsealed. Allowlisted because
@@ -58,6 +59,7 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * services/main/src is a read or a read helper: read, no state.
  */
 const allowlist: Record<string, string> = {
+  'modules/realm-reply/store.ts#create': 'A root lost inside create is an unsealed 503 with no terminal. A reply question or context missing after preflight is a refusal about a visible root and seals a denial by design; only the root, never the question, is a visibility outcome here.',
   'modules/profiles/credits.ts#createNativeCredit':
     'The catch rethrows the visibility miss before any receipt. recordGraphOutcome runs only after a completed edit already has its terminal receipt.',
 };
