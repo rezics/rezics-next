@@ -22,7 +22,7 @@ function themeState(options: {
     operatorSession: { cookie: 'cookie', token: '', issuedAt: 0,
       api: { token: options.token ?? (async () => { throw new Error('stop'); }) } },
     api: { getPublic: async () => { throw new SeedApiError('presentation', 404, 'missing'); } },
-    optional: async (label, operation) => {
+    optional: async (label: string, operation: () => Promise<unknown>) => {
       try { return await operation(); }
       catch (error) {
         findings.add(`${label}: ${error instanceof Error ? error.message : String(error)}`);
@@ -36,22 +36,22 @@ function labels(state: SeedState): string[] {
   return [...state.findings].map(finding => finding.slice(0, finding.indexOf(':'))).sort();
 }
 
+function selection(realms: string[], catalogueZones?: readonly ('anime' | 'manga')[]) {
+  return { createdRealms: realms.map(id => ({ id })), catalogueZones } as unknown as Pick<SeedState,
+    'createdRealms' | 'catalogueZones'>;
+}
+
 test('the default theme selection adds catalogue Zones only when this seed recorded them', () => {
-  const recorded = { createdRealms: [{ id: 'fiction' }, { id: 'kitchen' }],
-    catalogueZones: ['anime', 'manga'] as const };
-  expect(officialThemeSelection(recorded as Pick<SeedState, 'createdRealms' | 'catalogueZones'>))
+  expect(officialThemeSelection(selection(['fiction', 'kitchen'], ['anime', 'manga'])))
     .toEqual(['fiction', 'kitchen', 'anime', 'manga']);
-  expect(officialThemeSelection({ createdRealms: recorded.createdRealms }))
-    .toEqual(['fiction', 'kitchen']);
-  expect(officialThemeSelection({ createdRealms: recorded.createdRealms, catalogueZones: ['manga'] }))
-    .toEqual(['fiction', 'kitchen', 'manga']);
+  expect(officialThemeSelection(selection(['fiction', 'kitchen']))).toEqual(['fiction', 'kitchen']);
+  expect(officialThemeSelection(selection(['fiction', 'kitchen'], ['manga']))).toEqual(['fiction', 'kitchen', 'manga']);
 });
 
 test('an explicit theme selection is used unchanged', () => {
-  const state = { createdRealms: [{ id: 'fiction' }], catalogueZones: ['anime', 'manga'] as const };
-  expect(officialThemeSelection(state as Pick<SeedState, 'createdRealms' | 'catalogueZones'>, ['franchise-wiki']))
-    .toEqual(['franchise-wiki']);
-  expect(officialThemeSelection(state as Pick<SeedState, 'createdRealms' | 'catalogueZones'>, [])).toEqual([]);
+  const state = selection(['fiction'], ['anime', 'manga']);
+  expect(officialThemeSelection(state, ['franchise-wiki'])).toEqual(['franchise-wiki']);
+  expect(officialThemeSelection(state, [])).toEqual([]);
 });
 
 test('the default pass attempts recorded catalogue Zones and skips Realms with no package', async () => {

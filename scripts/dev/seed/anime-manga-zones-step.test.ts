@@ -19,8 +19,10 @@ test('the sample has a page of each format filter, mixed languages, a long serie
   const manga = plan.filter(sample => sample.zone === 'manga');
   const platform = (sample: (typeof plan)[number]) =>
     sample.subject.kind === 'bangumi' ? sample.subject.source.platform : null;
-  const tags = (sample: (typeof plan)[number]) =>
-    sample.subject.kind === 'bangumi' ? sample.subject.source.meta_tags ?? [] : [];
+  const tags = (sample: (typeof plan)[number]): readonly string[] => {
+    if (sample.subject.kind !== 'bangumi' || !Array.isArray(sample.subject.source.meta_tags)) return [];
+    return sample.subject.source.meta_tags.filter((tag): tag is string => typeof tag === 'string');
+  };
 
   expect(anime.filter(sample => platform(sample) === 1)).toHaveLength(22);
   expect(manga.filter(sample => platform(sample) === 1001)).toHaveLength(22);
@@ -47,8 +49,8 @@ test('the sample has a page of each format filter, mixed languages, a long serie
 test('package approval records the built files and slots, and another account reviews it', async () => {
   const ownerCalls: string[] = [];
   const reviewCalls: { path: string; body: unknown }[] = [];
-  let posted: { slots: string[]; files: { path: string; digest: string; gzipBytes: number }[]; packageDigest: string }
-    | null = null;
+  const recorded: { bundle: { slots: string[]; files: { path: string; digest: string; gzipBytes: number }[];
+    packageDigest: string } | null } = { bundle: null };
   const zone = native('11');
   const revision = native('12');
   const bytes = new TextEncoder().encode('_next/static/anime.js');
@@ -63,7 +65,7 @@ test('package approval records the built files and slots, and another account re
       ownerCalls.push(`${method} ${path.split('?')[0]}`);
       if (method === 'POST' && path === '/v1/themes') return { status: 201, body: { theme: officialTheme('anime') } };
       if (method === 'POST' && path.includes('/revisions') && !path.includes('/reviews')) {
-        posted = (body as { bundle: NonNullable<typeof posted> }).bundle;
+        recorded.bundle = (body as { bundle: NonNullable<typeof recorded.bundle> }).bundle;
         return { status: 201, body: { operation: revision } };
       }
       if (method === 'POST' && path.includes('/first-party-activations')) return { status: 201, body: {} };
@@ -79,8 +81,8 @@ test('package approval records the built files and slots, and another account re
   expect(reviewCalls).toHaveLength(1);
   expect(reviewCalls[0]?.path).toContain(`/revisions/${revision.slice(-36)}/reviews`);
   expect(reviewCalls[0]?.body).toMatchObject({ decision: 'approved', actingSubject: native('2') });
-  if (!posted) throw new Error('revision was not posted');
-  const bundle = posted as typeof posted;
+  if (!recorded.bundle) throw new Error('revision was not posted');
+  const bundle = recorded.bundle;
   expect(checkFirstPartyBundle(bundle).bundle.slots).toEqual([
     'browseHeader', 'cataloguePanel', 'footer', 'workCard',
   ]);
