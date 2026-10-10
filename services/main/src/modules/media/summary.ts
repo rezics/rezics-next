@@ -114,6 +114,8 @@ export interface SummaryBatch {
   generation: { graph: string; media: string | null; addresses?: string };
   /** Owner round trips spent by this batch, reported for the cost contract. */
   cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
+  /** Work heads from the summary graph read. Callers fencing those Works reuse them. */
+  workRevisions: ReadonlyMap<string, string>;
 }
 
 /** A list may omit optional media when its owner cannot answer. Core identity
@@ -482,28 +484,13 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       }
     }
   };
-  // Check the entire requested batch, including missing identities, before
-  // Access/name/avatar hydration. Rated and absent rows then have the same
-  // media generation and cost envelope as well as the same unavailable item.
-  // The graph row's type already proves a non-Agent has no agent name owner.
-  // Absent rows and Agents still probe: a missing identity is not that proof.
+  // Names, covers and the anonymous-name decision share one statement after
+  // avatars are hydrated. A hidden name or cover is dropped before a summary
+  // is returned. The graph row's type already proves a non-Agent has no agent
+  // name owner. Agents still probe: a missing identity is not that proof.
   const settledNameOwner = (row: GraphRow | undefined) =>
     input.settleNonAgentNameOwners && row !== undefined && row.type !== 'agent'
       ? { nameOwnerResolved: true as const } : {};
-  const initialTargets = unique.map(reference => {
-    const row = graph.rows.get(reference);
-    return { owner: 'graph' as const, resource: reference, component: 'name' as const,
-      revision: reference === row?.work ? row.head : null, work: row?.work,
-      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
-      ...settledNameOwner(row) };
-  });
-  const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
-    input.channel ?? 'summary', client);
-  if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
-  noteNameProbe(initialTargets);
-  for (const [index, reference] of unique.entries()) {
-    if (initialDecisions[index] !== 'visible') graph.rows.delete(reference);
-  }
   const readable = new Map<string, GraphRow>();
   const restricted = new Map<string, string>();
   const special = new Map<string, GraphRow>();
@@ -716,8 +703,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // callback can grant disclosure, and a hidden asset becomes the usual fallback.
   const targets: DisclosureTarget[] = [];
   const entries = [...readable];
+  const workRevisions = new Map<string, string>();
   const nameIndexes = new Map<string, number>(), assetIndexes = new Map<string, number>();
   for (const [reference, row] of entries) {
+    if (row.head && row.work && reference === row.work) workRevisions.set(reference, row.head);
     nameIndexes.set(reference, targets.length);
     targets.push({ owner: 'graph', resource: reference, component: 'name',
       revision: reference === row.work ? row.head : null, work: row.work,
@@ -728,6 +717,17 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       assetIndexes.set(reference, targets.length);
       targets.push({ owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover' });
     }
+  }
+  // Identities with no readable row, including an untyped or absent reference,
+  // still share this statement. A missing type is not proof that the name is public.
+  for (const reference of unique) {
+    if (nameIndexes.has(reference)) continue;
+    const row = graph.rows.get(reference);
+    nameIndexes.set(reference, targets.length);
+    targets.push({ owner: 'graph', resource: reference, component: 'name',
+      revision: reference === row?.work ? row.head : null, work: row?.work,
+      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+      ...settledNameOwner(row) });
   }
   const final = reader.viewer?.signedIn
     ? await discloseInventoryWithAnonymousNames(env, targets, reader.viewer, input.channel ?? 'summary', client)
@@ -772,7 +772,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   if (available.some(summary => ['space','realm','zone'].includes(summary.type))) cost.graphQueries++;
   for (const summary of available) summary.address = addresses.get(summary.reference)!;
   return { summaries, generation: { graph: graph.generation, media: mediaGeneration,addresses: addressGeneration(summaries) }, cost,
-    redirects: graph.redirects };
+    workRevisions, redirects: graph.redirects };
 }
 
 /** At most 33 owner batches of 64 identities, regardless of converging paths.
@@ -786,9 +786,10 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const first = await readSummaryPage(env, media, reader, input, client);
   const graphDependencies = [first.generation.graph];
   if (input.resolveMerges === false) return { summaries: first.summaries,
-    generation: first.generation, cost: first.cost };
+    generation: first.generation, cost: first.cost, workRevisions: first.workRevisions };
   const summaries = new Map(first.summaries.map(summary => [summary.reference, summary]));
   const redirects = new Map(first.redirects);
+  const workRevisions = new Map(first.workRevisions);
   const paths = [...new Set(input.resources)].map(source => ({ source, current: source,
     seen: new Set([source]), hops: 0, hidden: false }));
   let merged = false;
@@ -816,6 +817,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     graphDependencies.push(page.generation.graph);
     for (const summary of page.summaries) summaries.set(summary.reference, summary);
     for (const [source, target] of page.redirects) redirects.set(source, target);
+    for (const [work, revision] of page.workRevisions) workRevisions.set(work, revision);
     for (const key of ['graphQueries', 'mediaQueries', 'accessChecks', 'accessQueries'] as const) {
       first.cost[key] += page.cost[key];
     }
@@ -842,7 +844,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     });
   return { generation: { ...first.generation,
     ...(input.localBasis ? { graph: createHash('sha256').update(JSON.stringify(graphDependencies)).digest('hex') } : {}),
-    addresses: addressGeneration(result) },cost: first.cost,summaries: result };
+    addresses: addressGeneration(result) },cost: first.cost,summaries: result, workRevisions };
 }
 
 /** SQL name changes do not move the graph position. Conditional reads must

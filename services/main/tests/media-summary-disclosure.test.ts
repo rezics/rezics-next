@@ -110,7 +110,7 @@ test('Summary classifies a controller-visible private Agent name as restricted a
     { viewer: disclosureViewer(principal) }, f.input);
   expect(controller.summaries[0]).toMatchObject({ status: 'available', disclosure: 'restricted',
     name: { value: 'Name 000000000001' } });
-  expect(f.ownerCalls).toHaveLength(2);
+  expect(f.ownerCalls).toHaveLength(1);
   for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer({ ...principal, subject: 'stranger' })]) {
     const result = await readResourceSummaries(f.environment, undefined, { viewer }, f.input);
     expect(result.summaries).toEqual([{ reference: id(1), status: 'unavailable' }]);
@@ -141,7 +141,7 @@ for (const change of ['governance', 'private-name', 'controller-revoked', 'agent
       { viewer: disclosureViewer(principal) }, f.input)).summaries).toEqual([
       { reference: id(1), status: 'unavailable' },
     ]);
-    expect(f.ownerCalls).toHaveLength(2);
+    expect(f.ownerCalls).toHaveLength(1);
   });
 }
 
@@ -151,19 +151,19 @@ test('Final summary classification observes a public-to-private change while ret
   const result = await readResourceSummaries(f.environment, media(() => { entry.publicName = false; }),
     { viewer: disclosureViewer(principal) }, f.input);
   expect(result.summaries[0]).toMatchObject({ status: 'available', disclosure: 'restricted' });
-  expect(f.ownerCalls).toHaveLength(2);
+  expect(f.ownerCalls).toHaveLength(1);
 });
 
-test('A full summary batch spends the same graph calls signed in and anonymous, with two owner statements per pass', async () => {
+test('A full summary batch spends the same graph calls signed in and anonymous, with one owner statement per pass', async () => {
   for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer(principal)]) {
     const f = fixture(MAX_SUMMARY_BATCH);
     for (let pass = 0; pass < 2; pass++) {
       const result = await readResourceSummaries(f.environment, undefined, { viewer }, f.input);
       expect(result.summaries).toHaveLength(MAX_SUMMARY_BATCH);
       expect(result.summaries.every(summary => summary.status === 'available' && summary.disclosure === 'public')).toBe(true);
-      expect(result.cost).toMatchObject({ graphQueries: 3, accessQueries: 2 });
-      expect(f.graphCalls).toHaveLength((pass + 1) * 3);
-      expect(f.ownerCalls).toHaveLength((pass + 1) * 2);
+      expect(result.cost).toMatchObject({ graphQueries: 2, accessQueries: 1 });
+      expect(f.graphCalls).toHaveLength((pass + 1) * 2);
+      expect(f.ownerCalls).toHaveLength(pass + 1);
       expect(f.ownerCalls.at(-1)!.targets).toHaveLength(MAX_SUMMARY_BATCH);
     }
   }
@@ -177,12 +177,12 @@ test('Owner adapters without paired decisions retain the required anonymous prob
   const result = await readResourceSummaries(f.environment, undefined,
     { viewer: disclosureViewer(principal) }, f.input);
   expect(result.summaries[0]).toMatchObject({ status: 'available', disclosure: 'restricted' });
-  expect(f.ownerCalls).toHaveLength(3);
-  expect(f.graphCalls).toHaveLength(6);
-  expect(result.cost).toMatchObject({ graphQueries: 4, accessQueries: 3 });
+  expect(f.ownerCalls).toHaveLength(2);
+  expect(f.graphCalls).toHaveLength(4);
+  expect(result.cost).toMatchObject({ graphQueries: 3, accessQueries: 2 });
 });
 
-test('A full summary batch with covers preserves name indexes across two bounded final owner statements', async () => {
+test('A full summary batch with covers preserves name indexes across two bounded owner statements', async () => {
   const f = fixture(MAX_SUMMARY_BATCH);
   f.restrict(target => target.owner === 'media');
   const result = await readResourceSummaries(f.environment, media(),
@@ -190,12 +190,12 @@ test('A full summary batch with covers preserves name indexes across two bounded
   expect(result.summaries).toHaveLength(MAX_SUMMARY_BATCH);
   expect(result.summaries.every(summary => summary.status === 'available'
     && summary.disclosure === 'public' && summary.avatar.kind === 'fallback')).toBe(true);
-  expect(f.ownerCalls.map(call => call.targets.length)).toEqual([64, 64, 64]);
-  expect(f.graphCalls).toHaveLength(4);
-  expect(result.cost).toMatchObject({ graphQueries: 4, accessQueries: 3, mediaQueries: 1 });
+  expect(f.ownerCalls.map(call => call.targets.length)).toEqual([64, 64]);
+  expect(f.graphCalls).toHaveLength(3);
+  expect(result.cost).toMatchObject({ graphQueries: 3, accessQueries: 2, mediaQueries: 1 });
 });
 
-test('Release summaries carry the current owning Work and exact parent head into both disclosure passes', async () => {
+test('Release summaries carry the current owning Work and exact parent head into disclosure', async () => {
   const f = fixture(2);
   f.entries.set(id(10), { type: 'release', work: id(2), head: id(1002), publicName: true, active: true });
   const input = { ...f.input, resources: [id(1), id(10)] };
@@ -210,7 +210,7 @@ test('Release summaries carry the current owning Work and exact parent head into
   const second = await readResourceSummaries(f.environment, undefined, { viewer: disclosureViewer(principal) }, input);
   expect(second.summaries).toEqual([expect.objectContaining({ reference: id(1), status: 'available' }),
     { reference: id(10), status: 'unavailable' }]);
-  expect(f.ownerCalls[2]!.targets[1]).toMatchObject({ resource: id(10), work: id(2), workRevision: id(1202) });
+  expect(f.ownerCalls[1]!.targets[1]).toMatchObject({ resource: id(10), work: id(2), workRevision: id(1202) });
 });
 
 test('Paired inventory retains every exact target, parent revision, context and channel independently', async () => {
@@ -245,7 +245,7 @@ test('Paired anonymous classification applies its own suitability audience at th
   f.assessments.set(id(1), ['r15']);
   const result = await readResourceSummaries(f.environment, undefined, { viewer }, { ...f.input, channel: 'digest' });
   expect(result.summaries[0]).toMatchObject({ status: 'available', disclosure: 'restricted' });
-  expect(f.ownerCalls).toHaveLength(2);
+  expect(f.ownerCalls).toHaveLength(1);
   expect((await readResourceSummaries(f.environment, undefined, { viewer: ANONYMOUS_VIEWER },
     { ...f.input, channel: 'digest' })).summaries).toEqual([{ reference: id(1), status: 'unavailable' }]);
 });
