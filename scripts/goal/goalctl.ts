@@ -5637,8 +5637,10 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   const queuedAt = now();
   let startedAt: number | undefined;
   let code: number | undefined;
-  const artifactRoot = qaArtifactDirectory(process.cwd());
-  const prior = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
+  // A checkout older than the artifact override still writes under its own `.artifacts/qa`, so list both.
+  const artifactDirs = [...new Set([qaArtifactDirectory(process.cwd()), join(process.cwd(), '.artifacts', 'qa')])];
+  const listed = (dir: string) => existsSync(dir) ? readdirSync(dir).map(name => join(dir, name)) : [];
+  const prior = new Set(artifactDirs.flatMap(listed));
   const deferred = !heavy && harnessOwnsSlot(command);
   const slots = heavy ? undefined : options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
   if (!heavy && (!Number.isSafeInteger(slots) || slots! < 1)) throw new Error('GOAL_QA_SLOTS must be a positive integer');
@@ -5697,8 +5699,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
       writeFileSync(resultFile, JSON.stringify({ code, queuedAt, startedAt, finishedAt,
         queueMs: (startedAt ?? finishedAt) - queuedAt, testMs: startedAt ? finishedAt - startedAt : 0,
         totalMs: finishedAt - queuedAt,
-        artifactPaths: (existsSync(artifactRoot) ? readdirSync(artifactRoot) : [])
-          .filter(name => !prior.has(name)).map(name => join(artifactRoot, name)) }, null, 2));
+        artifactPaths: artifactDirs.flatMap(listed).filter(path => !prior.has(path)) }, null, 2));
     }
   }
 }

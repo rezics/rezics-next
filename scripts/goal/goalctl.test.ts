@@ -5236,6 +5236,38 @@ describe('heavy QA lock', () => {
     });
   }
 
+  test('a slot reports runs under the artifact override and under an older checkout\'s .artifacts/qa', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'slot-artifact-roots-'));
+    const checkout = join(root, 'checkout');
+    const override = join(root, 'override');
+    const resultFile = join(root, 'slot.json');
+    mkdirSync(join(checkout, '.artifacts', 'qa', 'run-before'), { recursive: true });
+    const cwd = process.cwd();
+    const previous = process.env.REZICS_QA_ARTIFACT_ROOT;
+    process.env.REZICS_QA_ARTIFACT_ROOT = override;
+    process.chdir(checkout);
+    try {
+      expect(await withSlot(['fake light run'], false, resultFile, {
+        slotDirectory: join(root, 'slots'), slots: 1, reap: () => {},
+        runCommand: async (_command, _env, onStart) => {
+          onStart();
+          mkdirSync(join(override, 'run-current'), { recursive: true });
+          mkdirSync(join(checkout, '.artifacts', 'qa', 'run-older-checkout'), { recursive: true });
+          return 0;
+        },
+      })).toBe(0);
+      const reported = (JSON.parse(readFileSync(resultFile, 'utf8')) as { artifactPaths: string[] }).artifactPaths;
+      expect(reported.sort()).toEqual([
+        join(checkout, '.artifacts', 'qa', 'run-older-checkout'), join(override, 'run-current'),
+      ].sort());
+    } finally {
+      process.chdir(cwd);
+      if (previous === undefined) delete process.env.REZICS_QA_ARTIFACT_ROOT;
+      else process.env.REZICS_QA_ARTIFACT_ROOT = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test('a slot waiter reports its reason and appears in status until a slot opens', async () => {
     const root = mkdtempSync(join(tmpdir(), 'slot-wait-status-'));
     const slots = join(root, 'qa-slots');
