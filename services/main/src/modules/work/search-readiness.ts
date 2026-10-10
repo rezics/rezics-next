@@ -14,7 +14,16 @@ import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget
 export { MAX_PUBLIC_UNITS, MAX_PHRASE_CANDIDATES, PHRASE_HIT_PROBE, MAX_SEARCH_RESPONSE_BYTES } from './search-limits.ts';
 const MAX_PROOF_RESPONSE_BYTES = 65_536;
 
-export class SearchIndexUnavailable extends Error {}
+/** Its message is a fixed reason string, so a bounded token of it is safe to log:
+ * the 503 names which readiness check refused (the dev-stack outage of a journal
+ * with no baseline looked identical to every other cause without it). */
+export class SearchIndexUnavailable extends Error {
+  readonly code: string;
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.code = (message ?? 'unavailable').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32);
+  }
+}
 export class SearchIndexBudgetExceeded extends Error {}
 /** A committed graph position changed between separate read snapshots. */
 export class SearchSnapshotMoved extends SearchIndexUnavailable {}

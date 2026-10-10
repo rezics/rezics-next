@@ -521,6 +521,7 @@ export function typedRefusal(error: unknown): Response | undefined {
     return problem(422, 'query_budget_exceeded', 'Public text population exceeds the complete-result budget');
   }
   if (error instanceof SearchIndexUnavailable) {
+    logWorkerFault('main.route.search_index_unavailable', error);
     return problem(503, 'search_index_unavailable', 'Public text index is unavailable');
   }
   if (error instanceof ContentProjectionUnavailable || error instanceof ContentProjectionGap
