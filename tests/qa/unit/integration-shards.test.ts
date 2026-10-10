@@ -111,8 +111,9 @@ const queueFiles = [
 test('queued integration projects keep the command budget and start as slots free', async () => {
   const slots = 3;
   const root = join(import.meta.dir, '../../..');
-  const history = join(root, '.artifacts', 'qa', '20990101t000000-a16090');
   const artifactRoot = mkdtempSync(join(root, '.temp', 'integration-queue-'));
+  // History lives under this test's own artifact root, never the shared .artifacts/qa other runs read.
+  const history = join(artifactRoot, '20990101t000000-a16090');
   const slotDirectory = join(artifactRoot, 'slots');
   mkdirSync(join(history, 'logs'), { recursive: true });
   mkdirSync(slotDirectory);
