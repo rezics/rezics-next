@@ -28,6 +28,9 @@ export async function readRankings(
     order: 'score' | 'growth';
   },
 ) {
+  // The page discloses each admitted name before hydration. Summary reads then
+  // keep that split instead of spending their own disclosure statements twice.
+  session.callerFencesSummaryDisclosure = true;
   if (options.realm) await readRealmBasis(session, options.realm);
   const checkpoint = await projection.current();
   const bucket = rankingBuckets(new Date(), options.interval).current;

@@ -148,6 +148,10 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
+  /** Home already fences names and bodies in one disclosure statement. */
+  callerFencesSummaryDisclosure = false;
+  /** Graph heads from a caller-fenced summary, keyed by resource. */
+  readonly summaryHeads = new Map<string, string>();
   get viewer() { return this.principal ? disclosureViewer(this.principal, this.options.actingSubject)
     : this.options.publicViewer ?? disclosureViewer(null); }
   disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
@@ -225,7 +229,9 @@ export class WorkReadSession {
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
       { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
         languages: this.displayLanguages, localBasis: this.options.localBasis,
-        settleNonAgentNameOwners: true });
+        settleNonAgentNameOwners: true,
+        callerFencesDisclosure: this.callerFencesSummaryDisclosure,
+        heads: this.callerFencesSummaryDisclosure ? this.summaryHeads : undefined });
     if (this.options.localBasis) {
       const key = `summaries:${JSON.stringify(resources)}`;
       const token = readDependencyToken([result.generation.graph, result.summaries]);
@@ -234,7 +240,10 @@ export class WorkReadSession {
       this.ownerDependencies.set(key, { token, read: async () => {
         const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
           { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-            languages: this.displayLanguages, localBasis: true });
+            languages: this.displayLanguages, localBasis: true,
+            settleNonAgentNameOwners: true,
+            callerFencesDisclosure: this.callerFencesSummaryDisclosure,
+            heads: this.callerFencesSummaryDisclosure ? this.summaryHeads : undefined });
         return [fresh.generation.graph, fresh.summaries];
       } });
     } else if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
@@ -399,7 +408,8 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               throw new AccountAssertionDenied('Principal is inactive');
             }
           }
-          await deps.access.assertRecoveryOpen();
+          // Opening and closing frames already hold the recovery fence. A trailing
+          // autocommit read sat outside every page cap that was set before it.
           signal.throwIfAborted();
           return complete ? complete(result, session) : result;
         } catch (error) {

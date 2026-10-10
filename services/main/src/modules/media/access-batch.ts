@@ -8,6 +8,13 @@ import { explicitSemanticReadGrant, readSemanticDisclosure, type SemanticDisclos
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_RESOURCES = 65;
+const poolGraphs = new WeakMap<Pool, Pick<FusekiClient, 'query'>>();
+
+/** The composed reader carries the graph. A replacement reader on the same pool
+ * still proves authorship against that graph, matching a singular Work read. */
+export function bindMediaAccessGraph(pool: Pool, graph: Pick<FusekiClient, 'query'>): void {
+  poolGraphs.set(pool, graph);
+}
 
 /** One Access transaction for at most 65 resources. Explicit grants use one
  * indexed batch query; author fallback uses one candidate statement and one
@@ -61,7 +68,8 @@ export class MediaAccessBatchReader {
         FOR SHARE OF gate, principal, subject`,
       [principal.issuer, principal.subject, unique, actingSubject, prefix, action]);
       const allowed = new Set(rows.rows.map(row => row.resource));
-      if (action === 'work.read' && principal.emailVerified && this.graph) {
+      const graph = this.graph ?? poolGraphs.get(this.pool);
+      if (action === 'work.read' && principal.emailVerified && graph) {
         const actor = (await client.query<{ id: string }>(`SELECT id FROM access.principal
           WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
         [principal.issuer, principal.subject])).rows[0];
@@ -72,7 +80,7 @@ export class MediaAccessBatchReader {
           const gateById = new Map(gates.map(gate => [gate.id, gate.open]));
           const remaining = unique.filter(work => !allowed.has(work)
             && gateById.get(`work:read:${work}`) !== false);
-          const authored = await authorWorkGenerations(client, this.graph, actor.id, actingSubject, remaining);
+          const authored = await authorWorkGenerations(client, graph, actor.id, actingSubject, remaining);
           for (const work of authored.keys()) allowed.add(work);
         }
       }

@@ -455,6 +455,8 @@ const normalized = (query: FeedQuery) => [
  * still passes its checks in the original order, so a hidden part drops that
  * item and any other failure fails the read exactly as a serial read would. */
 export async function readFeed(session: WorkReadSession, query: FeedQuery, reader?: FeedReader) {
+  // Names and bodies share the page's one disclosure statement.
+  session.callerFencesSummaryDisclosure = true;
   const interests = parseFeedInterests(query.interests);
   if (pinnedConcepts(query).length > 3) throw new WorkReadInvalid('A feed names at most three Concepts');
   const store = session.deps.feed;
@@ -747,18 +749,29 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       disclosed.push(item);
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
-  const fenceTargets = disclosed.flatMap(item => {
+  const fenceGroups = disclosed.map(item => {
     const source = final.get(item.id)!;
+    const work = item.target.work ?? source.work ?? undefined;
+    const workRevision = work ? session.summaryHeads.get(work) : undefined;
+    const names = [item.target.work, item.realm?.id].filter((id): id is string => !!id);
     return [{ owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
       resource: source.id, component: 'body' as const, revision: source.readerReview?.revision, work: source.work,
-      context: source.realm ?? undefined },
+      workRevision, context: source.realm ?? undefined },
     { owner: 'content' as const, resource: source.reply ?? source.contentTarget ?? source.target,
       component: 'body' as const, revision: source.contentRevision?.replace(/^urn:rezics:content:revision:/, '') ?? null,
-      work: source.work, context: source.realm ?? undefined }];
+      work: source.work, workRevision, context: source.realm ?? undefined },
+    ...names.map(resource => ({ owner: 'graph' as const, resource, component: 'name' as const,
+      revision: session.summaryHeads.get(resource), work, workRevision,
+      nameOwnerResolved: true, context: source.realm ?? undefined }))];
   });
-  const policy = await session.disclosure(fenceTargets, 'feed');
-  const hidden = new Set(disclosed.filter((_item, index) => policy[index * 2] !== 'visible'
-    || policy[index * 2 + 1] !== 'visible').map(item => item.id));
+  const policy = await session.disclosure(fenceGroups.flat(), 'feed');
+  let policyCursor = 0;
+  const hidden = new Set(disclosed.filter((_item, index) => {
+    const group = fenceGroups[index]!;
+    const decisions = policy.slice(policyCursor, policyCursor + group.length);
+    policyCursor += group.length;
+    return decisions.some(decision => decision !== 'visible');
+  }).map(item => item.id));
   const safe = disclosed.filter(item => !hidden.has(item.id));
   const { chosen: selected, seen, realms } = select(safe);
   followedSeen = seen; recentRealms = realms;

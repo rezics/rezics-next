@@ -97,7 +97,7 @@ import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRepresentedMembershipAuthority } from './modules/access/represented-membership-authority.ts';
 import { AccessEligibleOrgMemberSet } from './modules/access/eligible-org-member-set.ts';
 import { AccessPolicyOwner } from './modules/access/policy-owner.ts';
-import { MediaAccessBatchReader } from './modules/media/access-batch.ts';
+import { bindMediaAccessGraph, MediaAccessBatchReader } from './modules/media/access-batch.ts';
 import { ExportStore } from './modules/export/store.ts';
 import { VerificationStore } from './modules/verification/store.ts';
 import { MediaStore } from './modules/media/store.ts';
@@ -603,6 +603,7 @@ export async function composeMain(input: ComposeMainInput) {
   if (input.overrides?.account) dependencies.account = input.overrides.account;
   if (input.overrides?.media) dependencies.media = input.overrides.media;
   if (input.overrides?.mediaAccess) dependencies.mediaAccess = input.overrides.mediaAccess;
+  bindMediaAccessGraph(pool, fuseki);
   if (input.overrides?.dependencies) Object.assign(dependencies, input.overrides.dependencies);
   const app = createMainApp(fuseki, dependencies);
   libraryImport.setDispatch(request => app.handle(request));

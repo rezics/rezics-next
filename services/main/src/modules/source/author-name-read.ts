@@ -6,6 +6,22 @@ import { SOURCE_ADOPTION_READ_COST } from './native-work-adoption.ts';
 
 const reads = new WeakMap<WorkReadSession, Map<string, AuthorName | null>>();
 const reportedReads = new WeakMap<WorkReadSession, Map<string, string>>();
+/** Works this read already proved have no source binding. Author references
+ * are a subset of that binding, so a second and third lookup would only
+ * confirm the empty result. */
+const unboundWorks = new WeakMap<WorkReadSession, Set<string>>();
+
+export function noteUnboundSourceWorks(session: WorkReadSession, works: readonly string[]) {
+  if (!works.length) return;
+  const prior = unboundWorks.get(session) ?? new Set<string>();
+  for (const work of works) prior.add(work);
+  unboundWorks.set(session, prior);
+}
+
+function stillBound(session: WorkReadSession, works: readonly string[]) {
+  const known = unboundWorks.get(session);
+  return known?.size ? works.filter(work => !known.has(work)) : works;
+}
 /** A followed-author page records at most 8×64 Works and a discovery build at most
  * 250, so the binding fence adds at most eight PostgreSQL reads and no Fuseki calls. */
 export const SOURCE_REPORTED_CREDIT_COST = { works: 64, names: 192, perWork: 128,
@@ -124,9 +140,11 @@ export async function sourceReportedCredits(session: WorkReadSession, works: rea
     throw new WorkReadUnavailable('Source author batch exceeds its bound');
   }
   if (!works.length || !session.deps.sourceAdoptions) return new Map();
-  const refs = await session.deps.sourceAdoptions?.authorReferences(works)
+  const pending = stillBound(session, works);
+  if (!pending.length) return new Map();
+  const refs = await session.deps.sourceAdoptions?.authorReferences(pending)
     ?? new Map<string, Array<{ id: string; key: string; ordinal: number }>>();
-  if (!preview) recordReported(session, works, refs);
+  if (!preview) recordReported(session, pending, refs);
   const selected = [...refs.values()].flatMap(items => items.slice(0, perWork));
   const names = await readAuthorNames(session, selected.map(item => item.key), preview);
   if (preview) {

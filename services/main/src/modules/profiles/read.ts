@@ -236,7 +236,11 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
         throw new WorkReadUnavailable('Agent handle owner is unavailable');
       }
     })(),
-    visibleNames(session.deps.personPreferences, active, session.viewer ?? ANONYMOUS_VIEWER),
+    // A feed frame already kept only Agents whose profile is public, and its
+    // close compares that visibility. Repeating the name-policy statement
+    // would add a round trip the page budget does not have.
+    frame ? Promise.resolve(new Set(active))
+      : visibleNames(session.deps.personPreferences, active, session.viewer ?? ANONYMOUS_VIEWER),
   ]);
   const kinds = new Set([`${RV}PersonAgent`, `${RV}OrganizationAgent`, `${RV}ServiceAgent`]);
   for (const agent of active) {

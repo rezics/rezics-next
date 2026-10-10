@@ -57,7 +57,12 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     try { snapshot = await governance.realmHeaderRules(realm, profile?.rules ?? null); }
     catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
   }
-  const sourceRules = snapshot?.rules ?? profile?.rules;
+  // Creation stores a valid empty settings document before any public profile.
+  // That snapshot must not hide rules the profile published later. A settings
+  // document that actually lists rules stays the header's source, and a stale
+  // governance head still drops only its link.
+  const managed = snapshot?.rules;
+  const sourceRules = managed?.length ? managed : profile?.rules ?? managed;
   const rules = sourceRules ? sourceRules.map(rule => {
     let governanceRule = rule.governanceRule;
     if (governanceRule && snapshot?.heads.get(governanceRule.ref)?.revision !== governanceRule.revision) {

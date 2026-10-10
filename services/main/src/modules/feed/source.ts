@@ -1,6 +1,7 @@
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { publicWork, unerased, WorkReadMissing, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+import { noteUnboundSourceWorks } from '../source/author-name-read.ts';
 import { FEED_COST, type FeedKind } from './contract.ts';
 import { reviewTarget } from '../review/read.ts';
 import type { ReviewRow } from '../review/store.ts';
@@ -254,12 +255,13 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
   // Four 1 MiB bodies fit Content's 4 MiB batch. The page's eight references
   // therefore use at most two exact owner reads, not one per card.
   const revisions = [...new Set(published.map(revisionOf))];
+  const workIds = rows.flatMap(row => row.kind?.value === 'work' && row.work ? [row.work.value] : []);
   const [sourceBound, exacts] = await Promise.all([
-    session.deps.sourceAdoptions?.boundWorks(rows.flatMap(row =>
-      row.kind?.value === 'work' && row.work ? [row.work.value] : [])) ?? new Set<string>(),
+    session.deps.sourceAdoptions?.boundWorks(workIds) ?? new Set<string>(),
     Promise.all(Array.from({ length: Math.ceil(revisions.length / 4) }, (_, batch) =>
       session.deps.content!.readExactBatch(revisions.slice(batch * 4, batch * 4 + 4), async ids => new Set(ids))))
       .then(batches => batches.flat())]);
+  noteUnboundSourceWorks(session, workIds.filter(work => !sourceBound.has(work)));
   const exactById = new Map(revisions.map((id, index) => [id, exacts[index]]));
   const mapped: FeedSource[] = [];
   for (const row of rows) {

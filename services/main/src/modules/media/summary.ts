@@ -11,7 +11,7 @@ import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
-import { DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames, hasDisclosure, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
+import { DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames, hasDisclosure, type DisclosureChannel, type DisclosureDecision, type DisclosureTarget } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
@@ -91,6 +91,11 @@ export interface SummaryInput {
   /** The caller already loaded graph types. A non-Agent then needs no name-owner
    * probe; community pages set this so that probe is not another graph request. */
   settleNonAgentNameOwners?: boolean;
+  /** The caller fences names itself. This batch then keeps the graph split
+   * and does not spend its own disclosure statements. */
+  callerFencesDisclosure?: boolean;
+  /** Filled with graph heads so the caller can fence disclosure without a second probe. */
+  heads?: Map<string, string>;
 }
 
 export type AvatarDescriptor =
@@ -497,9 +502,12 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
       ...settledNameOwner(row) };
   });
-  const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
-    input.channel ?? 'summary', client);
-  if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
+  if (input.heads) for (const [reference, row] of graph.rows) if (row.head) input.heads.set(reference, row.head);
+  const initialDecisions = input.callerFencesDisclosure
+    ? unique.map(() => 'visible' as const)
+    : await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
+      input.channel ?? 'summary', client);
+  if (hasDisclosure(env) && !input.callerFencesDisclosure) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
   noteNameProbe(initialTargets);
   for (const [index, reference] of unique.entries()) {
     if (initialDecisions[index] !== 'visible') graph.rows.delete(reference);
@@ -729,12 +737,14 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       targets.push({ owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover' });
     }
   }
-  const final = reader.viewer?.signedIn
+  const final = input.callerFencesDisclosure
+    ? { decisions: targets.map(() => 'visible' as const), anonymousNames: [] as DisclosureDecision[], anonymousNameProbes: 0 }
+    : reader.viewer?.signedIn
     ? await discloseInventoryWithAnonymousNames(env, targets, reader.viewer, input.channel ?? 'summary', client)
     : { decisions: await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
-      input.channel ?? 'summary', client), anonymousNames: [], anonymousNameProbes: 0 };
+      input.channel ?? 'summary', client), anonymousNames: [] as DisclosureDecision[], anonymousNameProbes: 0 };
   const decisions = final.decisions;
-  if (hasDisclosure(env)) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
+  if (hasDisclosure(env) && !input.callerFencesDisclosure) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
   noteNameProbe(targets);
   cost.accessQueries += final.anonymousNameProbes;
   cost.graphQueries += final.anonymousNameProbes * DISCLOSURE_COST.nameOwnerQueries;
@@ -746,7 +756,8 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Agent graph flags cannot make a controller's private name public. Reuse
   // the anonymous name decision from the final exact-target owner snapshot;
   // viewer delivery and public classification share its current authority cut.
-  const nameIsPublic = (reference: string) => !hasDisclosure(env) || !reader.viewer?.signedIn
+  const nameIsPublic = (reference: string) => input.callerFencesDisclosure
+    || !hasDisclosure(env) || !reader.viewer?.signedIn
     || final.anonymousNames[nameIndexes.get(reference)!] === 'visible';
   const projectionSummaries = await readProjectionSummaries(env, reader, input, projections, graph.generation, cost, client);
   const summaries = input.resources.map((reference): ResourceSummary => {
