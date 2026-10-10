@@ -120,17 +120,6 @@ export function Pages({
   );
 }
 
-/** A date literal the API client parsed, as the calendar text it was recorded with. */
-function recordedLexical(lexical: unknown, datatype: string): string {
-  if (typeof lexical === 'string') return lexical;
-  if (!(lexical instanceof Date) || Number.isNaN(lexical.getTime())) return '';
-  const iso = lexical.toISOString();
-  const kind = datatype.slice(datatype.lastIndexOf('#') + 1);
-  if (kind === 'gYear') return iso.slice(0, 4);
-  if (kind === 'date' || kind === 'gYearMonth') return iso.slice(0, kind === 'gYearMonth' ? 7 : 10);
-  return iso.replace(/\.\d+(?=Z$)/, '');
-}
-
 export function Value({
   item,
   names,
@@ -181,11 +170,9 @@ export function Value({
   if (value.kind === 'no-value')
     return <span className="text-muted-foreground">{t.valueNone}</span>;
   if (value.kind === 'literal') {
-    // The API client turns a date lexical (`1980-04-01`) into a Date. A Date is not a React child.
-    const lexical = recordedLexical(value.lexical, value.datatype);
     return (
       <span lang={value.language ?? undefined} dir="auto" className="break-words">
-        {lexical}
+        {value.lexical}
       </span>
     );
   }
