@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
-import { formatTierRunLine, goalSlotDirectory, implementedTiers, parseArgs, tierBunTestArgs, tierTestTimeoutArg, tierTestTimeoutMs, trackCommandProcess, untrackCommandProcess, type Tier, type TierTestTimeout } from './core.ts';
+import { formatTierRunLine, goalSlotDirectory, implementedTiers, parseArgs, tierBunTestArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -41,23 +41,48 @@ function combinedQaCommand(groups: TestGroup[]): [string, string[]] | undefined 
     ...group.files.flatMap(file => ['--file', file])])]];
 }
 
-/** The unit gate names the owner tier's per-test timeout on `task test`.
- * The QA CLI passes that same table entry to bun, so a matching flag is
- * checked here and left off the hosted command. */
-function assertPassedTierTimeout(groups: readonly TestGroup[], timeout: string): void {
-  const tiers = [...new Set(groups.map(group => group.tier))];
-  const tier = tiers.length === 1 ? tiers[0] : undefined;
-  if (!tier || !Object.hasOwn(tierTestTimeoutMs, tier) || timeout !== tierTestTimeoutArg(tier as TierTestTimeout)) {
-    throw new Error('--timeout must be the tier per-test timeout');
+/** One caller `--timeout`, in the form bun accepts. Absent when the tier default should apply. */
+function splitBunTimeout(input: readonly string[]): { args: string[]; timeout: string[] } {
+  const args: string[] = [];
+  const timeout: string[] = [];
+  for (let i = 0; i < input.length; i++) {
+    const arg = input[i]!;
+    if (arg !== '--timeout' && !arg.startsWith('--timeout=')) { args.push(arg); continue; }
+    if (timeout.length) throw new Error('Pass one --timeout');
+    if (arg === '--timeout') {
+      const value = input[++i];
+      if (value === undefined || !/^\d+$/.test(value)) throw new Error('--timeout needs a millisecond value');
+      timeout.push('--timeout', value);
+    } else if (!/^--timeout=\d+$/.test(arg)) throw new Error('--timeout needs a millisecond value');
+    else timeout.push(arg);
   }
+  return { args, timeout };
+}
+
+/** A caller timeout replaces a tier default already on a bun line, and is appended to a hosted command. */
+function withCallerTimeout(command: [string, string[]], timeout: readonly string[]): [string, string[]] {
+  if (!timeout.length) return command;
+  const [program, argv] = command;
+  if (argv[0] !== 'test') return [program, [...argv, ...timeout]];
+  const body: string[] = [];
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === '--timeout') { i++; continue; }
+    if (arg.startsWith('--timeout=')) continue;
+    body.push(arg);
+  }
+  return [program, ['test', ...timeout, ...body]];
+}
+
+function applyCallerTimeout(groups: TestGroup[], timeout: readonly string[]): void {
+  if (!timeout.length) return;
+  for (const group of groups) group.command = withCallerTimeout(group.command, timeout);
 }
 
 export function selectTestGroups(input: string[]): TestGroup[] {
-  const timeouts = input.filter(arg => /^--timeout=\d+$/.test(arg));
-  if (timeouts.length > 1) throw new Error('A tier passes one per-test --timeout');
-  const timeoutArg = timeouts[0];
-  const groups = selectParsedTestGroups(timeoutArg ? input.filter(arg => arg !== timeoutArg) : input);
-  if (timeoutArg) assertPassedTierTimeout(groups, timeoutArg);
+  const { args, timeout } = splitBunTimeout(input);
+  const groups = selectParsedTestGroups(args);
+  applyCallerTimeout(groups, timeout);
   return groups;
 }
 
@@ -121,14 +146,15 @@ function selectParsedTestGroups(args: string[]): TestGroup[] {
   return groups;
 }
 
-function commandsFor(groups: TestGroup[]): [string, string[]][] {
+function commandsFor(groups: TestGroup[], timeout: readonly string[] = []): [string, string[]][] {
   const combined = combinedQaCommand(groups);
-  return combined ? [combined] : groups.map(group => group.command);
+  if (!combined) return groups.map(group => group.command);
+  return [timeout.length ? [combined[0], [...combined[1], ...timeout]] : combined];
 }
 
 /** The commands `goalctl test` runs. Several registered tiers become one QA invocation. */
 export function testCommands(args: string[]): [string, string[]][] {
-  return commandsFor(selectTestGroups(args));
+  return commandsFor(selectTestGroups(args), splitBunTimeout(args).timeout);
 }
 
 export function selectTestCommand(args: string[]): [string, string[]] {
@@ -260,7 +286,7 @@ async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions):
 /** Explicit stories bypass the stack harness, but their browser workers still need host memory. */
 export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
   const groups = selectTestGroups(args);
-  const commands = commandsFor(groups);
+  const commands = commandsFor(groups, splitBunTimeout(args).timeout);
   if (commands.length !== 1) return runTierGroups(groups, options);
   const command = commands[0]!;
   const env = options.env ?? process.env;

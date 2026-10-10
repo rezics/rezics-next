@@ -161,8 +161,9 @@ Owner is 30 seconds, and integration and fault/recovery are 60 seconds.
 Owner, integration, and fault/recovery start PostgreSQL, Fuseki, or a stack,
 and on a loaded host that startup alone exceeds bun's 5-second default. A
 case that sets its own timeout, or calls `setDefaultTimeout`, keeps that
-value. Cost and latency claims stay in the cost contracts and budget
-assertions.
+value. A `--timeout` passed with the files is the one flag `bun test`
+receives; the tier value applies only when that flag is absent. Cost and
+latency claims stay in the cost contracts and budget assertions.
 
 Other scale probes can select disk storage explicitly:
 

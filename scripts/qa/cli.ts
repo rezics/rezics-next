@@ -88,6 +88,15 @@ import {
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
+
+/** One per-test timeout: the caller's `--timeout` when present, otherwise the tier default. */
+function bunTestArgs(tier: Tier, args: readonly string[]): string[] {
+  const passed = options.timeoutArgs ?? [];
+  if (tier === 'unit' || tier === 'owner' || tier === 'integration' || tier === 'fault/recovery') {
+    return tierBunTestArgs(tier, args, passed);
+  }
+  return ['test', ...passed, ...args];
+}
 const runId = newRunId();
 const directory = join(qaArtifactDirectory(root), runId);
 const logs = join(directory, 'logs');
@@ -604,7 +613,7 @@ async function runShardWork(
     const batch = batches[index]!;
     const batchFile =
       batches.length === 1 ? outfile : outfile.replace(/\.xml$/, `-${index + 1}.xml`);
-    const batchArgs = tierBunTestArgs(tier, [
+    const batchArgs = bunTestArgs(tier, [
       ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`,
     ]);
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
@@ -889,7 +898,7 @@ try {
       await runBunTier(
         tier,
         'bun',
-        tierBunTestArgs(tier, [
+        bunTestArgs(tier, [
           ...testArgs(tier, selection, chosenFor(tier)),
           ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
           '--reporter=junit',
@@ -910,8 +919,8 @@ try {
       }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const compose = readEnv(join(stackDir, 'compose.env'));
-      const result = await commandAsync(root, 'bun', ['test', ...testArgs('model', selection, chosenFor('model')), '--reporter=junit',
-        `--reporter-outfile=${join(directory, 'model.xml')}`], 180_000,
+      const result = await commandAsync(root, 'bun', bunTestArgs('model', [...testArgs('model', selection, chosenFor('model')), '--reporter=junit',
+        `--reporter-outfile=${join(directory, 'model.xml')}`]), 180_000,
       { ...process.env, FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
         FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
         FUSEKI_COMMAND_TOKEN: compose.FUSEKI_COMMAND_TOKEN,
@@ -1046,8 +1055,8 @@ try {
       }
       // docs/testing/test-harness.md#tiers-and-budgets: 5 min since the phase D probes.
       const budget = 300_000;
-      const result = await commandAsync(root, 'bun', ['test', ...testArgs(tier, selection, chosenFor(tier)), '--reporter=junit',
-        `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
+      const result = await commandAsync(root, 'bun', bunTestArgs(tier, [...testArgs(tier, selection, chosenFor(tier)), '--reporter=junit',
+        `--reporter-outfile=${join(directory, `${artifact}.xml`)}`]), budget,
       { ...process.env, ...staged.apps, REZICS_QA_RUN_ID: projectRunId,
         REZICS_S3_GATE_PROJECT: projectRunId,
         REZICS_QA_ARTIFACT_DIR: directory,

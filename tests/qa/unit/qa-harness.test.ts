@@ -9,7 +9,7 @@ import { devStackStopArgs, rememberDevStack, startedDevStacks, stopDevSession }
   from '../../../scripts/dev/stack-session.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount } from '../../../scripts/qa/browser-budget.ts';
 import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
-import { acquireQaSlots, commandAsync, selfManagedFaultFiles, tierBunTestArgs } from '../../../scripts/qa/core.ts';
+import { acquireQaSlots, commandAsync, parseArgs, selfManagedFaultFiles, tierBunTestArgs } from '../../../scripts/qa/core.ts';
 import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
 import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
@@ -692,12 +692,30 @@ test('each tier bun test command carries that tier timeout', () => {
     'test', '--timeout=60000', 'tests/qa/integration/shared-stack.test.ts']);
   expect(tierBunTestArgs('fault/recovery', ['tests/qa/fault-recovery/lost-response.test.ts'])).toEqual([
     'test', '--timeout=60000', 'tests/qa/fault-recovery/lost-response.test.ts']);
-  const cli = readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8');
-  expect(cli.match(/tierBunTestArgs\(/g)).toHaveLength(2);
-  expect(selectTestCommand(['--timeout=30000', 'scripts/dev/seed/api.test.ts'])).toEqual([
-    'bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file', 'scripts/dev/seed/api.test.ts']]);
-  expect(() => selectTestCommand(['--timeout=5000', 'scripts/dev/seed/api.test.ts']))
-    .toThrow('--timeout must be the tier per-test timeout');
+  const unit = 'tests/qa/unit/qa-harness.test.ts';
+  const timeouts = (args: string[]) => args.filter(arg => arg === '--timeout' || arg.startsWith('--timeout='));
+  expect(timeouts(selectTestCommand([unit])[1])).toEqual(['--timeout=5000']);
+  expect(timeouts(selectTestCommand([unit, '--timeout=60000'])[1])).toEqual(['--timeout=60000']);
+  const directory = mkdtempSync(join(root, '.temp', 'caller-timeout-'));
+  const hang = join(directory, 'hang.test.ts');
+  writeFileSync(hang, "import { test } from 'bun:test';\ntest('hang', () => {});\n");
+  try {
+    const detached = selectTestCommand([hang, '--timeout=60000']);
+    expect(detached[0]).toBe('bun');
+    expect(timeouts(detached[1])).toEqual(['--timeout=60000']);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+  const owner = selectTestCommand(['--timeout=60000', 'scripts/dev/seed/api.test.ts']);
+  expect(owner).toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file',
+    'scripts/dev/seed/api.test.ts', '--timeout=60000']]);
+  expect(parseArgs(owner[1].slice(1)).timeoutArgs).toEqual(['--timeout=60000']);
+  expect(tierBunTestArgs('owner', ['scripts/dev/seed/api.test.ts'], ['--timeout=60000'])).toEqual([
+    'test', '--timeout=60000', 'scripts/dev/seed/api.test.ts']);
+  const spaced = selectTestCommand(['scripts/dev/seed/api.test.ts', '--timeout', '45000'])[1];
+  expect(spaced.slice(-2)).toEqual(['--timeout', '45000']);
+  expect(timeouts(spaced)).toEqual(['--timeout']);
+  const mixed = selectTestCommand([unit, 'scripts/dev/seed/api.test.ts', '--timeout=60000']);
+  expect(timeouts(mixed[1])).toEqual(['--timeout=60000']);
+  expect(() => selectTestCommand([unit, '--timeout=1000', '--timeout=2000'])).toThrow('Pass one --timeout');
 });
 
 test('a case sleeping 7s passes in owner and fails in unit', async () => {
