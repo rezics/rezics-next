@@ -71,6 +71,7 @@ import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-owner
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import {
   integrationBudgetSummary, integrationOverBudgetFiles, integrationTierWallMs, planIntegrationShards,
+  runQueuedProjects,
 } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
 import { filesKeptAfterResetFailure, integrationResetHarnessFailure } from './integration-reset.ts';
@@ -281,7 +282,7 @@ async function startRunStack(args: string[], budget: number, env: NodeJS.Process
     (environment, onLine) => runQaStartupChildAsync(root, args, budget, environment, onLine), reserve);
 }
 
-let release = () => {};
+const release = options.tier || options.groups || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 function campaignEvidenceRead(projectRunId: string, sample: CommandPhaseSample): CampaignEvidenceRead {
   const evidencePath = join(directory, 'erasure-campaign-qualification.json');
@@ -708,7 +709,7 @@ function testWall(runs: ShardRun[]): number {
 // recorded file durations and free Goal QA slots. A file that fails after other
 // files in its project is rerun alone on a fresh project; passing there marks it
 // order-dependent, and the fresh result replaces the shared-project result.
-export async function runStackTier(tier: StackTier, runProject: typeof runShard = runShard): Promise<void> {
+async function runStackTier(tier: StackTier): Promise<void> {
   const artifact = tierArtifactName(tier);
   const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosenFor(tier)));
   // Only the explicitly selected exclusive drill times both 600-second commands.
@@ -793,41 +794,19 @@ export async function runStackTier(tier: StackTier, runProject: typeof runShard 
     const warning = stackPlanBudgetWarning(estimates, tierBudget, capacity, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
-    const runs = new Array<ShardRun>(projects.length);
-    let project = 0;
     // Local workers bound the plan; each project takes its global lease only after admission.
     const startInitialStack = concurrencyGate(tier === 'integration' ? capacity : Math.min(capacity, 3));
-    await Promise.all(
-      Array.from({ length: Math.min(capacity, projects.length) }, async () => {
-        while (project < projects.length) {
-          const index = project++;
-          runs[index] = await runProject(
-            tier,
-            `${runId}-${prefix}${index + 1}`,
-            projects[index]!,
-            flags,
-            budget,
-            false,
-            startInitialStack,
-            integration?.[index]?.batches,
-          );
-        }
-      }),
-    );
+    const runs = await runQueuedProjects(projects, capacity, budget, (index, files, commandBudget) => runShard(
+      tier, `${runId}-${prefix}${index + 1}`, files, flags, commandBudget, false, startInitialStack,
+      integration?.[index]?.batches,
+    ));
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
       && run.record.files.length > 1)
       .flatMap(run => isolationCandidates(run.xml ?? '', tier)
         .map(candidate => ({ run, ...candidate })));
-    const reruns: (ShardRun | undefined)[] = [];
-    let next = 0;
     const startRerunStack = concurrencyGate(Math.min(capacity, 3));
-    await Promise.all(Array.from({ length: Math.min(capacity, candidates.length) }, async () => {
-      while (next < candidates.length) {
-        const index = next++;
-        reruns[index] = await runProject(tier, `${runId}-${prefix}r${index + 1}`,
-          [candidates[index]!.file], flags, budget, true, startRerunStack);
-      }
-    }));
+    const reruns = await runQueuedProjects(candidates, capacity, budget, (index, candidate, commandBudget) =>
+      runShard(tier, `${runId}-${prefix}r${index + 1}`, [candidate.file], flags, commandBudget, true, startRerunStack));
     const replaced = new Map<string, ShardRun>();
     candidates.forEach(({ run, file, names, afterFiles, infrastructure }, index) => {
       const rerun = reruns[index];
@@ -894,8 +873,6 @@ function noteIntegrationBudget(artifactDirectory: string): void {
   appendFileSync(join(artifactDirectory, 'summary.md'), `${integrationBudgetNotes.join('\n')}\n`);
 }
 
-if (import.meta.main) {
-release = options.tier || options.groups || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
   if (options.record) {
@@ -1154,5 +1131,4 @@ try {
         tiers.find(tier => tier.name === name)?.status ?? 'failed')).join('\n'));
     }
   if (errors.length) process.exitCode = 1;
-}
 }

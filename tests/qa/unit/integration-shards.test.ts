@@ -1,6 +1,4 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { planShards, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
 import {
   integrationBudgetSummary,
@@ -8,6 +6,7 @@ import {
   integrationPlanLimitMs,
   integrationTierWallMs,
   planIntegrationShards,
+  runQueuedProjects,
 } from '../../../scripts/qa/integration-shards.ts';
 import { qaResourceClasses, queuedProjectsBudget } from '../../../scripts/qa/resource-classes.ts';
 
@@ -110,89 +109,47 @@ const queueFiles = [
 
 test('queued integration projects keep the command budget and start as slots free', async () => {
   const slots = 3;
-  const root = join(import.meta.dir, '../../..');
-  const artifactRoot = mkdtempSync(join(root, '.temp', 'integration-queue-'));
-  // History lives under this test's own artifact root, never the shared .artifacts/qa other runs read.
-  const history = join(artifactRoot, '20990101t000000-a16090');
-  const slotDirectory = join(artifactRoot, 'slots');
-  mkdirSync(join(history, 'logs'), { recursive: true });
-  mkdirSync(slotDirectory);
-  writeFileSync(join(history, 'logs', 'integration-1.log'), '');
-  writeFileSync(join(history, 'logs', 'integration-1-durations.json'), JSON.stringify(
-    Object.fromEntries(queueFiles.map((file) => [file, 200_000])),
-  ));
-  const previousArgv = process.argv;
-  const previousEnv = {
-    GOAL_QA_SLOTS: process.env.GOAL_QA_SLOTS,
-    GOAL_QA_SLOT_DIRECTORY: process.env.GOAL_QA_SLOT_DIRECTORY,
-    GOAL_QA_HEAVY_RUN: process.env.GOAL_QA_HEAVY_RUN,
-    REZICS_QA_ARTIFACT_ROOT: process.env.REZICS_QA_ARTIFACT_ROOT,
-    REZICS_QA_MEMORY_DEADLINE: process.env.REZICS_QA_MEMORY_DEADLINE,
-    REZICS_STACK_PROFILE: process.env.REZICS_STACK_PROFILE,
-    REZICS_QA_MEMORY_EVENTS: process.env.REZICS_QA_MEMORY_EVENTS,
-    GOAL_QA_WAIT_DIR: process.env.GOAL_QA_WAIT_DIR,
-    GOAL_QA_COMMAND: process.env.GOAL_QA_COMMAND,
-  };
-  process.argv = ['bun', 'scripts/qa/cli.ts', '--tier', 'integration', ...queueFiles.flatMap((file) => ['--file', file])];
-  process.env.GOAL_QA_SLOTS = String(slots);
-  process.env.GOAL_QA_SLOT_DIRECTORY = slotDirectory;
-  delete process.env.GOAL_QA_HEAVY_RUN;
-  process.env.REZICS_QA_ARTIFACT_ROOT = artifactRoot;
+  const estimates = new Map(queueFiles.map((file) => [file, 200_000]));
+  const plan = planIntegrationShards(estimates, slots);
+  expect(plan.length).toBeGreaterThan(slots);
   const started: { files: string[]; budget: number }[] = [];
   const releases: (() => void)[] = [];
   let running = 0;
-  const restoreEnv = () => {
-    process.argv = previousArgv;
-    for (const [name, value] of Object.entries(previousEnv)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
+  // scripts/qa/cli.ts queues stack projects through this function.
+  const done = runQueuedProjects(plan, slots, ordinaryBudgetMs, async (_index, project, budget) => {
+    running++;
+    started.push({ files: [...project.files], budget });
+    await new Promise<void>((resolve) => releases.push(resolve));
+    running--;
+  });
+  const untilStarted = async (count: number) => {
+    const deadline = Date.now() + 5_000;
+    while (started.length < count) {
+      if (Date.now() >= deadline) throw new Error(`runner started ${started.length} projects`);
+      await Bun.sleep(5);
     }
   };
   try {
-    const { runStackTier } = await import('../../../scripts/qa/cli.ts');
-    const done = runStackTier('integration', async (_tier, projectRunId, files, _flags, budget) => {
-      running++;
-      started.push({ files: [...files], budget });
-      await new Promise<void>((resolve) => releases.push(resolve));
-      running--;
-      return {
-        ok: true, timedOut: false, noMatch: false,
-        record: { project: projectRunId, files, status: 'passed', stage: 'test', elapsedMs: 1 },
-      };
-    });
-    const untilStarted = async (count: number) => {
-      const deadline = Date.now() + 5_000;
-      while (started.length < count) {
-        if (Date.now() >= deadline) throw new Error(`runner started ${started.length} projects`);
-        await Bun.sleep(5);
-      }
-    };
-    try {
-      await untilStarted(slots);
-      expect(started).toHaveLength(slots);
-      expect(running).toBe(slots);
-      await Bun.sleep(30);
-      expect(started).toHaveLength(slots);
-      const runningFiles = new Set(started.flatMap((project) => project.files));
-      releases.shift()!();
-      await untilStarted(slots + 1);
-      expect(started).toHaveLength(slots + 1);
-      expect(running).toBe(slots);
-      expect(runningFiles.has(started[slots]!.files[0]!)).toBe(false);
-      expect(started.every((project) => project.files.length === 1 && project.budget === ordinaryBudgetMs)).toBe(true);
-    } finally {
-      const deadline = Date.now() + 5_000;
-      while (Date.now() < deadline) {
-        const waiting = releases.splice(0);
-        for (const release of waiting) release();
-        if (running === 0 && releases.length === 0 && started.length >= slots + 1) break;
-        await Bun.sleep(5);
-      }
-      await done;
-    }
+    await untilStarted(slots);
+    expect(started).toHaveLength(slots);
+    expect(running).toBe(slots);
+    await Bun.sleep(30);
+    expect(started).toHaveLength(slots);
+    const runningFiles = new Set(started.flatMap((project) => project.files));
+    releases.shift()!();
+    await untilStarted(slots + 1);
+    expect(started).toHaveLength(slots + 1);
+    expect(running).toBe(slots);
+    expect(runningFiles.has(started[slots]!.files[0]!)).toBe(false);
+    expect(started.every((project) => project.files.length === 1 && project.budget === ordinaryBudgetMs)).toBe(true);
   } finally {
-    restoreEnv();
-    rmSync(history, { recursive: true, force: true });
-    rmSync(artifactRoot, { recursive: true, force: true });
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const waiting = releases.splice(0);
+      for (const release of waiting) release();
+      if (running === 0 && releases.length === 0 && started.length >= slots + 1) break;
+      await Bun.sleep(5);
+    }
+    await done;
   }
 });

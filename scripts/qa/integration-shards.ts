@@ -102,3 +102,22 @@ export function planIntegrationShards(
     ...persistent.map((file) => shardOf([file], estimates)),
   ];
 }
+
+/** At most `slots` projects run at once. Each receives `budget` as its own
+ * deadline, and a project past the free slots starts when a worker finishes. */
+export async function runQueuedProjects<Project, Result>(
+  projects: readonly Project[],
+  slots: number,
+  budget: number,
+  run: (index: number, project: Project, budget: number) => Promise<Result>,
+): Promise<Result[]> {
+  const results = new Array<Result>(projects.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(slots, projects.length) }, async () => {
+    while (next < projects.length) {
+      const index = next++;
+      results[index] = await run(index, projects[index]!, budget);
+    }
+  }));
+  return results;
+}
