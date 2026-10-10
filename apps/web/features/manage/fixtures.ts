@@ -265,8 +265,10 @@ export const logApi: LogApi = {
 export const logNames: LogNames = { agents, works, chapters, facts };
 
 export const roles: Role[] = [
-  { id: id(2001), name: 'Community moderators', permissions: ['governance.moderate', 'realm.members.manage'] },
-  { id: id(2002), name: 'Rules editors', permissions: ['governance.rule.publish', 'realm.settings.manage'] },
+  { id: id(2001), name: 'Community moderators', permissions: ['governance.moderate', 'realm.members.manage'],
+    holders: [people.daniel, people.an], moreHolders: false },
+  { id: id(2002), name: 'Rules editors', permissions: ['governance.rule.publish', 'realm.settings.manage'],
+    holders: [], moreHolders: false },
 ];
 const until = new Date(now + 30 * 86_400_000).toISOString();
 export const members: Member[] = [
@@ -332,10 +334,13 @@ export function adminApi(options: { record?: AdminRecord; settingsFailure?: 'sta
   const record = options.record ?? { members: [], roles: [], settings: [] };
   const ok = <T>(data: T): Loaded<T> => ({ ok: true, data });
   return {
-    members: async search => ok({ generation: '12', nextCursor: null, items: search
-      ? members.filter(member => agents[member.member]!.label!.toLowerCase().includes(search.toLowerCase())
-        || `@${agents[member.member]!.handle}`.includes(search.toLowerCase()) || member.member === search)
-      : members }),
+    members: async (search, _after, role) => ok({ generation: '12', nextCursor: null, items: members.filter(member => {
+      if (role && !member.roles.some(item => item.id === role)) return false;
+      if (!search) return true;
+      const agent = agents[member.member]!;
+      return agent.label!.toLowerCase().includes(search.toLowerCase())
+        || `@${agent.handle}`.includes(search.toLowerCase()) || member.member === search;
+    }) }),
     names: async () => agents,
     invitations: async () => ok(outgoingInvitations),
     revoke: async (invitation, key) => {
@@ -361,7 +366,7 @@ export function adminApi(options: { record?: AdminRecord; settingsFailure?: 'sta
         membershipGeneration: command.expectedMembershipGeneration, banned: command.action === 'ban',
         bannedUntil: command.durationSeconds ? new Date(now + command.durationSeconds * 1000).toISOString() : null } };
     },
-    roles: async () => ok({ generation: '12', roles }),
+    roles: async () => ok({ generation: '12', cap: 32, roles }),
     preview: async command => ({ ok: true, data: impactOf(command) }),
     changeRole: async (command, digest, key) => {
       record.roles.push({ ...command, digest, key });

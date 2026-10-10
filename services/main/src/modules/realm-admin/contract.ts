@@ -11,7 +11,14 @@ import { Value } from 'typebox/value';
 // Community-scoped and temporary bans follow the moderator task described at
 // https://support.reddithelp.com/hc/en-us/articles/15484464549524-User-Management-banning-and-muting
 // (consulted 2026-09-28); Access remains the enforcement authority here.
-export const REALM_ADMIN_COST = { page: 50, roles: 32, assignments: 200,
+/** A Realm can have at most this many roles. One already past the cap keeps them and cannot add more. */
+export const REALM_ROLE_CAP = 32 as const;
+/** Names shown on a role card. The read fetches one extra row and sets moreHolders from it. */
+export const REALM_ROLE_HOLDER_PREVIEW = 3 as const;
+export const REALM_ROLE_HOLDER_PROBE = 4 as const;
+/** The roles read can return a Realm that already exceeded the cap, and refuses a larger page. */
+export const REALM_ROLE_READ_LIMIT = 128 as const;
+export const REALM_ADMIN_COST = { page: 50, roles: REALM_ROLE_CAP, assignments: 200,
   permissions: 9, grantRows: 4096, statementTimeoutMs: 5000, lockTimeoutMs: 2000 } as const;
 export const realmPermissions = ['governance.moderate', 'governance.rule.publish',
   'realm.members.manage', 'realm.roles.manage', 'realm.settings.manage', 'review.decide', 'publication.adopt', 'rating.configure', 'rating.question-presentation.review'] as const;
@@ -40,8 +47,10 @@ export const impact = t.Object({ digest: t.String(), exact: t.Literal(true), aff
   generation, changes: t.Array(t.Object({ member: readId,
     gained: t.Array(realmPermission), lost: t.Array(realmPermission) }), { maxItems: REALM_ADMIN_COST.assignments }) });
 export type RoleImpact = Static<typeof impact>;
-export const roleView = t.Object({ id: readUuid, name: t.String(), permissions: t.Array(realmPermission) });
-export const roleList = t.Object({ generation, roles: t.Array(roleView, { maxItems: REALM_ADMIN_COST.roles }) });
+export const roleView = t.Object({ id: readUuid, name: t.String(), permissions: t.Array(realmPermission),
+  holders: t.Array(readId, { maxItems: REALM_ROLE_HOLDER_PREVIEW }), moreHolders: t.Boolean() });
+export const roleList = t.Object({ generation, cap: t.Literal(REALM_ROLE_CAP),
+  roles: t.Array(roleView, { maxItems: REALM_ROLE_READ_LIMIT }) });
 export const roleReceipt = t.Object({ receiptId: readUuid, generation, replayed: t.Boolean(), impact });
 export const escalationCommand = t.Object({ ...commandFields,
   expectedItemGeneration: generation,
@@ -53,6 +62,7 @@ export const escalationView = t.Object({ id: readUuid, reason: t.String(), actin
 export const escalationReceipt = t.Object({ receiptId: readUuid, generation,
   replayed: t.Boolean(), escalation: escalationView });
 export const memberQuery = { actingSubject: readId, search: t.Optional(t.String({ maxLength: 80 })),
+  role: t.Optional(readUuid),
   after: t.Optional(readId), limit: t.Optional(t.Integer({ minimum: 1, maximum: REALM_ADMIN_COST.page })) };
 export const memberPage = t.Object({ generation, items: t.Array(t.Object({ member: readId,
   joinedAt: t.Nullable(t.String()), membershipGeneration: generation,

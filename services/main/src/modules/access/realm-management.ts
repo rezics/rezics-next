@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from './admission.ts';
-import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid,
+import { REALM_ADMIN_COST, REALM_ROLE_CAP, REALM_ROLE_HOLDER_PREVIEW, REALM_ROLE_HOLDER_PROBE,
+  REALM_ROLE_READ_LIMIT, RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid,
   RealmAdminLimit, RealmAdminStale, RealmAdminUnavailable, escalationCommand, roleCommand,
   realmPermissions, type EscalationCommand, type RealmPermission, type RoleCommand,
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
@@ -36,6 +37,81 @@ interface Assignment { member: string; valid_until: Date }
 interface Grant { id: string; recipient_subject: string; action: RealmPermission;
   generation: string; valid_until: Date; role_id: string | null }
 interface Receipt { receiptId: string; generation: string; replayed: boolean }
+interface MemberRosterRow { member: string; state: 'joined' | 'left' | 'not_joined';
+  membership_generation: string; banned: boolean; banned_until: Date | null; joined_at: Date | null;
+  roles: { id: string; name: string; validUntil: string }[] }
+interface RolePreviewRow { id: string; name: string; permissions: RealmPermission[];
+  holders: unknown; more_holders: boolean }
+
+const roleUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** An active Agent. A private principal, an institution and a deactivated Agent stay off the roster. */
+const visibleAgent = `subject.kind = 'agent' AND subject.active`;
+/** A ban ends a role. A leftover assignment must not name that person as a holder. */
+const notBannedHolder = `NOT EXISTS (SELECT 1 FROM access.membership_ban ban
+  WHERE ban.kind = 'realm' AND ban.owner_subject = holder.realm AND ban.member_subject = holder.member
+    AND ban.active AND (ban.expires_at IS NULL OR ban.expires_at > clock_timestamp()))`;
+
+/**
+ * One index range on (realm, role, member), then at most limit+1 visible holders.
+ * An unknown role returns no rows; it is not a separate existence check.
+ */
+export const REALM_ROLE_HOLDER_PAGE_SQL = `SELECT team.member,
+  COALESCE(m.state,'not_joined') AS state, COALESCE(m.generation,0)::text AS membership_generation,
+  COALESCE(b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()), false) AS banned,
+  CASE WHEN b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp())
+    THEN b.expires_at ELSE NULL END AS banned_until,
+  (SELECT h.changed_at FROM access.membership_history h WHERE h.membership_id = m.id
+    AND h.state = 'joined' ORDER BY h.generation DESC LIMIT 1) AS joined_at,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name,
+    'validUntil', a.valid_until) ORDER BY r.id) FROM access.realm_admin_assignment a
+    JOIN access.realm_admin_role r ON r.realm = a.realm AND r.id = a.role_id
+    WHERE a.realm = $1 AND a.member = team.member AND a.valid_until > clock_timestamp()), '[]') AS roles
+  FROM (
+    SELECT holder.member FROM access.realm_admin_assignment holder
+    JOIN access.authority_subject subject ON subject.id = holder.member AND ${visibleAgent}
+    WHERE holder.realm = $1 AND holder.role_id = $5::uuid AND holder.valid_until > clock_timestamp()
+      AND ($2::text IS NULL OR holder.member > $2)
+      AND ($3::text[] IS NULL OR holder.member = ANY($3))
+      AND ${notBannedHolder}
+    ORDER BY holder.member LIMIT $4) team
+  LEFT JOIN access.membership m ON m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = team.member
+  LEFT JOIN access.membership_ban b ON b.kind = 'realm'
+    AND b.owner_subject = $1 AND b.member_subject = team.member
+  ORDER BY team.member LIMIT $4`;
+
+/**
+ * Every role's first preview rows in one statement. Each lateral stops after the
+ * probe, so the assignment reads are capped by the role page times that probe.
+ */
+export const REALM_ROLE_HOLDER_PREVIEW_SQL = `SELECT r.id, r.name, r.permissions,
+  COALESCE(h.holders, '[]'::jsonb) AS holders, COALESCE(h.more_holders, false) AS more_holders
+  FROM (
+    SELECT id, name, permissions FROM access.realm_admin_role
+    WHERE realm = $1 ORDER BY id LIMIT $2) r
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(jsonb_agg(page.member ORDER BY page.ord) FILTER (WHERE page.ord <= $3), '[]'::jsonb) AS holders,
+      COALESCE(bool_or(page.ord > $3), false) AS more_holders
+    FROM (
+      SELECT bounded.member, row_number() OVER (ORDER BY bounded.member) AS ord
+      FROM (
+        SELECT holder.member FROM access.realm_admin_assignment holder
+        JOIN access.authority_subject subject ON subject.id = holder.member AND ${visibleAgent}
+        WHERE holder.realm = $1 AND holder.role_id = r.id AND holder.valid_until > clock_timestamp()
+          AND ${notBannedHolder}
+        ORDER BY holder.member LIMIT $4) bounded) page) h ON true
+  ORDER BY r.id`;
+
+function holderNames(value: unknown): string[] {
+  const parsed = typeof value === 'string' ? JSON.parse(value) as unknown : value;
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function memberItem(row: MemberRosterRow) {
+  return { member: row.member, state: row.state, banned: row.banned,
+    bannedUntil: row.banned_until?.toISOString() ?? null, membershipGeneration: row.membership_generation,
+    joinedAt: row.joined_at?.toISOString() ?? null, roles: row.roles };
+}
 
 /** A sanction appeal is its own case. It is not a content report and has no owner escalation. */
 export class AppealNotEscalable extends Error {
@@ -392,30 +468,29 @@ export class AccessRealmManagement {
   roles(principal: VerifiedPrincipal, realm: string, actor: string) {
     return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.roles.manage');
-      const roles = (await client.query<Role>(`SELECT id, name, permissions FROM access.realm_admin_role
-        WHERE realm = $1 ORDER BY id LIMIT $2`, [realm, REALM_ADMIN_COST.roles + 1])).rows;
-      if (roles.length > REALM_ADMIN_COST.roles) throw new RealmAdminLimit('Realm role budget exceeded');
-      return { generation, roles };
+      const rows = (await client.query<RolePreviewRow>(REALM_ROLE_HOLDER_PREVIEW_SQL,
+        [realm, REALM_ROLE_READ_LIMIT + 1, REALM_ROLE_HOLDER_PREVIEW, REALM_ROLE_HOLDER_PROBE])).rows;
+      if (rows.length > REALM_ROLE_READ_LIMIT) throw new RealmAdminLimit('Realm role budget exceeded');
+      return { generation, cap: REALM_ROLE_CAP, roles: rows.map(row => ({ id: row.id, name: row.name,
+        permissions: row.permissions, holders: holderNames(row.holders), moreHolders: row.more_holders === true })) };
     });
   }
 
   members(principal: VerifiedPrincipal, realm: string,
-    options: { actingSubject: string; search?: string; after?: string; limit?: number }) {
+    options: { actingSubject: string; search?: string; role?: string; after?: string; limit?: number }) {
     const limit = options.limit ?? REALM_ADMIN_COST.page;
     if (!Number.isInteger(limit) || limit < 1 || limit > REALM_ADMIN_COST.page
-      || options.after && !native.test(options.after) || (options.search?.length ?? 0) > 80) {
+      || options.after && !native.test(options.after) || (options.search?.length ?? 0) > 80
+      || options.role !== undefined && !roleUuid.test(options.role)) {
       throw new RealmAdminInvalid('Invalid member page');
     }
     return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
       const matches = !options.search?.trim() ? null
         : await searchRealmMembers(client, realm, options.search, options.after, limit + 1);
-      // This is the Agent team roster. Private principal memberships never
-      // disclose account identities through this listing.
-      const rows = (await client.query<{ member: string; state: 'joined' | 'left' | 'not_joined';
-        membership_generation: string; joined_at: Date | null;
-        banned: boolean; banned_until: Date | null;
-        roles: { id: string; name: string; validUntil: string }[] }>(`SELECT team.member,
+      // The Agent team roster. Private principals and inactive subjects stay out.
+      // A banned member remains here so they can be unbanned; holder reads omit them.
+      const rows = (await client.query<MemberRosterRow>(options.role ? REALM_ROLE_HOLDER_PAGE_SQL : `SELECT team.member,
         COALESCE(m.state,'not_joined') AS state, COALESCE(m.generation,0)::text AS membership_generation,
         COALESCE(b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()), false) AS banned,
         CASE WHEN b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp())
@@ -426,25 +501,28 @@ export class AccessRealmManagement {
           'validUntil', a.valid_until) ORDER BY r.id) FROM access.realm_admin_assignment a
           JOIN access.realm_admin_role r ON r.realm = a.realm AND r.id = a.role_id
           WHERE a.realm = $1 AND a.member = team.member AND a.valid_until > clock_timestamp()), '[]') AS roles
-        FROM ((SELECT member_subject AS member FROM access.membership
-          WHERE kind = 'realm' AND owner_subject = $1
-            AND ($2::text IS NULL OR member_subject > $2)
-            AND ($3::text[] IS NULL OR member_subject = ANY($3))
-          ORDER BY member_subject LIMIT $4)
+        FROM ((SELECT m.member_subject AS member FROM access.membership m
+          JOIN access.authority_subject subject ON subject.id = m.member_subject AND ${visibleAgent}
+          WHERE m.kind = 'realm' AND m.owner_subject = $1
+            AND ($2::text IS NULL OR m.member_subject > $2)
+            AND ($3::text[] IS NULL OR m.member_subject = ANY($3))
+          ORDER BY m.member_subject LIMIT $4)
           UNION
-          (SELECT DISTINCT member FROM access.realm_admin_assignment
-          WHERE realm = $1 AND valid_until > clock_timestamp()
-            AND ($2::text IS NULL OR member > $2)
-            AND ($3::text[] IS NULL OR member = ANY($3))
-          ORDER BY member LIMIT $4)) team
+          (SELECT DISTINCT holder.member FROM access.realm_admin_assignment holder
+          JOIN access.authority_subject subject ON subject.id = holder.member AND ${visibleAgent}
+          WHERE holder.realm = $1 AND holder.valid_until > clock_timestamp()
+            AND ($2::text IS NULL OR holder.member > $2)
+            AND ($3::text[] IS NULL OR holder.member = ANY($3))
+          ORDER BY holder.member LIMIT $4)) team
         LEFT JOIN access.membership m ON m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = team.member
         LEFT JOIN access.membership_ban b ON b.kind = 'realm'
           AND b.owner_subject = $1 AND b.member_subject = team.member
-        ORDER BY team.member LIMIT $4`, [realm, options.after ?? null, matches, limit + 1])).rows;
-      return { generation, items: rows.slice(0, limit).map(row => ({ member: row.member, state: row.state,
-        banned: row.banned, bannedUntil: row.banned_until?.toISOString() ?? null,
-        membershipGeneration: row.membership_generation, joinedAt: row.joined_at?.toISOString() ?? null, roles: row.roles })),
-      nextCursor: rows.length > limit ? rows[limit - 1]!.member : null };
+        ORDER BY team.member LIMIT $4`,
+      options.role
+        ? [realm, options.after ?? null, matches, limit + 1, options.role]
+        : [realm, options.after ?? null, matches, limit + 1])).rows;
+      return { generation, items: rows.slice(0, limit).map(memberItem),
+        nextCursor: rows.length > limit ? rows[limit - 1]!.member : null };
     });
   }
 

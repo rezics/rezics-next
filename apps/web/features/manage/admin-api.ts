@@ -10,7 +10,7 @@ import type { AgentSummary, InvitationCommand, InvitationPage, InvitationResult,
 
 /** Members, roles and settings from the browser. Stories pass a stand-in. */
 export interface AdminApi {
-  members(search: string, after: string | null): Promise<Loaded<MemberPage>>;
+  members(search: string, after: string | null, role?: string | null): Promise<Loaded<MemberPage>>;
   names(iris: readonly string[]): Promise<Record<string, AgentSummary>>;
   lookup(handle: string): Promise<Loaded<AgentSummary>>;
   changeMember(command: MemberCommand, key: string): Promise<Outcome<MemberReceipt>>;
@@ -27,7 +27,7 @@ export interface AdminApi {
 export function bffAdminApi(realm: string, actingSubject: string): AdminApi {
   const main = () => browserMainApi();
   return {
-    members: (search, after) => readMembers(main(), realm, { actingSubject, search, after }),
+    members: (search, after, role) => readMembers(main(), realm, { actingSubject, search, after, role }),
     names: iris => readAgents(main(), iris, actingSubject),
     lookup: handle => readHandle(main(), handle, actingSubject),
     changeMember: (command, key) => changeMember(main(), realm, command, key),

@@ -69,10 +69,11 @@ export function readPublicDecisions(main: MainClient, realm: string, actingSubje
 }
 
 export function readMembers(main: MainClient, realm: string, query: { actingSubject: string; search?: string;
-  after?: string | null }) {
+  after?: string | null; role?: string | null }) {
   const search = query.search?.trim();
   return settle(() => main.v1.realms({ realm }).members.get({ query: { actingSubject: query.actingSubject,
-    ...search ? { search } : {}, ...query.after ? { after: query.after } : {} } }), { management: true });
+    ...search ? { search } : {}, ...query.after ? { after: query.after } : {},
+    ...query.role ? { role: query.role } : {} } }), { management: true });
 }
 
 export function readOutgoingInvitations(main: MainClient, realm: string, actingSubject: string, after?: string | null) {
@@ -135,9 +136,9 @@ const NAME_BUDGET = 50;
  * an Agent Main cannot describe keeps a null label and shows its short ID.
  * A client that sends a token (the BFF always does) must name its acting Agent.
  */
-export async function readAgents(main: MainClient, iris: readonly string[], actingSubject?: string):
-  Promise<Record<string, AgentSummary>> {
-  const unique = [...new Set(iris)].slice(0, NAME_BUDGET);
+export async function readAgents(main: MainClient, iris: readonly string[], actingSubject?: string,
+  limit = NAME_BUDGET): Promise<Record<string, AgentSummary>> {
+  const unique = [...new Set(iris)].slice(0, limit);
   const agents = await bounded(unique, 8, async (iri): Promise<AgentSummary> => {
     const read = await settle(() => main.v1.agents({ id: uuidOf(iri) }).get({ query: actingSubject ? { actingSubject } : {} }));
     return read.ok ? { iri, label: read.data.displayName, handle: read.data.handle } : { iri, label: null, handle: null };

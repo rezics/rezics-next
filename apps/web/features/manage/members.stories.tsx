@@ -9,6 +9,7 @@ import { RealmFrame } from './realm-frame.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
 
 const record: AdminRecord = { members: [], roles: [], settings: [] };
+const roleReads: { search: string; after: string | null; role?: string | null }[] = [];
 const reset = () => { record.members.length = 0; record.roles.length = 0; };
 const first = { generation: '12', items: members, nextCursor: null };
 
@@ -206,6 +207,29 @@ export const GiveRoleWithImpact: Story = {
     await expect(record.roles).toEqual([expect.objectContaining({ digest: 'b'.repeat(64),
       reason: 'Drafting the spoiler policy.', change: expect.objectContaining({ kind: 'assignment', member: people.sophie,
         roleId: roles[1]!.id, assigned: true }) })]);
+  },
+};
+
+/** Show all lands here: the list stays on that role as it pages. */
+export const RoleFilter: Story = {
+  args: {
+    address: realm,
+    roleFilter: { id: roles[0]!.id, name: roles[0]!.name },
+    first: { generation: '12', nextCursor: 'page-2',
+      items: members.filter(member => member.roles.some(role => role.id === roles[0]!.id)) },
+    api: { ...adminApi({ record }), members: async (search, after, role) => {
+      roleReads.push({ search, after, role });
+      return { ok: true, data: { generation: '12', nextCursor: null, items: [] } };
+    } },
+  },
+  async play({ canvasElement }) {
+    roleReads.length = 0;
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Showing people who hold Community moderators.')).toBeVisible();
+    const clear = canvas.getByRole('link', { name: 'Show every member' });
+    await expect(clear).toHaveAttribute('href', expect.stringMatching(new RegExp(`/manage/r/${realm}/members$`)));
+    await userEvent.click(canvas.getByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(roleReads).toEqual([{ search: '', after: 'page-2', role: roles[0]!.id }]));
   },
 };
 

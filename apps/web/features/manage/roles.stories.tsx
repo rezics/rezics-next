@@ -14,7 +14,7 @@ const meta = {
   title: 'Manage/Roles',
   component: RolesView,
   parameters: { route: { pathname: `/en/manage/r/${realm}/roles` } },
-  args: { realm, actingSubject: acting.iri, list: { generation: '12', roles }, holders: { [roles[0]!.id]: [people.daniel, people.an] },
+  args: { realm, actingSubject: acting.iri, list: { generation: '12', cap: 32, roles },
     agents, locale: 'en', messages, api: adminApi({ record }) },
   render: (args: ComponentProps<typeof RolesView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><RolesView {...args} /></RealmFrame>,
@@ -33,7 +33,7 @@ export const PermissionBundles: Story = {
       /Moderate the queue.*Manage members/);
     await expect(moderators).toHaveTextContent('Daniel Chen 陈丹尼, An Wu 吴安');
     const editors = canvas.getByRole('heading', { name: 'Rules editors' }).closest('li')!;
-    await expect(editors).toHaveTextContent('Members shows the roles of people who joined the Realm.');
+    await expect(editors).toHaveTextContent('No one holds this role.');
   },
 };
 
@@ -56,6 +56,33 @@ export const EditWithImpactPreview: Story = {
     await expect(record.roles).toEqual([expect.objectContaining({ digest: 'b'.repeat(64), expectedGeneration: '12',
       change: { kind: 'role', roleId: roles[0]!.id, name: 'Community moderators',
         permissions: ['governance.moderate', 'realm.members.manage', 'governance.rule.publish'] } })]);
+  },
+};
+
+/** More than three holders: the card names the first three and links to the filtered members list. */
+export const ShowAllHolders: Story = {
+  args: { list: { generation: '12', cap: 32, roles: [{ ...roles[0]!,
+    holders: [people.daniel, people.an, people.mei], moreHolders: true }] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const card = canvas.getByRole('heading', { name: 'Community moderators' }).closest('li')!;
+    await expect(card).toHaveTextContent('Daniel Chen 陈丹尼, An Wu 吴安, Lin Mei 林梅');
+    const link = within(card).getByRole('link', { name: 'Show everyone who holds Community moderators' });
+    await expect(link).toHaveTextContent('Show all');
+    await expect(link).toHaveAttribute('href', expect.stringContaining(
+      `/manage/r/${realm}/members?role=${roles[0]!.id}`));
+  },
+};
+
+/** A Realm at the cap keeps its roles and cannot add another from this page. */
+export const AtTheCap: Story = {
+  args: { list: { generation: '12', cap: 32, roles: Array.from({ length: 32 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    name: `Role ${index + 1}`, permissions: [], holders: [], moreHolders: false })) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'New role' })).toBeDisabled();
+    await expect(canvas.getByText('This Realm has reached its limit of 32 roles.')).toBeVisible();
   },
 };
 

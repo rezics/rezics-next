@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { type AdminApi, bffAdminApi, useRoleChange } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import type { CommandFailure } from './commands.ts';
@@ -22,6 +23,7 @@ import { ImpactPreview } from './impact-preview.tsx';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark } from './parts.tsx';
 import { mergeAgents } from './read.ts';
+import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import type { AgentSummary, InvitationPage, Loaded, Member, MemberPage, Role, RoleChange } from './types.ts';
 
@@ -55,12 +57,15 @@ export function failureText(failure: CommandFailure | 'changed', t: ReturnType<t
  * Members of the Realm: search by name or handle, invite people, remove, ban
  * and unban them, and give or take roles with the impact shown first.
  */
-export function MembersView({ realm, actingSubject, first, agents: initialAgents, roles, now, locale, messages,
-  invitations: firstInvitations, api: givenApi }: {
-  realm: string; actingSubject: string; first: MemberPage; agents: Record<string, AgentSummary>;
+export function MembersView({ realm, address = realm, actingSubject, first, agents: initialAgents, roles, now, locale,
+  messages, invitations: firstInvitations, roleFilter = null, api: givenApi }: {
+  realm: string; address?: string; actingSubject: string; first: MemberPage; agents: Record<string, AgentSummary>;
   invitations: Loaded<InvitationPage>;
   /** Roles the person may give, or null without the Manage roles permission. */
-  roles: readonly Role[] | null; now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi;
+  roles: readonly Role[] | null;
+  /** When set, the list is people who hold this role. `name` is null when the role list could not name it. */
+  roleFilter?: { id: string; name: string | null } | null;
+  now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
@@ -79,7 +84,7 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
 
   async function load(search: string, after: string | null = null) {
     setSearching(true);
-    const read = await api.members(search, after);
+    const read = await api.members(search, after, roleFilter?.id);
     setSearching(false);
     if (!read.ok) { setStatus(t.unavailableTitle); return; }
     setPage(current => after ? { ...read.data, items: [...current.items, ...read.data.items] } : read.data);
@@ -148,10 +153,16 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
       {searched ? <Button type="button" variant="ghost" onClick={() => { setQuery(''); void load(''); }}>{t.clearSearch}</Button>
         : null}
     </form>
+    {roleFilter ? <p className="text-sm">
+      {roleFilter.name ? t.membersRoleFilter({ role: roleFilter.name }) : t.membersRoleFilterUnnamed}{' '}
+      <LocalizedLink href={membersHref(address)}
+        className="rounded-md font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {t.clearRoleFilter}</LocalizedLink>
+    </p> : null}
     <div role="status" aria-live="polite" className="empty:hidden">{status ? <p className="text-sm">{status}</p> : null}</div>
     {!page.items.length ? <EmptyState icon={UsersIcon}
-      title={searched ? t.noMemberMatches({ query: searched }) : t.noMembersTitle}
-      description={searched ? undefined : t.noMembersHelp} />
+      title={searched ? t.noMemberMatches({ query: searched }) : roleFilter ? t.roleHoldersHelp : t.noMembersTitle}
+      description={searched || roleFilter ? undefined : t.noMembersHelp} />
       : <ul aria-label={t.membersTitle} className="grid divide-y divide-border/60 rounded-2xl border border-border/60 bg-card">
         {page.items.map(member => {
           const name = nameOf(member.member);

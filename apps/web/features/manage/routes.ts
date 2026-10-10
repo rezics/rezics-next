@@ -1,4 +1,4 @@
-import type { ModerationKind } from './types.ts';
+import { isUuid, type ModerationKind } from './types.ts';
 
 export type RealmSection = 'queue' | 'log' | 'members' | 'roles' | 'showcase' | 'zones' | 'settings';
 
@@ -47,6 +47,17 @@ export function parseLogView(params: Record<string, string | string[] | undefine
   const kind = typeof params.kind === 'string' && (auditKinds as readonly string[]).includes(params.kind)
     ? params.kind as AuditFilter : null;
   return { view, kind: view === 'audit' ? kind : null };
+}
+
+/** A role id in the members address. Anything else is the unfiltered roster. */
+export function parseMemberRole(params: Record<string, string | string[] | undefined>): string | null {
+  return typeof params.role === 'string' && isUuid(params.role) ? params.role : null;
+}
+
+/** Members, optionally limited to people who hold one role. */
+export function membersHref(realm: string, role?: string | null): string {
+  const base = realmHref(realm, 'members');
+  return role ? `${base}?role=${encodeURIComponent(role)}` : base;
 }
 
 export function logHref(realm: string, view: LogView): string {

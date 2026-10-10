@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { type AdminApi, bffAdminApi, useRoleChange } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import { agentLabel } from './format.ts';
@@ -19,6 +20,7 @@ import { failureText } from './members-view.tsx';
 import type { ManageMessages } from './messages.ts';
 import { permissionOrder, permissionText, sortPermissions } from './permissions.ts';
 import { mergeAgents } from './read.ts';
+import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import type { AgentSummary, RealmPermission, Role, RoleChange, RoleList } from './types.ts';
 
@@ -26,10 +28,8 @@ import type { AgentSummary, RealmPermission, Role, RoleChange, RoleList } from '
  * The Realm's roles as bundles of permissions in plain words. Every edit shows
  * who gains or loses what before it can be saved.
  */
-export function RolesView({ realm, actingSubject, list, holders, agents, locale, messages, api: givenApi }: {
-  realm: string; actingSubject: string; list: RoleList;
-  /** Role holders from the members roster, by role; people outside the roster are not listed. */
-  holders: Record<string, readonly string[]>; agents: Record<string, AgentSummary>;
+export function RolesView({ realm, address = realm, actingSubject, list, agents, locale, messages, api: givenApi }: {
+  realm: string; address?: string; actingSubject: string; list: RoleList; agents: Record<string, AgentSummary>;
   locale: UiLocale; messages: ManageMessages; api?: AdminApi;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
@@ -38,13 +38,15 @@ export function RolesView({ realm, actingSubject, list, holders, agents, locale,
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const name = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
+  const atCap = list.roles.length >= list.cap;
   return <div className="grid gap-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1">
         <h2 className="font-semibold text-xl tracking-tight">{t.rolesTitle}</h2>
         <p className="max-w-2xl text-muted-foreground text-sm">{t.rolesHelp}</p>
+        {atCap ? <p className="max-w-2xl text-sm">{t.roleCapReached({ cap: String(list.cap) })}</p> : null}
       </div>
-      <Button size="sm" onClick={() => setEditing('new')}><PlusIcon aria-hidden="true" />{t.newRole}</Button>
+      <Button size="sm" disabled={atCap} onClick={() => setEditing('new')}><PlusIcon aria-hidden="true" />{t.newRole}</Button>
     </div>
     <div role="status" aria-live="polite" className="empty:hidden">{status ? <p className="text-sm">{status}</p> : null}</div>
     {!list.roles.length ? <EmptyState icon={ShieldIcon} title={t.noRolesTitle} description={t.noRolesHelp} />
@@ -66,8 +68,12 @@ export function RolesView({ realm, actingSubject, list, holders, agents, locale,
                 <span className="block text-muted-foreground">{t[permissionText[permission].help]}</span></span>
             </li>)}
           </ul>
-          <p className="border-border/60 border-t pt-3 text-muted-foreground text-sm">
-            {holders[role.id]?.length ? holders[role.id]!.map(name).join(', ') : t.roleHoldersHelp}</p>
+          <div className="grid gap-1 border-border/60 border-t pt-3 text-muted-foreground text-sm">
+            <p>{role.holders.length ? role.holders.map(name).join(', ') : t.roleHoldersHelp}</p>
+            {role.moreHolders ? <LocalizedLink href={membersHref(address, role.id)}
+              className="w-fit rounded-md font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={t.showAllHoldersLabel({ role: role.name })}>{t.showAllHolders}</LocalizedLink> : null}
+          </div>
         </li>)}
       </ul>}
     {editing ? <RoleEditor role={editing === 'new' ? null : editing} generation={list.generation} api={api}

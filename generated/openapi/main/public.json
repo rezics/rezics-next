@@ -418878,6 +418878,15 @@
           },
           {
             "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "after",
             "required": false,
             "schema": {
@@ -436648,6 +436657,10 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "cap": {
+                      "const": 32,
+                      "type": "number"
+                    },
                     "generation": {
                       "pattern": "^(0|[1-9][0-9]{0,17})$",
                       "type": "string"
@@ -436655,9 +436668,20 @@
                     "roles": {
                       "items": {
                         "properties": {
+                          "holders": {
+                            "items": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
                           "id": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "moreHolders": {
+                            "type": "boolean"
                           },
                           "name": {
                             "type": "string"
@@ -436683,16 +436707,19 @@
                         "required": [
                           "id",
                           "name",
-                          "permissions"
+                          "permissions",
+                          "holders",
+                          "moreHolders"
                         ],
                         "type": "object"
                       },
-                      "maxItems": 32,
+                      "maxItems": 128,
                       "type": "array"
                     }
                   },
                   "required": [
                     "generation",
+                    "cap",
                     "roles"
                   ],
                   "type": "object"
