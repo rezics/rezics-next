@@ -14,7 +14,8 @@ export interface WorkChoice { id: string; title: string; language: string }
 export type WorkLoader = (prefix: string, locale: UiLocale) => Promise<WorkChoice[]>;
 
 const searchWorks: WorkLoader = async (prefix, locale) => {
-  const { data } = await browserMainApi(undefined, { anonymous: true }).v1.search.typeahead.get({
+  // The server personalises this read from the credential.
+  const { data } = await browserMainApi().v1.search.typeahead.get({
     query: { prefix, language: locale } });
   return (data?.items ?? []).map(item => ({ id: item.work.slice(-36), title: item.title.value, language: item.title.language }));
 };

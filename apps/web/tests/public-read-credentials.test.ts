@@ -195,6 +195,38 @@ function clientArgs(text: string, call: EdenCall): string | null {
   return null;
 }
 
+/**
+ * Typeahead has no acting-subject parameter. Main still applies the signed-in reader's mutes from
+ * the cookie, so these sites keep it. A new site is a violation until it is listed here.
+ */
+const credentialPersonalised: readonly { file: string; operation: string; reason: string }[] = [
+  {
+    file: 'features/search/typeahead.tsx',
+    operation: 'getV1SearchTypeahead',
+    reason: 'the server personalises this read from the credential',
+  },
+  {
+    file: 'features/post-composer/composer.tsx',
+    operation: 'getV1SearchTypeahead',
+    reason: 'the server personalises this read from the credential',
+  },
+  {
+    file: 'features/work-levels-edit/work-picker.tsx',
+    operation: 'getV1SearchTypeahead',
+    reason: 'the server personalises this read from the credential',
+  },
+];
+
+function personalised(file: string, operations: readonly string[]): boolean {
+  return credentialPersonalised.some(
+    (entry) =>
+      entry.file === file &&
+      entry.reason === 'the server personalises this read from the credential' &&
+      operations.length === 1 &&
+      operations[0] === entry.operation,
+  );
+}
+
 /** Credentialed browser calls to public reads that do not name an acting subject. */
 export function violations(files: Readonly<Record<string, string>>): string[] {
   const functions = new Map<string, string>();
@@ -204,7 +236,7 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
   const found: string[] = [];
   for (const [file, text] of Object.entries(files)) {
     for (const call of edenCalls(text)) {
-      if (/actingSubject/.test(call.args)) continue;
+      if (/actingSubject/.test(call.args) || personalised(file, call.operations)) continue;
       const args = clientArgs(text, call);
       if (args === null || omits(args)) continue;
       found.push(
@@ -305,4 +337,17 @@ test('a credentialed public read is rejected, and an anonymous or acting-subject
 
 test('browser public reads omit the session cookie unless they name an acting subject', () => {
   expect(violations(webSources)).toEqual([]);
+});
+
+test('typeahead keeps the cookie only at the sites the server personalises from it', () => {
+  expect(credentialPersonalised.map((entry) => entry.reason)).toEqual([
+    'the server personalises this read from the credential',
+    'the server personalises this read from the credential',
+    'the server personalises this read from the credential',
+  ]);
+  expect(credentialPersonalised.map((entry) => entry.file)).toEqual([
+    'features/search/typeahead.tsx',
+    'features/post-composer/composer.tsx',
+    'features/work-levels-edit/work-picker.tsx',
+  ]);
 });

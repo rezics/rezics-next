@@ -175,7 +175,8 @@ export function PostComposer({
       void (async () => {
         setWorkState('loading');
         try {
-          const { data } = await browserMainApi(undefined, { anonymous: true }).v1.search.typeahead.get({
+          // The server personalises this read from the credential.
+          const { data } = await browserMainApi().v1.search.typeahead.get({
             query: { prefix: workQuery.trim() },
           });
           if (!current) return;
