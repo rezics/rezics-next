@@ -84,6 +84,8 @@ function zoneStorage(directory: string, name?: string, language?: string) {
       if (query.includes('SELECT ?space ?navigation ?head')) return rows([{ space: binding(space),
         navigation: binding(structure), head: binding(revision), manifest: binding(`urn:rezics:sha256:${manifest}`),
         state: binding(RV + 'Active'), disclosure: binding(RV + 'Public'), spaceDisclosure: binding(RV + 'Public') }]);
+      // Creation reads the Space's disclosure: a Zone's disclosure is its Space's.
+      if (query.includes('SELECT ?disclosure')) return rows([{ disclosure: binding(RV + 'Public') }]);
       if (query.includes('ASK')) return { boolean: query.includes('rv:restoreHold') };
       throw new Error(`Unexpected Zone query: ${query}`);
     },

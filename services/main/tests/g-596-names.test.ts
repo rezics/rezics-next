@@ -34,6 +34,8 @@ function ownerStorage(input: OwnerCreateInput, objectDirectory: string) {
     query: async (sql: string) => {
       if (sql.includes('SELECT ?outcome')) return { results: { bindings: terminal ? [terminal] : [] } };
       if (sql.includes('SELECT ?plain')) return { results: { bindings: plain ? [{ plain }] : [] } };
+      // Creation reads the Space's disclosure: a Zone's disclosure is its Space's.
+      if (sql.includes('SELECT ?disclosure')) return { results: { bindings: [{ disclosure: binding(`${RV}Public`) }] } };
       if (sql.includes('ASK') && sql.includes('rv:restoreHold')) return { boolean: true };
       if (sql.includes('ASK') && sql.includes('rv:InvalidProfile')) return { boolean: false };
       if (sql.includes('ASK') && sql.includes('rv:realmCapability')) return { boolean: true };
