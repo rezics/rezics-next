@@ -1122,9 +1122,12 @@ export async function importBangumiWorkFacts(client: BangumiFactsClient, actingS
       value: { kind: 'literal', lexical: facts.date.lexical, datatype: facts.date.datatype, language: null },
       applicability: [], interpretation: { kind: 'selected' }, evidence, actingSubject,
     }, `${prefix}:first-publication-date`);
-    await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
-      actingSubject, statement, { kind: 'global' }, 'accepted', null),
-    `${prefix}:first-publication-date:decision`);
+    // The year template joins a Statement target. A qualified-fact decision,
+    // which is what a count uses, does not name this statement.
+    await client.post('/v1/statement-decisions', {
+      profile: 'statement-decision-v1', target: { kind: 'statement', statement: statement.statement },
+      acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject,
+    }, `${prefix}:first-publication-date:decision`);
   }
   if (facts.status) {
     await client.put(`/v1/works/${work.work.slice(-36)}/metadata`, {

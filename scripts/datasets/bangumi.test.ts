@@ -64,7 +64,7 @@ function recordingClient() {
   const calls: { path: string; body: object; key: string }[] = [];
   let n = 0;
   const client: BangumiFactsClient = {
-    post: async (path, body, key) => {
+    post: async <T>(path: string, body: object, key: string): Promise<T> => {
       calls.push({ path, body, key });
       if (path === '/v1/statements') {
         const dated = key.endsWith(':first-publication-date');
@@ -74,23 +74,23 @@ function recordingClient() {
             ? 'https://rezics.com/id/019d0000-0000-7000-8000-000000000e10'
             : `https://rezics.com/id/019d0000-0000-7000-8000-000000000e${n}0`,
           meaningKey: dated ? 'meaning-date' : `meaning-${n}`,
-        };
+        } as T;
       }
       if (path === '/v1/classification-vocabulary') {
         n += 1;
         return { scheme: 'https://rezics.com/id/scheme', schemeHead: 'https://rezics.com/id/head',
           concept: `https://rezics.com/id/019d0000-0000-7000-8000-0000000001${String(n).padStart(2, '0')}`,
-          definitionRevision: definition.revision };
+          definitionRevision: definition.revision } as T;
       }
       if (path === '/v1/contexts') {
-        return { context: 'https://rezics.com/id/context', semanticRevision: definition.revision };
+        return { context: 'https://rezics.com/id/context', semanticRevision: definition.revision } as T;
       }
-      if (key === 'statement-first-publication-date:v1:property') return definition;
-      return { component: definition.component, revision: definition.revision };
+      if (key === 'statement-first-publication-date:v1:property') return definition as T;
+      return { component: definition.component, revision: definition.revision } as T;
     },
-    put: async (path, body, key) => {
+    put: async <T>(path: string, body: object, key: string): Promise<T> => {
       calls.push({ path, body, key });
-      return {};
+      return {} as T;
     },
     authorizeDefinition: async () => {},
   };
@@ -118,7 +118,7 @@ test('a dated subject posts the first-publication statement and its global accep
     path: '/v1/statement-decisions', key: `${prefix}:first-publication-date:decision`,
     body: {
       profile: 'statement-decision-v1',
-      target: { kind: 'qualified-fact', meaningKey: 'meaning-date', support: [statement] },
+      target: { kind: 'statement', statement },
       acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor,
     },
   }]);
