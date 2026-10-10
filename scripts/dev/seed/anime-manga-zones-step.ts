@@ -1,8 +1,4 @@
-import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { packageDigest } from '@rezics/zone-sdk';
 import { Pool } from 'pg';
 import { importBangumiWorkFacts, type BangumiFactSource, type BangumiFactsClient }
   from '../../datasets/bangumi.ts';
@@ -11,7 +7,8 @@ import type { SerialStatus } from '../../../services/main/src/modules/work/metad
 import { statementDecisionBody, classifiedStatementBody, discloseClassificationConcept,
   shareClassificationContext } from './classified-statement.ts';
 import { collectionPage, createSpace } from './ln-vn-zones-step.ts';
-import { grantOfficialThemeSeed, grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
+import { officialTheme } from './official-plan.ts';
+import { grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
 import { seedKey } from './plan.ts';
 import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
@@ -24,10 +21,8 @@ import { call, createCatalogueWork, grantVnSeedAuthority, publishCatalogueText, 
 const BOOK = 'https://schema.org/Book';
 const INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
 const DATE = 'http://www.w3.org/2001/XMLSchema#date';
-const root = resolve(import.meta.dir, '../../..');
 const short = (iri: string) => iri.slice(-36);
-const zoneIri = (id: string) => `https://rezics.com/id/${stableId(`catalogue-zone:${id}`)}`;
-const themeIri = (id: string) => `https://rezics.com/id/${stableId(`catalogue-theme:${id}`)}`;
+const zoneIri = (id: string) => `https://rezics.com/id/${stableId(`zone:${id}`)}`;
 
 export type CatalogueZoneId = 'anime' | 'manga';
 export interface CatalogueSample {
@@ -195,10 +190,11 @@ async function importSample(client: BangumiFactsClient, actor: string, work: { w
   return imported.concept;
 }
 
-function presentation(name: string, collection: string): ZonePresentation {
+function presentation(name: string, collection: string, theme: string): ZonePresentation {
   return {
     profile: 'zone-presentation-v2', preset: 'editorial', tokens: ZONE_PRESETS.editorial,
     navigation: [{ label: 'Browse', href: '/browse' }], slides: [],
+    official: { theme },
     modules: [
       { id: 'announcement', type: 'announcement', title: `${name} in the catalogue`,
         source: { kind: 'query-block', block: 'new-adoptions' } },
@@ -214,7 +210,7 @@ async function configure(port: SeedPort, id: CatalogueZoneId, zone: string, real
     defaultRealm: string | null; official: Record<string, never> | null; presentation: unknown } }>(port,
     `/v1/zones/${short(zone)}/configuration`);
   const desired = { name, language: 'en', defaultRealm: realm, official: {},
-    presentation: presentation(name, collection) };
+    presentation: presentation(name, collection, officialTheme(id)) };
   const actual = { name: current.name, language: current.language, defaultRealm: current.configuration.defaultRealm,
     official: current.configuration.official, presentation: current.configuration.presentation };
   if (!isDeepStrictEqual(actual, desired)) {
@@ -249,68 +245,6 @@ async function mount(port: SeedPort, id: string, zone: string, collection: strin
       position: 'last', actingSubject: port.actingSubject,
     }, seedKey('catalogue-mount', id));
   }
-}
-
-/** Source digest of one official package, the same bytes the web loader hashes. */
-export function cataloguePackageDigest(slug: CatalogueZoneId): Promise<string> {
-  const directory = join(root, 'apps/web/zones/official', slug);
-  const files: Record<string, string> = {};
-  const visit = (current: string) => {
-    for (const name of readdirSync(current)) {
-      const path = join(current, name);
-      if (statSync(path).isDirectory()) visit(path);
-      else files[relative(directory, path)] = readFileSync(path, 'utf8');
-    }
-  };
-  visit(directory);
-  return packageDigest(files);
-}
-
-const sha = (value: string) => createHash('sha256').update(value).digest('hex');
-
-/**
- * Approve the package for exactly this source. Slots named here are the ones the first-party
- * bundle admits (`workCard`, `footer`). The fact panel renders with the package; the bundle has
- * no name for that slot.
- */
-export async function approveCataloguePackage(port: SeedPort, input: {
-  zone: string; slug: CatalogueZoneId; owner: string; reviewer: string;
-  /** The independent reviewer's request. The owner never records their own review. */
-  review: SeedPort['request'];
-}): Promise<void> {
-  const theme = themeIri(input.slug);
-  const digest = await cataloguePackageDigest(input.slug);
-  const file = `assets/${input.slug}/main.js`;
-  const bundle = { profile: 'first-party-bundle-v1', hostZone: input.zone, packageDigest: digest, entry: file,
-    files: [{ path: file, digest: sha(`${input.slug}:${digest}`), gzipBytes: 1000 }],
-    slots: ['workCard', 'footer'], connectOrigins: [], imageOrigins: [], fontOrigins: [] };
-  const createKey = seedKey('catalogue-theme', input.slug);
-  await call(port, 'POST', '/v1/themes', { theme: short(theme), owner: input.owner, hostZone: input.zone,
-    actingSubject: input.owner, idempotencyKey: createKey }, createKey);
-  const revisionKey = seedKey('catalogue-theme-revision', `${input.slug}:${digest.slice(0, 12)}`);
-  const revision = await call<{ operation: string }>(port, 'POST', `/v1/themes/${short(theme)}/revisions`, {
-    expectedRevision: null, bundle, actingSubject: input.owner, idempotencyKey: revisionKey,
-  }, revisionKey);
-  const reviewKey = seedKey('catalogue-theme-review', `${input.slug}:${revision.operation.slice(-12)}`);
-  await call({ ...port, actingSubject: input.reviewer, request: input.review }, 'POST',
-    `/v1/themes/${short(theme)}/revisions/${short(revision.operation)}/reviews`, {
-      decision: 'approved', reviewEvidenceDigest: sha(`reviewed ${digest}`), actingSubject: input.reviewer,
-      idempotencyKey: reviewKey,
-    }, reviewKey);
-  const activationKey = seedKey('catalogue-theme-activation', `${input.slug}:${revision.operation.slice(-12)}`);
-  await call(port, 'POST', `/v1/themes/${short(theme)}/first-party-activations`, {
-    revision: revision.operation, expectedActivation: null,
-    approvalExpiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), actingSubject: input.owner,
-    idempotencyKey: activationKey,
-  }, activationKey);
-  const current = await read<{ revision: string; name: string; language: string; configuration: {
-    defaultRealm: string | null; official: Record<string, never> | null; presentation: object } }>(port,
-    `/v1/zones/${short(input.zone)}/configuration`);
-  await call(port, 'PUT', `/v1/zones/${short(input.zone)}/configuration`, {
-    expectedHead: current.revision, actingSubject: input.owner, name: current.name, language: current.language,
-    defaultRealm: current.configuration.defaultRealm, official: current.configuration.official,
-    presentation: { ...current.configuration.presentation, official: { theme } },
-  }, seedKey('catalogue-theme-presentation', `${input.slug}:${current.revision.slice(-12)}`));
 }
 
 export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaSamplePlan()):
@@ -376,7 +310,7 @@ export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaS
     }
     await insertMembers(port, spec.id, collection, works.filter(item => item.zone === spec.id).map(item => item.work));
     await mount(port, spec.id, zone, collection);
-    zones.push({ id: spec.id, space: space.space, realm: space.realm, zone, theme: themeIri(spec.id) });
+    zones.push({ id: spec.id, space: space.space, realm: space.realm, zone, theme: officialTheme(spec.id) });
   }
   return { works, zones };
 }
@@ -404,19 +338,6 @@ export async function seedAnimeMangaZones(state: SeedState): Promise<void> {
       refresh: () => refreshSeedTokens(state),
     };
     const created = await applyAnimeMangaZones(port);
-    const reviewer = state.sessions.find(item => item.id === 'daniel');
-    if (!reviewer) {
-      state.findings.add('Anime and manga package approval: independent reviewer is unavailable');
-      return;
-    }
-    for (const zone of created.zones) {
-      await state.optional(`Official ${zone.id} package`, async () => {
-        await grantOfficialThemeSeed(input, zone.theme, reviewer);
-        await approveCataloguePackage(port, { zone: zone.zone, slug: zone.id, owner: session.actingSubject,
-          reviewer: reviewer.actingSubject,
-          review: (method, path, body, key) => seedHttp(state, () => reviewer.token, method, path, body, key) });
-      });
-    }
     console.log(`Anime and manga: ${created.works.length} works in ${created.zones.map(zone => zone.id).join(', ')}`);
   } finally { await pool.end(); }
 }

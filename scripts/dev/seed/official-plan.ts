@@ -348,11 +348,12 @@ export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
 export const editorList = (realm: OfficialRealmId, list: string) =>
   `https://rezics.com/id/${stableId(`official-list:${realm}:${list}`)}`;
 
-export const packagedZone = (realm: OfficialRealmId | 'franchise-wiki') =>
+export const packagedZone = (realm: OfficialRealmId | 'franchise-wiki' | 'anime' | 'manga') =>
   realm === 'fiction' || realm === 'books' || realm === 'mods' || realm === 'ai-workshop'
-    || realm === 'games' || realm === 'software' || realm === 'franchise-wiki';
+    || realm === 'games' || realm === 'software' || realm === 'franchise-wiki'
+    || realm === 'anime' || realm === 'manga';
 
-export const officialTheme = (realm: OfficialRealmId | 'franchise-wiki') =>
+export const officialTheme = (realm: OfficialRealmId | 'franchise-wiki' | 'anime' | 'manga') =>
   `https://rezics.com/id/${stableId(`official-theme:${realm}`)}`;
 
 type Bilingual = { en: string; 'zh-CN': string };

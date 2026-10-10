@@ -615328,6 +615328,14 @@
                                         "type": "string"
                                       },
                                       {
+                                        "const": "browseHeader",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "cataloguePanel",
+                                        "type": "string"
+                                      },
+                                      {
                                         "maxLength": 72,
                                         "pattern": "^module:[a-z0-9]+(-[a-z0-9]+)*$",
                                         "type": "string"

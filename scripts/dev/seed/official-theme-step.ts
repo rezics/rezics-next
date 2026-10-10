@@ -23,6 +23,8 @@ const packages = {
   games: ['hero', 'workCard', 'module:shelf', 'module:editorial-list'],
   software: ['hero', 'workCard', 'module:shelf', 'module:editorial-list'],
   'franchise-wiki': ['home', 'memberIndex', 'entity'],
+  anime: ['browseHeader', 'workCard', 'cataloguePanel', 'footer'],
+  manga: ['browseHeader', 'workCard', 'cataloguePanel', 'footer'],
 } as const;
 type Slug = keyof typeof packages;
 export const officialPackageSlugs = Object.keys(packages) as Slug[];
@@ -89,9 +91,12 @@ async function firstPartyView(state: SeedState, theme: string) {
   throw new Error(`Official theme ${theme} read retries exhausted`);
 }
 
+type ThemeRealm = OfficialRealmId | 'franchise-wiki' | 'anime' | 'manga';
+
 /** Dev fixture review uses a second account; each state transition still passes through Main. */
 export async function seedOfficialThemes(state: SeedState,
-  selected: readonly (OfficialRealmId | 'franchise-wiki')[] = state.createdRealms.map(realm => realm.id as OfficialRealmId)) {
+  selected: readonly ThemeRealm[] = state.createdRealms.map(realm => realm.id as OfficialRealmId)) {
+  const realms = [...new Set<ThemeRealm>([...selected, 'anime', 'manga'])];
   const operator = state.operatorSession, input = state.operatorInput;
   const reviewer = state.sessions.find(session => session.id === 'daniel');
   if (!operator || !input || !reviewer) {
@@ -99,7 +104,7 @@ export async function seedOfficialThemes(state: SeedState,
     return;
   }
   let manifest: Manifest | null = null;
-  for (const realmId of selected) {
+  for (const realmId of realms) {
     if (!packagedZone(realmId)) continue;
     await state.optional(`Official ${realmId} theme`, async () => {
       // Theme review performs several graph commands; start each Zone with a fresh operator assertion.
@@ -107,6 +112,12 @@ export async function seedOfficialThemes(state: SeedState,
       operator.issuedAt = Date.now();
       const slug = realmId as Slug;
       const zone = `https://rezics.com/id/${stableId(`zone:${slug}`)}`;
+      try {
+        await state.api.getPublic(`/v1/zones/${id(zone)}/presentation`);
+      } catch (error) {
+        if (error instanceof SeedApiError && error.status === 404) return;
+        throw error;
+      }
       const theme = officialTheme(slug);
       await grantOfficialThemeSeed(input, theme, reviewer);
       const digest = await officialSourceDigest(slug);
@@ -168,4 +179,77 @@ export async function seedOfficialThemes(state: SeedState,
       console.log(`Official ${slug}: package ${digest} approved on the dev stack.`);
     });
   }
+}
+
+export interface OfficialPackageRequest {
+  (method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, key?: string):
+    Promise<{ status: number; body: unknown }>;
+}
+
+async function serverManifest(): Promise<Manifest> {
+  return JSON.parse(await readFile(join(root, 'apps/web/dist/server/.vite/manifest.json'), 'utf8')) as Manifest;
+}
+
+/** The bundle `officialBuildBundle` records for this source: real chunk digests, sizes and slots. */
+export async function builtOfficialBundle(slug: Slug, zone: string, manifest?: Manifest,
+  chunk?: (path: string) => Promise<Uint8Array>) {
+  const digest = await officialSourceDigest(slug);
+  const build = (source: Manifest) => officialBuildBundle(slug, digest, zone, source, chunk);
+  if (manifest) return { digest, bundle: await build(manifest) };
+  try {
+    return { digest, bundle: await build(await serverManifest()) };
+  } catch (error) {
+    if (error instanceof SyntaxError) throw error;
+    execFileSync('task', ['web:build'], { cwd: root, stdio: 'inherit' });
+    if (await officialSourceDigest(slug) !== digest) throw new Error(`${slug} source changed during web build`);
+    return { digest, bundle: await build(await serverManifest()) };
+  }
+}
+
+async function posted<T>(response: { status: number; body: unknown }, what: string): Promise<T> {
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`${what} failed (${response.status}): ${JSON.stringify(response.body)}`);
+  }
+  return response.body as T;
+}
+
+/**
+ * Approve one catalogue package on a fresh stack through the same bundle the official theme step records.
+ * The Zone's presentation already names `officialTheme`. The reviewer is a different account from the owner.
+ */
+export async function approveOfficialPackage(input: {
+  slug: 'anime' | 'manga';
+  zone: string;
+  owner: string;
+  reviewer: string;
+  request: OfficialPackageRequest;
+  review: OfficialPackageRequest;
+  manifest?: Manifest;
+  chunk?: (path: string) => Promise<Uint8Array>;
+}): Promise<void> {
+  const theme = officialTheme(input.slug);
+  const { digest, bundle } = await builtOfficialBundle(input.slug, input.zone, input.manifest, input.chunk);
+  const createKey = seedKey('theme-create', input.slug);
+  await posted(await input.request('POST', '/v1/themes', {
+    theme: id(theme), owner: input.owner, hostZone: input.zone, actingSubject: input.owner,
+    idempotencyKey: createKey,
+  }, createKey), 'theme create');
+  const revisionKey = themeRevisionSeedKey(input.slug, digest, null, bundle);
+  const revision = await posted<{ operation: string }>(await input.request('POST',
+    `/v1/themes/${id(theme)}/revisions`, {
+      expectedRevision: null, bundle, actingSubject: input.owner, idempotencyKey: revisionKey,
+    }, revisionKey), 'theme revision');
+  const reviewKey = seedKey('theme-review', `${input.slug}:${revision.operation.slice(-12)}`);
+  await posted(await input.review('POST', `/v1/themes/${id(theme)}/revisions/${id(revision.operation)}/reviews`, {
+    decision: 'approved', reviewEvidenceDigest: sha(JSON.stringify(bundle)),
+    actingSubject: input.reviewer, idempotencyKey: reviewKey,
+  }, reviewKey), 'theme review');
+  const expiry = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
+  expiry.setUTCDate(expiry.getUTCDate() + 89);
+  const activationKey = seedKey('theme-activation', `${input.slug}:${revision.operation.slice(-12)}:initial:${
+    expiry.toISOString().slice(0, 10)}`);
+  await posted(await input.request('POST', `/v1/themes/${id(theme)}/first-party-activations`, {
+    revision: revision.operation, expectedActivation: null, approvalExpiresAt: expiry.toISOString(),
+    actingSubject: input.owner, idempotencyKey: activationKey,
+  }, activationKey), 'theme activation');
 }

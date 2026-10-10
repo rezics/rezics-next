@@ -6,9 +6,10 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
-import { applyAnimeMangaZones, approveCataloguePackage, type CatalogueZoneRecord, type CatalogueWorkRecord }
+import { applyAnimeMangaZones, type CatalogueZoneRecord, type CatalogueWorkRecord }
   from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
-import { stableId } from '../../../scripts/dev/seed/state.ts';
+import { officialTheme } from '../../../scripts/dev/seed/official-plan.ts';
+import { approveOfficialPackage } from '../../../scripts/dev/seed/official-theme-step.ts';
 import type { SeedPort } from '../../../scripts/dev/seed/vn-catalogue-step.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
@@ -87,15 +88,15 @@ try {
   await openActorPlatformGroup(editor.principalId, 'executable-themes');
   await openActorPlatformGroup(reviewer.principalId, 'executable-themes');
   for (const zone of created.zones) {
-    const theme = `https://rezics.com/id/${stableId(`catalogue-theme:${zone.id}`)}`.slice(-36);
+    const theme = officialTheme(zone.id).slice(-36);
     for (const [scope, action] of [
       ['theme:create:root', 'theme.create'],
       [`theme:revise:${theme}`, 'theme.revise'],
       [`theme:activate:${theme}`, 'theme.activate'],
     ] as const) await editor.grant(scope, action);
     await reviewer.grant(`theme:review:${theme}`, 'theme.review');
-    await approveCataloguePackage(port, {
-      zone: zone.zone, slug: zone.id, owner: editor.actor, reviewer: reviewer.actor, review,
+    await approveOfficialPackage({
+      slug: zone.id, zone: zone.zone, owner: editor.actor, reviewer: reviewer.actor, request, review,
     });
   }
   const longTv = workOf(created.works, 'long-tv');

@@ -8,6 +8,7 @@ const origin = Type.String({ pattern: '^https://[^\\s/?#]{1,500}$', maxLength: 5
 const slot = Type.Union([Type.Literal('hero'), Type.Literal('header'),
   Type.Literal('workCard'), Type.Literal('background'), Type.Literal('footer'),
   Type.Literal('home'), Type.Literal('entity'), Type.Literal('index'), Type.Literal('memberIndex'),
+  Type.Literal('browseHeader'), Type.Literal('cataloguePanel'),
   Type.String({ pattern: '^module:[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 72 })]);
 
 export const FirstPartyBundle = Type.Object({
