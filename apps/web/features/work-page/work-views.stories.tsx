@@ -1098,6 +1098,7 @@ export const LicensedDescription: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(/A surveyor maps a delta/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Example' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
   },

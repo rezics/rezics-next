@@ -77,6 +77,7 @@ export const LicensedFacts: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('キリト')).toBeVisible();
     await expect(canvas.getByText('الشبح الأسود')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Example' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
     await expect(canvas.getByText(/Adaptations stay under the same terms/)).toBeVisible();
     // The page's facts share one rights read, so the list carries one mark.

@@ -105,6 +105,7 @@ export const LicensedDescription: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(/A surveyor maps a delta/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Example' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
     await expect(canvas.getByText(/Adaptations stay under the same terms/)).toBeVisible();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
@@ -116,6 +117,7 @@ export const LicensedDescriptionPhone: Story = {
   args: { work: { ...fixture.work, descriptionObligations: attributed } },
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'Example' })).toBeVisible();
     await expect(within(canvasElement).getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
     await noOverflow();
   },

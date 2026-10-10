@@ -1,9 +1,10 @@
 import { defineMessages } from '../../i18n/define.ts';
 
-// Duties the rights read names, in the reader's language. Attribution uses the
-// source's own notice instead of one of these lines. Non-English copy is
-// machine-drafted and needs native review.
+// Duties the rights read names, in the reader's language. `source` is the label
+// in front of the notice's own name. Non-English copy is machine-drafted and
+// needs native review.
 const en = {
+  source: 'Source: ',
   shareAlike: 'Adaptations stay under the same terms.',
   noticeRetention: 'Keep this notice with the text.',
   changeIndication: 'Say what changed.',
@@ -16,6 +17,7 @@ export const messages = defineMessages({
   en,
   // Machine-drafted; needs native review.
   'zh-Hant': {
+    source: '來源：',
     shareAlike: '改作須以相同條款共享。',
     noticeRetention: '這段說明須與正文一同保留。',
     changeIndication: '請標明改了什麼。',
@@ -25,6 +27,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   'zh-Hans': {
+    source: '来源：',
     shareAlike: '改编须以相同条款共享。',
     noticeRetention: '这段说明须与正文一同保留。',
     changeIndication: '请标明改了什么。',
@@ -34,6 +37,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   ja: {
+    source: '出典：',
     shareAlike: '翻案したものも、同じ条件で共有してください。',
     noticeRetention: 'この表示は本文と一緒に残してください。',
     changeIndication: '変更した点を示してください。',
@@ -43,6 +47,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   ko: {
+    source: '출처: ',
     shareAlike: '각색한 내용도 같은 조건으로 공유해야 합니다.',
     noticeRetention: '이 안내를 글과 함께 남기세요.',
     changeIndication: '바꾼 내용을 밝히세요.',
@@ -52,6 +57,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   de: {
+    source: 'Quelle: ',
     shareAlike: 'Bearbeitungen bleiben unter denselben Bedingungen.',
     noticeRetention: 'Behalte diesen Hinweis beim Text.',
     changeIndication: 'Sag, was sich geändert hat.',
@@ -61,6 +67,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   fr: {
+    source: 'Source : ',
     shareAlike: 'Les adaptations restent sous les mêmes conditions.',
     noticeRetention: 'Conservez cet avis avec le texte.',
     changeIndication: 'Indiquez ce qui a changé.',
@@ -70,6 +77,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   es: {
+    source: 'Fuente: ',
     shareAlike: 'Las adaptaciones siguen bajo las mismas condiciones.',
     noticeRetention: 'Conserva este aviso junto al texto.',
     changeIndication: 'Indica qué cambió.',

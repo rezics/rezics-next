@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { attributed, ccBySa, creditedOnly, instrumentOnly, unassessed } from './fixtures.ts';
+import { attributed, ccBySa, creditedOnly, instrumentOnly, sourceUrl, unassessed } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { RightsMark, RightsRunRows, type DisplayObligations } from './rights-mark.tsx';
 
@@ -29,8 +29,8 @@ export const AttributionAndShareAlike: Story = {
   render: args => <Pad><RightsMark {...args} /></Pad>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'https://example.test/records/1' }))
-      .toHaveAttribute('href', 'https://example.test/records/1');
+    await expect(canvas.getByRole('link', { name: 'Example' })).toHaveAttribute('href', sourceUrl);
+    await expect(canvas.queryByRole('link', { name: sourceUrl })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toHaveAttribute('href', ccBySa);
     await expect(canvas.getByText(/Adaptations stay under the same terms/)).toBeVisible();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
@@ -53,7 +53,7 @@ export const InstrumentOnly: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
     await expect(canvas.queryByText(/Adaptations stay/)).toBeNull();
-    await expect(canvas.queryByText(/Recorded source/)).toBeNull();
+    await expect(canvas.queryByText(/Source:/)).toBeNull();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
   },
 };
@@ -118,9 +118,13 @@ export const Locales: Story = {
   args: { rights: attributed },
   render: () => <LocaleList />,
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    for (const locale of uiLocales) await expect(canvas.getAllByText(messages[locale].shareAlike).length)
-      .toBeGreaterThan(0);
+    const marks = [...canvasElement.querySelectorAll('[data-rights-mark]')];
+    await expect(marks).toHaveLength(uiLocales.length);
+    for (const [index, locale] of uiLocales.entries()) {
+      const text = marks[index]?.textContent ?? '';
+      await expect(text).toContain(messages[locale].source.trim());
+      await expect(text).toContain(messages[locale].shareAlike);
+    }
   },
 };
 
@@ -144,6 +148,8 @@ export const SplitRightsRun: Story = {
   async play({ canvasElement }) {
     await expect(canvasElement.querySelectorAll('[data-rights-run]')).toHaveLength(2);
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(2);
+    await expect(within(canvasElement).getByRole('link', { name: 'Example' })).toBeVisible();
+    await expect(within(canvasElement).getByRole('link', { name: 'Archive' })).toBeVisible();
     await expect(within(canvasElement).getByRole('link', { name: 'CC BY 4.0' })).toBeVisible();
   },
 };

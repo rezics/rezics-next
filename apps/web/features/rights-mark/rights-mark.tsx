@@ -57,7 +57,34 @@ export function licenceLabel(instrument: string): string {
 
 const urlPattern = /https?:\/\/[^\s<>"']+/g;
 
-/** The recorded notice, with each http(s) address linked and the surrounding words left as given. */
+/**
+ * The credit a reader sees. The notice's words are the name; a notice that is
+ * only an address uses that address's host. The name links to the source, and
+ * the full address is never the visible text.
+ */
+function sourceCredit(notice: string): { name: string; href: string | null } {
+  let href: string | null = null;
+  const words = notice.replace(urlPattern, raw => {
+    const trimmed = raw.replace(/[),.;:!?]+$/u, '');
+    const url = httpUrl(trimmed);
+    if (url && !href) href = url.href;
+    return ' ';
+  });
+  const name = words.replace(/\s+/g, ' ').replace(/^[\s,;:.·-]+|[\s,;:.·-]+$/g, '').trim();
+  if (name) return { name, href };
+  if (!href) return { name: notice.trim(), href: null };
+  return { name: new URL(href).hostname.replace(/^www\./, ''), href };
+}
+
+function SourceCredit({ notice, label }: { notice: string; label: string }) {
+  const credit = sourceCredit(notice);
+  const name = credit.href
+    ? <a href={credit.href} rel="noreferrer noopener" className={linkClass}>{credit.name}</a>
+    : credit.name;
+  return <span>{label}{name}</span>;
+}
+
+/** A recorded notice that is not the credit, with each http(s) address linked. */
 function NoticeText({ notice }: { notice: string }) {
   const nodes: ReactNode[] = [];
   let last = 0;
@@ -87,15 +114,15 @@ function LicenceLink({ instrument }: { instrument: string }) {
 }
 
 /**
- * What the mark shows, in read order: each attribution notice, then each
- * distinct licence, then a short note for every other duty. A recorded notice
- * on those duties stays, because notice retention is the notice itself.
+ * What the mark shows, in read order: each source credit, then each distinct
+ * licence, then a short note for every other duty. A recorded notice on those
+ * duties stays, because notice retention is the notice itself.
  */
 function markPieces(rights: Assessed, copy: RightsMarkCopy): ReactNode[] {
   const pieces: ReactNode[] = [];
   for (const [index, item] of rights.obligations.entries()) {
     const notice = item.kind === 'attribution' ? item.notice?.trim() : '';
-    if (notice) pieces.push(<NoticeText key={`attribution-${index}`} notice={notice} />);
+    if (notice) pieces.push(<SourceCredit key={`attribution-${index}`} notice={notice} label={copy.source} />);
   }
   const instruments = [rights.instrument, ...rights.obligations.map(item => item.instrument)]
     .filter((instrument): instrument is string => Boolean(instrument));

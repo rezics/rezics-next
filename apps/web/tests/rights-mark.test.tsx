@@ -6,7 +6,7 @@ import { copyOf } from '../features/entity-page/messages.ts';
 import { statements, predicateLabels } from '../features/entity-page/fixtures.ts';
 import { standaloneHrefFor } from '../features/entity-page/route.ts';
 import { StatementsView } from '../features/entity-page/views.tsx';
-import { attributed, ccBySa, creditedOnly, instrumentOnly, unassessed } from '../features/rights-mark/fixtures.ts';
+import { attributed, ccBySa, creditedOnly, hostOnly, instrumentOnly, sourceUrl, unassessed } from '../features/rights-mark/fixtures.ts';
 import { messages } from '../features/rights-mark/messages.ts';
 import { licenceLabel, RightsMark, RightsRunRows, rightsRuns } from '../features/rights-mark/rights-mark.tsx';
 import { resourceHref } from '../features/address/path.ts';
@@ -18,10 +18,12 @@ const draw = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToSt
 const marks = (html: string) => html.match(/data-rights-mark/g)?.length ?? 0;
 
 describe('rights mark', () => {
-  test('an assessed credit shows the notice, linked to the source, the licence, and share-alike', () => {
+  test('an assessed credit names the source, links it, and keeps the licence and share-alike', () => {
     const html = draw(createElement(RightsMark, { rights: attributed, locale: 'en' }));
-    expect(html).toContain('Recorded source,');
-    expect(html).toContain('href="https://example.test/records/1"');
+    expect(html).toContain('Source: ');
+    expect(html).toContain('>Example</a>');
+    expect(html).toContain(`href="${sourceUrl}"`);
+    expect(html).not.toContain(`>${sourceUrl}<`);
     expect(html).toContain('CC BY-SA 3.0');
     expect(html).toContain(`href="${ccBySa}"`);
     expect(html).toContain(messages.en.shareAlike);
@@ -30,11 +32,19 @@ describe('rights mark', () => {
     expect(html.match(/CC BY-SA 3\.0/g)).toHaveLength(1);
   });
 
+  test('a notice that is only an address shows the host, not the address', () => {
+    const html = draw(createElement(RightsMark, { rights: hostOnly, locale: 'en' }));
+    expect(html).toContain('Source: ');
+    expect(html).toContain('>example.test</a>');
+    expect(html).toContain(`href="${sourceUrl}"`);
+    expect(html).not.toContain(`>${sourceUrl}<`);
+  });
+
   test('an assessed read with only a licence shows that link', () => {
     const html = draw(createElement(RightsMark, { rights: instrumentOnly, locale: 'en' }));
     expect(html).toContain('CC BY-SA 3.0');
     expect(html).not.toContain(messages.en.shareAlike);
-    expect(html).not.toContain('Recorded source');
+    expect(html).not.toContain('Source:');
     expect(marks(html)).toBe(1);
   });
 
@@ -127,6 +137,7 @@ describe('rights mark', () => {
       const copy = messages[locale];
       for (const value of Object.values(copy)) expect(value.trim().length).toBeGreaterThan(0);
       const html = draw(createElement(RightsMark, { rights: attributed, locale }));
+      expect(html).toContain(copy.source);
       expect(html).toContain(copy.shareAlike);
     }
   });
