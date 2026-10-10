@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool } from 'pg';
+import { currentWorkerTick } from '../../../../services/main/src/worker-tick.ts';
 import { RealmDirectoryWorker } from '../../../../services/main/src/modules/realm-directory/worker.ts';
 import { DiscoveryRefreshWorker } from '../../../../services/main/src/modules/discovery/refresh.ts';
 import { RankingBuildWorker } from '../../../../services/main/src/modules/recommendation/build-worker.ts';
@@ -26,6 +27,11 @@ export function isForegroundOperation(): boolean {
 
 export function runBackgroundOperation<T>(operation: () => T): T {
   return background.run(true, operation);
+}
+
+/** A stack read's own queries. Scheduler boundaries and worker ticks belong to the scheduler. */
+export function foregroundCounted(): boolean {
+  return isForegroundOperation() && currentWorkerTick() === undefined;
 }
 
 /** Mark scheduling boundaries, including lazy request startup and follow-up nudges.
@@ -68,7 +74,7 @@ export class CountingPool extends Pool {
   checkouts = 0;
 
   override connect = ((...args: unknown[]) => {
-    if (isForegroundOperation()) this.checkouts++;
+    if (foregroundCounted()) this.checkouts++;
     return (Pool.prototype.connect as (...values: unknown[]) => unknown).apply(this, args);
   }) as Pool['connect'];
 }

@@ -2,9 +2,8 @@ import { authorCreditFixture, shortId } from './author-credit.ts';
 import { type TitleControlState } from '../../../services/main/src/modules/work/title-control.ts';
 import type { NativeWorkSourceAdoption, NativeWorkSourceTitleApplication } from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import type { NativeWorkSourceProposal } from '../../../services/main/src/modules/source/native-work-proposal.ts';
-import type { CommandEnvelope, FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { currentWorkerTick } from '../../../services/main/src/worker-tick.ts';
-import { isForegroundOperation } from '../integration/support/operation-cost.ts';
+import type { CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { meterFuseki } from '../integration/support/query-cost-meter.ts';
 
 /** Focused title harness, reusing the real Account/Access/Source owner bootstrap. */
 export async function titleControlFixture(apps: Record<string, string>, directory: string) {
@@ -12,16 +11,9 @@ export async function titleControlFixture(apps: Record<string, string>, director
   const commands: CommandEnvelope[] = [];
   let before: ((command: CommandEnvelope) => Promise<void>) | undefined;
   let mutate: ((command: CommandEnvelope) => CommandEnvelope) | undefined;
-  let lose = false, queries = 0, queryBytes = 0;
-  f.env.fuseki = new Proxy(f.env.fuseki, { get(target, property) {
-    if (property === 'query') return async (...args: Parameters<FusekiClient['query']>) => {
-      // Realm-directory refresh shares this client and advances on every receipt.
-      // Its tick is not the title edit's cost, and it must not vary that cost.
-      const counted = isForegroundOperation() && !currentWorkerTick();
-      const result = await target.query(...args);
-      if (counted) { queries++; queryBytes += Buffer.byteLength(JSON.stringify(result)); }
-      return result;
-    };
+  let lose = false;
+  const graph = meterFuseki(f.env.fuseki);
+  f.env.fuseki = new Proxy(graph, { get(target, property) {
     if (property === 'commandWithReceipt') return async (command: CommandEnvelope) => {
       const title = command.update.includes('rv:titleControl ');
       if (title) {
@@ -60,7 +52,7 @@ export async function titleControlFixture(apps: Record<string, string>, director
     beforeTitle: (hook: (command: CommandEnvelope) => Promise<void>) => { before = hook; },
     mutateTitle: (hook: (command: CommandEnvelope) => CommandEnvelope) => { mutate = hook; },
     loseTitle: () => { lose = true; },
-    metrics: () => ({ queries, queryBytes, commands: commands.length,
+    metrics: () => ({ queries: graph.queries, queryBytes: graph.bytes, commands: commands.length,
       commandBytes: commands.reduce((total, command) => total + Buffer.byteLength(JSON.stringify(command)), 0) }),
-    resetMetrics: () => { queries = 0; queryBytes = 0; commands.length = 0; } };
+    resetMetrics: () => { graph.reset(); commands.length = 0; } };
 }

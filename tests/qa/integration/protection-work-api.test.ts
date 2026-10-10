@@ -11,6 +11,7 @@ import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/s
 import { strongRevokeWorkProtectionScope } from '../../../services/main/src/modules/protection/work.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { meterFuseki } from './support/query-cost-meter.ts';
 
 const id = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
 
@@ -22,14 +23,14 @@ test('SYS02/SYS03/SYS10/SYS11/SYS14: protected Work correction uses one reviewed
   const relayPool = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
   try {
     const nativeFuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
+    const metered = meterFuseki(nativeFuseki);
     let loseReview = false;
     let beforeReview: (() => Promise<void>) | undefined;
-    let graphQueries = 0, graphReadBytes = 0, proposalCommandBytes = 0;
+    let proposalCommandBytes = 0;
     let hiddenReceipt: string | null = null, reviewCommands = 0;
-    const fuseki = new Proxy(nativeFuseki, { get(target, property) {
+    const fuseki = new Proxy(metered, { get(target, property) {
       if (property === 'query') return async (...args: Parameters<FusekiClient['query']>) => {
         const result = await target.query(...args);
-        graphQueries++; graphReadBytes += Buffer.byteLength(JSON.stringify(result));
         if (hiddenReceipt && args[0].includes(`<${hiddenReceipt}>`)
           && args[0].includes('SELECT ?outcome ?recordedAction')) {
           return { ...result, results: { ...result.results!, bindings: [] } };
@@ -236,13 +237,13 @@ test('SYS02/SYS03/SYS10/SYS11/SYS14: protected Work correction uses one reviewed
     for (const size of [0, 4, 16]) {
       for (let i = 0; i < size; i++) await json(await call('POST', '/v1/works', { language: 'en',
         profile: 'metadata-only-v1', authoring: 'own-work', title: `Unrelated cost Work ${size}-${i}`, actingSubject: actors[0] }), 201);
-      graphQueries = 0; graphReadBytes = 0; proposalCommandBytes = 0;
+      metered.reset(); proposalCommandBytes = 0;
       await json(await call('POST', '/v1/work-title-corrections', {
         profile: 'work-title-correction-v1', ...basis, expectedHead: confirmedState.contentHead,
         expectedProtection: confirmedState.protectionHead, expectedControl: confirmedState.controlHead,
         expectedControlEpoch: confirmedState.controlEpoch, title: `Bounded proposal ${size}`,
         predecessor: null }), 201);
-      costs.push({ queries: graphQueries, bytes: graphReadBytes, commandBytes: proposalCommandBytes });
+      costs.push({ queries: metered.queries, bytes: metered.bytes, commandBytes: proposalCommandBytes });
     }
     expect(new Set(costs.map(cost => cost.queries)).size).toBe(1);
     expect(Math.max(...costs.map(cost => cost.bytes))).toBeLessThan(25_000);

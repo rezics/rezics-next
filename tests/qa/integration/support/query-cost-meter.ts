@@ -1,0 +1,92 @@
+import type { FusekiClient } from '../../../../services/main/src/infrastructure/fuseki.ts';
+import type { Pool, PoolClient } from 'pg';
+import { foregroundCounted } from './operation-cost.ts';
+
+export { foregroundCounted } from './operation-cost.ts';
+
+/** Call count and JSON byte size of results the caller itself issued. */
+export type QueryMeter = {
+  queries: number;
+  bytes: number;
+  reset(): void;
+};
+
+function meterState(): QueryMeter {
+  const state: QueryMeter = {
+    queries: 0,
+    bytes: 0,
+    reset() {
+      state.queries = 0;
+      state.bytes = 0;
+    },
+  };
+  return state;
+}
+
+function record(state: QueryMeter, value: unknown): void {
+  state.queries++;
+  const text = JSON.stringify(value);
+  if (text !== undefined) state.bytes += Buffer.byteLength(text);
+}
+
+function countedQuery<Args extends unknown[]>(
+  state: QueryMeter,
+  query: (...args: Args) => Promise<unknown>,
+): (...args: Args) => Promise<unknown> {
+  return async (...args: Args) => {
+    // Attribute the caller, not a tick the round trip happens to overlap.
+    const counted = foregroundCounted();
+    const result = await query(...args);
+    if (counted) record(state, result);
+    return result;
+  };
+}
+
+/** Proxy whose `query` counts only `foregroundCounted()` reads. Other methods stay on the client. */
+export function meterFuseki<T extends FusekiClient>(client: T): T & QueryMeter {
+  const state = meterState();
+  const query = client.query.bind(client);
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === 'queries') return state.queries;
+      if (property === 'bytes') return state.bytes;
+      if (property === 'reset') return state.reset.bind(state);
+      if (property === 'query') return countedQuery(state, query) as T['query'];
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as T & QueryMeter;
+}
+
+function meterClient(client: PoolClient, state: QueryMeter): PoolClient {
+  const query = client.query.bind(client);
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === 'query') return countedQuery(state, query as (...args: unknown[]) => Promise<unknown>);
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/** Proxy whose pool and checkout `query` calls share one foreground meter. */
+export function meterPool<T extends Pool>(pool: T): T & QueryMeter {
+  const state = meterState();
+  const query = pool.query.bind(pool);
+  const connect = pool.connect.bind(pool);
+  return new Proxy(pool, {
+    get(target, property) {
+      if (property === 'queries') return state.queries;
+      if (property === 'bytes') return state.bytes;
+      if (property === 'reset') return state.reset.bind(state);
+      if (property === 'query') return countedQuery(state, query as (...args: unknown[]) => Promise<unknown>);
+      if (property === 'connect') return (...args: unknown[]) => {
+        if (typeof args[0] === 'function') return connect(...args as Parameters<Pool['connect']>);
+        return Promise.resolve(connect(...args as Parameters<Pool['connect']>)).then(client =>
+          meterClient(client as PoolClient, state));
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as T & QueryMeter;
+}
