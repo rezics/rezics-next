@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 import { Unzip, UnzipInflate, type AsyncFlateStreamHandler } from 'fflate';
 import { declaredCountProperties, workFormatConcepts, type WorkFormatKey }
   from '../dev/seed/relation-lexicon-data.ts';
+import { InvalidSemanticValue, temporalParts } from '../../services/main/src/modules/semantic/value.ts';
 import type { SerialStatus } from '../../services/main/src/modules/work/metadata-schema.ts';
 import { MissingRemote, type Acquisition } from './network.ts';
 import { blobPath, canonical, sha256 } from './store.ts';
@@ -837,6 +838,10 @@ const statusTags: Record<string, SerialStatus> = {
 };
 const formatKeys = new Set<string>(workFormatConcepts.map((item) => item.key));
 const integerDatatype = 'http://www.w3.org/2001/XMLSchema#integer';
+const dateDatatype = 'http://www.w3.org/2001/XMLSchema#date';
+const yearDatatype = 'http://www.w3.org/2001/XMLSchema#gYear';
+/** First air or first publication. A later key is read only when every earlier field is blank. */
+const publicationDateKeys = ['放送开始', '发售日', '发行日期', '上映年度', '开始'] as const;
 
 /** A captured subject row or a dataset record whose `data` is that row. */
 export interface BangumiFactSource {
@@ -850,13 +855,21 @@ export interface BangumiFactSource {
   infobox?: unknown;
   meta_tags?: unknown;
   api_subject?: unknown;
+  /** Archive subject row air or publication date. The API subject's `date` lives on `api_subject`. */
+  date?: unknown;
 }
 export interface BangumiDeclaredCount { notation: 'episode-count' | 'volume-count'; lexical: string }
+/** A day or a year. Month precision and unparseable text are absent, not a guessed day. */
+export interface BangumiPublicationDate {
+  lexical: string;
+  datatype: typeof dateDatatype | typeof yearDatatype;
+}
 export interface BangumiWorkFacts {
   subjectId: string;
   format: WorkFormatKey | null;
   count: BangumiDeclaredCount | null;
   status: SerialStatus | null;
+  date: BangumiPublicationDate | null;
 }
 export interface BangumiFactsClient {
   post<T>(path: string, body: object, key: string): Promise<T>;
@@ -936,6 +949,67 @@ function subjectRow(record: BangumiFactSource): Row {
   return record as Row;
 }
 
+function textField(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+/** Top-level `|key=` or an infobox array entry. Edition notes such as `[发售日|…]` are not this field. */
+function infoboxField(infobox: unknown, key: string): string | null {
+  if (typeof infobox === 'string') {
+    const match = infobox.match(new RegExp(`\\|${key}=([^\\r\\n]*)`));
+    return match ? textField(match[1]) : null;
+  }
+  if (!Array.isArray(infobox)) return null;
+  const row = infobox.find((item) => !!item && typeof item === 'object' && (item as Row).key === key) as
+    | Row
+    | undefined;
+  if (!row) return null;
+  return textField(row.value);
+}
+
+function daysOrYear(lexical: string, precision: 'day' | 'year',
+  datatype: BangumiPublicationDate['datatype']): BangumiPublicationDate | null {
+  try { temporalParts(lexical, precision); }
+  catch (error) {
+    if (error instanceof InvalidSemanticValue) return null;
+    throw error;
+  }
+  return { lexical, datatype };
+}
+
+/**
+ * `YYYY-MM-DD` or `YYYY年M月D日` is a day. `YYYY` or `YYYY年` is a year.
+ * A month, a range, or any other text is not a date.
+ */
+function publicationDate(raw: string): BangumiPublicationDate | null {
+  const value = raw.trim();
+  const chineseDay = /^(\d{4})年(\d{1,2})月(\d{1,2})日$/.exec(value);
+  if (chineseDay) {
+    return daysOrYear(`${chineseDay[1]}-${chineseDay[2]!.padStart(2, '0')}-${chineseDay[3]!.padStart(2, '0')}`,
+      'day', dateDatatype);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return daysOrYear(value, 'day', dateDatatype);
+  const chineseYear = /^(\d{4})年$/.exec(value);
+  if (chineseYear) return daysOrYear(chineseYear[1]!, 'year', yearDatatype);
+  if (/^\d{4}$/.test(value)) return daysOrYear(value, 'year', yearDatatype);
+  return null;
+}
+
+/**
+ * The first non-blank candidate wins. A blank field is absent and the next
+ * candidate is read. A present value that is not exactly a day or a year
+ * states nothing: a later field must not supply a day this one withheld.
+ */
+function firstPublicationDate(candidates: readonly (string | null)[]): BangumiPublicationDate | null {
+  for (const candidate of candidates) {
+    if (candidate === null) continue;
+    return publicationDate(candidate);
+  }
+  return null;
+}
+
 function subjectId(record: BangumiFactSource, data: Row): string {
   for (const value of [record.externalId, data.id, record.id]) {
     if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
@@ -945,9 +1019,11 @@ function subjectId(record: BangumiFactSource, data: Row): string {
 }
 
 /**
- * Format, declared count and completion for one subject. Year and season are not
- * stored; they are read from the first-publication date. An unclassified subject
- * has no count. Anime counts episodes; manga counts volumes.
+ * Format, declared count, completion and first publication for one subject.
+ * The date is the API subject's `date`, then the archive row `date`, then the
+ * infobox keys in `publicationDateKeys`. The infobox is the API box when that
+ * subject sent one, otherwise the archive box, as for the declared count.
+ * An unclassified subject has no count. Anime counts episodes; manga counts volumes.
  */
 export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
   const data = subjectRow(record);
@@ -977,7 +1053,14 @@ export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
       ?? positiveInteger(data[field]) ?? infoboxCount(box, boxKey);
     if (lexical) count = { notation, lexical };
   }
-  return { subjectId: subjectId(record, data), format, count, status };
+  const box = apiRow && (typeof apiRow.infobox === 'string' || Array.isArray(apiRow.infobox))
+    ? apiRow.infobox : data.infobox;
+  const date = firstPublicationDate([
+    apiRow ? textField(apiRow.date) : null,
+    textField(data.date),
+    ...publicationDateKeys.map((key) => infoboxField(box, key)),
+  ]);
+  return { subjectId: subjectId(record, data), format, count, status, date };
 }
 
 /**
