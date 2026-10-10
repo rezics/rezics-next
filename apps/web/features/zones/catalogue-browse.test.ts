@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
+import { createElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { readZoneBrowse } from '../realm/read.ts';
-import { applyCatalogueYear, YEAR_PAGES } from './catalogue-browse.tsx';
+import { applyCatalogueYear, MEMBER_PAGES, YEAR_PAGES } from './catalogue-browse.tsx';
 import type { BrowseModel } from './browse-view.ts';
 import type { readPublicationYears } from './catalogue-facts.ts';
 import { messages } from './messages.ts';
@@ -132,4 +134,25 @@ test('a screen whose read found only other Zones\' Works still links forward to 
   }
   expect(screens[0]).toBe(0);
   expect(seen).toEqual(ours);
+});
+
+test('a Zone roster larger than the cap shows the notice', async () => {
+  let pages = 0;
+  const zoneBrowse = (async () => {
+    pages += 1;
+    return { ok: true as const, data: { items: [card(workId(pages))], nextCursor: `page-${pages}` } };
+  }) as unknown as typeof readZoneBrowse;
+  const publicationYears = (async () =>
+    ({ ok: true as const, data: { items: [], nextCursor: null } })) as typeof readPublicationYears;
+  const browseHeader = (props: { year?: { bounded: boolean; window: number } | null }): ReactNode =>
+    props.year?.bounded
+      ? createElement('p', null, `first ${props.year.window} Works in the current order, and may miss others`)
+      : null;
+  const capped = { ...view, pkg: { slots: { browseHeader } } } as unknown as RealmView;
+  const result = await applyCatalogueYear(
+    { view: capped, search: { year: '1995' }, model: model() },
+    { publicationYears, zoneBrowse });
+  expect(pages).toBe(MEMBER_PAGES);
+  expect(renderToStaticMarkup(result.header)).toContain(
+    `first ${MEMBER_PAGES} Works in the current order, and may miss others`);
 });

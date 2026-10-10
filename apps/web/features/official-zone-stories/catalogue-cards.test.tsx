@@ -91,7 +91,7 @@ test('a manga work page still names each fact that was not recorded', () => {
 test('the source credit is the footer, once, as the visual-novel Zone places its own', () => {
   installHostZoneAddresses();
   const year = { action: '/browse', value: '1980', kept: [], clearHref: null, directoryHref: '/browse?years=1',
-    directory: false, bounded: false };
+    directory: false, window: 0, bounded: false };
   const animeHead = draw(createElement(AnimeBrowseHeader, {
     zone: catalogueZone('anime', 'en'), Link, fallback: null, filter: null, filtered: false, year,
   }));
@@ -127,7 +127,7 @@ test('the source credit is the footer, once, as the visual-novel Zone places its
 test('the year control sits in the browse column, in the same row as Filters', () => {
   installHostZoneAddresses();
   const year = { action: '/browse', value: '1980', kept: [], clearHref: '/browse', directoryHref: '/browse?years=1',
-    directory: false, bounded: false };
+    directory: false, window: 0, bounded: false };
   const header = createElement(AnimeBrowseHeader, {
     zone: catalogueZone('anime', 'en'), Link, fallback: null, filter: null, filtered: false, year,
   });

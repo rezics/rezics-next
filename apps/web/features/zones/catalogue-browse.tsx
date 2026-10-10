@@ -12,7 +12,7 @@ import { catalogueYearParam, readPublicationYears } from './catalogue-facts.ts';
 // browse Facets. The year comes from the publication-year template and is intersected with those
 // results. A Work the template does not list is left out; the page does not invent a year.
 
-const MEMBER_PAGES = 10;
+export const MEMBER_PAGES = 10;
 /** Pages of `work-publication-years` one request may read. A cap on that request's cost, not a quota. */
 export const YEAR_PAGES = 8;
 /** Matches kept from the pages this request read. A further year-read page waits for the next cursor. */
@@ -49,6 +49,8 @@ function yearHref(href: string, cursor: string | null): string {
   return search ? `${url.pathname}?${search}` : url.pathname;
 }
 
+// The roster intersection stops after MEMBER_PAGES, so a year view covers only those Works
+// and may miss the rest. Use work-publication-years with `concept` and drop the roster intersection.
 async function members(view: Extract<RealmView, { kind: 'view' }>, state: ReturnType<typeof parseBrowseState>,
   browse: typeof readZoneBrowse): Promise<{
   works: Map<string, ZoneWork>; incomplete: boolean; failure: 'unavailable' | null;
@@ -102,7 +104,7 @@ export async function applyCatalogueYear({ view, search, model }: {
     action: base, value: year === null ? '' : String(year), kept,
     clearHref: listing ? withFlags(plain, null, false) : null,
     directoryHref: withFlags(plain, null, true),
-    directory, bounded: false,
+    directory, window: 0, bounded: false,
   };
   const Header = view.pkg?.slots.browseHeader;
   const Link = Header ? (await import('../shell/localized-link.tsx')).default : null;
@@ -143,9 +145,11 @@ export async function applyCatalogueYear({ view, search, model }: {
     model.items = found;
     model.next = resume ? yearHref(listedHref, resume) : null;
     model.first = started ? listedHref : null;
-    yearControl.bounded = roster.incomplete || nextCursor !== null;
+    yearControl.window = roster.works.size;
+    yearControl.bounded = roster.incomplete;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });
-    model.results = yearControl.bounded
+    const open = roster.incomplete || nextCursor !== null;
+    model.results = open
       ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);
   }
   return { header, publicationYears, year, failure: null };

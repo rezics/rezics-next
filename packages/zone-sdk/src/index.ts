@@ -419,7 +419,9 @@ export interface BrowseHeaderSlotProps extends ZoneSlotProps {
     directoryHref: string;
     /** The page is that newest-first list, not one chosen year. */
     directory: boolean;
-    /** The year read stopped at its bound, so a work outside the window is not listed. */
+    /** How many of this Zone's Works, in the current order, this year view read. */
+    window: number;
+    /** The roster read stopped at its cap, so Works past that window may be missing. */
     bounded: boolean;
   } | null;
 }

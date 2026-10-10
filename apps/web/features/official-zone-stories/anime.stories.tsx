@@ -24,7 +24,7 @@ function Page({ locale, bounded = false }: { locale: UiLocale; bounded?: boolean
       <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 sm:px-6 lg:px-10">
         <AnimeBrowseHeader zone={zone} fallback={null} Link={catalogueLink} filter={null} filtered={false} year={{
           action: browse, value: '1980', kept: [{ name: 'concept', value: animeFormatNames[0] }],
-          clearHref: browse, directoryHref: `${browse}?years=1`, directory: false, bounded,
+          clearHref: browse, directoryHref: `${browse}?years=1`, directory: false, window: 200, bounded,
         }} />
         <section aria-labelledby="anime-results">
           <h2 id="anime-results" className="sr-only">{results}</h2>
@@ -140,13 +140,13 @@ export const JapanesePhone: Story = {
   },
 };
 
-/** The year read stopped at its bound, so the page says a work outside that window is absent. */
+/** The roster read stopped at its cap, so the page says Works past that window may be missing. */
 export const BoundedYear: Story = {
   args: { bounded: true },
   parameters: { viewport: { defaultViewport: 'desktop' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText(/stops after the publication years/)).toBeVisible();
+    await expect(canvas.getByText(/first 200 Works in the current order/)).toBeVisible();
     await fits();
     await captureCatalogueStory(canvasElement, 'anime-bounded');
   },

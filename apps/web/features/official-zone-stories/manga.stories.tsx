@@ -25,7 +25,7 @@ function Page({ locale, bounded = false }: { locale: UiLocale; bounded?: boolean
       <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 sm:px-6 lg:px-10">
         <MangaBrowseHeader zone={zone} fallback={null} Link={catalogueLink} filter={null} filtered={false} year={{
           action: browse, value: '1995', kept: [{ name: 'status', value: 'completed' }],
-          clearHref: browse, directoryHref: `${browse}?years=1`, directory: false, bounded,
+          clearHref: browse, directoryHref: `${browse}?years=1`, directory: false, window: 200, bounded,
         }} />
         <section aria-labelledby="manga-results">
           <h2 id="manga-results" className="sr-only">{results}</h2>
@@ -143,7 +143,7 @@ export const BoundedYear: Story = {
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText(/stops after the publication years/)).toBeVisible();
+    await expect(canvas.getByText(/first 200 Works in the current order/)).toBeVisible();
     await fits();
     await captureCatalogueStory(canvasElement, 'manga-bounded');
   },

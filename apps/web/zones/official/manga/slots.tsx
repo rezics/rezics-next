@@ -89,7 +89,7 @@ export function MangaBrowseHeader({ zone, year, Link }: BrowseHeaderSlotProps) {
   if (!year) return null;
   const t = strings(zone.locale);
   return <CatalogueYearForm year={year} label={t.yearLabel} submit={t.yearSubmit} clear={t.yearClear}
-    directory={t.yearDirectory} bounded={t.yearBounded} Link={Link} />;
+    directory={t.yearDirectory} bounded={t.yearBounded(String(year.window))} Link={Link} />;
 }
 
 /** Bangumi, and the CC BY-SA 3.0 deed, at the addresses the host supplies. */
