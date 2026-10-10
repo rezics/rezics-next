@@ -567742,7 +567742,8 @@
                   "action": {
                     "enum": [
                       "add",
-                      "transfer"
+                      "transfer",
+                      "remove"
                     ],
                     "type": "string"
                   },
@@ -567785,7 +567786,8 @@
                   "action": {
                     "enum": [
                       "add",
-                      "transfer"
+                      "transfer",
+                      "remove"
                     ],
                     "type": "string"
                   },
@@ -567828,7 +567830,8 @@
                   "action": {
                     "enum": [
                       "add",
-                      "transfer"
+                      "transfer",
+                      "remove"
                     ],
                     "type": "string"
                   },
@@ -567881,6 +567884,10 @@
                       "maxItems": 32,
                       "type": "array"
                     },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "receipt": {
                       "type": "string"
                     },
@@ -567895,6 +567902,7 @@
                   "required": [
                     "work",
                     "generation",
+                    "owner",
                     "maintainers",
                     "receipt",
                     "replayed"
@@ -567922,6 +567930,10 @@
                       "maxItems": 32,
                       "type": "array"
                     },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "receipt": {
                       "type": "string"
                     },
@@ -567936,6 +567948,7 @@
                   "required": [
                     "work",
                     "generation",
+                    "owner",
                     "maintainers",
                     "receipt",
                     "replayed"
@@ -585948,6 +585961,10 @@
                       "maxItems": 32,
                       "type": "array"
                     },
+                    "owner": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "work": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -585956,6 +585973,7 @@
                   "required": [
                     "work",
                     "generation",
+                    "owner",
                     "maintainers"
                   ],
                   "type": "object"

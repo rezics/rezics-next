@@ -13,7 +13,7 @@ export const MAINTAINER_COST = { maxMaintainers: 32, graphQueries: 2,
   graphBytes: 2048, lockTimeoutMs: 2000, statementTimeoutMs: 5000 } as const;
 export interface MaintainerChange {
   work: string; actingSubject: string; target: string;
-  action: 'add' | 'transfer'; expectedGeneration: string;
+  action: 'add' | 'transfer' | 'remove'; expectedGeneration: string;
 }
 interface SetRow { main_version: string; generation: string }
 
@@ -35,28 +35,30 @@ export class WorkMaintainers {
     if (result.boolean !== true) throw new AdmissionDenied('Work is unavailable');
   }
 
-  private async members(client: Pick<PoolClient, 'query'>, work: string): Promise<string[]> {
-    const rows = await client.query<{ agent: string }>(`SELECT agent FROM access.work_maintainer
+  private async members(client: Pick<PoolClient, 'query'>, work: string): Promise<{ agent: string; owner: boolean }[]> {
+    const rows = await client.query<{ agent: string; owner: boolean }>(`SELECT agent, owner FROM access.work_maintainer
       WHERE work = $1 ORDER BY agent LIMIT 33`, [work]);
     if (rows.rows.length > MAINTAINER_COST.maxMaintainers) throw new AdmissionUnavailable('maintainer bound exceeded');
-    return rows.rows.map(row => row.agent);
+    return rows.rows;
   }
 
   async read(work: string) {
     await this.current(work);
-    // One statement provides a consistent set/generation snapshot.
-    const row = (await this.pool.query<{ generation: string; maintainers: string[] }>(`
+    // One statement. The owner lookup is the partial unique index, one extra read.
+    const row = (await this.pool.query<{ generation: string; maintainers: string[]; owner: string | null }>(`
       SELECT s.generation::text, ARRAY(SELECT m.agent FROM access.work_maintainer m
-        WHERE m.work = s.work ORDER BY m.agent LIMIT 32) AS maintainers
+        WHERE m.work = s.work ORDER BY m.agent LIMIT 32) AS maintainers,
+        (SELECT m.agent FROM access.work_maintainer m WHERE m.work = s.work AND m.owner) AS owner
       FROM access.work_maintainer_set s WHERE s.work = $1`, [work])).rows[0];
     if (!row) throw new AdmissionDenied('Work maintainers are unavailable');
-    return { work, ...row };
+    if (!row.owner) throw new AdmissionUnavailable('Work owner is unavailable');
+    return { work, generation: row.generation, maintainers: row.maintainers, owner: row.owner };
   }
 
   async change(principal: VerifiedPrincipal, input: MaintainerChange, key: string) {
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)
       || !/^(0|[1-9][0-9]{0,18})$/.test(input.expectedGeneration)
-      || !['add', 'transfer'].includes(input.action)
+      || !['add', 'transfer', 'remove'].includes(input.action)
       || ![input.actingSubject, input.target].every(value => /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(value))) {
       throw new AdmissionDenied('invalid maintainer change');
     }
@@ -85,24 +87,38 @@ export class WorkMaintainers {
       const person = (await client.query<{ id: string }>(`SELECT id FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`, [fresh.issuer, fresh.subject])).rows[0];
       if (!person) throw new AdmissionDenied('principal is inactive');
-      const prior = (await client.query<{ id: string; request_digest: string; generation: string; maintainers: string[] }>(`
-        SELECT id, request_digest, generation::text, maintainers FROM access.work_maintainer_receipt
+      const prior = (await client.query<{ id: string; request_digest: string; generation: string; maintainers: string[]; owner: string | null }>(`
+        SELECT id, request_digest, generation::text, maintainers, owner FROM access.work_maintainer_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [person.id, key])).rows[0];
       if (prior) {
         if (prior.request_digest !== digest) throw new AdmissionConflict('maintainer key binds another intent');
+        const owner = prior.owner ?? (await client.query<{ agent: string }>(
+          `SELECT agent FROM access.work_maintainer WHERE work = $1 AND owner`, [input.work])).rows[0]?.agent;
+        if (!owner) throw new AdmissionUnavailable('Work owner is unavailable');
         await client.query('COMMIT');
-        return { work: input.work, receipt: prior.id, generation: prior.generation, maintainers: prior.maintainers, replayed: true };
+        return { work: input.work, receipt: prior.id, generation: prior.generation,
+          maintainers: prior.maintainers, owner, replayed: true };
       }
       await lockControllerContinuity(client, [input.target]);
       await assertControllerContinuity(client, [input.target]);
       if (!await maintainerControllerProof(client, person.id, input.actingSubject)) throw new AdmissionDenied('Agent is not controlled by this member');
       const current = (await client.query<SetRow>(`SELECT main_version, generation::text
         FROM access.work_maintainer_set WHERE work = $1 FOR UPDATE`, [input.work])).rows[0]!;
-      const members = await this.members(client, input.work);
+      const roster = await this.members(client, input.work);
+      const members = roster.map(row => row.agent);
+      const owner = roster.find(row => row.owner)?.agent;
+      if (!owner) throw new AdmissionUnavailable('Work owner is unavailable');
       if (!members.includes(input.actingSubject)) throw new AdmissionDenied('Agent is not a Work maintainer');
       if (current.generation !== input.expectedGeneration) throw new AdmissionConflict('maintainer generation changed');
-      if (input.target === input.actingSubject) throw new AdmissionConflict('target must be another Agent');
-      if (!(await client.query(`SELECT 1 FROM access.authority_subject WHERE id = $1 AND active AND kind = 'agent' FOR SHARE`, [input.target])).rowCount) {
+      // Add and transfer still refuse a self target. Remove checks that after the last-member guard.
+      if (input.action !== 'remove' && input.target === input.actingSubject) throw new AdmissionConflict('target must be another Agent');
+      if (input.action === 'remove') {
+        if (input.actingSubject !== owner) throw new AdmissionDenied('only the Work owner may remove a maintainer');
+        if (!members.includes(input.target)) throw new AdmissionConflict('target is not a Work maintainer');
+        if (members.length < 2) throw new AdmissionControllerContinuity('Work keeps at least one maintainer');
+        // The owner is the only remover, so a self target is how the owner is kept. Transfer is how the owner leaves.
+        if (input.target === input.actingSubject) throw new AdmissionConflict('target must be another Agent');
+      } else if (!(await client.query(`SELECT 1 FROM access.authority_subject WHERE id = $1 AND active AND kind = 'agent' FOR SHARE`, [input.target])).rowCount) {
         throw new AdmissionDenied('target Agent is inactive');
       }
       if ((await client.query(`SELECT id FROM access.admission WHERE scope_id = $1
@@ -117,18 +133,33 @@ export class WorkMaintainers {
       if (input.action === 'add' && !members.includes(input.target) && members.length >= MAINTAINER_COST.maxMaintainers) {
         throw new AdmissionConflict('Work has 32 maintainers');
       }
-      await client.query('INSERT INTO access.work_maintainer (work, agent) VALUES ($1,$2) ON CONFLICT DO NOTHING', [input.work, input.target]);
-      if (input.action === 'transfer') await client.query('DELETE FROM access.work_maintainer WHERE work = $1 AND agent = $2', [input.work, input.actingSubject]);
+      if (input.action !== 'remove') {
+        await client.query('INSERT INTO access.work_maintainer (work, agent) VALUES ($1,$2) ON CONFLICT DO NOTHING', [input.work, input.target]);
+      }
+      if (input.action === 'transfer') {
+        // A co-maintainer leaving does not hand the removal right to their successor.
+        if (input.actingSubject === owner) {
+          await client.query('UPDATE access.work_maintainer SET owner = false WHERE work = $1 AND agent = $2', [input.work, input.actingSubject]);
+          await client.query('UPDATE access.work_maintainer SET owner = true WHERE work = $1 AND agent = $2', [input.work, input.target]);
+        }
+        await client.query('DELETE FROM access.work_maintainer WHERE work = $1 AND agent = $2', [input.work, input.actingSubject]);
+      }
+      if (input.action === 'remove') {
+        await client.query('DELETE FROM access.work_maintainer WHERE work = $1 AND agent = $2', [input.work, input.target]);
+      }
       const generation = (BigInt(current.generation) + 1n).toString();
       await client.query('UPDATE access.work_maintainer_set SET generation = $2 WHERE work = $1', [input.work, generation]);
-      const maintainers = await this.members(client, input.work);
+      const after = await this.members(client, input.work);
+      const maintainers = after.map(row => row.agent);
+      const savedOwner = after.find(row => row.owner)?.agent;
+      if (!savedOwner) throw new AdmissionUnavailable('Work owner is unavailable');
       const receipt = randomUUID();
       await client.query(`INSERT INTO access.work_maintainer_receipt
-        (id, work, principal_id, idempotency_key, request_digest, actor, target, action, generation, maintainers)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [receipt, input.work, person.id, key, digest,
-        input.actingSubject, input.target, input.action, generation, JSON.stringify(maintainers)]);
+        (id, work, principal_id, idempotency_key, request_digest, actor, target, action, generation, maintainers, owner)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [receipt, input.work, person.id, key, digest,
+        input.actingSubject, input.target, input.action, generation, JSON.stringify(maintainers), savedOwner]);
       await client.query('COMMIT');
-      return { work: input.work, receipt, generation, maintainers, replayed: false };
+      return { work: input.work, receipt, generation, maintainers, owner: savedOwner, replayed: false };
     } catch (error) {
       await client.query('ROLLBACK');
       if (error instanceof ControlConflict) throw new AdmissionControllerContinuity(error.message);

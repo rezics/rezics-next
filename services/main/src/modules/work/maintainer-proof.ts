@@ -42,11 +42,11 @@ export async function recordInitialMaintainer(client: PoolClient, admission: {
     (work, main_version, creation_admission) VALUES ($1,$2,$3)
     ON CONFLICT (work) DO NOTHING RETURNING work`, [work, mainVersion, admission.id]);
   if (!created.rowCount) return;
-  await client.query('INSERT INTO access.work_maintainer (work, agent) VALUES ($1,$2)',
+  await client.query('INSERT INTO access.work_maintainer (work, agent, owner) VALUES ($1,$2,true)',
     [work, admission.acting_subject]);
   await client.query(`INSERT INTO access.work_maintainer_receipt
-    (id, work, principal_id, idempotency_key, request_digest, actor, target, action, generation, maintainers)
-    VALUES ($1,$2,$3,$4,$5,$6,$6,'create',0,$7)`, [admission.id, work, admission.principal_id,
+    (id, work, principal_id, idempotency_key, request_digest, actor, target, action, generation, maintainers, owner)
+    VALUES ($1,$2,$3,$4,$5,$6,$6,'create',0,$7,$6)`, [admission.id, work, admission.principal_id,
     `${chapter ? 'chapter-create' : 'work-create'}:${admission.id}`, proof.requestDigest, admission.acting_subject,
     JSON.stringify([admission.acting_subject])]);
 }

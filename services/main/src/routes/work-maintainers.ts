@@ -6,7 +6,8 @@ import { commandError, problem } from './problems.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const generation = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
-const view = t.Object({ work: native, generation, maintainers: t.Array(native, { maxItems: 32 }) });
+const view = t.Object({ work: native, generation, owner: native,
+  maintainers: t.Array(native, { maxItems: 32 }) });
 const result = t.Object({ ...view.properties, receipt: t.String(), replayed: t.Boolean() });
 export const openApiOperations = {
   '/v1/work-maintainer-changes': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -27,7 +28,7 @@ export function workMaintainerRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/work-maintainer-changes', {
       body: t.Object({ profile: t.Literal('work-maintainer-change-v1'), work: native,
-        actingSubject: native, target: native, action: t.Union([t.Literal('add'), t.Literal('transfer')]),
+        actingSubject: native, target: native, action: t.Union([t.Literal('add'), t.Literal('transfer'), t.Literal('remove')]),
         expectedGeneration: generation }, { additionalProperties: false }),
       response: { 200: result, 201: result, ...writeProblems },
     }, async ({ request, body }) => {
