@@ -169,7 +169,7 @@ async function retryReply(stack: MediaStack, member: Member) {
   const hiddenKey = randomUUID();
   const hidden = await member.send('POST', '/v1/realm-replies', hiddenBody, hiddenKey);
   const hiddenText = await hidden.text();
-  expect(hidden.status, hiddenText).toBe(403);
+  expect(hidden.status, hiddenText).toBe(404);
   expect((await admissions(stack, member, hiddenKey)).rows).toEqual([]);
   const created = await stack.publicWork(member.actor, ['en'], 'Reply visibility');
   const revision = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
