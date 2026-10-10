@@ -156,6 +156,9 @@ test('role cards preview holders, the role filter pages, and a hidden member sta
   await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'institution')", [institution]);
   await pool.query(`INSERT INTO access.realm_admin_assignment (realm, role_id, member, valid_until)
     VALUES ($1,$2,$3,clock_timestamp() + interval '1 day')`, [manager.realm, wide, institution]);
+  const sealed = await role(manager.realm, 'Sealed');
+  await people(manager.realm, 0, 1, { role: sealed, assignOnly: true });
+  await people(manager.realm, 26, 1, { role: sealed, assignOnly: true });
 
   const preview = await admin.roles(manager.principal, manager.realm, manager.actor);
   expect(preview.cap).toBe(REALM_ROLE_CAP);
@@ -164,6 +167,7 @@ test('role cards preview holders, the role filter pages, and a hidden member sta
   expect(byName.Wide!.holders).toHaveLength(REALM_ROLE_HOLDER_PREVIEW);
   expect(byName.Small).toEqual(expect.objectContaining({ moreHolders: false, holders: [agent(24), agent(25)] }));
   expect(byName.Empty).toEqual(expect.objectContaining({ moreHolders: false, holders: [] }));
+  expect(byName.Sealed).toEqual(expect.objectContaining({ moreHolders: false, holders: [] }));
   expect(preview.roles.map(item => item.holders).flat()).not.toContain(agent(0));
   expect(preview.roles.map(item => item.holders).flat()).not.toContain(agent(26));
   expect(preview.roles.map(item => item.holders).flat()).not.toContain(institution);
