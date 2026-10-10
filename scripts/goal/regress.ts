@@ -273,6 +273,8 @@ function checkoutBytes(root: string): Map<string, number> | undefined {
 }
 
 function removeWorktree(repo: string, path: string): boolean {
+  // Release staging under .temp/releases is made read-only; git cannot delete it until it is writable again.
+  spawnSync('chmod', ['-R', 'u+w', path], { encoding: 'utf8' });
   const removed = gitResult(repo, ['worktree', 'remove', '--force', path]);
   if (removed.ok || !existsSync(path)) return true;
   console.error(`git worktree remove --force ${path}: ${removed.stderr.trim()}`);

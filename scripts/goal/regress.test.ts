@@ -1565,6 +1565,17 @@ test('a finished run removes exactly its mapped checkouts', async () => {
   } finally { r.cleanup(); }
 });
 
+test('a finished run removes a checkout that holds read-only release staging', async () => {
+  const r = repo();
+  try {
+    r.write('Taskfile.yml', "version: '3'\ntasks:\n  install:\n    cmds: ['mkdir -p .temp/releases/stage/infra && chmod -R a-w .temp/releases']\n  gen:check:\n    cmds: ['true']\n");
+    r.commit();
+    const finished = await r.run({ runId: 'read-only-stage', prepare: undefined });
+    expect(finished.status).toBe('passed');
+    for (const path of mappedCheckouts(r.options.stateDir, 'read-only-stage')) expect(existsSync(path)).toBe(false);
+  } finally { r.cleanup(); }
+});
+
 test('a non-live run loses its checkouts and resume recreates them', async () => {
   const r = repo();
   try {
