@@ -232,12 +232,12 @@ export class RealmReplyStore {
         }
         throw new RealmReplyDenied('reply admission was cancelled');
       }
-      // The route already disclosed the retained root. A lost-response retry
-      // keeps its identity after a target edit; only a new identity binds the
-      // current root. A miss here is still a read, not a sealed refusal.
+      // The route already disclosed the root. A lost-response retry keeps its
+      // identity after a target edit; only a new identity binds the current
+      // root. A visible root that cannot take this reply is a refusal.
       const readable = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
         session => boundReplyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision, !saved));
-      if (!readable) throw new WorkReadMissing('Reply root is unavailable');
+      if (!readable) throw new RealmReplyDenied('Reply root is unavailable');
       const create = async (client?: PoolClient) => {
         if (!saved) await this.fence(admission, principal, client);
         return this.content.createReply(admission, input);
@@ -257,13 +257,16 @@ export class RealmReplyStore {
       if (error instanceof TargetUnavailable) throw new RealmReplyUnavailable(error.message);
       const unavailable = unavailableReply(error);
       if (unavailable) throw unavailable;
-      if (error instanceof WorkReadMissing) throw error;
-      if (sealsReplyRefusal(error)) {
+      // An erased question or other visible root miss is a refusal. A target
+      // the caller cannot see never reaches this catch: the route answered 404.
+      const refusal = error instanceof WorkReadMissing
+        ? new RealmReplyDenied('Reply root is unavailable') : error;
+      if (sealsReplyRefusal(refusal)) {
         const refused = await this.refuseUncommittedCreate(admission, graph);
         graph = refused.terminal;
         if (refused.replay) return await this.content.createReply(admission, input);
       }
-      throw error;
+      throw refusal;
     } finally {
       await this.sealTerminal(admission, graph);
     }
