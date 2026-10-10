@@ -28,7 +28,15 @@ export class WorkReadInvalid extends Error {}
 export class WorkReadMissing extends Error {}
 export class WorkReadMoved extends Error {}
 export class WorkReadExpired extends WorkReadMoved {}
-export class WorkReadUnavailable extends Error {}
+/** `code` is a bounded token of the fixed reason, so the logged 503 names which
+ * read refused (the class alone cannot tell a moved basis from a missing one). */
+export class WorkReadUnavailable extends Error {
+  readonly code: string;
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.code = (message ?? 'unavailable').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32);
+  }
+}
 export class WorkReadLimit extends Error {}
 export type ReadRow = NonNullable<SparqlResult['results']>['bindings'][number];
 export interface ReadPosition { dataEpoch: string; sequence: string; dependencyToken?: string }

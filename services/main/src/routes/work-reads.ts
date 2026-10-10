@@ -1,3 +1,4 @@
+import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
@@ -37,6 +38,7 @@ export function workReadError(error: unknown): Response {
   if (error instanceof WorkReadLimit) return problem(422, 'work_read_budget_exceeded', 'Work read exceeds its budget');
   if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
   if (error instanceof WorkReadUnavailable || error instanceof MediaUnavailable || error instanceof ContextCommandUnavailable) {
+    logWorkerFault('main.route.work_read_unavailable', error);
     return problem(503, 'work_read_unavailable', 'Work read is unavailable');
   }
   return commandError(error);
