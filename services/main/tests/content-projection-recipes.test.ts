@@ -46,7 +46,9 @@ test('G-087: media-set publication is proven and acknowledged without text proje
     decisionDigest: bound(reference.byteDigest), decisionEpoch: bound(contentEpoch),
     decisionSequence: bound('2'),
   };
-  const fuseki = { query: async () => ({ results: { bindings: [row] } }),
+  // The relay first asks whether public search is open (the anchor is present).
+  const fuseki = { query: async (sparql: string) => sparql.includes('SearchGraphAnchor')
+      ? { boolean: true } : { results: { bindings: [row] } },
     commandHealth: async () => { throw new Error('text profile was checked'); },
   } as unknown as FusekiClient;
   const env = { fuseki, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' },

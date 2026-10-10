@@ -32,6 +32,8 @@ class ProjectionGraph extends FusekiClient {
       publicSearchWriteActive: false, profiles: Object.fromEntries(Object.entries(profileRegistry).map(([name, p]) => [name, p.sha256])) };
   }
   override async query(sparql: string): Promise<SparqlResult> {
+    // The relay first asks whether public search is open (the anchor is present).
+    if (sparql.includes('SearchGraphAnchor')) return { boolean: true } as unknown as SparqlResult;
     if (sparql.includes('SELECT ?work WHERE')) {
       const entry = [...this.structures].find(([structure]) => sparql.includes(`<${structure}>`));
       return { results: { bindings: entry && !this.failed.has(entry[0]) ? [{ work: binding(entry[1]) }] : [] } };
