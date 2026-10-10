@@ -9,6 +9,7 @@ import {
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
+import { DiscoveryNotProduced } from '../recommendation/derived-generation.ts';
 import {
   indexedLabels,
   publicNamePage,
@@ -88,6 +89,17 @@ export async function conceptCountBasis(
   const active = await session.deps.discovery.active(basis, session.position, generation);
   return { basis, active };
 }
+/** A generation that was never produced is a complete page with nothing to list.
+ * Followed topics still need that generation for usage counts, so they are absent here. */
+function conceptSearchNeverProduced(session: WorkReadSession) {
+  return {
+    profile: 'concept-search-v1' as const,
+    sourcePosition: session.position,
+    stale: false,
+    ...listResult([], null),
+  };
+}
+
 export async function conceptCounts(
   session: WorkReadSession,
   active: DiscoveryReadGeneration,
@@ -146,7 +158,14 @@ export async function readConceptSearch(
     if (!Number.isSafeInteger(prior.count) || prior.count < 0)
       throw new WorkReadInvalid('Concept cursor is invalid');
   }
-  const { basis, active } = await conceptCountBasis(session, input.realm);
+  let produced: { basis: OwnedDiscoveryBasis; active: DiscoveryReadGeneration };
+  try {
+    produced = await conceptCountBasis(session, input.realm);
+  } catch (error) {
+    if (!(error instanceof DiscoveryNotProduced)) throw error;
+    return conceptSearchNeverProduced(session);
+  }
+  const { basis, active } = produced;
   let ids: string[] = [],
     more = false,
     after = '',
@@ -337,7 +356,13 @@ export async function readConceptSearch(
     ];
   });
   await fenceDiscoveryReader(session, reader, input.personalization !== false);
-  const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
+  let final: DiscoveryReadGeneration;
+  try {
+    final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
+  } catch (error) {
+    if (!(error instanceof DiscoveryNotProduced)) throw error;
+    return conceptSearchNeverProduced(session);
+  }
   const stale = active.stale || final.stale;
   order.count += items.length;
   const next = more
