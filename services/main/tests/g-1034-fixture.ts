@@ -18,9 +18,13 @@ export async function growRealmThreads(
   options: {
     parent?: { reply: string; revision: string; chain: boolean };
     keyPrefix?: string;
+    /** Continue a resumed corpus. Keys stay `${prefix}:${startIndex + index}`. */
+    startIndex?: number;
   } = {},
 ): Promise<PostedRealmReply[]> {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid reply seed count');
+  const startIndex = options.startIndex ?? 0;
+  if (!Number.isSafeInteger(startIndex) || startIndex < 0) throw new Error('Invalid reply seed index');
   const started = performance.now();
   const replies: PostedRealmReply[] = [];
   let cursor = options.parent
@@ -32,7 +36,7 @@ export async function growRealmThreads(
         ? cursor
         : { reply: options.parent.reply, revision: options.parent.revision }
       : undefined;
-    const posted = await post(`${options.keyPrefix ?? 'realm-reply'}:${index}`, parent);
+    const posted = await post(`${options.keyPrefix ?? 'realm-reply'}:${startIndex + index}`, parent);
     replies.push(posted);
     if (options.parent?.chain) cursor = { reply: posted.reply, revision: posted.revision };
     if ((index + 1) % 100 === 0 || index + 1 === count) {

@@ -12,12 +12,10 @@ import {
   assertWorkCost,
 } from '../../../tests/qa/support/work-profile.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
-import { growRealmThreads } from './g-1034-fixture.ts';
 
 const sink = startWorkProfileSink({ settleMs: 25, maxSpans: 500_000 });
 startTelemetry('main', { ...process.env, ...sink.env });
 const { startHomeStack } = await import('../../../tests/qa/integration/feed-read-support.ts');
-const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
 const { createMainApp } = await import('../src/app.ts');
 const { GovernanceRules } = await import('../src/modules/governance/rules.ts');
 const { GovernanceStore } = await import('../src/modules/governance/store.ts');
@@ -25,22 +23,22 @@ const { AccessRealmManagement } = await import('../src/modules/access/realm-mana
 const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
-const { cloneQaOwnerDatabases } = await import('../../../tests/qa/support/databases.ts');
+const { explainUnavailableCorpus, readRealmRankingCorpus, restoreRealmRankingCorpus } =
+  await import('./realm-ranking-corpus.ts');
 
-const { requireQa } =
-  await import('../../../tests/qa/integration/recommendation-support.ts');
-// The administrator is an immutable singleton, and recovery tests fence Access.
-// Own all SQL state while retaining the shard's graph and its current position.
-const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
-Object.assign(process.env, {
-  ACCESS_DATABASE_URL: owners.urls.access,
-  CONTENT_DATABASE_URL: owners.urls.content,
-  ACCOUNT_RELAY_DATABASE_URL: owners.urls.relay,
+const corpus = readRealmRankingCorpus();
+if (!corpus) throw new Error(explainUnavailableCorpus());
+const restored = await restoreRealmRankingCorpus().catch(async (error) => {
+  await shutdownTelemetry();
+  await sink.stop();
+  throw error;
 });
-const home = await startHomeStack(`g-1034-realm-rank-${randomUUID()}`, {
+await restored.mount(100);
+let home = await startHomeStack(`g-1034-realm-rank-${randomUUID()}`, {
   projectionStart: 'current',
+  stableMembers: true,
 }).catch(async (error) => {
-  await owners.close();
+  await restored.close();
   await shutdownTelemetry();
   await sink.stop();
   throw error;
@@ -55,7 +53,7 @@ const profiles: {
   profile: Awaited<ReturnType<typeof profileRequest>>['profile'];
 }[] = [];
 try {
-  const { stack } = home;
+  let { stack } = home;
   for (const [owner, pool] of [
     ['access', stack.accessPool],
     ['content', stack.contentPool],
@@ -66,7 +64,7 @@ try {
     ).rows[0]!.database;
   const rules = new GovernanceRules(stack.accessPool);
   const realmAdmin = new AccessRealmManagement(stack.accessPool);
-  const app = createMainApp(stack.fuseki, {
+  let app = createMainApp(stack.fuseki, {
     ...home.deps,
     realmAdmin,
     governance: {
@@ -83,7 +81,7 @@ try {
       ),
     },
   });
-  const api = workProfileCorpusApi('http://main.local', home.author.token, {
+  let api = workProfileCorpusApi('http://main.local', home.author.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });
   const started = performance.now();
@@ -115,34 +113,11 @@ try {
     }
     throw new Error('Realm scale projection exceeded its resumable waves');
   };
-  const actor = (
-    await api.command<{ agent: string }>('g1034:actor', {
-      method: 'POST',
-      path: '/v1/agents',
-      body: {
-        profile: 'agent-provision-v1',
-        kind: 'person',
-        displayName: 'Rank author',
-      },
-    })
-  ).agent;
-  await stack.accessPool.query('SELECT access.seed_platform_grants($1,$2)', [
-    home.author.principalId, `urn:rezics:access-receipt:${'a'.repeat(64)}`,
-  ]);
-  const reader = await home.provision('Rank reader', home.reader.token);
-  const realm = (
-    await api.command<{ realm: string }>('g1034:realm', {
-      method: 'POST',
-      path: '/v1/spaces',
-      body: {
-        profile: 'space-realm-v1',
-        name: 'Rank community',
-        capabilities: ['realm'],
-        actingSubject: actor,
-      },
-    })
-  ).realm;
+  const actor = corpus.identity.author;
+  const reader = corpus.identity.reader;
+  const realm = corpus.identity.realm;
   const root = `/v1/realms/${realm.slice(-36)}` as const;
+  const work = { work: corpus.identity.work, draftRevision: corpus.identity.draftRevision };
   const grant = async (scope: string, action: string, subject = actor) => {
     await stack.accessPool.query(
       'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
@@ -159,18 +134,6 @@ try {
       [randomUUID(), subject, scope, action],
     );
   };
-  for (const [scope, action] of [
-    [`review:decide:${realm}`, 'review.decide'],
-    [`reply:place:${realm}`, 'reply.place'],
-    [`realm:profile:${realm}`, 'realm.profile.publish'],
-    [`governance:realm:${realm}`, 'governance.rule.publish'],
-  ] as const)
-    await grant(scope, action);
-  const work = await seedPublicProfileWork(api, 'g1034:work', {
-    actingSubject: actor,
-    title: 'Ranking root',
-    body: 'Public root',
-  });
   const post = async (
     key: string,
     parent?: { reply: string; revision: string },
@@ -255,14 +218,25 @@ try {
       digest: draft.revisionDigest,
     };
   };
-  const opening = await post('g1034:opening');
-  await post('g1034:second');
-  // Incomplete indexes never silently fall back to a recent sample.
+  const opening = corpus.identity.opening;
+  // A Realm with no placed reply is the incomplete-index case. The retained
+  // population is already projected, so it cannot stand in for that 503.
+  const emptyRealm = (
+    await api.command<{ realm: string }>('g1034:empty-realm', {
+      method: 'POST',
+      path: '/v1/spaces',
+      body: {
+        profile: 'space-realm-v1',
+        name: 'Unranked',
+        capabilities: ['realm'],
+        actingSubject: actor,
+      },
+    })
+  ).realm;
   const unavailable = await app.handle(
-    new Request(`http://main.local${root}/threads?sort=top&limit=2`),
+    new Request(`http://main.local/v1/realms/${emptyRealm.slice(-36)}/threads?sort=top&limit=2`),
   );
   assert.equal(unavailable.status, 503);
-  await project();
   const allRules = Array.from({ length: 12 }, (_, index) => ({
     id: `rule-${index}`,
     title: { original: 'en', labels: { en: `Rule ${index}` } },
@@ -396,7 +370,7 @@ try {
     }
   }
   await project();
-  const epoch = stack.env.lineage.dataEpoch;
+  const epoch = corpus.identity.dataEpoch;
   // A real private membership episode: older posts precede its immutable cut.
   // The cut's admitted-score index is built once, then votes/replies mirror it.
   const privateCreated = await api.command<{ realm: string; space: string }>('g1034:private', {
@@ -529,66 +503,43 @@ try {
     ).rowCount,
   );
   let created = 0;
-  let winner: string | undefined;
-  let scored = false;
-  let perReplyMs = 0;
-  let scaleBlocker: string | undefined;
-  const vote = (key: string, placement: string) =>
-    api.command<{ score: number }>(key, {
-      method: 'POST',
-      path: `/v1/feed/${placement.slice(-36)}/vote`,
-      body: {
-        profile: 'feed-vote-command-v1',
-        actingSubject: actor,
-        value: 1,
-        expectedRevision: null,
-      },
-    });
-  for (const size of [100, 1000, 10000]) {
-    const count = size - 2 - created;
-    const remainingMs = 600_000 - (performance.now() - started);
-    if (perReplyMs > 0 && perReplyMs * count > remainingMs) {
-      scaleBlocker =
-        `Realm reply commands measured ${perReplyMs} ms each. ` +
-        `Seeding ${count} more replies would take about ${Math.round((perReplyMs * count) / 1000)} s, ` +
-        `past the ${Math.round(remainingMs / 1000)} s left in the 600 s preparation budget.`;
-      evidence.push({
-        blocker: scaleBlocker,
-        perReplyMs,
-        count,
-        projectedMs: Math.round(perReplyMs * count),
+  let winner: string | undefined = corpus.identity.winner.reply;
+  for (const size of [100, 1000, 10000] as const) {
+    if (size !== 100) {
+      await home.stop();
+      const mounted = await restored.mount(size);
+      evidence.push({ restore: size, elapsedMs: restored.elapsedMs, database: mounted.urls.access });
+      home = await startHomeStack(`g-1034-realm-rank-${size}-${randomUUID()}`, {
+        projectionStart: 'current',
+        stableMembers: true,
       });
-      break;
+      stack = home.stack;
+      const nextRules = new GovernanceRules(stack.accessPool);
+      app = createMainApp(stack.fuseki, {
+        ...home.deps,
+        realmAdmin: new AccessRealmManagement(stack.accessPool),
+        governance: {
+          rules: nextRules,
+          store: new GovernanceStore(
+            stack.accessPool,
+            { capture: async () => { throw new Error('Evidence outside this test'); } },
+            { current: async () => null },
+            nextRules,
+          ),
+        },
+      });
+      api = workProfileCorpusApi('http://main.local', home.author.token, {
+        fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+      });
     }
-    const seedStarted = performance.now();
-    const grown = await growRealmThreads(
-      (key, parent) => post(key, parent),
-      count,
-      { keyPrefix: `g1034:fill:${size}` },
-    );
-    const seedMs = performance.now() - seedStarted;
-    perReplyMs = grown.length ? Math.round(seedMs / grown.length) : perReplyMs;
-    winner ??= grown[0]!.reply;
-    created += grown.length;
+    created = size - 2;
     evidence.push({
-      seedCount: grown.length,
-      seedMs: Math.round(seedMs),
-      perReplyMs: grown.length ? Math.round(seedMs / grown.length) : 0,
+      seedCount: created,
+      restored: true,
+      restoreMs: restored.elapsedMs,
     });
-    // Product commands leave one current placement each. Page bytes staying
-    // flat as this population grows is the ranking bound; the assembler has
-    // no raw update with which to park extra retained placements.
+    // The cut already holds this many product replies, projected and voted.
     await project();
-    if (!scored) {
-      const winnerPlacement = grown[0]?.placement;
-      if (!winnerPlacement) throw new Error('Seeded reply has no placement');
-      // One upvote on the earliest seeded thread and on the opening. Equal
-      // scores still rank the newer winner first; the opening stays ahead of
-      // every unvoted thread.
-      await vote('g1034:score:winner', winnerPlacement);
-      await vote('g1034:score:opening', opening.placement);
-      scored = true;
-    }
     await stack.accessPool.query('ANALYZE access.realm_thread_order');
     const raw = (
       await stack.accessPool.query<{
@@ -761,9 +712,15 @@ try {
       expectedRevision: null,
     },
   });
-  // The opening already carries the author's upvote. This reader's vote and
-  // the two concurrent score writes below compose on that baseline.
-  assert.equal(voted.score, 2);
+  // Supporters and the author already voted. This reader's vote and the two
+  // concurrent score writes compose on that baseline, whatever the baseline is.
+  const baseline = (
+    await stack.accessPool.query<{ score: number }>(
+      'SELECT score FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3',
+      [epoch, realm, opening.reply],
+    )
+  ).rows[0]!.score;
+  assert.equal(voted.score, baseline + 1);
   await Promise.all([
     stack.accessPool.query(
       'UPDATE access.feed_item SET score=score+1 WHERE data_epoch=$1 AND id=$2',
@@ -787,7 +744,7 @@ try {
         [epoch, realm, opening.reply],
       )
     ).rows[0]!.score,
-    4,
+    baseline + 3,
   );
   const child = await post('g1034:child', opening);
   await project();
@@ -872,7 +829,6 @@ try {
     ],
     child: child.reply,
   });
-  if (scaleBlocker) throw new Error(scaleBlocker);
 } finally {
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
@@ -883,7 +839,7 @@ try {
     await home.stop();
   } finally {
     try {
-      await owners.close();
+      await restored.close();
     } finally {
       await shutdownTelemetry();
       await sink.stop();
