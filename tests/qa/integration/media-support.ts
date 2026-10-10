@@ -95,7 +95,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
     matcher: options.matchUploads === false ? undefined : requiredSafetyMatcher(matcherMode) };
   const issuer = `https://qa-${label}.test`;
   const tokens = new Map<string, { issuer: string; subject: string; emailVerified: boolean }>();
-  const mediaAccess = new CountingMediaAccess(accessPool);
+  // This counted reader replaces the composed one. Authorship proof uses the
+  // graph passed here; a reader built without a graph is the opt-out.
+  const mediaAccess = new CountingMediaAccess(accessPool, fuseki);
   // The same dependency object the process builds. The harness replaces the
   // Account verifier, the counted media reader, and this stack's media store.
   // Write budgets stay open: one shared database serves the whole shard.
