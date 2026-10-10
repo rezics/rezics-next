@@ -5,6 +5,12 @@ decision slot. `read.ts` returns the statement with its readable meaning basis
 and resolves local then Global acceptance. The shared graph command and receipt
 path is `../context/command.ts`; the route adapter is `../../routes/contexts.ts`.
 
+A property whose notation is `statement-first-publication-date-v1` stores
+`rdf:predicate <https://schema.org/datePublished>` so the year template can read
+the statement. The caller names that definition's component, `rv:relationDefinition`
+keeps the component recoverable, and the Statement resource returns it. The
+literal must be an XML Schema date, dateTime or gYear.
+
 For another Statement mutation, copy the request digest, exact meaning key,
 expected-head and target guards, profile validation, receipt resolution, and
 read path from these files. Retain independent speaker, support, evidence and

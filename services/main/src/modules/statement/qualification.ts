@@ -24,16 +24,19 @@ import type { StatementRetainedClaimProvenance, StatementValue } from './schema.
 export const QUALIFICATION_DEFINITION_NOTATION = 'statement-proposition-qualification-v1';
 
 /**
- * The one reviewed legacy predicate binding: first publication or broadcast of
- * the referent, expressed as its exact Date/DateTime, within the independently
- * retained edition and validity scope. This does not assert a publication event,
- * transfer source authority, or replace the predicate with a native alias.
+ * The one reviewed predicate binding: first publication or broadcast of the
+ * referent. A public Statement whose sealed property Definition uses
+ * DATE_PUBLISHED_DEFINITION_NOTATION is stored with this external predicate so
+ * the year template can read it. The caller still names that definition's
+ * component; rv:relationDefinition keeps the component recoverable, and the
+ * Statement resource returns it. This does not assert a publication event,
+ * transfer source authority, or replace an arbitrary predicate with an alias.
  * https://schema.org/datePublished (Schema.org V30.1, 2026-09-16).
  * The supported sealed property Definition has this fixed notation and no roles;
  * labels are presentation and cannot establish or alter the binding.
- * The existing Gregorian value codec admits four-digit Date/full DateTime,
- * optional DateTime offset and up to nine fractional-second digits; broader XML
- * date forms are outside this reviewed slice and remain retained.
+ * The public value is an XML Schema date, dateTime or gYear. The existing
+ * Gregorian codec admits four-digit Date/gYear and full DateTime, optional
+ * DateTime offset and up to nine fractional-second digits.
  */
 export const DATE_PUBLISHED_PREDICATE = 'https://schema.org/datePublished';
 export const DATE_PUBLISHED_DEFINITION_NOTATION = 'statement-first-publication-date-v1';
@@ -111,6 +114,26 @@ export function checkedRetainedClaimDateValue(value: StatementValue): Extract<St
   try { temporalParts(value.lexical, value.datatype === `${XSD}date` ? 'day' : 'second'); }
   catch (error) {
     if (error instanceof InvalidSemanticValue) throw new InvalidContextCommand('retained publication claim has an invalid Date or DateTime literal');
+    throw error;
+  }
+  return { ...value };
+}
+
+const FIRST_PUBLICATION_PRECISION = {
+  [`${XSD}date`]: 'day',
+  [`${XSD}dateTime`]: 'second',
+  [`${XSD}gYear`]: 'year',
+} as const;
+
+/** Public first-publication literals. A retained Claim stays on its Date/DateTime check. */
+export function checkedFirstPublicationValue(value: StatementValue): Extract<StatementValue, { kind: 'literal' }> {
+  const refused = () => new InvalidContextCommand('first publication requires a Date, DateTime or gYear literal');
+  if (!value || value.kind !== 'literal' || value.language !== null) throw refused();
+  const precision = FIRST_PUBLICATION_PRECISION[value.datatype as keyof typeof FIRST_PUBLICATION_PRECISION];
+  if (!precision) throw refused();
+  try { temporalParts(value.lexical, precision); }
+  catch (error) {
+    if (error instanceof InvalidSemanticValue) throw refused();
     throw error;
   }
   return { ...value };
@@ -470,19 +493,21 @@ function definitionGuard(value: ExactStatementDefinition): string {
       rv:definitionKind ${kind} ; rv:lifecycle rv:Active . }`;
 }
 
-/** Bind a native predicate to its exact relation/property definition and fixed qualification contract. */
+/** Bind a native predicate to its exact relation/property definition and fixed qualification contract.
+ * The reviewed first-publication notation stores the external predicate; every other
+ * property keeps the caller's component. */
 export async function validateStatementDefinitions(
   env: WorkActivationEnvironment,
-  input: { predicate: string; relationDefinition: string; qualification?: StatementQualification },
+  input: { predicate: string; relationDefinition: string; value?: StatementValue; qualification?: StatementQualification },
   canReadDefinition?: (definition: string) => Promise<boolean>,
-): Promise<{ guard: string }> {
+): Promise<{ guard: string; graphPredicate: string }> {
   // Event aliases retain this reviewed platform profile, not an arbitrary
   // native DefinitionRef. The exact predicate has no qualification contract.
   if (input.relationDefinition === 'https://rezics.com/definition/event-time-v1') {
     if (input.predicate !== `${RV}denotesEvent` || input.qualification !== undefined) {
       throw new InvalidContextCommand('Statement relation definition does not bind this proposition');
     }
-    return { guard: activeDirectDefinitionsGuard([input.relationDefinition]) };
+    return { guard: activeDirectDefinitionsGuard([input.relationDefinition]), graphPredicate: input.predicate };
   }
   // The existing authored classification relation retains its reviewed binding.
   if (input.relationDefinition === CLASSIFICATION_PROPOSITION_PROFILE) {
@@ -491,7 +516,7 @@ export async function validateStatementDefinitions(
         'Statement relation definition does not bind this proposition',
       );
     }
-    return { guard: activeDirectDefinitionsGuard([input.relationDefinition]) };
+    return { guard: activeDirectDefinitionsGuard([input.relationDefinition]), graphPredicate: input.predicate };
   }
   const qualification =
     input.qualification === undefined
@@ -503,7 +528,13 @@ export async function validateStatementDefinitions(
   ];
   const definitions = await exactDefinitions(env, references, canReadDefinition);
   const relation = definitions.get(input.relationDefinition)!;
-  if (
+  const firstPublication = relation.state.notation === DATE_PUBLISHED_DEFINITION_NOTATION;
+  if (firstPublication) {
+    if (relation.state.kind !== 'property' || relation.state.roles.length !== 0
+      || relation.state.successor !== null || relation.definition !== input.predicate) {
+      throw new InvalidContextCommand('Statement relation definition does not bind its predicate');
+    }
+  } else if (
     !['property', 'relation'].includes(relation.state.kind) ||
     relation.definition !== input.predicate
   ) {
@@ -518,11 +549,47 @@ export async function validateStatementDefinitions(
       throw new InvalidContextCommand('unsupported Statement qualification definition');
     }
   }
+  if (firstPublication) checkedFirstPublicationValue(input.value ?? { kind: 'no-value' });
   return {
     guard:
       [...definitions.values()].map(definitionGuard).join('\n') +
       `\n${activeDirectDefinitionsGuard(references)}`,
+    graphPredicate: firstPublication ? DATE_PUBLISHED_PREDICATE : input.predicate,
   };
+}
+
+/** Component of a sealed first-publication revision, or null when the pin is another definition.
+ * Undefined means the revision itself cannot be read. */
+async function sealedFirstPublicationComponent(env: WorkActivationEnvironment,
+  revision: string): Promise<string | null | undefined> {
+  let pinned: string;
+  try { pinned = nativeDefinition(revision); }
+  catch { return undefined; }
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?definition ?manifest WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(pinned)} a rv:DefinitionRevision ;
+        rv:component ?definition ; rv:manifest ?manifest . }
+    } LIMIT 2`)).results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || row?.definition?.type !== 'uri' || row.manifest?.type !== 'uri') return undefined;
+  const definition = nativeDefinition(row.definition.value);
+  const state = checkedStoredState(await readComponent(env, row.manifest.value, definition, PROFILES.definition));
+  if (state.component !== 'definition' || state.kind !== 'property'
+    || state.notation !== DATE_PUBLISHED_DEFINITION_NOTATION
+    || state.roles.length !== 0 || state.successor !== null) return null;
+  return definition;
+}
+
+/** The Statement resource names the component the caller used. A retained Claim keeps the external predicate. */
+export async function statementResourcePredicate(env: WorkActivationEnvironment, statement: string,
+  predicate: string, relationDefinition: string): Promise<string> {
+  if (predicate !== DATE_PUBLISHED_PREDICATE) return predicate;
+  const retained = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(statement)} rv:retainedClaimHead ?head } }`);
+  if (retained.boolean === true) return predicate;
+  const component = await sealedFirstPublicationComponent(env, relationDefinition);
+  if (component === undefined) throw new ContextCommandUnavailable('Statement definition is unavailable');
+  return component ?? predicate;
 }
 
 /** The reviewed fold binds the original external predicate through fixed sealed D/Q contracts. */

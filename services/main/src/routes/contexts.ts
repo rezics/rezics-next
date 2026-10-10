@@ -34,6 +34,7 @@ import { StatementNotFound, readStatement, resolveStatementAcceptance,
 } from '../modules/statement/read.ts';
 import { InvalidStatementSchemaInput } from '../modules/statement/schema.ts';
 import { statementQualificationSchema } from '../modules/statement/contract.ts';
+import { statementResourcePredicate } from '../modules/statement/qualification.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -869,7 +870,12 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           return statement;
         },
           );
-        return Response.json(read, { headers: noStore });
+        const predicate = await statementResourcePredicate(env, read.statement, read.predicate,
+          read.relationDefinition);
+        const rdfPredicate = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate';
+        return Response.json(predicate === read.predicate ? read : {
+          ...read, predicate, export: { ...read.export, [rdfPredicate]: [{ '@id': predicate }] },
+        }, { headers: noStore });
       } catch (error) { return readError(error); }
     },
     )

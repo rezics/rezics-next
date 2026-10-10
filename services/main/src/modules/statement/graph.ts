@@ -230,7 +230,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
     return checkedCommandReceipt((await sealCommandTerminal(env, admission, family, 'stale-head'))!,
       admission, request.digest);
   }
-  const meaning: StatementMeaning = { subject: normalized.subject, predicate: input.predicate,
+  const meaning: StatementMeaning = { subject: normalized.subject, predicate: definitions.graphPredicate,
     relationDefinition: input.relationDefinition,
     interpretationDefinitions: interpretation.definition ? [interpretation.definition] : [],
     value: input.value, applicability: normalized.applicability,
@@ -276,7 +276,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   const committed = await commitCommand(env, admission, { family, digest: request.digest, validations, operation,
     component: statement, revision, expectedHead: null,
     insert: `GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ;
-        rdf:subject ${iri(meaning.subject)} ; rdf:predicate ${term(input.predicate)} ;
+        rdf:subject ${iri(meaning.subject)} ; rdf:predicate ${term(meaning.predicate)} ;
         rdf:object ${objectTerm(input.value)} ; rv:relationDefinition ${term(input.relationDefinition)} ;
         ${meaning.interpretationDefinitions.map(value => `rv:interpretationDefinition ${term(value)} ;`).join(' ')}
         ${interpretation.semanticRevision ? `rv:semanticContextRevision ${iri(interpretation.semanticRevision)} ;` : ''}
