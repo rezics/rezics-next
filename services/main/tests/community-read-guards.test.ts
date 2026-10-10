@@ -84,6 +84,43 @@ test('community summaries still probe an Agent and an untyped row, and withhold 
   expect(JSON.stringify(result)).not.toContain(privateName);
 });
 
+test('a local summary re-read keeps the same dependency token when name owners stay settled', async () => {
+  const queries: string[] = [];
+  const graph = new FusekiClient('http://summary-dependency.invalid');
+  graph.query = async query => {
+    queries.push(query);
+    if (query.includes('SELECT ?work ?head ?nameOwner')) throw new Error('Name owner probe');
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) {
+      return { results: { bindings: [{
+        epoch: term('epoch'), sequence: term('7'), r: uri(work), type: term('work'),
+        work: uri(work), head: uri(id(13)), public: term('true'),
+        label: { ...term(publicTitle), 'xml:lang': 'en' },
+      }] } };
+    }
+    if (query.includes('SELECT ?epoch ?sequence')) {
+      return { results: { bindings: [{ epoch: term('epoch'), sequence: term('7') }] } };
+    }
+    throw new Error(`Unexpected summary query: ${query.slice(0, 180)}`);
+  };
+  const pool = { query: async (sql: string) => {
+    if (!sql.includes('requested AS')) throw new Error('Unexpected disclosure statement');
+    return { rows: [{ ordinal: 0, open: true, restricted: false, assessments: [], nameVisible: true, publicNameVisible: true }] };
+  } } as unknown as Pool;
+  const environment = { fuseki: graph, objectDirectory: '.temp/summary-dependency',
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
+  configureDisclosure(environment, new DisclosureStore(pool));
+  const value = await workRead({ environment, account: {} as never,
+    access: recoveryAccess() as never } as MainWorkDependencies,
+  new Request('http://main.test/v1/works'), { localBasis: true }, async session => {
+    const summaries = await session.summaries([work]);
+    return summaries[0];
+  });
+  expect(value).toEqual(expect.objectContaining({ reference: work, status: 'available' }));
+  const summaryReads = queries.filter(query => query.includes('SELECT ?epoch ?sequence ?hold ?r'));
+  expect(summaryReads).toHaveLength(2);
+  expect(queries.some(query => query.includes('SELECT ?work ?head ?nameOwner'))).toBe(false);
+});
+
 test('a read that starts during a recovery hold answers unavailable', async () => {
   const queries: string[] = [];
   let graphHeld = false;
