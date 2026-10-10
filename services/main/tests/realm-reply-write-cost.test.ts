@@ -384,6 +384,59 @@ function sqlText(args: unknown[]): string | undefined {
   return undefined;
 }
 
+test('an unavailable reply question is denied before any admission or graph command', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  const command = fx.fuseki.command.bind(fx.fuseki);
+  const withReceipt = fx.fuseki.commandWithReceipt.bind(fx.fuseki);
+  try {
+    const input = fx.draftInput();
+    const draft = await fx.call('POST', '/v1/member-reply-drafts', input);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const body = {
+      profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, author: fx.actor, rootTarget: input.rootTarget,
+      rootRevision: input.rootRevision, parentReply: null, parentRevision: null,
+      contextRevision: `https://rezics.com/id/${randomUUID()}`,
+    };
+    let commands = 0;
+    let missed = false;
+    fx.fuseki.query = async (sparql, limit) => {
+      if (sparql.includes('SELECT ?context') && sparql.includes(body.contextRevision)) {
+        missed = true;
+        throw new WorkReadMissing('Reply question is unavailable');
+      }
+      return query(sparql, limit);
+    };
+    fx.fuseki.command = (async (...args: Parameters<FusekiClient['command']>) => {
+      commands += 1;
+      return command(...args);
+    }) as FusekiClient['command'];
+    fx.fuseki.commandWithReceipt = (async (...args: Parameters<FusekiClient['commandWithReceipt']>) => {
+      commands += 1;
+      return withReceipt(...args);
+    }) as FusekiClient['commandWithReceipt'];
+    const key = randomUUID();
+    const denied = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(missed).toBe(true);
+    expect(denied.status, JSON.stringify(denied.body)).toBe(403);
+    expect(denied.body.code).toBe('realm_reply_denied');
+    expect(commands).toBe(0);
+    expect((await fx.accessPool.query(
+      'SELECT id FROM access.admission WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+    expect((await fx.contentPool.query(
+      'SELECT 1 FROM content.reply WHERE id = $1', [input.reply])).rowCount).toBe(0);
+    fx.fuseki.query = query;
+    const retry = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(retry.status, JSON.stringify(retry.body)).toBe(201);
+  } finally {
+    fx.fuseki.query = query;
+    fx.fuseki.command = command;
+    fx.fuseki.commandWithReceipt = withReceipt;
+    await fx.close();
+  }
+}, 120_000);
+
 function sqlValues(args: unknown[]): unknown[] {
   const first = args[0];
   if (typeof first === 'string') return Array.isArray(args[1]) ? args[1] as unknown[] : [];
