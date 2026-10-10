@@ -1056,12 +1056,83 @@ final class SearchDeltaJournal {
     }
     private static long verifyContentSubject(DatasetGraph data, TextIndexLucene lucene, String subject) {
         var current = FilteredGraphTextIndex.contentBodyMetadataSource(data, subject);
-        String identity = current == null ? "" : currentContentBodyDigest(data, subject);
+        if (current == null) throw new IllegalStateException("public Content authority is unavailable");
+        // Receipts admitted before the native source pin have no retained pin.
+        // Their stored body still has to equal RDF. A pin that is present and
+        // differs, or a body that differs, stays a refusal.
+        if (legacyUnpinnedContentReceipt(data, subject)) {
+            String recorded = latestContentSource(data, uri(subject));
+            String recordedIdentity = latestContentBodyDigest(data, uri(subject));
+            String identity = FilteredGraphTextIndex.contentBodyIdentity(data, subject);
+            if (recorded != null && !recorded.equals(current.encoded())
+                || recordedIdentity != null && !recordedIdentity.equals(identity))
+                throw new IllegalStateException("public Content differs from recorded delivery");
+            return verifyLegacyContentBody(data, lucene, subject);
+        }
+        String identity = currentContentBodyDigest(data, subject);
         String source = latestContentSource(data, uri(subject)), body = latestContentBodyDigest(data, uri(subject));
-        if (source != null && !source.equals(current == null ? "" : current.encoded())
+        if (source != null && !source.equals(current.encoded())
             || body != null && !body.equals(identity))
             throw new IllegalStateException("public Content differs from recorded delivery");
         return FilteredGraphTextIndex.verifyContentBody(data, lucene, subject, identity, true);
+    }
+    /** True only for one successful receipt whose metadata matches and which never received either native pin. */
+    private static boolean legacyUnpinnedContentReceipt(DatasetGraph data, String unit) {
+        Node projection = one(data, PUBLIC, uri(unit), uri(RV + "projection"));
+        if (projection == null || !projection.isURI()) return false;
+        var receipts = data.find(uri(CommandPolicy.RECEIPTS), Node.ANY, uri(RV + "projection"), projection);
+        Node receipt;
+        try {
+            if (!receipts.hasNext()) return false;
+            receipt = receipts.next().getSubject();
+            if (!receipt.isURI() || receipts.hasNext()) return false;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(receipts); }
+        Node graph = uri(CommandPolicy.RECEIPTS), subject = uri(unit);
+        if (!data.contains(graph, receipt, RDF.type.asNode(), uri(RV + "OperationReceipt"))
+            || !uri(RV + "Succeeded").equals(one(data, graph, receipt, uri(RV + "outcome"))))
+            return false;
+        for (String field : List.of("variant", "resource", "publicationDecision", "eligibility", "projection")) {
+            Node value = one(data, PUBLIC, subject, uri(RV + field));
+            if (value == null || !value.equals(one(data, graph, receipt, uri(RV + field)))) return false;
+        }
+        TextEntityDocuments.Source current = FilteredGraphTextIndex.contentBodyMetadataSource(data, unit);
+        if (current == null || !subject.equals(one(data, graph, receipt, uri(RV + "matchUnit")))
+            || !uri(current.reference()).equals(one(data, graph, receipt, uri(RV + "contentRevision"))))
+            return false;
+        boolean sourceAbsent = one(data, graph, receipt, CONTENT_SOURCE) == null
+            && !data.contains(graph, receipt, CONTENT_SOURCE, Node.ANY);
+        boolean bodyAbsent = one(data, graph, receipt, CONTENT_BODY_DIGEST) == null
+            && !data.contains(graph, receipt, CONTENT_BODY_DIGEST, Node.ANY);
+        return sourceAbsent && bodyAbsent;
+    }
+    /** Plain Jena body document: equality with the RDF literal, including when other documents carry rank schema. */
+    private static long verifyLegacyContentBody(DatasetGraph data, TextIndexLucene lucene, String subject) {
+        Node unit = uri(subject);
+        Node body = one(data, PUBLIC, unit, BODY);
+        if (!data.contains(PUBLIC, unit, RDF.type.asNode(), MATCH_UNIT)
+            || body == null || !body.isLiteral())
+            throw new IllegalStateException("public index differs from RDF");
+        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            BooleanQuery exact = new BooleanQuery.Builder()
+                .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
+                .add(new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+                .add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.FILTER)
+                .build();
+            var hits = searcher.search(exact, 2);
+            if (hits.totalHits.value() != 1) throw new IllegalStateException("public index differs from RDF");
+            Document stored = searcher.storedFields().document(hits.scoreDocs[0].doc);
+            String[] values = stored.getValues("body");
+            if (values.length != 1 || !body.getLiteralLexicalForm().equals(values[0])
+                || !body.getLiteralLanguage().equalsIgnoreCase(stored.get("lang") == null ? "" : stored.get("lang")))
+                throw new IllegalStateException("public index differs from RDF");
+            if (org.apache.lucene.index.FieldInfos.getMergedFieldInfos(reader).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null
+                && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, stored))
+                throw new IllegalStateException("public rank metadata differs from RDF");
+            return reader.getIndexCommit().getGeneration();
+        } catch (IOException unavailable) {
+            throw new TextIndexException("public Content reader unavailable", unavailable);
+        }
     }
     /** Carries a fixed audit reason and, when the check names one, the subject IRI. The message is never a body. */
     private static final class AuditRefusal extends IllegalStateException {

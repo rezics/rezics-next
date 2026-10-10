@@ -16,7 +16,11 @@ import org.apache.jena.query.text.EntityDefinition;
 import org.apache.jena.query.text.TextDocProducerTriples;
 import org.apache.jena.query.text.TextIndexConfig;
 import org.apache.jena.query.text.TextIndexLucene;
+import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.vocabulary.RDF;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.junit.Test;
 
@@ -33,6 +37,18 @@ public class SearchDeltaJournalStartupTest {
     private static final Node MATCH = NodeFactory.createURI(RV + "MatchUnit");
     private static final String RDF_BODY = "alpha-body-must-stay-out-of-the-log";
     private static final String INDEX_BODY = "beta-body-must-stay-out-of-the-log";
+    private static final String CONTENT = "urn:rezics:content:match-unit:" + "d".repeat(64);
+    private static final String CONTENT_BODY = "legacy-body-must-stay-out-of-the-log";
+    private static final String CONTENT_INDEX_BODY = "legacy-index-body-must-stay-out-of-the-log";
+    private static final String VARIANT = "urn:test:content:variant";
+    private static final String RESOURCE = "urn:test:content:work";
+    private static final String PUBLICATION = "urn:test:content:publication";
+    private static final String ELIGIBILITY = "urn:test:content:eligibility";
+    private static final String REVISION = "urn:rezics:content:revision:00000000-0000-4000-8000-000000000001";
+    private static final String PROJECTION = "urn:test:content:projection:1";
+    private static final String RECEIPT = "urn:test:content:receipt:1";
+    private static final String DIGEST = "b".repeat(64);
+    private static final String OWNER_EPOCH = "00000000-0000-4000-8000-000000000002";
 
     private static Node property(String name) { return NodeFactory.createURI(RV + name); }
     private static Node integer(String value) {
@@ -70,6 +86,82 @@ public class SearchDeltaJournalStartupTest {
             } finally { data.end(); }
         }
         @Override public void close() { data.close(); index.close(); }
+    }
+
+    private static void seedLegacyContent(DatasetGraph data, String body, String pinnedSource, boolean commit) {
+        data.begin(ReadWrite.WRITE);
+        try {
+            String current = CommandPolicy.CURRENT, revisions = CommandPolicy.REVISIONS, receipts = CommandPolicy.RECEIPTS;
+            iri(data, current, VARIANT, RDF.type.getURI(), RV + "ContentVariant");
+            iri(data, current, VARIANT, RV + "resource", RESOURCE);
+            iri(data, current, VARIANT, RV + "contentPublicationHead", PUBLICATION);
+            iri(data, current, VARIANT, RV + "publicSearchEligibilityHead", ELIGIBILITY);
+            iri(data, revisions, PUBLICATION, RDF.type.getURI(), RV + "ContentPublicationDecision");
+            iri(data, revisions, PUBLICATION, RV + "component", VARIANT);
+            iri(data, revisions, PUBLICATION, RV + "resource", RESOURCE);
+            iri(data, revisions, PUBLICATION, RV + "contentRevision", REVISION);
+            data.add(uri(revisions), uri(PUBLICATION), uri(RV + "byteDigest"), NodeFactory.createLiteralString(DIGEST));
+            data.add(uri(revisions), uri(PUBLICATION), uri(RV + "ownerDataEpoch"), NodeFactory.createLiteralString(OWNER_EPOCH));
+            iri(data, revisions, ELIGIBILITY, RDF.type.getURI(), RV + "ContentSearchEligibilityDecision");
+            iri(data, revisions, ELIGIBILITY, RV + "variant", VARIANT);
+            iri(data, revisions, ELIGIBILITY, RV + "resource", RESOURCE);
+            iri(data, revisions, ELIGIBILITY, RV + "publicationDecision", PUBLICATION);
+            iri(data, revisions, ELIGIBILITY, RV + "disclosure", RV + "Public");
+            iri(data, revisions, PROJECTION, RDF.type.getURI(), RV + "ContentProjection");
+            iri(data, revisions, PROJECTION, RV + "matchUnit", CONTENT);
+            iri(data, revisions, PROJECTION, RV + "component", VARIANT);
+            iri(data, revisions, PROJECTION, RV + "resource", RESOURCE);
+            iri(data, revisions, PROJECTION, RV + "contentRevision", REVISION);
+            iri(data, revisions, PROJECTION, RV + "publicationDecision", PUBLICATION);
+            iri(data, revisions, PROJECTION, RV + "eligibility", ELIGIBILITY);
+            iri(data, revisions, PROJECTION, RV + "modelRevision", "https://rezics.com/definition/content-match-unit-v1");
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RDF.type.getURI(), RV + "MatchUnit");
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "field", RV + "Body");
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "disclosure", RV + "Public");
+            data.add(uri(CommandPolicy.PUBLIC_SEARCH), uri(CONTENT), uri(RV + "language"), NodeFactory.createLiteralString("en"));
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "variant", VARIANT);
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "resource", RESOURCE);
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "revision", REVISION);
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "publicationDecision", PUBLICATION);
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "eligibility", ELIGIBILITY);
+            iri(data, CommandPolicy.PUBLIC_SEARCH, CONTENT, RV + "projection", PROJECTION);
+            data.add(uri(CommandPolicy.PUBLIC_SEARCH), uri(CONTENT), uri(RV + "searchBody"),
+                NodeFactory.createLiteralLang(body, "en"));
+            iri(data, receipts, RECEIPT, RDF.type.getURI(), RV + "OperationReceipt");
+            iri(data, receipts, RECEIPT, RV + "outcome", RV + "Succeeded");
+            iri(data, receipts, RECEIPT, RV + "variant", VARIANT);
+            iri(data, receipts, RECEIPT, RV + "resource", RESOURCE);
+            iri(data, receipts, RECEIPT, RV + "publicationDecision", PUBLICATION);
+            iri(data, receipts, RECEIPT, RV + "eligibility", ELIGIBILITY);
+            iri(data, receipts, RECEIPT, RV + "projection", PROJECTION);
+            iri(data, receipts, RECEIPT, RV + "matchUnit", CONTENT);
+            iri(data, receipts, RECEIPT, RV + "contentRevision", REVISION);
+            if (pinnedSource != null) data.add(uri(receipts), uri(RECEIPT), uri(RV + "searchDeltaContentSource"),
+                NodeFactory.createLiteralString(pinnedSource));
+            if (commit) data.commit();
+        } finally { data.end(); }
+    }
+    private static void iri(DatasetGraph data, String graph, String subject, String predicate, String object) {
+        data.add(uri(graph), uri(subject), uri(predicate), uri(object));
+    }
+    private static Node uri(String value) { return NodeFactory.createURI(value); }
+    private static void markRankSchemaOnAnotherDocument(Fixture fixture) {
+        FieldType keyword = new FieldType();
+        keyword.setTokenized(false);
+        keyword.setStored(true);
+        keyword.setIndexOptions(IndexOptions.DOCS);
+        keyword.setOmitNorms(false);
+        keyword.freeze();
+        FieldType unstored = new FieldType(keyword);
+        unstored.setStored(false);
+        unstored.freeze();
+        var neighbor = new org.apache.lucene.document.Document();
+        neighbor.add(new Field("uri", "urn:rezics:rank-schema-neighbor", keyword));
+        neighbor.add(new Field("graph", CommandPolicy.PUBLIC_SEARCH, keyword));
+        neighbor.add(new Field(FilteredGraphTextIndex.RANK_SCHEMA, "1", unstored));
+        try { fixture.index.getIndexWriter().addDocument(neighbor); }
+        catch (java.io.IOException unavailable) { throw new IllegalStateException(unavailable); }
+        fixture.index.commit();
     }
 
     private List<String> capture() {
@@ -139,6 +231,55 @@ public class SearchDeltaJournalStartupTest {
                     "search journal baseline installed: epoch=epoch generation=" + GENERATION
                         + " population=1 luceneGeneration=[0-9]+")));
                 assertEquals(true, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+            } finally { release(fixture.data); }
+        }
+    }
+
+    @Test public void unpinnedContentReceiptQualifiesWhenTheStoredBodyMatchesRdf() {
+        try (Fixture fixture = new Fixture()) {
+            fixture.anchor();
+            seedLegacyContent(fixture.data, CONTENT_BODY, null, true);
+            markRankSchemaOnAnotherDocument(fixture);
+            List<String> lines = capture();
+            try {
+                assertTrue(SearchDeltaJournal.qualifyAtStartup(fixture.data));
+                assertTrue(lines.stream().anyMatch(line -> line.startsWith("search journal baseline installed:")));
+                assertEquals(true, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+                assertEquals("1", SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("qualifiedPopulation"));
+            } finally { release(fixture.data); }
+        }
+    }
+
+    @Test public void unpinnedContentReceiptRefusesAStoredBodyThatDiffersFromRdf() {
+        try (Fixture fixture = new Fixture()) {
+            fixture.anchor();
+            seedLegacyContent(((org.apache.jena.sparql.core.DatasetGraphWrapper) fixture.data).getWrapped(),
+                CONTENT_BODY, null, true);
+            Entity stored = new Entity(CONTENT, CommandPolicy.PUBLIC_SEARCH, "en", null);
+            stored.put("body", CONTENT_INDEX_BODY);
+            fixture.index.addEntity(stored);
+            fixture.index.commit();
+            markRankSchemaOnAnotherDocument(fixture);
+            List<String> lines = capture();
+            try {
+                assertFalse(SearchDeltaJournal.qualifyAtStartup(fixture.data));
+                assertTrue(lines.contains(
+                    "startup-audit failed: public index differs from RDF [" + CONTENT + "]"));
+                assertFalse(lines.stream().anyMatch(line ->
+                    line.contains(CONTENT_BODY) || line.contains(CONTENT_INDEX_BODY)));
+            } finally { release(fixture.data); }
+        }
+    }
+
+    @Test public void contentReceiptPinThatDiffersFromCurrentAuthorityStaysClosed() {
+        try (Fixture fixture = new Fixture()) {
+            fixture.anchor();
+            seedLegacyContent(fixture.data, CONTENT_BODY, "stale-pin", true);
+            List<String> lines = capture();
+            try {
+                assertFalse(SearchDeltaJournal.qualifyAtStartup(fixture.data));
+                assertTrue(lines.contains("startup-audit failed: original Content receipt source differs from current authority ["
+                    + CONTENT + "]"));
             } finally { release(fixture.data); }
         }
     }

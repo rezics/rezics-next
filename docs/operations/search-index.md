@@ -20,6 +20,10 @@ absent, a Realm-owner refusal, a public body or rank field that differs from
 RDF, a public MatchUnit absent from the index, and an index population that
 differs from the public MatchUnit count. I/O and text-index failures use the
 exception's short message, or the exception class when that message is long.
+A Content receipt written before the native source pin has no
+`searchDeltaContentSource`. Startup still qualifies that unit when its stored
+body equals the RDF body. A pin that differs from the current authority, or a
+stored body that differs from RDF, stays closed.
 `journal invalidated` names the caller that dropped the in-memory baseline
 (`qualify`, `fenceBeforeWrite`, `qualifiedProof`, or the writer that withdrew
 it after a commit).
