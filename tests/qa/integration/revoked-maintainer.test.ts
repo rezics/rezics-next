@@ -58,11 +58,18 @@ test('a co-maintainer removed while editing is refused, leaves the work unchange
     expect(saved.status, JSON.stringify(saved.body)).toBe(200);
     const revision = saved.body.revision as string;
 
-    // Access deletes the maintainer who acts. The owning account submits that
-    // transfer as the co-maintainer, back to the owner, so the owner stays.
-    const removed = await h.post('/v1/work-maintainer-changes', {
+    const blocked = await h.post('/v1/work-maintainer-changes', {
       profile: 'work-maintainer-change-v1', work, actingSubject: h.pen, target: h.actor,
-      action: 'transfer', expectedGeneration: added.body.generation,
+      action: 'remove', expectedGeneration: added.body.generation,
+    });
+    expect(blocked.status, JSON.stringify(blocked.body)).toBe(403);
+    expect(blocked.body.code).toBe('authority_denied');
+    const still = await h.get(`/v1/works/${idOf(work)}/maintainers`);
+    expect([...(still.body.maintainers as string[])].sort()).toEqual([h.actor, h.pen].sort());
+
+    const removed = await h.post('/v1/work-maintainer-changes', {
+      profile: 'work-maintainer-change-v1', work, actingSubject: h.actor, target: h.pen,
+      action: 'remove', expectedGeneration: added.body.generation,
     });
     expect(removed.status, JSON.stringify(removed.body)).toBe(201);
     expect(removed.body.maintainers).toEqual([h.actor]);

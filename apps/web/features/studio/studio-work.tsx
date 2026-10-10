@@ -217,8 +217,10 @@ export function WorkTabPending({ label }: { label: string }) {
 }
 
 /** One tab of a Work, as {@link StudioWorkFrame} holds it. `language` is the one the Work is written in. */
-export function WorkTabBody({ agent, work, language, content, locale, messages }: {
+export function WorkTabBody({ agent, work, language, content, locale, messages, maintainers }: {
   agent: AgentOption; work: Work; language: string; content: WorkTabContent; locale: UiLocale; messages: StudioMessages;
+  /** The Work's maintainer list, on the details tab beside the cover. */
+  maintainers?: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
   const { header } = work;
@@ -238,6 +240,7 @@ export function WorkTabBody({ agent, work, language, content, locale, messages }
           : <Failure title={t.workFailed} retry t={t} />}
       </Section>
       <div className="grid content-start gap-10">
+        {maintainers}
         <CoverEditor agent={agent} work={{ id: header.id, title: header.title, types: header.types }} {...content.cover}
           locale={locale} messages={messages} />
         <Tags tags={content.tags} t={t} />

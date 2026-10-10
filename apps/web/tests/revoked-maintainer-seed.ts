@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
-import { studioSegment } from '../features/studio/agent.ts';
+import { studioSegment, workHref } from '../features/studio/agent.ts';
 import { recipeEditHref } from '../features/recipe-editor/route.ts';
 import { localizedPath } from '../i18n/locale.ts';
 
@@ -80,9 +80,10 @@ if (composition.status !== 201) throw new Error(`Recipe composition was not crea
 const editorPath = localizedPath(
   `${recipeEditHref(workIri.slice(-36))}?agent=${encodeURIComponent(studioSegment({ iri: coMaintainer, handle: null }))}`,
   'en');
+const panelPath = localizedPath(workHref({ iri: owner, handle: null }, workIri, 'details'), 'en');
 const directory = resolve('.temp/revoked-maintainer', process.env.REZICS_QA_RUN_ID!);
 mkdirSync(directory, { recursive: true });
 writeFileSync(resolve(directory, 'seed.json'), JSON.stringify({
-  work: workIri, owner, pen: coMaintainer, generation: added.body.generation, editorPath,
+  work: workIri, owner, pen: coMaintainer, generation: added.body.generation, editorPath, panelPath,
 }, null, 2) + '\n');
 console.log(editorPath);

@@ -17,6 +17,7 @@ import { readChapterFacts, readChapters, readPublishedTexts, readRealmChoices, r
   from '../../../../../../features/studio/read.ts';
 import { studioAgent, studioContext } from '../../../../../../features/studio/route.ts';
 import { StudioWorkFrame, WorkTabBody, WorkTabPending, workTabs } from '../../../../../../features/studio/studio-work.tsx';
+import { WorkMaintainers } from '../../../../../../features/work-maintainers/panel.tsx';
 import { uuid } from '../../../../../../features/studio/types.ts';
 import type { UiLocale } from '../../../../../../i18n/define.ts';
 import { getMessages, getTranslation, requestLocale } from '../../../../../../i18n/server.ts';
@@ -55,6 +56,7 @@ async function StreamedTab({ tab, agent, work, language, locale, messages }: Tab
     case 'text': return <WorkTabBody agent={agent} work={work} language={language} locale={locale} messages={messages}
       content={{ tab, texts: await readWorkTexts(agent.iri, header.id) }} />;
     case 'details': return <WorkTabBody agent={agent} work={work} language={language} locale={locale} messages={messages}
+      maintainers={<WorkMaintainers work={header.id} actingSubject={agent.iri} locale={locale} />}
       content={{ tab, tags: await readTags(agent.iri, header.id, locale), cover: { cover: header.cover },
         details: { status: 'idle', head: metadata.ok ? metadata.data.revision : null,
           values: detailsValues(metadata.ok ? metadata.data : null, language) } }} />;

@@ -3,9 +3,8 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 
-// The owner removes a co-maintainer while that person still has the recipe
-// editor open. Access has no separate remove: the owning account transfers as
-// the co-maintainer, back to the owner, which drops the co-maintainer.
+// The owner removes a co-maintainer from the Maintainers panel while that
+// person still has the recipe editor open.
 
 const phone = { width: 390, height: 844 };
 const typed = 'A note I still need.';
@@ -21,7 +20,7 @@ test.use({ actionTimeout: 20_000 });
 test('a co-maintainer removed while editing keeps their text and is told why', async ({ browser }, info) => {
   test.setTimeout(180_000);
   const seed = JSON.parse(readFileSync(resolve('.temp/revoked-maintainer', process.env.REZICS_QA_RUN_ID!, 'seed.json'), 'utf8')) as {
-    work: string; owner: string; pen: string; generation: string; editorPath: string;
+    work: string; owner: string; pen: string; generation: string; editorPath: string; panelPath: string;
   };
   const member = fixture<{ member: { email: string; password: string } }>('REZICS_WEB_AUTH_PRIVATE_PATH').member;
   const baseURL = info.project.use.baseURL as string;
@@ -36,12 +35,15 @@ test('a co-maintainer removed while editing keeps their text and is told why', a
     await expect(cook.getByRole('heading', { name: 'About this recipe' })).toBeVisible();
     const notes = cook.getByRole('textbox', { name: 'Notes' });
     await notes.fill(typed);
-    const removed = await owner.request.post('/api/main/v1/work-maintainer-changes', {
-      headers: { 'idempotency-key': crypto.randomUUID() },
-      data: { profile: 'work-maintainer-change-v1', work: seed.work, actingSubject: seed.pen,
-        target: seed.owner, action: 'transfer', expectedGeneration: seed.generation },
-    });
-    expect(removed.status(), await removed.text()).toBe(201);
+    await remover.goto(seed.panelPath);
+    const panel = remover.getByRole('region', { name: 'Maintainers' });
+    await expect(panel.getByRole('button', { name: 'Remove Recipe co-maintainer' })).toBeVisible({ timeout: 30_000 });
+    await panel.getByRole('button', { name: 'Remove Recipe co-maintainer' }).click();
+    const dialog = remover.getByRole('alertdialog');
+    await expect(dialog).toContainText('will no longer be able to edit this Work');
+    await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(panel.getByRole('status')).toContainText('Maintainer list updated');
+    await expect(panel.getByRole('button', { name: 'Remove Recipe co-maintainer' })).toHaveCount(0);
     await notes.blur();
     await expect(cook.getByRole('alert')).toContainText('Your editing access was removed. What you typed is still here.');
     await expect(notes).toHaveValue(typed);
