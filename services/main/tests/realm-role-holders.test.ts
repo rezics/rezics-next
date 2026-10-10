@@ -244,6 +244,7 @@ test('creating a 33rd role is refused, and a Realm already over the cap keeps ev
   const listed = await admin.roles(manager.principal, manager.realm, manager.actor);
   expect(listed.cap).toBe(REALM_ROLE_CAP);
   expect(listed.roles).toHaveLength(REALM_ROLE_CAP + 1);
+  expect(listed.roles.map(item => item.name)).toEqual(expect.arrayContaining(['Role 1', 'Already past']));
   await expect(admin.preview(manager.principal, manager.realm, { ...extra, change: { ...extra.change, roleId: randomUUID(),
     name: 'Still too many' } })).rejects.toBeInstanceOf(RealmAdminLimit);
   expect((await pool.query(`SELECT count(*)::int AS count FROM access.realm_admin_role WHERE realm = $1`,
