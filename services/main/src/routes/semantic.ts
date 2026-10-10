@@ -69,7 +69,9 @@ export function semanticError(error: unknown): Response {
   }
   if (error instanceof SemanticStageConflict) return problem(409, 'semantic_stage_conflict', 'Semantic stage key conflicts');
   if (error instanceof SemanticStageUnavailable) return problem(503, 'semantic_stage_unavailable', 'Semantic stage is unavailable');
-  if (error instanceof SemanticTargetUnavailable) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
+  // A reference lost after the key is claimed is retried. A hidden reference and
+  // an absent one share this refusal, and the key stays unsealed.
+  if (error instanceof SemanticTargetUnavailable) return problem(503, 'semantic_unavailable', 'Semantic resource is unavailable');
   return commandError(error);
 }
 
