@@ -17,6 +17,8 @@ import { ProjectionRefused } from '../projection/schema.ts';
 
 export class InvalidContextCommand extends Error {}
 export class ContextCommandUnavailable extends Error {}
+/** The Context, Realm or rule is absent or hidden right now. The same key is re-evaluated once it is visible. */
+export class ContextCurrentVisibility extends ContextCommandUnavailable {}
 export class StaleContextCommand extends Error {}
 export class PendingContextCommand extends PendingActivation {
   readonly operationId: string;
@@ -278,6 +280,7 @@ export async function runAdmittedCommand<I>(env: WorkActivationEnvironment,
         catch (error) {
           if (error instanceof IdempotencyConflict || error instanceof InvalidContextCommand
             || error instanceof CommandRejected || error instanceof ProjectionRefused) throw error;
+          if (error instanceof ContextCurrentVisibility) throw error;
           if (error instanceof ContextCommandUnavailable) {
             await sealCommandTerminal(env, admission, command.family, 'unavailable');
           }

@@ -4,7 +4,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { readComponentState } from '../work/history.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { ContextCommandUnavailable, InvalidContextCommand, checkedCommandReceipt, commitCommand,
+import { ContextCommandUnavailable, ContextCurrentVisibility, InvalidContextCommand, checkedCommandReceipt, commitCommand,
   readCommandReceipt, sealCommandTerminal, term, type ContextCommandReceipt } from './command.ts';
 import { ContextNotFound, readContextRevision } from './read.ts';
 import { CONTEXT_LIMITS, CONTEXT_PROFILE, GLOBAL_SEMANTIC_CONTEXT } from './schema.ts';
@@ -59,7 +59,7 @@ export async function setContextPreferences(env: WorkActivationEnvironment, admi
       rv:contextState rv:Active ; rv:semanticHead ?semantic .
       OPTIONAL { ${iri(input.context)} rv:preferenceHead ?head } }
   }`)).results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.semantic) throw new ContextCommandUnavailable('Context is unavailable');
+  if (rows.length !== 1 || !rows[0]?.semantic) throw new ContextCurrentVisibility('Context is unavailable');
   const current = rows[0].head?.value ?? null;
   const stale = input.expectedPreferenceHead
     ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {

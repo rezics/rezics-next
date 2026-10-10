@@ -7,7 +7,7 @@ import { ensureModelGeneration } from '../semantic/command.ts';
 import { modelGenerationHeadGuard, readActiveModelGeneration } from '../semantic/generation-guard.ts';
 import { checkedFiniteRule, planFiniteRules, type FinitePositiveRule, type FiniteRuleFact,
   type FiniteRulePlan, type SelectedFiniteRule } from '../semantic/finite-rule.ts';
-import { ContextCommandUnavailable, InvalidContextCommand, StaleContextCommand,
+import { ContextCommandUnavailable, ContextCurrentVisibility, InvalidContextCommand, StaleContextCommand,
   checkedCommandReceipt, commitCommand,
   readCommandReceipt, sealCommandTerminal, term, type ContextCommandReceipt } from './command.ts';
 import { ContextNotFound, readContextRevision } from './read.ts';
@@ -170,7 +170,7 @@ export async function readContextRule(env: WorkActivationEnvironment, slot: stri
     throw new InvalidContextCommand('rule reference is invalid');
   }
   const head = await currentRuleHead(env, slot);
-  if (!head) throw new ContextCommandUnavailable('rule is unavailable');
+  if (!head) throw new ContextCurrentVisibility('rule is unavailable');
   const exact = revision ?? head.head;
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?context ?contextRevision ?realm
     ?output ?generation ?modelGeneration ?predecessor WHERE {
@@ -380,7 +380,7 @@ export async function staleRuleDependencies(env: WorkActivationEnvironment, slot
     throw new InvalidContextCommand('invalidation cursor is invalid');
   }
   const head = await currentRuleHead(env, slot);
-  if (!head) throw new ContextCommandUnavailable('rule is unavailable');
+  if (!head) throw new ContextCurrentVisibility('rule is unavailable');
   if (head.generation !== expectedGeneration) throw new StaleContextCommand('invalidation generation changed');
   const rule = await readContextRule(env, slot);
   if (rule.modelGeneration !== (await readActiveModelGeneration(env.fuseki)).generation) {

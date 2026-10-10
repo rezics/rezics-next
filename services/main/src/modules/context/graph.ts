@@ -2,7 +2,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
-import { ContextCommandUnavailable, InvalidContextCommand, checkedCommandReceipt, commitCommand,
+import { ContextCommandUnavailable, ContextCurrentVisibility, InvalidContextCommand, checkedCommandReceipt, commitCommand,
   readCommandReceipt, sealCommandTerminal, term, type ContextCommandReceipt } from './command.ts';
 import { readContextRevision } from './read.ts';
 import { activeDefinitionDependenciesGuard, activeDirectDefinitionsGuard } from './definition-state.ts';
@@ -208,7 +208,7 @@ export async function reviseContext(env: WorkActivationEnvironment, admission: R
   const header = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?disclosure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} a rv:SemanticContext ; rv:contextState rv:Active ;
       rv:semanticHead ?head ; rv:disclosure ?disclosure . } }`)).results?.bindings ?? [];
-  if (header.length !== 1 || !header[0]?.head) throw new ContextCommandUnavailable('Context is unavailable');
+  if (header.length !== 1 || !header[0]?.head) throw new ContextCurrentVisibility('Context is unavailable');
   const stale = `GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} a rv:SemanticContext ; rv:semanticHead ?other .
       FILTER(?other != ${iri(input.expectedSemanticHead)}) }`;
   if (header[0].head.value !== input.expectedSemanticHead) {
@@ -294,7 +294,7 @@ export async function selectRealmContext(env: WorkActivationEnvironment, admissi
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?selection a rv:ContextSelection ;
       rv:selectionKey ${iri(request.key)} ; rv:contextSelectionHead ?head . } }
   }`)).results?.bindings ?? [];
-  if (read.length !== 1 || !read[0]?.realmOk) throw new ContextCommandUnavailable('Realm is unavailable');
+  if (read.length !== 1 || !read[0]?.realmOk) throw new ContextCurrentVisibility('Realm is unavailable');
   const current = read[0].head?.value ?? null;
   const headGuard = input.expectedHead
     ? `GRAPH ${iri(GRAPHS.current)} { ?selection rv:selectionKey ${iri(request.key)} ;
