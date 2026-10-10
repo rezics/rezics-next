@@ -10,6 +10,9 @@ import { reasonSemanticFacts, SEMANTIC_REASONING_PROFILE,
 const RV = 'https://rezics.com/vocab/';
 const OWL = 'http://www.w3.org/2002/07/owl#';
 
+// A fresh Account, Content schema and graph, then the first semantic create.
+// That measured total is about 7s; this budget is twice that. Later creates
+// in the same case are a few hundred milliseconds.
 test('MODEL19/MODEL20: identity axioms are refused and Source/Realm closure cannot qualify or authorize facts', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `semantic-reasoning-${randomUUID()}`));
@@ -74,4 +77,4 @@ test('MODEL19/MODEL20: identity axioms are refused and Source/Realm closure cann
     expect(partial).toMatchObject({ status: 'partial', inferences: [], exactCount: null,
       accepted: false, authorizes: false, fallbackUsed: false, modelGeneration: activeGeneration.generation });
   } finally { await f.close(); }
-});
+}, 15_000);
