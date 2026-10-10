@@ -192,7 +192,11 @@ test('a new id continues an open quarantine without deleting the absent anchor',
   expect(anchorDeleted(updates[0]!)).toBe(false);
   expect(updates[0]).toContain('FILTER NOT EXISTS');
   expect(updates[0]).toContain(priorReceipt);
-  expect(updates[0]).toContain(prior);
+  // A quarantine receipt from before rv:rebuildJob existed carries only its
+  // outcome, epoch and sequence; the continuing guard must accept it.
+  const clause = updates[0]!.slice(updates[0]!.indexOf(`<${priorReceipt}>`)).split('. }')[0]!;
+  expect(clause).toContain('rv:sequence ?priorSequence');
+  expect(clause).not.toContain('rv:rebuildJob');
 });
 
 test('Content clear pages are ordered and stay inside the native subject cap', () => {

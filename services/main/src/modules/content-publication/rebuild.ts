@@ -385,11 +385,14 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
       await command(env, 'quarantine', id, {
         family: 'content-rebuild-quarantine-v1', id, cut, continues: prior,
       }, {
+        // The prior receipt is named by the hash of its job id. A quarantine
+        // written before receipts stored rv:rebuildJob has no such triple, so
+        // the guard must not require one.
         condition: `FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
             ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }
           GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt('quarantine', prior))} a rv:OperationReceipt ;
             rv:outcome rv:Succeeded ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-            rv:sequence ?priorSequence ; rv:rebuildJob ${lit(prior)} . }
+            rv:sequence ?priorSequence . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
             ${iri(receipt('activate', prior))} a rv:OperationReceipt ; rv:outcome rv:Succeeded . } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
