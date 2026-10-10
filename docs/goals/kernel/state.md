@@ -33,7 +33,7 @@ No kernel worktree is dirty and no task is half-done. Next step for each, when q
 | G-1615 maintainer move | brief | waits for Launch's change to `realm-management.ts` | after it lands |
 | G-1300 | old exited task; needs the original G847 integration | Launch wires production Statement seek | close when that lands |
 
-No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. One request to Program is open: `task dev:refresh -- --wait` for pin `ce9c77bee5cd`, when the stack is idle.
+No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. The shared stack runs pin `ce9c77bee5cd` (refreshed 2026-10-10 17:01 UTC; the rebuilt search index survived the restart).
 
 ## Open
 
