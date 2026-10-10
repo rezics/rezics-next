@@ -248,6 +248,10 @@ export interface RebuildInput {
   assertWritersStopped: () => Promise<void>;
   /** Printed by the operator command. Absent in tests. */
   onStep?: (step: 'quarantined' | 'cleared' | 'offline-indexed' | 'replayed' | 'activated') => void;
+  /** Sequence the offline command advanced from, so its receipt IRI is known. */
+  offlinePreSequence?: string;
+  /** Persists that sequence next to the job id before any later command moves the graph. */
+  onOfflineRecorded?: (preSequence: string, generation: string) => void;
 }
 
 export interface RebuildResult {
@@ -288,9 +292,18 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   let replayMs = 0;
   let activateMs = 0;
   let offlineDigest: string | undefined;
+  let offlinePreSequence = input.offlinePreSequence ?? null;
+  const rememberOffline = (preSequence: string, generation: string) => {
+    offlinePreSequence = preSequence;
+    input.onOfflineRecorded?.(preSequence, generation);
+  };
   for (let guard = 0; guard < 8; guard++) {
     const at = await input.cursor.initialize(job.consumer);
-    const progress = await readContentRebuildProgress(input.env, input.id, at.sequence);
+    const progress = await readContentRebuildProgress(input.env, input.id, at.sequence, offlinePreSequence);
+    if (offlinePreSequence === null && progress.offlineCovers && progress.sequence
+      && progress.sequence !== '0' && progress.generation) {
+      rememberOffline((BigInt(progress.sequence) - 1n).toString(), progress.generation);
+    }
     const next = nextContentRebuildStep(progress);
     if (typeof next !== 'string') {
       if (next.refuse === CONTENT_REBUILD_NONEMPTY_REFUSAL) throw new SearchStateRefused(next.refuse);
@@ -322,7 +335,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
       started = clock();
       await input.assertWritersStopped();
       await backfillCatalogueNames(input.env);
-      const prepared = await readContentRebuildProgress(input.env, input.id, at.sequence);
+      const prepared = await readContentRebuildProgress(input.env, input.id, at.sequence, offlinePreSequence);
       if (prepared.malformedContent) throw new SearchStateRefused(CONTENT_REBUILD_NONEMPTY_REFUSAL);
       if (prepared.contentUnits) continue;
       offlineLog = await offlineTextIndex(input.runner);
@@ -334,10 +347,10 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
       if (health.textIndexUncertain !== false) {
         throw new SearchStateRefused('rebuilt text index is still reported uncertain');
       }
-      const probe = await readContentRebuildStep('probe', () => input.env.fuseki.query(`PREFIX rv: <${RV}>
+      const probe = await readContentRebuildStep('offline: probe', () => input.env.fuseki.query(`PREFIX rv: <${RV}>
         PREFIX text: <http://jena.apache.org/text#> ASK { ${textIndexProbePattern()} }`));
       if (probe.boolean !== true) throw new SearchStateRefused('rebuilt text index probe is absent');
-      const indexed = await readContentRebuildProgress(input.env, input.id, at.sequence);
+      const indexed = await readContentRebuildProgress(input.env, input.id, at.sequence, offlinePreSequence);
       if (indexed.malformedContent || indexed.contentUnits) {
         throw new SearchStateRefused(CONTENT_REBUILD_NONEMPTY_REFUSAL);
       }
@@ -350,6 +363,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
         fusekiJar: pins.fusekiJarSha256, commandJar: pins.commandJarSha256,
         moduleVersion: pins.moduleVersion, output: sha256(offlineLog) }));
       await recordOfflineContentRebuild(input.env, job, indexed.generation, indexed.sequence, offlineDigest);
+      rememberOffline(indexed.sequence, indexed.generation);
       verify += clock() - started;
       input.onStep?.('offline-indexed');
       crashSearchRebuild('after-offline-index');

@@ -52,11 +52,13 @@ async function progress(scene: Scene): Promise<ContentRebuildProgress> {
         generation: term(scene.generation ?? generation) }] } };
     }
     if (sparql.includes('FILTER NOT EXISTS') && sparql.includes('content:match-unit')) {
-      return { boolean: scene.malformed };
+      return { results: { bindings: scene.malformed ? [{ unit: term('urn:rezics:content:match-unit:bad') }] : [] } };
     }
     if (sparql.includes('SearchGraphAnchor')) return { boolean: scene.anchor };
     if (sparql.includes('content-rebuild:cleared')) return { boolean: scene.clearReceipt };
-    if (sparql.includes('content:projection')) return { boolean: scene.contentUnits };
+    if (sparql.includes('content:projection')) {
+      return { results: { bindings: scene.contentUnits ? [{ unit: term('urn:rezics:content:match-unit:ok') }] : [] } };
+    }
     throw new Error(`unexpected rebuild query: ${sparql.slice(0, 180)}`);
   } } as unknown as WorkActivationEnvironment['fuseki'];
   return readContentRebuildProgress({ fuseki, lineage: { dataEpoch: epoch, routingEpoch: epoch },

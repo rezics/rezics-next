@@ -70,8 +70,15 @@ if (!existsSync(join(stack, 'compose.env')) || !existsSync(join(stack, 'apps.env
 assertSavedStackStorage(options, readEnv(join(stack, 'compose.env')));
 assertSavedStackRawUpdate(options, readEnv(join(stack, 'compose.env')));
 const apps = readEnv(join(stack, 'apps.env'));
-const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as { id: string } : null;
-if (saved && !UUID.test(saved.id)) throw new Error('saved Content rebuild job is invalid');
+const GENERATION = /^urn:rezics:text-index-generation:[0-9a-f-]{36}$/;
+const DECIMAL = /^(0|[1-9][0-9]*)$/;
+interface SavedRebuildJob { id: string; offlinePreSequence?: string; offlineGeneration?: string }
+const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob : null;
+if (saved && (!UUID.test(saved.id)
+  || (saved.offlinePreSequence !== undefined && !DECIMAL.test(saved.offlinePreSequence))
+  || (saved.offlineGeneration !== undefined && !GENERATION.test(saved.offlineGeneration)))) {
+  throw new Error('saved Content rebuild job is invalid');
+}
 if (saved && jobArg && saved.id !== jobArg) throw new Error('resume the saved Content rebuild job');
 const docker = loadDockerEnvironment();
 const runner: FusekiStateRunner = {
@@ -105,6 +112,11 @@ try {
     } else id = randomUUID();
   }
   if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
+  const rememberOffline = (preSequence: string, generation: string) => {
+    const current = JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob;
+    writeFileSync(jobFile, JSON.stringify({ id: current.id, offlinePreSequence: preSequence,
+      offlineGeneration: generation }) + '\n', { mode: 0o600 });
+  };
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
   try {
     const content = new ContentCore(pool);
@@ -118,6 +130,8 @@ try {
       const result = await rebuildPublicContentSearch({ runner, dockerEnv: docker, env, content, cursor,
         id, publicConsumer, reserveBytes, assertWritersStopped: () => assertWritersStopped(apps.MAIN_ORIGIN!),
         expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`),
+        offlinePreSequence: saved?.offlinePreSequence,
+        onOfflineRecorded: rememberOffline,
         onStep: step => console.log(`content-rebuild step: ${step}`) });
       const logPath = join(stack, `content-rebuild-${id}.log`);
       writeFileSync(logPath, result.offlineLog, { mode: 0o600 });

@@ -83,6 +83,10 @@ export function contentRebuildFailureLine(error: unknown): string | undefined {
   return undefined;
 }
 
+function contentRebuildTimeoutLine(step: string, elapsedMs: number, budgetMs: number): string {
+  return `${step}: timed out after ${Math.round(elapsedMs)}ms (budget ${budgetMs}ms)`;
+}
+
 /** Name the step when a read aborts or exceeds the per-read budget. */
 export async function readContentRebuildStep<T>(step: string, read: () => Promise<T>): Promise<T> {
   const started = performance.now();
@@ -91,13 +95,15 @@ export async function readContentRebuildStep<T>(step: string, read: () => Promis
     const elapsed = performance.now() - started;
     if (elapsed > CONTENT_REBUILD_READ_BUDGET_MS) {
       throw new ContentRebuildUnavailable(
-        `${step}: timed out after ${Math.round(elapsed)}ms (budget ${CONTENT_REBUILD_READ_BUDGET_MS}ms)`);
+        contentRebuildTimeoutLine(step, elapsed, CONTENT_REBUILD_READ_BUDGET_MS));
     }
     return result;
   } catch (error) {
     if (error instanceof ContentRebuildUnavailable) throw error;
     if (contentRebuildStepTimedOut(error)) {
-      throw new ContentRebuildUnavailable(`${step}: timed out`, { cause: error });
+      throw new ContentRebuildUnavailable(
+        contentRebuildTimeoutLine(step, performance.now() - started, CONTENT_REBUILD_READ_BUDGET_MS),
+        { cause: error });
     }
     throw error;
   }
@@ -179,11 +185,13 @@ function rebuildId(value: string): void {
 
 async function command(env: WorkActivationEnvironment, phase: Phase, identity: string,
   digestInput: unknown, changes: { deletion?: string; insertion?: string; condition?: string;
-    receiptFacts?: string; controlDeletion?: string; controlInsertion?: string }): Promise<void> {
+    receiptFacts?: string; controlDeletion?: string; controlInsertion?: string },
+  step = `${phase}: command`): Promise<void> {
   const operation = receipt(phase, identity);
   const digest = hash(JSON.stringify(digestInput));
   const batch = `urn:rezics:outbox:${hash(`${operation}\0batch`)}`;
   const event = `urn:rezics:event:${hash(`${operation}\0event`)}`;
+  const deadlineMs = 10_000;
   const update = `PREFIX rv: <${RV}> DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n ${changes.controlDeletion ?? ''} }
     ${changes.deletion ?? ''}
@@ -208,12 +216,14 @@ async function command(env: WorkActivationEnvironment, phase: Phase, identity: s
     BIND(?n + 1 AS ?next)
   }`;
   let result;
+  const started = performance.now();
   try {
     result = await env.fuseki.commandWithReceipt({ receipt: operation, digest,
-      update, validations: [], deadlineMs: 10_000 });
+      update, validations: [], deadlineMs });
   } catch (error) {
     if (contentRebuildStepTimedOut(error)) {
-      throw new ContentRebuildUnavailable('rebuild command: timed out', { cause: error });
+      throw new ContentRebuildUnavailable(
+        contentRebuildTimeoutLine(step, performance.now() - started, deadlineMs), { cause: error });
     }
     throw error;
   }
@@ -224,7 +234,7 @@ async function command(env: WorkActivationEnvironment, phase: Phase, identity: s
 }
 
 async function readQuarantine(env: WorkActivationEnvironment, id: string): Promise<ContentPosition | null> {
-  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?sourceEpoch ?sourceSequence WHERE {
+  const result = await readContentRebuildStep('progress: quarantine receipt', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?sourceEpoch ?sourceSequence WHERE {
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt('quarantine', id))} a rv:OperationReceipt ;
       rv:outcome rv:Succeeded ; rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
       rv:ownerDataEpoch ?sourceEpoch ; rv:ownerSequence ?sourceSequence . }
@@ -241,10 +251,11 @@ async function readQuarantine(env: WorkActivationEnvironment, id: string): Promi
     sequence: row.sourceSequence!.value };
 }
 
-async function isReceiptCommitted(env: WorkActivationEnvironment, phase: Phase, id: string): Promise<boolean> {
-  const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
+/** Keyed by the receipt IRI. Callers name the read so a timeout says which one stopped. */
+async function receiptIsCommitted(env: WorkActivationEnvironment, phase: Phase, id: string): Promise<boolean> {
+  const answer = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
     ${iri(receipt(phase, id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-      rv:dataEpoch ${lit(env.lineage.dataEpoch)} . } }`));
+      rv:dataEpoch ${lit(env.lineage.dataEpoch)} . } }`);
   return answer.boolean === true;
 }
 
@@ -252,7 +263,7 @@ async function isReceiptCommitted(env: WorkActivationEnvironment, phase: Phase, 
 export async function resumeActivatedContentRebuild(env: WorkActivationEnvironment,
   cursor: ContentProjectionCursor, id: string, publicConsumer: string): Promise<string | null> {
   rebuildId(id);
-  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sourceEpoch
+  const result = await readContentRebuildStep('activate: receipt', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sourceEpoch
     ?sourceSequence ?generation WHERE { GRAPH ${iri(GRAPHS.receipts)} {
     ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
       rv:dataEpoch ?epoch ; rv:ownerDataEpoch ?sourceEpoch ;
@@ -267,7 +278,7 @@ export async function resumeActivatedContentRebuild(env: WorkActivationEnvironme
     throw new ContentRebuildUnavailable('activated rebuild receipt is incomplete');
   }
   const generation = value(row!, 'generation')!;
-  const confirmed = await readContentRebuildStep('control', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+  const confirmed = await readContentRebuildStep('activate: control', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:textIndexGeneration ${iri(generation)} . }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
@@ -279,7 +290,7 @@ export async function resumeActivatedContentRebuild(env: WorkActivationEnvironme
 }
 
 export async function publicSearchAnchorPresent(env: WorkActivationEnvironment): Promise<boolean> {
-  const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+  const answer = await readContentRebuildStep('progress: anchor', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
     ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`));
   if (answer.boolean !== true && answer.boolean !== false) {
     throw new ContentRebuildUnavailable('quarantine: public search anchor is unreadable');
@@ -318,7 +329,7 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
   // Public reads stay closed until the offline rebuild and activation finish.
   // Cost: one bounded receipt read and one constant-size guarded command.
   const profileIdentity = `${id}\0${TEXT_INDEX_PROFILE}`;
-  if (!await isReceiptCommitted(env, 'profile', profileIdentity)) {
+  if (!await readContentRebuildStep('quarantine: profile receipt', () => receiptIsCommitted(env, 'profile', profileIdentity))) {
     await command(env, 'profile', profileIdentity, {
       family: 'content-rebuild-profile-v1', id, profile: TEXT_INDEX_PROFILE,
       probe: TEXT_INDEX_PROBE_BODY,
@@ -347,8 +358,8 @@ export function contentRebuildClearPageQuery(): string {
   } ORDER BY STR(?unit) LIMIT ${CONTENT_REBUILD_PAGE}`;
 }
 
-async function listContentUnits(env: WorkActivationEnvironment): Promise<string[]> {
-  const result = await readContentRebuildStep('clear page', () => env.fuseki.query(contentRebuildClearPageQuery()));
+async function listContentUnits(env: WorkActivationEnvironment, page: number): Promise<string[]> {
+  const result = await readContentRebuildStep(`clear: page ${page}`, () => env.fuseki.query(contentRebuildClearPageQuery()));
   const rows = result.results?.bindings ?? [];
   const units = rows.map(row => row.unit?.value);
   if (units.some(unit => !unit || !unit.startsWith('urn:rezics:content:match-unit:'))
@@ -362,10 +373,10 @@ async function listContentUnits(env: WorkActivationEnvironment): Promise<string[
 export async function clearQuarantinedContentUnits(env: WorkActivationEnvironment,
   job: ContentRebuildJob): Promise<number> {
   await assertQuarantined(env);
-  if (await isReceiptCommitted(env, 'cleared', job.id)) return 0;
+  if (await readContentRebuildStep('clear: cleared receipt', () => receiptIsCommitted(env, 'cleared', job.id))) return 0;
   let removed = 0;
   for (let batch = 0; batch < MAX_CLEAR_BATCHES; batch++) {
-    const units = await listContentUnits(env);
+    const units = await listContentUnits(env, batch);
     if (units.length === 0) {
       await command(env, 'cleared', job.id,
         { family: 'content-rebuild-cleared-v1', id: job.id, cut: job.cut }, {});
@@ -393,10 +404,12 @@ export async function clearQuarantinedContentUnits(env: WorkActivationEnvironmen
 export async function reclearQuarantinedContentUnits(env: WorkActivationEnvironment,
   job: ContentRebuildJob): Promise<number> {
   await assertQuarantined(env);
-  if (!await isReceiptCommitted(env, 'cleared', job.id)) return clearQuarantinedContentUnits(env, job);
+  if (!await readContentRebuildStep('reclear: cleared receipt', () => receiptIsCommitted(env, 'cleared', job.id))) {
+    return clearQuarantinedContentUnits(env, job);
+  }
   let removed = 0;
   for (let batch = 0; batch < MAX_CLEAR_BATCHES; batch++) {
-    const units = await listContentUnits(env);
+    const units = await listContentUnits(env, batch);
     if (units.length === 0) {
       if (removed > 0) await recordReclear(env, job);
       return removed;
@@ -430,7 +443,7 @@ async function recordReclear(env: WorkActivationEnvironment, job: ContentRebuild
           ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`,
       receiptFacts: `; rv:rebuildJob ${lit(job.id)} ; rv:ownerDataEpoch ${lit(job.cut.dataEpoch)}
         ; rv:ownerSequence ${lit(job.cut.sequence)}`,
-    });
+    }, 'reclear: command');
 }
 
 /** The admitted cleared-family command records an indexer pass. It advances
@@ -451,11 +464,11 @@ export async function recordOfflineContentRebuild(env: WorkActivationEnvironment
           ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`,
       receiptFacts: `; rv:rebuildJob ${lit(job.id)} ; rv:textIndexGeneration ${iri(generation)}
         ; rv:indexRebuildDigest ${lit(digest)}`,
-    });
+    }, 'offline: command');
 }
 
 async function readIndexControl(env: WorkActivationEnvironment): Promise<{ sequence: string; generation: string }> {
-  const result = await readContentRebuildStep('control', () => env.fuseki.query(`PREFIX rv: <${RV}>
+  const result = await readContentRebuildStep('progress: index control', () => env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?sequence ?generation WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?sequence ; rv:textIndexGeneration ?generation .
@@ -470,8 +483,8 @@ async function readIndexControl(env: WorkActivationEnvironment): Promise<{ seque
   return { sequence: row!.sequence!.value, generation: row!.generation!.value };
 }
 
-async function askContent(env: WorkActivationEnvironment, kind: 'units' | 'malformed'): Promise<boolean> {
-  const pattern = kind === 'units'
+function contentUnitPattern(kind: 'units' | 'malformed'): string {
+  return kind === 'units'
     ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:projection ?projection .
         FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")
           && STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) }`
@@ -479,24 +492,33 @@ async function askContent(env: WorkActivationEnvironment, kind: 'units' | 'malfo
         FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:"))
         FILTER NOT EXISTS { ?unit a rv:MatchUnit ; rv:projection ?projection .
           FILTER(STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) } }`;
-  const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${pattern} }`));
-  if (answer.boolean !== true && answer.boolean !== false) {
-    throw new ContentRebuildUnavailable('clear: Content unit inventory is unreadable');
-  }
-  return answer.boolean === true;
 }
 
-async function readLatestOffline(env: WorkActivationEnvironment, id: string,
-  generation: string): Promise<{ digest: string; sequence: string } | null> {
-  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+/** One row. The clear page is the ordered inventory; this read only asks whether any subject remains. */
+async function contentUnitExists(env: WorkActivationEnvironment, kind: 'units' | 'malformed'): Promise<boolean> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?unit WHERE {
+    ${contentUnitPattern(kind)} } LIMIT 1`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length > 1) throw new ContentRebuildUnavailable('clear: Content unit inventory is unreadable');
+  return rows.length === 1;
+}
+
+/** The offline receipt IRI is hash(job, generation, the sequence the command advanced from). */
+function offlineReceipt(id: string, generation: string, preSequence: string): string {
+  return receipt('cleared', `offline\0${id}\0${generation}\0${preSequence}`);
+}
+
+async function readKeyedOffline(env: WorkActivationEnvironment, id: string, generation: string,
+  preSequence: string): Promise<{ digest: string; sequence: string } | null> {
+  const result = await readContentRebuildStep('progress: offline receipt', () => env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?digest ?sequence WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence ;
-        rv:rebuildJob ${lit(id)} ; rv:indexRebuildDigest ?digest ;
-        rv:textIndexGeneration ${iri(generation)} .
-        FILTER(STRSTARTS(STR(?receipt), "urn:rezics:receipt:content-rebuild:cleared:")) }
-    } ORDER BY DESC(xsd:integer(?sequence)) LIMIT 1`));
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(offlineReceipt(id, generation, preSequence))} a rv:OperationReceipt ;
+          rv:outcome rv:Succeeded ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:sequence ?sequence ; rv:rebuildJob ${lit(id)} ;
+          rv:indexRebuildDigest ?digest ; rv:textIndexGeneration ${iri(generation)} .
+      }
+    }`));
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) return null;
   const digest = rows[0]?.digest?.value ?? '';
@@ -507,8 +529,28 @@ async function readLatestOffline(env: WorkActivationEnvironment, id: string,
   return { digest, sequence };
 }
 
+/** The stored pre-sequence is the receipt the indexer wrote. The prior control
+ * sequence is the same receipt when the file has not caught up yet. Both are
+ * receipt IRIs, so neither walks the receipts graph. */
+async function readLatestOffline(env: WorkActivationEnvironment, id: string,
+  generation: string, controlSequence: string, knownPreSequence: string | null):
+  Promise<{ digest: string; sequence: string } | null> {
+  const keys: string[] = [];
+  if (knownPreSequence && DECIMAL.test(knownPreSequence)) keys.push(knownPreSequence);
+  if (DECIMAL.test(controlSequence) && controlSequence !== '0') {
+    const prior = (BigInt(controlSequence) - 1n).toString();
+    if (!keys.includes(prior)) keys.push(prior);
+  }
+  let best: { digest: string; sequence: string } | null = null;
+  for (const key of keys) {
+    const found = await readKeyedOffline(env, id, generation, key);
+    if (found && (best === null || BigInt(found.sequence) > BigInt(best.sequence))) best = found;
+  }
+  return best;
+}
+
 async function readActivationGeneration(env: WorkActivationEnvironment, id: string): Promise<string | null> {
-  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}>
+  const result = await readContentRebuildStep('progress: activation receipt', () => env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?generation WHERE { GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:textIndexGeneration ?generation . } }`));
@@ -521,20 +563,28 @@ async function readActivationGeneration(env: WorkActivationEnvironment, id: stri
   return generation;
 }
 
-/** Facts a rerun needs. `replaySequence` is the rebuild cursor, 0 before replay. */
+/** Facts a rerun needs. `replaySequence` is the rebuild cursor, 0 before replay.
+ * `offlinePreSequence` is the sequence the indexer command advanced from, stored
+ * beside the job id so a later resume can name that receipt. */
 export async function readContentRebuildProgress(env: WorkActivationEnvironment, id: string,
-  replaySequence: string | null): Promise<ContentRebuildProgress> {
+  replaySequence: string | null, offlinePreSequence: string | null = null): Promise<ContentRebuildProgress> {
   rebuildId(id);
   if (replaySequence !== null && !DECIMAL.test(replaySequence)) {
     throw new ContentRebuildUnavailable('replay: cursor is invalid');
   }
+  if (offlinePreSequence !== null && !DECIMAL.test(offlinePreSequence)) {
+    throw new ContentRebuildUnavailable('offline: stored sequence is invalid');
+  }
   const anchor = await publicSearchAnchorPresent(env);
   const quarantine = await readQuarantine(env, id);
-  const clearReceipt = await isReceiptCommitted(env, 'cleared', id);
-  const contentUnits = await askContent(env, 'units');
-  const malformedContent = await askContent(env, 'malformed');
+  const clearReceipt = await readContentRebuildStep('progress: cleared receipt',
+    () => receiptIsCommitted(env, 'cleared', id));
+  const contentUnits = await readContentRebuildStep('progress: content units',
+    () => contentUnitExists(env, 'units'));
+  const malformedContent = await readContentRebuildStep('progress: malformed content',
+    () => contentUnitExists(env, 'malformed'));
   const control = await readIndexControl(env);
-  const offline = await readLatestOffline(env, id, control.generation);
+  const offline = await readLatestOffline(env, id, control.generation, control.sequence, offlinePreSequence);
   const activation = await readActivationGeneration(env, id);
   return { anchor, quarantine: quarantine !== null, clearReceipt, contentUnits, malformedContent,
     offlineCovers: Boolean(offline && offline.sequence === control.sequence && !contentUnits),
@@ -543,15 +593,16 @@ export async function readContentRebuildProgress(env: WorkActivationEnvironment,
     activated: activation !== null && activation === control.generation };
 }
 
-/** Latest quarantine receipt that stored its job id. Older receipts have none. */
+/** One quarantine job id, with no sort. The job file is the usual key. This
+ * read is for a receipt that stored rv:rebuildJob when that file is absent.
+ * Sorting every such receipt walks the receipts graph. */
 export async function readAdoptedQuarantineJob(env: WorkActivationEnvironment): Promise<string | null> {
-  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+  const result = await readContentRebuildStep('adopt: quarantine job', () => env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?job WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence ; rv:rebuildJob ?job .
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:rebuildJob ?job ;
+        rv:outcome rv:Succeeded ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} .
         FILTER(STRSTARTS(STR(?receipt), "urn:rezics:receipt:content-rebuild:quarantine:")) }
-    } ORDER BY DESC(xsd:integer(?sequence)) LIMIT 1`));
+    } LIMIT 1`));
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) return null;
   const job = rows[0]?.job?.value ?? '';
@@ -565,7 +616,7 @@ export async function readAdoptedQuarantineJob(env: WorkActivationEnvironment): 
 export async function replayQuarantinedContentCut(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, job: ContentRebuildJob): Promise<number> {
   await assertQuarantined(env);
-  if (!await isReceiptCommitted(env, 'cleared', job.id)) {
+  if (!await readContentRebuildStep('replay: cleared receipt', () => receiptIsCommitted(env, 'cleared', job.id))) {
     throw new ContentRebuildUnavailable('old Content units were not cleared');
   }
   const at = await cursor.initialize(job.consumer);
@@ -691,7 +742,7 @@ async function readDeclaredPages(env: WorkActivationEnvironment): Promise<Rebuil
   const declared: RebuildBinding[] = [];
   let after: string | undefined;
   for (let ordinal = 0; ordinal <= MAX_REBUILD_UNITS; ordinal++) {
-    const page = (await readContentRebuildStep(`declared page ${ordinal}`, () => env.fuseki.query(
+    const page = (await readContentRebuildStep(`verify: declared page ${ordinal}`, () => env.fuseki.query(
       contentRebuildDeclaredPageQuery(after)))).results?.bindings ?? [];
     if (page.length === 0) return declared;
     const next = pageAdvanced(page, 'variant', after);
@@ -708,7 +759,7 @@ async function readHeadPages(env: WorkActivationEnvironment, declared: readonly 
   const heads: RebuildBinding[] = [];
   const variants = declared.map(row => value(row, 'variant')!);
   for (let ordinal = 0, offset = 0; offset < variants.length; ordinal++, offset += CONTENT_REBUILD_PAGE) {
-    const rows = (await readContentRebuildStep(`heads page ${ordinal}`, () => env.fuseki.query(
+    const rows = (await readContentRebuildStep(`verify: heads page ${ordinal}`, () => env.fuseki.query(
       contentRebuildHeadsPageQuery(variants.slice(offset, offset + CONTENT_REBUILD_PAGE), env.lineage.dataEpoch),
     ))).results?.bindings ?? [];
     heads.push(...rows);
@@ -721,7 +772,7 @@ async function readUnitPages(env: WorkActivationEnvironment): Promise<RebuildBin
   const units: RebuildBinding[] = [];
   let after: string | undefined;
   for (let ordinal = 0; ordinal <= MAX_REBUILD_UNITS; ordinal++) {
-    const page = (await readContentRebuildStep(`units page ${ordinal}`, () => env.fuseki.query(
+    const page = (await readContentRebuildStep(`verify: units page ${ordinal}`, () => env.fuseki.query(
       contentRebuildUnitsPageQuery(after)))).results?.bindings ?? [];
     if (page.length === 0) return units;
     const next = pageAdvanced(page, 'unit', after);
@@ -740,7 +791,7 @@ async function readUnitPages(env: WorkActivationEnvironment): Promise<RebuildBin
 export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, job: ContentRebuildJob): Promise<RebuildGraphSnapshot> {
   await assertQuarantined(env);
-  if (!await isReceiptCommitted(env, 'cleared', job.id)) {
+  if (!await readContentRebuildStep('verify: cleared receipt', () => receiptIsCommitted(env, 'cleared', job.id))) {
     throw new ContentRebuildUnavailable('Content cleanup receipt is absent');
   }
   const [owner, replay] = await Promise.all([content.ownerPosition(), cursor.read(job.consumer)]);
@@ -749,7 +800,7 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
     throw new ContentRebuildUnavailable('Content replay does not cover exact owner cut');
   }
   const control = async () => {
-    const result = await readContentRebuildStep('control', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?routing ?sequence ?generation WHERE {
+    const result = await readContentRebuildStep('verify: index control', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?routing ?sequence ?generation WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:routingEpoch ?routing ; rv:sequence ?sequence ;
         rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ; rv:textIndexGeneration ?generation .
@@ -766,12 +817,12 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
     return { sequence: value(row!, 'sequence')!, generation: value(row!, 'generation')! };
   };
   const before = await control();
-  const probeResult = await readContentRebuildStep('probe', () => env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
+  const probeResult = await readContentRebuildStep('verify: probe', () => env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
       ASK { ${textIndexProbePattern()} }`));
   if (probeResult.boolean !== true) throw new ContentRebuildUnavailable('rebuilt CJK index probe is absent');
   // The native audit compares graph-scoped identity and stored body/language,
   // including legal bodies for which the analyzer emits no tokens.
-  const indexResult = await readContentRebuildStep('inventory', () => env.fuseki.query(
+  const indexResult = await readContentRebuildStep('verify: inventory', () => env.fuseki.query(
     `PREFIX rv: <${RV}> SELECT (rv:publicTextInventory() AS ?population) WHERE {}`));
   const indexedPopulation = Number(indexResult.results?.bindings?.[0]?.population?.value);
   const declared = await readDeclaredPages(env);

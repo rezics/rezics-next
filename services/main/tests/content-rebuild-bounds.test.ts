@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'bun:test';
 import type { ContentCore } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
@@ -140,18 +141,37 @@ test('a variant with no public head still fails the rebuild', async () => {
 });
 
 test('a timed out verification read names its step and page', async () => {
+  const timedOut = (label: string) => new RegExp(`${label}: timed out after \\d+ms \\(budget 8000ms\\)`);
   await expect(verifyFixture({ timeoutOn: 'SELECT ?variant ?resource' }).run)
-    .rejects.toThrow('heads page 0: timed out');
+    .rejects.toThrow(timedOut('verify: heads page 0'));
   await expect(verifyFixture({ timeoutOn: 'SELECT ?variant WHERE' }).run)
-    .rejects.toThrow('declared page 0: timed out');
+    .rejects.toThrow(timedOut('verify: declared page 0'));
   await expect(verifyFixture({ timeoutOn: 'SELECT ?unit ?body' }).run)
-    .rejects.toThrow('units page 0: timed out');
+    .rejects.toThrow(timedOut('verify: units page 0'));
   await expect(verifyFixture({ timeoutOn: 'publicTextInventory()' }).run)
-    .rejects.toThrow('inventory: timed out');
+    .rejects.toThrow(timedOut('verify: inventory'));
   const timeout = new DOMException('The operation timed out.', 'TimeoutError');
   expect(contentRebuildFailureLine(timeout)).toBe('rebuild: timed out');
-  expect(contentRebuildFailureLine(new ContentRebuildUnavailable('heads page 0: timed out')))
-    .toBe('heads page 0: timed out');
+  const named = 'verify: heads page 0: timed out after 4ms (budget 8000ms)';
+  expect(contentRebuildFailureLine(new ContentRebuildUnavailable(named))).toBe(named);
+});
+
+test('every content rebuild read has one unique label', () => {
+  const source = readFileSync(new URL('../src/modules/content-publication/rebuild.ts', import.meta.url), 'utf8');
+  const calls = source.match(/readContentRebuildStep\(/g) ?? [];
+  const labels = [...source.matchAll(/readContentRebuildStep\(\s*(?:'([^']*)'|`([^`]*)`)/g)]
+    .map(match => match[1] ?? match[2] ?? '');
+  expect(labels).toHaveLength(calls.length);
+  expect(labels.every(label => label.length > 0)).toBe(true);
+  expect(new Set(labels).size).toBe(labels.length);
+  for (const label of ['progress: anchor', 'progress: quarantine receipt', 'progress: cleared receipt',
+    'progress: content units', 'progress: malformed content', 'progress: index control',
+    'progress: offline receipt', 'progress: activation receipt', 'adopt: quarantine job',
+    'clear: page ${page}']) {
+    expect(labels).toContain(label);
+  }
+  expect(source).not.toContain('ORDER BY DESC');
+  expect(source).not.toContain("readContentRebuildStep('rebuild command'");
 });
 
 test('a Fuseki startup timeout names the wait', async () => {
