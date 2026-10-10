@@ -17,6 +17,20 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
   const { stack } = home;
   try {
     const seed = await seedHome(home, 3);
+    // A few hundred product replies exceed one 400-batch relay pass. Resume the
+    // same checkpoint instead of treating that bound as a failed population.
+    const catchUp = async () => {
+      for (let wave = 0; wave < 8; wave++) {
+        try {
+          await home.project();
+          return;
+        } catch (error) {
+          if (!(error instanceof Error) || !/Home (projection|relay) exceeded/.test(error.message))
+            throw error;
+        }
+      }
+      throw new Error('Realm thread projection exceeded its resumable waves');
+    };
     const realm = seed.realm.realm,
       epoch = stack.env.lineage.dataEpoch;
     const threads = home.deps.realmReplyThreads;
@@ -26,16 +40,16 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
         await home.call('GET', `${root}/threads/${reply.slice(-36)}`),
       );
     expect((await readThread(seed.discussion.reply)).complete).toBe(true);
-    const chain = await growRealmThreads(
-      stack.contentPool,
-      stack.accessPool,
-      stack.env,
-      realm,
-      seed.discussion.reply,
-      0,
-      34,
-      { reply: seed.discussion.reply, chain: true },
-    );
+    const postReply = (key: string, parent?: { reply: string; revision: string }) =>
+      seed.post(key, parent && { reply: parent.reply, revisionId: parent.revision }).then((created) => ({
+        reply: created.reply,
+        revision: created.revisionId,
+      }));
+    const chain = await growRealmThreads(postReply, 34, {
+      parent: { reply: seed.discussion.reply, revision: seed.discussion.revisionId, chain: true },
+      keyPrefix: 'g1042:chain',
+    });
+    await catchUp();
     // The bounded Content walk has far fewer than 192 rows but crosses depth 32.
     const subtree = await threads.subtree(seed.discussion.reply);
     expect(subtree.length).toBeLessThan(REALM_THREAD_COST.replies);
@@ -55,16 +69,11 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     );
 
     // A broad thread hits the total-row cap independently of the depth cap.
-    await growRealmThreads(
-      stack.contentPool,
-      stack.accessPool,
-      stack.env,
-      realm,
-      seed.discussion.reply,
-      100,
-      193,
-      { reply: seed.response.reply, chain: false },
-    );
+    await growRealmThreads(postReply, 193, {
+      parent: { reply: seed.response.reply, revision: seed.response.revisionId, chain: false },
+      keyPrefix: 'g1042:wide',
+    });
+    await catchUp();
     const wide = await threads.subtree(seed.response.reply);
     expect(wide).toHaveLength(REALM_THREAD_COST.replies + 2);
     expect(wide.some((node) => node.truncated)).toBe(false);
@@ -75,7 +84,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       WHERE data_epoch=$1 AND realm=$2`,
       [epoch, realm],
     );
-    await home.project();
+    await catchUp();
 
     const floor = { dataEpoch: epoch, sequence: '0' };
     await new AccessRealmManagement(stack.accessPool).initialize(
@@ -132,7 +141,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       );
     }
     const population = await threads.historyPopulation(epoch, realm, floor);
-    await home.project();
+    await catchUp();
     const count = async (table: string, suffix = '') =>
       Number(
         (
@@ -149,7 +158,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       `UPDATE access.membership SET state='left',generation=generation+1 WHERE id=$1`,
       [membership],
     );
-    await home.project();
+    await catchUp();
     expect(await count('realm_thread_population')).toBe(1);
     await stack.accessPool.query(
       `UPDATE access.private_membership SET state='left',generation=generation+1,
@@ -194,14 +203,14 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       VALUES('agent',$1,3,$2,0)`,
       [membership, epoch],
     );
-    await home.project();
+    await catchUp();
     expect(await count('realm_thread_population_admission')).toBe(before);
     expect(await count('realm_thread_population', 'AND ready')).toBe(1);
     await stack.accessPool.query(
       `UPDATE access.membership SET state='left',generation=generation+1 WHERE id=$1`,
       [membership],
     );
-    await home.project();
+    await catchUp();
     expect(await count('realm_thread_population')).toBe(0);
     expect(await count('realm_thread_population_admission')).toBe(0);
     expect(await count('realm_thread_private_order')).toBe(0);
@@ -224,7 +233,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=''`,
       [epoch, seed.discussion.reply],
     );
-    await home.project();
+    await catchUp();
     expect(await count('realm_thread_reference', `AND reply='${seed.discussion.reply}'`)).toBe(0);
     expect(await count('realm_thread_population_job', `AND reply='${seed.discussion.reply}'`)).toBe(
       0,
@@ -253,7 +262,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
           [membership, epoch],
         );
       }
-      await home.project();
+      await catchUp();
       expect(await count('realm_thread_reference')).toBeGreaterThan(0);
       expect(await count('realm_thread_population')).toBe(1);
       await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE WHERE {
@@ -269,7 +278,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
         ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=''`,
         [epoch, realm],
       );
-      await home.project();
+      await catchUp();
       expect(await count('realm_thread_reference')).toBe(0);
       expect(await count('realm_thread_order')).toBe(0);
       expect(await count('realm_thread_population')).toBe(0);

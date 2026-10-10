@@ -25,7 +25,6 @@ const { AccessRealmManagement } = await import('../src/modules/access/realm-mana
 const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
-const { GRAPHS, iri, lit } = await import('../src/modules/work/activate.ts');
 const { cloneQaOwnerDatabases } = await import('../../../tests/qa/support/databases.ts');
 
 const { requireQa } =
@@ -91,12 +90,17 @@ try {
   const project = async () => {
     // The scale snapshot exceeds Home's small-fixture 400-tick helper bound.
     // Resume the same durable job rather than resetting/replaying any prefix.
-    for (let wave = 0; wave < 4; wave++) {
+    // Relay and ranking each stop at that bound, so a full population takes
+    // several resumable waves.
+    for (let wave = 0; wave < 40; wave++) {
       try {
         await home.project();
         return;
       } catch (error) {
-        if (!(error instanceof Error) || !error.message.includes('Home projection exceeded'))
+        if (
+          !(error instanceof Error) ||
+          !/Home (projection|relay) exceeded/.test(error.message)
+        )
           throw error;
         const pending = (
           await stack.accessPool.query(
@@ -109,7 +113,7 @@ try {
         if (performance.now() - started > 550_000) throw error;
       }
     }
-    throw new Error('Realm scale projection exceeded 1600 resumable ticks');
+    throw new Error('Realm scale projection exceeded its resumable waves');
   };
   const actor = (
     await api.command<{ agent: string }>('g1034:actor', {
@@ -259,10 +263,6 @@ try {
   );
   assert.equal(unavailable.status, 503);
   await project();
-  await stack.accessPool.query(
-    'UPDATE access.feed_item SET score=1000000,best_key=best_key+6 WHERE data_epoch=$1 AND id=$2',
-    [stack.env.lineage.dataEpoch, opening.placement],
-  );
   const allRules = Array.from({ length: 12 }, (_, index) => ({
     id: `rule-${index}`,
     title: { original: 'en', labels: { en: `Rule ${index}` } },
@@ -314,7 +314,28 @@ try {
     moderators.push(moderator);
   }
   let profileHead: string | null = null;
+  // Realm creation stores an empty settings rules document, and the header
+  // reads that document. Advance it with the same rules the profile publishes.
+  const rulesRef = `urn:rezics:realm-rules:${realm.slice(-36)}`;
   for (const count of [0, 1, 12]) {
+    const currentRules = await rules.current(rulesRef, `governance:realm:${realm}`);
+    await api.command(`g1034:rules-document:${count}`, {
+      method: 'POST',
+      path: '/v1/governance/rules',
+      body: {
+        profile: 'governance-rule-v1',
+        ref: rulesRef,
+        scopeId: `governance:realm:${realm}`,
+        actingSubject: actor,
+        expectedRevision: currentRules?.revision ?? null,
+        document: {
+          profile: 'realm-settings-rules-v2',
+          public: true,
+          rules: allRules.slice(0, count),
+        },
+        idempotencyKey: `g1034:rules-document:${count}`,
+      },
+    });
     const published: { revision: string } = await api.command<{ revision: string }>(
       `g1034:profile:${count}`,
       {
@@ -509,30 +530,65 @@ try {
   );
   let created = 0;
   let winner: string | undefined;
+  let scored = false;
+  let perReplyMs = 0;
+  let scaleBlocker: string | undefined;
+  const vote = (key: string, placement: string) =>
+    api.command<{ score: number }>(key, {
+      method: 'POST',
+      path: `/v1/feed/${placement.slice(-36)}/vote`,
+      body: {
+        profile: 'feed-vote-command-v1',
+        actingSubject: actor,
+        value: 1,
+        expectedRevision: null,
+      },
+    });
   for (const size of [100, 1000, 10000]) {
+    const count = size - 2 - created;
+    const remainingMs = 600_000 - (performance.now() - started);
+    if (perReplyMs > 0 && perReplyMs * count > remainingMs) {
+      scaleBlocker =
+        `Realm reply commands measured ${perReplyMs} ms each. ` +
+        `Seeding ${count} more replies would take about ${Math.round((perReplyMs * count) / 1000)} s, ` +
+        `past the ${Math.round(remainingMs / 1000)} s left in the 600 s preparation budget.`;
+      evidence.push({
+        blocker: scaleBlocker,
+        perReplyMs,
+        count,
+        projectedMs: Math.round(perReplyMs * count),
+      });
+      break;
+    }
+    const seedStarted = performance.now();
     const grown = await growRealmThreads(
-      stack.contentPool,
-      stack.accessPool,
-      stack.env,
-      realm,
-      opening.reply,
-      created,
-      size - 2 - created,
+      (key, parent) => post(key, parent),
+      count,
+      { keyPrefix: `g1034:fill:${size}` },
     );
+    const seedMs = performance.now() - seedStarted;
+    perReplyMs = grown.length ? Math.round(seedMs / grown.length) : perReplyMs;
     winner ??= grown[0]!.reply;
     created += grown.length;
-    // A long retained placement history is additional to the current population.
-    await stack.fuseki
-      .update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
-      ${Array.from(
-        { length: size },
-        (
-          _,
-          index,
-        ) => `${iri(`urn:rezics:g1034:history:${size}:${index}`)} a rv:RealmReplyPlacement ;
-        rv:component ${iri(`urn:rezics:g1034:retained:${index}`)} ; rv:realm ${iri(realm)} ; rv:placementOutcome rv:Accepted ;
-        rv:dataEpoch ${lit(epoch)} ; rv:sequence 0 .`,
-      ).join('\n')} } }`);
+    evidence.push({
+      seedCount: grown.length,
+      seedMs: Math.round(seedMs),
+      perReplyMs: grown.length ? Math.round(seedMs / grown.length) : 0,
+    });
+    // Product commands leave one current placement each. Page bytes staying
+    // flat as this population grows is the ranking bound; the assembler has
+    // no raw update with which to park extra retained placements.
+    await project();
+    if (!scored) {
+      const winnerPlacement = grown[0]?.placement;
+      if (!winnerPlacement) throw new Error('Seeded reply has no placement');
+      // One upvote on the earliest seeded thread and on the opening. Equal
+      // scores still rank the newer winner first; the opening stays ahead of
+      // every unvoted thread.
+      await vote('g1034:score:winner', winnerPlacement);
+      await vote('g1034:score:opening', opening.placement);
+      scored = true;
+    }
     await stack.accessPool.query('ANALYZE access.realm_thread_order');
     const raw = (
       await stack.accessPool.query<{
@@ -651,7 +707,7 @@ try {
       size,
       preparationMs: performance.now() - started,
       basis:
-        'real owner snapshot imported from API-created template; first/warm are not engine-cold',
+        'replies posted through the Realm reply commands and projected; first/warm are not engine-cold',
     });
   }
   // Rolling windows select their entire eligible populations before LIMIT.
@@ -705,7 +761,9 @@ try {
       expectedRevision: null,
     },
   });
-  assert.equal(voted.score, 1000001);
+  // The opening already carries the author's upvote. This reader's vote and
+  // the two concurrent score writes below compose on that baseline.
+  assert.equal(voted.score, 2);
   await Promise.all([
     stack.accessPool.query(
       'UPDATE access.feed_item SET score=score+1 WHERE data_epoch=$1 AND id=$2',
@@ -729,7 +787,7 @@ try {
         [epoch, realm, opening.reply],
       )
     ).rows[0]!.score,
-    1000003,
+    4,
   );
   const child = await post('g1034:child', opening);
   await project();
@@ -814,6 +872,7 @@ try {
     ],
     child: child.reply,
   });
+  if (scaleBlocker) throw new Error(scaleBlocker);
 } finally {
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
