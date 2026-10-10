@@ -1,3 +1,4 @@
+import { logWorkerFault } from '@rezics/observability/log';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
 import { BackpressureSaturated, BackpressureUnavailable, InFlightAdmission,
@@ -86,33 +87,49 @@ export function contentProjectionPositions(
   };
 }
 
-/** Graph control high water (one bound SPARQL lookup) against the relay
- * checkpoint (one primary-key read). A held or foreign epoch is unavailable. */
+type BrokerProbeCode = 'graph_control_ambiguous' | 'graph_control_held'
+  | 'relay_checkpoint_foreign_epoch' | 'relay_position_gap';
+
+function brokerProbeFault(code: BrokerProbeCode): Error {
+  const error = new Error(code);
+  error.name = 'BrokerLaneProbe';
+  return Object.assign(error, { code });
+}
+
+/** Graph control high water against the relay checkpoint. No checkpoint on this
+ * epoch is no handoff yet (delivered 0, backlog = head). A held or ambiguous
+ * control row, or a checkpoint from another epoch, is unavailable. The
+ * checkpoint is read first and the head second, because the head only grows;
+ * a checkpoint ahead of that head is read once more and only a repeat is a gap. */
 export function relayHandoffPositions(fuseki: FusekiClient, dataEpoch: string,
   readCheckpoint: () => Promise<{ dataEpoch: string; sequence: string } | null>,
 ): () => Promise<DurablePositions> {
-  return async () => {
-    const [control, checkpoint] = await Promise.all([fuseki.query(`PREFIX rv: <${RV}>
+  const observe = async (): Promise<DurablePositions> => {
+    const checkpoint = await readCheckpoint();
+    const control = await fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?sequence ?hold WHERE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(dataEpoch)} ;
           rv:sequence ?sequence . }
         OPTIONAL { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?hold } }
-      } LIMIT 2`), readCheckpoint()]);
+      } LIMIT 2`);
     const rows = control.results?.bindings ?? [];
-    if (rows.length !== 1 || rows[0]?.hold?.value === 'true') {
-      throw new Error('graph outbox source is held or ambiguous');
-    }
-    if (!checkpoint || checkpoint.dataEpoch !== dataEpoch) {
-      throw new Error('relay checkpoint epoch differs');
-    }
+    if (rows.length !== 1) throw brokerProbeFault('graph_control_ambiguous');
+    if (rows[0]?.hold?.value === 'true') throw brokerProbeFault('graph_control_held');
+    if (checkpoint && checkpoint.dataEpoch !== dataEpoch) throw brokerProbeFault('relay_checkpoint_foreign_epoch');
     return { dataEpoch, head: position(rows[0]?.sequence?.value, 'graph outbox'),
-      delivered: position(checkpoint.sequence, 'relay checkpoint') };
+      delivered: checkpoint ? position(checkpoint.sequence, 'relay checkpoint') : 0n };
+  };
+  return async () => {
+    let positions = await observe();
+    if (positions.delivered > positions.head) positions = await observe();
+    if (positions.delivered > positions.head) throw brokerProbeFault('relay_position_gap');
+    return positions;
   };
 }
 
 /**
  * Lane budgets for OPS06. Durable lanes read positions, not rows, so a
- * snapshot costs a fixed four owner calls whatever the backlog; the object lane
+ * snapshot stays a bounded number of owner calls whatever the backlog; the object lane
  * is process-local. New intents are refused at the Main boundary before any
  * owner effect; admitted outbox records remain until their consumer
  * acknowledges them, so saturation never drops work.
@@ -142,9 +159,17 @@ export class OperationsBackpressure {
     if (!probe) return { ...empty, state: 'unobserved' };
     let positions: DurablePositions;
     try { positions = await probe(); }
-    catch { return { ...empty, state: 'unavailable' }; }
+    catch (error) {
+      const fault = error instanceof Error ? error : new Error('probe threw');
+      if (typeof (fault as { code?: unknown }).code !== 'string') Object.assign(fault, { code: 'probe_threw' });
+      logWorkerFault(`main.${lane}.backpressure`, fault);
+      return { ...empty, state: 'unavailable' };
+    }
     // A checkpoint ahead of its source is a gap, never negative backlog.
-    if (positions.delivered > positions.head) return { ...empty, state: 'unavailable' };
+    if (positions.delivered > positions.head) {
+      logWorkerFault(`main.${lane}.backpressure`, Object.assign(new Error('position_gap'), { code: 'position_gap' }));
+      return { ...empty, state: 'unavailable' };
+    }
     const backlog = positions.head - positions.delivered;
     return { lane, maxBacklog, state: backlog >= BigInt(maxBacklog) ? 'saturated' : 'open',
       dataEpoch: positions.dataEpoch, head: positions.head.toString(),
