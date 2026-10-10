@@ -2584,6 +2584,14 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/works/{id}/progress",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/works/{id}/reader-state",
     "ids": [
       "path:id",
