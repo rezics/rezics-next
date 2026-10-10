@@ -16,6 +16,7 @@ import { dispatchTool } from '../../../services/main/src/modules/mcp/dispatch.ts
 import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { createStatementProperty } from './statement-property.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 
 interface Report { erasureId: string; targets: { owner: string; kind: string; ref: string }[] }
@@ -212,8 +213,12 @@ serial('public Work reads omit an erased revision and keep its siblings', async 
 
 serial('Statement reads do not return an erased revision', async (scene) => {
   await scene.grant(`statement:speak:${scene.actor}`, 'statement.record');
-  const meaning = { subject: scene.mainVersion, predicate: 'https://example.org/erasure-reader',
-    relationDefinition: nativeId(), value: { kind: 'literal' as const, lexical: 'kept statement text',
+  await scene.grant('semantic:create:root', 'semantic.change');
+  const property = await createStatementProperty(
+    (method, path, payload) => scene.call(method, path, payload as object | undefined), scene.actor);
+  await scene.grant(`semantic:read:${property.predicate}`, 'semantic.read');
+  const meaning = { subject: scene.mainVersion, predicate: property.predicate,
+    relationDefinition: property.relationDefinition, value: { kind: 'literal' as const, lexical: 'kept statement text',
       datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
     applicability: [], interpretation: { kind: 'selected' as const }, evidence: [] };
   const written = await scene.call('POST', '/v1/statements', { profile: 'statement-v1',
