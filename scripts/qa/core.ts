@@ -184,14 +184,18 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
 }
 
 export function sourceIdentity(root: string): { head: string; fingerprint: string; clean: boolean } {
-  const head = command(root, 'git', ['rev-parse', 'HEAD'], 5_000);
+  // A full-tree status takes seconds on a loaded host; a short wait turned load into a gate failure.
+  const head = command(root, 'git', ['rev-parse', 'HEAD'], 60_000);
   const status = command(
     root,
     'git',
     ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-    5_000,
+    60_000,
   );
-  if (!head.ok || !status.ok) throw new Error('Cannot identify source tree');
+  if (!head.ok || !status.ok) {
+    const failed = !head.ok ? `git rev-parse HEAD (${head.elapsedMs} ms)` : `git status (${status.elapsedMs} ms)`;
+    throw new Error(`Cannot identify source tree: ${failed}: ${(!head.ok ? head : status).output.slice(-400)}`);
+  }
   const hash = createHash('sha256').update(head.output);
   const scratch = join(root, '.temp');
   mkdirSync(scratch, { recursive: true });
