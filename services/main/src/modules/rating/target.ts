@@ -15,7 +15,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, CancelledAct
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE,
   ratingContextDigest, ratingContextReceiptIri, readRatingContextReceipt, sealRatingContextAdmission,
   RatingRealmUnavailable, type RatingContextReceipt } from './context.ts';
-import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInput, RatingObservationUnavailable,
+import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInput, RatingCurrentVisibility, RatingObservationUnavailable,
   StaleRatingObservation, sealStandingRatingAdmission, sealRatingObservationTerminal,
   standingRatingReceiptIri, type RatingObservationReceipt } from './observation.ts';
 import { RatingTargetGrainMismatch } from './release.ts';
@@ -390,7 +390,7 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
   const existing = await readTargetRatingReceipt(env, admission.id);
   if (existing) return checked(existing, admission);
   const context = await readTargetRatingContext(env, input.context);
-  if (!context) throw new RatingObservationUnavailable('Target Context unavailable');
+  if (!context) throw new RatingCurrentVisibility('Target Context unavailable');
   if (target.resource !== input.target || target.base !== context.targetGrain) throw new RatingTargetGrainMismatch();
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Target admission expired');
   const slot = targetRatingSlotIri(admission.principalId, input.context, input.target);

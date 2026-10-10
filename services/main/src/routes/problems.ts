@@ -121,7 +121,7 @@ import { InvalidRatingPolicyInput, RatingPolicyUnavailable, StaleRatingPolicy }
   from '../modules/rating/policy.ts';
 import { RatingInventoryConflict } from '../modules/rating/aggregate-inventory.ts';
 import { InvalidRatingContextInput, RatingRealmUnavailable } from '../modules/rating/context.ts';
-import { InvalidRatingObservationInput, RatingObservationUnavailable, StaleRatingObservation }
+import { InvalidRatingObservationInput, RatingCurrentVisibility, RatingObservationUnavailable, StaleRatingObservation }
   from '../modules/rating/observation.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded, RatingAggregateUnavailable }
   from '../modules/rating/aggregate.ts';
@@ -496,10 +496,15 @@ export function typedRefusal(error: unknown): Response | undefined {
     return problem(409, 'realm_classification_unavailable', 'Realm classification context cannot be created');
   }
   if (error instanceof RatingRealmUnavailable) {
-    return problem(404, 'realm_unavailable', 'Rating Realm is unavailable');
+    // The Realm check runs after the key is claimed. A hidden Realm and an
+    // absent one share this refusal, and the key stays unsealed.
+    return problem(503, 'realm_unavailable', 'Rating Realm is unavailable');
   }
   if (error instanceof InvalidRatingPolicyInput) {
     return problem(400, 'invalid_request', 'Rating policy request is invalid');
+  }
+  if (error instanceof RatingCurrentVisibility) {
+    return problem(503, 'rating_observation_unavailable', 'Rating observation is unavailable');
   }
   if (error instanceof RatingObservationUnavailable) {
     return problem(409, 'rating_observation_unavailable', 'Rating observation is unavailable');
