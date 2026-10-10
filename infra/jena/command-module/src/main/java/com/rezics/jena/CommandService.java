@@ -151,36 +151,6 @@ final class CommandService extends ActionService {
                 action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                 respond(action, 200, result); return;
             }
-            if (body.get("claimFoldClassifySeal") != null) {
-                if (!authorized(action, maintenanceCapability)) {
-                    respond(action, 403, Map.of("status", "forbidden")); return;
-                }
-                var request = ClaimFoldInventory.parseClassifySeal(bytes);
-                var result = ClaimFoldInventory.sealClassification(action.getDataService().getDataset(), request, publicSearchWriteEpoch);
-                action.getResponse().setHeader("Server-Timing", work.serverTiming());
-                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, result); return;
-            }
-            if (body.get("claimFoldClassify") != null) {
-                if (!authorized(action, maintenanceCapability)) {
-                    respond(action, 403, Map.of("status", "forbidden")); return;
-                }
-                var request = ClaimFoldInventory.parseClassify(bytes);
-                var result = ClaimFoldInventory.classify(action.getDataService().getDataset(), request);
-                action.getResponse().setHeader("Server-Timing", work.serverTiming());
-                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, result); return;
-            }
-            if (body.get("claimFoldRetain") != null) {
-                if (!authorized(action, maintenanceCapability)) {
-                    respond(action, 403, Map.of("status", "forbidden")); return;
-                }
-                var request = ClaimFoldInventory.parseRetain(bytes);
-                var result = ClaimFoldInventory.retain(action.getDataService().getDataset(), request, profiles, publicSearchWriteEpoch);
-                action.getResponse().setHeader("Server-Timing", work.serverTiming());
-                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, result); return;
-            }
             if (body.get("datasetReset") != null) {
                 // Maintenance capability only. Raw update refuses to remove the
                 // work-scope proof graph, and this envelope is not SPARQL.
@@ -210,40 +180,6 @@ final class CommandService extends ActionService {
                 action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                 // The exclusive-writer refusal is a typed conflict. Prepared and deadline pages stay successful.
                 respond(action, "unavailable".equals(result.get("status")) ? 409 : 200, result); return;
-            }
-            if (body.get("claimFoldMembers") != null) {
-                if (!authorized(action, maintenanceCapability)) {
-                    respond(action, 403, Map.of("status", "forbidden")); return;
-                }
-                var request = ClaimFoldInventory.parseMembers(bytes);
-                var result = ClaimFoldInventory.readMembers(action.getDataService().getDataset(), request);
-                action.getResponse().setHeader("Server-Timing", work.serverTiming());
-                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, result); return;
-            }
-            if (body.get("claimFoldDisposition") != null) {
-                if (!authorized(action, maintenanceCapability)) {
-                    respond(action, 403, Map.of("status", "forbidden")); return;
-                }
-                var request = ClaimFoldInventory.parseDisposition(bytes);
-                var result = ClaimFoldInventory.readDisposition(action.getDataService().getDataset(), request);
-                action.getResponse().setHeader("Server-Timing", work.serverTiming());
-                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, result); return;
-            }
-            if (body.get("claimFoldInventory") != null) {
-                // Inventory is an owned maintenance operation. Check its
-                // capability before the closed raw-wire decoder or size gate.
-                if (!authorized(action, maintenanceCapability)) {
-                    respond(action, 403, Map.of("status", "forbidden")); return;
-                }
-                if (bytes.length > 16 * 1024 || !body.keys().equals(Set.of("claimFoldInventory")))
-                    throw new IllegalArgumentException("invalid Claim inventory envelope");
-                var request = ClaimFoldInventory.parse(bytes);
-                var result = ClaimFoldInventory.turn(action.getDataService().getDataset(), request);
-                action.getResponse().setHeader("Server-Timing", work.serverTiming());
-                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, ClaimFoldInventory.json(result)); return;
             }
             if (body.get("templateIndex") != null) {
                 if (!authorized(action, admittedCapability)) { respond(action,403,Map.of("status","forbidden")); return; }
@@ -872,10 +808,7 @@ final class CommandService extends ActionService {
             if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
                 throw new java.util.concurrent.CancellationException("native command cancelled or expired");
             boolean replay = receiptValue(dataset, receipt, "requestDigest") != null;
-            // The fixed Claim fold validates a Claim prestate and a source-free,
-            // evidence-empty Statement; it cannot change publication potential.
-            var publicationMembership = ClaimStatementFoldPolicy.applies(receipt)
-                ? null : new StatementPublicationMembership(dataset, plan);
+            var publicationMembership = new StatementPublicationMembership(dataset, plan);
             Map<String, Object> result;
             if (MetadataRestorePolicy.applies(receipt)) {
                 if (slim != null) return invalid("metadata restore cannot carry a live slim envelope");
@@ -985,9 +918,6 @@ final class CommandService extends ActionService {
             if (replay && (delta.contentReplayIntact() || delta.changes().isEmpty())) return result;
             if (publicationMembership != null) publicationMembership.advance(receipt);
             CommandWork.enter("commit");
-            if (ClaimStatementFoldPolicy.applies(receipt)
-                && (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline))
-                return Map.of("status", "deadline");
             SemanticSourceBasis.check(deadline);
             TemplateIndexService.workScopeBudget(deadline);
             CommitHalt.commit(dataset); commit = true;
@@ -1057,15 +987,13 @@ final class CommandService extends ActionService {
             if (existing != null) {
                 if (!existing.equals(digest)
                     || (StatementUpgradePolicy.applies(receipt) && !StatementUpgradePolicy.templateDigest(update)
-                        .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest")))
-                    || (ClaimStatementFoldPolicy.applies(receipt) && !ClaimStatementFoldPolicy.templateDigest(update)
-                        .equals(receiptValue(dataset, receipt, "claimFoldTemplateDigest"))))
+                        .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest"))))
                     return Map.of("status", "conflict");
                 if (delta != null) SearchDeltaJournal.repairContentReceipt(dataset, receipt, delta, publicSearchWriteEpoch.get() + 1);
                 Map<String,Object> replay = new LinkedHashMap<>(committed(dataset,receipt));
                 // Native maintenance does not retain a template-directory delta
                 // on its initial commit; replay returns that same receipt result.
-                if (!slim && !StatementUpgradePolicy.applies(receipt) && !ClaimStatementFoldPolicy.applies(receipt))
+                if (!slim && !StatementUpgradePolicy.applies(receipt))
                     replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan));
                 return replay;
             }
@@ -1073,13 +1001,6 @@ final class CommandService extends ActionService {
             if (legacySlim != null) return invalid(legacySlim);
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
-            if (ClaimStatementFoldPolicy.applies(receipt)) {
-                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
-                String inventory = ClaimFoldInventory.conversionGate(dataset, plan, receipt, deadline);
-                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
-                if (inventory != null) return invalid(inventory);
-                return evaluateClaimStatementFold(dataset, receipt, digest, update, plan, validations, deadline, delta);
-            }
             if (StatementUpgradePolicy.applies(receipt))
                 return evaluateStatementUpgrade(dataset, receipt, digest, update, plan, validations, deadline, delta);
             String erasure = ErasurePolicy.preflight(dataset, plan, receipt);
@@ -1256,97 +1177,6 @@ final class CommandService extends ActionService {
         // The dataset remains held at zero; owner custody retains the old event and both source positions.
         MembershipNormalFormPolicy.applied(physical, membership);
         return committed(physical, receipt);
-    }
-
-    /** One fixed retained Claim fold; generic canonical retyping remains refused. */
-    private Map<String, Object> evaluateClaimStatementFold(DatasetGraph dataset, String receipt, String digest,
-        String update, CommandPolicy.Plan plan, List<Validation> validations, long deadline,
-        SearchDeltaJournal.Capture delta) {
-        var control = CommandInvariant.readControl(dataset);
-        var before = ClaimStatementFoldPolicy.capture(dataset, receipt, digest, plan);
-        if (before.error() != null) return invalid(before.error());
-        List<Validation> nativeValidations = List.of();
-        Node claim = null;
-        if (!plan.current().isEmpty()) {
-            claim = claimFoldReceiptTerm(plan, receipt, "convertedClaim");
-            Node source = claimFoldReceiptTerm(plan, receipt, "sourceClaimRevision");
-            Node revision = claimFoldReceiptTerm(plan, receipt, "statementRevision");
-            nativeValidations = List.of(
-                new Validation("statement-v1", profiles.get("statement-v1"),
-                    "https://rezics.com/definition/statement-v1/statement-shape", List.of(claim.getURI()),
-                    List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()),
-                new Validation("statement-v1", profiles.get("statement-v1"),
-                    "https://rezics.com/definition/statement-v1/revision-shape", List.of(revision.getURI()),
-                    List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
-            for (var focus : List.of(Map.entry("claim", claim), Map.entry("revision", source))) {
-                Map<String, Object> report = validateOne(dataset, new Validation("claim-v1", profiles.get("claim-v1"),
-                    "https://rezics.com/definition/claim-v1/" + focus.getKey() + "-shape",
-                    List.of(focus.getValue().getURI()), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
-                if (report != null) return report;
-                if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
-            }
-        }
-        if (validations.size() != nativeValidations.size())
-            return invalid("Claim fold validation footprint differs");
-        for (Validation expected : nativeValidations) if (validations.stream().filter(entry ->
-            entry.profileId().equals(expected.profileId()) && entry.shape().equals(expected.shape())
-                && entry.focus().equals(expected.focus()) && entry.graphs().equals(expected.graphs())
-                && entry.binding().isEmpty()).count() != 1)
-            return invalid("Claim fold validation focus differs");
-        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
-        CommandWork.enter("update");
-        CommandOverlay primary = new CommandOverlay(CommandWork.observe(delta == null ? dataset : delta.observed()));
-        ClaimStatementFoldPolicy.applyExact(primary, before, plan);
-        MembershipNormalFormPolicy.Result membership = MembershipNormalFormPolicy.check(primary, profiles, deadline);
-        if (membership.error() != null) return invalid(membership.error());
-        primary.apply();
-        String stored = receiptValue(dataset, receipt, "requestDigest");
-        if (stored == null) return Map.of("status", "guard-unmatched");
-        if (!digest.equals(stored)) return Map.of("status", "conflict");
-        CommandWork.enter("invariants");
-        String invariant = CommandInvariant.check(dataset, receipt, digest, plan, control);
-        if (invariant != null) return invalid(invariant);
-        String conversion = ClaimStatementFoldPolicy.check(dataset, before);
-        if (conversion != null) return invalid(conversion);
-        // Retained Claim C remains visible for original R and assessment class
-        // validation. The fixed native view excludes only that archived descriptor.
-        if (claim != null) {
-            Map<String, Object> historical = validateOne(dataset, new Validation("claim-v1", profiles.get("claim-v1"),
-                "https://rezics.com/definition/claim-v1/claim-shape", List.of(claim.getURI()),
-                List.of(CommandPolicy.REVISIONS), Map.of()));
-            if (historical != null) return historical;
-        }
-        DatasetGraph nativeView = ClaimStatementFoldPolicy.validationView(dataset, plan);
-        CommandPolicy.Plan nativePlan = ClaimStatementFoldPolicy.nativePlan(plan, receipt);
-        Map<String, Object> scope = validateScope(nativeView, receipt, nativePlan, nativeValidations, Set.of(), Set.of());
-        if (scope != null) return scope;
-        for (Validation validation : nativeValidations) {
-            Map<String, Object> report = validateOne(nativeView, validation);
-            if (report != null) return report;
-            if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
-        }
-        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
-        dataset.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
-            NodeFactory.createURI(RV + "claimFoldTemplateDigest"),
-            NodeFactory.createLiteralString(ClaimStatementFoldPolicy.templateDigest(update)));
-        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
-        String disposition = ClaimFoldInventory.stageConverted(CommandWork.observe(dataset), plan, receipt, update, deadline);
-        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
-        if (disposition != null) return invalid(disposition);
-        if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
-        // Fixed template and control checks preserve both graph and relay cuts.
-        return committed(dataset, receipt);
-    }
-    private static Node claimFoldReceiptTerm(CommandPolicy.Plan plan, String receipt, String predicate) {
-        var modify = (org.apache.jena.sparql.modify.request.UpdateModify) plan.request().getOperations().getFirst();
-        List<Node> values = modify.getInsertQuads().stream().filter(quad ->
-            quad.getGraph().equals(NodeFactory.createURI(CommandPolicy.RECEIPTS))
-                && quad.getSubject().equals(NodeFactory.createURI(receipt))
-                && quad.getPredicate().equals(NodeFactory.createURI(RV + predicate)))
-            .map(Quad::getObject).toList();
-        if (values.size() != 1 || !values.getFirst().isURI())
-            throw new IllegalArgumentException("Claim fold receipt reference differs: " + predicate);
-        return values.getFirst();
     }
 
     /** Maintenance has its own closed write footprint, while canonical shapes still validate every native subject. */
