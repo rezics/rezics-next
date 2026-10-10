@@ -213,7 +213,7 @@ test('erasure journal schema installs empty, upgrades current head and allocates
     '23514');
 }, 60_000);
 
-test('migration 019 keeps populated erasure targets and admits the new kinds', async () => {
+test('migration 22 keeps populated erasure targets and admits the new kinds', async () => {
   const relay = await database('relay_019');
   const before = relayFiles(name => migrationVersion(name) < 19);
   expect(before.some(name => migrationVersion(name) === 10)).toBe(true);
