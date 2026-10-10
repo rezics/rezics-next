@@ -5,8 +5,9 @@ import { RealmReplyConflict, RealmReplyDenied, RealmReplyInvalid,
 import { realmReplyDigest } from '../modules/realm-reply/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
-import { resolveTargets } from '../modules/target/resolve.ts';
-import { workRead } from '../modules/work/read-session.ts';
+import { readReplyRoot } from '../modules/realm-reply/root.ts';
+import { resolveTargets, targetRead } from '../modules/target/resolve.ts';
+import { WorkReadMissing, workRead } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -84,6 +85,13 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
         const idempotencyKey = key(request);
         if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        // A root the caller cannot read is a missing read. Answering it here
+        // writes no admission, receipt, or graph command.
+        await targetRead(work.environment, { access: work.access, principal, actingSubject: body.author }, async session => {
+          if (!await readReplyRoot(session, body.rootTarget, body.rootRevision, body.contextRevision)) {
+            throw new WorkReadMissing('Reply root is unavailable');
+          }
+        });
         const { profile: _profile, ...input } = body;
         const result = await work.realmReplies.create(principal, input, idempotencyKey,
           realmReplyDigest(body));
