@@ -1,4 +1,4 @@
-// Goal worker-process control: exclusive claims, dispatch, waits, QA slots, scope and merge.
+// Goal worker-process control: exclusive claims, dispatch, waits, QA slots, gate lanes, scope and merge.
 // The manager is the only caller of the state-changing commands; see docs/goals/README.md.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -2642,7 +2642,8 @@ function unitGateShards(): number {
   return positiveInteger('GOAL_UNIT_GATE_SHARDS', 4);
 }
 
-/** Wall clock for every shard of one side. Twelve minutes: one Access-sized run previously waited past 25. */
+/** Wall clock for every shard of one side. Twelve minutes: one Access-sized run previously waited past 25.
+ * A merge gate starts this clock after it holds a gate lane, so time spent waiting for a lane is not included. */
 function unitGateBudgetMs(): number {
   return positiveInteger('GOAL_UNIT_GATE_BUDGET_MS', 12 * 60 * 1000);
 }
@@ -4737,13 +4738,20 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   let regated = false;
   let retyped = false;
   const skipTypes = flags.has('--skip-type-gate');
+  const skipUnits = flags.has('--skip-unit-gate');
+  const laneCommand = `${landPermittedFiles !== undefined ? 'land' : gateOnly ? 'gate' : 'merge'} ${id}`;
   const typecheck = (merge: PreparedMerge, only?: readonly string[]) =>
     preMergeTypecheckGate(merge.worktree, root, merge.before, merge.committed, skipTypes, only);
+  const unitGate = (merge: PreparedMerge) =>
+    preMergeUnitGate(merge.worktree, root, merge.before, merge.sharers, skipUnits, gatedFiles);
+  // Regeneration stays outside the lane. Type check and unit work share one lease, and each side's
+  // budget starts inside that work, after the wait.
+  const onLane = <T>(work: () => Promise<T>): Promise<T> => withGateLane(() => work(), { command: laneCommand });
   const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
     const generated = regenerateGeneratedOutputs(merge);
     if (generated) return generated;
-    return typecheck(merge).then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.before, merge.sharers,
-      flags.has('--skip-unit-gate'), gatedFiles));
+    const run = () => typecheck(merge).then(refusal => refusal ?? unitGate(merge));
+    return skipTypes && skipUnits ? run() : onLane(run);
   };
   let gateFailure = await gate(preparedMerge);
   for (;;) {
@@ -4809,7 +4817,11 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (!outcome) return;
     preparedMerge = outcome.rerun;
     retyped = true;
-    if (outcome.workspaces) gateFailure = await typecheck(outcome.rerun, outcome.workspaces);
+    if (outcome.workspaces) {
+      const workspaces = outcome.workspaces;
+      const rerun = () => typecheck(outcome.rerun, workspaces);
+      gateFailure = skipTypes ? await rerun() : await onLane(rerun);
+    }
     else {
       regated = true;
       gateFailure = await gate(outcome.rerun);
@@ -5027,6 +5039,8 @@ async function status(): Promise<void> {
   console.log(`shared lifecycle: ${sharedLifecycleStatus()}`);
   for (const waiting of sharedLifecycleWaiters()) console.log(waiting);
   for (const waiting of qaWaitStatusLines()) console.log(waiting);
+  console.log(`gate lanes: ${gateLaneStatus()}`);
+  for (const waiting of gateLaneWaiters()) console.log(waiting);
   const active = activeGoals(ledger);
   for (const slug of active) {
     const own = tasks.filter(task => task.goal === slug);
@@ -5186,6 +5200,150 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
     } catch { rmSync(path, { force: true }); }
   }
   return lines.sort();
+}
+
+/** Concurrent type-check and unit gates share this many process-identity leases.
+ * A killed gate's lease is stale, so the next gate takes its lane. */
+function gateLaneCount(): number {
+  return positiveInteger('GOAL_GATE_LANES', 2);
+}
+
+const gateLanesDir = join(stateDir, 'gate-lanes');
+const GATE_LANE_POLL_MS = 3_000;
+const GATE_LANE_DEADLINE_MS = 6 * 3_600_000;
+
+interface GateLaneWait {
+  pid: number; goal?: string; command: string; since: string;
+}
+
+interface GateLaneView {
+  held: number; lanes: number; holders: string[];
+}
+
+function gateLaneOwnerLive(info: DirectoryLeaseRecord, alive: (pid: number) => boolean): boolean {
+  if (info.invalid) return false;
+  if (info.start !== undefined && info.boot !== undefined)
+    return processAlive({ pid: info.pid, start: info.start, boot: info.boot });
+  return alive(info.pid);
+}
+
+function gateLaneView(directory: string, lanes: number, alive: (pid: number) => boolean): GateLaneView {
+  const holders: string[] = [];
+  let held = 0;
+  for (let index = 0; index < lanes; index++) {
+    const path = join(directory, String(index));
+    if (!directoryLeaseHeld(path, { alive })) continue;
+    held++;
+    const info = readDirectoryLease(path);
+    if (!info || !gateLaneOwnerLive(info, alive)) continue;
+    holders.push(`Goal ${info.goal ?? '?'} since ${info.startedAt ?? 'unknown'} (pid ${info.pid}): ${info.command ?? 'gate'}`);
+  }
+  return { held, lanes, holders };
+}
+
+function gateLaneBusyText(view: GateLaneView): string {
+  return `${view.held}/${view.lanes} gate lanes busy${view.holders.length ? `: ${view.holders.join('; ')}` : ''}`;
+}
+
+/** Live waiters. A record whose process is gone is removed, the same way a QA slot waiter is. */
+function readGateLaneWaiters(directory: string, alive: (pid: number) => boolean): GateLaneWait[] {
+  const waiterDirectory = join(directory, 'waiters');
+  let names: string[];
+  try { names = readdirSync(waiterDirectory); } catch { return []; }
+  const waiting: GateLaneWait[] = [];
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const path = join(waiterDirectory, name);
+    try {
+      const wait = JSON.parse(readFileSync(path, 'utf8')) as GateLaneWait;
+      if (!Number.isSafeInteger(wait.pid) || wait.pid <= 0 || typeof wait.command !== 'string'
+        || typeof wait.since !== 'string' || !alive(wait.pid)) {
+        rmSync(path, { force: true });
+        continue;
+      }
+      waiting.push(wait);
+    } catch { rmSync(path, { force: true }); }
+  }
+  return waiting;
+}
+
+/** Holders and how many gates are waiting. Dead holders are omitted; the next acquire reclaims their lease. */
+export function gateLaneStatus(directory = gateLanesDir, alive: (pid: number) => boolean = pidAlive,
+  lanes = gateLaneCount()): string {
+  const view = gateLaneView(directory, lanes, alive);
+  const who = view.holders.length ? ` (${view.holders.join('; ')})` : '';
+  return `${view.held}/${view.lanes} busy${who}; ${readGateLaneWaiters(directory, alive).length} waiting`;
+}
+
+export function gateLaneWaiters(directory = gateLanesDir, alive: (pid: number) => boolean = pidAlive,
+  lanes = gateLaneCount()): string[] {
+  const message = gateLaneBusyText(gateLaneView(directory, lanes, alive));
+  return readGateLaneWaiters(directory, alive).map(wait =>
+    `Gate waiting for lane: Goal ${wait.goal ?? '?'} (pid ${wait.pid}): ${wait.command}; ${message}`).sort();
+}
+
+export interface GateLaneOptions {
+  directory?: string;
+  lanes?: number;
+  pollMs?: number;
+  timeoutMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  announce?: (message: string) => void;
+  alive?: (pid: number) => boolean;
+  goal?: string;
+  command?: string;
+  pid?: number;
+}
+
+/** One host-wide lane for a gate's type check and unit work. `work` starts only after the lease is held,
+ * so the per-side budget does not include the wait. The lease records this process; a kill leaves it stale. */
+export async function withGateLane<T>(work: (hold: { acquiredAt: number }) => Promise<T>,
+  options: GateLaneOptions = {}): Promise<T> {
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
+  const announce = options.announce ?? console.error;
+  const alive = options.alive ?? (pid => pidAlive(pid));
+  const pid = options.pid ?? process.pid;
+  const lanes = options.lanes ?? gateLaneCount();
+  const directory = options.directory ?? gateLanesDir;
+  const goal = options.goal ?? currentQaGoal();
+  const command = options.command ?? 'gate';
+  const waiterDirectory = join(directory, 'waiters');
+  const deadline = now() + (options.timeoutMs ?? GATE_LANE_DEADLINE_MS);
+  mkdirSync(directory, { recursive: true });
+  let held: AcquiredDirectoryLease | undefined;
+  let waitPath: string | undefined;
+  let announced = false;
+  try {
+    while (!held) {
+      for (let index = 0; index < lanes && !held; index++) {
+        const acquired = tryAcquireDirectoryLease(join(directory, String(index)), {
+          pid, alive: candidate => alive(candidate),
+          note: { goal, command, startedAt: new Date(now()).toISOString() },
+        });
+        if (acquired !== 'held') held = acquired;
+      }
+      if (held) break;
+      const message = gateLaneBusyText(gateLaneView(directory, lanes, alive));
+      const record: GateLaneWait = { pid, goal, command, since: new Date(now()).toISOString() };
+      mkdirSync(waiterDirectory, { recursive: true });
+      waitPath ??= join(waiterDirectory, `lane-${pid}-${randomUUID()}.json`);
+      atomicJson(waitPath, record);
+      if (!announced) {
+        announce(`waiting for gate lane; ${message}`);
+        announced = true;
+      }
+      if (now() > deadline) throw new Error('No gate lane became free within six hours; waiting for a gate lane');
+      await sleep(options.pollMs ?? GATE_LANE_POLL_MS);
+    }
+    if (waitPath) rmSync(waitPath, { force: true });
+    waitPath = undefined;
+    return await work({ acquiredAt: now() });
+  } finally {
+    if (waitPath) rmSync(waitPath, { force: true });
+    held?.release();
+  }
 }
 
 /** `process.exit` from a signal still runs the exit hook, which is the one place a waiting ticket is removed without `finally`. */

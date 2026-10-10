@@ -14,6 +14,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
+  gateLaneStatus, gateLaneWaiters, withGateLane,
   mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -4393,6 +4394,215 @@ describe('goalctl archive', () => {
       expect(treeMentions(dir, [])).toEqual([]);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+describe('gate lanes', () => {
+  const pass = (files: readonly string[]): UnitShardResult => ({
+    done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+    output: '', ms: 1, files: [...files],
+  });
+
+  async function until(check: () => boolean): Promise<void> {
+    const deadline = Date.now() + 2_000;
+    while (!check() && Date.now() < deadline) await Bun.sleep(5);
+  }
+
+  test('a third concurrent gate waits for a lane', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'gate-lanes-'));
+    const directory = join(root, 'lanes');
+    const previous = process.env.GOAL_GATE_LANES;
+    delete process.env.GOAL_GATE_LANES;
+    const entered: string[] = [];
+    const release = new Map<string, () => void>();
+    const pending: Promise<unknown>[] = [];
+    let releasePrimary: (() => void) | undefined;
+    let releaseNext: (() => void) | undefined;
+    const hold = (name: string, announce?: (message: string) => void) => {
+      const run = withGateLane(() => new Promise<void>(done => {
+        entered.push(name);
+        release.set(name, done);
+      }), {
+        directory, command: `merge ${name}`, goal: 'program', pollMs: 5,
+        ...(announce ? { announce } : {}),
+      });
+      pending.push(run);
+      return run;
+    };
+    try {
+      const first = hold('G-1');
+      const second = hold('G-2');
+      expect(entered).toEqual(['G-1', 'G-2']);
+      const messages: string[] = [];
+      const third = hold('G-3', message => messages.push(message));
+      expect(entered).toEqual(['G-1', 'G-2']);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toContain('waiting for gate lane; 2/2 gate lanes busy');
+      expect(messages[0]).toContain('merge G-1');
+      expect(messages[0]).toContain('merge G-2');
+      expect(messages[0]).toContain(`pid ${process.pid}`);
+      const waiting = gateLaneStatus(directory);
+      expect(waiting).toContain('2/2 busy');
+      expect(waiting).toContain('1 waiting');
+      expect(waiting).toContain('merge G-1');
+      expect(waiting).toContain('merge G-2');
+      const waiters = gateLaneWaiters(directory);
+      expect(waiters).toEqual([
+        expect.stringContaining(`Gate waiting for lane: Goal program (pid ${process.pid}): merge G-3`),
+      ]);
+      expect(waiters[0]).toContain('2/2 gate lanes busy');
+      expect(waiters[0]).toContain('merge G-1');
+      expect(waiters[0]).toContain('merge G-2');
+      release.get('G-1')!();
+      await first;
+      await until(() => entered.includes('G-3'));
+      expect(entered).toEqual(['G-1', 'G-2', 'G-3']);
+      expect(gateLaneWaiters(directory)).toEqual([]);
+      const running = gateLaneStatus(directory);
+      expect(running).toContain('2/2 busy');
+      expect(running).toContain('0 waiting');
+      expect(running).toContain('merge G-2');
+      expect(running).toContain('merge G-3');
+      expect(running).not.toContain('merge G-1');
+      release.get('G-2')!();
+      release.get('G-3')!();
+      await second;
+      await third;
+
+      process.env.GOAL_GATE_LANES = '1';
+      const again: string[] = [];
+      const primary = withGateLane(() => new Promise<void>(done => {
+        again.push('primary');
+        releasePrimary = done;
+      }), { directory, command: 'merge G-4', goal: 'program' });
+      const notes: string[] = [];
+      const next = withGateLane(() => new Promise<void>(done => {
+        again.push('next');
+        releaseNext = done;
+      }), {
+        directory, command: 'merge G-5', goal: 'program', pollMs: 5,
+        announce: message => notes.push(message),
+      });
+      pending.push(primary, next);
+      expect(again).toEqual(['primary']);
+      expect(notes[0]).toContain('waiting for gate lane; 1/1 gate lanes busy');
+      expect(notes[0]).toContain('merge G-4');
+      expect(gateLaneStatus(directory)).toContain('1/1 busy');
+      expect(gateLaneStatus(directory)).toContain('1 waiting');
+      expect(gateLaneWaiters(directory)[0]).toContain('merge G-5');
+      releasePrimary!();
+      await primary;
+      await until(() => again.includes('next'));
+      expect(again).toEqual(['primary', 'next']);
+      releaseNext!();
+      await next;
+    } finally {
+      for (const done of release.values()) done();
+      releasePrimary?.();
+      releaseNext?.();
+      await Promise.allSettled(pending);
+      if (previous === undefined) delete process.env.GOAL_GATE_LANES;
+      else process.env.GOAL_GATE_LANES = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('a gate\'s budget excludes its wait', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'gate-budget-'));
+    const directory = join(root, 'lanes');
+    const work = mkdtempSync(join(tmpdir(), 'gate-budget-files-'));
+    const previous = process.env.GOAL_UNIT_GATE_BUDGET_MS;
+    process.env.GOAL_UNIT_GATE_BUDGET_MS = '400';
+    let releaseHold: (() => void) | undefined;
+    const holder = withGateLane(() => new Promise<void>(done => { releaseHold = done; }), {
+      directory, lanes: 1, command: 'merge G-1', goal: 'program',
+    });
+    const waitedAt = Date.now();
+    const messages: string[] = [];
+    try {
+      await withGateLane(async ({ acquiredAt }) => {
+        let deadline = 0;
+        await runUnitGate(work, ['gate-lane-budget-probe.test.ts'], 1, async (_cwd, files, shardDeadline) => {
+          deadline = shardDeadline;
+          return pass(files);
+        });
+        expect(acquiredAt - waitedAt).toBeGreaterThanOrEqual(400);
+        expect(deadline).toBeGreaterThanOrEqual(acquiredAt + 400);
+        expect(deadline).toBeLessThan(acquiredAt + 400 + 5_000);
+      }, {
+        directory, lanes: 1, command: 'merge G-2', goal: 'program', pollMs: 20,
+        announce: message => messages.push(message),
+        sleep: async () => {
+          await Bun.sleep(500);
+          releaseHold?.();
+          await holder;
+        },
+      });
+      expect(messages[0]).toContain('waiting for gate lane');
+      expect(messages[0]).toContain('merge G-1');
+      expect(messages[0]).toContain(`pid ${process.pid}`);
+    } finally {
+      releaseHold?.();
+      await holder.catch(() => undefined);
+      if (previous === undefined) delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
+      else process.env.GOAL_UNIT_GATE_BUDGET_MS = previous;
+      rmSync(root, { recursive: true, force: true });
+      rmSync(work, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  test('a killed holder frees its lane', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'gate-kill-'));
+    const directory = join(root, 'lanes');
+    const ready = join(root, 'ready');
+    const script = join(root, 'hold.ts');
+    const goalctl = join(import.meta.dir, 'goalctl.ts');
+    writeFileSync(script, `import { writeFileSync } from 'node:fs';
+import { withGateLane } from ${JSON.stringify(goalctl)};
+await withGateLane(async () => {
+  writeFileSync(${JSON.stringify(ready)}, 'held');
+  await new Promise(() => {});
+}, { directory: ${JSON.stringify(directory)}, lanes: 1, command: 'merge G-hold', goal: 'program' });
+`);
+    const child = spawn('bun', [script], { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    const collect = (chunk: unknown) => { output += String(chunk); };
+    child.stdout?.on('data', collect);
+    child.stderr?.on('data', collect);
+    const exited = new Promise<number | null>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', code => resolve(code));
+    });
+    try {
+      const readyDeadline = Date.now() + 10_000;
+      while (!existsSync(ready) && Date.now() < readyDeadline) await Bun.sleep(20);
+      if (!existsSync(ready)) throw new Error(`holder did not take a lane\n${output}`);
+      expect(child.pid).toBeGreaterThan(0);
+      const held = gateLaneStatus(directory, undefined, 1);
+      expect(held).toContain('1/1 busy');
+      expect(held).toContain(`pid ${child.pid}`);
+      expect(held).toContain('merge G-hold');
+      child.kill('SIGKILL');
+      await exited;
+      expect(existsSync(join(directory, '0', 'identity.json'))).toBe(true);
+      expect(JSON.parse(readFileSync(join(directory, '0', 'identity.json'), 'utf8')).pid).toBe(child.pid);
+      expect(gateLaneStatus(directory, undefined, 1)).toBe('0/1 busy; 0 waiting');
+      let slept = false;
+      await withGateLane(async () => {
+        const record = JSON.parse(readFileSync(join(directory, '0', 'identity.json'), 'utf8')) as { pid: number; command: string };
+        expect(record.pid).toBe(process.pid);
+        expect(record.command).toBe('merge G-next');
+      }, {
+        directory, lanes: 1, command: 'merge G-next', goal: 'program', timeoutMs: 1_000,
+        sleep: async () => { slept = true; },
+      });
+      expect(slept).toBe(false);
+      expect(existsSync(join(directory, '0'))).toBe(false);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited.catch(() => undefined);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 15_000);
 });
 
 describe('heavy QA lock', () => {
