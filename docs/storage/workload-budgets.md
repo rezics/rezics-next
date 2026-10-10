@@ -240,7 +240,11 @@ classifies it. Initial metadata and author credit already share its creation
 commit. The compound path creates a public catalogue record without selected
 text. These are distinct workloads, not interchangeable latency measurements.
 Numbers are traced requests at each background scale; bulk latency is batch wall
-time divided by 128. Allocated filesystem blocks are distinct from logical file
+time divided by 128. One native transaction records at most 64 Work-name owners
+([`catalogue-import.ts`](../../services/main/src/modules/work/catalogue-import.ts)),
+and each item creates one Work, so a 128-item API batch is two durable commits.
+The table's `1 / 128` cells are the 2026-10-04 trace, from when that batch was
+still one commit. Allocated filesystem blocks are distinct from logical file
 lengths and modified index pages. No latency distribution or storage-cold claim
 is made.
 

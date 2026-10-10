@@ -29,7 +29,7 @@ export const CATALOGUE_IMPORT_COST = { items: 128, credits: 8, classifications: 
   stagedQuads: 16_384, deadlineMs: 30_000 } as const;
 /** One native transaction records at most 64 Work-name owners. A catalogue item
  * creates one Work, so an API batch is committed in groups of this size. */
-const NAME_OWNER_COMMAND = 64;
+export const NAME_OWNER_COMMAND = 64;
 const closed = { additionalProperties: false } as const;
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' });
 const text = (maxLength: number) => t.String({ minLength: 1, maxLength, pattern: '^[^\\u0000-\\u001f\\u007f]+$' });

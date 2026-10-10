@@ -11,7 +11,7 @@ import { seedCatalogueProfileWorks } from '../../../scripts/load/catalogue-work.
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 import { qaTdbStorage, tdbGrowth } from '../../../scripts/load/tdb-growth.ts';
 import { retainCatalogueBackup } from '../../../scripts/load/catalogue-backup.ts';
-import { CATALOGUE_IMPORT_SCOPE, type CatalogueImportInput } from '../../../services/main/src/modules/work/catalogue-import.ts';
+import { CATALOGUE_IMPORT_SCOPE, NAME_OWNER_COMMAND, type CatalogueImportInput } from '../../../services/main/src/modules/work/catalogue-import.ts';
 import { scalePreparationBudgetMs } from '../../../scripts/qa/stack-environment.ts';
 
 /** Build through public APIs exactly once, then retain stopped owner cuts for
@@ -148,15 +148,16 @@ test.skipIf(Bun.env.G1038_REUSE === '1')('G1038: disk-backed single, compound an
         return result.json();
       });
       expect(compoundCommits).toBe(1);
-      const bulkCommits = await measured('bulk-catalogue-works', 128, async headers => {
+      const bulkCount = 128;
+      const bulkCommits = await measured('bulk-catalogue-works', bulkCount, async headers => {
         const result = await home.app.handle(new Request('http://main.local/v1/work-imports/bulk', { method: 'POST',
           headers: { ...Object.fromEntries(headers), authorization: `Bearer ${home.author.token}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ actingSubject: actor, items: Array.from({ length: 128 }, (_, index) => ({ key: `${key}:sample:${scale}:${index}`, input: input(scale + index) })) }) }));
+          body: JSON.stringify({ actingSubject: actor, items: Array.from({ length: bulkCount }, (_, index) => ({ key: `${key}:sample:${scale}:${index}`, input: input(scale + index) })) }) }));
         const body = await home.json<{ complete: boolean; partial: boolean }>(result);
         expect(body).toMatchObject({ complete: true, partial: false });
         return body;
       });
-      expect(bulkCommits).toBe(1);
+      expect(bulkCommits).toBe(Math.ceil(bulkCount / NAME_OWNER_COMMAND));
       const first = works[0]!;
       const header = await api.read<{ id: string; revision: string; title: { value: string } }>(`/v1/works/${first.work.slice(-36)}?language=ja&actingSubject=${encodeURIComponent(actor)}`);
       expect(header).toMatchObject({ id: first.work, revision: first.workRevision, title: { value: 'Catalogue common Work 0' } });
