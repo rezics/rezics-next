@@ -176,6 +176,8 @@ export const isolatedIntegrationFileList = [
   // Separate batches so the harness resets between them. The second file reads the Work-name scope rebuilt after that reset.
   'tests/qa/integration/work-name-scope-a-startup.test.ts',
   'tests/qa/integration/work-name-scope-b-after-reset.test.ts',
+  // Name-record planting writes a synthetic outbox batch, so later relays must not see it.
+  'tests/qa/integration/g-898-wiki-disclosure.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
