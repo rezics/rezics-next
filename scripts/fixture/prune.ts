@@ -375,7 +375,8 @@ export async function executeFixturePrune(
   const failures: { target: string; error: string }[] = [];
   const removedIds: string[] = [];
   if (options.apply) {
-    const { dockerEnvironment, fixtureDirectory, removeVolumes } = await import('./stack.ts');
+    const { dockerEnvironment, fixtureDirectory, fixtureProject, removeStoppedContainers, removeVolumes } =
+      await import('./stack.ts');
     const docker = dockerEnvironment();
     for (const generation of targets.generations) {
       if (!FIXTURE_ID.test(generation.id)) {
@@ -386,6 +387,7 @@ export async function executeFixturePrune(
         continue;
       }
       try {
+        removeStoppedContainers(fixtureProject(generation.id), docker);
         removeVolumes(generation.volumes, docker);
         const directory = fixtureDirectory(generation.id);
         rmSync(directory, { recursive: true, force: true });

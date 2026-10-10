@@ -141,10 +141,19 @@ export function projectRunning(project: string, docker: NodeJS.ProcessEnv): bool
     docker, 15_000).trim() !== '';
 }
 
+/** A medium backup's media volume takes minutes to delete; a shorter wait reports a removal that still completes. */
 export function removeVolumes(names: readonly string[], docker: NodeJS.ProcessEnv): void {
   for (const name of names) {
-    if (volumeExists(name, docker)) run('docker', ['volume', 'rm', name], docker, 60_000);
+    if (volumeExists(name, docker)) run('docker', ['volume', 'rm', name], docker, 900_000);
   }
+}
+
+/** A crashed build leaves stopped containers that still hold its volumes. A running one is left to fail the removal. */
+export function removeStoppedContainers(project: string, docker: NodeJS.ProcessEnv): void {
+  const ids = run('docker', ['ps', '-aq', '--filter', `label=com.docker.compose.project=${project}`,
+    '--filter', 'status=created', '--filter', 'status=exited', '--filter', 'status=dead'], docker, 30_000)
+    .split('\n').map(line => line.trim()).filter(Boolean);
+  if (ids.length) run('docker', ['rm', ...ids], docker, 120_000);
 }
 
 /** Whole-volume stopped copy with the pinned PostgreSQL image as the helper. */
