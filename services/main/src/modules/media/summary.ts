@@ -488,22 +488,15 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Access, name or avatar hydration. A hidden row and an absent id then share
   // the media generation and the cost envelope, as well as the unavailable item.
   // The graph row's type already proves a non-Agent has no agent name owner.
-  // Only a public row is that proof. A non-public row stays unsettled so
-  // disclosure probes it in the same pass as a missing id.
+  // Absent rows and Agents still probe: a missing identity is not that proof.
   const settledNameOwner = (row: GraphRow | undefined) =>
-    input.settleNonAgentNameOwners && row !== undefined && row.public && row.type !== 'agent'
+    input.settleNonAgentNameOwners && row !== undefined && row.type !== 'agent'
       ? { nameOwnerResolved: true as const } : {};
-  // A caller who cannot be granted the row already knows it is not public.
-  // Leave its head unresolved so disclosure runs the same ownership query an
-  // absent id runs. Filling the head only for a hidden row skips that query.
   const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
-    const unresolved = row !== undefined && !row.public && !reader.canReadWork && !reader.canReadWorks;
     return { owner: 'graph' as const, resource: reference, component: 'name' as const,
-      revision: !unresolved && reference === row?.work ? row.head : null,
-      work: unresolved ? undefined : row?.work,
-      workRevision: unresolved ? undefined : row?.head,
-      context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+      revision: reference === row?.work ? row.head : null, work: row?.work,
+      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
       ...settledNameOwner(row) };
   });
   const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
@@ -548,13 +541,12 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     }
   }
   const works = [...new Set(restricted.values())];
+  cost.accessChecks = works.length;
   let admitted = new Set<string>();
   if (works.length && reader.canReadWorks) {
-    cost.accessChecks = works.length;
     admitted = new Set(await reader.canReadWorks(works));
     cost.accessQueries = 1;
   } else if (works.length && reader.canReadWork) {
-    cost.accessChecks = works.length;
     cost.accessQueries = works.length;
     const decisions: (string | null)[] = [];
     if (client) {
@@ -861,11 +853,10 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
 }
 
 /** SQL name changes do not move the graph position. Conditional reads must
- * include canonical addresses in their generation so a rename changes ETags.
- * Unavailable items share one digest: hashing the reference would tell a hidden id from an absent one. */
+ * include canonical addresses in their generation so a rename changes ETags. */
 function addressGeneration(summaries: readonly ResourceSummary[]): string {
   return createHash('sha256').update(JSON.stringify(summaries.map(summary => summary.status === 'available'
-    ? [summary.reference,summary.address] : null))).digest('hex');
+    ? [summary.reference,summary.address] : [summary.reference]))).digest('hex');
 }
 
 /** Main Version content availability for one summary: actual language basis or metadata-only. */
