@@ -218,16 +218,14 @@ export class RealmSubmissionStore {
         const row = await this.lockSubmission(client, realm, id, input.expectedRevision);
         if (row.state !== 'pending') throw new SubmissionStale('Submission is not pending');
         if (input.outcome !== 'accept') {
-          try {
-            if (row.target) await requireResourceCandidate(this.env, realm, row.target);
-            else await requireCandidate(this.env, realm, { actingSubject: row.submitting_agent, kind: row.kind as SubmissionInput['kind'],
-              work: row.work, mainVersion: row.main_version, contribution: row.contribution!,
-              publicationDecision: row.publication_decision!, selectedDraft: row.selected_draft!,
-              correctionOf: row.correction_of });
-          } catch (error) {
-            if (error instanceof SubmissionMissing) throw new SubmissionStale('Submission candidate was superseded');
-            throw error;
-          }
+          // A candidate that is not public yet is re-evaluated on retry. It is
+          // not a terminal supersession. A hidden candidate stays the same
+          // refusal as an absent one.
+          if (row.target) await requireResourceCandidate(this.env, realm, row.target);
+          else await requireCandidate(this.env, realm, { actingSubject: row.submitting_agent, kind: row.kind as SubmissionInput['kind'],
+            work: row.work, mainVersion: row.main_version, contribution: row.contribution!,
+            publicationDecision: row.publication_decision!, selectedDraft: row.selected_draft!,
+            correctionOf: row.correction_of });
         }
         let adoption: Adoption | null = null;
         if (input.outcome === 'accept' && row.target) {

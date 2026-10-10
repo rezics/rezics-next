@@ -3,7 +3,8 @@ import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import { receiptFamilyFor } from '../access/receipt-families.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { realmSelectionSlotIri } from '../work/select-realm.ts';
-import { SUBMISSION_COST, SubmissionMissing, SubmissionUnavailable, type SubmissionInput } from './schema.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
+import { SUBMISSION_COST, SubmissionUnavailable, type SubmissionInput } from './schema.ts';
 
 /** Submission eligibility is public publication, not Main Version selection. A
  * newer private draft does not supersede the public revision offered for adoption. */
@@ -28,7 +29,7 @@ export async function requireCandidate(env: WorkActivationEnvironment, realm: st
     }
   } LIMIT ${SUBMISSION_COST.candidateRows}`, SUBMISSION_COST.candidateBytes)).results?.bindings;
   if (!rows) throw new SubmissionUnavailable('Candidate owner is unavailable');
-  if (rows.length !== 1) throw new SubmissionMissing('Exact public candidate is unavailable');
+  if (rows.length !== 1) throw new WorkReadMissing('Exact public candidate is unavailable');
 }
 
 function receiptIri(admission: RegisteredAdmission) {
