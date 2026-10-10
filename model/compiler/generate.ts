@@ -194,8 +194,7 @@ export function generate(root: string, check: boolean): void {
   // that are not named `*Revision`.
   const revisionClasses = 'infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java';
   const names = revisionClassNames(join(root, 'model/definitions'));
-  const identity = readFileSync(join(root, 'services/main/src/modules/erasure/revision-kind.ts'), 'utf8');
-  const rendered = renderRevisionClasses(names, priorRevisionTypes(identity, names));
+  const rendered = renderRevisionClasses(names, priorRevisionTypes(names));
   const revisionPath = join(root, revisionClasses);
   if (check) {
     let actual: string;

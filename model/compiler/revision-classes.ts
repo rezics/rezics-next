@@ -13,16 +13,22 @@ export function revisionClassNames(definitions: string): string[] {
 }
 
 /**
+ * Types, other than `rv:*Revision`, that identity resolution stores a revisions-graph
+ * subject as: work heads and contribution drafts are `RevisionAnchor`, a fixed release
+ * is `FixedRelease`, and a text contribution owner is `TextContribution`.
+ * `services/main/tests/erasure-revision-kinds.test.ts` checks that every type
+ * `modules/erasure/revision-kind.ts` resolves is a `*Revision` name or one of these,
+ * so the compiler does not read a service source file.
+ */
+export const IDENTITY_RESOLUTION_TYPES = ['FixedRelease', 'RevisionAnchor', 'TextContribution'] as const;
+
+/**
  * Types a revisions-graph subject may already have.
  * `ErasedRevision` is the marker, not a product revision.
- * Identity resolution also names `RevisionAnchor` and `FixedRelease`, which are
- * not `*Revision`: work heads, contribution drafts and fixed releases are stored as those.
  */
-export function priorRevisionTypes(identitySource: string, names: readonly string[]): string[] {
+export function priorRevisionTypes(names: readonly string[]): string[] {
   const found = new Set(names.filter(name => name !== 'ErasedRevision'));
-  for (const match of identitySource.matchAll(/\ba rv:([A-Z][A-Za-z0-9]+)/g)) {
-    if (match[1] !== 'ErasedRevision') found.add(match[1]!);
-  }
+  for (const name of IDENTITY_RESOLUTION_TYPES) found.add(name);
   return [...found].sort();
 }
 

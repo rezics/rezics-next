@@ -1,4 +1,4 @@
-import { priorRevisionTypes, revisionClassNames } from '../../../model/compiler/revision-classes.ts';
+import { IDENTITY_RESOLUTION_TYPES, priorRevisionTypes, revisionClassNames } from '../../../model/compiler/revision-classes.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -195,7 +195,13 @@ test('the native revision-class constant equals the model set', () => {
   const names = revisionClassNames(definitions);
   const source = readFileSync(resolve(import.meta.dir, '../src/modules/erasure/revision-kind.ts'), 'utf8');
   expect(generatedNames('NAMES')).toEqual(names);
-  expect(generatedNames('PRIOR')).toEqual(priorRevisionTypes(source, names));
+  expect(generatedNames('PRIOR')).toEqual(priorRevisionTypes(names));
+  // The compiler does not read this service file, so it is checked here: every
+  // type identity resolution looks for is a *Revision class or a named extra.
+  const resolved = [...source.matchAll(/\ba rv:([A-Z][A-Za-z0-9]+)/g)].map(match => match[1]!)
+    .filter(name => name !== 'ErasedRevision');
+  const known = new Set<string>([...names, ...IDENTITY_RESOLUTION_TYPES]);
+  expect(resolved.filter(name => !known.has(name))).toEqual([]);
   expect(names).toContain('ErasedRevision');
   expect(generatedNames('PRIOR')).not.toContain('ErasedRevision');
   expect(generatedNames('PRIOR')).toContain('RevisionAnchor');

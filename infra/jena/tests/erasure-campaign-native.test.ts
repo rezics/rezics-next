@@ -64,7 +64,8 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
       throw new Error(
         `native campaign tests failed (${result.status}):\n${result.stdout}\n${result.stderr}`,
       );
-    expect(result.stdout).toContain('Tests run: 3, Failures: 0, Errors: 0');
+    // The class grows with each purge counterexample; what matters is that it ran and passed.
+    expect(result.stdout).toMatch(/Tests run: [1-9][0-9]*, Failures: 0, Errors: 0/);
   } finally {
     rmSync(build, { recursive: true, force: true });
   }
