@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { fenceAuthorNames, sourceReportedCredits } from '../src/modules/source/author-name-read.ts';
+import { fenceAuthorNames, noteUnboundSourceWorks, sourceReportedCredits } from '../src/modules/source/author-name-read.ts';
 import { SOURCE_ADOPTION_READ_COST } from '../src/modules/source/native-work-adoption.ts';
 import { WorkReadMoved, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
@@ -57,6 +57,18 @@ test('author binding fence merges to the same map one call returns for a small s
   const merged = new Map<string, Ref[]>();
   for (const part of results.slice(marked)) for (const [item, refs] of part) merged.set(item, refs);
   expect([...merged]).toEqual([...direct]);
+});
+
+test('unbound works skip the opening lookup and the final fence still sees a new binding', async () => {
+  const { works, canonical, calls, reader } = harness(3);
+  for (const item of works) canonical.set(item, []);
+  noteUnboundSourceWorks(reader, works);
+  await sourceReportedCredits(reader, works);
+  expect(calls).toEqual([]);
+  await fenceAuthorNames(reader);
+  expect(calls).toEqual([works]);
+  canonical.set(works[1]!, [{ id: works[1]!, key: '/authors/OL9A', ordinal: 1 }]);
+  await expect(fenceAuthorNames(reader)).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('author binding fence refuses when a binding past the first chunk moves', async () => {

@@ -6,9 +6,9 @@ import { SOURCE_ADOPTION_READ_COST } from './native-work-adoption.ts';
 
 const reads = new WeakMap<WorkReadSession, Map<string, AuthorName | null>>();
 const reportedReads = new WeakMap<WorkReadSession, Map<string, string>>();
-/** Works this read already proved have no source binding. Author references
- * are a subset of that binding, so a second and third lookup would only
- * confirm the empty result. */
+/** Works this read already proved have no source binding. The opening author
+ * reference lookup is redundant for them. They stay recorded as empty so the
+ * final fence still sees a binding created during the read. */
 const unboundWorks = new WeakMap<WorkReadSession, Set<string>>();
 
 export function noteUnboundSourceWorks(session: WorkReadSession, works: readonly string[]) {
@@ -16,6 +16,7 @@ export function noteUnboundSourceWorks(session: WorkReadSession, works: readonly
   const prior = unboundWorks.get(session) ?? new Set<string>();
   for (const work of works) prior.add(work);
   unboundWorks.set(session, prior);
+  recordReported(session, works, new Map());
 }
 
 function stillBound(session: WorkReadSession, works: readonly string[]) {
