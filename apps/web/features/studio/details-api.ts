@@ -57,16 +57,18 @@ export async function saveWorkDetails(input: { actingSubject: string; work: stri
     { headers: { 'idempotency-key': crypto.randomUUID() } });
     if (response.data && 'revision' in response.data) return { status: 'saved', head: response.data.revision, values: input.values };
     const status = response.error?.status ?? 503;
-    if (status === 401 || status === 403) return { ...base, status: 'denied' };
-    if (status === 400 || status === 422) return { ...base, status: 'error', reason: 'invalid' };
+    // Keep the status. Studio still shows a denial for 401 and 403; a caller can tell them apart.
+    const carried = <T extends object>(body: T) => response.error ? { ...body, httpStatus: response.error.status } : body;
+    if (status === 401 || status === 403) return carried({ ...base, status: 'denied' as const });
+    if (status === 400 || status === 422) return carried({ ...base, status: 'error' as const, reason: 'invalid' as const });
     if (status === 409) {
       const current = await api.get({ query: { actingSubject: input.actingSubject } });
       if (current.data) {
         const theirs = detailsValues(current.data, values.entries[0]?.language ?? '').entries;
-        return { status: 'stale', head: current.data.revision, values: input.values, theirs };
+        return carried({ status: 'stale' as const, head: current.data.revision, values: input.values, theirs });
       }
     }
-    return { ...base, status: 'error', reason: response.data ? 'pending' : 'failed' };
+    return carried({ ...base, status: 'error' as const, reason: response.data ? 'pending' as const : 'failed' as const });
   } catch {
     return { ...base, status: 'error', reason: 'failed' };
   }

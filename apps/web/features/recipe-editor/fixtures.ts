@@ -67,8 +67,10 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     dropOccurrences?: boolean;
     /** A measure write is applied even when the head it names has already moved. */
     acceptStale?: boolean;
-    /** Writes are refused as removed editing access and are not applied. */
+    /** Writes are refused as removed editing access (403) and are not applied. */
     accessDenied?: boolean;
+    /** Writes answer with this HTTP status and are not applied. Takes precedence over `accessDenied`. */
+    writeStatus?: number;
     /**
      * Replaces one recipe read. `current` is the recipe Main holds at the moment of the read.
      * Returning nothing uses that recipe; returning a value uses it instead, so a late read can be stale.
@@ -83,8 +85,13 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   const answer = (data: unknown) => ({ data, error: null });
   const refuse = (status: number, code: string, title?: string) => ({ data: null,
     error: { status, value: title === undefined ? { code } : { code, title, status } } });
-  const removed = () => interference.accessDenied === true
-    ? refuse(403, 'authority_denied', 'Authority is not admitted') : null;
+  const removed = () => {
+    const status = interference.writeStatus ?? (interference.accessDenied === true ? 403 : undefined);
+    if (status === undefined) return null;
+    if (status === 403) return refuse(403, 'authority_denied', 'Authority is not admitted');
+    if (status === 404) return refuse(404, 'not_found');
+    return refuse(status, status === 401 ? 'unauthenticated' : 'request_failed');
+  };
   const record = async (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
     const call = { name, body, key: options?.headers?.['idempotency-key'] };
     calls.push(call);

@@ -139,6 +139,21 @@ test('a form that adds something waits for the writes in flight instead of dropp
   expect(await store.submit({ kind: 'addSection', label: 'Crumb', language: 'en' })).toEqual({ kind: 'saved' });
 });
 
+test('a lapsed session asks to sign in and a later edit is saved', async () => {
+  const { fake, store } = open();
+  const before = store.snapshot().state;
+  fake.interference.writeStatus = 401;
+  expect(await store.submit({ kind: 'editLine', occurrence: id(21), qualifier: line('2 cups butter') }))
+    .toEqual({ kind: 'refused', refusal: { kind: 'sign-in' } });
+  expect(store.snapshot().revoked).toBe(false);
+  expect(store.snapshot().state).toEqual(before);
+  fake.interference.writeStatus = undefined;
+  expect(await store.submit({ kind: 'editLine', occurrence: id(21), qualifier: line('2 cups butter') }))
+    .toEqual({ kind: 'saved' });
+  expect(store.snapshot().revoked).toBe(false);
+  expect(store.snapshot().state).not.toEqual(before);
+});
+
 test('a denied edit leaves the recipe as it was and is not sent again', async () => {
   const { fake, store } = open();
   const before = store.snapshot().state;

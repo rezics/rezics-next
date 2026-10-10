@@ -37,6 +37,8 @@ export interface DetailsState {
   values: DetailsValues;
   /** On a stale save: what the winning save holds, shown beside the writer's kept values. */
   theirs?: DetailsEntry[];
+  /** Main's HTTP status, when it answered, so a caller can tell a lapsed session from removed access. */
+  httpStatus?: number;
 }
 
 export type SaveDetails = (input: { actingSubject: string; work: string; head: string | null; values: DetailsValues }) =>

@@ -4,12 +4,15 @@ import type { AutosaveState } from '@rezics/ui/autosave-status';
 export type SaveOutcome =
   | { kind: 'saved'; head: string }
   /** The expected head moved: someone saved first. Nothing was written. `head` is the one that won, when Main says. */
-  | { kind: 'conflict'; head?: string | null }
+  | { kind: 'conflict'; head?: string | null; status?: number }
   /** The request never reached Main (or its answer never came back). */
   | { kind: 'offline' }
-  /** Main refused this Agent; retrying cannot help. */
-  | { kind: 'denied' }
-  | { kind: 'failed'; retryable: boolean };
+  /**
+   * Main refused this Agent; retrying cannot help. `status` is kept so a caller
+   * can tell a lapsed session from removed access. Autosave stops on either.
+   */
+  | { kind: 'denied'; status?: number }
+  | { kind: 'failed'; retryable: boolean; status?: number };
 
 export interface AutosaveSnapshot {
   state: AutosaveState;

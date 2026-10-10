@@ -1,8 +1,10 @@
 import { bodyText } from '../document-editor/body.ts';
+import type { SaveOutcome as StudioSave } from '../studio/autosave.ts';
 import { saveWorkDetails, detailsValues } from '../studio/details-api.ts';
 import type { DetailsValues } from '../studio/details-form.tsx';
 import { publishText, readLatest, readTextRevision, saveText, selectMainText } from '../studio/text-api.ts';
 import type { MainClient } from '../studio/types.ts';
+import { editingAccess } from './access.ts';
 
 // The recipe's title, description and notes live beside the Composition, each on its own head, so
 // they are saved by their own writers. The same rules hold as for the Composition: one write in
@@ -62,6 +64,18 @@ export function latestLane<I, R>(run: (input: I, newest: () => I) => Promise<R>,
 export type SaveRefusal = 'sign-in' | 'denied' | 'invalid' | 'unavailable' | 'pending' | 'moved' | 'empty';
 export type SaveOutcome = { kind: 'saved' } | { kind: 'unchanged' } | { kind: 'refused'; refusal: SaveRefusal };
 
+/** The one access rule, applied: only removed access closes further writes. */
+function applyAccess(status: number | undefined, close: () => void): SaveRefusal | null {
+  if (status === undefined) return null;
+  const access = editingAccess(status);
+  if (!access) return null;
+  if (access.revoked) close();
+  return access.refusal;
+}
+
+const studioStatus = (saved: StudioSave): number | undefined =>
+  saved.kind === 'saved' || saved.kind === 'offline' ? undefined : saved.status;
+
 // -- title and description --------------------------------------------------------------------
 
 export interface DetailsSnapshot { head: string | null; values: DetailsValues; busy: boolean;
@@ -110,6 +124,8 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
       if (current.title === change.title && current.description === change.description) return { kind: 'unchanged' };
       const next = withEntry(values, language, change);
       const result = await saveWorkDetails({ actingSubject, work, head, values: next }, main());
+      const access = applyAccess(result.httpStatus, () => { revoked = true; });
+      if (access) return refuse(access);
       if (result.status === 'saved') { head = result.head; values = next; notify(); return { kind: 'saved' }; }
       if (result.status === 'stale') {
         // Someone saved first: read what Main holds and put this edit of the title and description over it.
@@ -121,13 +137,13 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
         change = newest();
         continue;
       }
-      if (result.status === 'denied') return refuse('denied');
+      // A denial with no status is not classified as removed access, so it cannot trap the editor.
+      if (result.status === 'denied') return refuse('sign-in');
       if (result.status === 'error') return refuse(result.reason === 'invalid' ? 'invalid' : result.reason === 'pending' ? 'pending' : 'unavailable');
     }
     return refuse('moved');
   }
   const refuse = (refusal: SaveRefusal): SaveOutcome => {
-    if (refusal === 'denied') revoked = true;
     failure = refusal; notify(); return { kind: 'refused', refusal };
   };
   const lane = latestLane(run, { kind: 'refused', refusal: 'unavailable' } as SaveOutcome, () => notify());
@@ -180,6 +196,8 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
       const saved = await saveText(target, notes.text, body, notes.head, crypto.randomUUID(),
         created => { notes = { ...notes, text: created }; }, main());
       if (saved.kind === 'saved') { notes = { ...notes, head: saved.head, body }; return { kind: 'saved' }; }
+      const access = applyAccess(studioStatus(saved), () => { revoked = true; });
+      if (access) return { kind: 'refused', refusal: access };
       if (saved.kind === 'conflict' && notes.text) {
         const latest = await readLatest(actingSubject, notes.text, main());
         if (!latest) return { kind: 'refused', refusal: 'unavailable' };
@@ -187,8 +205,8 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
         body = adopt();
         continue;
       }
-      if (saved.kind === 'denied') revoked = true;
-      return { kind: 'refused', refusal: saved.kind === 'denied' ? 'denied' : saved.kind === 'conflict' ? 'moved' : 'unavailable' };
+      if (saved.kind === 'denied') return { kind: 'refused', refusal: 'sign-in' };
+      return { kind: 'refused', refusal: saved.kind === 'conflict' ? 'moved' : 'unavailable' };
     }
     return { kind: 'refused', refusal: 'moved' };
   }
@@ -219,6 +237,8 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
         if (!notes.text || !notes.head) return fail('invalid');
         const published = await publishText({ actingSubject, text: notes.text, head: notes.head,
           expectedPublicationHead: notes.publicationHead, key: crypto.randomUUID() }, main());
+        const publishedAccess = applyAccess(published.status, () => { revoked = true; });
+        if (publishedAccess) return fail(publishedAccess);
         if (published.outcome === 'stale') {
           const current = await main().v1.contributions({ contribution: idOf(notes.text) }).get({ query: { actingSubject } });
           if (!current.data) return fail('unavailable');
@@ -230,14 +250,16 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
           adopt();
           continue;
         }
-        if (published.outcome === 'denied') { revoked = true; return fail('denied'); }
+        if (published.outcome === 'denied') return fail('sign-in');
         if (published.outcome === 'pending') return fail('pending');
         if (published.outcome !== 'done' || !published.publication) return fail('unavailable');
         const selected = await selectMainText({ actingSubject, work, mainVersion, text: notes.text,
           publication: published.publication, key: crypto.randomUUID() }, main());
-        if (selected === 'denied') { revoked = true; return fail('denied'); }
-        if (selected === 'pending') return fail('pending');
-        if (selected !== 'done') return fail('unavailable');
+        const selectedAccess = applyAccess(selected.status, () => { revoked = true; });
+        if (selectedAccess) return fail(selectedAccess);
+        if (selected.outcome === 'denied') return fail('sign-in');
+        if (selected.outcome === 'pending') return fail('pending');
+        if (selected.outcome !== 'done') return fail('unavailable');
         notes = { ...notes, publicationHead: published.publication.publicationDecision };
         return finish({ kind: 'published' });
       }

@@ -330,20 +330,23 @@ describe('Studio save outcomes', () => {
     // A stale head names the head that won, so the editor reads that exact version to compare.
     expect(
       saveOutcomeOf({ status: 409, value: { code: 'stale_head', currentHead: head(7) } }),
-    ).toEqual({ kind: 'conflict', head: head(7) });
+    ).toEqual({ kind: 'conflict', head: head(7), status: 409 });
     expect(saveOutcomeOf({ status: 409, value: { code: 'stale_head' } })).toEqual({
       kind: 'conflict',
       head: null,
+      status: 409,
     });
     expect(saveOutcomeOf({ status: 409, value: { code: 'idempotency_conflict' } })).toEqual({
       kind: 'failed',
       retryable: false,
+      status: 409,
     });
     expect(saveOutcomeOf({ status: 403, value: { code: 'authority_denied' } })).toEqual({
       kind: 'denied',
+      status: 403,
     });
-    expect(saveOutcomeOf({ status: 503 })).toEqual({ kind: 'failed', retryable: true });
-    expect(saveOutcomeOf({ status: 400 })).toEqual({ kind: 'failed', retryable: false });
+    expect(saveOutcomeOf({ status: 503 })).toEqual({ kind: 'failed', retryable: true, status: 503 });
+    expect(saveOutcomeOf({ status: 400 })).toEqual({ kind: 'failed', retryable: false, status: 400 });
     expect(saveOutcomeOf({ status: Number.NaN })).toEqual({ kind: 'offline' });
   });
 });

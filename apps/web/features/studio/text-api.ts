@@ -132,7 +132,7 @@ export async function publishText(
     key: string;
   },
   main: MainClient = browserMainApi(),
-): Promise<{ outcome: StepOutcome; publication?: Publication }> {
+): Promise<{ outcome: StepOutcome; publication?: Publication; status?: number }> {
   const response = await main.v1['contribution-publications'].post(
     {
       profile: 'text-publication-v1',
@@ -145,7 +145,7 @@ export async function publishText(
     },
     { headers: { 'idempotency-key': input.key } },
   );
-  if (response.error) return { outcome: stepOf(response.error) };
+  if (response.error) return { outcome: stepOf(response.error), status: response.error.status };
   if (!response.data || 'operationId' in response.data) return { outcome: 'pending' };
   return {
     outcome: 'done',
@@ -167,11 +167,13 @@ export async function selectMainText(
     key: string;
   },
   main: MainClient = browserMainApi(),
-): Promise<StepOutcome> {
+): Promise<{ outcome: StepOutcome; status?: number }> {
   const current = await main.v1['main-versions']({
     mainVersion: idOf(input.mainVersion),
   }).selection.get({ query: {} });
-  if (current.error && current.error.status !== 404) return 'failed';
+  // No selection yet is a 404, not a missing private resource: the post creates it.
+  if (current.error && current.error.status !== 404)
+    return { outcome: stepOf(current.error), status: current.error.status };
   const response = await main.v1['publication-selections'].post(
     {
       profile: 'main-default-selection-v1',
@@ -185,8 +187,8 @@ export async function selectMainText(
     },
     { headers: { 'idempotency-key': input.key } },
   );
-  if (response.error) return stepOf(response.error);
-  return response.data && !('operationId' in response.data) ? 'done' : 'pending';
+  if (response.error) return { outcome: stepOf(response.error), status: response.error.status };
+  return { outcome: response.data && !('operationId' in response.data) ? 'done' : 'pending' };
 }
 
 /** Submits a published text to one Realm's review; each Realm is its own command and receipt. */

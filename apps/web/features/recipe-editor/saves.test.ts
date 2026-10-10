@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
+import { editingAccess } from './access.ts';
 import { actingSubject, detailsValues, fakeMain, id, mainVersion, noNotes, startRecipe, work } from './fixtures.ts';
 import { createDetailsSaver, createNotesWriter, entryOf, latestLane } from './saves.ts';
+
+test('editing access is one rule: a lapsed session stays open, removed access closes it', () => {
+  expect(editingAccess(401)).toEqual({ refusal: 'sign-in', revoked: false });
+  expect(editingAccess(403)).toEqual({ refusal: 'denied', revoked: true });
+  expect(editingAccess(404)).toEqual({ refusal: 'denied', revoked: true });
+  expect(editingAccess(409)).toBeNull();
+  expect(editingAccess(500)).toBeNull();
+});
 
 test('a title saved over a head that moved is read again and written over what Main holds', async () => {
   const fake = fakeMain({ recipe: startRecipe, metadataHead: id(701) });
@@ -185,9 +194,98 @@ test('a denied notes save keeps the previous body and is not sent again', async 
     initial: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
   expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'denied' });
   expect(writer.snapshot().revoked).toBe(true);
+  expect(writer.snapshot().failure).toBe('denied');
   expect(writer.snapshot().notes.body).toBe('old');
   expect(fake.world().notes.body).toBe('old');
   expect(fake.calls.filter(call => call.name === 'notes-edit')).toHaveLength(1);
   expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'denied' });
   expect(fake.calls.filter(call => call.name === 'notes-edit')).toHaveLength(1);
+});
+
+test('a lapsed notes session asks to sign in and a later save succeeds', async () => {
+  const fake = fakeMain({ recipe: startRecipe, notes: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
+  fake.interference.writeStatus = 401;
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en',
+    initial: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
+  expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'sign-in' });
+  expect(writer.snapshot().revoked).toBe(false);
+  expect(writer.snapshot().failure).toBe('sign-in');
+  expect(writer.snapshot().notes.body).toBe('old');
+  expect(fake.world().notes.body).toBe('old');
+  fake.interference.writeStatus = undefined;
+  expect(await writer.save('Kept.')).toEqual({ kind: 'saved' });
+  expect(writer.snapshot().revoked).toBe(false);
+  expect(writer.snapshot().notes.body).toBe('Kept.');
+  expect(fake.world().notes.body).toBe('Kept.');
+});
+
+test('a missing private notes draft closes further writes and keeps the text', async () => {
+  const fake = fakeMain({ recipe: startRecipe, notes: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
+  fake.interference.writeStatus = 404;
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en',
+    initial: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
+  expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'denied' });
+  expect(writer.snapshot().revoked).toBe(true);
+  expect(writer.snapshot().notes.body).toBe('old');
+  expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'denied' });
+  expect(fake.calls.filter(call => call.name === 'notes-edit')).toHaveLength(1);
+});
+
+test('a lapsed session on publish asks to sign in and a later publish succeeds', async () => {
+  const initial = { text: id(300), head: id(1500), body: 'Our notes.', publicationHead: null };
+  const fake = fakeMain({ recipe: startRecipe, notes: initial });
+  fake.interference.writeStatus = 401;
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en', initial });
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'refused', refusal: 'sign-in' });
+  expect(writer.snapshot().revoked).toBe(false);
+  expect(writer.snapshot().notes.body).toBe('Our notes.');
+  expect(fake.calls.map(call => call.name)).toEqual(['publish']);
+  fake.interference.writeStatus = undefined;
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'published' });
+  expect(writer.snapshot().revoked).toBe(false);
+  expect(writer.snapshot().published).toBe(true);
+});
+
+test('a lapsed session on the title asks to sign in and a later save succeeds', async () => {
+  const fake = fakeMain({ recipe: startRecipe });
+  fake.interference.writeStatus = 401;
+  const saver = createDetailsSaver({ main: fake.main, actingSubject, work, language: 'en',
+    initial: { head: id(700), values: detailsValues } });
+  expect(await saver.submit({ title: 'Kept title', description: 'Bright and tender.' }))
+    .toEqual({ kind: 'refused', refusal: 'sign-in' });
+  expect(saver.snapshot().revoked).toBe(false);
+  expect(entryOf(saver.snapshot().values, 'en').title).toBe('Lemon muffins');
+  fake.interference.writeStatus = undefined;
+  expect(await saver.submit({ title: 'Kept title', description: 'Bright and tender.' })).toEqual({ kind: 'saved' });
+  expect(saver.snapshot().revoked).toBe(false);
+  expect(entryOf(saver.snapshot().values, 'en').title).toBe('Kept title');
+});
+
+test('a removed title save closes further writes and keeps the previous title', async () => {
+  const fake = fakeMain({ recipe: startRecipe });
+  fake.interference.accessDenied = true;
+  const saver = createDetailsSaver({ main: fake.main, actingSubject, work, language: 'en',
+    initial: { head: id(700), values: detailsValues } });
+  expect(await saver.submit({ title: 'Kept title', description: 'Bright and tender.' }))
+    .toEqual({ kind: 'refused', refusal: 'denied' });
+  expect(saver.snapshot().revoked).toBe(true);
+  expect(entryOf(saver.snapshot().values, 'en').title).toBe('Lemon muffins');
+  expect(await saver.submit({ title: 'Another', description: 'Bright and tender.' }))
+    .toEqual({ kind: 'refused', refusal: 'denied' });
+  expect(fake.calls.filter(call => call.name === 'details')).toHaveLength(1);
+});
+
+test('a lapsed session while selecting the main text asks to sign in and a later publish succeeds', async () => {
+  const initial = { text: id(300), head: id(1500), body: 'Our notes.', publicationHead: null };
+  const fake = fakeMain({ recipe: startRecipe, notes: initial });
+  fake.interference.before = call => { if (call.name === 'select') fake.interference.writeStatus = 401; };
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en', initial });
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'refused', refusal: 'sign-in' });
+  expect(writer.snapshot().revoked).toBe(false);
+  expect(writer.snapshot().notes.body).toBe('Our notes.');
+  expect(fake.calls.map(call => call.name)).toEqual(['publish', 'select']);
+  fake.interference.writeStatus = undefined;
+  fake.interference.before = undefined;
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'published' });
+  expect(writer.snapshot().revoked).toBe(false);
 });

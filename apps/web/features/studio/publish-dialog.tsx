@@ -356,7 +356,7 @@ export function PublishDialog({
         onPublished(published.publication);
         if (makeMain) {
           update('main', 'running');
-          const outcome = await selectMainText(
+          const selected = await selectMainText(
             {
               actingSubject: agent,
               work: target.work,
@@ -366,11 +366,11 @@ export function PublishDialog({
               key: key('main'),
             },
             main,
-          ).catch(() => 'failed' as const);
+          ).catch(() => ({ outcome: 'failed' as const }));
           update(
             'main',
-            outcome,
-            outcome === 'denied' ? t.mainDenied : outcome === 'done' ? undefined : t.mainFailed,
+            selected.outcome,
+            selected.outcome === 'denied' ? t.mainDenied : selected.outcome === 'done' ? undefined : t.mainFailed,
           );
         }
         return null;

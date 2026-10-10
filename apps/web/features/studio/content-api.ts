@@ -24,14 +24,16 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function saveOutcomeOf(error: Failure): SaveOutcome {
   // No HTTP status: the request never got an answer (the network failed under it).
   if (!(error.status >= 100)) return { kind: 'offline' };
+  // The status stays on the outcome. Autosave treats 401 and 403 alike; a caller that must not can read it.
+  const withStatus = <T extends SaveOutcome>(body: T): T => ({ ...body, status: error.status });
   if (error.status === 409 && code(error) !== 'idempotency_conflict') {
     const head = field(error, 'currentHead');
-    return { kind: 'conflict', head: typeof head === 'string' ? head : null };
+    return withStatus({ kind: 'conflict', head: typeof head === 'string' ? head : null });
   }
-  if (error.status === 401 || error.status === 403) return { kind: 'denied' };
+  if (error.status === 401 || error.status === 403) return withStatus({ kind: 'denied' });
   if (error.status === 408 || error.status === 429 || error.status >= 500)
-    return { kind: 'failed', retryable: true };
-  return { kind: 'failed', retryable: false };
+    return withStatus({ kind: 'failed', retryable: true });
+  return withStatus({ kind: 'failed', retryable: false });
 }
 
 /**
