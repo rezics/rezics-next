@@ -82,8 +82,8 @@ export function meterPool<T extends Pool>(pool: T): T & QueryMeter {
       if (property === 'query') return countedQuery(state, query as (...args: unknown[]) => Promise<unknown>);
       if (property === 'connect') return (...args: unknown[]) => {
         if (typeof args[0] === 'function') return connect(...args as Parameters<Pool['connect']>);
-        return Promise.resolve(connect(...args as Parameters<Pool['connect']>)).then(client =>
-          meterClient(client as PoolClient, state));
+        return (connect as unknown as (...rest: unknown[]) => Promise<PoolClient>)(...args)
+          .then(client => meterClient(client, state));
       };
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
