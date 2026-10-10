@@ -416,10 +416,15 @@ function removalError(error: unknown): string {
   return redactCommandOutput(error instanceof Error ? error.message : String(error));
 }
 
+export interface GenerationRemoval {
+  removedIds: string[];
+  failures: { target: string; error: string }[];
+}
+
 /** Stopped containers first, then volumes, then the generation directory. */
 async function removeGenerations(
   generations: readonly RemovedGeneration[],
-): Promise<{ removedIds: string[]; failures: { target: string; error: string }[] }> {
+): Promise<GenerationRemoval> {
   const { dockerEnvironment, fixtureDirectory, fixtureProject, removeStoppedContainers, removeVolumes } =
     await import('./stack.ts');
   const docker = dockerEnvironment();
@@ -521,18 +526,24 @@ export interface SeedPruneOutcome {
  * abandoned project. Stopped containers are removed before volumes.
  */
 export async function executeSeedPrune(
-  options: SeedPruneRequest & { apply: boolean },
+  options: SeedPruneRequest & {
+    apply: boolean;
+    /** Defaults to the docker remover. Tests pass a stand-in. */
+    remove?: (generations: readonly RemovedGeneration[]) => Promise<GenerationRemoval>;
+    /** Defaults to the host inventory. Tests pass a fixed one. */
+    inventory?: PruneInventory;
+  },
 ): Promise<SeedPruneOutcome> {
   if (!SEED_NAME.test(options.seed)) throw new Error('seed-scoped prune needs the builder seed');
   if (!FIXTURE_ID.test(options.keepId))
     throw new Error('seed-scoped prune keeps one fixture generation id');
-  const inventory = await collectInventory();
-  const removeGenerations = seedPruneTargets(inventory, options);
-  if (!options.apply) return { mode: 'dry-run', removeGenerations, removedIds: [], failures: [] };
-  const removed = await removeGenerations(removeGenerations);
+  const inventory = options.inventory ?? (await collectInventory());
+  const targets = seedPruneTargets(inventory, options);
+  if (!options.apply) return { mode: 'dry-run', removeGenerations: targets, removedIds: [], failures: [] };
+  const removed = await (options.remove ?? removeGenerations)(targets);
   return {
     mode: 'apply',
-    removeGenerations,
+    removeGenerations: targets,
     removedIds: removed.removedIds,
     failures: removed.failures,
   };
@@ -542,9 +553,10 @@ export async function executeSeedPrune(
 export async function pruneSeedGenerations(seed: string, keepId: string): Promise<string[]> {
   const outcome = await executeSeedPrune({ seed, keepId, apply: true });
   if (outcome.failures.length) {
-    throw new Error(
-      outcome.failures.map((failure) => `${failure.target}: ${failure.error}`).join('; '),
-    );
+    const why = outcome.failures
+      .map((failure) => `${failure.target}: ${failure.error}`)
+      .join('; ');
+    throw new Error(`${outcome.failures.length} generations failed: ${why}`);
   }
   return outcome.removedIds;
 }

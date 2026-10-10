@@ -6,6 +6,7 @@ import {
   accountedPruneInventory,
   decideFixturePrune,
   formatPruneReport,
+  executeSeedPrune,
   pruneTargets,
   seedPruneTargets,
   type ListedGeneration,
@@ -353,6 +354,38 @@ test('a seed-scoped prune leaves another seed, and a pinned, retained and in-use
   );
   expect(removed.map((item) => item.id)).toEqual([supersededSame]);
   expect(removed[0]?.volumes).toEqual([volume(supersededSame).name]);
+});
+
+test('a seed-scoped apply removes that seed’s superseded generations through the injected remover', async () => {
+  const seed = 'g556-ranked-v1';
+  const keepId = 'fx-medium-aaaaaaaaaaaa';
+  const superseded = 'fx-medium-dddddddddddd';
+  const other = 'fx-medium-222222222222';
+  const received: string[] = [];
+  const outcome = await executeSeedPrune({
+    seed,
+    keepId,
+    apply: true,
+    inventory: {
+      generations: [
+        generation(keepId, { seed, compatible: true, completedAt: '2026-10-10T00:00:00.000Z' }),
+        generation(superseded, { seed, completedAt: '2026-08-01T00:00:00.000Z' }),
+        generation(other, { compatible: true, completedAt: '2026-01-01T00:00:00.000Z' }),
+      ],
+      volumes: [volume(keepId), volume(superseded), volume(other)],
+      currentIds: [],
+      pins: [],
+      mountedVolumes: [],
+    },
+    remove: async (generations) => {
+      received.push(...generations.map((item) => item.id));
+      return { removedIds: generations.map((item) => item.id), failures: [] };
+    },
+  });
+  expect(received).toEqual([superseded]);
+  expect(outcome.mode).toBe('apply');
+  expect(outcome.removedIds).toEqual([superseded]);
+  expect(outcome.failures).toEqual([]);
 });
 
 test('a seed-scoped prune removes only generations the fixture root accounts', () => {
