@@ -15,7 +15,8 @@ import { sealRecoveryPayload } from '../../../services/account/src/recovery-enve
 import { accountRecoveryCoverage } from '../../../services/account/src/recovery-coverage.ts';
 import { CommandOutcomeUnknown, CommandRejected, FusekiClient, type CommandEnvelope, type CommandResult }
   from '../../../services/main/src/infrastructure/fuseki.ts';
-import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { clearVerifiedImmutableObjectCache, S3ImmutableObjects }
+  from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
 import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
@@ -583,6 +584,10 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     const corrupt = await signer.fetch(`${new URL(apps.MAIN_S3_ENDPOINT!).origin}/${apps.MAIN_S3_BUCKET}/semantic/work/sha256/${corruptDigest}`, {
       method: 'PUT',body: Buffer.from('corrupt committed payload'),headers: { 'content-type': 'application/octet-stream' } });
     expect(corrupt.ok).toBe(true);
+    // The write above changes the stored bytes under a digest this process already
+    // verified; the per-process verified-byte cache (bounded by its TTL) would keep
+    // serving the good copy, so the test drops it to observe the corrupt storage.
+    clearVerifiedImmutableObjectCache();
     await borrowedTransaction(async read => { await expect(read('1')).rejects.toThrow(); });
     await expect(reconcile('1')).rejects.toThrow();
     expect(await facts(fuseki)).toEqual(held);
