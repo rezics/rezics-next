@@ -319,35 +319,60 @@ serial('MCP reads omit an erased revision and keep its siblings', async (scene) 
   const read = async (id: string) => dispatchTool(resource, { path: { resource: uuidOf(id) } }, caller,
     request => scene.app.handle(request));
   const work = await read(scene.work);
+  const contribution = await read(scene.draft.contribution);
   const kept = await read(scene.releases.kept);
   const erased = await read(scene.releases.erased);
   const page = await dispatchTool(editions, { path: { id: uuidOf(scene.work) },
     query: { limit: 20, actingSubject: scene.actor } }, caller,
     request => scene.app.handle(request));
-  const text = JSON.stringify({ work, kept, erased, page });
+  const editionsText = JSON.stringify(page);
+  const workText = JSON.stringify(work);
+  const contributionText = JSON.stringify(contribution);
   expect(work.structuredContent.status).toBe(200);
+  expect(contribution.structuredContent.status).toBe(200);
   expect(kept.structuredContent.status).toBe(200);
   expect(erased.structuredContent.status).toBe(404);
   expect(page.structuredContent.status).toBe(200);
-  expect(text).toContain(scene.releases.kept);
-  expect(text).not.toContain(scene.releases.erased);
-  expect(text).not.toContain(scene.heads.erased);
-  expect(text).not.toContain(scene.draft.erased);
+  expect(workText).toContain('ErasureReaderKeptTitle');
+  expect(workText, 'work_head').not.toContain('ErasureReaderGoneTitle');
+  expect(workText, 'work_head').not.toContain(scene.heads.erased);
+  expect(contributionText, 'text_contribution_draft').not.toContain(scene.draft.erased);
+  expect(contributionText, 'text_contribution_draft').not.toContain('gonedrafttoken');
+  expect(editionsText, 'release').toContain(scene.releases.kept);
+  expect(editionsText, 'release').not.toContain(scene.releases.erased);
+  expect(JSON.stringify(erased), 'release').not.toContain(scene.releases.erased);
 });
 
 serial('entity pages omit an erased revision and keep its siblings', async (scene) => {
   const entity = (id: string) => scene.call('GET', `/v1/resources/${uuidOf(id)}`, undefined, null);
+  const page = (id: string) => scene.call('GET', `/v1/resources/${uuidOf(id)}/page`, undefined, null);
   const work = await body(await entity(scene.work));
+  const contribution = await body(await entity(scene.draft.contribution));
   const kept = await body(await entity(scene.releases.kept));
   const erased = await body(await entity(scene.releases.erased));
+  const workPage = await body(await page(scene.work));
+  const erasedPage = await body(await page(scene.releases.erased));
+  const keptPage = await body(await page(scene.releases.kept));
   expect(work.status, work.text).toBe(200);
+  expect(contribution.status, contribution.text).toBe(200);
   expect(kept.status, kept.text).toBe(200);
   expect(erased.status).toBe(404);
-  expect(work.text).toContain(scene.work);
-  expect(work.text).not.toContain(scene.heads.erased);
-  expect(work.text).not.toContain(scene.draft.erased);
+  expect(workPage.status, workPage.text).toBe(200);
+  expect(keptPage.status, keptPage.text).toBe(200);
+  expect(erasedPage.status).toBe(404);
+  const header = JSON.parse(workPage.text) as { work: { revision: string } };
+  expect(header.work.revision, 'work_head').toBe(scene.heads.current);
+  expect(workPage.text, 'work_head').toContain('ErasureReaderKeptTitle');
+  expect(workPage.text, 'work_head').not.toContain('ErasureReaderGoneTitle');
+  expect(workPage.text, 'work_head').not.toContain(scene.heads.erased);
+  expect(workPage.text, 'text_contribution_draft').not.toContain(scene.draft.erased);
+  expect(workPage.text, 'release').not.toContain(scene.releases.erased);
+  expect(contribution.text, 'text_contribution_draft').not.toContain(scene.draft.erased);
+  expect(contribution.text, 'text_contribution_draft').not.toContain('gonedrafttoken');
   expect(kept.text).toContain(scene.releases.kept);
-  expect(kept.text).not.toContain(scene.releases.erased);
+  expect(kept.text, 'release').not.toContain(scene.releases.erased);
+  expect(keptPage.text, 'release').toContain(scene.releases.kept);
+  expect(keptPage.text, 'release').not.toContain(scene.releases.erased);
 });
 
 serial('sitemaps keep a work whose current head remains and omit an erased revision', async (scene) => {
@@ -363,7 +388,13 @@ serial('sitemaps keep a work whose current head remains and omit an erased revis
     after = next;
   }
   expect(found).toContain(scene.work);
-  expect(found).not.toContain(scene.heads.erased);
-  expect(found).not.toContain(scene.releases.erased);
-  expect(found).not.toContain(scene.draft.erased);
+  const shard = JSON.parse(found) as { entries: { reference: string; preview: string }[] };
+  const entry = shard.entries.find(item => item.reference === scene.work);
+  expect(entry?.reference, 'work_head').toBe(scene.work);
+  expect(entry?.preview).toBe(`/v1/public-previews/${uuidOf(scene.work)}`);
+  expect(found, 'work_head').not.toContain(scene.heads.erased);
+  expect(found, 'work_head').not.toContain('ErasureReaderGoneTitle');
+  expect(found, 'release').not.toContain(scene.releases.erased);
+  expect(found, 'text_contribution_draft').not.toContain(scene.draft.erased);
+  expect(found, 'text_contribution_draft').not.toContain('gonedrafttoken');
 });
