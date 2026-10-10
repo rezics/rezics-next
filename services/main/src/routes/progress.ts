@@ -51,6 +51,12 @@ export const openApiOperations = {
 const standingName = t.Union([t.Literal('not-started'), t.Literal('started'), t.Literal('completed'), t.Literal('dropped')]);
 const workStandingResult = t.Object({ work: ref, standing: standingName, version: t.Integer(),
   replayed: t.Optional(t.Boolean()) });
+/** The read says whether progress lives on parts. A Work with parts is not a failure. */
+const workProgressRead = t.Union([
+  t.Object({ work: ref, parts: t.Literal(false), standing: standingName, version: t.Integer(),
+    replayed: t.Optional(t.Boolean()) }),
+  t.Object({ work: ref, parts: t.Literal(true) }),
+]);
 
 function failure(error: unknown): Response {
   if (error instanceof WorkHasParts) return problem(409, 'work_has_parts', error.message);
@@ -214,15 +220,18 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/works/:id/progress', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: workStandingResult, ...authorizedReadProblems },
+      response: { 200: workProgressRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       try {
         const workId = `https://rezics.com/id/${params.id}`;
         const principal = await work.account.verify(request, ['work:read']);
-        await partlessWork(work, request, workId, query.actingSubject);
+        const basis = await workProgressBasis(work, request, workId, query.actingSubject);
+        if (basis.parts) return Response.json({ work: workId, parts: true },
+          { headers: { 'cache-control': 'private, no-store' } });
         const row = await work.progress.read(principal, workId, workId);
-        return Response.json(standingBody(workId, row), { headers: { 'cache-control': 'private, no-store' } });
+        return Response.json({ ...standingBody(workId, row), parts: false },
+          { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return standingFailure(error); }
     })
     .put('/v1/works/:id/progress', {
@@ -241,7 +250,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const workId = `https://rezics.com/id/${params.id}`;
         const principal = await work.account.verify(request, ['work:read', 'library:write']);
-        const canonical = await partlessWork(work, request, workId, body.actingSubject);
+        const basis = await workProgressBasis(work, request, workId, body.actingSubject);
+        if (basis.parts) throw new WorkHasParts('Progress for this Work is kept on its parts');
+        const canonical = basis.work;
         const encoded = encodeWorkStanding(body.standing);
         const value = await work.progress.write({ principal, structure: workId, occurrence: workId,
           library: { agent: body.actingSubject, work: canonical },
@@ -258,16 +269,16 @@ function standingFailure(error: unknown): Response {
   return workReadError(error);
 }
 
-/** The Work is visible and has no part Structure. One basis read and one probe. */
-async function partlessWork(deps: MainWorkDependencies, request: Request, workId: string, actingSubject: string) {
+/** The Work is visible, and whether any part Structure exists. One basis read and one probe.
+ * An empty composition still counts: the parts are the Structure, not the first page of them. */
+async function workProgressBasis(deps: MainWorkDependencies, request: Request, workId: string, actingSubject: string) {
   return workRead(deps, request, { actingSubject }, async session => {
     const basis = await readWorkBasis(session, workId);
     const structures = await session.query(`SELECT ?structure WHERE { GRAPH ${iri(GRAPHS.current)} {
       ?structure a rv:Structure ; rv:structureOf ${iri(basis.card.mainVersion)} ; rv:structureProfile ?profile .
       FILTER(?profile IN (<${RV}WorkComposition>, <${RV}BookComposition>))
     } } LIMIT 1`, 1);
-    if (structures.length) throw new WorkHasParts('Progress for this Work is kept on its parts');
-    return basis.card.id;
+    return { work: basis.card.id, parts: structures.length > 0 };
   });
 }
 

@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { progressControl } from '../features/tracking/medium-progress.tsx';
+import { workProgressConflict } from '../features/tracking/media-api.ts';
 import { chapterPosition, flattenChapters, gameStatus, mediumOf, resumeAt, resumeName, type ChapterRef } from '../features/tracking/media.ts';
 
 const chapter = (volume: number, number: number, id = `${volume}-${number}`): ChapterRef => ({
@@ -45,6 +47,40 @@ describe('medium progress', () => {
     expect(resumeName({ labels: [] })).toBeNull();
     expect(resumeName({})).toBeNull();
     expect(resumeName(null)).toBeNull();
+  });
+
+  test('a book of volume groups, and a book with an empty composition, keep the chapter panel', async () => {
+    let asked = 0;
+    const api = {
+      routes: async () => { asked++; return { ok: true as const, data: { items: [], next: null } }; },
+      workParts: async () => { asked++; return { ok: true as const, data: false }; },
+    };
+    const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+    // The first page of a nested book is volume groups, so a chapter list and a volume list are both empty.
+    expect(await progressControl(api, null, work, 'book')).toEqual({ kind: 'chapters' });
+    // An empty BookComposition lists nothing either. The book presentation is enough.
+    expect(await progressControl(api, null, work, 'book')).toEqual({ kind: 'chapters' });
+    expect(asked).toBe(0);
+  });
+
+  test('a Work whose progress read says it has parts uses the chapter panel', async () => {
+    const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
+    const api = {
+      routes: async () => { throw new Error('contents pages are not the parts check'); },
+      workParts: async () => ({ ok: true as const, data: true }),
+    };
+    expect(await progressControl(api, null, work, null)).toEqual({ kind: 'chapters' });
+    expect(await progressControl({ ...api, workParts: async () => ({ ok: false as const, failure: 'unavailable' as const }) },
+      null, work, null)).toEqual({ kind: 'chapters' });
+    expect(await progressControl({ ...api, workParts: async () => ({ ok: true as const, data: false }) },
+      null, work, null)).toEqual({ kind: 'work', verb: 'read' });
+  });
+
+  test('work_has_parts is the parts answer, and a moved graph is the conflict that can restart', () => {
+    expect(workProgressConflict(409, { code: 'work_has_parts' })).toBe('parts');
+    expect(workProgressConflict(409, { code: 'read_basis_changed' })).toBe('other');
+    expect(workProgressConflict(409, { code: 'stale_progress' })).toBe('other');
+    expect(workProgressConflict(404, { code: 'work_has_parts' })).toBeNull();
   });
 
   test('a game is completed from its required parts, and a route alone leaves it played', () => {

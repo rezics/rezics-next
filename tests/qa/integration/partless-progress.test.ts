@@ -71,8 +71,8 @@ test('a partless Work is marked on one device and read, undone and refused when 
     await grant(a, person, `work:edit:${saved.work}`, 'work.edit');
     const path = `/v1/works/${short(saved.work)}/progress`;
     const query = `?actingSubject=${encodeURIComponent(person)}`;
-    type Mark = { work: string; standing: string; version: number; replayed?: boolean };
-    expect(await json<Mark>(await call('GET', `${path}${query}`))).toMatchObject({ standing: 'not-started', version: 0 });
+    type Mark = { work: string; parts?: boolean; standing: string; version: number; replayed?: boolean };
+    expect(await json<Mark>(await call('GET', `${path}${query}`))).toMatchObject({ parts: false, standing: 'not-started', version: 0 });
     const started = await json<Mark>(await call('PUT', path, { actingSubject: person, expectedVersion: 0, standing: 'started' }));
     expect(started).toMatchObject({ standing: 'started', version: 1 });
     // Another request of the same reader is the other device.
@@ -114,6 +114,7 @@ test('a partless Work is marked on one device and read, undone and refused when 
     expect((await call('GET', `/v1/works/${randomUUID()}/progress${query}`)).status).toBe(404);
     await json(await call('POST', '/v1/compositions', { profile: 'work-composition', work: saved.work,
       mainVersion: saved.mainVersion, actingSubject: person }), 201);
+    expect(await json<{ parts: boolean }>(await call('GET', `${path}${query}`))).toEqual({ work: saved.work, parts: true });
     const refused = await call('PUT', path, { actingSubject: person, expectedVersion: 4, standing: 'completed' });
     expect(refused.status).toBe(409);
     expect((await refused.json() as { code: string }).code).toBe('work_has_parts');

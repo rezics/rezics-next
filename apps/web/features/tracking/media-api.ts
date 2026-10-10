@@ -1,7 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
-import { failureOf, type Loaded, settle, uuidOf } from '../feed/types.ts';
+import { failedRead, failureOf, isOfflineError, type Loaded, type ReadFailure, settle, uuidOf } from '../feed/types.ts';
 import { type EpisodeProgress, type ProgressStale, mainEpisodeApi } from './episode-api.ts';
 import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.ts';
 
@@ -50,16 +50,64 @@ export interface MediaApi {
   /** Writes one occurrence and, when another device wrote first, returns both sides. */
   mark(part: { structure: string; occurrence: string }, change: { completed: boolean; position?: string | null }):
     Promise<Loaded<EpisodeProgress> | ProgressStale>;
-  /** The whole Work, when it has no parts. */
-  workStanding(work: string): Promise<Loaded<WorkMark>>;
+  /** Whether progress is kept on parts. Main's answer, including an empty composition. */
+  workParts(work: string): Promise<Loaded<boolean>>;
+  /** The whole Work, when it has no parts. A Work with parts is `has-parts`, not a retry. */
+  workStanding(work: string): Promise<Loaded<WorkMark> | { ok: false; failure: 'has-parts' }>;
   /** Writes that mark. A stale version returns both sides and does not merge them. */
-  markWork(work: string, standing: WorkStanding): Promise<Loaded<WorkMark> | WorkStale>;
+  markWork(work: string, standing: WorkStanding): Promise<Loaded<WorkMark> | WorkStale | { ok: false; failure: 'has-parts' }>;
+}
+
+/** `work_has_parts` names a Work whose progress lives on its parts. Other 409s are a moved graph or a stale write. */
+export function workProgressConflict(status: number, body: unknown): 'parts' | 'other' | null {
+  if (status !== 409) return null;
+  const code = body && typeof body === 'object' && 'code' in body ? (body as { code?: unknown }).code : undefined;
+  return code === 'work_has_parts' ? 'parts' : 'other';
 }
 
 const PAGE = 20;
 const MOVED_RESTARTS = 4;
 const MOVED_DELAY_MS = 250;
 const wait = (ms: number) => new Promise(done => setTimeout(done, ms));
+
+type WorkProgressBody = { parts?: boolean; standing?: WorkStanding; version?: number };
+type WorkProgressAnswer = { data: WorkProgressBody | null; error: { status: number; value: unknown } | null };
+
+/** One progress read. A Work with parts answers immediately. A moved graph is the only 409 that restarts. */
+async function readWorkProgress(get: () => Promise<WorkProgressAnswer>): Promise<
+  | { ok: true; parts: false; mark: WorkMark }
+  | { ok: true; parts: true }
+  | { ok: false; failure: ReadFailure }
+> {
+  for (let attempt = 0; ; attempt++) {
+    let answer: WorkProgressAnswer;
+    try { answer = await get(); }
+    catch (error) {
+      const failure = isOfflineError(error) ? 'offline' as const : 'unavailable' as const;
+      if (failure === 'offline' || attempt === MOVED_RESTARTS) return { ok: false, failure };
+      await wait(MOVED_DELAY_MS * 2 ** attempt);
+      continue;
+    }
+    if (answer.error && workProgressConflict(answer.error.status, answer.error.value) === 'parts') {
+      return { ok: true, parts: true };
+    }
+    if (answer.error) {
+      const failure = failureOf(answer.error.status, answer.error.value);
+      if (failure !== 'moved' && failure !== 'unavailable' || attempt === MOVED_RESTARTS) {
+        return failedRead(failure, answer.error.value);
+      }
+      await wait(MOVED_DELAY_MS * 2 ** attempt);
+      continue;
+    }
+    const data = answer.data;
+    if (data?.parts === true) return { ok: true, parts: true };
+    if (data?.standing && typeof data.version === 'number') {
+      return { ok: true, parts: false, mark: { standing: data.standing, version: data.version } };
+    }
+    if (attempt === MOVED_RESTARTS) return { ok: false, failure: 'unavailable' };
+    await wait(MOVED_DELAY_MS * 2 ** attempt);
+  }
+}
 
 async function restarted<T>(read: () => Promise<Loaded<T>>): Promise<Loaded<T>> {
   for (let attempt = 0; ; attempt++) {
@@ -157,27 +205,36 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
     },
     progress: part => episodes.progress(part),
     mark: (part, change) => episodes.mark(part, change, { conflict: true }),
+    async workParts(work) {
+      const read = await readWorkProgress(() => main().v1.works({ id: uuidOf(work) }).progress.get({ query: { actingSubject } }));
+      return read.ok ? { ok: true, data: read.parts } : read;
+    },
     async workStanding(work) {
-      return restarted(() => settle(() => main().v1.works({ id: uuidOf(work) }).progress.get({ query: { actingSubject } })));
+      const read = await readWorkProgress(() => main().v1.works({ id: uuidOf(work) }).progress.get({ query: { actingSubject } }));
+      if (!read.ok) return read;
+      return read.parts ? { ok: false, failure: 'has-parts' } : { ok: true, data: read.mark };
     },
     async markWork(work, standing) {
       const progress = () => main().v1.works({ id: uuidOf(work) }).progress;
       for (let attempt = 0; attempt < 5; attempt++) {
-        const current = await restarted(() => settle(() => progress().get({ query: { actingSubject } })));
+        const current = await readWorkProgress(() => progress().get({ query: { actingSubject } }));
         if (!current.ok) return current;
+        if (current.parts) return { ok: false, failure: 'has-parts' };
         const key = commandKey();
         for (let tries = 0; tries < 3; tries++) {
           try {
-            const { data, error } = await progress().put({ actingSubject, expectedVersion: current.data.version, standing },
+            const { data, error } = await progress().put({ actingSubject, expectedVersion: current.mark.version, standing },
               { headers: { 'idempotency-key': key } });
             if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
             if (error.status === 409) {
+              if (workProgressConflict(error.status, error.value) === 'parts') return { ok: false, failure: 'has-parts' };
               const code = (error.value as { code?: string } | null)?.code;
               if (code === 'read_basis_changed') { await wait(MOVED_DELAY_MS * 2 ** attempt); break; }
               if (code === 'stale_progress') {
-                const again = await restarted(() => settle(() => progress().get({ query: { actingSubject } })));
+                const again = await readWorkProgress(() => progress().get({ query: { actingSubject } }));
                 if (!again.ok) return again;
-                return { ok: false, failure: 'stale', current: again.data, submitted: standing };
+                if (again.parts) return { ok: false, failure: 'has-parts' };
+                return { ok: false, failure: 'stale', current: again.mark, submitted: standing };
               }
               break;
             }

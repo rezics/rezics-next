@@ -590041,33 +590041,59 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "standing": {
-                      "enum": [
-                        "not-started",
-                        "started",
-                        "completed",
-                        "dropped"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "parts": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "standing": {
+                          "enum": [
+                            "not-started",
+                            "started",
+                            "completed",
+                            "dropped"
+                          ],
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "integer"
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "work",
+                        "parts",
+                        "standing",
+                        "version"
                       ],
-                      "type": "string"
+                      "type": "object"
                     },
-                    "version": {
-                      "type": "integer"
-                    },
-                    "work": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "parts": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "work",
+                        "parts"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "work",
-                    "standing",
-                    "version"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
