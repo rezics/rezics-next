@@ -55399,6 +55399,15 @@
               "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
