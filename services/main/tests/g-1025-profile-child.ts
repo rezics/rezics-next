@@ -217,6 +217,24 @@ async function profileHome() {
         sink.clear();
       }
     }
+    const pageCounts = new Map<string, { postgres: Set<number | null>; fuseki: Set<number | null> }>();
+    for (const row of evidence) {
+      if (row.dimension !== 'pageSize') continue;
+      const key = `${row.operation}|${row.temperature}`;
+      const found = pageCounts.get(key) ?? { postgres: new Set<number | null>(), fuseki: new Set<number | null>() };
+      found.postgres.add(row.profile.postgresStatements);
+      found.fuseki.add(row.profile.fusekiRequests);
+      pageCounts.set(key, found);
+    }
+    assert.equal(pageCounts.size, 8);
+    for (const [key, counts] of pageCounts) {
+      assert.equal(counts.postgres.size, 1, `${key} postgres grew with page size`);
+      assert.equal(counts.fuseki.size, 1, `${key} fuseki grew with page size`);
+      const signed = key.startsWith('signed');
+      const cap = signed ? HOME_REQUEST_COST.signedFeed : HOME_REQUEST_COST.anonymousFeed;
+      assert.equal([...counts.postgres][0], cap.postgresStatements, key);
+      assert.equal([...counts.fuseki][0], cap.fusekiRequests, key);
+    }
   } finally {
     mkdirSync('.temp/work-profiles', { recursive: true });
     writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1025-home.json', JSON.stringify({

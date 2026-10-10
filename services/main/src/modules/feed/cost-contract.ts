@@ -1,9 +1,25 @@
 /**
- * Home request work, G-1025. Native Work pages share set-based owner stages:
- * Access opening/closing cuts cost 8+8 signed (6+6 anonymous), candidate and
- * member seeks cost 2, actors/follow matching cost 1, canonical names cost 1,
- * avatar hydration/fence cost 2, and selected shelf state costs 2. Thus 24 SQL
- * statements signed and 18 anonymous, independent of the emitted item count.
+ * Home request work, G-1025. A feed page does not take more statements as it
+ * returns more items. Anonymous is 22 Postgres and 8 Fuseki. Signed is 28
+ * Postgres and 8 Fuseki. Some signed Best corpus scales have no shelf read and
+ * measure 26; the cap is the page that includes that pair.
+ *
+ * Anonymous Postgres:
+ * 1-6 opening Access control read;
+ * 7 candidate page seek;
+ * 8 member seek;
+ * 9 source-binding lookup, on the content pool;
+ * 10 follow/actor card;
+ * 11 avatar hydration;
+ * 12 summary disclosure, one statement after hydration, covering names, covers
+ * and the anonymous-name decision;
+ * 13 canonical names;
+ * 14 feed body disclosure, using the work head the summary already read;
+ * 15 avatar fence;
+ * 16-21 closing Access control read;
+ * 22 closing recovery check.
+ * Signed opening and closing control reads add two statements each, and the
+ * selected shelf pair adds two more.
  * Graph calls: two position cuts, source, metadata parts, actor names, public
  * summaries, global comment contexts and compositions: eight. Batch row/byte
  * work still grows with emitted references; these are round-trip bounds.
@@ -33,8 +49,8 @@
  * fan-out. Anonymous requests perform no private Home/follow/viewer reads.
  */
 export const HOME_REQUEST_COST = {
-  anonymousFeed: { fusekiRequests: 8, postgresStatements: 18 },
-  signedFeed: { fusekiRequests: 8, postgresStatements: 24 },
+  anonymousFeed: { fusekiRequests: 8, postgresStatements: 22 },
+  signedFeed: { fusekiRequests: 8, postgresStatements: 28 },
   continue: { fusekiRequests: 30, postgresStatements: 110 },
   suggestions: { fusekiRequests: 25, postgresStatements: 60 },
 } as const;
