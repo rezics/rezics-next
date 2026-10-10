@@ -339,6 +339,8 @@ export default {
   noRolesTitle: 'Pas encore de rôles', noRolesHelp: 'Créez un rôle pour partager la modération avec des personnes de confiance.',
   // Machine-drafted; needs native review.
   roleHoldersHelp: 'Personne n’a ce rôle.',
+  // Machine-drafted; needs native review.
+  holdersNotVisible: 'Titulaires non visibles',
   showAllHolders: 'Tout afficher',
   showAllHoldersLabel: insert('Afficher toutes les personnes qui ont « {{role}} »', { role: String }),
   roleCapReached: insert('Cette communauté a atteint sa limite de {{cap}} rôles.', { cap: String }),

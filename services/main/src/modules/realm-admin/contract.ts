@@ -13,7 +13,7 @@ import { Value } from 'typebox/value';
 // (consulted 2026-09-28); Access remains the enforcement authority here.
 /** A Realm can have at most this many roles. One already past the cap keeps them and cannot add more. */
 export const REALM_ROLE_CAP = 32 as const;
-/** Names shown on a role card. The read fetches one extra row and sets moreHolders from it. */
+/** Names shown on a role card when the caller can read members. The read fetches one extra row and sets moreHolders from it. */
 export const REALM_ROLE_HOLDER_PREVIEW = 3 as const;
 export const REALM_ROLE_HOLDER_PROBE = 4 as const;
 /** The roles read can return a Realm that already exceeded the cap, and refuses a larger page. */
@@ -48,7 +48,9 @@ export const impact = t.Object({ digest: t.String(), exact: t.Literal(true), aff
     gained: t.Array(realmPermission), lost: t.Array(realmPermission) }), { maxItems: REALM_ADMIN_COST.assignments }) });
 export type RoleImpact = Static<typeof impact>;
 export const roleView = t.Object({ id: readUuid, name: t.String(), permissions: t.Array(realmPermission),
-  holders: t.Array(readId, { maxItems: REALM_ROLE_HOLDER_PREVIEW }), moreHolders: t.Boolean() });
+  // Null means this caller cannot read members, not that the role is unused.
+  holders: t.Nullable(t.Array(readId, { maxItems: REALM_ROLE_HOLDER_PREVIEW })),
+  moreHolders: t.Nullable(t.Boolean()) });
 export const roleList = t.Object({ generation, cap: t.Literal(REALM_ROLE_CAP),
   roles: t.Array(roleView, { maxItems: REALM_ROLE_READ_LIMIT }) });
 export const roleReceipt = t.Object({ receiptId: readUuid, generation, replayed: t.Boolean(), impact });

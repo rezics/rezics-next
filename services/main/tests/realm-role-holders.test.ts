@@ -80,6 +80,23 @@ async function realmWith(actorGrant: readonly string[]) {
   return { principal, principalId, actor, realm, scope };
 }
 
+async function principalOn(realm: string, scope: string, actorGrant: readonly string[]) {
+  const principalId = randomUUID();
+  const principal: VerifiedPrincipal = { issuer: 'https://account.rezics.test', subject: randomUUID() };
+  const actor = `https://rezics.com/id/${randomUUID()}`;
+  await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    [principalId, principal.issuer, principal.subject]);
+  await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
+  await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), principalId, actor]);
+  for (const action of actorGrant) {
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,$4,'infinity')`, [randomUUID(), actor, scope, action]);
+  }
+  return { principal, actor };
+}
+
 async function people(realm: string, from: number, count: number, options: {
   role?: string; active?: boolean; kind?: 'agent' | 'institution'; banned?: boolean; assignOnly?: boolean;
 } = {}) {
@@ -248,4 +265,29 @@ test('an unknown role is an empty page, and holding a role does not grant the re
   } finally {
     await pool.query('UPDATE access.recovery_fence SET open = true WHERE id');
   }
+});
+
+test('a roles manager who cannot read members does not learn who holds a role', async () => {
+  const admin = new AccessRealmManagement(pool);
+  const manager = await realmWith(['realm.roles.manage']);
+  const wide = await role(manager.realm, 'Wide');
+  const holder = agent(41);
+  await pool.query("INSERT INTO access.authority_subject (id, kind, active) VALUES ($1, 'agent', true)", [holder]);
+  await pool.query(`INSERT INTO access.realm_admin_assignment (realm, role_id, member, valid_until)
+    VALUES ($1,$2,$3,clock_timestamp() + interval '1 day')`, [manager.realm, wide, holder]);
+  const hidden = await admin.roles(manager.principal, manager.realm, manager.actor);
+  const shown = (role: { id: string; name: string; permissions: readonly string[] }) =>
+    ({ id: role.id, name: role.name, permissions: role.permissions });
+  expect(hidden.roles).toEqual([expect.objectContaining({
+    id: wide, name: 'Wide', permissions: [], holders: null, moreHolders: null })]);
+  expect(JSON.stringify(hidden)).not.toContain(holder);
+  await expect(admin.members(manager.principal, manager.realm, { actingSubject: manager.actor }))
+    .rejects.toBeInstanceOf(RealmAdminDenied);
+
+  const reader = await principalOn(manager.realm, manager.scope, ['realm.roles.manage', 'realm.members.manage']);
+  const visible = await admin.roles(reader.principal, manager.realm, reader.actor);
+  expect(visible.generation).toBe(hidden.generation);
+  expect(visible.cap).toBe(hidden.cap);
+  expect(visible.roles.map(shown)).toEqual(hidden.roles.map(shown));
+  expect(visible.roles[0]).toMatchObject({ holders: [holder], moreHolders: false });
 });

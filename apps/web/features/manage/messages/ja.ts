@@ -328,6 +328,8 @@ export default {
   noRolesTitle: '役割はまだありません', noRolesHelp: '信頼できる人とモデレーションを分担するため、役割を作成してください。',
   // Machine-drafted; needs native review.
   roleHoldersHelp: 'この役割を持つ人はまだいません。',
+  // Machine-drafted; needs native review.
+  holdersNotVisible: '保持者は表示できません',
   showAllHolders: 'すべて表示',
   showAllHoldersLabel: insert('「{{role}}」を持つ人をすべて表示', { role: String }),
   roleCapReached: insert('このコミュニティの役割は上限の {{cap}} 件に達しています。', { cap: String }),

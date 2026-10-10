@@ -339,6 +339,8 @@ export default {
   noRolesTitle: '아직 역할이 없어요', noRolesHelp: '신뢰하는 사람들과 운영 업무를 나눌 역할을 만들어 보세요.',
   // Machine-drafted; needs native review.
   roleHoldersHelp: '이 역할을 가진 사람이 아직 없어요.',
+  // Machine-drafted; needs native review.
+  holdersNotVisible: '역할 보유자를 볼 수 없어요',
   showAllHolders: '모두 보기',
   showAllHoldersLabel: insert('「{{role}}」 역할을 가진 사람 모두 보기', { role: String }),
   roleCapReached: insert('이 커뮤니티의 역할이 한도인 {{cap}}개에 도달했어요.', { cap: String }),

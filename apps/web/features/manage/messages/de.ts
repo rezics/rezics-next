@@ -339,6 +339,8 @@ export default {
   noRolesTitle: 'Noch keine Rollen', noRolesHelp: 'Erstelle eine Rolle, um Moderationsaufgaben mit vertrauenswürdigen Personen zu teilen.',
   // Machine-drafted; needs native review.
   roleHoldersHelp: 'Niemand hat diese Rolle.',
+  // Machine-drafted; needs native review.
+  holdersNotVisible: 'Inhaber nicht sichtbar',
   showAllHolders: 'Alle anzeigen',
   showAllHoldersLabel: insert('Alle anzeigen, die „{{role}}“ haben', { role: String }),
   roleCapReached: insert('Diese Community hat ihr Limit von {{cap}} Rollen erreicht.', { cap: String }),

@@ -436669,19 +436669,29 @@
                       "items": {
                         "properties": {
                           "holders": {
+                            "~elyTyp": 7,
                             "items": {
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
                             "maxItems": 3,
-                            "type": "array"
+                            "nullable": true,
+                            "type": [
+                              "array",
+                              "null"
+                            ]
                           },
                           "id": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
                           },
                           "moreHolders": {
-                            "type": "boolean"
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
                           },
                           "name": {
                             "type": "string"

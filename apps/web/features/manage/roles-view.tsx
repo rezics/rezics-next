@@ -69,10 +69,16 @@ export function RolesView({ realm, address = realm, actingSubject, list, agents,
             </li>)}
           </ul>
           <div className="grid gap-1 border-border/60 border-t pt-3 text-muted-foreground text-sm">
-            <p>{role.holders.length ? role.holders.map(name).join(', ') : t.roleHoldersHelp}</p>
-            {role.moreHolders ? <LocalizedLink href={membersHref(address, role.id)}
-              className="w-fit rounded-md font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={t.showAllHoldersLabel({ role: role.name })}>{t.showAllHolders}</LocalizedLink> : null}
+            {role.holders === null ? <p>{t.holdersNotVisible}{' '}
+              <LocalizedLink href={membersHref(address)}
+                className="rounded-md font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {t.tabMembers}</LocalizedLink></p>
+              : <>
+                <p>{role.holders.length ? role.holders.map(name).join(', ') : t.roleHoldersHelp}</p>
+                {role.moreHolders ? <LocalizedLink href={membersHref(address, role.id)}
+                  className="w-fit rounded-md font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={t.showAllHoldersLabel({ role: role.name })}>{t.showAllHolders}</LocalizedLink> : null}
+              </>}
           </div>
         </li>)}
       </ul>}

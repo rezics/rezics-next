@@ -231,6 +231,17 @@ export class AccessRealmManagement {
     return { id: row.id, validUntil: row.valid_until };
   }
 
+  /** Whether `action` is granted. A missing grant is false; any other failure still aborts the read. */
+  private async allowed(client: PoolClient, principal: VerifiedPrincipal, realm: string, actor: string, action: string) {
+    try {
+      await this.authorize(client, principal, realm, actor, action);
+      return true;
+    } catch (error) {
+      if (error instanceof RealmAdminDenied) return false;
+      throw error;
+    }
+  }
+
   private async write<T extends Receipt>(principal: VerifiedPrincipal, realm: string,
     input: { actingSubject: string; expectedGeneration: string; reason: string }, key: string,
     action: string, run: (client: PoolClient, principalId: string, id: string, generation: string,
@@ -468,6 +479,18 @@ export class AccessRealmManagement {
   roles(principal: VerifiedPrincipal, realm: string, actor: string) {
     return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.roles.manage');
+      // Holder names are member identities. Only someone who can already read
+      // members may see them. Null, not [], so a roles-only manager is not told
+      // the role is unused. The holder query does not run otherwise.
+      const seeHolders = await this.allowed(client, principal, realm, actor, 'realm.members.manage');
+      if (!seeHolders) {
+        const rows = (await client.query<{ id: string; name: string; permissions: RealmPermission[] }>(
+          `SELECT id, name, permissions FROM access.realm_admin_role
+           WHERE realm = $1 ORDER BY id LIMIT $2`, [realm, REALM_ROLE_READ_LIMIT + 1])).rows;
+        if (rows.length > REALM_ROLE_READ_LIMIT) throw new RealmAdminLimit('Realm role budget exceeded');
+        return { generation, cap: REALM_ROLE_CAP, roles: rows.map(row => ({ id: row.id, name: row.name,
+          permissions: row.permissions, holders: null, moreHolders: null })) };
+      }
       const rows = (await client.query<RolePreviewRow>(REALM_ROLE_HOLDER_PREVIEW_SQL,
         [realm, REALM_ROLE_READ_LIMIT + 1, REALM_ROLE_HOLDER_PREVIEW, REALM_ROLE_HOLDER_PROBE])).rows;
       if (rows.length > REALM_ROLE_READ_LIMIT) throw new RealmAdminLimit('Realm role budget exceeded');

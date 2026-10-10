@@ -24,7 +24,7 @@ export default async function RealmRolesRoute({ params }: { params: Promise<{ re
   if (!list.ok) return <ManageFailure failure={list.failure} locale={locale} messages={messages} signInHref={signInHref}
     retryHref={localizedPath(realmHref(address, 'roles'), locale)} />;
   // Each card names its first three holders. A Realm at the cap is 32 cards.
-  const agents = await readAgents(anonymous, list.data.roles.flatMap(role => role.holders), undefined, 32 * 3);
+  const agents = await readAgents(anonymous, list.data.roles.flatMap(role => role.holders ?? []), undefined, 32 * 3);
   return <RolesView realm={realm} address={address} actingSubject={actingSubject} list={list.data} agents={agents}
     locale={locale} messages={messages} />;
 }

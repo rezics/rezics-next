@@ -354,6 +354,8 @@ export default {
   noRolesTitle: '还没有角色', noRolesHelp: '创建角色，与你信任的人分担审核工作。',
   // Machine-drafted; needs native review.
   roleHoldersHelp: '还没有人担任这个角色。',
+  // Machine-drafted; needs native review.
+  holdersNotVisible: '无法查看担任者',
   showAllHolders: '查看全部',
   showAllHoldersLabel: insert('查看所有担任「{{role}}」的人', { role: String }),
   roleCapReached: insert('此社区的角色已达上限（{{cap}} 个）。', { cap: String }),

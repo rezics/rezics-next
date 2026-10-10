@@ -74,6 +74,19 @@ export const ShowAllHolders: Story = {
   },
 };
 
+/** A manager who can edit roles but not read members is not shown who holds them. */
+export const HoldersNotVisible: Story = {
+  args: { list: { generation: '12', cap: 32, roles: [{ ...roles[0]!, holders: null, moreHolders: null }] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const card = canvas.getByRole('heading', { name: 'Community moderators' }).closest('li')!;
+    await expect(within(card).getByText('Holders not visible')).toBeVisible();
+    await expect(card).not.toHaveTextContent('Daniel Chen');
+    const link = within(card).getByRole('link', { name: 'Members' });
+    await expect(link).toHaveAttribute('href', expect.stringMatching(new RegExp(`/manage/r/${realm}/members$`)));
+  },
+};
+
 /** A Realm at the cap keeps its roles and cannot add another from this page. */
 export const AtTheCap: Story = {
   args: { list: { generation: '12', cap: 32, roles: Array.from({ length: 32 }, (_, index) => ({

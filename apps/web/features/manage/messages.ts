@@ -389,6 +389,7 @@ export const messages = {
   takeRole: 'Remove role',
   noRolesTitle: 'No roles yet', noRolesHelp: 'Create a role to share moderation work with people you trust.',
   roleHoldersHelp: 'No one holds this role.',
+  holdersNotVisible: 'Holders not visible',
   showAllHolders: 'Show all',
   showAllHoldersLabel: insert('Show everyone who holds {{role}}', { role: String }),
   roleCapReached: insert('This Realm has reached its limit of {{cap}} roles.', { cap: String }),

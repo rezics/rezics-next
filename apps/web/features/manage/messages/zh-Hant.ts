@@ -328,6 +328,8 @@ export default {
   noRolesTitle: '目前沒有角色', noRolesHelp: '建立角色，與信任的人分擔社群管理工作。',
   // Machine-drafted; needs native review.
   roleHoldersHelp: '還沒有人擔任這個角色。',
+  // Machine-drafted; needs native review.
+  holdersNotVisible: '無法查看擔任者',
   showAllHolders: '查看全部',
   showAllHoldersLabel: insert('查看所有擔任「{{role}}」的人', { role: String }),
   roleCapReached: insert('此社群的角色已達上限（{{cap}} 個）。', { cap: String }),
