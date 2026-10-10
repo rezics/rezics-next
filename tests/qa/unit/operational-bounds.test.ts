@@ -8,7 +8,7 @@ import type { FusekiClient } from '../../../services/main/src/infrastructure/fus
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { BackpressureSaturated, BackpressureUnavailable, InFlightAdmission,
   type AdmissionLease, type LeaseOutcome } from '../../../services/main/src/operations/admission-budget.ts';
-import { BACKPRESSURE_PROFILE_V1, OperationsBackpressure,
+import { BACKPRESSURE_PROFILE_V1, OperationsBackpressure, relayHandoffPositions,
   type DurablePositions } from '../../../services/main/src/operations/backpressure.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds,
   OperationalBoundsInvalid } from '../../../services/main/src/operations/bounds.ts';
@@ -196,6 +196,94 @@ test('OPS06: saturated object uploads are refused at the Main boundary and none 
     method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }));
   expect(invalid.status).toBe(400);
   expect((await read()).lanes[2].counters.admitted).toBe(limit);
+});
+
+function graphHead(sequence: string, options?: { hold?: string; copies?: number }) {
+  const copies = options?.copies ?? 1;
+  const binding = { sequence: { type: 'literal', value: sequence },
+    ...(options?.hold ? { hold: { type: 'literal', value: options.hold } } : {}) };
+  return { results: { bindings: Array.from({ length: copies }, () => structuredClone(binding)) } };
+}
+
+function brokerLane(sequence: string | (() => string),
+  checkpoint: (() => Promise<{ dataEpoch: string; sequence: string } | null>),
+  options?: { hold?: string; copies?: number }) {
+  const order: string[] = [];
+  const fuseki = { query: async () => {
+    order.push('head');
+    const value = typeof sequence === 'function' ? sequence() : sequence;
+    return graphHead(value, options);
+  } } as unknown as FusekiClient;
+  return { order, lanes: new OperationsBackpressure({
+    broker: relayHandoffPositions(fuseki, epoch, async () => {
+      order.push('checkpoint');
+      return checkpoint();
+    }),
+  }) };
+}
+
+async function faultCodes(run: () => Promise<void>): Promise<string[]> {
+  const codes: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    const line = args.map(item => String(item)).join(' ');
+    const code = /"error\.code":"([^"]+)"/.exec(line)?.[1];
+    if (code) codes.push(code);
+    else original(...args);
+  };
+  try { await run(); }
+  finally { console.error = original; }
+  return codes;
+}
+
+test('OPS06: no relay checkpoint yet is an open backlog of the whole head', async () => {
+  const { order, lanes } = brokerLane('4', async () => null);
+  await lanes.admitDurable('broker');
+  expect((await lanes.read()).lanes[1]).toMatchObject({ lane: 'broker', state: 'open',
+    dataEpoch: epoch, head: '4', delivered: '0', backlog: '4' });
+  expect(order.filter(step => step === 'head').length).toBe(2);
+  expect(order.indexOf('checkpoint')).toBeLessThan(order.indexOf('head'));
+  const saturated = brokerLane('1000', async () => null);
+  await expect(saturated.lanes.admitDurable('broker')).rejects.toBeInstanceOf(BackpressureSaturated);
+});
+
+test('OPS06: a checkpoint ahead of an earlier head is open after one re-read', async () => {
+  const heads = ['5', '12'];
+  const checkpoints = ['10', '11'];
+  let headReads = 0;
+  let checkpointReads = 0;
+  const { order, lanes } = brokerLane(() => heads[headReads++] ?? '12', async () => ({
+    dataEpoch: epoch, sequence: checkpoints[checkpointReads++] ?? '11',
+  }));
+  expect((await lanes.read()).lanes[1]).toMatchObject({ state: 'open', head: '12',
+    delivered: '11', backlog: '1' });
+  expect(headReads).toBe(2);
+  expect(checkpointReads).toBe(2);
+  expect(order).toEqual(['checkpoint', 'head', 'checkpoint', 'head']);
+});
+
+test('OPS06: a foreign relay epoch, a held or ambiguous head, and a repeated gap stay unavailable', async () => {
+  const foreign = brokerLane('4', async () => ({ dataEpoch: '22222222-2222-4222-8222-222222222222', sequence: '1' }));
+  const held = brokerLane('4', async () => ({ dataEpoch: epoch, sequence: '1' }), { hold: 'true' });
+  const ambiguous = brokerLane('4', async () => null, { copies: 2 });
+  const gapHeads = ['3', '3'];
+  let gapHead = 0;
+  const gap = brokerLane(() => gapHeads[gapHead++] ?? '3', async () => ({ dataEpoch: epoch, sequence: '9' }));
+  const thrown = new OperationsBackpressure({ broker: async () => { throw new Error('fuseki down'); } });
+  const codes = await faultCodes(async () => {
+    for (const lanes of [foreign.lanes, held.lanes, ambiguous.lanes, gap.lanes, thrown]) {
+      await expect(lanes.admitDurable('broker')).rejects.toBeInstanceOf(BackpressureUnavailable);
+      expect((await lanes.read()).lanes[1]).toMatchObject({ state: 'unavailable', backlog: null });
+    }
+  });
+  expect(codes).toEqual([
+    'relay_checkpoint_foreign_epoch', 'relay_checkpoint_foreign_epoch',
+    'graph_control_held', 'graph_control_held',
+    'graph_control_ambiguous', 'graph_control_ambiguous',
+    'relay_position_gap', 'relay_position_gap',
+    'probe_threw', 'probe_threw',
+  ]);
+  expect(gapHead).toBe(4);
 });
 
 test('OPS06: a Main without configured sources reports every lane as unobserved', async () => {
