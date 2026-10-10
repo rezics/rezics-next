@@ -145,11 +145,15 @@ including when it is selected alongside ordinary files or only one QA slot is
 free. A memory override below its declared minimum fails before startup.
 
 Projects queue through the available QA slots. Each keeps its declared command
-deadline; a selected tier with heavy projects gets a bounded scheduling
+deadline. The integration planner fills an ordinary project to at most 60% of
+that deadline, and when the files need more projects than free slots it queues
+the rest; a file whose own estimate exceeds that line keeps a project of its
+own and is named in the run summary. A selected tier with heavy projects, or
+with more ordinary projects than free slots, gets a bounded scheduling
 allowance for those commands and project turnover (up to 120 s cleanup and
-180 s each for startup and bootstrap). Ordinary-only selections retain their
-480-second tier budget. These test deadlines leave the existing 600-second
-fixture preparation ceiling unchanged.
+180 s each for startup and bootstrap). Ordinary selections that fit in the
+free slots retain their 480-second tier budget. These test deadlines leave
+the existing 600-second fixture preparation ceiling unchanged.
 
 Other scale probes can select disk storage explicitly:
 

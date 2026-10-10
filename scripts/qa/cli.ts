@@ -69,13 +69,15 @@ import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
-import { planIntegrationShards } from './integration-shards.ts';
+import {
+  integrationBudgetSummary, integrationOverBudgetFiles, integrationTierWallMs, planIntegrationShards,
+} from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
 import { filesKeptAfterResetFailure, integrationResetHarnessFailure } from './integration-reset.ts';
 import { exclusiveWorkScopeAssembler, integrationStackAdmitsWorkScope, qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
-import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
+import { assertQaResourceAllocation, integrationResourceClass, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
 import {
   campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
   childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
@@ -92,6 +94,7 @@ const sourceBefore = sourceIdentity(root);
 const tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?: number; shards?: ShardRecord[] }[] = [];
 const isolation: IsolationRecord[] = [];
 const errors: string[] = [];
+const integrationBudgetNotes: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
 const rawUpdateProjects = new Set<string>();
@@ -781,9 +784,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
     });
     const projectBudget = (files: readonly string[]) =>
       campaignQualificationShard(files) ? campaignShardActiveMs() : budget;
-    // Fault/recovery queues more projects than slots; each keeps its own deadline.
+    // Integration and fault/recovery queue more projects than slots; each keeps its own deadline.
     // The campaign project's wall is the sum of its two measured phases.
-    const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), capacity)
+    if (integration) integrationBudgetNotes.push(...integrationBudgetSummary(integrationOverBudgetFiles(estimates)));
+    const tierBudget = integration
+      ? integrationTierWallMs(integration.map(shard => shard.resourceClass), capacity, integration.length)
       : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(projectBudget), capacity) : budget;
     const warning = stackPlanBudgetWarning(estimates, tierBudget, capacity, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
@@ -882,6 +887,11 @@ function noteBrowserPlan(artifactDirectory: string): void {
     notes.push('- Accounts journeys: skipped (selected journey files; a full e2e tier runs them)');
   }
   if (notes.length) appendFileSync(join(artifactDirectory, 'summary.md'), `${notes.join('\n')}\n`);
+}
+
+function noteIntegrationBudget(artifactDirectory: string): void {
+  if (!integrationBudgetNotes.length) return;
+  appendFileSync(join(artifactDirectory, 'summary.md'), `${integrationBudgetNotes.join('\n')}\n`);
 }
 
 try {
@@ -1121,6 +1131,7 @@ try {
       scope: options.backend ? 'backend' : 'all', excludedCases: backendSelection?.excluded,
       inventoryFingerprint: backendSelection?.inventoryFingerprint });
     noteBrowserPlan(directory);
+    noteIntegrationBudget(directory);
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
       if (record.certifiesFull) {
