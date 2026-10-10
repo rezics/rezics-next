@@ -178,6 +178,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-898-wiki-disclosure.test.ts',
   // The shared wiki journey plants the same synthetic batch through plantCharacterMerge.
   'tests/qa/integration/g-693-wiki-delta.test.ts',
+  // Reply write cost compares two Realm sizes exactly. Other suites on the same database move that count.
+  'services/main/tests/realm-reply-write-cost.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

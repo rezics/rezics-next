@@ -1,22 +1,28 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
+import { isForegroundOperation } from '../../../tests/qa/integration/support/operation-cost.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { currentWorkerTick } from '../src/worker-tick.ts';
 import { RealmReplyDenied } from '../src/modules/realm-reply/content-store.ts';
 import { TargetUnavailable } from '../src/modules/target/resolve.ts';
 import { growRealmThreads } from './g-1034-fixture.ts';
 import { realmVisibilityFixture } from './realm-visibility-fixture.ts';
 
 /** Query executions and Fuseki requests for one reply: draft, identity, review, placement.
- * Content and account statements are identical at both sizes. Access and Fuseki
- * probes vary by a few retries that do not grow with the Realm; the slack is far
- * below one extra probe per thread. */
+ * The ceiling is the whole reply. Each bucket is exactly the same at both Realm sizes. */
 export const REALM_REPLY_WRITE_COST = {
   statements: 840,
   fusekiRequests: 130,
-  statementJitter: 32,
-  fusekiJitter: 16,
 } as const;
+
+/** True only while the measured request is the foreground caller. Background
+ * schedulers and other work on these pools are not this request's cost. */
+const measuredRequest = new AsyncLocalStorage<true>();
+function foregroundCounted(): boolean {
+  return measuredRequest.getStore() === true && isForegroundOperation() && currentWorkerTick() === undefined;
+}
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -32,7 +38,7 @@ function tallyPool(pool: Pool) {
     seen.add(client);
     const query = client.query.bind(client) as (...args: unknown[]) => unknown;
     client.query = ((...args: unknown[]) => {
-      count += 1;
+      if (foregroundCounted()) count += 1;
       return query(...args);
     }) as PoolClient['query'];
   };
@@ -57,7 +63,7 @@ function tallyFuseki(fuseki: FusekiClient) {
   for (const method of ['query', 'update', 'command', 'commandWithReceipt', 'commandHealth'] as const) {
     const original = fuseki[method].bind(fuseki) as (...args: unknown[]) => unknown;
     (fuseki as unknown as Record<string, (...args: unknown[]) => unknown>)[method] = (...args: unknown[]) => {
-      count += 1;
+      if (foregroundCounted()) count += 1;
       return original(...args);
     };
   }
@@ -86,7 +92,7 @@ test('one reply costs the same statements and Fuseki requests at 100 and 1,000 t
       const step = async (name: string, path: string, body: object) => {
         reset();
         const at = Date.now();
-        const response = await fx.call('POST', path, body);
+        const response = await measuredRequest.run(true, () => fx.call('POST', path, body));
         commands[name] = { ...read(), ms: Date.now() - at };
         expect(response.status, `${name} ${JSON.stringify(response.body)}`).toBe(201);
         return response.body;
@@ -127,18 +133,18 @@ test('one reply costs the same statements and Fuseki requests at 100 and 1,000 t
     await postReply();
     const at1000 = (await postReply()).cost;
     console.log(JSON.stringify({ realmReplyWriteCost: { at100, at1000 } }));
-    const stable = (cost: ReplyCost) => Object.fromEntries(Object.entries(cost.commands).map(([name, command]) =>
-      [name, { content: command.content, account: command.account }]));
-    expect(stable(at1000), JSON.stringify({ at100, at1000 })).toEqual(stable(at100));
-    for (const name of Object.keys(at100.commands)) {
-      const smaller = at100.commands[name]!;
-      const larger = at1000.commands[name]!;
-      expect(Math.abs(smaller.statements - larger.statements), name).toBeLessThanOrEqual(REALM_REPLY_WRITE_COST.statementJitter);
-      expect(Math.abs(smaller.fusekiRequests - larger.fusekiRequests), name).toBeLessThanOrEqual(REALM_REPLY_WRITE_COST.fusekiJitter);
-    }
-    expect(Math.abs(at100.statements - at1000.statements)).toBeLessThanOrEqual(8);
-    expect(Math.abs(at100.fusekiRequests - at1000.fusekiRequests)).toBeLessThanOrEqual(4);
+    const counted = (cost: ReplyCost) => ({
+      statements: cost.statements, fusekiRequests: cost.fusekiRequests,
+      content: cost.content, access: cost.access, account: cost.account,
+      commands: Object.fromEntries(Object.entries(cost.commands).map(([name, command]) => [name, {
+        statements: command.statements, fusekiRequests: command.fusekiRequests,
+        content: command.content, access: command.access, account: command.account,
+      }])),
+    });
+    expect(counted(at1000), JSON.stringify({ at100, at1000 })).toEqual(counted(at100));
     for (const cost of [at100, at1000]) {
+      expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.fusekiRequests).toBeGreaterThan(0);
       expect(cost.statements).toBeLessThanOrEqual(REALM_REPLY_WRITE_COST.statements);
       expect(cost.fusekiRequests).toBeLessThanOrEqual(REALM_REPLY_WRITE_COST.fusekiRequests);
     }
@@ -370,6 +376,120 @@ test('an unreadable reply root writes no admission, receipt, or graph command', 
   } finally {
     fx.fuseki.command = command;
     fx.fuseki.commandWithReceipt = withReceipt;
+    await fx.close();
+  }
+}, 120_000);
+
+/** After the pin is inserted, change the admission so the next claim must refuse. */
+function armPreparedPlacement(pool: Pool, once: () => Promise<void>): () => void {
+  const connect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+  const seen = new WeakSet<object>();
+  let armed = false;
+  const wrap = (client: PoolClient) => {
+    if (seen.has(client)) return;
+    seen.add(client);
+    const query = client.query.bind(client) as (...args: unknown[]) => unknown;
+    client.query = ((...args: unknown[]) => {
+      const pending = query(...args);
+      const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text;
+      if (armed || typeof text !== 'string' || !text.includes('INSERT INTO content.publication_preparation')) return pending;
+      armed = true;
+      return Promise.resolve(pending).then(async value => {
+        await once();
+        return value;
+      });
+    }) as PoolClient['query'];
+  };
+  pool.connect = ((...args: unknown[]) => {
+    if (typeof args[0] === 'function') {
+      const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
+      return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
+        if (client) wrap(client);
+        callback(error, client, done);
+      });
+    }
+    return Promise.resolve(connect()).then(client => {
+      wrap(client as PoolClient);
+      return client;
+    });
+  }) as Pool['connect'];
+  return () => { pool.connect = connect as Pool['connect']; };
+}
+
+async function reviewedPlacement(fx: Awaited<ReturnType<typeof realmVisibilityFixture>>) {
+  await fx.grant(fx.actor, `review:decide:${fx.realm}`, 'review.decide');
+  await fx.grant(fx.actor, `reply:place:${fx.realm}`, 'reply.place');
+  const input = fx.draftInput();
+  const draft = await fx.call('POST', '/v1/member-reply-drafts', input);
+  expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+  const identity = await fx.call('POST', '/v1/realm-replies', {
+    profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+    revisionId: draft.body.revisionId, author: fx.actor, rootTarget: input.rootTarget,
+    rootRevision: input.rootRevision, parentReply: null, parentRevision: null, contextRevision: null,
+  });
+  expect(identity.status, JSON.stringify(identity.body)).toBe(201);
+  const review = await fx.call('POST', '/v1/realm-reply-reviews', {
+    profile: 'realm-reply-review-v1', realm: fx.realm, reply: input.reply,
+    revisionId: draft.body.revisionId, revisionDigest: draft.body.revisionDigest, expectedGeneration: '0',
+    supersedes: null, outcome: 'approved', method: 'human', methodRevision: 'realm-manager-v1',
+    dependencyDigest: sha(fx.work.work), reasonReference: null, actingSubject: fx.actor,
+  });
+  expect(review.status, JSON.stringify(review.body)).toBe(201);
+  return {
+    profile: 'realm-reply-placement-v1', realm: fx.realm, reply: input.reply,
+    revisionId: draft.body.revisionId, revisionDigest: draft.body.revisionDigest,
+    reviewDecisionId: review.body.decisionId, expectedHead: null, actingSubject: fx.actor,
+  };
+}
+
+async function expectRefusedPlacement(fx: Awaited<ReturnType<typeof realmVisibilityFixture>>,
+  body: Awaited<ReturnType<typeof reviewedPlacement>>, key: ReturnType<typeof randomUUID>, status: number) {
+  const first = await fx.call('POST', '/v1/realm-reply-placements', body, fx.actor, key);
+  expect(first.status, JSON.stringify(first.body)).toBe(status);
+  const admission = await fx.accessPool.query<{ id: string; state: string; graph_outcome: string | null }>(
+    `SELECT id, state, graph_outcome FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.place'`, [key]);
+  expect(admission.rowCount).toBe(1);
+  expect(admission.rows[0]).toMatchObject({ state: 'sealed', graph_outcome: 'cancelled' });
+  const pin = await fx.contentPool.query<{ status: string; pin_active: boolean }>(
+    'SELECT status, pin_active FROM content.publication_preparation WHERE operation_id = $1',
+    [admission.rows[0]!.id]);
+  expect(pin.rows).toEqual([{ status: 'rejected', pin_active: false }]);
+  const retry = await fx.call('POST', '/v1/realm-reply-placements', body, fx.actor, key);
+  expect(retry.status, JSON.stringify(retry.body)).not.toBe(503);
+  expect([403, 409]).toContain(retry.status);
+  const again = await fx.accessPool.query<{ state: string; graph_outcome: string | null }>(
+    'SELECT state, graph_outcome FROM access.admission WHERE id = $1', [admission.rows[0]!.id]);
+  expect(again.rows[0]).toMatchObject({ state: 'sealed', graph_outcome: 'cancelled' });
+}
+
+test('an expired admission retry is refused and sealed with the placement pin released', async () => {
+  const fx = await realmVisibilityFixture();
+  let restore = () => {};
+  try {
+    const body = await reviewedPlacement(fx);
+    const key = randomUUID();
+    restore = armPreparedPlacement(fx.contentPool, () => fx.accessPool.query(
+      `UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second'
+       WHERE idempotency_key = $1 AND action = 'reply.place'`, [key]).then(() => undefined));
+    await expectRefusedPlacement(fx, body, key, 409);
+  } finally {
+    restore();
+    await fx.close();
+  }
+}, 120_000);
+
+test('a revoked authority epoch retry is refused and sealed with the placement pin released', async () => {
+  const fx = await realmVisibilityFixture();
+  let restore = () => {};
+  try {
+    const body = await reviewedPlacement(fx);
+    const key = randomUUID();
+    restore = armPreparedPlacement(fx.contentPool, () => fx.accessPool.query(
+      'UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = $1',
+      [`reply:place:${fx.realm}`]).then(() => undefined));
+    await expectRefusedPlacement(fx, body, key, 403);
+  } finally {
+    restore();
     await fx.close();
   }
 }, 120_000);
