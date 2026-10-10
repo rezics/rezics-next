@@ -1,56 +1,40 @@
 # State
 
-Checkpoint 2026-10-08 ~08:00 UTC. Manager `kernel-sonnet` (Claude, interactive; tmux `goal-kernel`), who took over from the Sol manager when both Codex accounts ran out (about 6 days; reset credits are forbidden). The coordinator is stopped; the manager keeps `scripts/goal/next-event.sh kernel` running. Live truth: `task goal -- status`; mail: `task goal -- mail inbox kernel`. The earlier per-event log is in git history (`git log -p -- docs/goals/kernel/state.md`).
+Checkpoint 2026-10-11 ~01:00 UTC (Asia/Taipei 09:00). Manager `kernel-sonnet` (Claude; tmux `goal-kernel`), which took over from the Sol manager on 2026-10-08 when both Codex accounts ran out. The Goal is active; C4-C6 and the completion criteria are not proven. The landed pieces below are component proofs, not whole contracts.
 
-The Goal is active. C4–C6 and the completion criteria are not proven; the landed pieces below are component proofs, not whole contracts.
+## Routing
 
-## Routing while Codex is out
+Workers are Cursor only, at most 4 live. Cursor sessions drop their connection often (an empty `attempt-N.json`, "Connection stalled repeatedly"): commit after every step, run long commands in the background with a log, resume with `--fresh` and a note naming the state. No Claude, Grok, Sol or Luna workers; no top-ups. Land reviews run on Sonnet. The unit gate decides; `--skip-unit-gate` is never used, and a refusal goes to Program with the evidence.
 
-Workers go to `grok` (implementation, fixtures, mechanical work). Sonnet takes only assertion integrity, contested evidence and correctness-critical slices, at most 2 at once. No Sol or Luna. Land reviews run on Sonnet. Keep the manager's turns lean and delegate wide reading to subagents.
+## Landing recipe
 
-## Merge gate
+`task gen` in the worktree and commit generated and pin files. Native work needs the pinned image built locally first (`rezics/fuseki:6.2.0-cmd0.5.39-<hash>`; the Maven suite runs inside `docker build -f infra/jena/Dockerfile`, about 20-30 minutes) and then one `task dev:refresh -- --wait`, which Program runs. Rebasing a native branch conflicts on `docs/development/toolchain.md`, `infra/dev/compose.yaml` and `scripts/dev/release-manifest.ts`: take main's, then `task gen`. A guard baseline that a registration move trips (anti-silo) is edited by hand for the moved key only; its own rewrite changes unrelated entries. Helper scripts live in `.temp/kernel/` (`merge-unit.sh`, `chain-test-merge.sh`, `after-then-chain.sh`, `build-image-1546.sh` with `WT`).
 
-Since G-1427 (df5a3b7a3) the unit gate compares failing cases with the current main commit the merge targets, by case name, from bun's per-file JUnit report. A file that fails only on the branch is rerun alone on both sides: passes alone is order or load dependent (reported, not blocking); fails alone with a case main does not fail is introduced; a pg_ctl, embedded PostgreSQL or port-bind start failure is inconclusive; any other runner crash refuses. Files a regeneration commit writes are not claims. `task goal -- gate <id>` reruns the pre-merge gate without merging. Do not use `--skip-unit-gate`: when the gate refuses, mail Program the evidence file. A merge can outlast a foreground turn, so run it as a detached unit (`.temp/kernel/merge-unit.sh <id> --allow-scope`, mails `kernel-merge-<id>-result`). Before landing, `task gen` in the worktree and commit the generated files (the merge does not regenerate; native work also needs the new image pin built). Native, model or migration landings are followed by `task dev:refresh -- --wait` (retry once on an `approve-zones` timeout; a refresh that fails a build step now names a 0600 log in the stack directory).
+## Landed since 2026-10-09
 
-## Landed 2026-10-08
+- Search: pre-pin Content receipts (G-1584), interrupted rebuild states (G-1600, G-1613, G-1617), quarantine continuation with a legacy prior receipt (direct fix on main), native command deadline 60 s. The shared stack's public search answers again after a clean 132 s rebuild (2026-10-10 16:45 UTC).
+- Claim fold deleted (G-1573); the Claims-into-Statements unification is decided and waits on provider identity.
+- Structure profile document is the allowlist (G-1592, pin `ce9c77bee5cd`): a new composition kind registers as data; the section-list proof is `tests/qa/integration/structure-profile-section-list.test.ts`.
+- No command seals an idempotency key on a current-visibility outcome (G-1623): the audit table and a source-scan guard are in `services/main/tests/seal-on-visibility.test.ts`. Reference shape: visibility checked before the write answers 404 with nothing written; a target lost inside the write answers 503 unsealed. `TargetUnavailable` stays the hidden==absent 404.
+- Erasure of every revision kind, rights T1, conversions, discovery and meter work (see the git history).
 
-- G-1352 structure-schema fixture, G-1379 Structure object-coverage group descriptor, G-1373 contribution draft/history original-create receipt reader, G-1345 Claim fold original-inventory receiver (authenticated progress, final deadline recheck; it also repairs four `claim-statement-fold` tests that fail on `main`).
-- G-1282 native Claim fold plus Title candidate union with the `ExternalFixture` JUnit category (package excludes it, the existing native wrapper runs it), pin `rezics/fuseki:6.2.0-cmd0.5.39-972ae0d9c953`. Proof: image package 388 tests, 0 failures, wrapper 61 tests, 0 failures, TS 24/24, guard 5/5. Shared stack refreshed and healthy.
+## Next, in order
 
-- Later the same day (all with the branch's own tests and per-case proof against main): G-1423 private Contribution reads reconcile the original create/edit receipts and read the edit actor through the Access module, fail closed (8a4a1cd76); G-1430 anti-silo CreativeWork count restored (aa213b9ba); G-1290 native `workScopeDirectory` prepare command plus tolerant startup caller, original Title custody acceptance passes on the exclusive-writer stack, pin ad8fad6e2794, stack refreshed (532a753e3); G-1433 Recipe work page in 100-occurrence signed-cursor pages, `measures` on every page (73c92bad9).
+1. G-1593 provider identity (running), then G-1618 Claims are Statements (no compatibility layer; `/v1/claims` routes retired; assessment export gets the Statement shape).
+2. Field-disposition projector from `source.field_disposition`, targeting Statements (brief written after G-1618 settles).
+3. G-1603 year template `concept` parameter (native, depends on G-1593), G-1591 explicit public read `mode`, G-1582 discovery never-produced reads, G-1615 maintainer move (waits for Launch's realm-management change).
+4. One `task dev:refresh -- --wait` for pin `ce9c77bee5cd` (asked of Program).
 
-## In flight (2026-10-09 ~18:30 UTC)
+## Open
 
-Workers: Cursor only, at most 4 live. Landed since the last checkpoint: composition change cost (G-1554: 6 graph queries per insert at any structure size; the 10,000-chapter build runs on the `large-tmpfs` class, 340 s), verified immutable-object byte cache by digest (G-1556, deadline-aware), rating inventory out of Access (G-1551), second Work-read survey and last fixtures (G-1535, G-1555), raw-SPARQL conversions (G-1534: saved views, feed reviews, library write scope), anonymous request path (G-1541), retired legacy document runtime (G-1558), Content typed layer pruned to `ownerControl` (G-1559).
+- Rights T2, T3a, T3b, T4, T5: send each diff to Trust-ops before landing. The Statement create has no licence field (`importBangumiWorkFacts` gap), flagged for T4.
+- Abstraction A1b and A1c; ranking projection event poisoning (brief separately); a feed refresh worker answers "failed" instead of "deferred" while public search is unavailable (fold into the next feed change).
+- Episode-number seek on work-composition: `traversal.ts` refuses numeric queries on work-composition manifests because no production reader exists.
+- Whole-Goal remainder: 18-family and current-model convergence, external search copies and physical population locality, Discover remeasurement, exact populated restore/erasure/startup, reciprocal source promotion.
 
-Running: G-1546 (erasure of every revision kind; TS commit on `goal/g-1546`, Java patch, purge campaign; Trust-ops reviews; native), G-1561 (`discovery-continuous-writes` 240 s cap: load or real cost). In the merge/test queue: G-1557 (Zone Spaces under the Space settings command; chain `rezics-kernel-chain-1557` runs ten neighbouring visibility files, then merges; gap: a Zone created private cannot become public through the command because Zone component disclosure stays pinned to the Zone graph's `rv:disclosure`).
+## Boundaries
 
-Queued briefs: G-1538 and G-1548 (native, after G-1546 lands), G-1524 (T1 rights read, on `goal/g-1524`, waits for Trust-ops review of the rights diff and migration 891). Not briefed: rights T2/T3a/T3b/T4/T5; abstraction A1a/A1b/A1c/A2; the cold-read seeding of the digest cache in `object-coverage` `exactBytes` (it still pays the 404 once per digest); Program's audit item 17 (wiki protocol schema through `scripts/generate.ts`, `importBangumiWorkFacts` invoked by the dataset entry point, waits for T4).
-
-Raw-SPARQL set: Program's rule (2026-10-09): graph copy is a restore state, built from a QA backup and an isolated restore, not an operation; zone disclosure goes through the Space settings command (G-1557); per-file conversion is paused until G-1546 and G-1548 land (do not spend workers on files that stay red for their other updates); then re-triage and bring the remaining families to Program as a group. G-1534 is closed; a new brief covers the next slice.
-
-Host: 2026-10-09 leaked QA stacks OOM-killed Postgres in the Docker VM (the cause of the repeated `discovery-history-seeks` death; it passes in 40 s on a pruned host). Program pruned them; its G-1560 makes every QA container owned and reaped.
-
-Landing recipe: `task gen` in the worktree and commit generated files; native work also needs the pinned image built before the merge; merges run as detached units (`.temp/kernel/merge-unit.sh <id> --allow-scope`, `merge-wait.sh <unit>[,<unit>] <id>` to queue behind others, `after-then-chain.sh <unit> <id> <worktree> <tests...>` for test-then-merge, `run-test-mail.sh <key> <test>` for a mailed test run; `GOAL_UNIT_GATE_BUDGET_MS=2700000`), one at a time; embedded Postgres tests need `USER=edge LANG=C.UTF-8 LC_ALL=C.UTF-8`; never `--skip-unit-gate`; a task whose status lags after its merge: `task goal -- merge <id> --landed` then `close`. One shared-stack refresh after the last native change (G-1546, G-1538, G-1548): mail Program when it is on main.
-
-## Open work
-
-- **G-1290 joined test** (`tests/qa/integration/title-candidate-original-custody.test.ts`): original SQL-issued Title custody through native acceptance and lost-ACK lookup. Now runnable on the new image; branch `goal/g-1290` holds only this test.
-- **G-1373 line (private original source):** an edit receipt is never reconciled (`readExactContributionDraft` does not read `textContributionEditReceiptIri`), there is no edit-actor source, and private bodies have no native external-document delivery. Falsifier test staged in `.temp/worktrees/g-1373/.temp/goal/private-original-source.test.ts`; it needs a worker.
-- **Episode-number seek on work-composition (deferred 2026-10-08):** `traversal.ts` refuses numeric queries on work-composition manifests because no production reader exists (needs Resource-local promotion of `schema:episodeNumber`, a number-keyed `QualifierKey` posting with checkpoints, `readCompositionNumberPage` modelled on `readCompositionOccurrenceByQualifierKey`, a typed normalizer, then Launch's one `traversal.ts` call). Launch confirmed it is not needed for the first public launch (the chooser says number jumps are unavailable); Program decided (2026-10-09) it is wanted after launch and will schedule it. Until then `g-1021-reading-cost` and `g-1022-reading-cost` assert today's contract for numbered seeks on work-composition: 503 `reading_seek_unavailable` at a flat cost, with every other case (chooser pages, CJK seeks, saved positions, caps) unchanged; when the slice is built those cases turn back into seeks and the refusal assertion forces the update. G847's Statement seek is a fixture matter: `rebuild()` then `projectOnce()`, owned by Launch G-1421.
-- **G-1379 line:** a real stage-64 proof of the group-only Structure descriptor is still owed.
-- **G-1300 closure** needs the original G847 integration (Launch G-1421 wires production Statement seek).
-- **Pending API decision (Launch de499):** publication of a no-notes Recipe. Authored own-work stays private absent selected public text or `catalogueVisible`; the Recipe reader uses Work disclosure then selected Structure. Needs a generic structured publication with optional notes, not filler text, a relaxed `empty_body` or a Recipe-specific backend. Decide the capability, then coordinate the UI with Launch.
-- Whole-Goal remainder: 18-family and current-model convergence, external search copies and physical population locality, Discover remeasurement, exact populated restore/erasure/startup, record §10 list, reciprocal source promotion.
-
-## Loans and boundaries
-
-- Trust-ops owns Comment/Verification C6 erasure (G-1408, G-1411); never edit `erasure`, `content.ts` or the barriers concurrently.
-- Launch owns the G-1421 original G847 fixture wiring; all its assertions stay.
-- Program owns wider owner regressions and gate diagnostics (G-1417). Kernel fixes only failures it identifies as its own.
-- Preserve peer edits and frozen originals; the vault is manager-only; the memory floor is 12 GiB for up to 24 host workers; no worker `--heavy`.
-
-## Update 2026-10-08 (later)
-
-- Landed: G-1446 (15e1d68be), G-1445 (40ba4e279, the Kernel-owned red owner cases from Program's G-1428 bisect), G-1437 year template `work-publication-years` (6d92f2faa; posting in `access.template_seek_entry`, page cost bounded at 5,000 extra entries). G-1437's image `4cc7c568097a` is built and the stack refreshed by the detached unit `rezics-kernel-build-refresh-1437` (self-mails `kernel-g1437-build-refresh-result`); close G-1437 verified only when both exits are 0.
-- G-1435 (Bangumi-like facts as data, goal/g-1435 149666d97) is done and tested but not landed: it makes `task web:typecheck` fail at `apps/web/features/recipe-editor/edit-page.tsx(104,75)` (completionStatus gains `upcoming`/`cancelled`), a file Launch's G-1444 claims together with `initial-details.ts`. Launch was mailed (`kernel-g1435-web-blocker-1008`); land after G-1444 widens both files, or on "kernel may edit". It needs `task dev:refresh -- --wait` (facet-status-v2 is a model change). Follow-up: journal `importBangumiWorkFacts` into `importDataset`. G-1436 (credit roles) is dispatchable now that G-1435 has released the lexicon seed.
+- Trust-ops owns Comment/Verification C6 erasure and the hidden==absent inventory; never edit `erasure`, `content.ts` or the barriers concurrently with it.
+- Launch owns the realm-reply files (G-1597) and the original fixture wiring; its assertions stay.
+- Program owns wider owner regressions and gate diagnostics; Kernel fixes only failures it identifies as its own.
+- The vault is manager-only; never switch HEAD in the main checkout; commit explicit paths only; no task IDs in code or comments.
