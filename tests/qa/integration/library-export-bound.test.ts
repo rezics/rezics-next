@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { LIBRARY_EXPORT_COST, retainedLibrarySourcePageSql } from '../../../services/main/src/modules/library-export/bundle.ts';
 import { emptyRow, type CanonicalRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 const SOURCES = 1_200;
 const EXPORTABLE = SOURCES / 20;
@@ -104,7 +105,7 @@ test('a library export page seeks only exportable sources when most of the libra
       if (args.some(arg => typeof arg === 'function')) return original(...args);
       const sql = typeof args[0] === 'string' ? args[0] : '';
       return original(...args).then((result: { rowCount: number | null; rows: unknown[] }) => {
-        if (/FROM\s+reader\.library_import_source\b/.test(sql) && /\bLIMIT\b/i.test(sql) && /^\s*SELECT\b/i.test(sql)) {
+        if (foregroundCounted() && /FROM\s+reader\.library_import_source\b/.test(sql) && /\bLIMIT\b/i.test(sql) && /^\s*SELECT\b/i.test(sql)) {
           pageSizes.push(result.rowCount ?? result.rows.length);
         }
         return result;

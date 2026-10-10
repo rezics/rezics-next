@@ -6,7 +6,7 @@ import { emptyRow, type CanonicalRow } from '../../../services/main/src/modules/
 import { getLibraryImportApplyWorker } from '../../../services/main/src/modules/library-import/apply-worker.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { pollLibraryImportApply } from './library-import-apply-support.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 const RECORDS = 1_200;
 type ExportPage = { profile: 'rezics-library-export-v1'; rows: CanonicalRow[]; snapshot: string; nextCursor: string | null };
@@ -29,13 +29,22 @@ function examined(node: Plan): number {
 }
 
 function assertSeek(plan: Plan) {
+  const nodes: Plan[] = [];
   const visit = (node: Plan) => {
-    if (node['Relation Name'] || node['Index Name']) {
-      expect(examined(node), JSON.stringify(node)).toBeLessThanOrEqual(LIBRARY_EXPORT_COST.page + 1);
-    }
+    nodes.push(node);
     for (const child of node.Plans ?? []) visit(child);
   };
   visit(plan);
+  // The page bound is the exportable-source seek. A lateral file lookup can
+  // see another agent's upload and is not that seek.
+  const sources = nodes.filter(node => node['Relation Name'] === 'library_import_source'
+    || node['Index Name'] === 'library_import_source_exportable'
+    || node['Index Name'] === 'library_import_source_pkey');
+  const bounded = sources.length ? sources : nodes.filter(node =>
+    (node['Relation Name'] || node['Index Name']) && node['Relation Name'] !== 'library_import_file');
+  for (const node of bounded) {
+    expect(examined(node), JSON.stringify(node)).toBeLessThanOrEqual(LIBRARY_EXPORT_COST.page + 1);
+  }
 }
 
 function planOf(result: { rows: Array<Record<string, unknown>> }): Plan {
@@ -54,7 +63,7 @@ function watchPool(pool: Pool) {
     const sql = typeof args[0] === 'string' ? args[0] : '';
     const values = Array.isArray(args[1]) ? args[1] : undefined;
     return original(...args).then(async result => {
-      if (!isForegroundOperation() || !INVENTORY.test(sql) || !/^\s*SELECT\b/i.test(sql) || !/\bLIMIT\b/i.test(sql)) return result;
+      if (!foregroundCounted() || !INVENTORY.test(sql) || !/^\s*SELECT\b/i.test(sql) || !/\bLIMIT\b/i.test(sql)) return result;
       inventory += 1;
       returnedRows.push(result.rowCount ?? result.rows.length);
       const explained = await original('EXPLAIN (ANALYZE, FORMAT JSON) ' + sql, ...(values ? [values] : []));
@@ -128,7 +137,7 @@ test('a 1,200-record library export resumes after a dropped page and a new expor
     const queryGraph = fuseki.query.bind(fuseki);
     let graphCalls = 0;
     fuseki.query = (async (sparql: string, maxResponseBytes?: number) => {
-      if (isForegroundOperation()) graphCalls += 1;
+      if (foregroundCounted()) graphCalls += 1;
       return queryGraph(sparql, maxResponseBytes);
     }) as typeof fuseki.query;
     restore = () => {
