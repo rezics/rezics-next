@@ -1,8 +1,8 @@
 /**
  * Home request work. A feed page does not take more statements as it
- * returns more items. Anonymous is 23 Postgres and 8 Fuseki. Signed is 29
+ * returns more items. Anonymous is 24 Postgres and 8 Fuseki. Signed is 30
  * Postgres and 8 Fuseki. Some signed Best corpus scales have no shelf read and
- * measure 27; the cap is the page that includes that pair.
+ * measure 28; the cap is the page that includes that pair.
  * The earlier 18/24 (and ranking 12) predate summary disclosure and the
  * source-binding lookup. Each line below is a check the page must keep, so the
  * cap was rebaselined to it (program decision, 2026-10-10); growth with items stays forbidden.
@@ -13,15 +13,16 @@
  * 8 member seek;
  * 9 source-binding lookup, on the content pool;
  * 10 follow/actor card;
- * 11 avatar hydration;
- * 12 summary disclosure, one statement after hydration, covering names, covers
- * and the anonymous-name decision;
- * 13 canonical names;
- * 14 feed body disclosure, using the work head the summary already read;
- * 15 avatar fence;
- * 16-21 closing Access control read;
- * 22 author-reference fence for works the binding read proved unbound;
- * 23 closing recovery check.
+ * 11 opening summary disclosure, so a hidden row is dropped before avatars;
+ * 12 avatar hydration;
+ * 13 summary disclosure after hydration, covering names, covers and the
+ * anonymous-name decision;
+ * 14 canonical names;
+ * 15 feed body disclosure, using the work head the summary already read;
+ * 16 avatar fence;
+ * 17-22 closing Access control read;
+ * 23 author-reference fence for works the binding read proved unbound;
+ * 24 closing recovery check.
  * Signed opening and closing control reads add two statements each, and the
  * selected shelf pair adds two more.
  * Graph calls: two position cuts, source, metadata parts, actor names, public
@@ -53,8 +54,8 @@
  * fan-out. Anonymous requests perform no private Home/follow/viewer reads.
  */
 export const HOME_REQUEST_COST = {
-  anonymousFeed: { fusekiRequests: 8, postgresStatements: 23 },
-  signedFeed: { fusekiRequests: 8, postgresStatements: 29 },
+  anonymousFeed: { fusekiRequests: 8, postgresStatements: 24 },
+  signedFeed: { fusekiRequests: 8, postgresStatements: 30 },
   continue: { fusekiRequests: 30, postgresStatements: 110 },
   suggestions: { fusekiRequests: 25, postgresStatements: 60 },
 } as const;
