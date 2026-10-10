@@ -35,7 +35,7 @@ export default async function RealmLogRoute({ params, searchParams }: {
     return <LogView realm={realm} address={address} actingSubject={actingSubject} view={view} first={{ kind: 'audit', page: page.data }}
       names={{ agents, ...subjects }} now={Date.now()} locale={locale} messages={messages} />;
   }
-  const page = await readPublicDecisions(anonymous, realm);
+  const page = await readPublicDecisions(main, realm, actingSubject);
   if (!page.ok) return <ManageFailure failure={page.failure} locale={locale} messages={messages}
     signInHref={signInHref} retryHref={retryHref} />;
   const subjects = await readSubjects(main, realm, page.data.items.flatMap(item => item.work ? [item.work] : []),

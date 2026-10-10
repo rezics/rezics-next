@@ -63,8 +63,9 @@ export function readAudit(main: MainClient, realm: string, query: { actingSubjec
   { management: true, cursor: query.cursor });
 }
 
-export function readPublicDecisions(main: MainClient, realm: string, cursor?: string | null) {
-  return settle(() => main.v1.realms({ realm }).decisions.get({ query: cursor ? { cursor } : {} }), { cursor });
+export function readPublicDecisions(main: MainClient, realm: string, actingSubject?: string, cursor?: string | null) {
+  return settle(() => main.v1.realms({ realm }).decisions.get({ query: {
+    ...(actingSubject ? { actingSubject } : {}), ...(cursor ? { cursor } : {}) } }), { cursor });
 }
 
 export function readMembers(main: MainClient, realm: string, query: { actingSubject: string; search?: string;

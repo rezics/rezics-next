@@ -196,6 +196,12 @@ const credentialPersonalised: readonly {
     callee: 'readConceptFeed',
     reason: 'the server personalises this read from the credential',
   },
+  {
+    file: 'features/studio/realm-submit.tsx',
+    operation: 'postV1Query',
+    callee: 'discoveryApi',
+    reason: 'the server personalises this read from the credential',
+  },
 ];
 
 const personalisation = 'the server personalises this read from the credential';
@@ -368,6 +374,7 @@ test('typeahead keeps the cookie only at the sites the server personalises from 
     personalisation,
     personalisation,
     personalisation,
+    personalisation,
   ]);
   expect(
     credentialPersonalised.map((entry) => `${entry.file} ${entry.callee ?? entry.operation}`),
@@ -376,5 +383,6 @@ test('typeahead keeps the cookie only at the sites the server personalises from 
     'features/post-composer/composer.tsx getV1SearchTypeahead',
     'features/work-levels-edit/work-picker.tsx getV1SearchTypeahead',
     'features/home/tabs.tsx readConceptFeed',
+    'features/studio/realm-submit.tsx discoveryApi',
   ]);
 });

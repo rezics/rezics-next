@@ -7,13 +7,14 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import Link from '../shell/localized-link.tsx';
 import { communityText as words } from './messages.ts';
+import { readSetupFirstPost } from './setup-first-post.ts';
 
 type Setup = { topics: boolean; invite: boolean; skipped?: string[] };
 const key = (actor: string, realm: string) => `rezics:community-setup:${actor}:${realm}`;
 
 /**
- * The creator's local, dismissible first-minutes guide. The first post is a
- * public thread read and sends no session cookie.
+ * The creator's local, dismissible first-minutes guide. The first post is that
+ * member's thread read: the cookie stays, and the query names the creator.
  */
 export function CommunitySetupChecklist({ realm, actor, path, locale, rules, icon, banner }: {
   realm: string; actor: string; path: string; locale: UiLocale;
@@ -26,9 +27,7 @@ export function CommunitySetupChecklist({ realm, actor, path, locale, rules, ico
       const value = JSON.parse(localStorage.getItem(key(actor, realm)) ?? 'null') as Setup | null;
       if (value && typeof value.topics === 'boolean' && typeof value.invite === 'boolean') setSetup(value);
     } catch { /* The guide is optional when local storage is unavailable. */ }
-    void browserMainApi(undefined, { anonymous: true }).v1.realms({ realm: realm.slice(-36) }).threads.get({
-      query: { sort: 'new', limit: 1 },
-    }).then(result => setFirstPost(Boolean(result.data?.items.length))).catch(() => undefined);
+    void readSetupFirstPost(browserMainApi(), realm, actor).then(setFirstPost).catch(() => undefined);
   }, [actor, realm]);
   const skipped = new Set(setup?.skipped ?? []);
   const finished = Boolean(setup) && [rules, setup?.topics ?? false, icon, banner, firstPost,

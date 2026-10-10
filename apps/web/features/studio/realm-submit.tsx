@@ -71,7 +71,8 @@ export function RealmSubmit({ agent, work, texts, realms, open, locale, messages
   const keys = useRef<Record<string, string>>({});
   const realm = selection[0]?.item.realm;
   const load: EntityPickerLoad<RealmPickerItem> = loadRealms ?? (async ({ q, cursor }) => {
-    const page = await discoveryApi(main ?? browserMainApi(undefined, { anonymous: true }), locale).resources({
+    // The server personalises this read from the credential.
+    const page = await discoveryApi(main ?? browserMainApi(), locale).resources({
       profile: 'resource-list-v1',
       context: 'global', scope: { kind: 'all' }, sort: q ? 'relevance' : 'newest', limit: 20,
       ...(q ? { q } : {}), ...(cursor ? { cursor } : {}),
