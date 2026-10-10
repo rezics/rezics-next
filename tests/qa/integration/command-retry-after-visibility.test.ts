@@ -20,7 +20,7 @@ async function admissions(stack: MediaStack, member: Member, key: string) {
 test('a command key is re-evaluated after its target becomes visible', async () => {
   const stack = await startMediaStack('command-retry-visibility', { profileCredits: true });
   try {
-    const member = await stack.member('visibility');
+    const member = await stack.member('visibility', { verified: true });
     await retryCredit(stack, member);
     await retryFollow(stack, member);
     await retryRating(stack, member);
@@ -57,8 +57,16 @@ async function retryCredit(stack: MediaStack, member: Member) {
 }
 
 async function retryFollow(stack: MediaStack, member: Member) {
+  // Follow authority is the acting member's controlled person, checked before
+  // the target's visibility. The fixture Agent is only an authority subject.
+  const provisioned = await member.send('POST', '/v1/agents', {
+    profile: 'agent-provision-v1', kind: 'person', displayName: 'Visibility follower',
+  });
+  const provisionText = await provisioned.text();
+  expect(provisioned.status, provisionText).toBe(201);
+  const person = (JSON.parse(provisionText) as { agent: string }).agent;
   const agent = native();
-  const body = { profile: 'follow-command-v1', target: agent, kind: 'agent', actingSubject: member.actor,
+  const body = { profile: 'follow-command-v1', target: agent, kind: 'agent', actingSubject: person,
     following: true, expectedRevision: null };
   const key = randomUUID();
   const hidden = await member.send('POST', '/v1/follows', body, key);
