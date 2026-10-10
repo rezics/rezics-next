@@ -18,6 +18,12 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4
 export interface NativeCreditInput { work: string; credit: string; agent: string;
   role: NativeCreditRole; expectedWorkHead: string; actingSubject: string }
 
+async function creditedAgentVisible(env: MainWorkDependencies['environment'], agent: string) {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    ASK { ${publicAgent(iri(agent))} }`);
+  return result.boolean === true;
+}
+
 export function nativeCreditDigest(input: NativeCreditInput) {
   if (![input.work, input.credit, input.agent, input.expectedWorkHead, input.actingSubject].every(id => nativeId.test(id))
     || !isNativeCreditRole(input.role)) throw new WorkReadInvalid('Invalid native Agent credit');
@@ -36,6 +42,14 @@ export async function createNativeCredit(deps: MainWorkDependencies, request: Re
   const env = deps.environment;
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await deps.account.verify(request, ['work:edit']);
+  // Whether this Agent is a public active subject is current visibility, not a
+  // property of the request. Refuse before the key is registered. A later guard
+  // miss stays unsealed while the Agent is not public, so the same key is
+  // re-evaluated once the Agent is. A hidden Agent and an absent one share this refusal.
+  if (!deps.profiles) throw new WorkReadUnavailable('Profile owner is unavailable');
+  if (!await deps.profiles.agentFence(input.agent) || !await creditedAgentVisible(env, input.agent)) {
+    throw new WorkReadMissing('Agent unavailable');
+  }
   const registered = await deps.access.register({ principal, actingSubject: input.actingSubject,
     scope: `work:edit:${input.work}`, action: 'work.edit', idempotencyKey: key, requestDigest: digest });
   let admission = registered;
@@ -50,10 +64,6 @@ export async function createNativeCredit(deps: MainWorkDependencies, request: Re
     if (!admission.dispatchEligible || admission.state === 'registered') {
       await sealMetadataWorkEditAdmission(env, admission);
     } else {
-      if (!deps.profiles || !await deps.profiles.agentFence(input.agent)) {
-        await sealMetadataWorkEditAdmission(env, admission);
-        throw new WorkReadMissing('Agent unavailable');
-      }
       const common = `rv:work ${iri(input.work)} ; rv:agent ${iri(input.agent)} ; schema:roleName ${lit(input.role)}`;
       const validations = await profileValidations(env.fuseki, 'native-agent-credit-v1', [
         { shape: `${PROFILE}/credit-shape`, focus: [input.credit], graphs: [GRAPHS.current, GRAPHS.revisions] },
@@ -96,8 +106,14 @@ export async function createNativeCredit(deps: MainWorkDependencies, request: Re
       try {
         const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 }, admission);
         if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
-        if (result.status === 'guard-unmatched') await sealMetadataWorkEditAdmission(env, admission);
-      } catch (error) { if (error instanceof CommandRejected) throw error; /* receipt resolves a lost response */ }
+        if (result.status === 'guard-unmatched') {
+          if (!await creditedAgentVisible(env, input.agent)) throw new WorkReadMissing('Agent unavailable');
+          await sealMetadataWorkEditAdmission(env, admission);
+        }
+      } catch (error) {
+        if (error instanceof CommandRejected || error instanceof WorkReadMissing) throw error;
+        /* receipt resolves a lost response */
+      }
     }
   }
   const terminal = await readWorkEditTerminalReceipt(env, admission.id);
