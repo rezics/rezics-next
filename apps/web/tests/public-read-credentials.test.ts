@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   operationExposures,
   type PlatformOperationId,
 } from '../../../generated/openapi/main/exposure.ts';
+import { callEnd, edenCalls, operationPattern, readWebSources } from './support/eden-calls.ts';
 
 // A browser call to a public read sends the session cookie only when it also names an acting subject.
 // Otherwise the response depends on who is signed in, shared caches cannot keep it, and Main rejects an
@@ -12,12 +13,7 @@ import {
 // guard does: Eden chains, then the generated exposure table. A read whose OpenAPI security is bearer-only
 // keeps the cookie; that call is the credential, and it has no acting-subject parameter to pass.
 
-const webRoot = join(import.meta.dir, '..');
-const repoRoot = join(webRoot, '../..');
-const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
-const upper = (word: string) => word[0]!.toUpperCase() + word.slice(1);
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const WORD_PARAMETER = 'By[A-Z][a-z0-9]*';
+const repoRoot = join(import.meta.dir, '../../..');
 
 function bearerOnly(spec: {
   paths: Record<string, Record<string, { operationId?: string; security?: object[] }>>;
@@ -44,82 +40,22 @@ const publicReads = (Object.keys(operationExposures) as PlatformOperationId[]).f
     (id.startsWith('get') || id === 'postV1Query'),
 );
 
-function operationPattern(
-  method: string | null,
-  segments: readonly (string | null)[],
-  prefix = false,
-): RegExp {
-  const path = segments
-    .map((segment) =>
-      segment === null
-        ? WORD_PARAMETER
-        : segment.startsWith('By')
-          ? segment
-          : escape(upper(segment)),
-    )
-    .join('');
-  const verb = method ?? '(?:get|post|put|patch|delete)';
-  return new RegExp(`^${verb}V1${path}${prefix ? '(?:[A-Z].*)?' : ''}$`);
-}
-
-const chain =
-  /(?<=\.)v1((?:\s*\??\.\s*[A-Za-z_]\w*|\[['"][^'"]+['"]\]|\((?:[^()]|\([^()]*\))*\))*)/g;
-const link = /\.\s*([A-Za-z_]\w*)|\[['"]([^'"]+)['"]\]|\((?:[^()]|\([^()]*\))*\)/g;
-
-function callEnd(text: string, openParen: number): number {
-  let depth = 0;
-  for (let index = openParen; index < text.length; index++) {
-    if (text[index] === '(') depth++;
-    else if (text[index] === ')') {
-      depth--;
-      if (depth === 0) return index;
-    }
-  }
-  return text.length - 1;
-}
-
-interface EdenCall {
+interface PublicCall {
   start: number;
   source: string;
   operations: string[];
   args: string;
 }
 
-function edenCalls(text: string): EdenCall[] {
-  const calls: EdenCall[] = [];
-  for (const found of text.matchAll(chain)) {
-    const segments: (string | null)[] = [];
-    let method: string | null = null;
-    let methodAt = 0;
-    for (const item of found[1]!.matchAll(link)) {
-      const name = item[1] ?? item[2];
-      if (name === undefined) {
-        const key = /^\(\s*\{\s*(\w+)/.exec(item[0])?.[1];
-        segments.push(key ? `By${upper(key)}` : null);
-        continue;
-      }
-      const at = found.index + 2 + item.index + item[0].length;
-      if (item[1] && METHODS.includes(name) && text[at] === '(') {
-        method = name;
-        methodAt = at;
-        break;
-      }
-      segments.push(name);
-    }
-    if ((!segments.length && method === null) || methodAt === 0) continue;
+function publicCalls(text: string): PublicCall[] {
+  return edenCalls(text).flatMap((call) => {
+    if (call.method === null) return [];
     const operations = publicReads.filter((id) =>
-      operationPattern(method, segments, method === null).test(id),
+      operationPattern(call.method, call.segments, false).test(id),
     );
-    if (!operations.length) continue;
-    const end = callEnd(text, methodAt);
-    calls.push({
-      start: found.index,
-      operations,
-      args: text.slice(methodAt, end + 1),
-      source: `.v1${found[1]!.slice(0, methodAt - (found.index + 2)).replace(/\s+/g, '')}(`,
-    });
-  }
-  return calls;
+    if (!operations.length) return [];
+    return [{ start: call.start, source: call.invocation, operations, args: call.args }];
+  });
 }
 
 function receiver(text: string, v1At: number): string {
@@ -182,7 +118,7 @@ function functionBodies(text: string): Map<string, string> {
   return bodies;
 }
 
-function clientArgs(text: string, call: EdenCall): string | null {
+function clientArgs(text: string, call: PublicCall): string | null {
   const who = receiver(text, call.start);
   if (who === 'browserMainApi()') {
     const open = text.lastIndexOf('browserMainApi(', call.start);
@@ -235,7 +171,7 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
   }
   const found: string[] = [];
   for (const [file, text] of Object.entries(files)) {
-    for (const call of edenCalls(text)) {
+    for (const call of publicCalls(text)) {
       if (/actingSubject/.test(call.args) || personalised(file, call.operations)) continue;
       const args = clientArgs(text, call);
       if (args === null || omits(args)) continue;
@@ -268,7 +204,7 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
       if (/actingSubject/.test(callText)) continue;
       const body = functions.get(callee);
       const read = body
-        ? edenCalls(body).find((call) => !/actingSubject/.test(call.args))
+        ? publicCalls(body).find((call) => !/actingSubject/.test(call.args))
         : undefined;
       if (read)
         found.push(
@@ -279,22 +215,7 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
   return found;
 }
 
-const skipped = /\.(?:test|stories|e2e)\.tsx?$|(?:fixtures?|story-fetch)\.tsx?$/;
-
-function sources(directory: string): string[] {
-  return readdirSync(directory).flatMap((name) => {
-    const path = join(directory, name);
-    if (statSync(path).isDirectory()) return name === 'node_modules' ? [] : sources(path);
-    return /\.tsx?$/.test(name) && !skipped.test(name) ? [path] : [];
-  });
-}
-
-const webSources = Object.fromEntries(
-  [...sources(join(webRoot, 'features')), ...sources(join(webRoot, 'app'))].map((path) => [
-    relative(webRoot, path),
-    readFileSync(path, 'utf8'),
-  ]),
-);
+const webSources = readWebSources();
 
 const readers = `
   export async function readConceptWorks(main) { return main.v1.query.post(query); }
