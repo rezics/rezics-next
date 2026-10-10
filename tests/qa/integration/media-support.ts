@@ -94,7 +94,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const media: MediaDependencies = { store, content, objects,
     matcher: options.matchUploads === false ? undefined : requiredSafetyMatcher(matcherMode) };
   const issuer = `https://qa-${label}.test`;
-  const tokens = new Map<string, { issuer: string; subject: string }>();
+  const tokens = new Map<string, { issuer: string; subject: string; emailVerified: boolean }>();
   const mediaAccess = new CountingMediaAccess(accessPool);
   // The same dependency object the process builds. The harness replaces the
   // Account verifier, the counted media reader, and this stack's media store.
@@ -112,11 +112,12 @@ export async function startMediaStack(label: string, options: { contentProjectio
       media, mediaAccess,
       account: { verify: async request => {
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
-        const principal = tokens.get(token);
-        if (!principal) throw new Error('unknown QA bearer');
-        if (!options.library) return principal;
-        // A baseline member claim re-reads the Account assertion. The library
-        // flag is that verified reader, so the re-read stays the same principal.
+        const bearer = tokens.get(token);
+        if (!bearer) throw new Error('unknown QA bearer');
+        const principal = { issuer: bearer.issuer, subject: bearer.subject };
+        if (!bearer.emailVerified) return principal;
+        // This bearer table stands in for Account. A verified member carries
+        // Account's verified-email claim, and a baseline re-read returns that same claim.
         const verified = { ...principal, emailVerified: true as const };
         return { ...verified, currentAssertion: async () => verified };
       } },
@@ -161,15 +162,16 @@ export async function startMediaStack(label: string, options: { contentProjectio
 
   /** One Account principal, represented Agent and bearer token; grants are explicit per scope.
    * `stable` keeps the same issuer, subject and Agent across processes so a later run replays
-   * instead of claiming a handle the first run already owns. */
-  const member = async (name: string, memberOptions?: { stable?: boolean }) => {
+   * instead of claiming a handle the first run already owns. `verified` records Account's
+   * verified-email claim for this bearer; the library option records it for every member. */
+  const member = async (name: string, memberOptions?: { stable?: boolean; verified?: boolean }) => {
     const stable = memberOptions?.stable === true;
     const principal = stable
       ? { issuer: 'https://qa-wiki-fixture.test', subject: name }
       : { issuer, subject: `${name}-${randomUUID()}` };
     const actor = stable ? `${ID}${fixtureUuid(`actor:${name}`)}` : `${ID}${randomUUID()}`;
     const token = randomUUID();
-    tokens.set(token, principal);
+    tokens.set(token, { ...principal, emailVerified: options.library === true || memberOptions?.verified === true });
     const existing = stable ? await accessPool.query<{ id: string }>(
       `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2 AND active`,
       [principal.issuer, principal.subject]) : { rows: [] as { id: string }[] };

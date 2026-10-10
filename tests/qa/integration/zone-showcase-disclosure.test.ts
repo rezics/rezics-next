@@ -1,12 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import { Pool } from 'pg';
+import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
-import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createAccountApp } from '../../../services/account/src/app.ts';
-import { createAccountAuth } from '../../../services/account/src/auth.ts';
-import { accountEmailQueue } from '../../../services/account/src/email.ts';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { DEFAULT_ZONE_PRESENTATION, type ZoneSlide } from '../../../services/main/src/modules/zone/presentation-format.ts';
@@ -20,113 +14,28 @@ import { requireQa } from './recommendation-support.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 let started: Promise<MediaStack> | undefined;
-const verifiedEditors = new Set<string>();
 const stack = () => started ??= (async () => {
   const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   try {
     const fixture = await startMediaStack('zone-showcase-disclosure', { ownerUrls: owners.urls });
-    attestVerifiedEditors(fixture.composition.dependencies.account);
     return { ...fixture, stop: async () => { try { await fixture.stop(); } finally { await owners.close(); } } };
   } catch (error) { await owners.close(); throw error; }
 })();
-afterAll(async () => {
-  if (started) await (await started).stop();
-  if (accountVerification) await (await accountVerification).close();
-});
+afterAll(async () => { if (started) await (await started).stop(); });
 
-interface AccountAssertion {
-  verify: (request: Request, scopes?: readonly string[]) => Promise<{ issuer: string; subject: string }>;
-}
-/** The media stack's bearer map is its Account assertion. It reports a verified
- * email only after a person completes Account's own verification link. */
-function attestVerifiedEditors(account: AccountAssertion) {
-  const verify = account.verify.bind(account);
-  account.verify = async (request, scopes) => {
-    const principal = await verify(request, scopes);
-    if (!verifiedEditors.has(`${principal.issuer}\0${principal.subject}`)) return principal;
-    const attested = { ...principal, emailVerified: true as const };
-    return { ...attested, currentAssertion: async () => attested };
-  };
-}
-
-let accountVerification: Promise<{ verifyPerson: () => Promise<void>; close: () => Promise<void> }> | undefined;
-function accountVerificationService() {
-  return accountVerification ??= startAccountVerification();
-}
-async function freePort(): Promise<number> {
-  const server = createServer();
-  return new Promise((resolvePort, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no Account port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-async function startAccountVerification() {
-  const secret = Bun.env.ACCOUNT_SECRET ?? '';
-  const resource = Bun.env.ACCOUNT_MAIN_RESOURCE;
-  if (secret.length < 32 || !resource) throw new Error('Account verification needs ACCOUNT_SECRET and ACCOUNT_MAIN_RESOURCE');
-  const owners = await cloneQaOwnerDatabases(requireQa(), ['account'], 'privileged');
-  const pool = new Pool({ connectionString: owners.urls.account });
-  let app: ReturnType<typeof createAccountApp> | undefined;
-  const close = async () => {
-    await app?.stop();
-    await pool.end();
-    await owners.close();
-  };
-  try {
-    const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
-    const messages: { to: string; text: string }[] = [];
-    const email = accountEmailQueue(pool, secret, async mail => { messages.push(mail); }, base);
-    const auth = createAccountAuth({ baseURL: base, secret, resource, pool, operatorUserIds: new Set(), email });
-    app = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port });
-    const request = (path: string, body?: unknown, cookie?: string) => app!.handle(new Request(new URL(path, base), {
-      method: body === undefined ? 'GET' : 'POST', redirect: 'manual',
-      headers: { origin: base, ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(cookie ? { cookie } : {}) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }));
-    return { close, verifyPerson: async () => {
-      const address = `showcase-${randomUUID()}@example.test`;
-      const password = randomBytes(18).toString('base64url');
-      const signedUp = await request('/api/auth/sign-up/email', { ...signupPolicyFixture, name: 'Showcase editor', email: address, password });
-      const signedUpText = await signedUp.text();
-      expect(signedUp.status, signedUpText).toBe(200);
-      await email.drain();
-      const mail = [...messages].reverse().find(message => message.to === address);
-      const link = mail && /https?:\/\/\S+/.exec(mail.text)?.[0];
-      if (!link) throw new Error('Account verification message has no link');
-      const verified = await request(link);
-      const verifiedText = await verified.text();
-      expect(verified.status, verifiedText).toBe(302);
-      const signedIn = await request('/api/auth/sign-in/email', { email: address, password });
-      const signedInText = await signedIn.text();
-      expect(signedIn.status, signedInText).toBe(200);
-      const session = await request('/api/auth/get-session', undefined, signedIn.headers.get('set-cookie') ?? '');
-      const body = await session.json() as { user?: { emailVerified?: boolean } };
-      expect(session.status, JSON.stringify(body)).toBe(200);
-      expect(body.user?.emailVerified).toBe(true);
-    } };
-  } catch (error) { await close(); throw error; }
-}
 async function json<T = Record<string, unknown>>(response: Response, expected = 200): Promise<T> {
   const body = await response.text();
   expect(response.status, body).toBe(expected);
   return JSON.parse(body) as T;
 }
-async function fixture(label: string) {
+async function fixture(label: string, member?: { verified?: boolean }) {
   const s = await stack();
   const structures = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
     region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
     prefix: 'semantic/structure/' });
   await structures.initialize();
   (s.env as typeof s.env & { structureObjects: ImmutableObjects }).structureObjects = structures;
-  const editor = await s.member(label);
-  await (await accountVerificationService()).verifyPerson();
-  verifiedEditors.add(`${editor.principal.issuer}\0${editor.principal.subject}`);
+  const editor = await s.member(label, { verified: member?.verified ?? true });
   await editor.grant('space:create:root', 'space.create');
   // Agent provision mints a new Agent. This editor is already the uploader and
   // the Space owner, so the fixture records the active controller that operation
@@ -183,6 +92,13 @@ async function fixture(label: string) {
   };
   return { ...s, ...space, zone, path, editor, save, campaign };
 }
+
+test('an unverified editor is refused the showcase editor read', async () => {
+  const f = await fixture('showcase-unverified', { verified: false });
+  expect(await json(await f.editor.read(`${f.path}/showcase-editor`), 403)).toMatchObject({
+    code: 'authority_denied',
+  });
+});
 
 async function finishRenditions(f: MediaStack, use: string) {
   const worker = new MediaRenditionWorker(f.store.renditions, new LocalImageTransformer(), f.objects);
