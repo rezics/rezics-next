@@ -442,9 +442,6 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task dev:refresh` | Bring the shared dev stack to committed main, preserving data; use -- --dry-run to inspect the plan, -- --wait to queue for shared lifecycle. |
 | `task dev:seed` | Seed this checkout's local demo through its public APIs. |
 | `task scripts:typecheck` | Type-check every script except the dataset tools. |
-| `task goal:typecheck` | Alias of scripts:typecheck while the merge gate still names it. |
-| `task dev:typecheck` | Alias of scripts:typecheck while the merge gate still names it. |
-| `task observability-scripts:typecheck` | Alias of scripts:typecheck while the merge gate still names it. |
 | `task apphost:typecheck` | Type-check the AppHost and its configuration imports with Node types. |
 | `task aspire` | Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...). |
 | `task aspire:restore` | Generate the TypeScript AppHost SDK for the pinned Aspire version. |

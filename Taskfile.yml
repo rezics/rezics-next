@@ -96,17 +96,6 @@ tasks:
     cmds:
       - bun scripts/qa/host-admission.ts --gib 3.5 -- bun node_modules/typescript/bin/tsc --project scripts/tsconfig.json
 
-  # The merge gate that lands scripts:typecheck still names the old tasks; removed right after it lands.
-  goal:typecheck:
-    desc: Alias of scripts:typecheck while the merge gate still names it.
-    cmds: [task: scripts:typecheck]
-  dev:typecheck:
-    desc: Alias of scripts:typecheck while the merge gate still names it.
-    cmds: [task: scripts:typecheck]
-  observability-scripts:typecheck:
-    desc: Alias of scripts:typecheck while the merge gate still names it.
-    cmds: [task: scripts:typecheck]
-
   apphost:typecheck:
     desc: Type-check the AppHost and its configuration imports with Node types.
     deps: [aspire:restore]
