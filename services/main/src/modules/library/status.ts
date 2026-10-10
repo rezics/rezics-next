@@ -147,6 +147,8 @@ export class ReaderLibraryStatusStore {
 
   /** Whole-year totals are one MVCC snapshot and twelve SQL aggregate rows.
    * Chapter completions use UTC calendar months, independent of the DB timezone.
+   * A row whose structure is the occurrence is the Work itself: it has no chapters,
+   * so it adds nothing here. Finished works are the shelf dates above, not this row.
    * No Work or occurrence inventory is transferred to Main. */
   async readingYear(agent: string, principal: VerifiedPrincipal, year: number): Promise<ReadingYear> {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
@@ -163,6 +165,7 @@ export class ReaderLibraryStatusStore {
         SELECT extract(month FROM created_at AT TIME ZONE 'UTC')::integer AS month, count(*) AS count
         FROM structure.progress_command
         WHERE principal_issuer = $2 AND principal_subject = $3 AND first_finish
+          AND structure <> occurrence
           AND created_at >= (make_date($4,1,1)::timestamp AT TIME ZONE 'UTC')
           AND created_at < (make_date($4 + 1,1,1)::timestamp AT TIME ZONE 'UTC')
         GROUP BY 1
