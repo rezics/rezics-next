@@ -281,7 +281,7 @@ async function startRunStack(args: string[], budget: number, env: NodeJS.Process
     (environment, onLine) => runQaStartupChildAsync(root, args, budget, environment, onLine), reserve);
 }
 
-const release = options.tier || options.groups || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
+let release = () => {};
 
 function campaignEvidenceRead(projectRunId: string, sample: CommandPhaseSample): CampaignEvidenceRead {
   const evidencePath = join(directory, 'erasure-campaign-qualification.json');
@@ -708,7 +708,7 @@ function testWall(runs: ShardRun[]): number {
 // recorded file durations and free Goal QA slots. A file that fails after other
 // files in its project is rerun alone on a fresh project; passing there marks it
 // order-dependent, and the fresh result replaces the shared-project result.
-async function runStackTier(tier: StackTier): Promise<void> {
+export async function runStackTier(tier: StackTier, runProject: typeof runShard = runShard): Promise<void> {
   const artifact = tierArtifactName(tier);
   const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosenFor(tier)));
   // Only the explicitly selected exclusive drill times both 600-second commands.
@@ -801,7 +801,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       Array.from({ length: Math.min(capacity, projects.length) }, async () => {
         while (project < projects.length) {
           const index = project++;
-          runs[index] = await runShard(
+          runs[index] = await runProject(
             tier,
             `${runId}-${prefix}${index + 1}`,
             projects[index]!,
@@ -824,7 +824,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     await Promise.all(Array.from({ length: Math.min(capacity, candidates.length) }, async () => {
       while (next < candidates.length) {
         const index = next++;
-        reruns[index] = await runShard(tier, `${runId}-${prefix}r${index + 1}`,
+        reruns[index] = await runProject(tier, `${runId}-${prefix}r${index + 1}`,
           [candidates[index]!.file], flags, budget, true, startRerunStack);
       }
     }));
@@ -894,6 +894,8 @@ function noteIntegrationBudget(artifactDirectory: string): void {
   appendFileSync(join(artifactDirectory, 'summary.md'), `${integrationBudgetNotes.join('\n')}\n`);
 }
 
+if (import.meta.main) {
+release = options.tier || options.groups || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
   if (options.record) {
@@ -1152,4 +1154,5 @@ try {
         tiers.find(tier => tier.name === name)?.status ?? 'failed')).join('\n'));
     }
   if (errors.length) process.exitCode = 1;
+}
 }

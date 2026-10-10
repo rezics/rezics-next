@@ -36,19 +36,6 @@ export function integrationBudgetSummary(files: readonly string[]): string[] {
   return files.map((file) => `- Over the integration budget: ${file}`);
 }
 
-/** Projects past the free slots wait. Each keeps its class command deadline. */
-export function integrationProjectSchedule(
-  shards: readonly IntegrationShard[],
-  slots: number,
-): { files: readonly string[]; deadlineMs: number; queued: boolean }[] {
-  if (!Number.isInteger(slots) || slots < 1) throw new Error('Invalid QA slot count');
-  return shards.map((shard, index) => ({
-    files: shard.files,
-    deadlineMs: qaResourceClasses[shard.resourceClass].budgetMs,
-    queued: index >= slots,
-  }));
-}
-
 /** Ordinary selections that fit in the free slots keep the 480s tier wall.
  * A queue of ordinary projects uses the same scheduling allowance as heavy projects. */
 export function integrationTierWallMs(
