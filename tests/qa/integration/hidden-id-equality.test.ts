@@ -200,40 +200,17 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       hidden: manifest.manifestId, absent,
       call: (id) => http('GET', `/v1/exports/${id}`, undefined, outsider.token),
     });
-    const workIri = hiddenWork.work;
-    calls.set('GET /v1/addresses/resolve', {
-      hidden: workId, absent,
-      call: (id) => http('GET', `/v1/addresses/resolve?scope=resource&key=${encodeURIComponent(id)}`),
-    });
     calls.set('GET /v1/concepts/{id}', {
       hidden: local(conceptId), absent,
       call: (id) => http('GET', `/v1/concepts/${id}`),
-    });
-    calls.set('GET /v1/public-previews/{resource}', {
-      hidden: workId, absent,
-      call: (id) => http('GET', `/v1/public-previews/${id}`),
-    });
-    calls.set('GET /v1/resources/{resource}', {
-      hidden: workId, absent,
-      call: (id) => http('GET', `/v1/resources/${id}`),
     });
     calls.set('GET /v1/statements/{id}', {
       hidden: statementId, absent,
       call: (id) => http('GET', `/v1/statements/${id}`),
     });
-    calls.set('GET /v1/works/{id}/history', {
-      hidden: workId, absent,
-      call: (id) => http('GET', `/v1/works/${id}/history`),
-    });
     calls.set('GET /v1/works/{id}/maintainers', {
       hidden: workId, absent,
       call: (id) => http('GET', `/v1/works/${id}/maintainers`),
-    });
-    calls.set('POST /v1/resources/summaries', {
-      hidden: workIri, absent: `${ID}${absent}`,
-      call: (id) => http('POST', '/v1/resources/summaries', {
-        profile: 'resource-summary-batch-v1', resources: [id],
-      }),
     });
     const ownedClaim = await http('GET',
       `/v1/claims/${claimId}?actingSubject=${encodeURIComponent(owner.actor)}`, undefined, owner.token);

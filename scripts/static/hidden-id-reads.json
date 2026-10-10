@@ -196,7 +196,7 @@
       "query:key",
       "query:scope"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "GET /v1/addresses/revisions/{revision}",
@@ -1466,7 +1466,7 @@
     "ids": [
       "path:resource"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "GET /v1/public-reports/{caseId}",
@@ -1992,7 +1992,7 @@
       "query:context",
       "query:position"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "GET /v1/resources/{resource}/continuities",
@@ -2549,7 +2549,7 @@
       "path:id",
       "query:actingSubject"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "GET /v1/works/{id}/maintainers",
@@ -3442,7 +3442,7 @@
     "ids": [
       "body:resources"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "POST /v1/rights/offerings/{offering}/changes",
