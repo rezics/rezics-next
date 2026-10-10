@@ -1065,9 +1065,10 @@ export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
 
 /**
  * Write one subject's facts through the public API: one classified format on the
- * Main version, one integer count on the Work, and completion when a tag maps.
- * Each statement's evidence is the subject page. Keys stay fixed so a replay
- * writes the same scheme the bootstrap seed created.
+ * Main version, one integer count on the Work, the first publication date when
+ * the subject has one, and completion when a tag maps. Each statement's evidence
+ * is the subject page. Keys stay fixed so a replay writes the same scheme the
+ * bootstrap seed created.
  */
 export async function importBangumiWorkFacts(client: BangumiFactsClient, actingSubject: string,
   work: { work: string; mainVersion: string }, record: BangumiFactSource): Promise<{
@@ -1112,6 +1113,18 @@ export async function importBangumiWorkFacts(client: BangumiFactsClient, actingS
     await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
       actingSubject, statement, { kind: 'global' }, 'accepted', null),
     `${prefix}:${facts.count.notation}:decision`);
+  }
+  if (facts.date) {
+    const definition = seeded.firstPublication;
+    const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work,
+      predicate: definition.component, relationDefinition: definition.revision,
+      value: { kind: 'literal', lexical: facts.date.lexical, datatype: facts.date.datatype, language: null },
+      applicability: [], interpretation: { kind: 'selected' }, evidence, actingSubject,
+    }, `${prefix}:first-publication-date`);
+    await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
+      actingSubject, statement, { kind: 'global' }, 'accepted', null),
+    `${prefix}:first-publication-date:decision`);
   }
   if (facts.status) {
     await client.put(`/v1/works/${work.work.slice(-36)}/metadata`, {

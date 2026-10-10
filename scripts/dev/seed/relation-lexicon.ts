@@ -211,6 +211,7 @@ export interface WorkFormatSeed {
   scheme: string;
   concepts: Record<WorkFormatKey, WorkFormatConceptSeed>;
   counts: Record<(typeof declaredCountProperties)[number]['notation'], SeedLexiconReceipt>;
+  firstPublication: SeedLexiconReceipt;
 }
 
 /**
@@ -267,6 +268,6 @@ export async function seedWorkFormat(
     await client.authorizeDefinition(definition);
     counts[property.notation] = definition;
   }
-  await seedFirstPublicationDate(client, actingSubject);
-  return { scheme: scheme!.id, concepts, counts };
+  const firstPublication = await seedFirstPublicationDate(client, actingSubject);
+  return { scheme: scheme!.id, concepts, counts, firstPublication };
 }
