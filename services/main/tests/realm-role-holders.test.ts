@@ -5,7 +5,8 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
-import { AccessRealmManagement, REALM_ROLE_HOLDER_PAGE_SQL, REALM_ROLE_HOLDER_PREVIEW_SQL } from '../src/modules/access/realm-management.ts';
+import { AccessRealmManagement, REALM_ROLE_HOLDER_PAGE_SQL, REALM_ROLE_HOLDER_PREVIEW_SQL,
+  REALM_ROLE_HOLDER_SEARCH_PAGE_SQL } from '../src/modules/access/realm-management.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { REALM_ROLE_CAP, REALM_ROLE_HOLDER_PREVIEW, RealmAdminDenied, RealmAdminLimit,
   RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
@@ -295,4 +296,55 @@ test('a roles manager who cannot read members does not learn who holds a role', 
   expect(visible.cap).toBe(hidden.cap);
   expect(visible.roles.map(shown)).toEqual(hidden.roles.map(shown));
   expect(visible.roles[0]).toMatchObject({ holders: [holder], moreHolders: false });
+});
+
+test('searching inside a role pages holders who sort after the realm-wide name page', async () => {
+  const adminSource = watch(pool);
+  const admin = new AccessRealmManagement(adminSource.pool);
+  const manager = await realmWith(['realm.members.manage']);
+  const wide = await role(manager.realm, 'Wide');
+  const from = 1000;
+  const count = 30;
+  await people(manager.realm, from, count);
+  await people(manager.realm, from + 24, 6, { role: wide, assignOnly: true });
+  await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+    SELECT ('10000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+      'https://account.rezics.test', 'lin-search-' || n::text
+    FROM generate_series($1::int, $1::int + $2::int - 1) n`, [from, count]);
+  await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+    SELECT ('20000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+      ('10000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+      'https://rezics.com/id/' || lpad(n::text, 8, '0') || '-0000-4000-8000-000000000000',
+      'agent.control', 'infinity'
+    FROM generate_series($1::int, $1::int + $2::int - 1) n`, [from, count]);
+  await pool.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key, request_digest,
+      agent_id, agent_kind, display_name, principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
+    SELECT ('30000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+      ('10000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+      'lin-search-' || n::text, repeat('a', 64),
+      'https://rezics.com/id/' || lpad(n::text, 8, '0') || '-0000-4000-8000-000000000000',
+      'person', 'Lin ' || n::text, 0, 'active', 'fixture', 1,
+      ('20000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid
+    FROM generate_series($1::int, $1::int + $2::int - 1) n`, [from, count]);
+
+  const realmPage = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor,
+    search: 'lin', limit: 20 });
+  expect(realmPage.items.map(item => item.member)).toEqual(Array.from({ length: 20 }, (_, index) => agent(from + index)));
+  expect(realmPage.nextCursor).toBe(agent(from + 19));
+
+  const holders = Array.from({ length: 6 }, (_, index) => agent(from + 24 + index));
+  const found: string[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 4; page += 1) {
+    adminSource.statements.length = 0;
+    const read = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor,
+      search: 'lin', role: wide, limit: 2, ...after ? { after } : {} });
+    expect(adminSource.statements.some(sql => sql === REALM_ROLE_HOLDER_SEARCH_PAGE_SQL)).toBe(true);
+    expect(adminSource.statements.some(sql => sql.includes('candidates'))).toBe(false);
+    found.push(...read.items.map(item => item.member));
+    after = read.nextCursor;
+    if (!after) break;
+  }
+  expect(found).toEqual(holders);
+  expect(after).toBeNull();
 });

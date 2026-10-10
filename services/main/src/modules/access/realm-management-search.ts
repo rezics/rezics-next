@@ -71,15 +71,22 @@ export const REALM_MEMBER_SEARCH_SQL = `WITH query AS MATERIALIZED (
 )
 SELECT member FROM candidates ORDER BY member LIMIT $4`;
 
-export async function searchRealmMembers(client: PoolClient, realm: string, search: string,
-  after: string | undefined, limit: number): Promise<string[]> {
+/** The normalized name query and the identity prefix a member page matches. */
+export async function prepareMemberSearch(client: PoolClient, search: string, limit: number):
+  Promise<{ text: string; prefix: string }> {
   const query = search.trim().normalize('NFKC').replace(/^@/, '');
   if (!query || query.length > 80 || /[\u0000-\u001f\u007f]/u.test(query)
     || !Number.isInteger(limit) || limit < 1 || limit > REALM_ADMIN_COST.page + 1) {
     throw new RealmAdminInvalid('Invalid member search');
   }
   const native = await resolveAgentSearch(client, query);
+  return { text: query, prefix: native.replace(/[\\%_]/g, '\\$&') };
+}
+
+export async function searchRealmMembers(client: PoolClient, realm: string, search: string,
+  after: string | undefined, limit: number): Promise<string[]> {
+  const prepared = await prepareMemberSearch(client, search, limit);
   const rows = await client.query<{ member: string }>(REALM_MEMBER_SEARCH_SQL,
-    [realm, after ?? '', query, limit, native.replace(/[\\%_]/g, '\\$&')]);
+    [realm, after ?? '', prepared.text, limit, prepared.prefix]);
   return rows.rows.map(row => row.member);
 }

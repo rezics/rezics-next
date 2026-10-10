@@ -14,7 +14,7 @@ import { prepareRealmHistoryAdmission } from '../realm-admin/history.ts';
 import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { registerFollowSpace } from '../follows/targets.ts';
-import { searchRealmMembers } from './realm-management-search.ts';
+import { prepareMemberSearch, searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings,
   applicableRealmSettings, applicableZoneSettings, lockSpaceSettingsGeneration, readSpaceSettingsGeneration } from './realm-management-settings.ts';
 import { spaceSettingsCommand, type SpaceSettingsCommand, type ZoneSpaceSettings } from '../realm-admin/contract.ts';
@@ -74,6 +74,50 @@ export const REALM_ROLE_HOLDER_PAGE_SQL = `SELECT team.member,
       AND ($2::text IS NULL OR holder.member > $2)
       AND ($3::text[] IS NULL OR holder.member = ANY($3))
       AND ${notBannedHolder}
+    ORDER BY holder.member LIMIT $4) team
+  LEFT JOIN access.membership m ON m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = team.member
+  LEFT JOIN access.membership_ban b ON b.kind = 'realm'
+    AND b.owner_subject = $1 AND b.member_subject = team.member
+  ORDER BY team.member LIMIT $4`;
+
+/**
+ * Name match inside the role-holder seek. A realm-wide search keeps only its
+ * first page of names, so holders later in that list would never be reached.
+ * This walks (realm, role, member) and stops after limit+1 holders who match.
+ */
+export const REALM_ROLE_HOLDER_SEARCH_PAGE_SQL = `WITH query AS MATERIALIZED (
+  SELECT access.realm_member_search_key($3) AS text
+), terms AS MATERIALIZED (
+  SELECT text, access.realm_member_search_terms(text) AS tokens FROM query
+)
+SELECT team.member,
+  COALESCE(m.state,'not_joined') AS state, COALESCE(m.generation,0)::text AS membership_generation,
+  COALESCE(b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()), false) AS banned,
+  CASE WHEN b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp())
+    THEN b.expires_at ELSE NULL END AS banned_until,
+  (SELECT h.changed_at FROM access.membership_history h WHERE h.membership_id = m.id
+    AND h.state = 'joined' ORDER BY h.generation DESC LIMIT 1) AS joined_at,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name,
+    'validUntil', a.valid_until) ORDER BY r.id) FROM access.realm_admin_assignment a
+    JOIN access.realm_admin_role r ON r.realm = a.realm AND r.id = a.role_id
+    WHERE a.realm = $1 AND a.member = team.member AND a.valid_until > clock_timestamp()), '[]') AS roles
+  FROM (
+    SELECT holder.member FROM access.realm_admin_assignment holder
+    JOIN access.authority_subject subject ON subject.id = holder.member AND ${visibleAgent}
+    CROSS JOIN terms q
+    WHERE holder.realm = $1 AND holder.role_id = $5::uuid AND holder.valid_until > clock_timestamp()
+      AND ($2::text IS NULL OR holder.member > $2)
+      AND ${notBannedHolder}
+      AND (
+        EXISTS (SELECT 1 FROM access.agent_provision p
+          WHERE p.agent_id = holder.member AND p.state = 'active'
+            AND access.realm_member_search_terms(access.realm_member_search_key(p.display_name)) @> q.tokens
+            AND strpos(access.realm_member_search_key(p.display_name), q.text) > 0)
+        OR EXISTS (SELECT 1 FROM access.alias_registry h
+          WHERE h.holder = holder.member AND h.scope = 'agent' AND h.state = 'current'
+            AND access.realm_member_search_terms(access.realm_member_search_key(h.key)) @> q.tokens
+            AND strpos(access.realm_member_search_key(h.key), q.text) > 0)
+        OR holder.member LIKE $6 || '%')
     ORDER BY holder.member LIMIT $4) team
   LEFT JOIN access.membership m ON m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = team.member
   LEFT JOIN access.membership_ban b ON b.kind = 'realm'
@@ -509,6 +553,15 @@ export class AccessRealmManagement {
     }
     return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
+      // Search inside the role seek. A realm-wide name page intersected with the
+      // role drops holders who sort after that page, and gives them no cursor.
+      if (options.role && options.search?.trim()) {
+        const prepared = await prepareMemberSearch(client, options.search, limit + 1);
+        const found = (await client.query<MemberRosterRow>(REALM_ROLE_HOLDER_SEARCH_PAGE_SQL,
+          [realm, options.after ?? null, prepared.text, limit + 1, options.role, prepared.prefix])).rows;
+        return { generation, items: found.slice(0, limit).map(memberItem),
+          nextCursor: found.length > limit ? found[limit - 1]!.member : null };
+      }
       const matches = !options.search?.trim() ? null
         : await searchRealmMembers(client, realm, options.search, options.after, limit + 1);
       // The Agent team roster. Private principals and inactive subjects stay out.
