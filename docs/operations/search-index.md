@@ -55,7 +55,8 @@ whatever receipts are already stored:
 | quarantined | Anchor absent, quarantine receipt stored | Clears Content units |
 | cleared | Terminal clear receipt | Indexes when no offline record covers this generation and sequence. Units that returned while the anchor is absent are cleared again |
 | offline-indexed | Cleared-family receipt with the indexer digest for this generation and sequence | Replays from the stored cut |
-| replayed | Rebuild cursor at the stored cut | Activates |
+| replayed | Rebuild cursor at the stored cut, and an offline receipt for this generation | Activates |
+| replayed, evidence absent | Cursor has left sequence 0, quarantine receipt present, no offline digest for this generation | Starts a fresh job. The same id cannot be cleared and replayed again |
 | activated | Activate receipt, control generation, and anchor agree | Promotes the SQL checkpoint |
 
 A `urn:rezics:content:match-unit:` subject that is not a MatchUnit with a
@@ -71,7 +72,18 @@ content-rebuild step: cleared
 content-rebuild step: offline-indexed
 content-rebuild step: replayed
 content-rebuild step: activated
+content-rebuild step: fresh job <uuid> (previous job <uuid> had no offline evidence)
 ```
+
+`fresh job` means the saved job already replayed and has no offline-index
+receipt. Its projection receipts cannot be written again, so this command
+allocates a new id, rewrites `.temp/stack/<stack>/content-rebuild.json`, and
+runs clear, offline index, replay, and activate once under that id. The new
+quarantine receipt stores the current Content owner cut and does not delete
+the anchor: the anchor is already absent, and the previous job has no
+activation receipt. A second fresh job in the same command refuses with
+`content-rebuild: fresh job refused for <previous> and <current>`. Writers
+stay stopped for every step.
 
 `quarantined` is printed again on a resume because the receipt is still the
 start of the job. `cleared` is printed when this process deleted Content units,

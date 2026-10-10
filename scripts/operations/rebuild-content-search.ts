@@ -7,8 +7,9 @@ import { ContentCore } from '../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
-import { ContentRebuildUnavailable, contentRebuildFailureLine, publicSearchAnchorPresent,
-  readAdoptedQuarantineJob, readContentRebuildStep, resumeActivatedContentRebuild }
+import { ContentRebuildFreshJob, ContentRebuildUnavailable, contentRebuildFailureLine,
+  freshJobLine, publicSearchAnchorPresent, readAdoptedQuarantineJob, readContentRebuildStep,
+  repeatedFreshJobRefusal, resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
 import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvironment,
   parseOptions, projectName,
@@ -122,25 +123,44 @@ try {
     const content = new ContentCore(pool);
     const cursor = new ContentProjectionCursor(pool);
     const publicConsumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
-    const activated = await resumeActivatedContentRebuild(env, cursor, id, publicConsumer);
-    if (activated) {
-      rmSync(jobFile);
-      console.log(JSON.stringify({ job: id, generation: activated, resumed: true }));
-    } else {
-      const result = await rebuildPublicContentSearch({ runner, dockerEnv: docker, env, content, cursor,
-        id, publicConsumer, reserveBytes, assertWritersStopped: () => assertWritersStopped(apps.MAIN_ORIGIN!),
-        expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`),
-        offlinePreSequence: saved?.offlinePreSequence,
-        onOfflineRecorded: rememberOffline,
-        onStep: step => console.log(`content-rebuild step: ${step}`) });
-      const logPath = join(stack, `content-rebuild-${id}.log`);
-      writeFileSync(logPath, result.offlineLog, { mode: 0o600 });
-      rmSync(jobFile);
-      console.log(JSON.stringify({ job: id, removed: result.removed, replayed: result.replayed,
-        generation: result.generation, logPath, storage: result.storage,
-        pins: { imageId: result.pins.imageId, stateVolume: result.pins.stateVolume,
-          assembler: result.pins.indexerAssemblerSha256, analyzer: result.pins.facts.analyzer,
-          moduleVersion: result.pins.moduleVersion }, elapsedMs: result.elapsedMs }));
+    let restartedFrom: string | undefined;
+    let offlinePreSequence = saved?.offlinePreSequence;
+    for (;;) {
+      await assertWritersStopped(apps.MAIN_ORIGIN!);
+      const activated = await resumeActivatedContentRebuild(env, cursor, id, publicConsumer);
+      if (activated) {
+        rmSync(jobFile);
+        console.log(JSON.stringify({ job: id, generation: activated, resumed: true }));
+        break;
+      }
+      try {
+        const result = await rebuildPublicContentSearch({ runner, dockerEnv: docker, env, content, cursor,
+          id, publicConsumer, reserveBytes, assertWritersStopped: () => assertWritersStopped(apps.MAIN_ORIGIN!),
+          expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`),
+          offlinePreSequence, continuingJob: restartedFrom, onOfflineRecorded: rememberOffline,
+          onStep: step => console.log(`content-rebuild step: ${step}`) });
+        const logPath = join(stack, `content-rebuild-${id}.log`);
+        writeFileSync(logPath, result.offlineLog, { mode: 0o600 });
+        rmSync(jobFile);
+        console.log(JSON.stringify({ job: id, removed: result.removed, replayed: result.replayed,
+          generation: result.generation, logPath, storage: result.storage,
+          pins: { imageId: result.pins.imageId, stateVolume: result.pins.stateVolume,
+            assembler: result.pins.indexerAssemblerSha256, analyzer: result.pins.facts.analyzer,
+            moduleVersion: result.pins.moduleVersion }, elapsedMs: result.elapsedMs }));
+        break;
+      } catch (error) {
+        if (!(error instanceof ContentRebuildFreshJob)) throw error;
+        if (restartedFrom !== undefined) {
+          throw new ContentRebuildUnavailable(repeatedFreshJobRefusal(restartedFrom, id));
+        }
+        const previous = id;
+        const nextId = randomUUID();
+        restartedFrom = previous;
+        id = nextId;
+        offlinePreSequence = undefined;
+        writeFileSync(jobFile, JSON.stringify({ id: nextId }) + '\n', { mode: 0o600 });
+        console.log(freshJobLine(nextId, previous));
+      }
     }
   } finally {
     await pool.end();

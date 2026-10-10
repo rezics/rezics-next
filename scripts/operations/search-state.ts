@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ContentCore } from '../../services/content/src/core.ts';
 import type { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
-import { CONTENT_REBUILD_NONEMPTY_REFUSAL, ContentRebuildUnavailable,
+import { CONTENT_REBUILD_NONEMPTY_REFUSAL, ContentRebuildFreshJob, ContentRebuildUnavailable,
   activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, crashSearchRebuild,
   nextContentRebuildStep, quarantinePublicContentSearch, readContentRebuildStep,
   readContentRebuildProgress, reclearQuarantinedContentUnits, recordOfflineContentRebuild,
@@ -250,6 +250,8 @@ export interface RebuildInput {
   onStep?: (step: 'quarantined' | 'cleared' | 'offline-indexed' | 'replayed' | 'activated') => void;
   /** Sequence the offline command advanced from, so its receipt IRI is known. */
   offlinePreSequence?: string;
+  /** Open job this id continues while the anchor is already absent. */
+  continuingJob?: string;
   /** Persists that sequence next to the job id before any later command moves the graph. */
   onOfflineRecorded?: (preSequence: string, generation: string) => void;
 }
@@ -269,11 +271,12 @@ export interface RebuildResult {
  * of one new text generation. Pins and headroom refuse before quarantine.
  * A rerun continues from the stored receipts. Units that return while the
  * anchor is absent are cleared again. The indexer runs when no offline receipt
- * covers the current generation and sequence. A subject the clear cannot delete
- * still refuses. Cost: one constant-size pin/headroom inspection, bounded
- * Content clear/replay batches, then one O(indexed RDF bytes) native indexer
- * scan when that pass is not already recorded. The native pass has a 300-second
- * command timeout; elapsed phases and storage are returned. */
+ * covers the current generation and sequence. A replay that has left sequence 0
+ * without that receipt asks for a new job id instead of refusing. A subject
+ * the clear cannot delete still refuses. Cost: one constant-size pin/headroom
+ * inspection, bounded Content clear/replay batches, then one O(indexed RDF
+ * bytes) native indexer scan when that pass is not already recorded. The native
+ * pass has a 300-second command timeout; elapsed phases and storage are returned. */
 export async function rebuildPublicContentSearch(input: RebuildInput): Promise<RebuildResult> {
   const clock = () => performance.now();
   let started = clock();
@@ -282,7 +285,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   const storage = storageHeadroom(input.runner, input.reserveBytes);
   assertStorageHeadroom(storage);
   let verify = clock() - started;
-  const job = await quarantinePublicContentSearch(input.env, input.content, input.id);
+  const job = await quarantinePublicContentSearch(input.env, input.content, input.id, input.continuingJob);
   input.onStep?.('quarantined');
   crashSearchRebuild('after-quarantine');
   let removed = 0;
@@ -306,6 +309,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
     }
     const next = nextContentRebuildStep(progress);
     if (typeof next !== 'string') {
+      if ('restart' in next) throw new ContentRebuildFreshJob();
       if (next.refuse === CONTENT_REBUILD_NONEMPTY_REFUSAL) throw new SearchStateRefused(next.refuse);
       throw new ContentRebuildUnavailable(next.refuse);
     }

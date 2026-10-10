@@ -1,5 +1,7 @@
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -88,6 +90,39 @@ test('an interrupted public search rebuild resumes through activation', async ()
       generation = result.generation;
       await expectReady(generation, population);
     }
+
+    // Cursor at the cut, then the offline receipt is removed. That is a replay
+    // that never recorded indexer evidence: the same job cannot accept those
+    // projection receipts again, so the rerun allocates a new id.
+    const interrupted = await crash('after-replay');
+    expect(interrupted).toContain('search rebuild crash: after-replay');
+    expect(interrupted).toContain('content-rebuild step: replayed');
+    if (!content || !fuseki || !contentPool) throw new Error('search rebuild fixture is absent');
+    const saved = JSON.parse(readFileSync(join(stack.directory, 'content-rebuild.json'), 'utf8')) as { id: string };
+    const cursorAt = await contentPool.query(
+      `SELECT sequence::text AS sequence FROM content.projection_checkpoint WHERE consumer = $1`,
+      [`content-rebuild.${saved.id}`]);
+    expect(cursorAt.rows[0]?.sequence).toBe((await content.ownerPosition()).sequence);
+    expect(cursorAt.rows[0]?.sequence).not.toBe('0');
+    const evidence = `PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
+      ?receipt rv:rebuildJob ${JSON.stringify(saved.id)} ; rv:indexRebuildDigest ?digest . } }`;
+    expect((await fuseki.query(evidence)).boolean).toBe(true);
+    await fuseki.update(`PREFIX rv: <${RV}> DELETE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt ?p ?o . } } WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:rebuildJob ${JSON.stringify(saved.id)} ;
+        rv:indexRebuildDigest ?digest ; ?p ?o . } }`);
+    expect((await fuseki.query(evidence)).boolean).toBe(false);
+    const freshRun = await rebuild();
+    expect(freshRun).toContain(`content-rebuild step: fresh job `);
+    expect(freshRun).toContain(`(previous job ${saved.id} had no offline evidence)`);
+    expect(freshRun).toContain('content-rebuild step: cleared');
+    expect(freshRun).toContain('content-rebuild step: offline-indexed');
+    expect(freshRun).toContain('content-rebuild step: replayed');
+    expect(freshRun).toContain('content-rebuild step: activated');
+    expect(freshRun).not.toContain('fresh job refused');
+    const fresh = lastJson<RebuildJson>(freshRun);
+    expect(fresh.job).not.toBe(saved.id);
+    await expectReady(fresh.generation, population);
   } finally {
     if (previousFlag === undefined) delete process.env[SEARCH_REBUILD_CRASH_FLAG];
     else process.env[SEARCH_REBUILD_CRASH_FLAG] = previousFlag;

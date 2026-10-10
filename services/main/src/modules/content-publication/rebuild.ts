@@ -30,8 +30,13 @@ export { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRAS
  *   control sequence. Rerun repeats the indexer when that receipt is absent.
  *   The admitted command is the cleared-family receipt: it advances sequence
  *   and writes no public triple. Its digest family is content-rebuild-offline-v1.
- * - replayed: the rebuild cursor is at the stored quarantine cut. Rerun adopts
- *   that checkpoint idempotently (the cursor does not rewind) and activates.
+ * - replayed: the rebuild cursor is at the stored quarantine cut and an offline
+ *   receipt covers this generation. Rerun adopts that checkpoint idempotently
+ *   (the cursor does not rewind) and activates.
+ * - replayed without offline evidence: the cursor has left sequence 0 and no
+ *   indexer receipt exists for this generation. Projection receipts for this
+ *   job cannot be inserted again, so a new job id continues from the closed
+ *   anchor. The same id is not cleared or replayed again.
  * - activated: the activate receipt, control generation, and anchor agree.
  *   Rerun only finishes SQL checkpoint promotion.
  *
@@ -61,6 +66,29 @@ export const CONTENT_REBUILD_READ_BUDGET_MS = 8_000;
 export const CONTENT_REBUILD_COMMAND_DEADLINE_MS = 60_000;
 
 export class ContentRebuildUnavailable extends Error {}
+
+/** The decision table asked for a new job. This is a step, not a refusal. */
+export class ContentRebuildFreshJob extends Error {
+  readonly restart = 'fresh-job' as const;
+  constructor() {
+    super('fresh-job');
+    this.name = 'ContentRebuildFreshJob';
+  }
+}
+
+/** The one stdout line for a job that replayed without offline evidence. */
+export function freshJobLine(nextId: string, previousId: string): string {
+  rebuildId(nextId);
+  rebuildId(previousId);
+  return `content-rebuild step: fresh job ${nextId} (previous job ${previousId} had no offline evidence)`;
+}
+
+/** A second fresh job in one invocation names both ids and stops. */
+export function repeatedFreshJobRefusal(originalId: string, currentId: string): string {
+  rebuildId(originalId);
+  rebuildId(currentId);
+  return `content-rebuild: fresh job refused for ${originalId} and ${currentId}`;
+}
 
 /** A Fuseki query abort, the server's 10s 503, or a compose wait that exceeded its clock. */
 export function contentRebuildStepTimedOut(error: unknown): boolean {
@@ -147,11 +175,13 @@ export type ContentRebuildResume =
   | 'replay'
   | 'activate'
   | 'done'
-  | { refuse: string };
+  | { refuse: string }
+  | { restart: 'fresh-job' };
 
 /** The next command a rerun must run. A rotated generation is not a refusal:
  * activation reads the live generation. Units after a clear are a clear, while
- * the graph stays closed. */
+ * the graph stays closed. A cursor past sequence 0 whose offline receipt is
+ * missing starts a new job: those projection receipts cannot be inserted again. */
 export function nextContentRebuildStep(progress: ContentRebuildProgress): ContentRebuildResume {
   if (progress.activated) {
     if (!progress.anchor) return { refuse: 'activate: anchor is absent after activation' };
@@ -163,12 +193,13 @@ export function nextContentRebuildStep(progress: ContentRebuildProgress): Conten
   }
   if (progress.anchor) return { refuse: 'quarantine: anchor returned before activation' };
   const atCut = progress.cutSequence !== null && progress.replaySequence === progress.cutSequence;
-  // Sequence 0 has not replayed. A non-zero cursor, or a cursor already at the
-  // cut, has units whose projection receipts cannot be inserted again.
+  // Sequence 0 has not replayed. A non-zero cursor has units whose projection
+  // receipts cannot be inserted again under this job id.
   const replayStarted = progress.replaySequence !== null && progress.replaySequence !== '0';
   if (!replayStarted && (!progress.clearReceipt || progress.contentUnits)) return 'clear';
   if (progress.malformedContent && !atCut) return { refuse: CONTENT_REBUILD_NONEMPTY_REFUSAL };
   if (!replayStarted && !progress.offlineCovers) return 'offline';
+  if (replayStarted && progress.offlineDigest === null) return { restart: 'fresh-job' };
   if (!atCut) return 'replay';
   return 'activate';
 }
@@ -308,25 +339,64 @@ async function assertQuarantined(env: WorkActivationEnvironment): Promise<void> 
   if (await publicSearchAnchorPresent(env)) throw new ContentRebuildUnavailable('public search is not quarantined');
 }
 
-/** Persistently remove the public-search anchor before any replacement work. */
+/** The prior job is named by receipt IRI. A scan for the latest quarantine walks the receipts graph. */
+async function openQuarantineToContinue(env: WorkActivationEnvironment, id: string,
+  continuingJob: string | undefined): Promise<string> {
+  const prior = continuingJob ?? await readAdoptedQuarantineJob(env);
+  if (!prior || prior === id || !await readQuarantine(env, prior)) {
+    throw new ContentRebuildUnavailable('quarantine: anchor is absent and this job has no receipt');
+  }
+  if (await readActivationGeneration(env, prior)) {
+    throw new ContentRebuildUnavailable('quarantine: a job with an activation receipt is never adopted');
+  }
+  return prior;
+}
+
+/** Persistently remove the public-search anchor before any replacement work.
+ * A new id may continue an open quarantine while the anchor is already absent:
+ * the receipt records the current Content owner cut and does not delete the
+ * anchor. A live anchor still takes the original deletion. A job that already
+ * activated is never used again. */
 export async function quarantinePublicContentSearch(env: WorkActivationEnvironment,
-  content: ContentCore, id: string): Promise<ContentRebuildJob> {
+  content: ContentCore, id: string, continuingJob?: string): Promise<ContentRebuildJob> {
   rebuildId(id);
+  if (continuingJob !== undefined) rebuildId(continuingJob);
+  if (await readActivationGeneration(env, id)) {
+    throw new ContentRebuildUnavailable('quarantine: a job with an activation receipt is never adopted');
+  }
   const consumer = `content-rebuild.${id}`;
   let cut = await readQuarantine(env, id);
   if (!cut) {
-    if (!await publicSearchAnchorPresent(env)) {
-      throw new ContentRebuildUnavailable('quarantine: anchor is absent and this job has no receipt');
+    const anchor = await publicSearchAnchorPresent(env);
+    if (anchor) {
+      cut = await content.ownerPosition();
+      sourceCut(cut);
+      await command(env, 'quarantine', id, { family: 'content-rebuild-quarantine-v1', id, cut }, {
+        deletion: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
+        condition: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
+        receiptFacts: `; rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ${lit(cut.sequence)} ; rv:rebuildJob ${lit(id)}`,
+      });
+    } else {
+      const prior = await openQuarantineToContinue(env, id, continuingJob);
+      cut = await content.ownerPosition();
+      sourceCut(cut);
+      await command(env, 'quarantine', id, {
+        family: 'content-rebuild-quarantine-v1', id, cut, continues: prior,
+      }, {
+        condition: `FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+            ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }
+          GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt('quarantine', prior))} a rv:OperationReceipt ;
+            rv:outcome rv:Succeeded ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:sequence ?priorSequence ; rv:rebuildJob ${lit(prior)} . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
+            ${iri(receipt('activate', prior))} a rv:OperationReceipt ; rv:outcome rv:Succeeded . } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
+            ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded . } }`,
+        receiptFacts: `; rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ${lit(cut.sequence)} ; rv:rebuildJob ${lit(id)}`,
+      });
     }
-    cut = await content.ownerPosition();
-    sourceCut(cut);
-    await command(env, 'quarantine', id, { family: 'content-rebuild-quarantine-v1', id, cut }, {
-      deletion: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
-      condition: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
-      receiptFacts: `; rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ${lit(cut.sequence)} ; rv:rebuildJob ${lit(id)}`,
-    });
     cut = await readQuarantine(env, id);
     if (!cut) throw new ContentRebuildUnavailable('quarantine receipt is absent');
   }
@@ -601,7 +671,8 @@ export async function readContentRebuildProgress(env: WorkActivationEnvironment,
 
 /** One quarantine job id, with no sort. The job file is the usual key. This
  * read is for a receipt that stored rv:rebuildJob when that file is absent.
- * Sorting every such receipt walks the receipts graph. */
+ * Sorting every such receipt walks the receipts graph. A job that already
+ * has an activation receipt is not a resume key. */
 export async function readAdoptedQuarantineJob(env: WorkActivationEnvironment): Promise<string | null> {
   const result = await readContentRebuildStep('adopt: quarantine job', () => env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?job WHERE {
@@ -615,6 +686,7 @@ export async function readAdoptedQuarantineJob(env: WorkActivationEnvironment): 
   if (rows.length !== 1 || !UUID.test(job)) {
     throw new ContentRebuildUnavailable('quarantine: receipt job id is invalid');
   }
+  if (await readActivationGeneration(env, job)) return null;
   return job;
 }
 

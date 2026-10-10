@@ -6,10 +6,11 @@ import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { relayContentProjectionOnce } from '../src/modules/content-publication/relay.ts';
 import { CONTENT_REBUILD_NONEMPTY_REFUSAL, CONTENT_REBUILD_PAGE, SEARCH_REBUILD_CRASH_AT,
   SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRASH_POINTS, SearchRebuildCrash,
-  contentRebuildClearPageQuery, crashSearchRebuild, nextContentRebuildStep,
-  readContentRebuildProgress, type ContentRebuildProgress }
+  contentRebuildClearPageQuery, crashSearchRebuild, freshJobLine, nextContentRebuildStep,
+  quarantinePublicContentSearch, readAdoptedQuarantineJob, readContentRebuildProgress,
+  repeatedFreshJobRefusal, type ContentRebuildProgress }
   from '../src/modules/content-publication/rebuild.ts';
-import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { DATASET, hash, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const epoch = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const job = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -77,7 +78,9 @@ test('a quarantined rebuild resumes from every stored state', async () => {
   expect(await step(closed)).toBe('offline');
   expect(await step({ ...closed, offlineSequence: '9' })).toBe('offline');
   expect(await step({ ...closed, offlineSequence: '10' })).toBe('replay');
-  expect(await step({ ...closed, replay: '2', contentUnits: true })).toBe('replay');
+  expect(await step({ ...closed, replay: '2', contentUnits: true, offlineSequence: '8' })).toBe('replay');
+  expect(await step({ ...closed, replay: '2', contentUnits: true })).toEqual({ restart: 'fresh-job' });
+  expect(await step({ ...closed, replay: '5', contentUnits: true })).toEqual({ restart: 'fresh-job' });
   expect(await step({ ...closed, replay: '5', contentUnits: true, offlineSequence: '8' })).toBe('activate');
   expect(await step({ ...closed, replay: '0', cut: '0', clearReceipt: false })).toBe('clear');
   expect(await step({ ...closed, replay: '0', cut: '0', offlineSequence: '10' })).toBe('activate');
@@ -88,6 +91,108 @@ test('a quarantined rebuild resumes from every stored state', async () => {
   expect(await step({ ...closed, anchor: true })).toEqual({ refuse: 'quarantine: anchor returned before activation' });
   expect(await step({ ...closed, activation: generation, anchor: false }))
     .toEqual({ refuse: 'activate: anchor is absent after activation' });
+});
+
+const prior = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const fresh = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+function committed(sequence = '11') {
+  return { status: 'committed' as const, position: { datasetId: DATASET, dataEpoch: epoch, sequence } };
+}
+
+function anchorDeleted(update: string): boolean {
+  return (update.split('} WHERE {')[0] ?? '').includes('SearchGraphAnchor');
+}
+
+test('a second fresh-job restart names both ids and stops', () => {
+  expect(freshJobLine(fresh, job)).toBe(
+    `content-rebuild step: fresh job ${fresh} (previous job ${job} had no offline evidence)`);
+  const refusal = repeatedFreshJobRefusal(job, fresh);
+  expect(refusal).toContain(job);
+  expect(refusal).toContain(fresh);
+  expect(refusal).toBe(`content-rebuild: fresh job refused for ${job} and ${fresh}`);
+});
+
+test('a job with an activation receipt is never adopted', async () => {
+  const queries: string[] = [];
+  const fuseki = { async query(sparql: string): Promise<SparqlResult> {
+    queries.push(sparql);
+    if (sparql.includes('rv:rebuildJob ?job')) {
+      return { results: { bindings: [{ job: term(job) }] } };
+    }
+    if (sparql.includes('content-rebuild:activate')) {
+      return { results: { bindings: [{ generation: term(generation) }] } };
+    }
+    throw new Error(`unexpected adopt query: ${sparql.slice(0, 180)}`);
+  }, async commandWithReceipt() {
+    throw new Error('adopt must not write');
+  } } as unknown as WorkActivationEnvironment['fuseki'];
+  const env = { fuseki, lineage: { dataEpoch: epoch, routingEpoch: epoch }, objectDirectory: '' };
+  expect(await readAdoptedQuarantineJob(env)).toBeNull();
+  const content = { ownerPosition: async () => ({ owner: 'content' as const, dataEpoch: epoch, sequence: '5' }) };
+  await expect(quarantinePublicContentSearch(env, content as unknown as ContentCore, job))
+    .rejects.toThrow('quarantine: a job with an activation receipt is never adopted');
+  expect(queries.some(sparql => sparql.includes('command'))).toBe(false);
+});
+
+test('an existing live anchor still takes the quarantine deletion path', async () => {
+  let quarantineReads = 0;
+  let anchor = true;
+  const updates: string[] = [];
+  const fuseki = { async query(sparql: string): Promise<SparqlResult> {
+    if (sparql.includes('content-rebuild:activate')) return { results: { bindings: [] } };
+    if (sparql.includes('rv:ownerDataEpoch')) {
+      quarantineReads++;
+      if (quarantineReads === 1) return { results: { bindings: [] } };
+      return { results: { bindings: [{ epoch: term(epoch), sequence: term('4'),
+        sourceEpoch: term(epoch), sourceSequence: term('5') }] } };
+    }
+    if (sparql.includes('SearchGraphAnchor')) return { boolean: anchor };
+    if (sparql.includes('content-rebuild:profile')) return { boolean: true };
+    throw new Error(`unexpected quarantine query: ${sparql.slice(0, 180)}`);
+  }, async commandWithReceipt(envelope: { update: string }) {
+    updates.push(envelope.update);
+    anchor = false;
+    return committed();
+  } } as unknown as WorkActivationEnvironment['fuseki'];
+  const env = { fuseki, lineage: { dataEpoch: epoch, routingEpoch: epoch }, objectDirectory: '' };
+  const content = { ownerPosition: async () => ({ owner: 'content' as const, dataEpoch: epoch, sequence: '5' }) };
+  const result = await quarantinePublicContentSearch(env, content as unknown as ContentCore, fresh);
+  expect(result).toMatchObject({ id: fresh, cut: { owner: 'content', dataEpoch: epoch, sequence: '5' } });
+  expect(updates).toHaveLength(1);
+  expect(anchorDeleted(updates[0]!)).toBe(true);
+  expect(updates[0]).not.toContain('FILTER NOT EXISTS { GRAPH <urn:rezics:search:public>');
+});
+
+test('a new id continues an open quarantine without deleting the absent anchor', async () => {
+  let wrote = false;
+  const updates: string[] = [];
+  const priorReceipt = `urn:rezics:receipt:content-rebuild:quarantine:${hash(prior)}`;
+  const fuseki = { async query(sparql: string): Promise<SparqlResult> {
+    if (sparql.includes('content-rebuild:activate')) return { results: { bindings: [] } };
+    if (sparql.includes('rv:ownerDataEpoch')) {
+      const visible = sparql.includes(priorReceipt) || wrote;
+      if (!visible) return { results: { bindings: [] } };
+      return { results: { bindings: [{ epoch: term(epoch), sequence: term('4'),
+        sourceEpoch: term(epoch), sourceSequence: term('5') }] } };
+    }
+    if (sparql.includes('SearchGraphAnchor')) return { boolean: false };
+    if (sparql.includes('content-rebuild:profile')) return { boolean: true };
+    throw new Error(`unexpected fresh quarantine query: ${sparql.slice(0, 180)}`);
+  }, async commandWithReceipt(envelope: { update: string }) {
+    updates.push(envelope.update);
+    wrote = true;
+    return committed();
+  } } as unknown as WorkActivationEnvironment['fuseki'];
+  const env = { fuseki, lineage: { dataEpoch: epoch, routingEpoch: epoch }, objectDirectory: '' };
+  const content = { ownerPosition: async () => ({ owner: 'content' as const, dataEpoch: epoch, sequence: '5' }) };
+  const result = await quarantinePublicContentSearch(env, content as unknown as ContentCore, fresh, prior);
+  expect(result.cut).toEqual({ owner: 'content', dataEpoch: epoch, sequence: '5' });
+  expect(updates).toHaveLength(1);
+  expect(anchorDeleted(updates[0]!)).toBe(false);
+  expect(updates[0]).toContain('FILTER NOT EXISTS');
+  expect(updates[0]).toContain(priorReceipt);
+  expect(updates[0]).toContain(prior);
 });
 
 test('Content clear pages are ordered and stay inside the native subject cap', () => {
