@@ -19,6 +19,7 @@ import { realmLabel } from '../work-page/scope-labels.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import { idOf } from '../work-page/route.ts';
 import type { DiscussionPage, Loaded } from '../work-page/types.ts';
+import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
 import type { Copy } from './messages.ts';
 import type { PredicateLabels } from './predicate-labels.ts';
 import { presentStatements } from './statement-groups.ts';
@@ -248,6 +249,7 @@ export function StatementsView({
   ownName,
   cursor,
   hrefFor,
+  locale = 'en',
   t,
   messages,
 }: {
@@ -258,6 +260,8 @@ export function StatementsView({
   ownName?: string;
   cursor: string | undefined;
   hrefFor: HrefFor;
+  /** The page locale. The mark's notes follow it; stories that omit it stay in English. */
+  locale?: UiLocale;
   t: Copy;
   messages: WorkPageMessages;
 }) {
@@ -274,6 +278,7 @@ export function StatementsView({
     );
   }
   const { labelled, other } = presentStatements(page.data.groups, labels, ownName);
+  const rows = [...labelled.flatMap((group) => group.items), ...other];
   return (
     <Region id="statements" title={t.statements}>
       {labelled.length || other.length ? (
@@ -291,6 +296,9 @@ export function StatementsView({
           {other.length ? (
             <StatementGroupView heading={t.otherFacts} items={other} names={names} hrefFor={hrefFor} t={t} />
           ) : null}
+          {rightsRuns(rows, () => page.data.factObligations).map((run, index) => (
+            <RightsMark key={index} rights={run.rights} locale={locale} />
+          ))}
         </div>
       ) : (
         <Quiet title={t.noStatements} body={t.noStatementsBody} />

@@ -29,9 +29,10 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     ...item.kind === 'component-property' && item.value.kind === 'resource' && typeof item.value.ref === 'string' ? [item.value.ref] : [],
     ...item.qualifiers.applicability])), position) : new Map();
   return projection
-    ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t} messages={rest.messages} />
-    : <StatementsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}
-      messages={rest.messages} />;
+    ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor}
+      locale={rest.locale} t={rest.t} messages={rest.messages} />
+    : <StatementsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor}
+      locale={rest.locale} t={rest.t} messages={rest.messages} />;
 }
 
 

@@ -1,9 +1,11 @@
+import type { UiLocale } from '../../i18n/define.ts';
 import type { Names } from '../work-levels/types.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { Loaded } from '../work-page/types.ts';
 import type { Copy } from './messages.ts';
 import type { HrefFor, StatementItem, StatementPage } from './types.ts';
+import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
 import { Pages, Quiet, Value } from './views.tsx';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import type { PredicateLabels } from './predicate-labels.ts';
@@ -29,6 +31,7 @@ export function ProjectionFactsView({
   ownName,
   cursor,
   hrefFor,
+  locale = 'en',
   t,
   messages,
 }: {
@@ -39,6 +42,7 @@ export function ProjectionFactsView({
   ownName?: string;
   cursor: string | undefined;
   hrefFor: HrefFor;
+  locale?: UiLocale;
   t: Copy;
   messages: WorkPageMessages;
 }) {
@@ -92,6 +96,9 @@ export function ProjectionFactsView({
               </section>
             );
           })}
+          {rightsRuns(claims, () => page.data.factObligations).map((run, index) => (
+            <RightsMark key={index} rights={run.rights} locale={locale} />
+          ))}
         </div>
       ) : (
         <Quiet title={t.noStatements} body={t.noStatementsBody} />

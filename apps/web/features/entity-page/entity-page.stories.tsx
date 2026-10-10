@@ -16,6 +16,7 @@ import { EntityHeader } from './header.tsx';
 import { drawnSections } from './views.tsx';
 import { copyOf } from './messages.ts';
 import { DiscussionView, RelationsView, StatementsView } from './views.tsx';
+import { attributed } from '../rights-mark/fixtures.ts';
 import { appearances, baseSections, componentStatements, noStatements, predicateLabels, projectionFor, statements, withheldCreditAppearance } from './fixtures.ts';
 import { alter, identityEntry } from './identity-fixtures.ts';
 import { standaloneHrefFor } from './route.ts';
@@ -66,6 +67,29 @@ export const Statements: Story = {
     // The list continues by Main's cursor, on the same address.
     await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
       localizedPath(`${resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d')}?statements=next#statements`, 'en'));
+  },
+};
+
+export const LicensedFacts: Story = {
+  render: () => <Page><StatementsView page={{ ok: true, data: { ...statements(), factObligations: attributed } }}
+    labels={predicateLabels} ownName="Kirito" names={statementNames} cursor={undefined} {...common('en')} /></Page>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('キリト')).toBeVisible();
+    await expect(canvas.getByText('الشبح الأسود')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
+    await expect(canvas.getByText(/Adaptations stay under the same terms/)).toBeVisible();
+    // The page's facts share one rights read, so the list carries one mark.
+    await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
+  },
+};
+
+export const LicensedFactsPhone: Story = {
+  ...LicensedFacts,
+  globals: { viewport: { value: 'phone' } },
+  play: async (context) => {
+    await LicensedFacts.play!(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

@@ -16,7 +16,9 @@ import { ScopeBar } from './scope-bar.tsx';
 import type { WorkTab } from './route.ts';
 import type { WorkHeader } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
+import { attributed } from '../rights-mark/fixtures.ts';
 import { WorkFrame } from './work-frame.tsx';
+import { WorkAbout } from './work-header.tsx';
 import { WorkNotFound, WorkSkeleton, WorkUnavailable, WorkViewSkeleton } from './work-states.tsx';
 import { WorkKindActions } from './types/actions.tsx';
 import { RecipeExperience } from './types/recipe.tsx';
@@ -1086,6 +1088,27 @@ export const DiscussionMine: Story = {
     await expect(
       within(canvasElement).getByRole('heading', { name: 'Discussion isn’t personal' }),
     ).toBeVisible();
+  },
+};
+
+export const LicensedDescription: Story = {
+  render: () => <Framed work={{ ...fixture.work, descriptionObligations: attributed }}>
+    <WorkAbout work={{ ...fixture.work, descriptionObligations: attributed }} locale="en" messages={messages.en} />
+  </Framed>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(/A surveyor maps a delta/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
+    await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
+  },
+};
+
+export const LicensedDescriptionPhone: Story = {
+  ...LicensedDescription,
+  globals: { viewport: { value: 'phone' } },
+  play: async (context) => {
+    await LicensedDescription.play!(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

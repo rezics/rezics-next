@@ -5,6 +5,7 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import { Expandable } from './expandable.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
+import { RightsMark } from '../rights-mark/rights-mark.tsx';
 import { typeLabel } from '../catalogue/types.ts';
 import { formatCompact } from '../catalogue/work.ts';
 import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote }
@@ -98,9 +99,15 @@ export function WorkHeader({ work, credits, ratingLine, showcase, now = new Date
   </header>;
 }
 
-/** The Work's recorded description, in the reader's language when Main has one, folded after a few lines. */
-export function WorkAbout({ work, messages }: { work: Header; messages: WorkPageMessages }) {
-  if (!work.description) return null;
+/**
+ * The Work's recorded description, in the reader's language when Main has one, folded after a few lines.
+ * The rights mark stays outside the fold, so the credit remains visible when the text is cut.
+ */
+export function WorkAbout({ work, locale = 'en', messages }: {
+  work: Header; locale?: UiLocale; messages: WorkPageMessages;
+}) {
+  const mark = <RightsMark rights={work.descriptionObligations} locale={locale} />;
+  if (!work.description) return mark;
   return <section aria-labelledby="work-about" className="grid max-w-3xl gap-2">
     <h2 id="work-about" className="sr-only">{messages.about}</h2>
     <Expandable more={messages.showMore} less={messages.showLess}>
@@ -109,5 +116,6 @@ export function WorkAbout({ work, messages }: { work: Header; messages: WorkPage
         {paragraphs(work.description.value).map((line, index) => <p key={index}>{line}</p>)}
       </div>
     </Expandable>
+    {mark}
   </section>;
 }

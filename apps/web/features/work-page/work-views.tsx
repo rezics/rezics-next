@@ -350,11 +350,11 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
     // Specialist reading or cooking leads; the description and tags follow.
     // A recipe's description reads straight under its title, before the method.
     type={experience.kind === 'book' || experience.kind === 'plain' ? null : <>
-      {experience.kind === 'recipe' ? <WorkAbout work={work} messages={messages} /> : null}
+      {experience.kind === 'recipe' ? <WorkAbout work={work} locale={locale} messages={messages} /> : null}
       <Suspense fallback={<RegionSkeleton
         id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
         <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense></>}
-    about={experience.kind === 'recipe' ? null : <WorkAbout work={work} messages={messages} />}
+    about={experience.kind === 'recipe' ? null : <WorkAbout work={work} locale={locale} messages={messages} />}
     facts={<Suspense fallback={null}><AboutFacts {...common} /></Suspense>}
     availability={<>
       <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}

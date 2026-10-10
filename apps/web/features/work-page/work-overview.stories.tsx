@@ -28,6 +28,7 @@ import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage
 import type { ReadStart } from './read.ts';
 import { hubLabels, hubSections } from './hub.ts';
 import { OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
+import { attributed } from '../rights-mark/fixtures.ts';
 import { WorkAbout } from './work-header.tsx';
 import { chooseMenuItem } from '../stories/choose-option.ts';
 
@@ -62,7 +63,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       : null}
     readAction={readAction === undefined ? undefined
       : <ReadButton workRef={fixture.workRef} start={readAction} messages={t} />}>
-    <OverviewLayout messages={t} plan={hubSections} about={<WorkAbout work={work} messages={t} />} scopeBar={scopeBar}
+    <OverviewLayout messages={t} plan={hubSections} about={<WorkAbout work={work} locale={locale} messages={t} />} scopeBar={scopeBar}
       ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} scopeBar={scopeBar} locale={locale}
         messages={t} /> : null}
       classification={view ? <ClassificationRegion classifications={classifications} view={view}
@@ -97,6 +98,27 @@ type Story = StoryObj<typeof meta>;
 
 const noOverflow = async () => {
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+};
+
+export const LicensedDescription: Story = {
+  args: { work: { ...fixture.work, descriptionObligations: attributed } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(/A surveyor maps a delta/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
+    await expect(canvas.getByText(/Adaptations stay under the same terms/)).toBeVisible();
+    await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
+    await noOverflow();
+  },
+};
+
+export const LicensedDescriptionPhone: Story = {
+  args: { work: { ...fixture.work, descriptionObligations: attributed } },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
+    await noOverflow();
+  },
 };
 
 export const Global: Story = {
