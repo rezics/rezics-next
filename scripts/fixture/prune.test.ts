@@ -7,6 +7,7 @@ import {
   decideFixturePrune,
   formatPruneReport,
   pruneTargets,
+  seedPruneTargets,
   type ListedGeneration,
   type ListedVolume,
   type PruneInventory,
@@ -317,6 +318,64 @@ test('declared pins are the ids load and phase D restore, and a test literal is 
   });
   expect(decision.keep).toEqual([{ id: PINNED_FIXTURE_IDS[0], reasons: ['pinned'] }]);
   expect(decision.removeGenerations.map((item) => item.id)).toEqual([recorded]);
+});
+
+test('a seed-scoped prune leaves another seed, and a pinned, retained and in-use generation', () => {
+  const seed = 'g556-ranked-v1';
+  const keepId = 'fx-medium-aaaaaaaaaaaa';
+  const pinnedSame = 'fx-medium-bbbbbbbbbbbb';
+  const retainedSame = 'fx-medium-cccccccccccc';
+  const mountedSame = 'fx-medium-eeeeeeeeeeee';
+  const lockedSame = 'fx-medium-ffffffffffff';
+  const supersededSame = 'fx-medium-dddddddddddd';
+  const otherSeed = 'fx-medium-222222222222';
+  const supersededOther = 'fx-medium-333333333333';
+  const mountedName = volume(mountedSame).name;
+  const generations = [
+    generation(keepId, { seed, completedAt: '2026-07-01T00:00:00.000Z' }),
+    generation(pinnedSame, { seed, completedAt: '2026-06-01T00:00:00.000Z' }),
+    generation(retainedSame, { seed, compatible: true, completedAt: '2026-10-09T00:00:00.000Z' }),
+    generation(mountedSame, { seed }),
+    generation(lockedSame, { seed, buildInProgress: true, directory: false }),
+    generation(supersededSame, { seed, compatible: true, completedAt: '2026-08-01T00:00:00.000Z' }),
+    generation(otherSeed, { compatible: true, completedAt: '2026-10-01T00:00:00.000Z' }),
+    generation(supersededOther, { compatible: true, completedAt: '2026-01-01T00:00:00.000Z' }),
+  ];
+  const removed = seedPruneTargets(
+    {
+      generations,
+      volumes: generations.filter((item) => item.id !== lockedSame).map((item) => volume(item.id)),
+      currentIds: [otherSeed],
+      pins: [pinnedSame],
+      mountedVolumes: [mountedName],
+    },
+    { seed, keepId },
+  );
+  expect(removed.map((item) => item.id)).toEqual([supersededSame]);
+  expect(removed[0]?.volumes).toEqual([volume(supersededSame).name]);
+});
+
+test('a seed-scoped prune removes only generations the fixture root accounts', () => {
+  const seed = 'g556-ranked-v1';
+  const keepId = 'fx-medium-aaaaaaaaaaaa';
+  const local = 'fx-medium-dddddddddddd';
+  const foreign = 'fx-medium-111111111111';
+  const listed: PruneInventory = {
+    generations: [
+      generation(keepId, { seed, compatible: true, completedAt: '2026-10-10T00:00:00.000Z' }),
+      generation(local, { seed, compatible: true, completedAt: '2026-08-01T00:00:00.000Z' }),
+      generation(foreign, { seed, directory: false, manifest: false }),
+    ],
+    volumes: [volume(keepId), volume(local), volume(foreign)],
+    currentIds: [],
+    pins: [],
+    mountedVolumes: [],
+  };
+  const removed = seedPruneTargets(accountedPruneInventory(listed, true), { seed, keepId });
+  expect(removed.map((item) => item.id)).toEqual([local]);
+  expect(
+    seedPruneTargets(accountedPruneInventory(listed, false), { seed, keepId }).map((item) => item.id),
+  ).toEqual([foreign, local]);
 });
 
 test('volume lines without a compose project stay unlabelled', () => {

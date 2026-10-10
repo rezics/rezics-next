@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildFixtureCorpus } from '../../../scripts/fixture/build.ts';
+import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
+import { pruneSeedGenerations } from '../../../scripts/fixture/prune.ts';
 import {
   fixtureCorpus,
   publicUnitAt,
@@ -113,4 +115,21 @@ const rankedGraphOwner: FixtureOwner = {
 export const rankedFixtureOwners = fixtureOwners.map((owner) =>
   owner.name === 'graph' ? rankedGraphOwner : owner,
 );
-export const buildRankedFixture = () => buildFixtureCorpus(rankedCorpus, rankedFixtureOwners);
+export async function buildRankedFixture() {
+  const manifest = await buildFixtureCorpus(rankedCorpus, rankedFixtureOwners);
+  // A failed prune must not discard the backup this build just kept.
+  try {
+    const removed = await pruneSeedGenerations(rankedCorpus.seed, manifest.id);
+    if (removed.length)
+      console.log(
+        `fixture ${manifest.id}: pruned superseded ${rankedCorpus.seed}: ${removed.join(' ')}`,
+      );
+  } catch (error) {
+    console.error(
+      `fixture ${manifest.id}: seed prune failed: ${
+        redactCommandOutput(error instanceof Error ? error.message : String(error))
+      }`,
+    );
+  }
+  return manifest;
+}

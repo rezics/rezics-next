@@ -81,6 +81,24 @@ export interface PruneScope {
   protectIds?: readonly string[];
 }
 
+function volumesByProject(volumes: readonly ListedVolume[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const volume of volumes) {
+    if (!volume.project) continue;
+    const listed = grouped.get(volume.project) ?? [];
+    listed.push(volume.name);
+    grouped.set(volume.project, listed);
+  }
+  return grouped;
+}
+
+function volumesForGeneration(
+  generation: ListedGeneration,
+  grouped: ReadonlyMap<string, readonly string[]>,
+): string[] {
+  return [...new Set([...generation.volumes, ...(grouped.get(generation.project) ?? [])])].sort();
+}
+
 /**
  * Keep a generation when a current consumer can still restore it.
  * `current` is the id `fixture:build` computes for the default seed.
@@ -99,20 +117,12 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const pins = new Set(inventory.pins);
   const mounted = new Set(inventory.mountedVolumes);
   const retained = retainedGenerationIds(inventory.generations);
-  const volumesByProject = new Map<string, string[]>();
-  for (const volume of inventory.volumes) {
-    if (!volume.project) continue;
-    const listed = volumesByProject.get(volume.project) ?? [];
-    listed.push(volume.name);
-    volumesByProject.set(volume.project, listed);
-  }
+  const groupedVolumes = volumesByProject(inventory.volumes);
   const generationProjects = new Set(inventory.generations.map((generation) => generation.project));
   const keep: KeptGeneration[] = [];
   const removeGenerations: RemovedGeneration[] = [];
   for (const generation of inventory.generations) {
-    const volumes = [
-      ...new Set([...generation.volumes, ...(volumesByProject.get(generation.project) ?? [])]),
-    ].sort();
+    const volumes = volumesForGeneration(generation, groupedVolumes);
     const reasons: FixtureKeepReason[] = [];
     if (current.has(generation.id)) reasons.push('current');
     if (pins.has(generation.id)) reasons.push('pinned');
@@ -135,7 +145,7 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   }
   const keepProjects: VolumeProject[] = [];
   const abandonedGroups = new Map<string, string[]>();
-  for (const [project, names] of volumesByProject) {
+  for (const [project, names] of groupedVolumes) {
     if (generationProjects.has(project)) continue;
     // Other compose projects on the host are not this repository's to remove.
     if (!project.startsWith('rezics-')) continue;
@@ -221,6 +231,47 @@ export function pruneTargets(
     ),
     abandoned: scope.profile === undefined ? decision.abandoned : [],
   };
+}
+
+export interface SeedPruneRequest {
+  seed: string;
+  /** The generation this seed's builder just produced. */
+  keepId: string;
+}
+
+/**
+ * Generations of one seed its builder can remove once it knows the id to keep.
+ * Another seed stays, including one a full prune would call superseded.
+ * The kept id stays, as do pinned, retained and in-use generations.
+ * The inventory is already root-accounted, the same rule as `fixture:prune`.
+ */
+export function seedPruneTargets(
+  inventory: PruneInventory,
+  request: SeedPruneRequest,
+): RemovedGeneration[] {
+  const pins = new Set(inventory.pins);
+  const mounted = new Set(inventory.mountedVolumes);
+  const retained = retainedGenerationIds(inventory.generations);
+  const groupedVolumes = volumesByProject(inventory.volumes);
+  const remove: RemovedGeneration[] = [];
+  for (const generation of inventory.generations) {
+    if (generation.seed !== request.seed || generation.id === request.keepId) continue;
+    const volumes = volumesForGeneration(generation, groupedVolumes);
+    const protectedGeneration =
+      pins.has(generation.id) ||
+      retained.has(generation.id) ||
+      generation.buildInProgress ||
+      volumes.some((name) => mounted.has(name));
+    if (protectedGeneration) continue;
+    remove.push({
+      id: generation.id,
+      profile: generation.profile,
+      directory: generation.directory,
+      volumes,
+    });
+  }
+  remove.sort((left, right) => left.id.localeCompare(right.id));
+  return remove;
 }
 
 export interface PruneOutcome {
@@ -365,6 +416,37 @@ function removalError(error: unknown): string {
   return redactCommandOutput(error instanceof Error ? error.message : String(error));
 }
 
+/** Stopped containers first, then volumes, then the generation directory. */
+async function removeGenerations(
+  generations: readonly RemovedGeneration[],
+): Promise<{ removedIds: string[]; failures: { target: string; error: string }[] }> {
+  const { dockerEnvironment, fixtureDirectory, fixtureProject, removeStoppedContainers, removeVolumes } =
+    await import('./stack.ts');
+  const docker = dockerEnvironment();
+  const failures: { target: string; error: string }[] = [];
+  const removedIds: string[] = [];
+  for (const generation of generations) {
+    if (!FIXTURE_ID.test(generation.id)) {
+      failures.push({
+        target: generation.id,
+        error: 'refusing an id that is not a fixture generation',
+      });
+      continue;
+    }
+    try {
+      removeStoppedContainers(fixtureProject(generation.id), docker);
+      removeVolumes(generation.volumes, docker);
+      const directory = fixtureDirectory(generation.id);
+      rmSync(directory, { recursive: true, force: true });
+      rmSync(`${directory}.lock`, { force: true });
+      removedIds.push(generation.id);
+    } catch (error) {
+      failures.push({ target: generation.id, error: removalError(error) });
+    }
+  }
+  return { removedIds, failures };
+}
+
 /** Dry run unless `apply` is set. A profile scope leaves other sizes and abandoned projects alone. */
 export async function executeFixturePrune(
   options: { apply: boolean } & PruneScope,
@@ -375,28 +457,11 @@ export async function executeFixturePrune(
   const failures: { target: string; error: string }[] = [];
   const removedIds: string[] = [];
   if (options.apply) {
-    const { dockerEnvironment, fixtureDirectory, fixtureProject, removeStoppedContainers, removeVolumes } =
-      await import('./stack.ts');
+    const removed = await removeGenerations(targets.generations);
+    failures.push(...removed.failures);
+    removedIds.push(...removed.removedIds);
+    const { dockerEnvironment, removeVolumes } = await import('./stack.ts');
     const docker = dockerEnvironment();
-    for (const generation of targets.generations) {
-      if (!FIXTURE_ID.test(generation.id)) {
-        failures.push({
-          target: generation.id,
-          error: 'refusing an id that is not a fixture generation',
-        });
-        continue;
-      }
-      try {
-        removeStoppedContainers(fixtureProject(generation.id), docker);
-        removeVolumes(generation.volumes, docker);
-        const directory = fixtureDirectory(generation.id);
-        rmSync(directory, { recursive: true, force: true });
-        rmSync(`${directory}.lock`, { force: true });
-        removedIds.push(generation.id);
-      } catch (error) {
-        failures.push({ target: generation.id, error: removalError(error) });
-      }
-    }
     const keptProjects = new Set([
       DEV_COMPOSE_PROJECT,
       ...decision.keep.map((generation) => `rezics-fixture-${generation.id}`),
@@ -433,6 +498,49 @@ export async function pruneSupersededGenerations(
   protectId: string,
 ): Promise<string[]> {
   const outcome = await executeFixturePrune({ apply: true, profile, protectIds: [protectId] });
+  if (outcome.failures.length) {
+    throw new Error(
+      outcome.failures.map((failure) => `${failure.target}: ${failure.error}`).join('; '),
+    );
+  }
+  return outcome.removedIds;
+}
+
+const SEED_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+export interface SeedPruneOutcome {
+  mode: 'dry-run' | 'apply';
+  removeGenerations: RemovedGeneration[];
+  removedIds: string[];
+  failures: { target: string; error: string }[];
+}
+
+/**
+ * Dry run unless `apply` is set. Uses the same inventory as `fixture:prune`,
+ * including the fixture root rule, and never removes another seed or an
+ * abandoned project. Stopped containers are removed before volumes.
+ */
+export async function executeSeedPrune(
+  options: SeedPruneRequest & { apply: boolean },
+): Promise<SeedPruneOutcome> {
+  if (!SEED_NAME.test(options.seed)) throw new Error('seed-scoped prune needs the builder seed');
+  if (!FIXTURE_ID.test(options.keepId))
+    throw new Error('seed-scoped prune keeps one fixture generation id');
+  const inventory = await collectInventory();
+  const removeGenerations = seedPruneTargets(inventory, options);
+  if (!options.apply) return { mode: 'dry-run', removeGenerations, removedIds: [], failures: [] };
+  const removed = await removeGenerations(removeGenerations);
+  return {
+    mode: 'apply',
+    removeGenerations,
+    removedIds: removed.removedIds,
+    failures: removed.failures,
+  };
+}
+
+/** After a seed's builder has its current id, drop that seed's other generations. */
+export async function pruneSeedGenerations(seed: string, keepId: string): Promise<string[]> {
+  const outcome = await executeSeedPrune({ seed, keepId, apply: true });
   if (outcome.failures.length) {
     throw new Error(
       outcome.failures.map((failure) => `${failure.target}: ${failure.error}`).join('; '),
