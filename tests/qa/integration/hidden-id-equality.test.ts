@@ -5,7 +5,7 @@ import { createRealmSpace, spaceCreationDigest } from '../../../services/main/sr
 import { registeredHiddenIdReads } from '../../../scripts/qa/hidden-id-equality.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertHiddenIdEquality, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { startMediaStack } from './media-support.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -20,7 +20,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
   let countSql = true;
   let bytes = 0;
   prototype.query = function (this: unknown, ...args: unknown[]) {
-    if (countSql && isForegroundOperation()) statements++;
+    if (countSql && foregroundCounted()) statements++;
     return originalQuery.apply(this, args);
   };
   try {
