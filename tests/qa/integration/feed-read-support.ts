@@ -131,10 +131,17 @@ export function meterStatements() {
  * relay delivery and the projection worker, without a web server. */
 export async function startHomeStack(label: string, options: {
   projectionStart?: 'current';
+  // Closed catalogue commands consult grants only when a caller asks. Other
+  // Home reads stay on public routes and do not pay that lookup.
+  platformAccess?: boolean;
+  /** Reuse the fixture principal and Agent so a restored corpus matches this process. */
+  stableMembers?: boolean;
+  profileCredits?: boolean;
 } = {}) {
-  const stack = await startMediaStack(label);
+  const stack = await startMediaStack(label, { profileCredits: options.profileCredits });
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
-  const author = await stack.member('author'), reader = await stack.member('reader');
+  const memberOptions = options.stableMembers ? { stable: true as const } : undefined;
+  const author = await stack.member('author', memberOptions), reader = await stack.member('reader', memberOptions);
   const principals = new Map<string, { issuer: string; subject: string; emailVerified: boolean }>(
     [author, reader].map(member => [member.token, { ...member.principal, emailVerified: true }]));
   const account = { verify: async (request: Request) => {
