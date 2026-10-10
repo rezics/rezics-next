@@ -16,6 +16,7 @@ import {
   RecommendationRestart,
   RecommendationStale,
   RecommendationUnavailable,
+  DiscoveryNotProduced,
   type ManageContext,
   type ReceiptKey,
 } from '../recommendation/derived-generation.ts';
@@ -841,7 +842,7 @@ export class DiscoveryProjection {
           [discoveryScopeKey(basis)],
         )
       ).rows[0];
-      if (!head) throw new RecommendationUnavailable('Discovery has no active generation');
+      if (!head) throw new DiscoveryNotProduced('Discovery has no active generation');
       const row = await generation(client, pinned ?? head.active_generation).catch(
         (error: unknown) => {
           // A retained cursor expires identically before and after its physical

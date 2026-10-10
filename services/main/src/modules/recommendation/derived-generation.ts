@@ -11,6 +11,8 @@ export class RecommendationConflict extends Error {}
 export class RecommendationStale extends Error {}
 export class RecommendationNotReady extends Error {}
 export class RecommendationUnavailable extends Error {}
+/** The discovery head has never produced a generation. The state is "never produced", not "failed". */
+export class DiscoveryNotProduced extends RecommendationUnavailable {}
 export class RecommendationMissing extends Error {}
 /** The caller must start pagination again; no reason or count is disclosed. */
 export class RecommendationRestart extends Error {}
