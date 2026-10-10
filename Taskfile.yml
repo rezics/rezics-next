@@ -91,15 +91,10 @@ tasks:
       - bun scripts/dev/seed/cli.ts {{.CLI_ARGS}}
 
   # *:typecheck --gib values are measured tsc resident peaks plus 0.25 GiB, rounded up to 0.5 GiB.
-  dev:typecheck:
-    desc: Type-check the development scripts.
+  scripts:typecheck:
+    desc: Type-check every script except the dataset tools.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 2.5 -- bun node_modules/typescript/bin/tsc --project scripts/dev/tsconfig.json
-
-  goal:typecheck:
-    desc: Type-check the Goal scripts.
-    cmds:
-      - bun scripts/qa/host-admission.ts --gib 2.5 -- bun node_modules/typescript/bin/tsc --project scripts/goal/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 3.5 -- bun node_modules/typescript/bin/tsc --project scripts/tsconfig.json
 
   apphost:typecheck:
     desc: Type-check the AppHost and its configuration imports with Node types.
@@ -323,11 +318,6 @@ tasks:
     desc: Type-check the shared telemetry runtime.
     cmds:
       - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
-
-  observability-scripts:typecheck:
-    desc: Type-check the telemetry probes.
-    cmds:
-      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project scripts/observability/tsconfig.json
 
   observability:aspire-smoke:
     desc: Verify real server spans, structured logs and OTLP authentication against the running backend AppHost.

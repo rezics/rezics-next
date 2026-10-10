@@ -8,7 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeXml, ownerGateFiles, parseJUnit, testArgs, unitHarnessFiles, type TestResult } from '../qa/acceptance.ts';
-import { affectedPlanForChanges, affectedUnitTierEntries, type AffectedPlan } from '../qa/affected.ts';
+import { affectedPlanForChanges, affectedUnitTierEntries, typecheckWorkspaces, TYPECHECK_WORKSPACES, type AffectedPlan } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease,
@@ -24,6 +24,8 @@ import { mechanisms } from '../static/mechanisms.ts';
 import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
   WAKE_LAST_MESSAGE, WAKE_PROMPT, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
+
+export { typecheckWorkspaces, TYPECHECK_WORKSPACES };
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -3926,34 +3928,6 @@ function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
   merge.after = git(merge.worktree, ['rev-parse', 'HEAD']);
   merge.committed = git(merge.worktree, ['diff', '--name-only', 'main...HEAD'], true).split('\n').filter(Boolean);
   return undefined;
-}
-
-/** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
- * TypeScript project: Task stops at the first failing command, so a second project would hide its errors. */
-export const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, roots: readonly string[]]> = [
-  ['main', ['services/main/']],
-  ['account', ['services/account/']],
-  ['content', ['services/content/']],
-  ['web', ['apps/web/']],
-  ['accounts', ['apps/accounts/']],
-  ['model', ['packages/model/']],
-  ['ui', ['packages/ui/']],
-  ['document', ['packages/document/']],
-  ['observability', ['packages/observability/']],
-  ['observability-scripts', ['scripts/observability/']],
-  ['dataset', ['scripts/datasets/']],
-  ['dev', ['scripts/dev/']],
-  ['goal', ['scripts/goal/']],
-  ['apphost', ['apphost/']],
-];
-
-const TYPECHECK_SOURCE = /\.[cm]?tsx?$|(?:^|\/)(?:tsconfig[^/]*|package)\.json$/;
-
-/** Each workspace a changed TypeScript source or its config belongs to, once. */
-export function typecheckWorkspaces(files: readonly string[]): string[] {
-  return TYPECHECK_WORKSPACES
-    .filter(([, roots]) => files.some(file => TYPECHECK_SOURCE.test(file) && roots.some(root => file.startsWith(root))))
-    .map(([workspace]) => workspace);
 }
 
 /** `tsc` diagnostics keyed without line and column, so an edit above an old error does not make it new.

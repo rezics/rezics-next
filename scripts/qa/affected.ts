@@ -255,6 +255,35 @@ function referencedBy(path: string, sources: Map<string, string>, data: boolean)
     .map(([source]) => source);
 }
 
+/** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
+ * TypeScript project: Task stops at the first failing command, so a second project would hide its errors.
+ * A longer root owns a file that also sits under a shorter one, so dataset tools are not checked as ordinary scripts. */
+export const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, roots: readonly string[]]> = [
+  ['main', ['services/main/']],
+  ['account', ['services/account/']],
+  ['content', ['services/content/']],
+  ['web', ['apps/web/']],
+  ['accounts', ['apps/accounts/']],
+  ['model', ['packages/model/']],
+  ['ui', ['packages/ui/']],
+  ['document', ['packages/document/']],
+  ['observability', ['packages/observability/']],
+  ['dataset', ['scripts/datasets/']],
+  ['scripts', ['scripts/']],
+  ['apphost', ['apphost/']],
+];
+
+const TYPECHECK_SOURCE = /\.[cm]?tsx?$|(?:^|\/)(?:tsconfig[^/]*|package)\.json$/;
+
+/** Each workspace a changed TypeScript source or its config belongs to, once. */
+export function typecheckWorkspaces(files: readonly string[]): string[] {
+  const owned = (file: string, root: string) => file.startsWith(root) && TYPECHECK_WORKSPACES.every(([, roots]) =>
+    roots.every(other => other.length <= root.length || !file.startsWith(other)));
+  return TYPECHECK_WORKSPACES
+    .filter(([, roots]) => files.some(file => TYPECHECK_SOURCE.test(file) && roots.some(root => owned(file, root))))
+    .map(([workspace]) => workspace);
+}
+
 export function planAffected(input: {
   base: string;
   changed: string[];
@@ -316,6 +345,13 @@ export function planAffected(input: {
     if (nativeCopies) for (const file of nativeFilesTouchedBy(path, nativeCopies)) matchedNative.add(file);
     if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
       plan.tasks.push({ task: 'jena:check', because: `${path}: pinned Jena CLI input` });
+    for (const workspace of typecheckWorkspaces([path])) {
+      const roots = TYPECHECK_WORKSPACES.find(([name]) => name === workspace)?.[1] ?? [];
+      if (!roots.some(root => root.startsWith('scripts/'))) continue;
+      const task = `${workspace}:typecheck`;
+      if (!plan.tasks.some(check => check.task === task))
+        plan.tasks.push({ task, because: `${path}: script type check` });
+    }
     // A root script edit changes command wiring, not installed dependencies.
     const rule = input.scriptOnlyManifests?.has(path)
       ? { match: /$^/, effect: 'smoke' as const, reason: 'root command wiring' }

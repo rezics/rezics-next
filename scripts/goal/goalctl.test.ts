@@ -2453,6 +2453,8 @@ if (args.includes('--list')) {
   if (process.env.GOAL_TEST_PLAN) console.log(readFileSync(process.env.GOAL_TEST_PLAN, 'utf8'));
   process.exit(0);
 }
+// This stub runs Bun tests. A type check is not one of them, and it is not a test run.
+if (args.some(arg => arg.endsWith(':typecheck'))) process.exit(0);
 if (process.env.GOAL_TEST_LOG) appendFileSync(process.env.GOAL_TEST_LOG, JSON.stringify({ cwd: process.cwd(), args }) + '\\n');
 if (process.env.GOAL_TEST_RUNNER_FAILURE) {
   console.error(process.env.GOAL_TEST_RUNNER_FAILURE);
@@ -5318,11 +5320,12 @@ describe('pre-merge type check', () => {
     expect(typecheckWorkspaces(['services/main/tests/list.test.ts', 'services/main/src/app.ts', 'apps/web/src/a.tsx']))
       .toEqual(['main', 'web']);
     expect(typecheckWorkspaces(['packages/model/package.json', 'scripts/observability/probe.ts', 'apphost/apphost.mts']))
-      .toEqual(['model', 'observability-scripts', 'apphost']);
+      .toEqual(['model', 'scripts', 'apphost']);
     expect(typecheckWorkspaces(['packages/observability/src/a.ts'])).toEqual(['observability']);
     expect(typecheckWorkspaces(['docs/goals/README.md', 'services/main/README.md', 'services/main/migrations/001.sql']))
       .toEqual([]);
-    expect(typecheckWorkspaces(['scripts/goal/goalctl.ts', 'scripts/goal/tsconfig.json'])).toEqual(['goal']);
+    expect(typecheckWorkspaces(['scripts/goal/goalctl.ts', 'scripts/tsconfig.json'])).toEqual(['scripts']);
+    expect(typecheckWorkspaces(['scripts/datasets/cli.ts', 'scripts/dev/cli.ts'])).toEqual(['dataset', 'scripts']);
   });
 
   test('every mapped workspace is a Task type check of exactly one command', () => {

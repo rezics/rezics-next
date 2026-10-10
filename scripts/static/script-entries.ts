@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 import { dirname, normalize } from 'node:path/posix';
 
@@ -38,7 +38,8 @@ const scriptToken = String.raw`(?:\.\.?\/|scripts\/)[\w./-]+\.ts`;
 function walk(root: string, accept: (name: string) => boolean): string[] {
   const found: string[] = [];
   const visit = (directory: string, relative: string) => {
-    let entries: ReturnType<typeof readdirSync>;
+    // ReturnType<typeof readdirSync> is the buffer-name overload. This call returns string names.
+    let entries: Dirent[];
     try {
       entries = readdirSync(directory, { withFileTypes: true });
     } catch {

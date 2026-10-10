@@ -1,0 +1,8 @@
+{
+  "extends": "../services/main/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["datasets/**", "research/http_framework_comparison/**"]
+}

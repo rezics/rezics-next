@@ -25,14 +25,14 @@ export async function verifyCargoLockOracle(base: string, cargo: string,
     checksums.set(`${entry.name}@${entry.vers}`, hash(bytes));
   }
   let indexes = new Map<string, string>();
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req) {
+  const server: Bun.Server<undefined> = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req): Response {
     const path = new URL(req.url).pathname;
     if (path === '/index/config.json') return Response.json({ dl: `http://127.0.0.1:${server.port}/crates` });
     const index = indexes.get(path);
     if (index) return new Response(index);
     const match = /^\/crates\/([^/]+)\/([^/]+)\/download$/.exec(path);
     const archive = match ? archives.get(`${match[1]}/${match[2]}`) : null;
-    return archive ? new Response(archive) : new Response('not found', { status: 404 });
+    return archive ? new Response(new Uint8Array(archive)) : new Response('not found', { status: 404 });
   } });
   const nativeSource = `sparse+http://127.0.0.1:${server.port}/index/`;
   const admittedSource = `sparse+${registry}`;
@@ -165,5 +165,5 @@ export async function verifyCargoLockOracle(base: string, cargo: string,
     await writeFile(resolve(base, 'lock-result.json'), JSON.stringify({
       cargoVersion: '1.98.1', sourceMapping: { nativeSource, admittedSource }, results }, null, 2));
     console.log(`Cargo lock oracle matched ${cargoLockCases.length} eligibility and 3 format scenarios; result: ${resolve(base, 'lock-result.json')}`);
-  } finally { server.stop(true); }
+  } finally { await server.stop(true); }
 }

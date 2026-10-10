@@ -9,8 +9,10 @@ import { crate } from './cargo-crate.ts';
 import { verifyCargoLiveOracle } from './cargo-live-oracle.ts';
 
 const base = resolve('.temp/package-cargo-oracle');
-const cargo = Bun.which('cargo');
-if (!cargo) throw new Error('Cargo 1.98.1 is not installed');
+const locatedCargo = Bun.which('cargo');
+if (!locatedCargo) throw new Error('Cargo 1.98.1 is not installed');
+// A closure keeps the outer string | null type, so bind the narrowed path.
+const cargo = locatedCargo;
 const source = 'https://snapshot.example.invalid/index/';
 const target = 'x86_64-unknown-linux-gnu';
 const encoder = new TextEncoder();
@@ -99,8 +101,8 @@ const request: CargoRequest = { profile: 'cargo-index-exact-resolver2-v1',
   host: target, target, features: [], defaultFeatures: true };
 const rezics = solveCargoSnapshot(request);
 if (rezics.status !== 'solved') throw new Error(`REZICS did not solve fixture: ${JSON.stringify(rezics)}`);
-const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
-  fetch(req) {
+const server: Bun.Server<undefined> = Bun.serve({ hostname: '127.0.0.1', port: 0,
+  fetch(req): Response {
     const path = new URL(req.url).pathname;
     if (path === '/index/config.json') return Response.json({
       dl: `http://127.0.0.1:${server.port}/crates` });
@@ -109,7 +111,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
       { headers: { 'content-type': 'text/plain', etag: hash(encoder.encode(index)) } });
     const match = /^\/crates\/([^/]+)\/([^/]+)\/download$/.exec(path);
     const archive = match ? archives.get(`${match[1]}/${match[2]}`) : null;
-    if (archive) return new Response(archive);
+    if (archive) return new Response(new Uint8Array(archive));
     return new Response('not found', { status: 404 });
   } });
 try {
@@ -207,7 +209,7 @@ try {
     nativeTree: tree.stdout, comparedVariants };
   await writeFile(resolve(base, 'result.json'), JSON.stringify(result, null, 2));
   console.log(`Cargo oracle matched ${selected.length} selected packages and ${nativeEdges.length} root edges; result: ${resolve(base, 'result.json')}`);
-} finally { server.stop(true); }
+} finally { await server.stop(true); }
 await verifyCargoLinksOracle(base, cargo, crate, indexPath);
 await verifyCargoLockOracle(base, cargo, crate, indexPath);
 await verifyCargoLiveOracle(base, cargo, crate);

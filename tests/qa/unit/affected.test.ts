@@ -71,6 +71,18 @@ test('Jena image and authored Turtle changes select the pinned CLI check once', 
   expect(affectedCommands(result).filter(item => item.label === 'jena:check')).toHaveLength(1);
 });
 
+test('a changed script selects the script type check, and dataset tools keep theirs', () => {
+  const fixture = plan(['scripts/fixture/prune.ts']);
+  expect(fixture.tasks).toEqual([{ task: 'scripts:typecheck', because: 'scripts/fixture/prune.ts: script type check' }]);
+  expect(formatPlan(fixture)).toContain('task scripts:typecheck');
+  expect(affectedCommands(fixture).map(item => item.command)).toContainEqual(['task', ['scripts:typecheck']]);
+  const both = plan(['scripts/fixture/prune.ts', 'scripts/dev/cli.ts']);
+  expect(both.tasks.filter(item => item.task === 'scripts:typecheck')).toHaveLength(1);
+  expect(plan(['scripts/datasets/cli.ts']).tasks).toEqual([{
+    task: 'dataset:typecheck', because: 'scripts/datasets/cli.ts: script type check' }]);
+  expect(plan(['services/main/src/access.ts']).tasks).toEqual([]);
+});
+
 test('Jena CLI staged query, shapes, fixture and image pin inputs select the same check', () => {
   for (const path of ['generated/model/shapes/entity.ttl', 'tests/fixtures/jena-cli/scratch.trig',
     'services/main/src/modules/query/templates/work-versions.rq',
@@ -119,11 +131,13 @@ test('a widened unit tier still runs affected unit tests outside the registered 
     exists: path => path === outside || files.has(path),
   });
   expect(result.tests.unit).toEqual([outside]);
-  const commands = affectedCommands(result).slice(0, 2).map(item => item.command);
-  expect(commands[0]![1].slice(0, 3)).toEqual(['scripts/qa/cli.ts', '--tier', 'unit']);
-  expect(commands[0]![1]).not.toContain(nativeUnionTest);
-  expect(commands[0]![1]).not.toContain(erasureCampaignNativeTest);
-  expect(commands[1]).toEqual(['bun', ['test', `./${outside}`]]);
+  const commands = affectedCommands(result).map(item => item.command);
+  expect(commands[0]).toEqual(['task', ['scripts:typecheck']]);
+  const unit = commands.find(command => command[1][0] === 'scripts/qa/cli.ts');
+  expect(unit![1].slice(0, 3)).toEqual(['scripts/qa/cli.ts', '--tier', 'unit']);
+  expect(unit![1]).not.toContain(nativeUnionTest);
+  expect(unit![1]).not.toContain(erasureCampaignNativeTest);
+  expect(commands).toContainEqual(['bun', ['test', `./${outside}`]]);
 });
 
 test('data files, deleted modules and spawned scripts reach tests without import edges', () => {

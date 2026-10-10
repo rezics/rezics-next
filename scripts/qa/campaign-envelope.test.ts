@@ -9,7 +9,7 @@ import {
   aggregateCampaignCopies, campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard,
   campaignShardActiveMs, childStackCleanupCommand, classifyCampaignEvidence, currentSuppliedRunIds,
   openCampaignEvidence, preparationBoundaryActiveMs, readCampaignCopyEvidence, selectCampaignCopies,
-  type CampaignEvidenceRead, type CampaignEvidenceState, type CommandPhaseSample,
+  type CampaignCopyLabel, type CampaignEvidenceRead, type CampaignEvidenceState, type CommandPhaseSample,
 } from './campaign-envelope.ts';
 
 const scratch: string[] = [];
@@ -515,7 +515,8 @@ test('a late first read uses the evidence write, and later rewrites cannot move 
     });
   expect(result.ok).toBe(true);
   expect(boundary).toBeDefined();
-  expect(firstActive - boundary!).toBeGreaterThan(150);
+  if (boundary === undefined) throw new Error('preparation boundary was not observed');
+  expect(firstActive - boundary).toBeGreaterThan(150);
   expect(boundary).not.toBe(firstActive);
   const again = watch.observe(readEvidence('delay', {
     activeElapsedMs: (boundary ?? 0) + 400, admissionOpen: false, observedAt: Date.now(),
@@ -698,7 +699,7 @@ function oneCopyEvidence(index: 0 | 1, source: string, volume: string): Record<s
 
 test('one campaign copy labels qualification evidence as one of two', () => {
   const evidence = oneCopyEvidence(0, 'fixture-campaign-a', 'rezics-qa-fixture-campaign-a_fuseki_data');
-  const written = JSON.parse(JSON.stringify(evidence)) as { copy: { text: string; of: number; index: number } };
+  const written = JSON.parse(JSON.stringify(evidence)) as { copy: CampaignCopyLabel };
   expect(written.copy).toEqual({ index: 0, of: 2, path: 'rollback', text: 'copy 0 of 2' });
   expect(JSON.stringify(written)).toContain('copy 0 of 2');
   expect(readCampaignCopyEvidence(written).label.text).toBe('copy 0 of 2');

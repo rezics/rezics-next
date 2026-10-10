@@ -1,3 +1,6 @@
+// Top-level await is legal only in a module.
+export {};
+
 const started = performance.now();
 const child = Bun.spawn(['bun', 'node_modules/typescript/bin/tsc', '--project',
   'tests/qa/client/tsconfig.json'], { stdout: 'inherit', stderr: 'inherit' });

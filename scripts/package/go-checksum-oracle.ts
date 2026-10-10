@@ -84,9 +84,9 @@ for (const module of modules) {
       toolchainFile: 'go/src/cmd/go.mod', checksumFile: 'go/src/cmd/go.sum',
       ...pseudoSource, capturedManifestSha256: pseudoManifestSha256 } : null,
     capturedAt: captured.fetchedAt.toISOString(),
-    infoSha256: await crypto.subtle.digest('SHA-256', captured.info)
+    infoSha256: await crypto.subtle.digest('SHA-256', new Uint8Array(captured.info))
       .then(bytes => Buffer.from(bytes).toString('hex')),
-    rawModSha256: await crypto.subtle.digest('SHA-256', captured.mod)
+    rawModSha256: await crypto.subtle.digest('SHA-256', new Uint8Array(captured.mod))
       .then(bytes => Buffer.from(bytes).toString('hex')),
     calculatedGoModH1: calculated, nativeVerifiedGoModSum: native.GoModSum,
     nativeVerifiedModuleSum: native.Sum, signedTree, includedLookup,

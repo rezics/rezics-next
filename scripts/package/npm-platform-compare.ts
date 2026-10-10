@@ -1,5 +1,5 @@
 import { npmStable } from '../../services/main/src/modules/package/npm-lock.ts';
-import type { NpmPlatformOutcome } from '../../services/main/src/modules/package/npm-platform.ts';
+import type { NpmPlatformIssue, NpmPlatformOutcome } from '../../services/main/src/modules/package/npm-platform.ts';
 
 export interface NpmNativePlatformTree {
   nodes: Array<{ path: string; name: string; version: string; resolved: string | null; integrity: string | null;
@@ -13,8 +13,8 @@ export function compareNpmPlatform(key: string, native: NpmNativePlatformTree, r
   const equal = (a: unknown, b: unknown, label: string) => {
     if (npmStable(a) !== npmStable(b)) throw new Error(`${key}: ${label} differs\nnative=${npmStable(a)}\nrezics=${npmStable(b)}`);
   };
-  const errors = native.nodes.flatMap(node => node.edges.filter(edge => edge.error).map(edge => ({ path: node.path,
-    name: edge.name, specifier: edge.specifier, foundPath: edge.to,
+  const errors = native.nodes.flatMap(node => node.edges.filter(edge => edge.error).map((edge): NpmPlatformIssue => ({
+    path: node.path, name: edge.name, specifier: edge.specifier, foundPath: edge.to,
     kind: edge.error === 'MISSING' ? edge.kind.startsWith('peer') ? 'missing-peer' : 'missing-dependency'
       : edge.error === 'PEER LOCAL' ? 'peer-local' : 'version-mismatch' })));
   const status = errors.some(error => error.kind.startsWith('missing-')) ? 'incomplete-source-data'
@@ -23,7 +23,8 @@ export function compareNpmPlatform(key: string, native: NpmNativePlatformTree, r
   equal(native.projection.target, result.target, 'target');
   const sorted = <T>(items: T[]) => items.map(item => npmStable(item)).sort();
   if (status !== 'validated') {
-    const expected = errors.length ? errors : native.projection.platformErrors.map(error => ({ kind: 'platform-incompatible',
+    const expected: NpmPlatformIssue[] = errors.length ? errors : native.projection.platformErrors.map(error => ({
+      kind: 'platform-incompatible',
       path: error.path, name: native.nodes.find(node => node.path === error.path)!.name,
       specifier: null, foundPath: error.path }));
     equal(sorted(expected), sorted(result.issues), 'failure witnesses');

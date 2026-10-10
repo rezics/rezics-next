@@ -39,7 +39,7 @@ export async function verifyCargoLinksOracle(base: string, cargo: string,
       entries.filter(entry => entry.name === file.name)));
     const indexes = new Map(request.indexFiles.map(file => [indexPath(file.name),
       Buffer.from(file.bytesBase64, 'base64').toString('utf8')]));
-    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req) {
+    const server: Bun.Server<undefined> = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req): Response {
       const path = new URL(req.url).pathname;
       if (path === '/index/config.json') return Response.json({
         dl: `http://127.0.0.1:${server.port}/crates` });
@@ -47,7 +47,7 @@ export async function verifyCargoLinksOracle(base: string, cargo: string,
       if (path.startsWith('/index/') && index) return new Response(index);
       const match = /^\/crates\/([^/]+)\/([^/]+)\/download$/.exec(path);
       const archive = match ? archives.get(`${match[1]}/${match[2]}`) : null;
-      return archive ? new Response(archive) : new Response('not found', { status: 404 });
+      return archive ? new Response(new Uint8Array(archive)) : new Response('not found', { status: 404 });
     } });
     try {
       const nativeSource = `sparse+http://127.0.0.1:${server.port}/index/`;
@@ -126,7 +126,7 @@ export async function verifyCargoLinksOracle(base: string, cargo: string,
       }
       results[kind] = { status: conflict ? 'unsatisfiable' : 'solved', exitCode,
         selected, stderr, metadata, request, rezics };
-    } finally { server.stop(true); }
+    } finally { await server.stop(true); }
   }
   await writeFile(resolve(base, 'links-result.json'), JSON.stringify(results, null, 2));
   console.log(`Cargo links oracle matched ${cargoLinksCases.length} scenarios; result: ${resolve(base, 'links-result.json')}`);
