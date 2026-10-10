@@ -215,7 +215,15 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('getV1RealmsByRealmZone-attachments');
   expect(matrix.find(entry => entry.path === '/v1/realms/{realm}/zone-attachments' && entry.method === 'get'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read' });
-  expect(publicOperations).toHaveLength(525);
+  // Trust-ops approved public on 2026-10-10 under standing route consent, conditional on a hidden Work answering like an absent id: the signed-in reader's standing on one Work, bearer, read family.
+  expect(publicOperations).toContain('getV1WorksByIdProgress');
+  expect(matrix.find(entry => entry.path === '/v1/works/{id}/progress' && entry.method === 'get'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
+  // The same consent covers the mark: bearer, write family, idempotency key, and no write when that Work is hidden.
+  expect(publicOperations).toContain('putV1WorksByIdProgress');
+  expect(matrix.find(entry => entry.path === '/v1/works/{id}/progress' && entry.method === 'put'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
+  expect(publicOperations).toHaveLength(527);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
