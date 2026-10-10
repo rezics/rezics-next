@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
+import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
+import { commitCommand } from '../../../services/main/src/modules/context/command.ts';
+import { profileValidations } from '../../../services/main/src/infrastructure/profile.ts';
+import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { registeredHiddenIdReads } from '../../../scripts/qa/hidden-id-equality.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertHiddenIdEquality, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
@@ -53,6 +58,98 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     if (exported.status !== 201 && exported.status !== 200) throw new Error(`export ${exported.status}: ${exportedText}`);
     const manifest = JSON.parse(exportedText) as { manifestId?: string };
     if (!manifest.manifestId) throw new Error(`export ${exported.status}: ${exportedText}`);
+    await owner.grant(`content:draft:${hiddenWork.work}`, 'content.draft');
+    const drafted = await owner.send('POST', '/v1/content-drafts', {
+      profile: 'content-text-v1', resourceId: hiddenWork.work, variantId: `urn:rezics:variant:${randomUUID()}`,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+      expectedHead: null, body: 'Hidden revision body', actingSubject: owner.actor,
+    });
+    const draftedText = await drafted.text();
+    if (drafted.status !== 201) throw new Error(`content draft ${drafted.status}: ${draftedText}`);
+    const revisionId = (JSON.parse(draftedText) as { revisionId: string }).revisionId;
+    const privateRealmInput = { name: `Hidden concept realm ${randomUUID()}`, actingSubject: owner.actor,
+      initialSettings: { visibility: 'private' as const, reviewRequired: true, reviewMode: 'mandatory' as const,
+        whoMaySubmit: 'granted' as const, selfJoin: false, rules: [] } };
+    const privateRealm = await createRealmSpace(stack.env, stack.admission(owner.actor, 'space:create:root', 'space.create',
+      spaceCreationDigest(privateRealmInput)), privateRealmInput);
+    if (!privateRealm.realm) throw new Error('Private realm was not created');
+    const conceptId = `${ID}${randomUUID()}`;
+    const schemeId = `${ID}${randomUUID()}`;
+    const conceptHead = `${ID}${randomUUID()}`;
+    const schemeHead = `${ID}${randomUUID()}`;
+    const SKOS = 'http://www.w3.org/2004/02/skos/core#';
+    const vocabulary = 'https://rezics.com/definition/classification-proposition-v2';
+    const graphAdmission = stack.admission(owner.actor, 'statement:speak:hidden-id', 'statement.record',
+      createHash('sha256').update(conceptId).digest('hex'));
+    const pathId = `${ID}${randomUUID()}`;
+    const expressionId = `${ID}${randomUUID()}`;
+    const senseId = `${ID}${randomUUID()}`;
+    const senseHead = `${ID}${randomUUID()}`;
+    const conceptValidations = await profileValidations(stack.env.fuseki, 'classification-proposition-v2', [
+      ['scheme', schemeId], ['concept', conceptId], ['path', pathId],
+      ['expression', expressionId], ['sense', senseId],
+    ].map(([role, focus]) => ({
+      shape: `${vocabulary}/${role}-shape`, focus: [focus!], graphs: [GRAPHS.current],
+    })), { scheme: schemeId, concept: conceptId, path: pathId, expression: expressionId, sense: senseId });
+    const recorded = await commitCommand(stack.env, graphAdmission, {
+      family: 'statement-record-v1', digest: graphAdmission.requestDigest, validations: conceptValidations,
+      operation: `${ID}${randomUUID()}`, component: conceptId, revision: conceptHead,
+      expectedHead: null, where: `GRAPH ${iri(GRAPHS.current)} { ${iri(privateRealm.realm)} a rv:Realm . }`,
+      insert: `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(schemeId)} a <${SKOS}ConceptScheme>, rv:VocabularyDefinition ; rv:definitionProfile ${iri(vocabulary)} ;
+            rv:schemeState rv:Active ; rv:schemeRevisionHead ${iri(schemeHead)} .
+          ${iri(conceptId)} a <${SKOS}Concept>, rv:VocabularyDefinition ; rv:definitionProfile ${iri(vocabulary)} ;
+            <${SKOS}inScheme> ${iri(schemeId)} ; <${SKOS}prefLabel> "Hidden concept"@en ;
+            rv:conceptState rv:Active ; rv:head ${iri(conceptHead)} ;
+            rv:conceptRealm ${iri(privateRealm.realm)} .
+          ${iri(pathId)} a rv:ConceptPath, rv:VocabularyDefinition ; rv:definitionProfile ${iri(vocabulary)} ;
+            rv:pathKind rv:SingleConcept ; rv:pathLength 1 ; rv:terminalConcept ${iri(conceptId)} ;
+            rv:pathState rv:Active .
+          ${iri(expressionId)} a rv:ClassificationExpression, rv:VocabularyDefinition ;
+            rv:definitionProfile ${iri(vocabulary)} ; rv:path ${iri(pathId)} ;
+            rv:propositionKind rv:ConceptAssertion ; rv:assertedConcept ${iri(conceptId)} ;
+            rv:expressionState rv:Active .
+          ${iri(senseId)} a rv:ClassificationSense, rv:VocabularyDefinition ;
+            rv:definitionProfile ${iri(vocabulary)} ; rv:path ${iri(pathId)} ;
+            rv:expression ${iri(expressionId)} ; rv:interpretationScope <urn:rezics:classification-context:global> ;
+            rv:senseState rv:Active ; rv:head ${iri(senseHead)} .
+        }`,
+    });
+    if (!recorded) throw new Error('Hidden concept was not recorded');
+    await ensureGlobalClassificationContext(stack.env);
+    await owner.grant(`statement:speak:${owner.actor}`, 'statement.record');
+    const defined = await owner.send('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, actingSubject: owner.actor,
+      state: { component: 'definition', kind: 'property', lifecycle: 'active', successor: null, roles: [],
+        notation: DATE_PUBLISHED_DEFINITION_NOTATION },
+    });
+    const definedText = await defined.text();
+    if (defined.status !== 201 && defined.status !== 200) throw new Error(`definition ${defined.status}: ${definedText}`);
+    const property = JSON.parse(definedText) as { component: string; revision: string };
+    await owner.grant(`semantic:read:${property.component}`, 'semantic.read');
+    const written = await owner.send('POST', '/v1/statements', {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: hiddenWork.work,
+      predicate: property.component, relationDefinition: property.revision,
+      value: { kind: 'literal', lexical: '1980-01-01', datatype: 'http://www.w3.org/2001/XMLSchema#date', language: null },
+      applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor,
+    });
+    const writtenText = await written.text();
+    if (written.status !== 201) throw new Error(`statement ${written.status}: ${writtenText}`);
+    const statementId = local((JSON.parse(writtenText) as { statement: string }).statement);
+    await owner.grant('verification:claim:global', 'verification.claim-create');
+    await grantRecordedPlatformUse(stack.accessPool, owner.principalId, ['wiki-agents']);
+    await grantRecordedPlatformUse(stack.accessPool, outsider.principalId, ['wiki-agents']);
+    const claimed = await owner.send('POST', '/v1/claims', {
+      profile: 'claim-create-v1', referent: hiddenWork.work,
+      interpretationContext: 'urn:rezics:context:hidden-id',
+      propositionPredicate: 'https://schema.org/datePublished',
+      value: { kind: 'literal', lexical: '1980-01-01', datatype: 'date' },
+      valuePrecision: 'exact', valueQualifiers: [], validFrom: null, validUntil: null,
+      editionScope: null, actingSubject: owner.actor,
+    });
+    const claimedText = await claimed.text();
+    if (claimed.status !== 201) throw new Error(`claim ${claimed.status}: ${claimedText}`);
+    const claimId = local((JSON.parse(claimedText) as { claim: { claim: string } }).claim.claim);
 
     const http = async (method: string, path: string, body?: unknown, token?: string) => {
       const response = await stack.call(method, path, { token, body, ...(body ? { key: randomUUID() } : {}) });
@@ -102,6 +199,49 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       hidden: manifest.manifestId, absent,
       call: (id) => http('GET', `/v1/exports/${id}`, undefined, outsider.token),
     });
+    const workIri = hiddenWork.work;
+    calls.set('GET /v1/addresses/resolve', {
+      hidden: workId, absent,
+      call: (id) => http('GET', `/v1/addresses/resolve?scope=resource&key=${encodeURIComponent(id)}`),
+    });
+    calls.set('GET /v1/claims/{claim}', {
+      hidden: claimId, absent,
+      call: (id) => http('GET', `/v1/claims/${id}`, undefined, outsider.token),
+    });
+    calls.set('GET /v1/concepts/{id}', {
+      hidden: local(conceptId), absent,
+      call: (id) => http('GET', `/v1/concepts/${id}`),
+    });
+    calls.set('GET /v1/content-revisions/{revision}/comments', {
+      hidden: revisionId, absent,
+      call: (id) => http('GET', outsiderQuery(`/v1/content-revisions/${id}/comments`), undefined, outsider.token),
+    });
+    calls.set('GET /v1/public-previews/{resource}', {
+      hidden: workId, absent,
+      call: (id) => http('GET', `/v1/public-previews/${id}`),
+    });
+    calls.set('GET /v1/resources/{resource}', {
+      hidden: workId, absent,
+      call: (id) => http('GET', `/v1/resources/${id}`),
+    });
+    calls.set('GET /v1/statements/{id}', {
+      hidden: statementId, absent,
+      call: (id) => http('GET', `/v1/statements/${id}`),
+    });
+    calls.set('GET /v1/works/{id}/history', {
+      hidden: workId, absent,
+      call: (id) => http('GET', `/v1/works/${id}/history`),
+    });
+    calls.set('GET /v1/works/{id}/maintainers', {
+      hidden: workId, absent,
+      call: (id) => http('GET', `/v1/works/${id}/maintainers`),
+    });
+    calls.set('POST /v1/resources/summaries', {
+      hidden: workIri, absent: `${ID}${absent}`,
+      call: (id) => http('POST', '/v1/resources/summaries', {
+        profile: 'resource-summary-batch-v1', resources: [id],
+      }),
+    });
     expect([...calls.keys()].sort()).toEqual([...registeredHiddenIdReads]);
     for (const operation of registeredHiddenIdReads) {
       const spec = calls.get(operation)!;
@@ -112,4 +252,4 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     prototype.query = originalQuery;
     await stack.stop();
   }
-}, 180_000);
+}, 300_000);

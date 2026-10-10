@@ -10,9 +10,16 @@ const openApiPath = 'generated/openapi/main/public.json';
 
 /** Equality coverage. A row is `registered` only while it stays in this list. */
 export const registeredHiddenIdReads = [
+  'GET /v1/addresses/resolve',
+  'GET /v1/claims/{claim}',
+  'GET /v1/concepts/{id}',
+  'GET /v1/content-revisions/{revision}/comments',
   'GET /v1/exports/{export}',
+  'GET /v1/public-previews/{resource}',
   'GET /v1/realms/{realm}/members',
   'GET /v1/realms/{realm}/roles',
+  'GET /v1/resources/{resource}',
+  'GET /v1/statements/{id}',
   'GET /v1/works/{id}',
   'GET /v1/works/{id}/classifications',
   'GET /v1/works/{id}/content-variants',
@@ -21,11 +28,14 @@ export const registeredHiddenIdReads = [
   'GET /v1/works/{id}/credits',
   'GET /v1/works/{id}/editions',
   'GET /v1/works/{id}/editorial-state',
+  'GET /v1/works/{id}/history',
+  'GET /v1/works/{id}/maintainers',
   'GET /v1/works/{id}/metadata',
   'GET /v1/works/{id}/progress',
   'GET /v1/works/{id}/realizations',
   'GET /v1/works/{id}/releases',
   'GET /v1/works/{id}/source-support',
+  'POST /v1/resources/summaries',
 ] as const;
 
 const BODY_ID_ARRAYS = new Set(['ids', 'resources', 'targets']);

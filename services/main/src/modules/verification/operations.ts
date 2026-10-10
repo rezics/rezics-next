@@ -897,8 +897,8 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
 
 /** A claim with its active summary and a bounded freshness proof against every pinned owner head. */
 export async function readClaimQuality(deps: Pick<VerificationDependencies, 'env' | 'store'>, claim: string,
-  context: string | null) {
-  const record = await readClaimHead(deps.env, claim);
+  context: string | null, canReadReferent?: (referent: string) => Promise<boolean>) {
+  const record = await readClaimHead(deps.env, claim, canReadReferent);
   if (!record) return null;
   const summary = context ? await deps.store.readSummary(claim, context) : null;
   let quality = null;

@@ -452,15 +452,32 @@ export async function readClaimRevisions(env: WorkActivationEnvironment,
   return found;
 }
 
-export async function readClaimHead(env: WorkActivationEnvironment, claim: string): Promise<ClaimRecord | null> {
+export async function readClaimHead(env: WorkActivationEnvironment, claim: string,
+  canReadReferent?: (referent: string) => Promise<boolean>): Promise<ClaimRecord | null> {
+  // Loaded on call: a static import cycles through disclosure into this module.
+  const { publicWork } = await import('../work/public-patterns.ts');
   const head = await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?head WHERE {
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX schema: <https://schema.org/>
+    SELECT ?head ?referent ?referentIsWork ?referentPublic WHERE {
     { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement ; rv:head ?head ; rv:retainedClaimHead ?root } }
     UNION { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rv:Claim ; rv:claimHead ?head }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement } } } }`);
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement } } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:referent ?revisionReferent } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} rv:referent ?claimReferent } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement ; rdf:subject ?statementSubject } }
+    BIND(COALESCE(?revisionReferent, ?claimReferent, ?statementSubject) AS ?referent)
+    BIND(IF(BOUND(?referent), EXISTS { GRAPH ${iri(GRAPHS.current)} { ?referent a schema:CreativeWork } }, false) AS ?referentIsWork)
+    BIND(IF(BOUND(?referent), EXISTS { ${publicWork('?referent', '?claimReferentMain')} }, true) AS ?referentPublic)
+  }`);
   const rows = head.results?.bindings ?? [];
-  if (rows.length !== 1) return null;
-  return (await readClaimRevisions(env, [rows[0]!.head!.value])).get(rows[0]!.head!.value) ?? null;
+  if (rows.length !== 1 || !rows[0]?.head?.value) return null;
+  const row = rows[0]!;
+  if (canReadReferent && row.referentIsWork?.value === 'true' && row.referentPublic?.value !== 'true') {
+    const referent = row.referent?.value;
+    if (!referent || !await canReadReferent(referent)) return null;
+  }
+  return (await readClaimRevisions(env, [row.head!.value])).get(row.head!.value) ?? null;
 }
 
 // ------------------------------------------------------ source reliability

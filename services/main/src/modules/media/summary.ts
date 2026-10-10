@@ -473,6 +473,13 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const unique = [...new Set(input.resources.filter(resource => nativeId.test(resource)))];
   const graph = await graphRows(env, unique, input.localBasis);
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
+  // A settled non-Agent skipped the name-owner probe. If that row is later
+  // withheld, run the probe the absent id already paid, so existence is not cheaper.
+  const settledNonAgents = new Set(input.settleNonAgentNameOwners
+    ? unique.filter(reference => {
+      const row = graph.rows.get(reference);
+      return row !== undefined && row.type !== 'agent';
+    }) : []);
   const noteNameProbe = (batch: readonly Pick<DisclosureTarget, 'owner' | 'component' | 'nameOwnerResolved'>[]) => {
     if (!hasDisclosure(env)) return;
     // Covers share the transport batch with names. Count each owner batch
@@ -492,11 +499,17 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const settledNameOwner = (row: GraphRow | undefined) =>
     input.settleNonAgentNameOwners && row !== undefined && row.type !== 'agent'
       ? { nameOwnerResolved: true as const } : {};
+  // A caller who cannot be granted the row already knows it is not public.
+  // Leave its head unresolved so disclosure runs the same ownership query an
+  // absent id runs. Filling the head only for a hidden row skips that query.
   const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
+    const unresolved = row !== undefined && !row.public && !reader.canReadWork && !reader.canReadWorks;
     return { owner: 'graph' as const, resource: reference, component: 'name' as const,
-      revision: reference === row?.work ? row.head : null, work: row?.work,
-      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+      revision: !unresolved && reference === row?.work ? row.head : null,
+      work: unresolved ? undefined : row?.work,
+      workRevision: unresolved ? undefined : row?.head,
+      context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
       ...settledNameOwner(row) };
   });
   const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
@@ -541,12 +554,13 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     }
   }
   const works = [...new Set(restricted.values())];
-  cost.accessChecks = works.length;
   let admitted = new Set<string>();
   if (works.length && reader.canReadWorks) {
+    cost.accessChecks = works.length;
     admitted = new Set(await reader.canReadWorks(works));
     cost.accessQueries = 1;
   } else if (works.length && reader.canReadWork) {
+    cost.accessChecks = works.length;
     cost.accessQueries = works.length;
     const decisions: (string | null)[] = [];
     if (client) {
@@ -772,6 +786,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
           ? { context: input.context, preferenceRevision: selectedContext.preferenceRevision } : {}) },
       avatar: avatar(row.type, reference, avatars.get(reference)) };
   });
+  await probeWithheldNameOwners(env, summaries, settledNonAgents, cost);
   const available = summaries.filter(summary => summary.status === 'available');
   const addresses = await canonicalAddresses(env, available, client);
   if (available.some(summary => ['space','realm','zone'].includes(summary.type))) cost.graphQueries++;
@@ -853,10 +868,37 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
 }
 
 /** SQL name changes do not move the graph position. Conditional reads must
- * include canonical addresses in their generation so a rename changes ETags. */
+ * include canonical addresses in their generation so a rename changes ETags.
+ * Unavailable items share one digest: hashing the reference would tell a hidden id from an absent one. */
 function addressGeneration(summaries: readonly ResourceSummary[]): string {
   return createHash('sha256').update(JSON.stringify(summaries.map(summary => summary.status === 'available'
-    ? [summary.reference,summary.address] : [summary.reference]))).digest('hex');
+    ? [summary.reference,summary.address] : null))).digest('hex');
+}
+
+/** The disclosure name-owner probe, for settled non-Agents that were withheld.
+ * Available rows keep the skip: their type already proved they are not Agents. */
+async function probeWithheldNameOwners(env: WorkActivationEnvironment, summaries: readonly ResourceSummary[],
+  settled: ReadonlySet<string>, cost: { graphQueries: number }): Promise<void> {
+  if (!hasDisclosure(env) || !settled.size) return;
+  const withheld = [...new Set(summaries.filter(summary => summary.status === 'unavailable'
+    && settled.has(summary.reference)).map(summary => summary.reference))];
+  for (let offset = 0; offset < withheld.length; offset += DISCLOSURE_COST.batch) {
+    const resources = withheld.slice(offset, offset + DISCLOSURE_COST.batch);
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?work ?head ?nameOwner WHERE {
+        VALUES ?work { ${resources.map(iri).join(' ')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
+        OPTIONAL { VALUES ?work { ${resources.map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} { ?work a rv:Agent }
+          BIND(?work AS ?nameOwner) }
+      } LIMIT ${resources.length + 1}`, 131_072)).results?.bindings ?? [];
+    if (rows.length !== resources.length || new Set(rows.map(row => row.work?.value)).size !== resources.length
+      || rows.some(row => !row.work || !resources.includes(row.work.value)
+        || row.nameOwner && row.nameOwner.value !== row.work.value)) {
+      throw new MediaUnavailable('Name ownership is unavailable');
+    }
+    cost.graphQueries += DISCLOSURE_COST.nameOwnerQueries;
+  }
 }
 
 /** Main Version content availability for one summary: actual language basis or metadata-only. */

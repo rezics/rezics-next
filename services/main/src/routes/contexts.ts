@@ -830,6 +830,9 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           const statement = await readStatement(env, `https://rezics.com/id/${params.id}`,
             privateReader(principal, query.actingSubject ?? null),
                 query.revision,
+            principal && query.actingSubject
+              ? subject => work.access.canReadWork(principal, query.actingSubject!, subject)
+              : async () => false,
               );
           const records = [statement.statement, statement.subject, ...statement.applicability,
                 ...(query.revision ? [query.revision] : []),

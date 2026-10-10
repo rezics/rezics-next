@@ -196,7 +196,7 @@
       "query:key",
       "query:scope"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/addresses/revisions/{revision}",
@@ -339,7 +339,7 @@
     "ids": [
       "path:claim"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/claims/{claim}/assessments/{assessment}",
@@ -500,7 +500,7 @@
     "ids": [
       "path:id"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/concepts/{id}/works",
@@ -539,7 +539,7 @@
       "path:revision",
       "query:actingSubject"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/context-definition-equivalences",
@@ -1465,7 +1465,7 @@
     "ids": [
       "path:resource"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/public-reports/{caseId}",
@@ -1991,7 +1991,7 @@
       "query:context",
       "query:position"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/resources/{resource}/continuities",
@@ -2341,7 +2341,7 @@
       "query:position",
       "query:revision"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/statements/{id}/judgments",
@@ -2548,14 +2548,14 @@
       "path:id",
       "query:actingSubject"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/works/{id}/maintainers",
     "ids": [
       "path:id"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/works/{id}/metadata",
@@ -3441,7 +3441,7 @@
     "ids": [
       "body:resources"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "POST /v1/rights/offerings/{offering}/changes",

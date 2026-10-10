@@ -43,14 +43,22 @@ export class WorkMaintainers {
   }
 
   async read(work: string) {
-    await this.current(work);
+    let present = true;
+    try {
+      await this.current(work);
+    } catch (error) {
+      if (!(error instanceof AdmissionDenied)) throw error;
+      present = false;
+    }
+    // The set read runs for a missing Work too. Skipping it only when the graph
+    // ASK fails would tell a hidden Work with no set from an absent id.
     // One statement. The owner lookup is the partial unique index, one extra read.
     const row = (await this.pool.query<{ generation: string; maintainers: string[]; owner: string | null }>(`
       SELECT s.generation::text, ARRAY(SELECT m.agent FROM access.work_maintainer m
         WHERE m.work = s.work ORDER BY m.agent LIMIT 32) AS maintainers,
         (SELECT m.agent FROM access.work_maintainer m WHERE m.work = s.work AND m.owner) AS owner
       FROM access.work_maintainer_set s WHERE s.work = $1`, [work])).rows[0];
-    if (!row) throw new AdmissionDenied('Work maintainers are unavailable');
+    if (!present || !row) throw new AdmissionDenied('Work maintainers are unavailable');
     if (!row.owner) throw new AdmissionUnavailable('Work owner is unavailable');
     return { work, generation: row.generation, maintainers: row.maintainers, owner: row.owner };
   }

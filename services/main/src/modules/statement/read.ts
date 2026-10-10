@@ -239,12 +239,16 @@ export async function statementValueFromManifest(
 export async function readStatement(env: WorkActivationEnvironment, statement: string,
   canReadPrivate: (context: string) => Promise<boolean>,
   revision?: string,
+  canReadWorkSubject?: (subject: string) => Promise<boolean>,
 ): Promise<StatementRead> {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const { publicWork } = await import('../work/public-patterns.ts');
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
+    PREFIX schema: <https://schema.org/>
     SELECT ?epoch ?sequence ?subject ?predicate ?object ?relation ?definition ?applicability ?speaker ?key
       ?state ?head ?headRevision ?operation ?recordedBy ?pin ?context ?disclosure
-      ?qualificationDefinition ?qualificationContext ?precision ?qualifier ?validFrom ?validUntil ?edition ?manifest WHERE {
+      ?qualificationDefinition ?qualificationContext ?precision ?qualifier ?validFrom ?validUntil ?edition ?manifest
+      ?subjectIsWork ?subjectPublic WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ; rdf:subject ?subject ;
@@ -270,9 +274,17 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
           OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } }
         }
       }
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?subject a schema:CreativeWork } } AS ?subjectIsWork)
+      BIND(EXISTS { ${publicWork('?subject', '?statementSubjectMain')} } AS ?subjectPublic)
     } LIMIT 129`)).results?.bindings ?? [];
   const row = rows[0];
   if (!row?.subject) throw new StatementNotFound('Statement is unavailable');
+  // A non-public Work subject is the same answer as a missing Statement, before
+  // revision snapshots or a later visibility pass that would do more work.
+  if (canReadWorkSubject && row.subjectIsWork?.value === 'true' && row.subjectPublic?.value !== 'true'
+    && !await canReadWorkSubject(row.subject.value)) {
+    throw new StatementNotFound('Statement is unavailable');
+  }
   if (['predicate', 'object', 'relation', 'speaker', 'key', 'state', 'head', 'headRevision',
     'operation', 'recordedBy'].some(key => !row[key])) {
     throw new ContextCommandUnavailable('Statement read is incomplete');

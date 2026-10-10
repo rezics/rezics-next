@@ -219,8 +219,11 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           return problem(503, 'content_unavailable', 'Comment or Content owner is unavailable');
         }
         const resourceId = await work.content.owningResourceForRevision(params.revision);
-        if (!resourceId || !await work.access.canReadWork(principal, query.actingSubject,
-          resourceId)) return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        // A missing revision still takes the Work admission, so a hidden revision
+        // is not the only caller that pays for it.
+        const admitted = await work.access.canReadWork(principal, query.actingSubject,
+          resourceId ?? `https://rezics.com/id/${params.revision}`);
+        if (!resourceId || !admitted) return problem(404, 'comment_unavailable', 'Comments are unavailable');
         const current = await fuseki.query(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
           ASK { GRAPH <urn:rezics:graph:current> {
             ${iri(resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } }`);

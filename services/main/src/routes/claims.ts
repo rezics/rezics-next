@@ -152,7 +152,8 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
     }, async ({ request, params, query }) => {
       try {
         await principal(request, 'claim:read');
-        const result = await readClaimQuality(deps(), nativeId(params.claim), query.context ?? null);
+        const result = await readClaimQuality(deps(), nativeId(params.claim), query.context ?? null,
+          async () => false);
         return result ? ok(result) : problem(404, 'claim_unavailable', 'Claim is unavailable');
       } catch (error) { return claimError(error); }
     })
