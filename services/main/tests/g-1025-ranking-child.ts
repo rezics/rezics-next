@@ -88,17 +88,18 @@ try {
       sink.clear();
     }
   }
-  // Fifteen Postgres, eight Fuseki, at every rejected-prefix scale. The count
+  // Seventeen Postgres, eight Fuseki, at every rejected-prefix scale. The count
   // does not grow from 4 to 64 privately read Books:
-  // opening content snapshot and access checkpoint; candidate seek; admission
-  // name disclosure; summary disclosure, avatar hydration and canonical address;
-  // serial relay head and serial summary; the summary trio again on the re-read;
-  // closing content snapshot, access checkpoint and recovery check.
+  // opening content owner position and progress head, then the access
+  // checkpoint; candidate seek; admission name disclosure; summary disclosure,
+  // avatar hydration and canonical address; serial relay head and serial
+  // summary; the summary trio again on the re-read; closing content owner
+  // position and progress head, access checkpoint and recovery check.
   // Fuseki: opening position, admission population, summary graph, serial head,
   // metadata header, type relation, summary graph again, closing position.
   assert.equal(new Set(profiles.map(profile => profile.postgresStatements)).size, 1);
   assert.equal(new Set(profiles.map(profile => profile.fusekiRequests)).size, 1);
-  assertWorkCostAtScales(profiles,{ fusekiRequests: 8,postgresStatements: 15 });
+  assertWorkCostAtScales(profiles,{ fusekiRequests: 8,postgresStatements: 17 });
   // Folding the review head into the checkpoint read must preserve missing
   // source rejection and the grace period for committed, unsequenced reviews.
   const reviewHead = (await home.stack.accessPool.query<{ position: string }>(
