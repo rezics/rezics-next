@@ -80,6 +80,25 @@ the indexer ran in this process. A resume that already recorded that pass does
 not print it. The last line is the JSON result. `elapsedMs` is the measured
 time of this run.
 
+A read or command that exceeds its budget exits with one line. The name is the
+read, and a paged read includes the page:
+
+```text
+progress: offline receipt: timed out after 4282ms (budget 8000ms)
+clear: page 3: timed out after 8100ms (budget 8000ms)
+offline: command: timed out after 10012ms (budget 10000ms)
+```
+
+Resume reads are `progress: anchor`, `progress: quarantine receipt`,
+`progress: cleared receipt`, `progress: content units`,
+`progress: malformed content`, `progress: index control`,
+`progress: offline receipt`, `progress: activation receipt`, and
+`adopt: quarantine job`. Each receipt read uses the receipt IRI for this job.
+The offline receipt is that IRI for the job, the text generation, and the
+control sequence the indexer command advanced from. The job file records that
+sequence as `offlinePreSequence`. A resume uses it, and does not sort the
+receipts graph.
+
 ## Resuming the stuck development stack
 
 Stop the development server so Main is not writing, then rebuild, then start
@@ -93,8 +112,9 @@ task search:rebuild
 
 The shared stack's job file `.temp/stack/rezics-dev/content-rebuild.json`
 already holds the job id. The command resumes that id. Do not pass a new one.
-When that file is gone and the quarantine receipt has no job id, pass the id
-with `task search:rebuild -- --job <uuid>`.
+When that file is gone, one unread quarantine receipt supplies its job id.
+When that receipt has none, pass the id with
+`task search:rebuild -- --job <uuid>`.
 
 A resume prints the step lines above and then one JSON object whose
 `generation` is the activated text generation. The indexer command itself is
