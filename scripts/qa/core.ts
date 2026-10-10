@@ -1013,6 +1013,7 @@ function mainCheckout(root: string): string | undefined {
 // Prior QA artifacts of this checkout, the main checkout and its Goal worktrees.
 export function artifactRoots(root: string): string[] {
   const roots = new Set([join(root, '.artifacts', 'qa')]);
+  if (process.env.REZICS_QA_ARTIFACT_ROOT) roots.add(process.env.REZICS_QA_ARTIFACT_ROOT);
   const main = mainCheckout(root);
   if (main) {
     roots.add(join(main, '.artifacts', 'qa'));

@@ -6,13 +6,13 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
-import { parseArgs } from '../qa/core.ts';
+import { artifactRoots, parseArgs } from '../qa/core.ts';
 import { UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
-import { abandonRegressionRuns, appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
+import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
   pruneRegressionCheckouts, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
@@ -1127,9 +1127,15 @@ test('bounded CLI selections preserve the resume configuration', () => {
     .toEqual({ at: 'main', only: ['unit', 'model'], integrationBatches: 2 });
   expect(() => parseRegressArgs(['--resume', 'run', '--only', 'unit'])).toThrow('original selection');
   expect(() => parseRegressArgs(['--integration-batches', '-1'])).toThrow('Invalid');
-  expect(parseRegressArgs(['--apply', '--prune-checkouts'])).toEqual({ pruneCheckouts: true, apply: true });
-  expect(() => parseRegressArgs(['--apply'])).toThrow('--apply requires --prune-checkouts');
-  expect(() => parseRegressArgs(['--prune-checkouts', '--resume', 'run'])).toThrow('does not take a regression selection');
+  const previous = process.env.REZICS_QA_ARTIFACT_ROOT;
+  process.env.REZICS_QA_ARTIFACT_ROOT = '/run/qa';
+  try {
+    expect(artifactRoots('/checkout')).toContain('/run/qa');
+    expect(regressionBatchEnvironment({}, 1, 1, '/run/qa').REZICS_QA_ARTIFACT_ROOT).toBe('/run/qa');
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_QA_ARTIFACT_ROOT;
+    else process.env.REZICS_QA_ARTIFACT_ROOT = previous;
+  }
 });
 
 test('only browser and Storybook commands acquire the heavy lock', () => {
@@ -1396,50 +1402,61 @@ function mappedCheckouts(stateDir: string, id: string): string[] {
 
 test('a finished run removes exactly its mapped checkouts', async () => {
   const r = repo();
+  const taskfile = (ok: boolean) => `version: '3'\ntasks:\n  install:\n    cmds: ['${ok ? 'true' : 'false'}']\n  gen:check:\n    cmds: ['true']\n`;
   try {
     const spare = join(r.options.checkoutRoot!, 'keep-extra');
     mkdirSync(r.options.checkoutRoot!, { recursive: true });
     r.git('worktree', 'add', '--detach', spare, r.base);
-    const passed = await r.run({ runId: 'finished-pass' });
+    r.write('Taskfile.yml', taskfile(true)); r.commit();
+    const passed = await r.run({ runId: 'finished-pass', prepare: undefined });
     expect(passed.status).toBe('passed');
     const mapped = mappedCheckouts(r.options.stateDir, 'finished-pass');
     expect(mapped).toContain(passed.checkout);
     for (const path of mapped) expect(existsSync(path)).toBe(false);
+    const evidence = join(r.options.stateDir, 'regress/finished-pass/preflight');
+    expect(passed.preflight.artifactPaths.length).toBeGreaterThan(0);
+    for (const path of passed.preflight.artifactPaths) {
+      expect(path.startsWith(evidence)).toBe(true);
+      expect(existsSync(path)).toBe(true);
+    }
     expect(existsSync(spare)).toBe(true);
     const listed = r.git('worktree', 'list', '--porcelain');
     for (const path of mapped) expect(listed.split('\n')).not.toContain(`worktree ${path}`);
     expect(listed).toContain(`worktree ${spare}`);
-    const failed = await r.run({ runId: 'finished-fail', prepare: async () => ({ ok: false, artifactPaths: [], reason: 'pinned build unavailable' }) });
+    r.write('Taskfile.yml', taskfile(false)); r.commit();
+    const failed = await r.run({ runId: 'finished-fail', prepare: undefined });
     expect(failed.status).toBe('failed');
     for (const path of mappedCheckouts(r.options.stateDir, 'finished-fail')) expect(existsSync(path)).toBe(false);
+    const failedEvidence = join(r.options.stateDir, 'regress/finished-fail/preflight');
+    expect(failed.preflight.artifactPaths.every(path => path.startsWith(failedEvidence) && existsSync(path))).toBe(true);
+    expect(inboxEntries(r.options.stateDir, 'program')[0]!.artifactPaths).toEqual(failed.preflight.artifactPaths);
     expect(existsSync(spare)).toBe(true);
   } finally { r.cleanup(); }
 });
 
-test('a resumable run keeps its checkouts', async () => {
+test('a non-live run loses its checkouts and resume recreates them', async () => {
   const r = repo();
   try {
-    await expect(r.run({ runId: 'resume-keep', runner: async (...args) => {
+    await expect(r.run({ runId: 'resume-drop', runner: async (...args) => {
       if (args[1].tier === 'owner') throw new Error('stopped');
       return r.runner(...args);
     } })).rejects.toThrow('stopped');
-    expect(r.manifest('resume-keep').status).toBe('running');
-    const kept = mappedCheckouts(r.options.stateDir, 'resume-keep');
-    expect(kept.length).toBeGreaterThan(0);
-    for (const path of kept) expect(existsSync(path)).toBe(true);
-    const partial = await r.run({ runId: 'partial-keep', only: ['unit'] });
-    expect(partial.status).toBe('incomplete');
-    for (const path of mappedCheckouts(r.options.stateDir, 'partial-keep')) expect(existsSync(path)).toBe(true);
-    const directory = join(r.options.stateDir, 'regress/resume-keep');
-    const manifest = r.manifest('resume-keep');
-    manifest.files.push({ file: 'tests/qa/unit/added.test.ts', tier: 'unit', outcome: 'pending' });
-    writeFileSync(join(directory, 'manifest.json'), JSON.stringify(manifest));
-    await expect(r.run({ resume: 'resume-keep' })).rejects.toThrow('Incomplete or changed regression manifest');
-    for (const path of kept) expect(existsSync(path)).toBe(false);
+    const mapped = mappedCheckouts(r.options.stateDir, 'resume-drop');
+    expect(mapped.length).toBeGreaterThan(0);
+    for (const path of mapped) expect(existsSync(path)).toBe(false);
+    let recreated = '';
+    const resumed = await r.run({ resume: 'resume-drop', runner: async (...args) => {
+      recreated = args[0];
+      expect(existsSync(args[0])).toBe(true);
+      return r.runner(...args);
+    }});
+    expect(resumed.status).toBe('passed');
+    expect(mapped).toContain(recreated);
+    expect(existsSync(recreated)).toBe(false);
   } finally { r.cleanup(); }
 });
 
-test('prune keeps a live or resumable run and ignores paths outside the cache and non-worktrees', async () => {
+test('prune keeps a live run and an unmapped worktree, and ignores paths outside the cache and non-worktrees', async () => {
   const r = repo();
   let release: (() => void) | undefined;
   try {
@@ -1451,8 +1468,7 @@ test('prune keeps a live or resumable run and ignores paths outside the cache an
       return path;
     };
     const live = add('live');
-    const resumable = add('resumable');
-    const finished = add('finished');
+    const stale = add('stale');
     const orphan = add('orphan');
     const outside = join(r.dir, 'outside-tree');
     r.git('worktree', 'add', '--detach', outside, r.base);
@@ -1460,89 +1476,48 @@ test('prune keeps a live or resumable run and ignores paths outside the cache an
     mkdirSync(plain);
     const escape = join(cache, 'escape');
     symlinkSync(outside, escape);
-    const writeRun = (id: string, status: Manifest['status'], checkout: string, startedAt?: string) => {
+    mkdirSync(join(stale, '.artifacts/qa'), { recursive: true });
+    const writeRun = (id: string, checkout: string) => {
       const directory = join(r.options.stateDir, 'regress', id);
       mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status, ...(startedAt ? { startedAt } : {}) }));
+      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status: 'running' }));
       writeFileSync(join(directory, 'checkouts.json'), JSON.stringify({ [`${r.base}:pinned`]: checkout }));
       return directory;
     };
-    const liveDir = writeRun('live-run', 'failed', live);
+    const liveDir = writeRun('live-run', live);
     const acquired = tryAcquireDirectoryLease(join(liveDir, 'lock'));
     if (acquired === 'held') throw new Error('live lock was already held');
     release = acquired.release;
-    writeRun('resumable-run', 'running', resumable, '2020-01-01T00:00:00.000Z');
-    writeRun('finished-run', 'passed', finished);
-    writeRun('outside-run', 'passed', outside);
-    const stale = writeRun('stale-run', 'failed', finished);
-    mkdirSync(join(stale, 'lock'));
-    writeFileSync(join(stale, 'lock', 'identity.json'), JSON.stringify({ pid: 99999999, token: 'stale', start: '1', boot: 'not-this-boot' }));
+    writeRun('stale-run', stale);
+    writeRun('outside-run', outside);
     const dry = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, measureBytes: false });
     expect(dry.apply).toBe(false);
-    expect(existsSync(finished)).toBe(true);
+    expect(existsSync(stale)).toBe(true);
     expect(existsSync(orphan)).toBe(true);
     const applied = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, apply: true, measureBytes: false });
     expect(existsSync(live)).toBe(true);
-    expect(existsSync(resumable)).toBe(true);
-    expect(existsSync(finished)).toBe(false);
-    expect(existsSync(orphan)).toBe(false);
+    expect(existsSync(orphan)).toBe(true);
+    expect(existsSync(stale)).toBe(false);
     expect(existsSync(outside)).toBe(true);
     expect(existsSync(plain)).toBe(true);
     expect(existsSync(escape)).toBe(true);
     expect(applied.kept.map(entry => [entry.path, entry.reason])).toEqual([
       [live, 'live run live-run'],
-      [resumable, expect.stringMatching(/^stale \d+d; abandon to free 1 checkouts \(resumable-run\)$/)],
+      [orphan, 'unmapped while run live-run is live'],
     ]);
     expect(applied.removed.map(entry => [entry.path, entry.reason])).toEqual([
-      [finished, 'terminal run finished-run, stale-run'],
-      [orphan, 'registered worktree with no checkout map'],
+      [stale, 'non-live run stale-run; holds old evidence'],
     ]);
     expect(applied.untouched).toEqual(expect.arrayContaining([
       { path: plain, reason: 'not a registered worktree' },
       { path: escape, reason: 'escapes the cache root' },
       { path: outside, reason: 'outside the cache root' },
     ]));
-  } finally { release?.(); r.cleanup(); }
-});
-
-test('abandon refuses a live run and frees a stale one', () => {
-  const r = repo();
-  let release: (() => void) | undefined;
-  try {
-    const cache = r.options.checkoutRoot!;
-    mkdirSync(cache, { recursive: true });
-    const add = (name: string) => {
-      const path = join(cache, name);
-      r.git('worktree', 'add', '--detach', path, r.base);
-      return path;
-    };
-    const liveTree = add('live');
-    const staleTree = add('stale');
-    const writeRun = (id: string, checkout: string) => {
-      const directory = join(r.options.stateDir, 'regress', id);
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status: 'running', startedAt: '2020-01-01T00:00:00.000Z' }));
-      writeFileSync(join(directory, 'checkouts.json'), JSON.stringify({ [`${r.base}:pinned`]: checkout }));
-      return directory;
-    };
-    const liveDir = writeRun('live-run', liveTree);
-    const acquired = tryAcquireDirectoryLease(join(liveDir, 'lock'));
-    if (acquired === 'held') throw new Error('live lock was already held');
-    release = acquired.release;
-    writeRun('stale-run', staleTree);
-    const options = { repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, now: () => '2026-10-10T00:00:00.000Z' };
-    const dry = pruneRegressionCheckouts({ ...options, measureBytes: false });
-    expect(dry.kept.find(entry => entry.path === staleTree)?.reason).toMatch(/^stale \d+d; abandon to free 1 checkouts \(stale-run\)$/);
-    expect(dry.kept.find(entry => entry.path === liveTree)?.reason).toBe('live run live-run');
-    expect(() => abandonRegressionRuns(['live-run', 'stale-run'], options)).toThrow('live-run is live');
-    expect(existsSync(staleTree)).toBe(true);
-    expect(JSON.parse(readFileSync(join(r.options.stateDir, 'regress/stale-run/manifest.json'), 'utf8')).status).toBe('running');
-    abandonRegressionRuns(['stale-run'], options);
-    expect(existsSync(staleTree)).toBe(false);
-    expect(existsSync(liveTree)).toBe(true);
-    expect(JSON.parse(readFileSync(join(r.options.stateDir, 'regress/stale-run/manifest.json'), 'utf8')))
-      .toMatchObject({ status: 'incomplete', abandonedAt: '2026-10-10T00:00:00.000Z' });
-    expect(r.git('worktree', 'list', '--porcelain').split('\n')).not.toContain(`worktree ${staleTree}`);
+    release(); release = undefined;
+    const freed = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, apply: true, measureBytes: false });
+    expect(existsSync(orphan)).toBe(false);
+    expect(existsSync(live)).toBe(false);
+    expect(freed.removed.map(entry => entry.path).sort()).toEqual([live, orphan].sort());
   } finally { release?.(); r.cleanup(); }
 });
 
