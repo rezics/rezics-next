@@ -53,6 +53,12 @@ export const CONTENT_REBUILD_PAGE = 64;
 export const CONTENT_REBUILD_NONEMPTY_REFUSAL = 'Content units remain after terminal clear; offline rebuild refused';
 /** One verification read must finish inside this budget, leaving margin under Fuseki's 10s query timeout. */
 export const CONTENT_REBUILD_READ_BUDGET_MS = 8_000;
+/** One native rebuild command (quarantine, clear page, cleared, profile, activate)
+ * runs against a stopped-writer stack. Measured on a 22 GiB dataset with nothing else
+ * running they take 1.3 to 4.7 s each (a TDB2 commit with its fsync plus the journal
+ * bookkeeping), so the 10 s Fuseki-style bound the module used refused the operator's
+ * rebuild as soon as the disk was shared. */
+export const CONTENT_REBUILD_COMMAND_DEADLINE_MS = 60_000;
 
 export class ContentRebuildUnavailable extends Error {}
 
@@ -191,7 +197,7 @@ async function command(env: WorkActivationEnvironment, phase: Phase, identity: s
   const digest = hash(JSON.stringify(digestInput));
   const batch = `urn:rezics:outbox:${hash(`${operation}\0batch`)}`;
   const event = `urn:rezics:event:${hash(`${operation}\0event`)}`;
-  const deadlineMs = 10_000;
+  const deadlineMs = CONTENT_REBUILD_COMMAND_DEADLINE_MS;
   const update = `PREFIX rv: <${RV}> DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n ${changes.controlDeletion ?? ''} }
     ${changes.deletion ?? ''}
