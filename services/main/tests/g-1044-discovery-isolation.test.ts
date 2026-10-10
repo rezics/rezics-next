@@ -7,7 +7,7 @@ const discovery = ['g-1016-discovery-refresh', 'g-1029-discovery-ready', 'g-1033
 test('G1044: discovery owns a reset batch after ten shared files and keeps every file in the plan', () => {
   const prior = ['g-591-contribution-basis', 'g-629-entity-page', 'g-629-statement-context',
     'g-630-zone-restore', 'g-630-zone-routes', 'g-650-resource-targets', 'g-652-target-reviews',
-    'g-653-types', 'g-657-zone-facets', 'g-693-wiki-delta']
+    'g-653-types', 'g-657-zone-facets', 'g-744-findings']
     .map(name => `tests/qa/integration/${name}.test.ts`);
   const plans = planIntegrationShards(new Map([...prior, ...discovery].map(file => [file, 1000])), 1);
   expect(plans).toHaveLength(1);
