@@ -107,11 +107,14 @@ export async function createNativeCredit(deps: MainWorkDependencies, request: Re
         const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 }, admission);
         if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
         if (result.status === 'guard-unmatched') {
-          if (!await creditedAgentVisible(env, input.agent)) throw new WorkReadMissing('Agent unavailable');
+          // The key is already claimed. Losing the Agent inside the write stays
+          // unsealed, so the same key is re-evaluated once the Agent is public.
+          if (!await creditedAgentVisible(env, input.agent)) throw new WorkReadUnavailable('Agent unavailable');
           await sealMetadataWorkEditAdmission(env, admission);
         }
       } catch (error) {
-        if (error instanceof CommandRejected || error instanceof WorkReadMissing) throw error;
+        if (error instanceof CommandRejected || error instanceof WorkReadMissing
+          || error instanceof WorkReadUnavailable) throw error;
         /* receipt resolves a lost response */
       }
     }
