@@ -53,7 +53,7 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * before the projection key is registered.
  * member reply draft proveRoot (modules/content-publication/reply-draft.ts):
  * sealed yes. The miss is rewritten to a denial and the draft admission is
- * then sealed. Launch's G-1597 has the file; not edited.
+ * then sealed. The file is under another Goal's open claim; not edited.
  * Every other instanceof WorkReadMissing or TargetUnavailable under
  * services/main/src is a read or a read helper: read, no state.
  */
