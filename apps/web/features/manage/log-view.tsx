@@ -33,7 +33,7 @@ export interface LogApi {
 export function bffLogApi(realm: string, actingSubject: string, language: string): LogApi {
   return {
     audit: (kind, cursor) => readAudit(browserMainApi(), realm, { actingSubject, kind, cursor }),
-    decisions: cursor => readPublicDecisions(browserMainApi(), realm, cursor),
+    decisions: cursor => readPublicDecisions(browserMainApi(undefined, { anonymous: true }), realm, cursor),
     async names(agents, works, known) {
       const main = browserMainApi();
       const [a, subjects] = await Promise.all([readAgents(main, agents, actingSubject),

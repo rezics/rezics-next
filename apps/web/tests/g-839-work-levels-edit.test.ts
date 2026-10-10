@@ -1,5 +1,6 @@
 import { resourceHref } from '../features/address/path.ts';
 import { describe, expect, mock, test } from 'bun:test';
+import * as navigation from 'next/navigation';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement } from 'react';
@@ -19,7 +20,9 @@ import {
 import { uiLocales } from '../i18n/define.ts';
 
 // The editors keep their submit state in React hooks and refresh through the App Router.
+// Keep the real exports: a later file in the same run still imports notFound.
 void mock.module('next/navigation', () => ({
+  ...navigation,
   useRouter: () => ({ refresh() {} }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),

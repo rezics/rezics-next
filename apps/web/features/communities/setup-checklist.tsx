@@ -11,7 +11,10 @@ import { communityText as words } from './messages.ts';
 type Setup = { topics: boolean; invite: boolean; skipped?: string[] };
 const key = (actor: string, realm: string) => `rezics:community-setup:${actor}:${realm}`;
 
-/** The creator's local, dismissible first-minutes guide; API reads verify public setup and the first post. */
+/**
+ * The creator's local, dismissible first-minutes guide. The first post is a
+ * public thread read and sends no session cookie.
+ */
 export function CommunitySetupChecklist({ realm, actor, path, locale, rules, icon, banner }: {
   realm: string; actor: string; path: string; locale: UiLocale;
   rules: boolean; icon: boolean; banner: boolean;
@@ -23,7 +26,7 @@ export function CommunitySetupChecklist({ realm, actor, path, locale, rules, ico
       const value = JSON.parse(localStorage.getItem(key(actor, realm)) ?? 'null') as Setup | null;
       if (value && typeof value.topics === 'boolean' && typeof value.invite === 'boolean') setSetup(value);
     } catch { /* The guide is optional when local storage is unavailable. */ }
-    void browserMainApi().v1.realms({ realm: realm.slice(-36) }).threads.get({
+    void browserMainApi(undefined, { anonymous: true }).v1.realms({ realm: realm.slice(-36) }).threads.get({
       query: { sort: 'new', limit: 1 },
     }).then(result => setFirstPost(Boolean(result.data?.items.length))).catch(() => undefined);
   }, [actor, realm]);

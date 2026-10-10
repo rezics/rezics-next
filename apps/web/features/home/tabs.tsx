@@ -427,9 +427,11 @@ function TopicFailure({ failure, reference }: { failure: ReadFailure; reference?
  * One followed topic's public works, newest first. The server renders the first
  * seek page; Show more asks for the next cursor and keeps what is already listed.
  */
-export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
+export function ConceptTopicFeed({ topic, initial, locale, messages, load, actingSubject }: {
   topic: FollowedConceptTab | null; initial: Loaded<ConceptFeedPage>; locale: UiLocale;
   messages: { home: HomeMessages }; load?: ConceptLoader;
+  /** Set when the first page was read as this Agent; later pages use the same session. */
+  actingSubject?: string;
 }) {
   const home = materializeData(messages.home, { locale });
   const [client, setClient] = useState<TopicClientPages | null>(null);
@@ -452,7 +454,8 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
     busy.current = true;
     setLoading(true);
     const requested = continuationRequest(fromStart, shown.cursor);
-    const read = await (load ?? (next => readConceptFeed(browserMainApi(), topic.id, locale, next)))(requested);
+    const read = await (load ?? (next => readConceptFeed(browserMainApi(undefined,
+      { anonymous: !actingSubject }), topic.id, locale, next)))(requested);
     busy.current = false;
     setLoading(false);
     if (!read.ok) { setNotice(nextContinuation(fromStart, read.failure)); return; }

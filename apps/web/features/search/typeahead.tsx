@@ -21,7 +21,8 @@ import { typeaheadMessages } from './typeahead-messages.ts';
 export type TypeaheadLoader = (prefix: string, locale: UiLocale) => Promise<TypeaheadItem[]>;
 
 const mainTypeahead: TypeaheadLoader = async (prefix, language) => {
-  const { data } = await browserMainApi().v1.search.typeahead.get({ query: { prefix, language } });
+  const { data } = await browserMainApi(undefined, { anonymous: true }).v1.search.typeahead.get({
+    query: { prefix, language } });
   return data?.items ?? [];
 };
 

@@ -73,7 +73,7 @@ export function ConditionBar({
   const maxValues = Math.min(suppliedMax ?? admittedMax, admittedMax);
   useEffect(() => {
     let active = true;
-    void browserMainApi()
+    void browserMainApi(undefined, { anonymous: true })
       .v1.facets.get()
       .then((result) => {
         const concept = result.data?.facets.find(

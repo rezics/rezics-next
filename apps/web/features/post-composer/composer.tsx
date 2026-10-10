@@ -139,7 +139,7 @@ export function PostComposer({
       void (async () => {
         setCommunityState('loading');
         try {
-          const { data } = await browserMainApi().v1.realms.get({
+          const { data } = await browserMainApi(undefined, { anonymous: true }).v1.realms.get({
             query: {
               limit: 20,
               sort: 'activity',
@@ -175,7 +175,7 @@ export function PostComposer({
       void (async () => {
         setWorkState('loading');
         try {
-          const { data } = await browserMainApi().v1.search.typeahead.get({
+          const { data } = await browserMainApi(undefined, { anonymous: true }).v1.search.typeahead.get({
             query: { prefix: workQuery.trim() },
           });
           if (!current) return;

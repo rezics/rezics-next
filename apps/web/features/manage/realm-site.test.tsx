@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import * as navigation from 'next/navigation';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { acting, header, iri, now, realm } from './fixtures.ts';
@@ -6,7 +7,9 @@ import { messages } from './messages.ts';
 import { realmEditSite } from './realm-site.ts';
 
 // The frame's tabs read the path. Stories and this render have no router.
+// Keep the real exports: a later file in the same run still imports notFound.
 void mock.module('next/navigation', () => ({
+  ...navigation,
   useRouter: () => ({ refresh() {} }),
   usePathname: () => '/manage/r/fiction',
   useSearchParams: () => new URLSearchParams(),

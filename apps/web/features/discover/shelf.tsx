@@ -85,8 +85,8 @@ function Pages({ first, query, load, conditionState, scope, heading, neighbour, 
   messages }: DiscoverShelfProps & { first: DiscoveryPage }) {
   const t = materializeData(messages, { locale });
   const client = useQueryClient();
-  const loader = load ?? (conditionState ? (page: DiscoveryQuery) => readQueryDiscovery(browserMainApi(),
-    conditionState, page) : bffDiscovery);
+  const loader = load ?? (conditionState ? (page: DiscoveryQuery) => readQueryDiscovery(
+    browserMainApi(undefined, { anonymous: !page.actingSubject }), conditionState, page) : bffDiscovery);
   const options = discoveryPagesOptions(query, first, loader);
   const pages = useInfiniteQuery(options);
   const list = useRef<HTMLUListElement>(null);

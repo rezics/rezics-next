@@ -10,8 +10,12 @@ export class ReadError extends Error {
 
 export type DiscoveryLoader = (query: DiscoveryQuery) => Promise<Loaded<DiscoveryPage>>;
 
-/** Pages after the server-rendered first one, read through the BFF. */
-export const bffDiscovery: DiscoveryLoader = query => readDiscovery(browserMainApi(), query);
+/**
+ * Pages after the server-rendered first one. Mine sends the session with its
+ * acting subject; every other shelf is public and sends neither.
+ */
+export const bffDiscovery: DiscoveryLoader = query =>
+  readDiscovery(browserMainApi(undefined, { anonymous: !query.actingSubject }), query);
 
 /**
  * A shelf's pages. The key includes the exact selection (scope, Realm, Context,
