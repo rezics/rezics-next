@@ -408,7 +408,7 @@ describe('dev seed plan', () => {
       expect(lines).toContain(`  ${person.name}: ${person.email} / ${person.password}`);
     }
     expect(steps.map(step => step.name)).toEqual([
-      'seedAccounts', 'seedClassics', 'seedWorks', 'seedFranchises', 'seedScopedSubjects', 'seedVnCatalogue', 'seedLnVnZones', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
+      'seedAccounts', 'seedClassics', 'seedWorks', 'seedFranchises', 'seedScopedSubjects', 'seedVnCatalogue', 'seedLnVnZones', 'seedAnimeMangaZones', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
       'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedZoneSites', 'seedBookConcepts',
       'seedOfficialThemes', 'seedOfficialWiki', 'seedShowcase',
