@@ -129,7 +129,7 @@ export class RealmReplyStore {
           await this.access.recordGraphOutcome(registered.id, terminal);
         } else if (action === 'reply.create') {
           const refused = await this.refuseUncommittedCreate(registered, null);
-          await this.access.recordGraphOutcome(registered.id, refused.terminal);
+          if (refused.terminal) await this.access.recordGraphOutcome(registered.id, refused.terminal);
           if (refused.replay) return { registered, graph: refused.terminal };
         }
         if (error instanceof AdmissionExpired && (action === 'reply.place' || action === 'reply.create'))
@@ -139,21 +139,25 @@ export class RealmReplyStore {
     }
   }
 
-  /** Graph cancellation is recorded before any Content rejection. A lost graph
-   * result leaves no rejection, so the same key can finish and the next key is
-   * not refused as a cancelled admission. */
+  /** Reject under the Content operation lock, then cancel in the graph. The
+   * graph step is idempotent: a lost result stays on this admission's rejected
+   * receipt and a later attempt finishes it. Another reply is a different
+   * admission and does not read that receipt. */
   private async refuseUncommittedCreate(admission: RegisteredAdmission, graph: ReplyGraphReceipt | null): Promise<{
-    terminal: ReplyGraphReceipt; replay: boolean }> {
+    terminal: ReplyGraphReceipt | null; replay: boolean }> {
     const outcome = await this.content.createOutcome(admission);
-    if (outcome === 'succeeded') {
+    if (outcome === 'succeeded' || outcome === null && await this.content.rejectCreate(admission) === 'succeeded') {
       return { terminal: await acknowledgeContentDecision(this.env, admission, graph), replay: true };
     }
-    if (outcome === 'rejected') {
-      return { terminal: graph?.outcome === 'cancelled' ? graph : await cancelPlacement(this.env, admission), replay: false };
-    }
-    const terminal = await cancelPlacement(this.env, admission);
-    await this.content.rejectCreate(admission);
-    return { terminal, replay: false };
+    return { terminal: await this.finishCreateCancellation(admission, graph), replay: false };
+  }
+
+  /** A rejected receipt names one admission. The graph cancel is the same
+   * receipt written again until it exists; a lost result stays retryable and
+   * is not a denial of any other admission. */
+  private async finishCreateCancellation(admission: RegisteredAdmission, graph: ReplyGraphReceipt | null): Promise<ReplyGraphReceipt> {
+    if (graph?.outcome === 'cancelled') return graph;
+    return cancelPlacement(this.env, admission);
   }
 
   private async seal(admission: RegisteredAdmission, known?: ReplyGraphReceipt | null): Promise<void> {
@@ -193,8 +197,16 @@ export class RealmReplyStore {
     let graph = opened.graph;
     try {
       const saved = await this.content.hasReceipt(admission.id, 'reply.create', digest);
+      // The receipt is this admission's. A different idempotency key is a
+      // different admission and must not inherit the denial.
+      if (saved && await this.content.createOutcome(admission) === 'rejected') {
+        graph = await this.finishCreateCancellation(admission, graph);
+        throw new RealmReplyDenied('reply admission was cancelled');
+      }
       if (graph?.outcome === 'cancelled' && !saved) {
-        await this.content.rejectCreate(admission);
+        if (await this.content.rejectCreate(admission) === 'succeeded') {
+          throw new RealmReplyUnavailable('reply identity is already admitted');
+        }
         throw new RealmReplyDenied('reply admission was cancelled');
       }
       // A lost-response retry retains its successful identity after a target edit.

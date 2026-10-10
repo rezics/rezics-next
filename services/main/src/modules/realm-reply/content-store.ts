@@ -187,20 +187,23 @@ export class RealmReplyContentStore {
   }
 
   /** The operation lock orders cancellation against an uncertain identity
-   * insert, so replay cannot publish an identity after Access sealed denial.
-   * Call it only after the graph cancellation receipt is durable: a lost graph
-   * result must not leave a rejection that the next attempt inherits. */
-  async rejectCreate(admission: RegisteredAdmission): Promise<void> {
+   * insert. Take it before any graph cancel: a concurrent attempt that already
+   * claimed either waits and then sees this rejection, or commits first and
+   * this returns succeeded so the caller replays that identity instead of
+   * sealing Cancelled over it. */
+  async rejectCreate(admission: RegisteredAdmission): Promise<'rejected' | 'succeeded'> {
     if (admission.action !== 'reply.create') throw new RealmReplyDenied('wrong reply action');
-    await this.transaction(async client => {
+    return this.transaction(async client => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`realm-reply:${admission.id}`]);
       const prior = (await client.query<Receipt>('SELECT action, request_digest, outcome FROM content.receipt WHERE operation_id = $1', [admission.id])).rows[0];
       if (prior) {
         if (prior.action !== 'reply.create' || prior.request_digest !== admission.requestDigest) throw new RealmReplyConflict('reply cancellation differs');
-        if (prior.outcome === 'succeeded') throw new RealmReplyUnavailable('reply identity is already admitted');
-        return;
+        if (prior.outcome === 'succeeded') return 'succeeded' as const;
+        if (prior.outcome !== 'rejected') throw new RealmReplyUnavailable('reply receipt outcome is unknown');
+        return 'rejected' as const;
       }
       await this.receipt(client, admission, 'reply.create', null, null, 'content.reply.cancelled', {}, 'rejected');
+      return 'rejected' as const;
     });
   }
 

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { WorkReadMissing } from '../src/modules/work/read-session.ts';
 import { growRealmThreads } from './g-1034-fixture.ts';
 import { realmVisibilityFixture } from './realm-visibility-fixture.ts';
 
@@ -109,6 +110,9 @@ test('one reply costs the same statements and Fuseki requests at 100 and 1,000 t
       const cost = {
         statements: Object.values(commands).reduce((sum, command) => sum + command.statements, 0),
         fusekiRequests: Object.values(commands).reduce((sum, command) => sum + command.fusekiRequests, 0),
+        content: Object.values(commands).reduce((sum, command) => sum + command.content, 0),
+        access: Object.values(commands).reduce((sum, command) => sum + command.access, 0),
+        account: Object.values(commands).reduce((sum, command) => sum + command.account, 0),
         ms: Date.now() - started, commands,
       };
       return { reply: identity.reply as string, cost };
@@ -162,12 +166,103 @@ test('one reply costs the same statements and Fuseki requests at 100 and 1,000 t
     const admission = await fx.accessPool.query<{ id: string }>(
       `SELECT id FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [poisonedKey]);
     expect(admission.rowCount).toBe(1);
-    const receipt = await fx.contentPool.query(
+    const receipt = await fx.contentPool.query<{ outcome: string }>(
       'SELECT outcome FROM content.receipt WHERE operation_id = $1', [admission.rows[0]!.id]);
-    expect(receipt.rowCount).toBe(0);
+    expect(receipt.rows[0]?.outcome).toBe('rejected');
     const next = await postReply();
     expect(next.reply.startsWith('https://rezics.com/id/')).toBe(true);
   } finally {
     await fx.close();
   }
 }, 420_000);
+
+test('a same-key create during cancellation cannot leave a live identity under a cancelled graph', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  const command = fx.fuseki.commandWithReceipt.bind(fx.fuseki);
+  try {
+    const draftInput = fx.draftInput();
+    const draft = await fx.call('POST', '/v1/member-reply-drafts', draftInput);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const body = {
+      profile: 'realm-reply-identity-v1', reply: draftInput.reply, variantId: draftInput.variantId,
+      revisionId: draft.body.revisionId, author: fx.actor, rootTarget: draftInput.rootTarget,
+      rootRevision: draftInput.rootRevision, parentReply: null, parentRevision: null, contextRevision: null,
+    };
+    const key = randomUUID();
+    const arm = { on: false };
+    let failedRoot = false;
+    let pausedCancel = false;
+    let releaseCancel = () => {};
+    const cancelPaused = new Promise<void>(resolve => {
+      const connect = fx.accessPool.connect.bind(fx.accessPool) as (...args: unknown[]) => unknown;
+      const seen = new WeakSet<object>();
+      const wrap = (client: PoolClient) => {
+        if (seen.has(client)) return;
+        seen.add(client);
+        const original = client.query.bind(client) as (...args: unknown[]) => unknown;
+        client.query = ((...args: unknown[]) => {
+          const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text;
+          if (typeof text === 'string' && text.includes("'admission.claimed'")) arm.on = true;
+          return original(...args);
+        }) as PoolClient['query'];
+      };
+      fx.accessPool.connect = ((...args: unknown[]) => {
+        if (typeof args[0] === 'function') {
+          const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
+          return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
+            if (client) wrap(client);
+            callback(error, client, done);
+          });
+        }
+        return Promise.resolve(connect()).then(client => {
+          wrap(client as PoolClient);
+          return client;
+        });
+      }) as Pool['connect'];
+      resolve();
+    });
+    await cancelPaused;
+    fx.fuseki.query = async (sparql, limit) => {
+      if (arm.on && !failedRoot && sparql.includes('rv:ErasedRevision')) {
+        failedRoot = true;
+        throw new WorkReadMissing('Reply root is unavailable');
+      }
+      return query(sparql, limit);
+    };
+    const release = new Promise<void>(resolve => { releaseCancel = resolve; });
+    fx.fuseki.commandWithReceipt = async (envelope) => {
+      if (!pausedCancel && envelope.update.includes('rv:outcome rv:Cancelled')) {
+        pausedCancel = true;
+        await release;
+      }
+      return command(envelope);
+    };
+    const canceller = fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    const started = Date.now();
+    while (!pausedCancel) {
+      if (Date.now() - started > 60_000) throw new Error('cancellation did not reach the graph command');
+      await Bun.sleep(20);
+    }
+    const racer = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    releaseCancel();
+    const cancelled = await canceller;
+    expect(racer.status, JSON.stringify(racer.body)).not.toBe(201);
+    expect(cancelled.status, JSON.stringify(cancelled.body)).not.toBe(201);
+    const admission = await fx.accessPool.query<{ id: string; graph_outcome: string | null }>(
+      `SELECT id, graph_outcome FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [key]);
+    expect(admission.rowCount).toBe(1);
+    const receipt = await fx.contentPool.query<{ outcome: string }>(
+      'SELECT outcome FROM content.receipt WHERE operation_id = $1', [admission.rows[0]!.id]);
+    const live = await fx.contentPool.query('SELECT 1 FROM content.reply WHERE id = $1', [body.reply]);
+    const identity = receipt.rows[0]?.outcome === 'succeeded' && (live.rowCount ?? 0) > 0;
+    expect(admission.rows[0]!.graph_outcome === 'cancelled' && identity).toBe(false);
+    expect(receipt.rows[0]?.outcome).toBe('rejected');
+    expect(live.rowCount).toBe(0);
+    expect(admission.rows[0]!.graph_outcome).toBe('cancelled');
+  } finally {
+    fx.fuseki.query = query;
+    fx.fuseki.commandWithReceipt = command;
+    await fx.close();
+  }
+}, 120_000);
