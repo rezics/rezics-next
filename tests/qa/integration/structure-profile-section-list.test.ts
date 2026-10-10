@@ -8,7 +8,7 @@ type Created = { structure: string; revision: string; occurrences?: string[] };
 type Page = { occurrences: Array<{ occurrence: string; role: string; target?: string;
   qualifier?: { type: string; id?: string; values?: { note?: string } } }> };
 
-test('G-1592: a section list is created, noted, updated, withheld and refused as a cycle', async () => {
+test('a section list is created, noted, updated, withheld and refused as a cycle', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structure-profile-section-list-${randomUUID()}`));
