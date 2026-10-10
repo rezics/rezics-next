@@ -12,7 +12,6 @@ const scanRoots = ['tests/qa', 'services/main/tests'];
 
 /** Wrappers that record a stack query without the shared foreground meter. */
 const allowlist: Record<string, string> = {
-    'Canned Fuseki doubles, including http://unused.invalid, replace query to serve fixture rows. They are not the client background workers share.',
   'tests/qa/integration/zone-document-home.test.ts':
     'Counts rv:publishedPage membership probes. Worker ticks do not issue that shape, and another task holds the file.',
 };
