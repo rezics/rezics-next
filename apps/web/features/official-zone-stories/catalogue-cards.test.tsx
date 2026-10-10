@@ -95,26 +95,33 @@ test('the source credit is the footer, once, as the visual-novel Zone places its
   const animeHead = draw(createElement(AnimeBrowseHeader, {
     zone: catalogueZone('anime', 'en'), Link, fallback: null, filter: null, filtered: false, year,
   }));
+  const credit = { sourceHref: 'https://bgm.tv', licenceHref: 'https://creativecommons.org/licenses/by-sa/3.0/' };
   const animeFoot = draw(createElement(AnimeFooter, {
-    zone: catalogueZone('anime', 'en'), Link, fallback: null,
+    zone: catalogueZone('anime', 'en'), Link, fallback: null, credit,
   }));
   expect(animeHead).not.toContain('Bangumi Archive');
   expect(animeHead).toContain('min-h-11');
   expect(animeHead).toContain('gap-2');
   expect(animeHead).toContain('rounded-xl border border-border/80 bg-card px-4');
-  expect(animeFoot).toContain('Bangumi Archive wiki export');
+  expect(animeFoot).toContain('href="https://bgm.tv"');
+  expect(animeFoot).toContain('>Bangumi</a>');
+  expect(animeFoot).toContain('href="https://creativecommons.org/licenses/by-sa/3.0/"');
+  expect(animeFoot).toContain('>CC BY-SA 3.0</a>');
 
   const mangaHead = draw(createElement(MangaBrowseHeader, {
     zone: catalogueZone('manga', 'en'), Link, fallback: null, filter: null, filtered: false, year,
   }));
   const mangaFoot = draw(createElement(MangaFooter, {
-    zone: catalogueZone('manga', 'en'), Link, fallback: null,
+    zone: catalogueZone('manga', 'en'), Link, fallback: null, credit,
   }));
   expect(mangaHead).not.toContain('Bangumi Archive');
   expect(mangaHead).toContain('min-h-11');
   expect(mangaHead).toContain('gap-2');
   expect(mangaHead).toContain('rounded-xl border border-border/80 bg-card px-4');
-  expect(mangaFoot).toContain('Bangumi Archive wiki export');
+  expect(mangaFoot).toContain('href="https://bgm.tv"');
+  expect(mangaFoot).toContain('>Bangumi</a>');
+  expect(mangaFoot).toContain('href="https://creativecommons.org/licenses/by-sa/3.0/"');
+  expect(mangaFoot).toContain('>CC BY-SA 3.0</a>');
 });
 
 test('the year control sits in the browse column, in the same row as Filters', () => {

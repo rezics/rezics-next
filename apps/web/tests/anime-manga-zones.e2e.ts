@@ -62,6 +62,15 @@ async function chooseFormat(page: Page, filters: string, name: RegExp) {
   await link.first().click();
 }
 
+async function shotFooter(page: Page, shot: (name: string) => Promise<void>, name: string) {
+  const footer = page.locator('footer').filter({ has: page.getByRole('link', { name: 'Bangumi' }) });
+  await footer.scrollIntoViewIfNeeded();
+  await expect(footer.getByRole('link', { name: 'Bangumi' })).toHaveAttribute('href', 'https://bgm.tv');
+  await expect(footer.getByRole('link', { name: 'CC BY-SA 3.0' })).toHaveAttribute('href',
+    'https://creativecommons.org/licenses/by-sa/3.0/');
+  await shot(name);
+}
+
 async function showYear(page: Page, label: string, submit: string, year: string) {
   await page.getByLabel(label).fill(year);
   await page.getByRole('button', { name: submit }).click();
@@ -101,6 +110,7 @@ for (const locale of locales) {
       await expect(animePanel).not.toContainText(/chapter/i);
       await animePanel.scrollIntoViewIfNeeded();
       await shot('anime-panel');
+      if (viewport.width === 390) await shotFooter(page, shot, 'anime-footer');
 
       await page.goto(localizedPath(spaceHref(data.manga.handle, 'site', ['browse']), locale));
       await chooseFormat(page, words.filters, words.manga);
@@ -121,6 +131,7 @@ for (const locale of locales) {
       await expect(mangaPanel.getByText(/\d+ episodes/)).toHaveCount(0);
       await mangaPanel.scrollIntoViewIfNeeded();
       await shot('manga-panel');
+      if (viewport.width === 390) await shotFooter(page, shot, 'manga-footer');
     });
   }
 }

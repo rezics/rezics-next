@@ -92,15 +92,26 @@ export function AnimeBrowseHeader({ zone, year, Link }: BrowseHeaderSlotProps) {
     directory={t.yearDirectory} bounded={t.yearBounded} Link={Link} />;
 }
 
-/** What this Zone covers, the export it names, and the manga Zone beside it. */
-export function AnimeFooter({ zone, Link }: ZoneSlotProps) {
+/** Bangumi, and the CC BY-SA 3.0 deed, at the addresses the host supplies. */
+function SourceCredit({ t, credit }: { t: Strings; credit: ZoneSlotProps['credit'] }) {
+  const source = credit?.sourceHref
+    ? <a href={credit.sourceHref} rel="noreferrer noopener">{t.sourceName}</a> : t.sourceName;
+  const licence = credit?.licenceHref
+    ? <a href={credit.licenceHref} rel="noreferrer noopener">{t.licenceName}</a> : t.licenceName;
+  return <p className="anime-source">
+    {t.attributionBefore}{source}{t.attributionBetween}{licence}{t.attributionAfter}
+  </p>;
+}
+
+/** What this Zone covers, the source it credits, and the manga Zone beside it. */
+export function AnimeFooter({ zone, Link, credit }: ZoneSlotProps) {
   const t = strings(zone.locale);
   return <footer className="anime-footer">
     <div className="anime-footer-grid">
       <section aria-labelledby="anime-coverage">
         <h2 id="anime-coverage" className="anime-footer-title">{t.coverageTitle}</h2>
         <p>{t.coverageBody}</p>
-        <p className="anime-source">{t.attribution}</p>
+        <SourceCredit t={t} credit={credit} />
       </section>
       <section aria-labelledby="anime-sibling">
         <h2 id="anime-sibling" className="anime-footer-title">{t.siblingTitle}</h2>

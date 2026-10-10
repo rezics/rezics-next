@@ -284,6 +284,11 @@ export interface ZoneSlotProps {
    * in it and navigates within the app. Use it for every link to a page.
    */
   Link: ComponentType<ZoneLinkProps>;
+  /**
+   * Source and licence addresses for a footer credit. The host supplies them.
+   * A package names the source and does not carry the address itself.
+   */
+  credit?: { sourceHref: string; licenceHref: string } | null;
 }
 export interface HeaderSlotProps extends ZoneSlotProps {
   /** Platform controls (follow, the Zone menu) the header must show. */

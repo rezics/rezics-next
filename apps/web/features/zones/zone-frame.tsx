@@ -96,6 +96,8 @@ export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions
     {crumbs ? <ZoneBreadcrumbs crumbs={crumbs.items} label={crumbs.label} /> : null}
     {children}
     {Footer ? <SlotBoundary slot="footer" fallback={null}>
-      <Footer zone={zone} fallback={null} Link={LocalizedLink} /></SlotBoundary> : null}
+      <Footer zone={zone} fallback={null} Link={LocalizedLink} credit={zone.slug === 'anime' || zone.slug === 'manga'
+        ? { sourceHref: 'https://bgm.tv', licenceHref: 'https://creativecommons.org/licenses/by-sa/3.0/' }
+        : null} /></SlotBoundary> : null}
   </div>;
 }

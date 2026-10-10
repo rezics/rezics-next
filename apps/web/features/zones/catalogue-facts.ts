@@ -21,6 +21,11 @@ const DATE_TIME = /^(\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[
 
 const empty = (): ZoneCatalogueFacts => ({ format: null, years: [], count: null, countName: null, unavailable: false });
 
+/** Catalogue facts plus the statement pages' rights reads, one per page, in page order. */
+export interface CatalogueFacts extends ZoneCatalogueFacts {
+  factObligations: StatementPage['factObligations'][];
+}
+
 function daysInMonth(year: number, month: number): number {
   const date = new Date(0);
   date.setUTCFullYear(year, month, 0);
@@ -143,7 +148,7 @@ async function countPredicate(notation: 'episode-count' | 'volume-count',
  * `formatNames` are the public names of this Zone's formats; any other classification stays off the panel.
  */
 export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'episodes' | 'volumes',
-  formatNames: readonly string[]): Promise<ZoneCatalogueFacts> {
+  formatNames: readonly string[]): Promise<CatalogueFacts> {
   // A browse card names the Work by its IRI. Statement and classification paths take the UUID.
   const resource = idOf(id) ?? id;
   const names = new Set(formatNames);
@@ -152,7 +157,7 @@ export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'e
     statementPages(resource),
     countPredicate(count === 'episodes' ? 'episode-count' : 'volume-count', locale),
   ]);
-  if (!classifications.ok || !pages.ok || !predicate.ok) return { ...empty(), unavailable: true };
+  if (!classifications.ok || !pages.ok || !predicate.ok) return { ...empty(), unavailable: true, factObligations: [] };
   const matched = classifications.data.items.find(item => names.has(item.name.value));
   const format: ZoneText | null = matched
     ? { value: matched.name.value, lang: matched.name.language, dir: matched.name.direction }
@@ -163,6 +168,7 @@ export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'e
     count: predicate.data ? countFrom(pages.data, predicate.data.predicate) : null,
     countName: predicate.data?.name ?? null,
     unavailable: false,
+    factObligations: pages.data.map(page => page.factObligations),
   };
 }
 

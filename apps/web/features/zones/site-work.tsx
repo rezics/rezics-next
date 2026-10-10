@@ -6,7 +6,8 @@ import { getMessages } from '../../i18n/server.ts';
 import { zoneText } from '../realm/adapt.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { loadWork } from '../work-page/read.ts';
-import { publicationYearsOf, readCatalogueFacts } from './catalogue-facts.ts';
+import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
+import { type CatalogueFacts, publicationYearsOf, readCatalogueFacts } from './catalogue-facts.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
 import {
   idOf,
@@ -54,6 +55,14 @@ export function workBase(
  * The Work's own page and tabs inside the Zone's frame, with the Zone's Realm as their scope unless the URL
  * names another. Nothing here is a second copy of the Work page; `base` only moves its addresses.
  */
+/** One rights mark per run of the statement pages behind the imported facts. */
+function CatalogueFactRights({ facts, locale }: { facts: CatalogueFacts; locale: UiLocale }) {
+  const imported = facts.format !== null || facts.years.length > 0 || facts.count !== null;
+  if (!imported || facts.unavailable) return null;
+  return rightsRuns(facts.factObligations, item => item).map((run, index) =>
+    <RightsMark key={index} rights={run.rights} locale={locale} />);
+}
+
 const recordedStatus = (value: string | null | undefined): ZoneWork['status'] =>
   value === 'ongoing' || value === 'completed' || value === 'hiatus' || value === 'upcoming'
     || value === 'cancelled' ? value : null;
@@ -100,6 +109,7 @@ export async function ZoneWorkPage({
             <Panel zone={zone} work={{ id: work.id, href: base.path, title: zoneText(work.header.title),
               status: recordedStatus(work.header.completionStatus) }} facts={facts} credits={null} fallback={null}
               Link={LocalizedLink} />
+            <CatalogueFactRights facts={facts} locale={locale} />
           </SlotBoundary> : null}
           <WorkOverview {...common} work={work.header} scope={scope} context={context} lead={lead} />
         </>

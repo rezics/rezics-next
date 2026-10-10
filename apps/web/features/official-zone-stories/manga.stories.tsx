@@ -59,7 +59,7 @@ type Story = StoryObj<typeof meta>;
 const fits = async () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
 async function recorded(canvasElement: HTMLElement, copy: {
-  year: string; volumes: string; status: string; cancelled: string; sibling: string; archive: string | RegExp;
+  year: string; volumes: string; status: string; cancelled: string; sibling: string;
   cardOmits: readonly string[]; panelNames: readonly string[];
 }) {
   const canvas = within(canvasElement);
@@ -75,7 +75,8 @@ async function recorded(canvasElement: HTMLElement, copy: {
   const gap = canvasElement.querySelectorAll('[data-catalogue-panel]')[1]?.textContent ?? '';
   for (const line of copy.panelNames) await expect(gap).toContain(line);
   await expect(canvas.getByRole('link', { name: copy.sibling })).toBeVisible();
-  await expect(canvas.getAllByText(copy.archive)).toHaveLength(1);
+  await expect(canvas.getByRole('link', { name: 'Bangumi' })).toHaveAttribute('href', 'https://bgm.tv');
+  await expect(canvas.getByRole('link', { name: 'CC BY-SA 3.0' })).toHaveAttribute('href', 'https://creativecommons.org/licenses/by-sa/3.0/');
   await expect(canvas.queryByText('catalogue-editor')).toBeNull();
   await expect(canvas.queryByText(/\d+ episodes/)).toBeNull();
   await fits();
@@ -88,7 +89,7 @@ export const EnglishDesktop: Story = {
       year: 'Publication year', volumes: '21 volumes', status: 'Completed', cancelled: 'Cancelled',
       cardOmits: ['Year not recorded', 'Volume count not recorded'],
       panelNames: ['One-shot', 'Year not recorded', 'Volume count not recorded', 'Upcoming'],
-      sibling: 'Open the Anime Zone', archive: /Bangumi Archive wiki export/,
+      sibling: 'Open the Anime Zone',
     });
     await captureCatalogueStory(canvasElement, 'manga-en-desktop');
   },
@@ -101,7 +102,7 @@ export const EnglishPhone: Story = {
       year: 'Publication year', volumes: '21 volumes', status: 'Completed', cancelled: 'Cancelled',
       cardOmits: ['Year not recorded', 'Volume count not recorded'],
       panelNames: ['One-shot', 'Year not recorded', 'Volume count not recorded', 'Upcoming'],
-      sibling: 'Open the Anime Zone', archive: /Bangumi Archive wiki export/,
+      sibling: 'Open the Anime Zone',
     });
     await captureCatalogueStory(canvasElement, 'manga-en-phone');
   },
@@ -116,7 +117,7 @@ export const JapaneseDesktop: Story = {
       year: '公開年', volumes: '21 巻', status: '完結', cancelled: '中止',
       cardOmits: ['年は記録されていません', '巻数は記録されていません'],
       panelNames: ['One-shot', '年は記録されていません', '巻数は記録されていません', '未発売'],
-      sibling: 'アニメゾーンを開く', archive: /Bangumi Archive/,
+      sibling: 'アニメゾーンを開く',
     });
     await captureCatalogueStory(canvasElement, 'manga-ja-desktop');
   },
@@ -131,7 +132,7 @@ export const JapanesePhone: Story = {
       year: '公開年', volumes: '21 巻', status: '完結', cancelled: '中止',
       cardOmits: ['年は記録されていません', '巻数は記録されていません'],
       panelNames: ['One-shot', '年は記録されていません', '巻数は記録されていません', '未発売'],
-      sibling: 'アニメゾーンを開く', archive: /Bangumi Archive/,
+      sibling: 'アニメゾーンを開く',
     });
     await captureCatalogueStory(canvasElement, 'manga-ja-phone');
   },
