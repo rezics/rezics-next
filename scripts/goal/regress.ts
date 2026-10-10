@@ -28,10 +28,23 @@ export interface Execution {
 export interface Batch {
   id: string; tier: RegressionTier; files: string[]; state: 'pending' | 'running' | 'done'; attempts: Execution[];
 }
+/** The diagnosis fields worth carrying from an earlier run, without its probe log. */
+export interface RecordedDiagnosis {
+  status: Diagnosis['status']; classification: Classification; before?: string; after: string;
+  goal?: string; taskIds?: string[]; reason?: string;
+}
 export interface Diagnosis {
-  file: string; status: 'attributed' | 'inherited' | 'unavailable' | 'inconclusive'; classification: Classification;
+  file: string; status: 'attributed' | 'inherited' | 'unavailable' | 'inconclusive' | 'undiagnosed'; classification: Classification;
   before?: string; after: string; goal?: string; taskIds?: string[]; probes: { commit: string; outcome: string }[];
   artifactPaths: string[]; reason?: string;
+  /** Finished run in which this file was already failing. */
+  earlierRunId?: string;
+  /** That run's diagnosis for this file, when it recorded one. */
+  earlierDiagnosis?: RecordedDiagnosis;
+}
+/** Failures that are new, still failing, or fixed since the baseline run. */
+export interface RegressionComparison {
+  earlierRunId: string; new: string[]; inherited: string[]; fixed: string[];
 }
 export interface InboxEntry {
   runId: string; atCommit: string; failingTests: string[]; before?: string; after: string;
@@ -45,6 +58,12 @@ export interface Manifest {
   diagnoses: Diagnosis[];
   /** Reserved before starting a probe, including interrupted probes, so resume cannot reset the eight-probe bound. */
   probeCounts?: Record<string, number>;
+  /** Wall-clock milliseconds already spent diagnosing this run. Resume continues from this total. */
+  diagnosisSpentMs?: number;
+  /** Closest finished baseline, chosen once so resume classifies against the same run. */
+  baselineRunId?: string;
+  /** New, inherited and fixed failures versus that baseline. */
+  comparison?: RegressionComparison;
   /** Browser tiers are inventoried but excluded from routine runs; older manifests included them. */
   selection?: 'routine' | 'explicit';
 }
@@ -56,6 +75,10 @@ export interface RegressionOptions {
   runner?: (checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string) => Promise<Execution>;
   waitForTurn?: typeof waitForRegressionTurn;
   route?: (entry: InboxEntry) => Promise<void>;
+  /** Clock for the diagnosis budget. Production uses `Date.now`. */
+  now?: () => number;
+  /** Overrides `GOAL_REGRESS_DIAGNOSIS_BUDGET_MS` for one run. */
+  diagnosisBudgetMs?: number;
 }
 export interface RegressionTurnOptions {
   status?: () => string;
@@ -720,10 +743,129 @@ export function lastPassingCommit(repo: string, stateDir: string, file: string, 
   return candidates.reduce<string | undefined>((latest, candidate) => !latest || ancestor(repo, latest, candidate) ? candidate : latest, undefined);
 }
 
+/** Diagnosis wall clock for one regression run. An empty value keeps the two-hour default. */
+export function regressionDiagnosisBudgetMs(configured: string | undefined = process.env.GOAL_REGRESS_DIAGNOSIS_BUDGET_MS): number {
+  if (configured === undefined || configured === '') return 2 * 3_600_000;
+  if (!/^\d+$/.test(configured) || !Number.isSafeInteger(Number(configured))) {
+    throw new Error('GOAL_REGRESS_DIAGNOSIS_BUDGET_MS must be a non-negative integer');
+  }
+  return Number(configured);
+}
+
+function regressionManifestPath(stateDir: string, runId: string): string {
+  return join(stateDir, 'regress', runId, 'manifest.json');
+}
+
+function readRegressionManifest(stateDir: string, runId: string): Manifest | undefined {
+  const path = regressionManifestPath(stateDir, runId);
+  return existsSync(path) ? json<Manifest>(path) : undefined;
+}
+
+function fileOutcomes(manifest: Manifest): { failed: Set<string>; passed: Set<string> } {
+  const failed = new Set(manifest.files.filter(file => file.outcome === 'failed').map(file => file.file));
+  const passed = new Set(manifest.files.filter(file => file.outcome === 'passed' && !failed.has(file.file)).map(file => file.file));
+  return { failed, passed };
+}
+
+function sortedFiles(files: Iterable<string>): string[] {
+  return [...files].sort((left, right) => left.localeCompare(right));
+}
+
+function compareWithEarlierRun(current: Manifest, earlier: Manifest): RegressionComparison {
+  const previous = fileOutcomes(earlier);
+  const present = fileOutcomes(current);
+  return {
+    earlierRunId: earlier.runId,
+    new: sortedFiles([...present.failed].filter(file => !previous.failed.has(file))),
+    inherited: sortedFiles([...present.failed].filter(file => previous.failed.has(file))),
+    fixed: sortedFiles([...previous.failed].filter(file => present.passed.has(file))),
+  };
+}
+
+export function comparisonReport(comparison: RegressionComparison): string[] {
+  return [
+    `Since ${comparison.earlierRunId}: ${comparison.new.length} new, ${comparison.inherited.length} inherited, ${comparison.fixed.length} fixed`,
+    ...comparison.new.map(file => `new: ${file}`),
+    ...comparison.inherited.map(file => `inherited: ${file}`),
+    ...comparison.fixed.map(file => `fixed: ${file}`),
+  ];
+}
+
+/** Closest finished run on `pinned`'s first-parent history whose build succeeded.
+ * A later execution of an older commit stays behind that nearer result, so known failures are not bisected back across it. */
+function earlierRegressionRun(repo: string, stateDir: string, pinned: string, currentRunId: string): Manifest | undefined {
+  const directory = join(stateDir, 'regress');
+  if (!existsSync(directory)) return undefined;
+  const runs: Manifest[] = [];
+  for (const name of readdirSync(directory)) {
+    if (name === currentRunId) continue;
+    const manifest = readRegressionManifest(stateDir, name);
+    if (!manifest?.finishedAt || manifest.status === 'running' || !manifest.preflight?.ok || !manifest.atCommit) continue;
+    if (!ancestor(repo, manifest.atCommit, pinned)) continue;
+    runs.push(manifest);
+  }
+  if (!runs.length) return undefined;
+  const index = new Map(git(repo, ['rev-list', '--first-parent', pinned]).split('\n').filter(Boolean)
+    .map((commit, position) => [commit, position]));
+  return runs.reduce((best, candidate) => closerRegressionRun(repo, index, best, candidate));
+}
+
+function closerRegressionRun(repo: string, index: Map<string, number>, best: Manifest, candidate: Manifest): Manifest {
+  const bestIndex = index.get(best.atCommit);
+  const candidateIndex = index.get(candidate.atCommit);
+  if (bestIndex !== undefined && candidateIndex !== undefined) {
+    if (bestIndex !== candidateIndex) return candidateIndex < bestIndex ? candidate : best;
+    return candidate.startedAt > best.startedAt ? candidate : best;
+  }
+  if (candidateIndex !== undefined) return candidate;
+  if (bestIndex !== undefined) return best;
+  if (best.atCommit !== candidate.atCommit) {
+    if (ancestor(repo, best.atCommit, candidate.atCommit)) return candidate;
+    if (ancestor(repo, candidate.atCommit, best.atCommit)) return best;
+  }
+  return candidate.startedAt > best.startedAt ? candidate : best;
+}
+
+function recordedDiagnosis(diagnosis: Diagnosis): RecordedDiagnosis {
+  const recorded: RecordedDiagnosis = { status: diagnosis.status, classification: diagnosis.classification, after: diagnosis.after };
+  if (diagnosis.before) recorded.before = diagnosis.before;
+  if (diagnosis.goal) recorded.goal = diagnosis.goal;
+  if (diagnosis.taskIds) recorded.taskIds = diagnosis.taskIds;
+  if (diagnosis.reason) recorded.reason = diagnosis.reason;
+  return recorded;
+}
+
+function inheritedFailure(file: string, earlier: Manifest, initial: Execution, pinned: string, artifactPaths: string[]): Diagnosis {
+  const prior = earlier.diagnoses.find(item => item.file === file);
+  const diagnosis: Diagnosis = {
+    file, status: 'inherited', classification: prior?.classification ?? initial.classification ?? 'deterministic',
+    before: prior?.before, after: prior?.after ?? pinned, goal: prior?.goal, taskIds: prior?.taskIds, probes: [],
+    artifactPaths: [...artifactPaths], reason: prior?.reason ?? `Failed in ${earlier.runId}`, earlierRunId: earlier.runId,
+  };
+  if (prior) diagnosis.earlierDiagnosis = recordedDiagnosis(prior);
+  return diagnosis;
+}
+
+function undiagnosedFailure(file: string, initial: Execution, pinned: string, artifactPaths: string[]): Diagnosis {
+  return {
+    file, status: 'undiagnosed', classification: initial.classification ?? 'deterministic', after: pinned, probes: [],
+    artifactPaths: [...artifactPaths], reason: 'budget',
+  };
+}
+
+function diagnosisReport(item: Diagnosis): string {
+  const status = item.status === 'undiagnosed' ? `undiagnosed: ${item.reason ?? 'budget'}` : `${item.status}, ${item.classification}`;
+  const reason = item.status === 'undiagnosed' ? '' : item.reason ?? '';
+  const earlier = item.earlierRunId ? ` earlier run ${item.earlierRunId}` : '';
+  return `${item.file}: ${status}; ${item.before ?? '?'}..${item.after}; ${item.goal ?? 'program'} ${item.taskIds?.join(', ') ?? ''}; ${reason}${earlier}`;
+}
+
 export async function runRegression(options: RegressionOptions): Promise<Manifest> {
   const { repo, stateDir } = options;
   const configuredSlots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
   if (!Number.isSafeInteger(configuredSlots) || configuredSlots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+  const diagnosisBudget = options.diagnosisBudgetMs !== undefined
+    ? regressionDiagnosisBudgetMs(String(options.diagnosisBudgetMs)) : regressionDiagnosisBudgetMs();
   const slotLimit = Math.min(configuredSlots, 2);
   const runner = options.runner ?? runBatch;
   const runId = options.resume ?? options.runId ?? newRunId();
@@ -860,6 +1002,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const runManifest = manifest;
     const save = () => atomic(path, runManifest);
     runManifest.probeCounts ??= {};
+    runManifest.diagnosisSpentMs ??= 0;
     save();
     // Persist the SHA and selection before installation, so a stop during preparation can resume that exact revision.
     await checkoutAt(pinned);
@@ -964,6 +1107,22 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
       runManifest.diagnoses.push(diagnosis); save();
     };
+    // The budget starts when diagnosis starts. The preceding execution is not part of it.
+    const clock = options.now ?? Date.now;
+    let diagnosisMark = clock();
+    const chargeDiagnosis = () => {
+      const current = clock();
+      runManifest.diagnosisSpentMs = (runManifest.diagnosisSpentMs ?? 0) + Math.max(0, current - diagnosisMark);
+      diagnosisMark = current;
+    };
+    if (!runManifest.baselineRunId) {
+      const selected = earlierRegressionRun(repo, stateDir, pinned, runId);
+      if (selected) { runManifest.baselineRunId = selected.runId; save(); }
+    }
+    const earlierRun = runManifest.baselineRunId ? readRegressionManifest(stateDir, runManifest.baselineRunId) : undefined;
+    const earlierOutcomes = earlierRun ? fileOutcomes(earlierRun) : undefined;
+    const failedNow = (batch: Batch, file: string) => runManifest.files.some(item =>
+      item.tier === batch.tier && item.file === file && item.outcome === 'failed');
     const retainUnavailableAssertions = async (batch: Batch, initial: Execution, artifactPaths: string[], reason: string) => {
       for (const file of assertionFiles(batch, initial)) {
         if (runManifest.diagnoses.some(item => item.file === file)) continue;
@@ -1006,6 +1165,16 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const runnable = hang ? { ...batch, files: batch.files.filter(file => file !== hang.file) } : batch;
       for (const file of failing) {
         if (runManifest.diagnoses.some(item => item.file === file)) continue;
+        chargeDiagnosis();
+        // A failure already present in the baseline needs no confirmation, isolation or bisect.
+        if (earlierRun && earlierOutcomes?.failed.has(file) && failedNow(batch, file)) {
+          await routeFileFailure(file, initial, inheritedFailure(file, earlierRun, initial, pinned, [...initial.artifactPaths]));
+          continue;
+        }
+        if ((runManifest.diagnosisSpentMs ?? 0) >= diagnosisBudget) {
+          await routeFileFailure(file, initial, undiagnosedFailure(file, initial, pinned, [...initial.artifactPaths]));
+          continue;
+        }
         const diagnosis: Diagnosis = { file, status: 'inconclusive', classification: initial.classification ?? 'deterministic',
           after: pinned, probes: [], artifactPaths: [...initial.artifactPaths] };
         repeatBatch ??= await execute(pinned, runnable, `${batch.id}/confirm`);
@@ -1047,7 +1216,15 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
             runManifest.probeCounts![file] = count + 1; save();
             return count + 1;
           };
-          await bisectFailure(repo, stateDir, pinned, file, alone, events, diagnosis, checkoutAt, prepared, execute, takeProbe);
+          // The baseline already passed this file at the pinned commit, so older history cannot explain it.
+          if (earlierRun && earlierOutcomes?.passed.has(file) && earlierRun.atCommit === pinned) {
+            diagnosis.status = 'inconclusive';
+            diagnosis.reason = `Passed in ${earlierRun.runId} at this commit`;
+            diagnosis.earlierRunId = earlierRun.runId;
+          } else {
+            const lowerBound = earlierRun && earlierOutcomes?.passed.has(file) ? earlierRun.atCommit : undefined;
+            await bisectFailure(repo, stateDir, pinned, file, alone, events, diagnosis, checkoutAt, prepared, execute, takeProbe, lowerBound);
+          }
         }
         if (diagnosis.classification === 'infrastructure') {
           await routeBatchFailure(batch, { ...initial, classification: 'infrastructure', cause: diagnosis.reason,
@@ -1067,6 +1244,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         goal: 'program', taskIds: [], status: diagnosis.status, classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
       runManifest.diagnoses.push(diagnosis);
     }
+    chargeDiagnosis();
+    if (earlierRun) runManifest.comparison = compareWithEarlierRun(runManifest, earlierRun);
+    const comparisonText = runManifest.comparison ? comparisonReport(runManifest.comparison) : [];
     const complete = !runManifest.partial && runManifest.batches.every(batch => batch.state === 'done' && batch.attempts.length > 0)
       && runManifest.files.every(file => file.outcome === 'passed' || file.outcome === 'excluded');
     runManifest.status = complete && runManifest.preflight.ok && !runManifest.batches.some(batch => batch.attempts.at(-1)?.code)
@@ -1075,12 +1255,13 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     writeFileSync(join(directory, 'summary.md'), [`# Regression ${runId}`, '', `Commit: ${pinned}`,
       `Result: ${runManifest.status}; complete execution: ${complete}; shards: ${runManifest.shards}`,
       `Preflight: ${runManifest.preflight.ok ? 'passed' : runManifest.preflight.reason}`, '',
+      ...comparisonText, ...(comparisonText.length ? [''] : []),
       ...runManifest.batches.map(batch => `${batch.id}: ${batch.state}; ${batch.files.length} files; `
         + batch.attempts.map(result => `queue ${result.queueMs}ms, test ${result.testMs}ms, total ${result.totalMs}ms (${result.classification ?? 'passed'})`
           + (result.hang ? `; hung ${result.hang.file}; ${result.hang.log}` : '')).join('; ')), '',
-      ...runManifest.diagnoses.map(item => `${item.file}: ${item.status}, ${item.classification}; ${item.before ?? '?'}..${item.after}; `
-        + `${item.goal ?? 'program'} ${item.taskIds?.join(', ') ?? ''}; ${item.reason ?? ''}`), '',
+      ...runManifest.diagnoses.map(diagnosisReport), '',
     ].join('\n'));
+    if (comparisonText.length) console.log(comparisonText.join('\n'));
     return runManifest;
   } finally {
     // Resume recreates a missing checkout, so the process can drop its trees when it releases the lock.
@@ -1099,8 +1280,8 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
 async function bisectFailure(repo: string, stateDir: string, pinned: string, file: string, batch: Batch, events: MergeEvent[],
   diagnosis: Diagnosis, checkoutAt: (commit: string, probe?: string) => Promise<string>, prepared: Map<string, Manifest['preflight']>,
   execute: (commit: string, batch: Batch, label: string, probeTree?: string) => Promise<Execution>,
-  takeProbe: () => number | undefined): Promise<void> {
-  const passing = lastPassingCommit(repo, stateDir, file, pinned);
+  takeProbe: () => number | undefined, lowerBound?: string): Promise<void> {
+  const passing = lowerBound ?? lastPassingCommit(repo, stateDir, file, pinned);
   const base = passing ?? git(repo, ['rev-list', '--first-parent', '--max-parents=0', pinned]).split('\n')[0]!;
   const commits = [base, ...git(repo, ['rev-list', '--first-parent', '--reverse', `${base}..${pinned}`]).split('\n').filter(Boolean)];
   const positions = new Map(commits.map((commit, index) => [commit, index]));

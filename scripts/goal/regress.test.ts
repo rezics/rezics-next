@@ -13,8 +13,8 @@ import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
-  pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
-  runBatch,
+  pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
+  regressionRegistry, runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 let repoSequence = 0;
@@ -1178,6 +1178,148 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
     } finally { r.cleanup(); }
   });
 
+  test('a failure that still fails in the closest earlier run is inherited without probes', async () => {
+    const r = repo();
+    const failing = 'tests/qa/unit/still-failing.test.ts';
+    try {
+      r.files.push({ file: failing, tier: 'unit', outcome: 'pending' });
+      r.write(failing, 'pass\n');
+      const passedAt = r.commit();
+      await r.run({ runId: 'older-pass', at: passedAt, only: ['unit'] });
+      r.write(failing, 'fail\n');
+      const closerCommit = r.commit();
+      r.event(passedAt, closerCommit);
+      await r.run({ runId: 'closer', only: ['unit'] });
+      const prior = r.manifest('closer').diagnoses.find(item => item.file === failing);
+      expect(prior).toMatchObject({ status: 'attributed', goal: 'owner', taskIds: ['G-001', 'G-002'] });
+      // A later execution of the older passing commit must not replace the nearer failure.
+      await r.run({ runId: 'rewind', at: passedAt, only: ['unit'] });
+      r.commit();
+      r.calls.length = 0;
+      const result = await r.run({ runId: 'current', only: ['unit'] });
+      expect(result.diagnoses.find(item => item.file === failing)).toMatchObject({
+        status: 'inherited', probes: [], earlierRunId: 'closer', goal: 'owner', taskIds: ['G-001', 'G-002'],
+        earlierDiagnosis: { status: 'attributed', classification: prior!.classification, after: prior!.after, goal: 'owner' },
+      });
+      expect(r.calls.some(call => /\/probes\/|\/alone-|\/confirm/.test(call.directory))).toBe(false);
+      expect(result.status).toBe('failed');
+      expect(result.finishedAt).toBeDefined();
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('a new failure is bisected only inside the earlier run and the current commit', async () => {
+    const r = repo();
+    try {
+      const root = r.base;
+      const earlierCommit = r.commit();
+      await r.run({ runId: 'earlier', at: earlierCommit, only: ['unit'] });
+      const broke = r.commit({ [r.unit]: 'fail\n' });
+      const head = r.commit();
+      r.event(earlierCommit, broke);
+      const result = await r.run({ runId: 'current', only: ['unit'] });
+      const diagnosis = result.diagnoses.find(item => item.file === r.unit)!;
+      const range = new Set([earlierCommit, ...r.git('rev-list', '--first-parent', `${earlierCommit}..${head}`).split('\n').filter(Boolean)]);
+      expect(result.atCommit).toBe(head);
+      expect(range.has(root)).toBe(false);
+      expect(diagnosis.probes.length).toBeGreaterThan(0);
+      expect(diagnosis.probes[0]!.commit).toBe(earlierCommit);
+      expect(diagnosis.probes.every(probe => range.has(probe.commit))).toBe(true);
+      expect(r.calls.filter(call => call.directory.includes('/probes/')).every(call => range.has(call.commit))).toBe(true);
+      expect(diagnosis.status).toBe('attributed');
+      expect(diagnosis.before).toBe(earlierCommit);
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('a failure that passed in an earlier run of the same commit is not bisected through older history', async () => {
+    const r = repo();
+    try {
+      const root = r.base;
+      const pinned = r.commit();
+      let fail = false;
+      const runner: RegressionOptions['runner'] = async (...args) => {
+        const result = await r.runner(...args);
+        if (fail && args[1].tier === 'unit' && args[1].files.includes(r.unit)) {
+          result.outcomes[r.unit] = 'failed'; result.code = 1;
+        }
+        return result;
+      };
+      await r.run({ runId: 'older', at: root, only: ['unit'], runner });
+      await r.run({ runId: 'earlier', at: pinned, only: ['unit'], runner });
+      fail = true;
+      r.calls.length = 0;
+      const result = await r.run({ runId: 'current', at: pinned, only: ['unit'], runner });
+      const diagnosis = result.diagnoses.find(item => item.file === r.unit)!;
+      expect(result.atCommit).toBe(pinned);
+      expect(diagnosis).toMatchObject({ status: 'inconclusive', earlierRunId: 'earlier', probes: [] });
+      expect(diagnosis.reason).toContain('earlier');
+      expect(r.calls.filter(call => call.directory.includes('/probes/'))).toHaveLength(0);
+      expect(r.calls.some(call => call.commit === root && /\/confirm|\/alone-|\/probes\//.test(call.directory))).toBe(false);
+      expect(result.finishedAt).toBeDefined();
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('the diagnosis budget leaves the remaining failures undiagnosed and still finishes the run', async () => {
+    const r = repo();
+    const still = 'tests/qa/unit/still-failing.test.ts';
+    const leftover = 'tests/qa/unit/leftover.test.ts';
+    try {
+      for (const file of [still, leftover]) r.files.push({ file, tier: 'unit', outcome: 'pending' });
+      r.write(still, 'fail\n');
+      r.write(leftover, 'pass\n');
+      const earlierCommit = r.commit();
+      await r.run({ runId: 'earlier', at: earlierCommit, only: ['unit'] });
+      r.commit({ [r.unit]: 'fail\n', [still]: 'fail\n', [leftover]: 'fail\n' });
+      r.calls.length = 0;
+      let clock = 0;
+      const result = await r.run({
+        runId: 'current', only: ['unit'], diagnosisBudgetMs: 1000, now: () => clock,
+        runner: async (...args) => {
+          const produced = await r.runner(...args);
+          if (args[2].includes('/confirm')) clock = 1000;
+          return produced;
+        },
+      });
+      const diagnosis = (file: string) => result.diagnoses.find(item => item.file === file);
+      expect(diagnosis(r.unit)!.probes.length).toBeGreaterThan(0);
+      expect(diagnosis(still)).toMatchObject({ status: 'inherited', earlierRunId: 'earlier', probes: [] });
+      expect(diagnosis(leftover)).toMatchObject({ status: 'undiagnosed', reason: 'budget', probes: [] });
+      expect(r.calls.some(call => call.directory.includes('/alone-1') || call.directory.includes('/alone-2'))).toBe(false);
+      expect(result.status).toBe('failed');
+      expect(result.finishedAt).toBeDefined();
+      const summary = readFileSync(join(r.options.stateDir, 'regress', 'current', 'summary.md'), 'utf8');
+      expect(summary).toContain('undiagnosed: budget');
+      expect(summary).toContain(`Since earlier: ${result.comparison!.new.length} new, ${result.comparison!.inherited.length} inherited, ${result.comparison!.fixed.length} fixed`);
+      expect(result.comparison).toEqual({
+        earlierRunId: 'earlier', new: [r.unit, leftover].sort((left, right) => left.localeCompare(right)), inherited: [still], fixed: [],
+      });
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('the manifest and the run summary count new, inherited and fixed failures since the earlier run', async () => {
+    const r = repo();
+    const model = r.files.find(file => file.tier === 'model')!.file;
+    const owner = r.files.find(file => file.tier === 'owner')!.file;
+    try {
+      r.write(r.unit, 'fail\n');
+      r.write(model, 'fail\n');
+      r.commit();
+      await r.run({ runId: 'earlier', only: ['unit', 'model', 'owner'] });
+      r.write(model, 'pass\n');
+      r.write(owner, 'fail\n');
+      r.commit();
+      const result = await r.run({ runId: 'current', only: ['unit', 'model', 'owner'] });
+      expect(result.comparison).toEqual({ earlierRunId: 'earlier', new: [owner], inherited: [r.unit], fixed: [model] });
+      const summary = readFileSync(join(r.options.stateDir, 'regress', 'current', 'summary.md'), 'utf8');
+      expect(summary).toContain('Since earlier: 1 new, 1 inherited, 1 fixed');
+      expect(summary).toContain(`new: ${owner}`);
+      expect(summary).toContain(`inherited: ${r.unit}`);
+      expect(summary).toContain(`fixed: ${model}`);
+      expect(result.diagnoses.find(item => item.file === r.unit)).toMatchObject({ status: 'inherited', earlierRunId: 'earlier', probes: [] });
+      expect(result.status).toBe('failed');
+      expect(result.finishedAt).toBeDefined();
+    } finally { r.cleanup(); }
+  }, 60_000);
+
   test('stale generated artifacts fail preflight and are reported without regenerating', async () => {
     const r = repo();
     try {
@@ -1188,6 +1330,22 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       expect(inboxEntries(r.options.stateDir, 'program')[0]!.artifactPaths).toEqual(['generated.log']);
     } finally { r.cleanup(); }
   });
+});
+
+test('diagnosis budget defaults to two hours and rejects a non-integer', () => {
+  const previous = process.env.GOAL_REGRESS_DIAGNOSIS_BUDGET_MS;
+  try {
+    delete process.env.GOAL_REGRESS_DIAGNOSIS_BUDGET_MS;
+    expect(regressionDiagnosisBudgetMs()).toBe(2 * 3_600_000);
+    expect(regressionDiagnosisBudgetMs('')).toBe(2 * 3_600_000);
+    expect(regressionDiagnosisBudgetMs('0')).toBe(0);
+    expect(regressionDiagnosisBudgetMs('1500')).toBe(1500);
+    expect(() => regressionDiagnosisBudgetMs('nope')).toThrow('GOAL_REGRESS_DIAGNOSIS_BUDGET_MS');
+    expect(() => regressionDiagnosisBudgetMs('-1')).toThrow('GOAL_REGRESS_DIAGNOSIS_BUDGET_MS');
+  } finally {
+    if (previous === undefined) delete process.env.GOAL_REGRESS_DIAGNOSIS_BUDGET_MS;
+    else process.env.GOAL_REGRESS_DIAGNOSIS_BUDGET_MS = previous;
+  }
 });
 
 test('regression yielding stops at its deadline or an interruption', async () => {
