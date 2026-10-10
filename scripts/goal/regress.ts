@@ -252,6 +252,21 @@ function regressionRunDirectory(stateDir: string): string {
   return basename(directory) === 'regress' ? directory : join(directory, 'regress');
 }
 
+/** `<repo>/.temp/goal-orchestration/regress`, where each regression run has its own directory. */
+export function regressionRunsRoot(repo: string): string {
+  return join(repo, '.temp', 'goal-orchestration', 'regress');
+}
+
+/** QA evidence for every batch of one regression run. */
+export function regressionQaDirectory(runDirectory: string): string {
+  return join(runDirectory, 'qa');
+}
+
+/** Artifact root for one batch label. The label may contain slashes (`<batch>/attempt-1`, `probes/<id>`). */
+export function regressionBatchQaDirectory(runDirectory: string, label: string): string {
+  return join(regressionQaDirectory(runDirectory), label);
+}
+
 function regressionRuns(stateDir: string): RegressionRunView[] {
   const root = regressionRunDirectory(stateDir);
   if (!existsSync(root)) return [];
@@ -346,7 +361,7 @@ function regressionRepository(): string {
  */
 export function pruneRegressionCheckouts(options: PruneCheckoutsOptions = {}): PruneCheckoutsReport {
   const repo = options.repo ?? regressionRepository();
-  const stateDir = options.stateDir ?? join(repo, '.temp', 'goal-orchestration', 'regress');
+  const stateDir = options.stateDir ?? regressionRunsRoot(repo);
   const cacheRoot = regressionCheckoutRoot(repo, options.checkoutRoot);
   const listed = registeredWorktrees(repo);
   const runs = regressionRuns(stateDir);
@@ -1012,7 +1027,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
       if (browserTier(batch.tier) && options.waitForTurn) await options.waitForTurn(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
-      const result = await runner(tree, batch, join(directory, label), runManifest.shards, slotLimit, join(directory, 'qa', label));
+      const result = await runner(tree, batch, join(directory, label), runManifest.shards, slotLimit, regressionBatchQaDirectory(directory, label));
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
       if (result.code && result.classification) {

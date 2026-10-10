@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { acquireFullLock, acquireQaSlots, admissionIntervalMs, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
-  recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
+  artifactRoots, recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
   testLogEnvironment, writeSummary, withQaMemory,
   implementedTiers, tierArtifactName,
   xmlForCommand, sourceIdentity, type Tier } from '../../../scripts/qa/core.ts';
@@ -349,6 +349,53 @@ test('QA shards: recorded durations use the latest merged JUnit, killed-run logs
       '<testcase name="one" time="1" file="a.test.ts" />')) });
     expect(recordedFileDurations([dir], 'integration', 60, 1).get('a.test.ts')).toBe(1000);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('QA shards: recorded durations read regression batch artifacts and maxRuns bounds those runs', () => {
+  const repo = mkdtempSync(join(scratch, 'rezics-qa-regression-durations-'));
+  const previousArtifactRoot = process.env.REZICS_QA_ARTIFACT_ROOT;
+  const previousGitDir = process.env.GIT_DIR;
+  const previousGitWorkTree = process.env.GIT_WORK_TREE;
+  delete process.env.REZICS_QA_ARTIFACT_ROOT;
+  delete process.env.GIT_DIR;
+  delete process.env.GIT_WORK_TREE;
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: repo });
+    const runs = join(repo, '.temp/goal-orchestration/regress');
+    const write = (run: string, batch: string, qaRun: string, file: string, seconds: string) => {
+      const dir = join(runs, run, 'qa', batch, qaRun);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'integration.xml'), junit(suite(file,
+        `<testcase name="one" time="${seconds}" file="${file}" />`)));
+    };
+    // Newest run has a batch directory and no QA run, so the bound must not fall through to older runs.
+    mkdirSync(join(runs, '20261008t000000-cccccc', 'qa', 'integration-1'), { recursive: true });
+    write('20261007t000000-bbbbbb', 'integration-1', '20261007t000000-bbbbbb', 'only-regression.test.ts', '2.5');
+    write('20261006t000000-aaaaaa', 'integration-1/attempt-1', '20261006t000000-aaaaaa', 'attempted.test.ts', '4');
+    for (let index = 0; index < 6; index++) {
+      write(`2026100${index}t000000-ddddd${index}`, 'integration-9/attempt-1', `2026100${index}t000000-ddddd${index}`,
+        'ancient.test.ts', '8');
+    }
+    const newestOnly = artifactRoots(repo, 1);
+    expect(newestOnly.some(path => path.includes('20261007t000000-bbbbbb'))).toBe(false);
+    expect(recordedFileDurations(newestOnly, 'integration', 1).size).toBe(0);
+    const window = artifactRoots(repo, 2);
+    expect(recordedFileDurations(window, 'integration', 2).get('only-regression.test.ts')).toBe(2500);
+    expect(recordedFileDurations(window, 'integration', 2).has('attempted.test.ts')).toBe(false);
+    expect(recordedFileDurations(window, 'integration', 2).has('ancient.test.ts')).toBe(false);
+    const withAttempt = recordedFileDurations(artifactRoots(repo, 3), 'integration', 3);
+    expect(withAttempt.get('only-regression.test.ts')).toBe(2500);
+    expect(withAttempt.get('attempted.test.ts')).toBe(4000);
+    expect(withAttempt.has('ancient.test.ts')).toBe(false);
+  } finally {
+    if (previousArtifactRoot === undefined) delete process.env.REZICS_QA_ARTIFACT_ROOT;
+    else process.env.REZICS_QA_ARTIFACT_ROOT = previousArtifactRoot;
+    if (previousGitDir === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = previousGitDir;
+    if (previousGitWorkTree === undefined) delete process.env.GIT_WORK_TREE;
+    else process.env.GIT_WORK_TREE = previousGitWorkTree;
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('QA shards: shard count keeps each project near half its budget and planning is balanced and deterministic', () => {

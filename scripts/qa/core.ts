@@ -27,6 +27,7 @@ import { PINNED_FIXTURE_IDS } from '../fixture/stack.ts';
 import { processAlive, processAncestors } from './process/identity.ts';
 import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from './process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup, terminateProcessGroupSync } from './process/terminate.ts';
+import { regressionQaDirectory, regressionRunsRoot } from '../goal/regress.ts';
 
 export type Tier = 'static' | 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
 export const implementedTiers: Tier[] = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
@@ -749,22 +750,31 @@ function stackUnavailable(runPath: string, tier: Tier): boolean | Set<string> {
   return setupFailed && !names.includes(`${artifact}.log`);
 }
 
+const qaRunDirectoryName = /^\d{8}t\d{6}-[0-9a-f]{6}$/;
+const durationHistoryRuns = 60;
+
 // Recorded per-file time for a tier: the largest of the last three observations
 // across the given artifact roots, from merged JUnit or, for killed runs, logs.
 export function recordedFileDurations(
   artifactRoots: string[],
   tier: Tier,
-  maxRuns = 60,
+  maxRuns = durationHistoryRuns,
   observations = 3,
 ): Map<string, number> {
   const artifact = tierArtifactName(tier);
   const logName = new RegExp(`^${artifact}(?:-f?r?\\d+)?\\.log$`);
-  const runs = artifactRoots.filter(existsSync).flatMap(dir => readdirSync(dir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && /^\d{8}t\d{6}-[0-9a-f]{6}$/.test(entry.name))
+  const hasRecord = (runPath: string) => existsSync(join(runPath, `${artifact}.xml`))
+    || (existsSync(join(runPath, 'logs')) && readdirSync(join(runPath, 'logs')).some(name => logName.test(name)));
+  // Names sort newest-first, so artifact checks stop once the history window is full.
+  const candidates = artifactRoots.filter(existsSync).flatMap(dir => readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && qaRunDirectoryName.test(entry.name))
     .map(entry => ({ name: entry.name, path: join(dir, entry.name) })))
-    .filter(run => existsSync(join(run.path, `${artifact}.xml`))
-      || (existsSync(join(run.path, 'logs')) && readdirSync(join(run.path, 'logs')).some(name => logName.test(name))))
-    .sort((a, b) => b.name.localeCompare(a.name)).slice(0, maxRuns);
+    .sort((a, b) => b.name.localeCompare(a.name));
+  const runs: { name: string; path: string }[] = [];
+  for (const candidate of candidates) {
+    if (runs.length >= maxRuns) break;
+    if (hasRecord(candidate.path)) runs.push(candidate);
+  }
   const observed = new Map<string, number[]>();
   for (const run of runs) {
     // Stack startup/bootstrap failures can make every case finish quickly
@@ -1074,8 +1084,30 @@ export function qaArtifactDirectory(root: string): string {
   return process.env.REZICS_QA_ARTIFACT_ROOT || join(root, '.artifacts', 'qa');
 }
 
-// Prior QA artifacts of this checkout, the main checkout and its Goal worktrees.
-export function artifactRoots(root: string): string[] {
+// A batch artifact root is the directory whose children are QA run ids.
+// Labels nest (`<batch>/attempt-1`, `probes/<id>`), so stop at the first such directory.
+function regressionBatchArtifactRoots(runDirectory: string): string[] {
+  const top = regressionQaDirectory(runDirectory);
+  if (!existsSync(top)) return [];
+  const found: string[] = [];
+  const visit = (directory: string, depth: number) => {
+    const entries = readdirSync(directory, { withFileTypes: true });
+    const directories = entries.filter(entry => entry.isDirectory());
+    if (directories.some(entry => qaRunDirectoryName.test(entry.name))) {
+      found.push(directory);
+      return;
+    }
+    if (depth >= 3) return;
+    for (const entry of directories) visit(join(directory, entry.name), depth + 1);
+  };
+  visit(top, 0);
+  return found;
+}
+
+// Prior QA artifacts of this checkout, the main checkout, its Goal worktrees,
+// and per-batch QA roots from the newest regression runs. Opening every historical
+// run makes estimation slow, so the regression window matches duration history.
+export function artifactRoots(root: string, maxRuns = durationHistoryRuns): string[] {
   const roots = new Set([qaArtifactDirectory(root), join(root, '.artifacts', 'qa')]);
   const main = mainCheckout(root);
   if (main) {
@@ -1083,6 +1115,15 @@ export function artifactRoots(root: string): string[] {
     const worktrees = join(main, '.temp', 'worktrees');
     if (existsSync(worktrees)) for (const entry of readdirSync(worktrees, { withFileTypes: true })) {
       if (entry.isDirectory()) roots.add(join(worktrees, entry.name, '.artifacts', 'qa'));
+    }
+    const runsRoot = regressionRunsRoot(main);
+    if (existsSync(runsRoot)) {
+      const runs = readdirSync(runsRoot, { withFileTypes: true })
+        .filter(entry => entry.isDirectory()).map(entry => entry.name)
+        .sort((a, b) => b.localeCompare(a)).slice(0, maxRuns);
+      for (const name of runs) {
+        for (const batch of regressionBatchArtifactRoots(join(runsRoot, name))) roots.add(batch);
+      }
     }
   }
   return [...roots];
