@@ -28,6 +28,7 @@ export async function growRealmThreads(
   first: number,
   count: number,
   parent?: { reply: string; chain: boolean },
+  includeGraph = true,
 ): Promise<ScaledThread[]> {
   const now = Date.now();
   const replies = Array.from({ length: count }, () => `https://rezics.com/id/${randomUUID()}`);
@@ -154,7 +155,9 @@ export async function growRealmThreads(
   } finally {
     client.release();
   }
-  for (let offset = 0; offset < entries.length; offset += 200) {
+  // The product Fuseki assembler has no raw update endpoint. A caller measuring
+  // commands can keep the owner rows and skip this fixture graph insert.
+  if (includeGraph) for (let offset = 0; offset < entries.length; offset += 200) {
     const batch = entries.slice(offset, offset + 200);
     await env.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${batch

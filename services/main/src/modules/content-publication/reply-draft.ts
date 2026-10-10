@@ -110,7 +110,9 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       }
     }
   }
-  try { if (!priorReceipt) await proveRoot(creating); }
+  // The earlier probe already disclosed the retained root. A new draft still
+  // binds the target's current root; an edit does not resolve it again.
+  try { if (!priorReceipt && creating) await proveRoot(true); }
   catch (error) {
     await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
     throw error;

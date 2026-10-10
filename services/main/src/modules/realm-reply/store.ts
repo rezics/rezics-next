@@ -9,8 +9,8 @@ import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavail
   type ReplyIdentityInput, type ReviewInput, RealmReplyContentStore } from './content-store.ts';
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads, replySlotIri,
-  readReplyGraphReceipt } from './graph.ts';
-import { readableReplyRoot, replyRoot } from './root.ts';
+  readReplyGraphReceipt, type ReplyGraphReceipt } from './graph.ts';
+import { boundReplyRoot, readableReplyRoot } from './root.ts';
 import { targetRead } from '../target/resolve.ts';
 import { WorkReadMissing } from '../work/read-session.ts';
 import { readRealmPolicy, reviewPolicy, type RealmPolicy } from '../space/policy.ts';
@@ -90,7 +90,8 @@ export class RealmReplyStore {
     private readonly env: WorkActivationEnvironment) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
-    scope: string, key: string, requestDigest: string, sourceRevision?: string): Promise<RegisteredAdmission> {
+    scope: string, key: string, requestDigest: string, sourceRevision?: string): Promise<{
+      registered: RegisteredAdmission; graph: ReplyGraphReceipt | null }> {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const registered = await this.access.register({ principal, actingSubject, action, scope,
       idempotencyKey: key, requestDigest, baselineSourceRevision: sourceRevision });
@@ -98,26 +99,28 @@ export class RealmReplyStore {
     const saved = await this.content.hasReceipt(registered.id, contentAction, requestDigest);
     if (registered.state === 'sealed') {
       const terminal = await readReplyGraphReceipt(this.env, registered);
-      if (terminal?.outcome === 'cancelled') return registered;
+      if (terminal?.outcome === 'cancelled') return { registered, graph: terminal };
       if (!saved) throw new RealmReplyUnavailable('sealed admission lost its Content receipt');
-      return registered;
+      return { registered, graph: terminal };
     }
     const prior = await readReplyGraphReceipt(this.env, registered);
-    if (prior) return registered;
-    if (saved && registered.state === 'claimed') return registered;
+    if (prior) return { registered, graph: prior };
+    if (saved && registered.state === 'claimed') return { registered, graph: null };
     try {
       if (!registered.dispatchEligible) throw new AdmissionDenied('admission dispatch is fenced');
-      return await this.access.claim(registered.id, requestDigest, principal);
+      return { registered: await this.access.claim(registered.id, requestDigest, principal), graph: null };
     }
     catch (error) {
       if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
         // A concurrent winner can seal while claim waits. Recover its exact
         // receipt; a prepared-only placement still has no authority to publish.
-        if (await readReplyGraphReceipt(this.env, registered)
-          || action !== 'reply.place' && await this.content.hasReceipt(registered.id, contentAction, requestDigest)) return registered;
+        const raced = await readReplyGraphReceipt(this.env, registered);
+        if (raced || action !== 'reply.place' && await this.content.hasReceipt(registered.id, contentAction, requestDigest)) {
+          return { registered, graph: raced };
+        }
         if (action === 'reply.place') {
           const terminal = await cancelPlacement(this.env, registered);
-          if (terminal.outcome === 'succeeded') return registered;
+          if (terminal.outcome === 'succeeded') return { registered, graph: terminal };
           const prepared = await this.content.readPlacement(registered.id);
           if (prepared) await this.contentCore.settlePublication(`${registered.id}:settle`, registered.id, {
             outcome: 'rejected', revisionId: prepared.revisionId, receipt: terminal.receipt,
@@ -125,11 +128,9 @@ export class RealmReplyStore {
           });
           await this.access.recordGraphOutcome(registered.id, terminal);
         } else if (action === 'reply.create') {
-          const succeeded = await this.content.cancelCreate(registered);
-          const terminal = succeeded ? await acknowledgeContentDecision(this.env, registered)
-            : await cancelPlacement(this.env, registered);
-          await this.access.recordGraphOutcome(registered.id, terminal);
-          if (succeeded) return registered;
+          const refused = await this.refuseUncommittedCreate(registered, null);
+          await this.access.recordGraphOutcome(registered.id, refused.terminal);
+          if (refused.replay) return { registered, graph: refused.terminal };
         }
         if (error instanceof AdmissionExpired && (action === 'reply.place' || action === 'reply.create'))
           throw new RealmReplyStale('admission expired during claim verification');
@@ -138,8 +139,25 @@ export class RealmReplyStore {
     }
   }
 
-  private async seal(admission: RegisteredAdmission): Promise<void> {
-    const terminal = await readReplyGraphReceipt(this.env, admission);
+  /** Graph cancellation is recorded before any Content rejection. A lost graph
+   * result leaves no rejection, so the same key can finish and the next key is
+   * not refused as a cancelled admission. */
+  private async refuseUncommittedCreate(admission: RegisteredAdmission, graph: ReplyGraphReceipt | null): Promise<{
+    terminal: ReplyGraphReceipt; replay: boolean }> {
+    const outcome = await this.content.createOutcome(admission);
+    if (outcome === 'succeeded') {
+      return { terminal: await acknowledgeContentDecision(this.env, admission, graph), replay: true };
+    }
+    if (outcome === 'rejected') {
+      return { terminal: graph?.outcome === 'cancelled' ? graph : await cancelPlacement(this.env, admission), replay: false };
+    }
+    const terminal = await cancelPlacement(this.env, admission);
+    await this.content.rejectCreate(admission);
+    return { terminal, replay: false };
+  }
+
+  private async seal(admission: RegisteredAdmission, known?: ReplyGraphReceipt | null): Promise<void> {
+    const terminal = known ?? await readReplyGraphReceipt(this.env, admission);
     if (!terminal) throw new RealmReplyUnavailable('terminal graph receipt is unavailable');
     await this.access.recordGraphOutcome(admission.id, terminal);
   }
@@ -157,8 +175,10 @@ export class RealmReplyStore {
 
   /** Unknown graph outcomes remain pending; only an exact terminal receipt may
    * be sealed, after the Realm callback has released its Access connection. */
-  private async sealTerminal(admission: RegisteredAdmission) {
-    const terminal = await readReplyGraphReceipt(this.env, admission);
+  private async sealTerminal(admission: RegisteredAdmission, known?: ReplyGraphReceipt | null) {
+    // Null means a command may have written a receipt this caller has not
+    // reread. A receipt already in hand is not read again.
+    const terminal = known ?? await readReplyGraphReceipt(this.env, admission);
     if (terminal) await this.access.recordGraphOutcome(admission.id, terminal);
   }
 
@@ -167,17 +187,22 @@ export class RealmReplyStore {
     const origin = await this.content.origin(input.reply);
     if (origin?.realm && !this.access.withRealmPolicy) throw new RealmReplyUnavailable('Realm policy owner is unavailable');
     // These transactions must commit before either native owner has an effect.
-    const admission = await this.admission(principal, input.author, 'reply.create',
+    const opened = await this.admission(principal, input.author, 'reply.create',
       `reply:create:${input.rootTarget}`, key, digest, input.rootRevision);
+    const admission = opened.registered;
+    let graph = opened.graph;
     try {
       const saved = await this.content.hasReceipt(admission.id, 'reply.create', digest);
+      if (graph?.outcome === 'cancelled' && !saved) {
+        await this.content.rejectCreate(admission);
+        throw new RealmReplyDenied('reply admission was cancelled');
+      }
       // A lost-response retry retains its successful identity after a target edit.
       // Only a new Content identity must bind to the target's current root.
-      if (!saved) {
-        const currentRoot = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
-          session => replyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision));
-        if (!currentRoot) throw new RealmReplyDenied('Reply root is unavailable');
-      }
+      // One resolution covers disclosure and that current-root bind.
+      const readable = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
+        session => boundReplyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision, !saved));
+      if (!readable) throw new RealmReplyDenied('Reply root is unavailable');
       const create = async (client?: PoolClient) => {
         if (!saved) await this.fence(admission, principal, client);
         return this.content.createReply(admission, input);
@@ -188,7 +213,7 @@ export class RealmReplyStore {
           if (!policy || policy.visibility !== 'public' && !permit.member) throw new RealmReplyDenied('Realm membership is required');
           return create(client);
         }) : await create();
-      await acknowledgeContentDecision(this.env, admission);
+      graph = await acknowledgeContentDecision(this.env, admission, graph);
       return result;
     }
     catch (error) {
@@ -196,50 +221,55 @@ export class RealmReplyStore {
       if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale
         || error instanceof RatingTargetNotAccepted || error instanceof RatingTargetGrainMismatch
         || error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
-        const succeeded = await this.content.cancelCreate(admission);
-        if (succeeded) await acknowledgeContentDecision(this.env, admission);
-        else await cancelPlacement(this.env, admission);
-        if (succeeded)
-          return await this.content.createReply(admission, input);
+        const refused = await this.refuseUncommittedCreate(admission, graph);
+        graph = refused.terminal;
+        if (refused.replay) return await this.content.createReply(admission, input);
       }
       throw error;
     } finally {
-      await this.sealTerminal(admission);
+      await this.sealTerminal(admission, graph);
     }
   }
 
   async review(principal: VerifiedPrincipal, actingSubject: string, input: ReviewInput,
     key: string, digest: string) {
-    const admission = await this.admission(principal, actingSubject, 'review.decide',
+    const opened = await this.admission(principal, actingSubject, 'review.decide',
       `review:decide:${input.realm}`, key, digest);
-    const result = await this.content.decideReview(admission, input);
-    await acknowledgeContentDecision(this.env, admission);
-    await this.seal(admission);
+    const result = await this.content.decideReview(opened.registered, input);
+    const terminal = await acknowledgeContentDecision(this.env, opened.registered, opened.graph);
+    await this.seal(opened.registered, terminal);
     return result;
   }
 
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
     key: string, digest: string) {
-    const admission = await this.admission(principal, actingSubject, 'reply.place',
+    const opened = await this.admission(principal, actingSubject, 'reply.place',
       `reply:place:${input.realm}`, key, digest);
-    const terminal = await readReplyGraphReceipt(this.env, admission);
+    const admission = opened.registered;
+    let graph = opened.graph;
     // This flag describes the immutable admission proof, not current authority;
     // fenceClaim rechecks its membership generation inside the Realm callback.
     const memberAdmission = input.reviewDecisionId === null
       && await this.access.hasRealmMemberAdmission?.(admission.id) === true;
     try {
-      if (terminal || !this.access.withRealmPolicy)
-        return await this.placeAdmitted(principal, input, admission, memberAdmission);
-      return await this.access.withRealmPolicy(principal, actingSubject, input.realm, 'reply',
-        (permit, client) => this.placeAdmitted(principal, input, admission, memberAdmission, permit, client));
+      const placed = graph || !this.access.withRealmPolicy
+        ? await this.placeAdmitted(principal, input, admission, memberAdmission, graph)
+        : await this.access.withRealmPolicy(principal, actingSubject, input.realm, 'reply',
+          (permit, client) => this.placeAdmitted(principal, input, admission, memberAdmission, graph, permit, client));
+      graph = placed.terminal;
+      return placed.body;
     } catch (error) {
       if (error instanceof AdmissionDenied || error instanceof AdmissionExpired
         || error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
         // The native receipt lock chooses cancellation or the concurrent
         // winner. Transport failures do not imply either terminal outcome.
         const terminal = await cancelPlacement(this.env, admission);
-        if (terminal.outcome === 'succeeded')
-          return await this.placeAdmitted(principal, input, admission, memberAdmission);
+        graph = terminal;
+        if (terminal.outcome === 'succeeded') {
+          const placed = await this.placeAdmitted(principal, input, admission, memberAdmission, terminal);
+          graph = placed.terminal;
+          return placed.body;
+        }
         const prepared = await this.content.readPlacement(admission.id);
         if (prepared) await this.contentCore.settlePublication(`${admission.id}:settle`, admission.id, {
           outcome: 'rejected', revisionId: input.revisionId, receipt: terminal.receipt,
@@ -248,17 +278,18 @@ export class RealmReplyStore {
       }
       throw error;
     } finally {
-      await this.sealTerminal(admission);
+      await this.sealTerminal(admission, graph);
     }
   }
 
   private async placeAdmitted(principal: VerifiedPrincipal, input: PlacementInput,
-    admission: RegisteredAdmission, memberAdmission: boolean, permit?: RealmPermit, client?: PoolClient) {
+    admission: RegisteredAdmission, memberAdmission: boolean, observed: ReplyGraphReceipt | null,
+    permit?: RealmPermit, client?: PoolClient) {
     const unified = await readRealmPolicy(this.env, input.realm);
     if (permit && (!unified || unified.visibility !== 'public' && !permit.member)) {
       throw new RealmReplyDenied('Realm membership is required');
     }
-    const existing = await readReplyGraphReceipt(this.env, admission);
+    const existing = observed;
     let prepared = await this.content.readPlacement(admission.id);
     if (existing?.outcome === 'cancelled' && !prepared) throw new RealmReplyStale('Realm reply placement was cancelled');
     if (!prepared && !existing) {
@@ -285,12 +316,13 @@ export class RealmReplyStore {
       prepared = await this.content.preparePlacement(admission, input, directPolicyRevision, directPolicy);
     }
     if (!prepared) throw new RealmReplyUnavailable('Realm placement lost its Content preparation');
-    let terminal = await readReplyGraphReceipt(this.env, admission);
+    let terminal = existing;
     if (!terminal) {
       await this.fence(admission, principal, client);
       // A previous attempt can leave the pin while its graph result is unknown.
       // The immutable receipt resolves that ambiguity before another dispatch.
-      terminal = await placeReply(this.env, admission, prepared, input.expectedHead);
+      // The caller already observed that this receipt was absent.
+      terminal = await placeReply(this.env, admission, prepared, input.expectedHead, null);
     }
     if (terminal.outcome === 'cancelled') {
       await this.contentCore.settlePublication(`${admission.id}:settle`, admission.id, {
@@ -308,9 +340,9 @@ export class RealmReplyStore {
       outcome: 'active', revisionId: input.revisionId, receipt: terminal.receipt,
       dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
     });
-    return { placement: terminal.placement, reply: input.reply, realm: input.realm,
+    return { terminal, body: { placement: terminal.placement, reply: input.reply, realm: input.realm,
       revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId, reviewGeneration: prepared.reviewGeneration,
-      replayed: admission.replayed || prepared.replayed };
+      replayed: admission.replayed || prepared.replayed } };
   }
 
   async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string) {

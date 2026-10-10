@@ -4,17 +4,43 @@ import type { ResolvedTarget } from '../target/contract.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadMissing } from '../work/read-session.ts';
 
+/** One target resolution shared by the retained-root and current-root probes. */
+async function loadReplyTarget(session: TargetReadSession, resource: string, revision: string,
+  contextRevision?: string | null): Promise<ResolvedTarget | null> {
+  // Access baseline is imported by summary owners; defer resolver initialization
+  // until the capability is used, outside that module cycle.
+  const { resolveTargets } = await import('../target/resolve.ts');
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)) return null;
+  const [target] = await resolveTargets(session, [resource], 'discussion');
+  await assertReplyRatingContext(session, target!, contextRevision);
+  return target!;
+}
+
+async function retainedReplyRoot(session: TargetReadSession, target: ResolvedTarget, revision: string) {
+  // A projection is immutable and has exactly its own revision as a root.
+  // An arbitrary retained revision must not become a discussion of it.
+  if (target.base === 'projection') return target.revision === revision;
+  const rows = await session.query(`SELECT ?root WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { BIND(${iri(revision)} AS ?root)
+      ?root ?predicate ?object . FILTER NOT EXISTS { ?root a rv:ErasedRevision } }
+  } LIMIT 1`, 1);
+  return rows.length === 1;
+}
+
 /** Exact target revision or an unerased published Work draft; no text selection
  * is required for a target's own revision. */
 export async function replyRoot(session: TargetReadSession, resource: string, revision: string,
   contextRevision?: string | null): Promise<boolean> {
-  // Access baseline is imported by summary owners; defer resolver initialization
-  // until the capability is used, outside that module cycle.
-  const { resolveTargets } = await import('../target/resolve.ts');
-  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)) return false;
-  const [target] = await resolveTargets(session, [resource], 'discussion');
-  await assertReplyRatingContext(session, target!, contextRevision);
-  return replyRootRevision(session, target!, revision);
+  const target = await loadReplyTarget(session, resource, revision, contextRevision);
+  return target ? replyRootRevision(session, target, revision) : false;
+}
+
+/** Disclosure and, for a new identity, the current root: one resolution. */
+export async function boundReplyRoot(session: TargetReadSession, resource: string, revision: string,
+  contextRevision: string | null | undefined, requireCurrent: boolean): Promise<boolean> {
+  const target = await loadReplyTarget(session, resource, revision, contextRevision);
+  if (!target || !await retainedReplyRoot(session, target, revision)) return false;
+  return requireCurrent ? replyRootRevision(session, target, revision) : true;
 }
 
 async function replyRootRevision(session: TargetReadSession, target: ResolvedTarget, revision: string) {
@@ -36,18 +62,7 @@ async function replyRootRevision(session: TargetReadSession, target: ResolvedTar
  * Current target authority and erasure still govern disclosure and reply edits. */
 export async function readReplyRoot(session: TargetReadSession, resource: string, revision: string,
   contextRevision?: string | null): Promise<boolean> {
-  const { resolveTargets } = await import('../target/resolve.ts');
-  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)) return false;
-  const [target] = await resolveTargets(session, [resource], 'discussion');
-  await assertReplyRatingContext(session, target!, contextRevision);
-  // A projection is immutable and has exactly its own revision as a root.
-  // An arbitrary retained revision must not become a discussion of it.
-  if (target!.base === 'projection') return target!.revision === revision;
-  const rows = await session.query(`SELECT ?root WHERE {
-    GRAPH ${iri(GRAPHS.revisions)} { BIND(${iri(revision)} AS ?root)
-      ?root ?predicate ?object . FILTER NOT EXISTS { ?root a rv:ErasedRevision } }
-  } LIMIT 1`, 1);
-  return rows.length === 1;
+  return boundReplyRoot(session, resource, revision, contextRevision, false);
 }
 
 /** Replies may pin a semantic Context or a rating question. Only a revision

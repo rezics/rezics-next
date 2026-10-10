@@ -79,9 +79,12 @@ function checked(receipt: ReplyGraphReceipt, admission: RegisteredAdmission): Re
 /** A Content-owned reply/review decision receives a graph terminal receipt for
  * the existing Access sealer. The graph receipt does not duplicate that fact. */
 export async function acknowledgeContentDecision(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission): Promise<ReplyGraphReceipt> {
-  const prior = await readReplyGraphReceipt(env, admission);
-  if (prior) return checked(prior, admission);
+  admission: RegisteredAdmission, observed?: ReplyGraphReceipt | null): Promise<ReplyGraphReceipt> {
+  if (observed) return checked(observed, admission);
+  if (observed === undefined) {
+    const prior = await readReplyGraphReceipt(env, admission);
+    if (prior) return checked(prior, admission);
+  }
   const receipt = replyReceiptIri(admission);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
@@ -223,9 +226,12 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
 /** Exact, one-slot graph CAS. A different Realm has a different slot and count. */
 export async function placeReply(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, preparation: PlacementPreparation,
-  expectedHead: string | null): Promise<ReplyGraphReceipt> {
-  const prior = await readReplyGraphReceipt(env, admission);
-  if (prior) return checked(prior, admission);
+  expectedHead: string | null, observed?: ReplyGraphReceipt | null): Promise<ReplyGraphReceipt> {
+  if (observed) return checked(observed, admission);
+  if (observed === undefined) {
+    const prior = await readReplyGraphReceipt(env, admission);
+    if (prior) return checked(prior, admission);
+  }
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     throw new RealmReplyStale('placement admission expired before graph dispatch');
   }
