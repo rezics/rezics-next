@@ -13,7 +13,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
 import { InvalidRatingContextInput, RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
   RATING_STANDING_CADENCE, RatingRealmUnavailable, ratingContextDigest, ratingContextReceiptIri, readRatingContextReceipt,
   sealRatingContextAdmission, type RatingContextReceipt } from './context.ts';
-import { InvalidRatingObservationInput, RatingObservationUnavailable, StaleRatingObservation,
+import { InvalidRatingObservationInput, RatingCurrentVisibility, RatingObservationUnavailable, StaleRatingObservation,
   canonicalRatingInstant, readStandingRatingReceipt, sameRatingInstant,
   sealRatingObservationTerminal, sealStandingRatingAdmission, standingRatingReceiptIri,
   type RatingObservationReceipt } from './observation.ts';
@@ -237,8 +237,7 @@ export async function createAdmittedReleaseRatingContext(
       } else {
         try { await createReleaseRatingContext(env, admission, input); }
         catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
-          if (error instanceof RatingRealmUnavailable) await sealRatingContextAdmission(env, admission);
+          if (error instanceof IdempotencyConflict || error instanceof RatingRealmUnavailable) throw error;
         }
       }
     }
@@ -247,7 +246,8 @@ export async function createAdmittedReleaseRatingContext(
     await access.recordGraphOutcome(registered.id, terminal);
     return { ...checkedContext(terminal, registered, input, digest), replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+      || error instanceof RatingRealmUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-context');
   }
 }
@@ -360,7 +360,7 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetReleas
   const row = rows[0];
   if (rows.length !== 1 || !row?.realm || !row.contextRevision
     || (row.observation && (!row.prior || !row.evaluatedAt || !row.originalSubmissionAt))) {
-    throw new RatingObservationUnavailable('release rating Context, target or slot is unavailable');
+    throw new RatingCurrentVisibility('release rating Context, target or slot is unavailable');
   }
   return { realm: row.realm.value, contextRevision: row.contextRevision.value,
     ...(row.observation ? { observation: row.observation.value, prior: row.prior!.value,
@@ -583,7 +583,7 @@ export async function setAdmittedReleaseRating(
       } else {
         try { await setReleaseRating(env, admission, input); }
         catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof RatingCurrentVisibility) throw error;
           if (error instanceof RatingObservationUnavailable) await sealStandingRatingAdmission(env, admission);
         }
       }

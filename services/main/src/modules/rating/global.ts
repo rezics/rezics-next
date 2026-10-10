@@ -7,7 +7,7 @@ import { CancelledActivation, DATASET, GRAPHS, ID, IdempotencyConflict, PendingA
   hash, iri, lit, prepareComponent, type WorkActivationEnvironment } from '../work/activate.ts';
 import { InvalidRatingContextInput, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE,
   ratingContextReceiptIri, readRatingContextReceipt, type RatingContextReceipt } from './context.ts';
-import { canonicalRatingInstant, InvalidRatingObservationInput, RatingObservationUnavailable,
+import { canonicalRatingInstant, InvalidRatingObservationInput, RatingCurrentVisibility, RatingObservationUnavailable,
   readStandingRatingReceipt, StaleRatingObservation, standingRatingReceiptIri, standingRatingSlotIri,
   type RatingObservationReceipt } from './observation.ts';
 
@@ -237,7 +237,7 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetGlobal
   const row = rows[0];
   if (rows.length !== 1 || !row?.contextRevision || !row.contextManifest || !row.question
     || (row.observation && (!row.prior || !row.evaluatedAt || !row.originalSubmissionAt))) {
-    throw new RatingObservationUnavailable('Global rating Context, target or slot is unavailable');
+    throw new RatingCurrentVisibility('Global rating Context, target or slot is unavailable');
   }
   try {
     const state = readComponentState(env.objectDirectory, row.contextManifest.value, input.context, GLOBAL_CONTEXT_PROFILE);

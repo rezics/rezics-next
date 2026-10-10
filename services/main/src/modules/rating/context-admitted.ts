@@ -35,10 +35,7 @@ export async function createAdmittedRatingContext(
       } else {
         try { await createRatingContext(env, admission, input); }
         catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
-          if (error instanceof RatingRealmUnavailable) {
-            await sealRatingContextAdmission(env, admission);
-          }
+          if (error instanceof IdempotencyConflict || error instanceof RatingRealmUnavailable) throw error;
         }
       }
     }
@@ -55,7 +52,8 @@ export async function createAdmittedRatingContext(
     }
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+      || error instanceof RatingRealmUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-context');
   }
 }

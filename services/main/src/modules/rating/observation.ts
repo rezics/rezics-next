@@ -20,6 +20,8 @@ export const STANDING_RATING_OBSERVATION_PROFILE =
 
 export class InvalidRatingObservationInput extends Error {}
 export class RatingObservationUnavailable extends Error {}
+/** The Context, target or slot is absent or hidden right now. The same key is re-evaluated once it is visible. */
+export class RatingCurrentVisibility extends RatingObservationUnavailable {}
 export class StaleRatingObservation extends Error {}
 
 /** Jena may shorten fractional seconds while retaining the same xsd:dateTime value. */
@@ -234,7 +236,7 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.realm || !rows[0]?.contextRevision
     || (rows[0].observation && !rows[0].prior)) {
-    throw new RatingObservationUnavailable('rating Context, target or slot is unavailable');
+    throw new RatingCurrentVisibility('rating Context, target or slot is unavailable');
   }
   const row = rows[0]!;
   if (experience) {

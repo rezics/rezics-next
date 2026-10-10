@@ -4,7 +4,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { checkedRatingReceipt, readStandingRatingReceipt,
-  RatingObservationUnavailable, sealStandingRatingAdmission, setStandingRating,
+  RatingCurrentVisibility, RatingObservationUnavailable, sealStandingRatingAdmission, setStandingRating,
   standingRatingDigest, StaleRatingObservation,
   type RatingObservationReceipt, type SetStandingRatingInput } from './observation.ts';
 
@@ -36,7 +36,7 @@ export async function setAdmittedStandingRating(
       } else {
         try { await setStandingRating(env, admission, input, daily); }
         catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof RatingCurrentVisibility) throw error;
           if (error instanceof RatingObservationUnavailable) {
             await sealStandingRatingAdmission(env, admission);
           }

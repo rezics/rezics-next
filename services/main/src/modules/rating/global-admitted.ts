@@ -8,7 +8,7 @@ import { readRatingContextReceipt, sealRatingContextAdmission, type RatingContex
 import { checkedGlobalContextReceipt, checkedGlobalRatingReceipt, createGlobalRatingContext,
   GLOBAL_CONTEXT_SCOPE, globalRatingContextDigest, globalRatingDigest, setGlobalRating,
   type CreateGlobalRatingContextInput, type SetGlobalRatingInput } from './global.ts';
-import { RatingObservationUnavailable, readStandingRatingReceipt, sealStandingRatingAdmission,
+import { RatingCurrentVisibility, RatingObservationUnavailable, readStandingRatingReceipt, sealStandingRatingAdmission,
   StaleRatingObservation, type RatingObservationReceipt } from './observation.ts';
 
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>;
@@ -67,7 +67,7 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
     await dispatch(access, registered, digest, principal, async admission => {
       try { await setGlobalRating(env, admission, input); }
       catch (error) {
-        if (error instanceof IdempotencyConflict) throw error;
+        if (error instanceof IdempotencyConflict || error instanceof RatingCurrentVisibility) throw error;
         if (error instanceof RatingObservationUnavailable) await sealStandingRatingAdmission(env, admission);
       }
     }, admission => sealStandingRatingAdmission(env, admission));
