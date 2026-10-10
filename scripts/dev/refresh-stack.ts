@@ -26,6 +26,7 @@ import { AppHostResourceLost, appHostRestartInstruction, type RefreshInputs, ass
   syncBackendInputs,
   pruneBackendRevisions,
   appHostSourceHash,
+  refreshCommandFailure,
   stageBackend,
   readPendingRefresh,
   type PendingRefresh,
@@ -49,13 +50,18 @@ interface Checkpoint { revision: string; appHostHash: string; appHostSession: st
 function command(root: string, executable: string, args: string[], env = process.env, timeout = 30_000): string {
   const result = spawnSync(executable, args, { cwd: root, env, encoding: 'utf8', timeout,
     maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  // Describe and Compose output can contain secrets; never include it in errors.
-  if (result.error || result.status !== 0) throw new Error(`${executable} ${args[0]} failed (exit ${result.status ?? 'timeout/error'})`);
+  // Compose output can carry credentials. The failure keeps a redacted tail of
+  // the pipes this call already has, not a new capture of the full stream.
+  if (result.error || result.status !== 0) throw new Error(refreshCommandFailure({
+    step: executable, command: args, status: result.status, error: result.error,
+    stdout: result.stdout, stderr: result.stderr,
+  }));
   return result.stdout.trim();
 }
 
 /** CLI exit 16 and nested DCP NotFound (including stop's exit 17) both
- * require a new AppHost. Parse diagnostics without exposing their contents. */
+ * require a new AppHost. Resource-loss errors still omit diagnostics. Any
+ * other failure reports a redacted tail of the output already captured. */
 export function refreshAspireOutput(args: string[], result: {
   status: number | null; stdout: string; stderr: string; error?: Error;
 }): string {
@@ -64,7 +70,10 @@ export function refreshAspireOutput(args: string[], result: {
     if (resource && (result.status === 16 || /\bNotFound\b|\bnot found\b/i.test(`${result.stdout}\n${result.stderr}`))) {
       throw new AppHostResourceLost(resource, args[0] === 'wait' ? 'wait' : args[2]!);
     }
-    throw new Error(`Aspire ${args[0]} failed (exit ${result.status ?? 'timeout/error'})`);
+    throw new Error(refreshCommandFailure({
+      step: 'Aspire', command: args, status: result.status, error: result.error,
+      stdout: result.stdout, stderr: result.stderr,
+    }));
   }
   return result.stdout.trim();
 }
@@ -128,12 +137,16 @@ export async function buildRefreshImage(root: string, stackRoot = root,
   const dir = stackDirectory(stackRoot, { profile: 'dev' });
   const file = join(dir, 'compose.env');
   const log = join(dir, imageBuildLog);
+  const executable = options.executable ?? 'docker';
+  const args = ['compose', '--env-file', file, '-f', join(root, 'infra/dev/compose.yaml'),
+    '--project-name', 'rezics-dev', 'build', 'fuseki'];
   const fd = openSync(log, 'w', 0o600);
   try {
     fchmodSync(fd, 0o600);
-    const child = spawn(options.executable ?? 'docker', ['compose', '--env-file', file,
-      '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'build', 'fuseki'],
-    { cwd: root, env: composeProcessEnvironment(process.env, readEnv(file)), stdio: ['ignore', fd, fd], detached: true });
+    const child = spawn(executable, args, {
+      cwd: root, env: composeProcessEnvironment(process.env, readEnv(file)),
+      stdio: ['ignore', fd, fd], detached: true,
+    });
     let timedOut = false;
     let stopping: Promise<void> | undefined;
     const timer = setTimeout(() => {
@@ -145,9 +158,15 @@ export async function buildRefreshImage(root: string, stackRoot = root,
       child.once('close', code => done({ code }));
     }).finally(() => { clearTimeout(timer); });
     if (stopping) await stopping;
-    if (timedOut) throw new Error(`image build exceeded ${budgetMs >= 60_000 ? `${budgetMs / 60_000} min` : `${budgetMs / 1000} s`}; output in ${log}`);
+    const failure = { step: 'image build', command: [executable, ...args], log };
+    if (timedOut) throw new Error(refreshCommandFailure({
+      ...failure, status: null,
+      timeoutLimit: budgetMs >= 60_000 ? `${budgetMs / 60_000} min` : `${budgetMs / 1000} s`,
+    }));
     if (outcome.error || outcome.code !== 0)
-      throw new Error(`image build failed (exit ${outcome.code ?? 'signal/error'}); output in ${log}`);
+      throw new Error(refreshCommandFailure({
+        ...failure, status: outcome.code, unresolved: 'signal/error', error: outcome.error,
+      }));
   } finally { closeSync(fd); }
 }
 
@@ -512,7 +531,7 @@ export function refreshBuildStepLog(candidate: string, args: string[], output: s
   return path;
 }
 
-function refreshBuildTask(candidate: string, args: string[], env = process.env): void {
+export function refreshBuildTask(candidate: string, args: string[], env = process.env): void {
   const result = spawnSync('bun', [join(candidate, 'scripts/qa/host-admission.ts'),
     '--gib', '4', '--', 'task', ...args,
   ], { cwd: candidate, env, encoding: 'utf8', timeout: 600_000, maxBuffer: 8 * 1024 * 1024,
@@ -520,7 +539,9 @@ function refreshBuildTask(candidate: string, args: string[], env = process.env):
   if (!result.error && result.status === 0) return;
   const log = refreshBuildStepLog(candidate, args,
     `${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error ? String(result.error) : ''}`);
-  throw new Error(`task ${args[0]} failed (exit ${result.status ?? 'timeout/error'}); output in ${log}`);
+  throw new Error(refreshCommandFailure({
+    step: 'task', command: args, status: result.status, error: result.error, log,
+  }));
 }
 
 /** Storage up may build an absent image, including during maintenance retry

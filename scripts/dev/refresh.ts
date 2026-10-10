@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { redactCommandOutput } from '../fixture/command-output.ts';
 
 export function appHostSourceHash(root: string): string {
   const digest = createHash('sha256');
@@ -74,6 +75,44 @@ export function pruneBackendRevisions(
   }
 }
 
+const refreshFailureTailLines = 40;
+
+/** Failure text for one refresh command. A call that already kept a log names
+ * that file; a call that already kept pipes adds the redacted last 40 lines
+ * of that stdout and stderr. This reads only what the caller passes. */
+export function refreshCommandFailure(input: {
+  step: string;
+  command: readonly string[];
+  status: number | null;
+  /** Wait budget already known to the caller, such as an image-build limit. */
+  timeoutLimit?: string;
+  /** Used when the process produced no exit code and did not time out. */
+  unresolved?: string;
+  error?: Error;
+  stdout?: string | null;
+  stderr?: string | null;
+  log?: string;
+}): string {
+  const timedOut = input.timeoutLimit === undefined
+    && input.status === null
+    && (input.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT';
+  const outcome = input.timeoutLimit !== undefined
+    ? `exceeded ${input.timeoutLimit}`
+    : timedOut
+      ? 'timed out'
+      : `failed (exit ${input.status ?? input.unresolved ?? 'timeout/error'})`;
+  const summary = `${input.step} ${input.command.join(' ')} ${outcome}`.trim();
+  if (input.log) return `${summary}; output in ${input.log}`;
+  const parts = [input.stdout, input.stderr]
+    .filter((part): part is string => Boolean(part))
+    .map(part => part.replace(/\r?\n$/, ''));
+  const text = parts.join('\n');
+  if (!text.trim()) return summary;
+  const lines = text.split(/\r?\n/);
+  const tail = redactCommandOutput(lines.slice(-refreshFailureTailLines).join('\n'));
+  return tail ? `${summary}\n${tail}` : summary;
+}
+
 export type BackendCommand = (root: string, executable: string, args: string[]) => string;
 export const backendCommand: BackendCommand = (root, executable, args) => {
   const result = spawnSync(executable, args, {
@@ -84,9 +123,14 @@ export const backendCommand: BackendCommand = (root, executable, args) => {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (result.error || result.status !== 0)
-    throw new Error(
-      `Backend ${executable} ${args[0]} failed (exit ${result.status ?? 'timeout/error'})`,
-    );
+    throw new Error(refreshCommandFailure({
+      step: 'Backend',
+      command: [executable, ...args],
+      status: result.status,
+      error: result.error,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }));
   return result.stdout.trim();
 };
 

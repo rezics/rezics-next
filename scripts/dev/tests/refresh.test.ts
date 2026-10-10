@@ -12,6 +12,7 @@ import { activeBackend,
   activateBackend,
   appHostSourceHash,
   backendCommand,
+  refreshCommandFailure,
   backendExecutable,
   ensureBackend,
   stageBackend,
@@ -24,7 +25,7 @@ import { inspectRefresh, inspectRefreshAppHost, refreshMembershipCurrent, lostRe
   refreshLifecycleLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
   buildRefreshImage, imageBuildBudgetMs,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
-import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones, refreshBuildStepLog } from '../refresh-stack.ts';
+import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones, refreshBuildStepLog, refreshBuildTask } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -1119,9 +1120,22 @@ describe('shared stack refresh execution and guards', () => {
     });
   }
 
-  test('other Aspire errors remain ordinary failures without exposing output', () => {
-    expect(() => refreshAspireOutput(['resource', 'main', 'stop'], { status: 17, stdout: '', stderr: 'secret-value' }))
-      .toThrow('Aspire resource failed (exit 17)');
+  test('other Aspire errors name the command, the exit and a redacted output tail', () => {
+    const stdout = Array.from({ length: 45 }, (_, index) => `out ${index}`).join('\n');
+    let caught: unknown;
+    try {
+      refreshAspireOutput(['resource', 'main', 'stop'], {
+        status: 17, stdout, stderr: 'stopped\nDATABASE_PASSWORD=super-secret',
+      });
+    } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(Error);
+    const message = (caught as Error).message;
+    expect(message.startsWith('Aspire resource main stop failed (exit 17)\n')).toBe(true);
+    expect(message).toContain('out 7\n');
+    expect(message).not.toContain('out 6\n');
+    expect(message).toContain('stopped');
+    expect(message).toContain('DATABASE_PASSWORD=[redacted]');
+    expect(message).not.toContain('super-secret');
     expect(refreshAspireOutput(['describe'], { status: 0, stdout: ' {}\n', stderr: '' })).toBe('{}');
   });
 
@@ -1444,13 +1458,22 @@ describe('refresh image build', () => {
     expect(imageBuildBudgetMs).toBe(45 * 60_000);
   });
 
+  function imageCommand(dir: string, docker: string): string {
+    const state = join(dir, '.temp/stack/rezics-dev');
+    return `${docker} compose --env-file ${join(state, 'compose.env')} -f ${join(dir, 'infra/dev/compose.yaml')} --project-name rezics-dev build fuseki`;
+  }
+
   test('a build that outlives the budget reports a timeout', async () => {
     const { dir, docker, log } = stack('echo started; exec sleep 30');
     try {
       const started = Date.now();
-      await expect(buildRefreshImage(dir, dir, { budgetMs: 300, executable: docker }))
-        .rejects.toThrow('image build exceeded 0.3 s');
+      const error = await buildRefreshImage(dir, dir, { budgetMs: 300, executable: docker })
+        .catch((failure: unknown) => failure);
       expect(Date.now() - started).toBeLessThan(10_000);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        `image build ${imageCommand(dir, docker)} exceeded 0.3 s; output in ${log}`,
+      );
       expect(readFileSync(log, 'utf8')).toContain('started');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
@@ -1461,8 +1484,9 @@ describe('refresh image build', () => {
       const error = await buildRefreshImage(dir, dir, { executable: docker }).catch((failure: unknown) => failure);
       expect(error).toBeInstanceOf(Error);
       if (!(error instanceof Error)) return;
-      expect(error.message).toContain('exit 255');
-      expect(error.message).toContain(log);
+      expect(error.message).toBe(
+        `image build ${imageCommand(dir, docker)} failed (exit 255); output in ${log}`,
+      );
       expect(readFileSync(log, 'utf8')).toContain('step 3/9 mvn package');
       expect(readFileSync(log, 'utf8')).toContain('BUILD FAILURE');
       expect(statSync(log).mode & 0o777).toBe(0o600);
@@ -1480,6 +1504,70 @@ describe('refresh image build', () => {
 });
 
 describe('refresh build step output', () => {
+  test('a failing backend task error includes the redacted output tail', () => {
+    const dir = mkdtempSync(join(root, '.temp/refresh-task-failure-'));
+    const executable = join(dir, 'task');
+    const lines = Array.from({ length: 50 }, (_, index) => `prepare line ${index + 1}`);
+    writeFileSync(executable, `#!/bin/sh\nprintf '%s\\n' ${lines.map(line => `'${line}'`).join(' ')}\necho 'DATABASE_PASSWORD=super-secret' >&2\nexit 201\n`, { mode: 0o755 });
+    try {
+      let caught: unknown;
+      try { backendCommand(dir, executable, ['dev:prepare', '--', '--seek-only', 'dev.env']); }
+      catch (error) { caught = error; }
+      expect(caught).toBeInstanceOf(Error);
+      const message = (caught as Error).message;
+      expect(message.startsWith(
+        `Backend ${executable} dev:prepare -- --seek-only dev.env failed (exit 201)\n`,
+      )).toBe(true);
+      expect(message).toContain('prepare line 12\n');
+      expect(message).toContain('prepare line 50\n');
+      expect(message).not.toContain('prepare line 11\n');
+      expect(message).toContain('DATABASE_PASSWORD=[redacted]');
+      expect(message).not.toContain('super-secret');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('a failing backend task with a log names that log and leaves the output there', () => {
+    const stack = mkdtempSync(join(root, '.temp/refresh-build-task-'));
+    const bin = join(stack, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'bun'), '#!/bin/sh\necho "prepare failed: model head"\necho "DATABASE_PASSWORD=super-secret" >&2\nexit 201\n', { mode: 0o755 });
+    const candidate = join(stack, 'backend-revisions', 'abc123');
+    mkdirSync(candidate, { recursive: true });
+    try {
+      let caught: unknown;
+      try {
+        refreshBuildTask(candidate, ['dev:prepare', '--', '--seek-only'], {
+          ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`,
+        });
+      } catch (error) { caught = error; }
+      expect(caught).toBeInstanceOf(Error);
+      const message = (caught as Error).message;
+      expect(message.startsWith('task dev:prepare -- --seek-only failed (exit 201); output in ')).toBe(true);
+      expect(message).not.toContain('super-secret');
+      expect(message).not.toContain('prepare failed');
+      const log = message.slice(message.indexOf('output in ') + 'output in '.length);
+      expect(dirname(log)).toBe(stack);
+      expect(readFileSync(log, 'utf8')).toContain('prepare failed: model head');
+      expect(readFileSync(log, 'utf8')).toContain('DATABASE_PASSWORD=super-secret');
+      expect(statSync(log).mode & 0o777).toBe(0o600);
+    } finally { rmSync(stack, { recursive: true, force: true }); }
+  });
+
+  test('a backend command that times out says so and keeps the captured tail', () => {
+    const error = Object.assign(new Error('spawn timed out'), { code: 'ETIMEDOUT' });
+    expect(refreshCommandFailure({
+      step: 'Backend', command: ['task', 'dev:prepare'], status: null, error,
+      stderr: 'still aligning',
+    })).toBe('Backend task dev:prepare timed out\nstill aligning');
+  });
+
+  test('a logged failure does not also paste captured output', () => {
+    expect(refreshCommandFailure({
+      step: 'task', command: ['dev:prepare'], status: 201, log: '/stack/refresh-build.log',
+      stdout: 'DATABASE_PASSWORD=super-secret', stderr: 'prepare failed',
+    })).toBe('task dev:prepare failed (exit 201); output in /stack/refresh-build.log');
+  });
+
   test('a failing build step keeps its output in an owner-only log in the stack directory', () => {
     const stack = mkdtempSync(join(root, '.temp/refresh-build-log-'));
     try {
