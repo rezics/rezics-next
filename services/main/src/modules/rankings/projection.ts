@@ -4,7 +4,6 @@ import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { logWorkerFault } from '@rezics/observability/log';
 import { runWorkerTick } from '../../worker-tick.ts';
 import type { ContentCore, ContentOutboxEvent } from '../../../../content/src/core.ts';
-import { ContentUnavailable } from '../../../../content/src/errors.ts';
 import { readProgressSignal, type ProgressSignal } from '../structure/progress-outbox.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { refreshReadRankingAdmissions } from '../feed/ranking-admission.ts';
@@ -321,20 +320,11 @@ export class ReadRankingProjection {
   }
 
   async current(): Promise<RankingCheckpoint> {
-    // A page fences this twice. The progress head used to be its own Content
-    // statement, so those two fences put the ranking read two statements over
-    // its cap. Owner position and the progress head now share one snapshot.
-    const head = (await this.contentPool.query<{ data_epoch: string; sequence: string;
-      progress_sequence: string; pending: boolean }>(`SELECT c.data_epoch, c.sequence::text AS sequence,
-      COALESCE((SELECT o.sequence::text FROM content.outbox o WHERE o.data_epoch = c.data_epoch
-        AND o.recipe = 'structure-progress-v1' AND o.sequence IS NOT NULL
-        ORDER BY o.sequence DESC LIMIT 1), '0') AS progress_sequence,
-      EXISTS (SELECT 1 FROM content.outbox WHERE recipe = 'structure-progress-v1'
-        AND sequence IS NULL) AS pending
-      FROM content.owner_control c WHERE c.singleton`)).rows[0];
-    if (!head) throw new ContentUnavailable('Content owner position unavailable');
-    const owner = { dataEpoch: head.data_epoch, sequence: head.sequence };
-    const progressHead = { sequence: head.progress_sequence, pending: head.pending };
+    // The same reads the projection worker uses. A copied predicate here would
+    // let this fence and that worker disagree about which head is current.
+    // A page fences this twice, so each statement is counted twice.
+    const owner = await this.content.ownerPosition();
+    const progressHead = await this.progressHead(owner.dataEpoch);
     // Checkpoint and review source share one Access snapshot. Each page fences
     // twice, so a separate head read would add two statements to its cost.
     const row = (await this.access.query<{ generation: string; content_epoch: string;
