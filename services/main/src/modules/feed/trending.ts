@@ -113,10 +113,10 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
           ${realm ? '' : 'FILTER NOT EXISTS { ?space rv:disclosure rv:Private }'}
           ${realm ? '' : 'FILTER NOT EXISTS { ?space rv:listing ?listing FILTER(?listing != "listed") }'}
           FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
-          OPTIONAL { ?zone a rv:Zone ; rv:zoneState rv:Active ; rv:disclosure rv:Public ;
+          OPTIONAL { ?zone a rv:Zone ; rv:zoneState rv:Active ;
               rv:defaultRealm ?realm ; rv:space ?space .
-            FILTER NOT EXISTS { ?zone rv:protectionHead ?zoneProtection }
-            FILTER NOT EXISTS { ?zone rv:disclosure rv:Private } }
+            ?space rv:disclosure rv:Public .
+            FILTER NOT EXISTS { ?zone rv:protectionHead ?zoneProtection } }
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ?selection a rv:PublicationSelection ; rv:component ?slot ;

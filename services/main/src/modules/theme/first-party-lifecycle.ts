@@ -270,7 +270,7 @@ function mutation(input: FirstPartyCommand, operation: string,
       rv:hostZone ${iri(input.hostZone!)} .`,
     guard: `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${target} ?p ?o } }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.hostZone!)} a rv:Zone ;
-        rv:zoneState rv:Active ; rv:disclosure rv:Public . }` };
+        rv:zoneState rv:Active ; rv:space ?hostSpace . ?hostSpace rv:disclosure rv:Public . }` };
   if (input.action === 'revise') {
     const checked = checkFirstPartyBundle(input.bundle);
     const old = input.expectedRevision ? iri(input.expectedRevision) : null;

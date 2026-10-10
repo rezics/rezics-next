@@ -98,8 +98,7 @@ const publicRealm = `GRAPH ${iri(GRAPHS.current)} {
   ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
   FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
   FILTER NOT EXISTS { ?realm rv:protectionHead ?realmProtection }
-  OPTIONAL { ?space rv:zoneCapability ?zone . ?zone a rv:Zone ; rv:zoneState rv:Active ; rv:disclosure rv:Public .
-    FILTER NOT EXISTS { ?zone rv:disclosure rv:Private }
+  OPTIONAL { ?space rv:zoneCapability ?zone . ?zone a rv:Zone ; rv:zoneState rv:Active .
     FILTER NOT EXISTS { ?zone rv:protectionHead ?zoneProtection } }
 }`;
 
