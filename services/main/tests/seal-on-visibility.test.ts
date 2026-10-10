@@ -12,6 +12,50 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * Sites whose function both catches a current-visibility miss and writes a
  * receipt. Each reason is why that write is not a sealed refusal of visibility.
  * A hidden target and an absent one stay the same answer, including retry.
+ *
+ * Command-path audit. TargetUnavailable stays a WorkReadMissing: hidden and
+ * absent share one answer, so the hierarchy is unchanged. "Sealed" means a
+ * terminal receipt or a consumed key is recorded on that outcome.
+ *
+ * follows homeError (routes/follows.ts): sealed no, listed. The target is
+ * described before any follow receipt is inserted.
+ * ratings ratingError (routes/ratings.ts): sealed no, fixed. RatingCurrentVisibility
+ * is rethrown from the admitted writers; other observation failures still seal.
+ * realm submissions errorResponse (routes/realm-submissions.ts): sealed no, fixed.
+ * A candidate that is not public is WorkReadUnavailable (503) and is not in the
+ * terminal cancellation list.
+ * semantic semanticError (routes/semantic.ts) and admitted/change: sealed no,
+ * fixed. A reference that is not in the graph throws SemanticTargetUnavailable
+ * (503) before a rejection receipt. A taken definition key still seals.
+ * context runAdmittedCommand (modules/context/command.ts): sealed no, fixed.
+ * ContextCurrentVisibility is rethrown. Other ContextCommandUnavailable values
+ * still seal; those are stale or ambiguous heads, not current visibility.
+ * The contexts readError mapper is a read path: read, no state.
+ * post identification (routes/post-identification.ts): sealed no, listed. The
+ * placement miss is thrown before any subcommand key.
+ * realm reply route (routes/realm-replies.ts): sealed no. Launch, fixed locally.
+ * The miss becomes a denial before create, so the key is never registered.
+ * realm reply store create (modules/realm-reply/store.ts): sealed yes when the
+ * miss happens inside create, because sealTerminal runs in finally. Launch,
+ * listed, allowlisted below. Not edited.
+ * native credit createNativeCredit (modules/profiles/credits.ts): sealed no,
+ * fixed. A hidden Agent is refused before the key is registered, and a guard
+ * miss while the Agent is hidden rethrows unsealed. Allowlisted because
+ * recordGraphOutcome runs later in the same function, only after a completed edit.
+ * readNativeCredits: read, no state.
+ * progress completion planner (modules/progress/completion-plan.ts): sealed no,
+ * listed. A missing boundary returns null and writes no progress receipt.
+ * notification producers (saved-views, resources, editorial, producer-review):
+ * sealed no, listed. A hidden subject is skipped or returned undisclosed, and
+ * saved-view progress is not advanced for a hidden Work.
+ * review quotes, rating rollups, follow reads, rollup reads: read, no state.
+ * projection resolveProjection: sealed no, listed. A hidden frame refuses
+ * before the projection key is registered.
+ * member reply draft proveRoot (modules/content-publication/reply-draft.ts):
+ * sealed yes. The miss is rewritten to a denial and the draft admission is
+ * then sealed. Launch's G-1597 has the file; not edited.
+ * Every other instanceof WorkReadMissing or TargetUnavailable under
+ * services/main/src is a read or a read helper: read, no state.
  */
 const allowlist: Record<string, string> = {
   'modules/profiles/credits.ts#createNativeCredit':
