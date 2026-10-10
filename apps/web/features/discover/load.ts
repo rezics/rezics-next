@@ -68,7 +68,7 @@ export async function loadDiscoverState(
             ).items,
         )
       : Promise.resolve(null),
-    readChapterText(reader.anonymous, state, locale),
+    readChapterText(reader.personal, state, locale),
   ]);
   return {
     state,

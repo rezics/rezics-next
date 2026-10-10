@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import type { MainClient } from '../features/discover/types.ts';
-import { readSetupFirstPost } from '../features/communities/setup-first-post.ts';
+import type { MainClient } from '../discover/types.ts';
+import { readSetupFirstPost } from './setup-first-post.ts';
 
 const actor = 'https://rezics.com/id/00000000-0000-8000-8000-000000000412';
 const realm = 'https://rezics.com/id/00000000-0000-8000-8000-000000000436';

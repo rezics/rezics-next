@@ -23,9 +23,10 @@ type Text = ReturnType<typeof materializeData<ConceptMessages>>;
 /** Reads a page, the first again after "Start over"; the BFF by default, a fixture in stories. */
 export type ConceptWorksLoader = (state: ConceptState, locale: UiLocale, cursor?: string) =>
   Promise<Loaded<ConceptWorksPage>>;
-// The Concept list is public. A session cookie would make "Show more" depend on who is signed in.
+// publicWorkRead applies age and category opt-ins from the bearer. Show more keeps the session
+// the server used for the first page.
 const bffWorks: ConceptWorksLoader = (state, locale, cursor) =>
-  readConceptWorks(browserMainApi(undefined, { anonymous: true }), state, locale, cursor);
+  readConceptWorks(browserMainApi(), state, locale, cursor);
 
 class ReadError extends Error {
   constructor(readonly failure: ReadFailure) { super(`Concept Works read failed: ${failure}`); }

@@ -7,11 +7,10 @@ import {
 } from '../../../generated/openapi/main/exposure.ts';
 import { callEnd, edenCalls, operationPattern, readWebSources } from './support/eden-calls.ts';
 
-// A browser call to a public read sends the session cookie only when it also names an acting subject.
-// Otherwise the response depends on who is signed in, shared caches cannot keep it, and Main rejects an
-// authenticated read that names no Agent. The scan reads features/ and app/ the way the closed-operations
-// guard does: Eden chains, then the generated exposure table. A read whose OpenAPI security is bearer-only
-// keeps the cookie; that call is the credential, and it has no acting-subject parameter to pass.
+// Every browser call to a Main read is one of three classes, taken from the route:
+// `anonymous` ignores the bearer, `credential` personalises from it and takes no subject,
+// `acting-subject` names the reader. An unlisted operation fails. An anonymous call to any
+// other class fails, and so does a missing subject on an acting-subject read.
 
 const repoRoot = join(import.meta.dir, '../../..');
 
@@ -39,6 +38,10 @@ const publicReads = (Object.keys(operationExposures) as PlatformOperationId[]).f
     !bearerRequired.has(id) &&
     (id.startsWith('get') || id === 'postV1Query'),
 );
+const mainReads = (Object.keys(operationExposures) as PlatformOperationId[]).filter(
+  (id) =>
+    operationExposures[id] === 'public' && (id.startsWith('get') || id === 'postV1Query'),
+);
 
 interface PublicCall {
   start: number;
@@ -50,7 +53,7 @@ interface PublicCall {
 function publicCalls(text: string): PublicCall[] {
   return edenCalls(text).flatMap((call) => {
     if (call.method === null) return [];
-    const operations = publicReads.filter((id) =>
+    const operations = mainReads.filter((id) =>
       operationPattern(call.method, call.segments, false).test(id),
     );
     if (!operations.length) return [];
@@ -84,11 +87,6 @@ function initializer(text: string, name: string): string | null {
   if (!last) return null;
   const open = last.index + last[0].length - 1;
   return text.slice(open, callEnd(text, open) + 1);
-}
-
-/** The client sends no cookie. Gating that on an acting subject still sends one when the subject is set. */
-function omits(args: string | null): boolean {
-  return !!args && /anonymous\s*:\s*true\b/.test(args);
 }
 
 interface Reader {
@@ -165,57 +163,143 @@ function clientArgs(text: string, call: PublicCall): string | null {
   return null;
 }
 
-/**
- * These reads have no acting-subject parameter, and Main still changes the result from the cookie.
- * A new site is a violation until it is listed here.
- */
-const credentialPersonalised: readonly {
-  file: string;
-  operation: string;
-  callee?: string;
-  reason: string;
-}[] = [
-  {
-    file: 'features/search/typeahead.tsx',
-    operation: 'getV1SearchTypeahead',
-    reason: 'the server personalises this read from the credential',
-  },
-  {
-    file: 'features/post-composer/composer.tsx',
-    operation: 'getV1SearchTypeahead',
-    reason: 'the server personalises this read from the credential',
-  },
-  {
-    file: 'features/work-levels-edit/work-picker.tsx',
-    operation: 'getV1SearchTypeahead',
-    reason: 'the server personalises this read from the credential',
-  },
-  {
-    file: 'features/home/tabs.tsx',
-    operation: 'postV1Query',
-    callee: 'readConceptFeed',
-    reason: 'the server personalises this read from the credential',
-  },
-  {
-    file: 'features/studio/realm-submit.tsx',
-    operation: 'postV1Query',
-    callee: 'discoveryApi',
-    reason: 'the server personalises this read from the credential',
-  },
-];
+type ReadClass = 'anonymous' | 'credential' | 'acting-subject';
 
-const personalisation = 'the server personalises this read from the credential';
-
-function personalised(file: string, operations: readonly string[], callee?: string): boolean {
-  return credentialPersonalised.some(
-    (entry) =>
-      entry.file === file &&
-      entry.reason === personalisation &&
-      operations.length === 1 &&
-      operations[0] === entry.operation &&
-      entry.callee === callee,
-  );
-}
+/** Route evidence for every Main read a browser call can reach. An id missing here fails the scan. */
+const readClasses: Readonly<Record<string, { kind: ReadClass; evidence: string }>> = {
+  getV1Facets: {
+    kind: 'anonymous',
+    evidence: 'services/main/src/routes/facets.ts:7 drops the bearer; one body per deploy',
+  },
+  getV1Realms: {
+    kind: 'anonymous',
+    evidence: 'services/main/src/routes/realm-directory.ts:68 publicRequest strips the bearer',
+  },
+  getV1SearchTypeahead: {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/search.ts:190 applies mutes from the bearer and takes no subject',
+  },
+  getV1Works: {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/discovery.ts:54 publicWorkRead discloses from the bearer',
+  },
+  postV1Query: {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/query.ts:118 publicWorkRead discloses from the bearer',
+  },
+  getV1RealmsByRealmThreads: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/realm-reply-threads.ts:53 workRead; a private Realm needs the member',
+  },
+  getV1RealmsByRealmDecisions: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/realm-reads.ts:98 workRead; a private Realm needs the member',
+  },
+  getV1RealmsByRealmThreadsByReply: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/realm-reply-threads.ts:62 workRead names the member on a thread page',
+  },
+  getV1DiscoveryConcepts: {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/discovery.ts:31 publicWorkRead discloses from the bearer',
+  },
+  getV1DiscoverySections: {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/discovery.ts:36 publicWorkRead discloses from the bearer',
+  },
+  'getV1Rating-populations': {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/rating-populations.ts:22 publicWorkRead discloses from the bearer',
+  },
+  getV1AddressesResolve: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/addresses.ts:216 resolves as query.actingSubject when the bearer is present',
+  },
+  'getV1MePerson-preferences': {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/preferences.ts:46 requires actingSubject with the bearer',
+  },
+  'getV1MeManaged-realms': {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/managed-realms.ts:52 requires actingSubject with the bearer',
+  },
+  'getV1MeFeed-preferences': {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/feed.ts:108 reads preferences for query.actingSubject',
+  },
+  getV1MeFollows: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/follows.ts:70 verifies the bearer and reads query.actingSubject',
+  },
+  getV1RealmsByRealmModeration: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/management-reads.ts:92 moderation queue is read as the member',
+  },
+  getV1RealmsByRealmModerationByCaseId: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/management-reads.ts:55 a case is read as the member',
+  },
+  getV1RealmsByRealmAudit: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/management-reads.ts:118 the audit log is read as the member',
+  },
+  getV1RealmsByRealmJoining: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/managed-realms.ts:79 join policy is read as the member',
+  },
+  getV1RealmsByRealm: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/realm-reads.ts:77 workRead takes the optional member on the header',
+  },
+  'getV1RealmsByRealmZone-attachments': {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/zones.ts:692 lists attachments as query.actingSubject',
+  },
+  getV1ZonesByIdConfiguration: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/zones.ts:572 requires the zone editor as actingSubject',
+  },
+  getV1AgentsById: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/profiles.ts:86 workRead; a token must name the acting Agent',
+  },
+  getV1ContributionsByContributionDraftsByRevision: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/contributions.ts:148 the draft is read as actingSubject',
+  },
+  getV1EditorialProposals: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/editorial-proposals.ts:174 lists proposals for the bearer and actingSubject',
+  },
+  getV1EditorialProposalsByProposal: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/editorial-proposals.ts:165 reads one proposal for the bearer and actingSubject',
+  },
+  getV1WorksById: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/work-reads.ts:62 workRead discloses from the bearer and the subject',
+  },
+  getV1WorksByIdMetadata: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/work-metadata.ts:93 the header head is read as actingSubject',
+  },
+  getV1WorksByIdRealizations: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/realizations.ts:60 the edition list is read as actingSubject',
+  },
+  getV1PostsByIdIdentifications: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/post-identification.ts:62 workRead names the reader on the links',
+  },
+  'getV1Reading-positionsByWork': {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/reading-positions.ts:56 workRead seeks as the reader',
+  },
+  getV1ReaderSettings: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/reading-settings.ts:45 requires actingSubject with the bearer',
+  },
+};
 
 /** The Eden arguments name an acting subject, or they send the value whose subject gates the cookie. */
 function subjectPassed(apiArgs: string, clientArgs: string | null): boolean {
@@ -260,8 +344,60 @@ function subjectForwarded(
   });
 }
 
-/** Credentialed browser calls to public reads that do not name an acting subject. */
-export function violations(files: Readonly<Record<string, string>>): string[] {
+function anonymousTrue(args: string | null): boolean {
+  return !!args && /anonymous\s*:\s*true\b/.test(args);
+}
+
+/** Any `anonymous:` option can drop the bearer. Credential routes have no subject to gate that on. */
+function anonymousOption(args: string | null): boolean {
+  return !!args && /anonymous\s*:/.test(args);
+}
+
+function judge(
+  file: string,
+  label: string,
+  operations: readonly string[],
+  client: string | null,
+  apiArgs: string,
+  classes: Readonly<Record<string, { kind: ReadClass }>>,
+  reader?: Reader,
+  invocation?: string,
+): string[] {
+  const subject =
+    subjectPassed(apiArgs, client) ||
+    (!!reader &&
+      !!invocation &&
+      !!client &&
+      subjectForwarded(reader, invocation, client, apiArgs));
+  const found: string[] = [];
+  for (const operation of operations) {
+    const entry = classes[operation];
+    if (!entry) {
+      found.push(`${file}: ${label} reaches ${operation}, which has no read class`);
+      continue;
+    }
+    if (entry.kind === 'anonymous') {
+      if (!anonymousTrue(client))
+        found.push(
+          `${file}: ${label} reaches ${operation} with the session cookie; the route ignores the bearer`,
+        );
+    } else if (
+      anonymousTrue(client) ||
+      (entry.kind === 'credential' && anonymousOption(client))
+    ) {
+      found.push(`${file}: ${label} reaches ${operation} anonymously; the route reads the bearer`);
+    } else if (entry.kind === 'acting-subject' && !subject) {
+      found.push(`${file}: ${label} reaches ${operation} with no acting subject`);
+    }
+  }
+  return found;
+}
+
+/** Browser calls to Main reads that disagree with their route class. */
+export function violations(
+  files: Readonly<Record<string, string>>,
+  classes: Readonly<Record<string, { kind: ReadClass }>> = readClasses,
+): string[] {
   const functions = new Map<string, Reader>();
   for (const text of Object.values(files)) {
     for (const [name, reader] of functionBodies(text)) functions.set(name, reader);
@@ -269,12 +405,9 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
   const found: string[] = [];
   for (const [file, text] of Object.entries(files)) {
     for (const call of publicCalls(text)) {
-      if (personalised(file, call.operations)) continue;
       const args = clientArgs(text, call);
-      if (args === null || omits(args) || subjectPassed(call.args, args)) continue;
-      found.push(
-        `${file}: ${call.source} reaches ${call.operations.join(', ')} with the session cookie and no acting subject`,
-      );
+      if (args === null) continue;
+      found.push(...judge(file, call.source, call.operations, args, call.args, classes));
     }
     for (const created of text.matchAll(/browserMainApi\(/g)) {
       const before = text.slice(Math.max(0, created.index - 40), created.index);
@@ -283,7 +416,7 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
       const open = created.index + 'browserMainApi'.length;
       const end = callEnd(text, open);
       const args = text.slice(open, end + 1);
-      if (omits(args) || /^\s*\??\.\s*v1/.test(text.slice(end + 1))) continue;
+      if (/^\s*\??\.\s*v1/.test(text.slice(end + 1))) continue;
       let depth = 0;
       let start = created.index;
       for (let index = created.index - 1; index >= 0; index--) {
@@ -300,21 +433,12 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
       if (!callee) continue;
       const callText = text.slice(start, callEnd(text, start) + 1);
       const reader = functions.get(callee);
-      const handed = splitTop(callText.slice(1, -1)).some(
-        (arg) => !arg.includes('browserMainApi(') && /\bactingSubject\b/.test(arg),
-      );
-      const read =
-        reader && !(handed && /\bactingSubject\b/.test(reader.body))
-          ? publicCalls(reader.body).find(
-              (call) =>
-                !subjectPassed(call.args, args) &&
-                !subjectForwarded(reader, callText, args, call.args),
-            )
-          : undefined;
-      if (read && !personalised(file, read.operations, callee))
+      if (!reader) continue;
+      for (const call of publicCalls(reader.body)) {
         found.push(
-          `${file}: ${callee}() reaches ${read.operations.join(', ')} with the session cookie and no acting subject`,
+          ...judge(file, `${callee}()`, call.operations, args, call.args, classes, reader, callText),
         );
+      }
     }
   }
   return found;
@@ -337,52 +461,48 @@ test('the exposure table has public reads the scan can name', () => {
   expect(publicReads).not.toContain('getV1AgentsByIdListing');
 });
 
-test('a credentialed public read is rejected, and an anonymous or acting-subject read is not', () => {
+test('a browser read must match its route class', () => {
   expect(
     violations({
       'features/old.tsx': `${readers}
-      const works = () => readConceptWorks(browserMainApi(), state, locale, cursor);
-      const shelf = query => readDiscovery(browserMainApi(), query);
-      const filtered = page => readQueryDiscovery(browserMainApi(), state, page);
       void browserMainApi().v1.realms({ realm }).threads.get({ query: { sort: 'new', limit: 1 } });
       void browserMainApi().v1.realms.get({ query: { limit: 20 } });
       void browserMainApi().v1.search.typeahead.get({ query: { prefix } });
-      void browserMainApi().v1.agents({ id }).listing.get();
-      void browserMainApi().v1.realms({ realm }).get({ query: { actingSubject } });
+      void browserMainApi().v1.facets.get();
+      const works = () => readConceptWorks(browserMainApi(), state, locale, cursor);
+      const shelf = query => readDiscovery(browserMainApi(), query);
       const mine = query => readDiscovery(browserMainApi(undefined, { anonymous: !query.actingSubject }), query);
       const publicList = () => readConceptWorks(browserMainApi(undefined, { anonymous: true }), state, locale, cursor);
-      const topic = () => readConceptFeed(browserMainApi(undefined, { anonymous: !actingSubject }), conceptId, locale, cursor);`,
+      const topic = () => readConceptFeed(browserMainApi(undefined, { anonymous: !actingSubject }), conceptId, locale, cursor);
+      void browserMainApi().v1.realms({ realm }).threads.get({ query: { actingSubject } });`,
     }),
   ).toEqual([
-    'features/old.tsx: .v1.realms({realm}).threads.get( reaches getV1RealmsByRealmThreads with the session cookie and no acting subject',
-    'features/old.tsx: .v1.realms.get( reaches getV1Realms with the session cookie and no acting subject',
-    'features/old.tsx: .v1.search.typeahead.get( reaches getV1SearchTypeahead with the session cookie and no acting subject',
-    'features/old.tsx: readConceptWorks() reaches postV1Query with the session cookie and no acting subject',
-    'features/old.tsx: readDiscovery() reaches getV1Works with the session cookie and no acting subject',
-    'features/old.tsx: readQueryDiscovery() reaches postV1Query with the session cookie and no acting subject',
-    'features/old.tsx: readConceptFeed() reaches postV1Query with the session cookie and no acting subject',
+    'features/old.tsx: .v1.realms({realm}).threads.get( reaches getV1RealmsByRealmThreads with no acting subject',
+    'features/old.tsx: .v1.realms.get( reaches getV1Realms with the session cookie; the route ignores the bearer',
+    'features/old.tsx: .v1.facets.get( reaches getV1Facets with the session cookie; the route ignores the bearer',
+    'features/old.tsx: readDiscovery() reaches getV1Works anonymously; the route reads the bearer',
+    'features/old.tsx: readConceptWorks() reaches postV1Query anonymously; the route reads the bearer',
+    'features/old.tsx: readConceptFeed() reaches postV1Query anonymously; the route reads the bearer',
   ]);
 });
 
-test('browser public reads omit the session cookie unless they name an acting subject', () => {
+test('an unlisted Main read fails', () => {
+  expect(
+    violations(
+      { 'features/new.tsx': 'void browserMainApi().v1.works.get({ query });' },
+      {},
+    ),
+  ).toEqual(['features/new.tsx: .v1.works.get( reaches getV1Works, which has no read class']);
+});
+
+test('browser Main reads match the route class', () => {
   expect(violations(webSources)).toEqual([]);
 });
 
-test('typeahead keeps the cookie only at the sites the server personalises from it', () => {
-  expect(credentialPersonalised.map((entry) => entry.reason)).toEqual([
-    personalisation,
-    personalisation,
-    personalisation,
-    personalisation,
-    personalisation,
-  ]);
-  expect(
-    credentialPersonalised.map((entry) => `${entry.file} ${entry.callee ?? entry.operation}`),
-  ).toEqual([
-    'features/search/typeahead.tsx getV1SearchTypeahead',
-    'features/post-composer/composer.tsx getV1SearchTypeahead',
-    'features/work-levels-edit/work-picker.tsx getV1SearchTypeahead',
-    'features/home/tabs.tsx readConceptFeed',
-    'features/studio/realm-submit.tsx discoveryApi',
-  ]);
+test('each class names the route that decides it', () => {
+  const kinds = new Set(Object.values(readClasses).map((entry) => entry.kind));
+  expect(kinds).toEqual(new Set(['anonymous', 'credential', 'acting-subject']));
+  expect(Object.values(readClasses).every((entry) => entry.evidence.includes('services/main/'))).toBe(
+    true,
+  );
 });

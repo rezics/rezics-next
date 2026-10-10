@@ -1,4 +1,7 @@
+import { cookies } from 'next/headers';
 import { cache } from 'react';
+import { mainApiWithToken } from '../api/main.ts';
+import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readReaderSeed } from '../catalogue/reader-store.ts';
 import { type FeedDefaults, type FeedState, feedQuery, parseFeedState } from '../feed/state.ts';
@@ -131,11 +134,11 @@ export async function resolveConceptTab(tabUuid: string | null,
   return tab ? { kind: 'selected', tab, tabs: withOpenedConcept(tabs, tab) } : { kind: 'absent', tabs };
 }
 
-/** One seek page of a followed topic's public works, newest first. */
+/** One seek page of a followed topic's public works, newest first. The template is public, and publicWorkRead still applies disclosure from the bearer. */
 export async function readConceptTopicFeed(conceptId: string, locale: UiLocale, cursor?: string):
   Promise<Loaded<ConceptFeedPage>> {
-  const reader = await shellReader();
-  return readConceptFeed(reader.actingSubject ? reader.main : reader.anonymous, conceptId, locale, cursor);
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  return readConceptFeed(mainApiWithToken(token), conceptId, locale, cursor);
 }
 
 export type { ConceptFeedPage, FollowedConceptTab };

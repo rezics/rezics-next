@@ -50,14 +50,14 @@ async function StreamedPosts({ posts, ...props }: Omit<HomePostsProps, 'query' |
 }
 
 /** A followed topic's works, once the public template answers. */
-async function StreamedConcept({ topic, locale, messages, actingSubject }: {
-  topic: FollowedConceptTab; locale: UiLocale; actingSubject?: string;
+async function StreamedConcept({ topic, locale, messages }: {
+  topic: FollowedConceptTab; locale: UiLocale;
   messages: { home: HomeMessages; feed: HomePostsProps['messages']['feed'] };
 }) {
   const initial = await readConceptTopicFeed(topic.id, locale);
   // The key is this read, not only the topic, so a retry replaces a failed page.
   return <ConceptTopicFeed key={`${topic.id}:${conceptFeedIdentity(initial)}`} topic={topic} locale={locale}
-    messages={messages} initial={initial} actingSubject={actingSubject} />;
+    messages={messages} initial={initial} />;
 }
 
 /**
@@ -98,8 +98,7 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
     welcomeDismissed={jar.get(WELCOME_COOKIE)?.value === 'dismissed'}
     signInHref={signInHref} signUpHref={`${signInHref}&create=1`}
     posts={conceptTab ? <Suspense fallback={<div aria-busy="true"><FeedSkeleton /></div>}>
-      <StreamedConcept topic={conceptTab} locale={locale} messages={messages}
-        actingSubject={view.actingSubject ?? undefined} />
+      <StreamedConcept topic={conceptTab} locale={locale} messages={messages} />
     </Suspense> : topic.kind === 'unread' ? <ConceptTopicFeed topic={null} locale={locale} messages={messages}
       initial={{ ok: false, failure: 'unavailable' }} />
       : posts ? <Suspense fallback={<div aria-busy="true"><FeedSkeleton /></div>}>

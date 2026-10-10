@@ -15,8 +15,8 @@ import { readConceptWorks, settle } from './works-read.ts';
 
 /**
  * Who reads. A signed-in person whose session Agent is eligible follows as
- * that Agent; anyone else reads publicly. Concept pages are public: only the
- * follow state is read as the reader.
+ * that Agent. The Works list sends the account bearer on its own: publicWorkRead
+ * reveals age-gated Works from that credential and takes no acting subject.
  */
 export const conceptReader = cache(async () => {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
@@ -31,8 +31,8 @@ export const conceptReader = cache(async () => {
 export const readConcept = cache((id: string, _locale: UiLocale): Promise<Loaded<ConceptRead>> =>
   settle(() => mainApiWithToken(undefined).v1.concepts({ id }).get({ query: {} })));
 
-export const readFirstWorks = cache((state: ConceptState, locale: UiLocale) =>
-  readConceptWorks(mainApiWithToken(undefined), state, locale));
+export const readFirstWorks = cache(async (state: ConceptState, locale: UiLocale) =>
+  readConceptWorks(mainApiWithToken((await cookies()).get(ACCESS_COOKIE)?.value), state, locale));
 
 /** Followers, and as a signed-in reader whether they follow the Concept. */
 export const readConceptFollow = cache(async (id: string, _locale: UiLocale): Promise<Loaded<ConceptFollowState>> => {
