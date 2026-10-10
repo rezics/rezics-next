@@ -88,9 +88,7 @@ try {
       sink.clear();
     }
   }
-  // A completed read checks the Access recovery fence after the page, one
-  // statement beyond the page's own reads.
-  assertWorkCostAtScales(profiles,{ fusekiRequests: 12,postgresStatements: 13 });
+  assertWorkCostAtScales(profiles,{ fusekiRequests: 12,postgresStatements: 12 });
   // Folding the review head into the checkpoint read must preserve missing
   // source rejection and the grace period for committed, unsequenced reviews.
   const reviewHead = (await home.stack.accessPool.query<{ position: string }>(
