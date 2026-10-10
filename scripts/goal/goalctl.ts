@@ -15,6 +15,7 @@ import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcqu
   updateDirectoryLeaseNote, type AcquiredDirectoryLease, type DirectoryLeaseRecord } from '../qa/process/lease.ts';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
+import { qaArtifactDirectory } from '../qa/core.ts';
 import { parseAffectedArgs, testCommands } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
@@ -5636,7 +5637,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   const queuedAt = now();
   let startedAt: number | undefined;
   let code: number | undefined;
-  const artifactRoot = join(process.cwd(), '.artifacts', 'qa');
+  const artifactRoot = qaArtifactDirectory(process.cwd());
   const prior = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
   const deferred = !heavy && harnessOwnsSlot(command);
   const slots = heavy ? undefined : options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);

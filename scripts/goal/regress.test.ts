@@ -14,6 +14,7 @@ import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
+  runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 let repoSequence = 0;
@@ -657,6 +658,34 @@ describe('pinned main-wide regression', () => {
       }
     } finally { release?.(); r.cleanup(); }
   });
+
+  test('withSlot lists the override root and runBatch reads its junit', async () => {
+    const r = repo();
+    const file = r.files.find(item => item.tier === 'integration')!.file;
+    const resolver = join(import.meta.dir, '../qa/core.ts');
+    r.commit({ 'scripts/qa/test.ts': `import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { newRunId, qaArtifactDirectory } from ${JSON.stringify(resolver)};
+const directory = join(qaArtifactDirectory(process.cwd()), newRunId());
+mkdirSync(directory, { recursive: true });
+writeFileSync(join(directory, 'integration.xml'), '<testcase file="${file}" name="listed"></testcase>');
+process.exit(0);
+` });
+    try {
+      const result = await r.run({ runId: 'slot-listing', only: ['integration'], runner: async (checkout, batch, directory, shards, slotLimit, artifactRoot) => {
+        if (batch.tier !== 'integration') return r.runner(checkout, batch, directory, shards, slotLimit, artifactRoot);
+        return runBatch(checkout, batch, directory, shards, slotLimit, artifactRoot);
+      } });
+      const attempt = result.batches.find(batch => batch.id === 'integration-1')!.attempts[0]!;
+      const slot = JSON.parse(readFileSync(join(r.options.stateDir, 'regress/slot-listing/integration-1/attempt-1/slot.json'), 'utf8')) as { artifactPaths: string[] };
+      const batchRoot = join(r.options.stateDir, 'regress/slot-listing/qa/integration-1/attempt-1');
+      expect(slot.artifactPaths).toHaveLength(1);
+      expect(slot.artifactPaths[0]!.startsWith(`${batchRoot}/`)).toBe(true);
+      expect(attempt.artifactPaths).toContain(slot.artifactPaths[0]);
+      expect(readFileSync(join(slot.artifactPaths[0]!, 'integration.xml'), 'utf8')).toContain('name="listed"');
+      expect(result.files.find(item => item.file === file)!.outcome).toBe('passed');
+    } finally { r.cleanup(); }
+  }, 60_000);
 
   test('a stale run directory in the label root is ignored', () => {
     const root = mkdtempSync(join(regressionCheckoutRoot(import.meta.dir, join(import.meta.dir, '../../.temp/r')), 'label-'));

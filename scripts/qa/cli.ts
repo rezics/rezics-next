@@ -27,6 +27,7 @@ import {
   mergeJUnit,
   newRunId,
   parseArgs,
+  qaArtifactDirectory,
   planStackProjects,
   recordedFileDurations,
   selfManagedFaultFiles,
@@ -84,8 +85,7 @@ import {
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
 const runId = newRunId();
-// A regression run sets this so QA evidence stays in the run directory after the checkout is removed.
-const directory = join(process.env.REZICS_QA_ARTIFACT_ROOT ?? join(root, '.artifacts', 'qa'), runId);
+const directory = join(qaArtifactDirectory(root), runId);
 const logs = join(directory, 'logs');
 mkdirSync(logs, { recursive: true });
 const sourceBefore = sourceIdentity(root);

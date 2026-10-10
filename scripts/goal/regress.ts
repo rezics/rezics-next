@@ -644,7 +644,7 @@ export function regressionBatchArtifactPaths(reported: readonly string[], artifa
   return moved;
 }
 
-async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string): Promise<Execution> {
+export async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string): Promise<Execution> {
   mkdirSync(directory, { recursive: true });
   const report = join(directory, 'slot.json');
   const storyXmlPath = join(directory, 'storybook.xml');

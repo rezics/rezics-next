@@ -1010,10 +1010,14 @@ function mainCheckout(root: string): string | undefined {
   return common.ok ? dirname(common.output.trim()) : undefined;
 }
 
+/** Where this process writes its QA run: the regression override, otherwise `<root>/.artifacts/qa`. */
+export function qaArtifactDirectory(root: string): string {
+  return process.env.REZICS_QA_ARTIFACT_ROOT || join(root, '.artifacts', 'qa');
+}
+
 // Prior QA artifacts of this checkout, the main checkout and its Goal worktrees.
 export function artifactRoots(root: string): string[] {
-  const roots = new Set([join(root, '.artifacts', 'qa')]);
-  if (process.env.REZICS_QA_ARTIFACT_ROOT) roots.add(process.env.REZICS_QA_ARTIFACT_ROOT);
+  const roots = new Set([qaArtifactDirectory(root), join(root, '.artifacts', 'qa')]);
   const main = mainCheckout(root);
   if (main) {
     roots.add(join(main, '.artifacts', 'qa'));
