@@ -13,7 +13,10 @@ import { catalogueYearParam, readPublicationYears } from './catalogue-facts.ts';
 // results. A Work the template does not list is left out; the page does not invent a year.
 
 const MEMBER_PAGES = 10;
-const YEAR_PAGES = 8;
+/** Pages of `work-publication-years` one request may read. A cap on that request's cost, not a quota. */
+export const YEAR_PAGES = 8;
+/** Matches kept from the pages this request read. A further year-read page waits for the next cursor. */
+const SCREEN = 20;
 
 function withFlags(href: string, year: number | null, directory: boolean): string {
   const url = new URL(href, 'https://rezics.local');
@@ -22,6 +25,7 @@ function withFlags(href: string, year: number | null, directory: boolean): strin
   if (directory && year === null) url.searchParams.set('years', '1');
   else url.searchParams.delete('years');
   url.searchParams.delete('yearOffset');
+  url.searchParams.delete('yearCursor');
   const search = url.searchParams.toString();
   return search ? `${url.pathname}?${search}` : url.pathname;
 }
@@ -31,20 +35,28 @@ function directoryParam(value: string | string[] | undefined): boolean {
   return raw === '1';
 }
 
-function offsetOf(value: string | string[] | undefined): number {
+/** The publication-year cursor the year view resumes from, or null at the start of the read. */
+function yearCursorOf(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw || !/^[0-9]+$/.test(raw)) return 0;
-  const offset = Number(raw);
-  return Number.isSafeInteger(offset) && offset >= 0 && offset <= 10_000 ? offset : 0;
+  return raw && raw.length <= 2048 ? raw : null;
 }
 
-async function members(view: Extract<RealmView, { kind: 'view' }>, state: ReturnType<typeof parseBrowseState>): Promise<{
+function yearHref(href: string, cursor: string | null): string {
+  const url = new URL(href, 'https://rezics.local');
+  if (cursor) url.searchParams.set('yearCursor', cursor);
+  else url.searchParams.delete('yearCursor');
+  const search = url.searchParams.toString();
+  return search ? `${url.pathname}?${search}` : url.pathname;
+}
+
+async function members(view: Extract<RealmView, { kind: 'view' }>, state: ReturnType<typeof parseBrowseState>,
+  browse: typeof readZoneBrowse): Promise<{
   works: Map<string, ZoneWork>; incomplete: boolean; failure: 'unavailable' | null;
 }> {
   const works = new Map<string, ZoneWork>();
   let cursor: string | null = null;
   for (let page = 0; page < MEMBER_PAGES; page++) {
-    const read = await readZoneBrowse(view.context.realm, view.context.locale, mainBrowseQuery({ ...state, cursor }));
+    const read = await browse(view.context.realm, view.context.locale, mainBrowseQuery({ ...state, cursor }));
     if (!read.ok) return { works, incomplete: true, failure: 'unavailable' };
     for (const item of read.data.items) works.set(item.id, zoneWork(item, view.context, item.evidence));
     cursor = read.data.nextCursor;
@@ -56,12 +68,14 @@ async function members(view: Extract<RealmView, { kind: 'view' }>, state: Return
 /**
  * Stamps the year onto the browse model the route already built, and fills the header slot's year
  * control. The route has already loaded the view and the first browse page.
+ * `reads` replaces the year and roster reads in tests.
  */
 export async function applyCatalogueYear({ view, search, model }: {
   view: Extract<RealmView, { kind: 'view' }>;
   search: Record<string, string | string[] | undefined>;
   model: BrowseModel;
-}): Promise<{ header: ReactNode; publicationYears: Map<string, number[]>; year: number | null;
+}, reads: { publicationYears?: typeof readPublicationYears; zoneBrowse?: typeof readZoneBrowse } = {}): Promise<{
+  header: ReactNode; publicationYears: Map<string, number[]>; year: number | null;
   failure: 'unavailable' | null }> {
   const year = catalogueYearParam(search.year);
   const directory = year === null && directoryParam(search.years);
@@ -91,18 +105,21 @@ export async function applyCatalogueYear({ view, search, model }: {
     directory, bounded: false,
   };
   const Header = view.pkg?.slots.browseHeader;
-  const Link = (await import('../shell/localized-link.tsx')).default;
-  const header = Header ? <Header zone={view.zone} filter={null} filtered={false} fallback={null} Link={Link}
+  const Link = Header ? (await import('../shell/localized-link.tsx')).default : null;
+  const header = Header && Link ? <Header zone={view.zone} filter={null} filtered={false} fallback={null} Link={Link}
     year={yearControl} /> : null;
   const publicationYears = new Map<string, number[]>();
   if (listing) {
-    const roster = await members(view, { ...state, cursor: null });
+    const years = reads.publicationYears ?? readPublicationYears;
+    const roster = await members(view, { ...state, cursor: null }, reads.zoneBrowse ?? readZoneBrowse);
     if (roster.failure) return { header, publicationYears, year, failure: 'unavailable' };
     const found: ZoneWork[] = [];
-    let cursor: string | undefined;
-    let stopped = false;
+    let cursor = yearCursorOf(search.yearCursor) ?? undefined;
+    let nextCursor: string | null = null;
+    // YEAR_PAGES bounds one request. Works outside this Zone are filtered after the read;
+    // the year template does not take a format or type yet.
     for (let step = 0; step < YEAR_PAGES; step++) {
-      const listed = await readPublicationYears(year === null ? {} : { fromYear: year, toYear: year }, cursor);
+      const listed = await years(year === null ? {} : { fromYear: year, toYear: year }, cursor);
       if (!listed.ok) return { header, publicationYears, year, failure: 'unavailable' };
       for (const row of listed.data.items) {
         const work = roster.works.get(row.id);
@@ -111,20 +128,21 @@ export async function applyCatalogueYear({ view, search, model }: {
         if (!prior.includes(row.year)) publicationYears.set(work.id, [...prior, row.year].sort((left, right) => right - left));
         if (!found.some(item => item.id === work.id)) found.push(work);
       }
-      if (!listed.data.nextCursor) { cursor = undefined; break; }
+      if (!listed.data.nextCursor) { nextCursor = null; break; }
+      nextCursor = listed.data.nextCursor;
       cursor = listed.data.nextCursor;
-      if (step === YEAR_PAGES - 1) stopped = true;
+      if (found.length >= SCREEN) break;
     }
-    const offset = offsetOf(search.yearOffset);
-    const slice = found.slice(offset, offset + 20);
-    const nextOffset = offset + slice.length;
+    // Every match on a page this request read stays on the screen, so the read leaves nothing
+    // unshown. Next carries the cursor where the read stopped when a further page remains.
+    // The same cursor again would re-read this page; an empty screen is not linked.
+    const started = yearCursorOf(search.yearCursor);
+    const resume = nextCursor && nextCursor !== started ? nextCursor : null;
     const listedHref = withFlags(plain, year, directory);
-    const join = listedHref.includes('?') ? '&' : '?';
-    model.items = slice;
-    model.next = nextOffset < found.length || (stopped && cursor)
-      ? `${listedHref}${join}yearOffset=${nextOffset}` : null;
-    model.first = offset > 0 ? listedHref : null;
-    yearControl.bounded = roster.incomplete || stopped;
+    model.items = found;
+    model.next = found.length > 0 && resume ? yearHref(listedHref, resume) : null;
+    model.first = started ? listedHref : null;
+    yearControl.bounded = roster.incomplete || nextCursor !== null;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });
     model.results = yearControl.bounded
       ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);
