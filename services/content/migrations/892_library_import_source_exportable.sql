@@ -1,19 +1,23 @@
--- A library export page is a digest keyset. The exportable predicate used to be
+-- A library export page is a digest keyset. The export predicate used to be
 -- applied after a lateral join, so a page walked every later source until it
 -- had filled. Most sources are not exportable, and that made a whole export
 -- quadratic. The marker keeps the keyset on this partial index instead.
 --
--- exportable is true when the source kind is source or retained, private_extras
--- is not empty, or any of its rows needs an archive. The writes that change
--- that fact recompute it in the same transaction:
+-- exportable over-approximates that predicate. It is true when the kind is
+-- source or retained, private_extras is not empty, or any row needs an archive,
+-- including a row whose file has expired and not yet been purged. The seek uses
+-- the marker only to bound the page. The page then keeps a source only when the
+-- chosen non-expired row itself needs an archive, or the kind is source or
+-- retained, or private_extras is not empty. A marked source that fails that
+-- check is skipped. Expiry can make a page short; it never adds a row.
+--
+-- The writes that change the marker recompute it in the same transaction:
 --   LibraryFileStore.create inserts the source and its row (a row with no
 --     outcome still needs an archive);
 --   LibraryFileStore.resolve updates resolution (a private choice needs an archive);
 --   LibraryFileStore.complete updates outcome (a clean outcome can clear it);
 --   deleteLibraryUploads and eraseLibraryImportsForPrincipals delete rows and
 --     sources.
--- File expiry is time-dependent and stays out of the marker. The export applies
--- it to the already limited page, which may then return fewer rows than the limit.
 ALTER TABLE reader.library_import_source
   ADD COLUMN exportable boolean NOT NULL DEFAULT false;
 

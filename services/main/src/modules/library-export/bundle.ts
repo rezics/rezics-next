@@ -14,12 +14,13 @@ import { ownershipJsonLd, loanJsonLd } from './ownership.ts';
 
 export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 20, graphPerPage: WORK_READ_COST.graphCalls,
   phases: 10, scopedRatingsPerPage: 20, responseBytes: FILE_IMPORT_COST.bytes } as const;
-// The inner seek is the partial index of exportable sources, so a page reads at
-// most its limit whatever share of the library qualifies. An unexpired file is
-// time-dependent and is checked only on that already bounded page: a source
-// whose file has expired is left out, and the page returns fewer rows rather
-// than reading further to fill the limit.
-export const retainedLibrarySourcePageSql = `SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.archive_needed,r.match,r.resolution,r.outcome
+// The marker index over-approximates, so the seek stays bounded by it. A source
+// is included only when its chosen non-expired row needs an archive, or the
+// kind is source or retained, or private extras are not empty. An expired file,
+// or a live row that fails that check, is skipped. The page can be short; it
+// never reads further to fill, and expiry never adds a row.
+export const retainedLibrarySourcePageSql = `SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.archive_needed,r.match,r.resolution,r.outcome,
+  (r.archive_needed OR s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb) AS included
   FROM (
     SELECT agent,digest,source,private_extras FROM reader.library_import_source
     WHERE agent=$1 AND exportable AND digest>$2 ORDER BY digest LIMIT $3
@@ -94,8 +95,9 @@ export class LibraryBundleExporter {
       let index = 0;
       for (; index < page.length; index++) {
         const item = page[index]!;
-        // Expired evidence was already counted by the seek. Skipping it must not
-        // pull another source into this page.
+        // A marked source with no live row, or whose chosen live row fails the
+        // export predicate, was already counted by the seek. Skipping it must
+        // not pull another source into this page.
         if (!item.row) continue;
         const bytes = new TextEncoder().encode(JSON.stringify(item.row)).length + 1;
         if (accepted.length + rows.length >= pageLimit || rowBytes + bytes > LIBRARY_EXPORT_COST.responseBytes - 8192) break;
@@ -108,8 +110,9 @@ export class LibraryBundleExporter {
         break;
       }
       if (page.length === requested) {
-        // The seek window was full. Expiry can leave this response short; the
-        // next page continues after the last source examined.
+        // The seek window was full. Expiry, or a marked source whose live row
+        // fails the export predicate, can leave this response short. The next
+        // page continues after the last source examined.
         after = page.at(-1)!.key;
         break;
       }
@@ -151,9 +154,9 @@ export class LibraryBundleExporter {
         review: { text: r.body,language: r.language,spoiler: r.spoiler } } }));
     }
     if (phase === 3) {
-      const result = await this.content.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean | null; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(
+      const result = await this.content.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean | null; included: boolean | null; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(
         retainedLibrarySourcePageSql,[agent,after,limit]);
-      return result.rows.map(s => ({ key: s.key,row: s.archive_needed == null ? null
+      return result.rows.map(s => ({ key: s.key,row: s.archive_needed == null || s.included !== true ? null
         : s.source_view ? { ...s.source_view,raw: { ...s.source_view.raw,source: s.source } }
         : s.source.kind === 'retained' ? s.source
         : s.source.kind !== 'source' && !s.archive_needed ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
