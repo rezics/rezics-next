@@ -229,4 +229,13 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(recipe).toContainText('Best the day after baking.');
   await expect(page.getByRole('link', { name: 'Edit recipe' })).toHaveAttribute('href', /\/edit\/recipe$/);
   await shoot(page, 'recipe-published', info);
+  // A published recipe has no wiki. The section either says so or shows one that loaded;
+  // the failure panel is a broken read, not an empty wiki.
+  const wiki = page.getByRole('region', { name: 'Explore the wiki' });
+  const openWiki = wiki.getByRole('link', { name: 'Open the wiki' });
+  const none = wiki.getByText('No wiki exists for this Work yet.');
+  const failed = wiki.getByRole('alert');
+  await expect(openWiki.or(none).or(failed)).toBeVisible();
+  await expect(failed, 'Explore the wiki shows the failure panel').toHaveCount(0);
+  await expect(openWiki.or(none)).toBeVisible();
 });
