@@ -18,6 +18,14 @@ const allowlist: Record<string, string> = {
     'Counts rv:publishedPage membership probes. Worker ticks do not issue that shape, and another task holds the file.',
 };
 
+/** The scheduler flag alone still counts a worker tick. Only these files may name it. */
+const schedulerFlagAllowlist: Record<string, string> = {
+  'tests/qa/integration/support/operation-cost.ts':
+    'Defines the scheduler flag. foregroundCounted is that flag and the absence of a worker tick.',
+  'tests/qa/integration/support/operation-cost.test.ts':
+    'Asserts the scheduler flag across awaits. An explicit tick method is not runWorkerTick.',
+};
+
 const wrapPattern = /\.query\s*=|(?:property|key|member|name|field)\s*===\s*['"]query['"]|override\s+async\s+query\s*\(/g;
 const countsPattern = /(?:\+\+|\.push\s*\()/;
 
@@ -135,6 +143,8 @@ test('a query counter that skips the meter is rejected', () => {
   const metered = `import { foregroundCounted } from '../integration/support/query-cost-meter.ts';
     stack.fuseki.query = async (sparql) => { if (foregroundCounted()) queries.push(sparql); return native(sparql); };`;
   expect(unmeteredQueryCounters(metered)).toEqual([]);
+  const schedulerOnly = `stack.fuseki.query = async (sparql) => { if (isForegroundOperation()) queries.push(sparql); return native(sparql); };`;
+  expect(unmeteredQueryCounters(schedulerOnly)).toHaveLength(1);
   const proxied = `new Proxy(fuseki, { get(target, property) {
     if (property === 'query') return async () => { graphQueries++; return target.query(); };
   } });`;
@@ -144,6 +154,7 @@ test('a query counter that skips the meter is rejected', () => {
 test('stack query counters use the shared meter', () => {
   const offenders: string[] = [];
   const stale: string[] = [];
+  const seenSchedulerFlag = new Set<string>();
   for (const scanRoot of scanRoots) {
     for (const path of walk(join(root, scanRoot))) {
       const file = relative(root, path);
@@ -153,13 +164,19 @@ test('stack query counters use the shared meter', () => {
       const reason = allowlist[file];
       if (reason) {
         if (!hits.length) stale.push(file);
-        continue;
+      } else if (hits.length) offenders.push(`${file}\n  ${hits.join('\n  ')}`);
+      if (!source.includes('isForegroundOperation(')) continue;
+      seenSchedulerFlag.add(file);
+      if (!schedulerFlagAllowlist[file]) {
+        offenders.push(`${file}\n  isForegroundOperation() still counts a worker tick; use foregroundCounted()`);
       }
-      if (hits.length) offenders.push(`${file}\n  ${hits.join('\n  ')}`);
     }
   }
   for (const file of Object.keys(allowlist)) {
     if (!existsSync(join(root, file))) stale.push(`${file} missing`);
+  }
+  for (const file of Object.keys(schedulerFlagAllowlist)) {
+    if (!seenSchedulerFlag.has(file)) stale.push(`${file} no longer names isForegroundOperation`);
   }
   expect(stale, 'allowlist entries must still be unmetered counters').toEqual([]);
   expect(offenders, 'wrap the stack client with meterFuseki, meterPool, or foregroundCounted()').toEqual([]);

@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { uuidToSid } from '@rezics/model/address/sid';
@@ -15,7 +15,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     const d = await f.work('Delta Work');
     let calls = 0;
     const query = f.env.fuseki.query.bind(f.env.fuseki);
-    f.env.fuseki.query = async (...args) => { if (isForegroundOperation()) calls++;return query(...args); };
+    f.env.fuseki.query = async (...args) => { if (foregroundCounted()) calls++;return query(...args); };
     const bounded = async (limit: number,operation: () => Promise<Response>) => {
       calls = 0;const result = await operation();expect(calls).toBeLessThanOrEqual(limit);return result;
     };

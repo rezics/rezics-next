@@ -2,7 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Value } from 'typebox/value';
-import { CountingPool, isForegroundOperation } from './support/operation-cost.ts';
+import { CountingPool } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -53,7 +54,7 @@ export function png(width: number, height: number, payload = 64): Uint8Array {
 class CountingMediaAccess extends MediaAccessBatchReader {
   batches = 0;
   override async canReadWorks(principal: VerifiedPrincipal, actingSubject: string, works: readonly string[]) {
-    if (isForegroundOperation()) this.batches++;
+    if (foregroundCounted()) this.batches++;
     return super.canReadWorks(principal, actingSubject, works);
   }
 }

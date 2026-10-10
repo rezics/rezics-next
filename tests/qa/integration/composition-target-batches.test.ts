@@ -5,7 +5,7 @@ import { Elysia } from 'elysia';
 import type { PoolClient } from 'pg';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
@@ -107,7 +107,7 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     const query = url.href === new URL('query', graphBase).href;
     const template = url.href === new URL('command', graphBase).href && typeof init?.body === 'string'
       && /"template(?:Query|Index)"\s*:/.test(init.body);
-    const count = measuring && isForegroundOperation() && (query || template);
+    const count = measuring && foregroundCounted() && (query || template);
     if (count) graphCalls++;
     const response = await originalFetch(...args);
     // clone observes the bytes delivered by the real transport, including the
@@ -120,7 +120,7 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     const original = client.query;
     clients.set(client, original);
     client.query = ((...args: unknown[]) => {
-      if (measuring && isForegroundOperation()) ownerSql++;
+      if (measuring && foregroundCounted()) ownerSql++;
       return Reflect.apply(original, client, args);
     }) as typeof client.query;
   };

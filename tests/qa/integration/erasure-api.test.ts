@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -33,7 +33,7 @@ interface Costs { calls: number; rows: number }
  * call with the operation it bounds is one call: the bound is on calls. */
 function counted(pool: Pool, costs: Costs): Pool {
   const count = (result: QueryResult | QueryResult[]) => {
-    if (!isForegroundOperation()) return result;
+    if (!foregroundCounted()) return result;
     const results = Array.isArray(result) ? result : [result];
     costs.calls++;
     for (const item of results) costs.rows += item.rows.length;

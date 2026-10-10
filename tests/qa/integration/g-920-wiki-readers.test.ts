@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -950,9 +950,9 @@ test('G-920: published franchise entities, contradictory claims and relations di
         const original = client.query;
         originalQueries.set(client,original);
         client.query = ((...args: unknown[]) => {
-          if (isForegroundOperation() && typeof args[0] === 'string'
+          if (foregroundCounted() && typeof args[0] === 'string'
             && args[0].includes('FROM access.statement_seek_coverage WHERE')) globalCoverageReads++;
-          if (isForegroundOperation() && typeof args[0] === 'string'
+          if (foregroundCounted() && typeof args[0] === 'string'
             && args[0].includes('FROM access.statement_seek WHERE')) {
             rawSql.push({text: args[0],values: [...args[1] as unknown[]]});
           }
@@ -968,29 +968,29 @@ test('G-920: published franchise entities, contradictory claims and relations di
       f.accessPool.on('release',release);
       f.statementSeek.seek = async (...args) => {
         const result = await seek(...args);
-        if (isForegroundOperation()) rawBatches.push({ after: args[2], rows: result.candidates.length, visited: result.visitedRows });
+        if (foregroundCounted()) rawBatches.push({ after: args[2], rows: result.candidates.length, visited: result.visitedRows });
         return result;
       };
       f.statementSeek.seekPotentialPublication = async (...args) => {
         const result = await publicationSeek(...args);
-        if (isForegroundOperation()) publicationBatches.push({rows: result.candidates.length,visited: result.visitedRows});
+        if (foregroundCounted()) publicationBatches.push({rows: result.candidates.length,visited: result.visitedRows});
         return result;
       };
       f.env.fuseki.query = async (sparql, maxBytes) => {
-        if (isForegroundOperation()) {
+        if (foregroundCounted()) {
           calls++;
           // Hydration is bounded to accepted or readable published claims.
           // Raw StatementSeek work is measured separately below.
           if (sparql.includes('GROUP_CONCAT(DISTINCT STR(?evidence)')) inventories++;
         }
         const result = await query(sparql, maxBytes);
-        if (isForegroundOperation()) responseJsonBytes += Buffer.byteLength(JSON.stringify(result));
+        if (foregroundCounted()) responseJsonBytes += Buffer.byteLength(JSON.stringify(result));
         return result;
       };
       f.env.fuseki.templateIndex = (async (...args: Parameters<typeof nativeIndex>) => {
-        if (isForegroundOperation()) calls++;
+        if (foregroundCounted()) calls++;
         const result = await nativeIndex(...args);
-        if (isForegroundOperation()) responseJsonBytes += Buffer.byteLength(JSON.stringify(result));
+        if (foregroundCounted()) responseJsonBytes += Buffer.byteLength(JSON.stringify(result));
         return result;
       }) as typeof f.env.fuseki.templateIndex;
       try {
