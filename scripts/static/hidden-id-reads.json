@@ -1696,7 +1696,8 @@
     "ids": [
       "path:realm",
       "query:actingSubject",
-      "query:after"
+      "query:after",
+      "query:role"
     ],
     "status": "registered"
   },
