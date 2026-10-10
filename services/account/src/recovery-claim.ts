@@ -380,14 +380,22 @@ export async function readAccountRecoveryClaim(pool: Pool, claimId: string,
 
 async function claimView(db: Pool | PoolClient, claim: RecoveryClaim,
   replayed: boolean): Promise<RecoveryClaimView> {
+  // Approval follows the claim's own invitation. Activation spends that
+  // invitation, and a later policy must not hide a recovery that already spent
+  // it. Withdrawal still drops the approval.
   const evidence = await db.query<{ approved: boolean; activated: boolean }>(`SELECT
     EXISTS (SELECT 1 FROM public.rezics_account_recovery_approval a
       JOIN public.rezics_account_recovery_claim c ON c.id = a.id
-      JOIN public.rezics_account_recovery_policy p ON p.id = c.target_user_id
-      JOIN public.rezics_account_recovery_guardian_invitation i ON i.id = p.guardian_invitation_id
-      WHERE a.id = $1 AND i.state = 'accepted' AND a.approver_user_id = p.guardian_user_id
-        AND p.code_hash = c.code_hash AND p.generation = c.policy_generation
-        AND c.guardian_invitation_id = p.guardian_invitation_id) AS approved,
+      JOIN public.rezics_account_recovery_guardian_invitation i ON i.id = c.guardian_invitation_id
+      LEFT JOIN public.rezics_account_recovery_policy p ON p.id = c.target_user_id
+      WHERE a.id = $1 AND a.approver_user_id = i.guardian_user_id
+        AND (
+          (i.state = 'spent' AND EXISTS (
+            SELECT 1 FROM public.rezics_account_recovery_activation act WHERE act.id = c.id))
+          OR (i.state = 'accepted' AND a.approver_user_id = p.guardian_user_id
+            AND p.code_hash = c.code_hash AND p.generation = c.policy_generation
+            AND c.guardian_invitation_id = p.guardian_invitation_id)
+        )) AS approved,
     EXISTS (SELECT 1 FROM public.rezics_account_recovery_activation WHERE id = $1) AS activated`,
   [claim.id]);
   return { claimId: claim.id, targetUserId: claim.target_user_id,

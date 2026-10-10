@@ -184,6 +184,11 @@ test('guardian consent: a spent guardian can delete their account without erasin
     const guardian = await f.signup('spent-guardian@example.test');
     const proof = await recoveryProof(f, owner, guardian);
     expect((await proof.activate()).status).toBe(200);
+    const spent = await (
+      await f.request(`${proof.path}/read`, { recoveryCode: proof.recoveryCode })
+    ).json();
+    expect(spent.approved).toBe(true);
+    expect(spent.activated).toBe(true);
     expect((await remove(f, guardian)).status).toBe(200);
     expect(
       (

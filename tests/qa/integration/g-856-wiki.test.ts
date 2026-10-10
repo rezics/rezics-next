@@ -6,6 +6,7 @@ import { EditorialReviewStore } from '../../../services/main/src/modules/editori
 import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { WorkReadUnavailable } from '../../../services/main/src/modules/work/read-session.ts';
 import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
 import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
@@ -76,6 +77,10 @@ test('G856: English and Finnish Pride editions extract the same character throug
       wikiEvidence: new WikiEvidenceStore(f.contentPool),
       wikiQuotations: new WikiQuotationStore(f.contentPool),
       readingPositions: new ReadingPositionStore(f.contentPool),
+      // Mine resumes from this owner. Without it the boundary withholds the
+      // revealed name and the candidate stays new.
+      progress: new StructureProgressStore(f.contentPool),
+      statementSeek: f.statementSeek,
       media: f.media,
       mediaAccess: f.mediaAccess,
       rights: { store: new RightsStore(f.contentPool, f.accessPool) },
@@ -354,9 +359,19 @@ test('G856: English and Finnish Pride editions extract the same character throug
       reader.token,
     );
     expect((await lookup()).items[0]).toMatchObject({ status: 'new', candidates: [] });
-    await new StructureProgressStore(f.contentPool).write({ principal: reader.principal,
-      structure: seed.structure, occurrence: seed.chapters[0]!, completed: true,
-      position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    // A store write that omits the composition order is not a resume candidate,
+    // so the revealed name stays hidden. The progress route records that order.
+    const chapter = seed.chapters[0]!;
+    const progressPath = `/v1/compositions/${short(seed.structure)}/occurrences/${short(chapter)}/progress`;
+    const current = await call('GET', `${progressPath}?actingSubject=${encodeURIComponent(person.agent)}`, undefined, reader.token);
+    if (current.status !== 200 && current.status !== 404) {
+      throw new Error(`progress read: ${current.status} ${await current.text()}`);
+    }
+    const version = current.status === 200 ? ((await current.json()) as { version: number }).version : 0;
+    const written = await call('PUT', progressPath, {
+      actingSubject: person.agent, expectedVersion: version, completed: true, position: null,
+    }, reader.token);
+    if (written.status !== 200) throw new Error(`progress: ${written.status} ${await written.text()}`);
     const candidates = await lookup();
     expect(candidates.items[0]).toMatchObject({ status: 'matched', candidates: [character] });
     expect(await mcp('wiki_validate', { actingSubject: actor, bundle: finnish })).toMatchObject({
@@ -377,6 +392,27 @@ test('G856: English and Finnish Pride editions extract the same character throug
     });
     expect(second.commands!.find(row => row.key.endsWith(':entity:mr-bennet'))!.result)
       .toMatchObject({ component: character });
+    // Boot projects an empty inventory. Wiki claims are not Global facts, so the
+    // page stays pending until both the raw batches and publication reconstruction finish.
+    for (let batch = 0; await f.statementSeek.projectOnce(); batch++) {
+      if (batch >= 64) throw new Error('statement projection did not catch up');
+    }
+    const basis = await f.statementSeek.capturePublicationBasis(character);
+    if (basis) {
+      let ready = false;
+      for (let step = 0; step < 40 && !ready; step++) {
+        try {
+          await f.statementSeek.requirePublicationCoverage(basis);
+          ready = true;
+        } catch (error) {
+          if (!(error instanceof WorkReadUnavailable)) throw error;
+          if (!await f.statementSeek.projectPublicationOnce()) {
+            throw new Error('publication projection made no progress');
+          }
+        }
+      }
+      if (!ready) throw new Error('publication reconstruction did not finish');
+    }
     const facts = await json<{ groups: { items: { kind: string; statement?: string }[] }[] }>(
       await call('GET', `/v1/resources/${short(character)}/statements?position=all`),
     );

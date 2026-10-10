@@ -739,6 +739,16 @@ test('IAM08: independent Account claim replaces a compromised credential and fen
       owner.sessionCookie)).status).toBe(200);
     expect((await h.accountRequest('/api/account/recovery-policy', policy,
       owner.sessionCookie)).status).toBe(200);
+    // A claim is admitted only after the invited guardian accepts. Mailbox
+    // acceptance requires a verified guardian address; this case is the claim,
+    // not verification delivery.
+    await h.accountPool.query('UPDATE public."user" SET "emailVerified" = true WHERE id = $1',
+      [guardian.accountId]);
+    const enrolled = await h.accountRequest('/api/account/recovery-policy/read', {}, owner.sessionCookie);
+    expect(enrolled.status).toBe(200);
+    const invitationId = (await enrolled.json() as { policy: { invitationId: string } }).policy.invitationId;
+    expect((await h.accountRequest(`/api/account/recovery-guardians/${invitationId}`,
+      { action: 'accept' }, guardian.sessionCookie)).status).toBe(200);
     const claimId = randomUUID();
     const claimPath = '/api/account/recovery-claims';
     const claim = { claimId, targetEmail: owner.email, recoveryCode: code };

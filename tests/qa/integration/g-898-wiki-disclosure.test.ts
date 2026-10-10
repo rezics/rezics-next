@@ -5,7 +5,8 @@ import { resolve } from 'node:path';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
-import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { validationsFor } from '../../../services/main/src/modules/semantic/command.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
 test('G-898: candidate HTTP responses are identical with private members present or absent, including public alias collisions', async () => {
@@ -78,14 +79,13 @@ test('G-898: candidate HTTP responses are identical with private members present
         target, routeSegment: segment, position: 'last', disclosure: 'public', actingSubject: f.actor }));
     }
     // Both stored name sources are probed; a hidden name record also collides with a public record.
+    // The product assembler admits guarded commands, not raw SPARQL Update.
     const publicName = nativeId(), privateName = nativeId(), secretName = nativeId();
-    await f.nativeFuseki.update(`INSERT DATA { GRAPH <${GRAPHS.current}> {
-      <${publicMember.component}> <${RV}nameRecord> <${publicName}> .
-      <${privateMember.component}> <${RV}nameRecord> <${privateName}>, <${secretName}> .
-      <${publicName}> <http://www.w3.org/2008/05/skos-xl#literalForm> "Shared record"@en .
-      <${privateName}> <http://www.w3.org/2008/05/skos-xl#literalForm> "Shared record"@fr .
-      <${secretName}> <http://www.w3.org/2008/05/skos-xl#literalForm> "Secret record"@fr .
-    } }`);
+    await plantNameRecords(f.env, [
+      [publicMember.component, publicName, 'Shared record', 'en'],
+      [privateMember.component, privateName, 'Shared record', 'fr'],
+      [privateMember.component, secretName, 'Secret record', 'fr'],
+    ]);
     const request = { target: work.work, zone, actingSubject: f.actor,
       names: ['Secret character', 'Secret record', 'Shared alias', 'Shared record', 'Unknown']
         .map(value => ({ value, language: 'fr' })) };
@@ -135,3 +135,66 @@ test('G-898: candidate HTTP responses are identical with private members present
     await f.close(); rmSync(directory, { recursive: true, force: true });
   }
 }, 180_000);
+
+/** Current-graph name records, through the guarded command the product assembler admits. */
+async function plantNameRecords(env: Parameters<typeof validationsFor>[0],
+  records: readonly (readonly [string, string, string, string])[]): Promise<void> {
+  const receipt = `urn:rezics:receipt:${hash(randomUUID())}`;
+  const digest = hash(receipt);
+  const batch = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
+  const event = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
+  const resources = [...new Set(records.map(([resource]) => resource))];
+  const heads = new Map<string, string>();
+  for (const row of (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resource ?head WHERE {
+    VALUES ?resource { ${resources.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?resource rv:semanticHead ?head }
+  }`)).results?.bindings ?? []) {
+    if (row.resource?.value && row.head?.value) heads.set(row.resource.value, row.head.value);
+  }
+  if (resources.some(resource => !heads.get(resource))) throw new Error('name record resource has no semantic head');
+  // A current-graph subject needs a registry type. The label stays a SKOS-XL
+  // name and also a Resource so the open semantic envelope can carry it.
+  const triples = records.map(([resource, label, lexical, language]) =>
+    `${iri(resource)} <${RV}nameRecord> ${iri(label)} .
+     ${iri(label)} a <http://www.w3.org/2008/05/skos-xl#Label>, <http://www.w3.org/2000/01/rdf-schema#Resource> ;
+       <${RV}semanticHead> ${iri(heads.get(resource)!)} ;
+       <http://www.w3.org/2008/05/skos-xl#literalForm> ${JSON.stringify(lexical)}@${language} .`).join('\n');
+  const update = `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${triples}
+      }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+        rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(randomUUID())} ;
+        rv:authorityEpoch ${lit('0')} ; rv:admittedScope ${lit('semantic.change')} ;
+        rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+        ${iri(event)} a rv:SemanticChangedEvent ; rv:ordinal 0 ; rv:action ${lit('semantic.change')} ;
+          rv:receipt ${iri(receipt)} . }
+    }
+    WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      BIND(?n + 1 AS ?next)
+    }`;
+  const validations = [
+    ...await validationsFor(env, 'semantic-annotation-v1', [
+      { role: 'label', focus: records.map(([, label]) => label) },
+    ]),
+    ...await validationsFor(env, 'semantic-resource-v1', [
+      { role: 'resource', focus: [...new Set(records.map(([resource]) => resource))] },
+    ]),
+  ];
+  const result = await env.fuseki.commandWithReceipt({
+    receipt, digest, update, validations, deadlineMs: 10_000,
+  });
+  if (result.status !== 'committed') {
+    throw new Error(`name records were not planted: ${result.status} ${JSON.stringify('report' in result ? result.report : undefined)}`);
+  }
+}

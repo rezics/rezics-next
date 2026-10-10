@@ -12,9 +12,16 @@ import type { WikiExtraction } from '../../../services/main/src/modules/wiki/pro
 import {
   activateMetadataWork,
   metadataWorkRequestDigest,
+  DATASET,
   GRAPHS,
   RV,
+  hash,
+  iri,
+  lit,
+  type WorkActivationEnvironment,
 } from '../../../services/main/src/modules/work/activate.ts';
+import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { validationsFor } from '../../../services/main/src/modules/semantic/command.ts';
 import {
   selectMainDefault,
   mainSelectionDigest,
@@ -752,11 +759,10 @@ export async function wikiDeltaJourney() {
     expect(await json<History>(await call('GET', `${pinnedPath}&section=characters`))).toEqual(
       sectionPin,
     );
-    // G-836 currently limits public merge commands to Works. Exercise the
-    // character dependency using its committed read-resolution representation.
-    await f.fuseki.update(
-      `INSERT DATA { GRAPH <${GRAPHS.current}> { <${jane}> <${RV}mergedInto> <${elizabeth}> } }`,
-    );
+    // Public merge commands are limited to Works. The character dependency is
+    // planted as the guarded command the assembler admits; a raw update is not
+    // served, and that current-graph write drops the membership proof.
+    await plantCharacterMerge(f.fuseki, f.env, jane, elizabeth);
     const resolved = await json<History>(await call('GET', pinnedPath));
     expect(resolved.resolutions[jane]).toMatchObject({
       source: jane,
@@ -912,4 +918,56 @@ export async function wikiDeltaJourney() {
   } finally {
     await f.stop();
   }
+}
+
+/** Current-graph character merge, through the guarded command the assembler admits. */
+async function plantCharacterMerge(fuseki: FusekiClient,
+  env: WorkActivationEnvironment, source: string, survivor: string): Promise<void> {
+  const lineage = env.lineage;
+  const receipt = `urn:rezics:receipt:${hash(randomUUID())}`;
+  const digest = hash(receipt);
+  const batch = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
+  const event = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
+  const update = `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(source)} rv:mergedInto ${iri(survivor)} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+        rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(randomUUID())} ;
+        rv:authorityEpoch ${lit('0')} ; rv:admittedScope ${lit('semantic.change')} ;
+        rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
+        rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(lineage.dataEpoch)} ;
+        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+        ${iri(event)} a rv:SemanticChangedEvent ; rv:ordinal 0 ; rv:action ${lit('semantic.change')} ;
+          rv:receipt ${iri(receipt)} . }
+    }
+    WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?n . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      BIND(?n + 1 AS ?next)
+    }`;
+  const validations = await validationsFor(env, 'semantic-resource-v1', [
+    { role: 'resource', focus: [source] },
+  ]);
+  const planted = await fuseki.commandWithReceipt({
+    receipt, digest, update, validations, deadlineMs: 10_000,
+  });
+  if (planted.status !== 'committed') {
+    throw new Error(`character merge was not planted: ${planted.status} ${JSON.stringify('report' in planted ? planted.report : undefined)}`);
+  }
+  const deadline = Date.now() + 60_000;
+  let restored = false;
+  for (let turn = 0; turn < 8 && !restored; turn++) {
+    const prepared = await fuseki.membershipPrepare({
+      dataEpoch: lineage.dataEpoch, routingEpoch: lineage.routingEpoch,
+      requestId: randomUUID(), deadline,
+    });
+    if (prepared.status !== 'committed') throw new Error(`membership proof was not restored: ${prepared.status}`);
+    restored = prepared.complete;
+  }
+  if (!restored) throw new Error('membership proof was not restored');
 }

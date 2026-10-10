@@ -459,6 +459,19 @@ test('G929: exact erased pins and current removal cannot be recovered through hi
       await absent(await wiki.call('GET', path(wiki, scope), undefined, wiki.reader.token));
     await absent(await exportWiki(wiki, permitted));
   } finally {
+    // Both raw writes drop the shared graph's membership proof. Later mounts
+    // are membership commands and reject until preparation puts the proof back.
+    const deadline = Date.now() + 60_000;
+    let restored = false;
+    for (let turn = 0; turn < 8 && !restored; turn++) {
+      const prepared = await wiki.f.fuseki.membershipPrepare({
+        dataEpoch: wiki.f.env.lineage.dataEpoch, routingEpoch: wiki.f.env.lineage.routingEpoch,
+        requestId: randomUUID(), deadline,
+      });
+      if (prepared.status !== 'committed') throw new Error(`membership proof was not restored: ${prepared.status}`);
+      restored = prepared.complete;
+    }
+    if (!restored) throw new Error('membership proof was not restored');
     await wiki.f.stop();
   }
 }, 180_000);
