@@ -213,6 +213,45 @@ test('erasure journal schema installs empty, upgrades current head and allocates
     '23514');
 }, 60_000);
 
+test('migration 019 keeps populated erasure targets and admits the new kinds', async () => {
+  const relay = await database('relay_019');
+  const before = relayFiles(name => name < '019_');
+  expect(before.some(name => name.startsWith('010_'))).toBe(true);
+  expect(before.some(name => name.startsWith('019_'))).toBe(false);
+  await applyRelay(relay, before);
+  const erasure = randomUUID();
+  await relay.query(`INSERT INTO relay.erasure
+    (id, erasure_epoch, operation_id, request_digest, kind, authority, principal_id, admission_id, authority_epoch)
+    VALUES ($1, relay.next_erasure_epoch(), $2, $3, 'revision', 'access_admission', $4, $5, 4)`,
+  [erasure, `erasure:${erasure}`, digest(erasure), randomUUID(), randomUUID()]);
+  const old = {
+    principal: 'access', content_revision: 'content', content_variant: 'content',
+    semantic_revision: 'graph', resource: 'graph', source_observation: 'source', object: 'object',
+  } as const;
+  let ordinal = 1;
+  for (const [kind, owner] of Object.entries(old)) {
+    await relay.query(`INSERT INTO relay.erasure_target (erasure_id, ordinal, owner, target_kind, target_ref)
+      VALUES ($1, $2, $3, $4, $5)`, [erasure, ordinal, owner, kind, `old:${kind}`]);
+    ordinal += 1;
+  }
+  await applyRelay(relay, relayFiles(name => name.startsWith('019_')));
+  const kept = (await relay.query<{ target_kind: string; owner: string; target_ref: string }>(
+    `SELECT target_kind, owner, target_ref FROM relay.erasure_target
+     WHERE erasure_id = $1 ORDER BY ordinal`, [erasure])).rows;
+  expect(kept).toEqual(Object.entries(old).map(([kind, owner]) => ({
+    target_kind: kind, owner, target_ref: `old:${kind}`,
+  })));
+  const added = ['text_contribution_draft', 'release_revision', 'work_head', 'composition_revision'];
+  for (const kind of added) {
+    await relay.query(`INSERT INTO relay.erasure_target (erasure_id, ordinal, owner, target_kind, target_ref)
+      VALUES ($1, $2, 'graph', $3, $4)`, [erasure, ordinal, kind, `new:${kind}`]);
+    ordinal += 1;
+  }
+  expect((await relay.query<{ target_kind: string }>(
+    `SELECT target_kind FROM relay.erasure_target WHERE erasure_id = $1 ORDER BY ordinal`, [erasure]))
+    .rows.map(row => row.target_kind)).toEqual([...Object.keys(old), ...added]);
+});
+
 test('erasure lifecycle reports suppression and destruction separately per retention domain', async () => {
   const relay = await database('relay_erasure');
   await applyRelay(relay, relayFiles(() => true));
