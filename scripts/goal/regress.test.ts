@@ -7,13 +7,13 @@ import { dirname, join } from 'node:path';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { artifactRoots, parseArgs } from '../qa/core.ts';
-import { UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
+import { parseJUnit, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
-  pruneRegressionCheckouts, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
+  pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 let repoSequence = 0;
@@ -600,6 +600,61 @@ describe('pinned main-wide regression', () => {
       expect((await r.run({ resume: 'integration-width' })).batches.filter(batch => batch.tier === 'integration')
         .map(batch => batch.files.length)).toEqual([5, 5, 5]);
     } finally { r.cleanup(); }
+  });
+
+  test('concurrent lanes read only their own QA artifacts', async () => {
+    const r = repo(5);
+    let arrived = 0;
+    let release: (() => void) | undefined;
+    const both = new Promise<void>(done => { release = done; });
+    const evidence = new Map<string, string>();
+    try {
+      const result = await r.run({ runId: 'lane-artifacts', slots: 2, only: ['integration'], runner: async (checkout, batch, directory, shards, slotLimit, artifactRoot) => {
+        if (batch.tier !== 'integration' || !directory.endsWith('/attempt-1')) return r.runner(checkout, batch, directory, shards, slotLimit);
+        const root = artifactRoot!;
+        const own = join(root, 'run');
+        mkdirSync(join(own, 'logs'), { recursive: true });
+        const file = batch.files[0]!;
+        writeFileSync(join(own, 'integration.xml'), `<testcase file="${file}" name="fail-${batch.id}"><failure>no</failure></testcase>`);
+        writeFileSync(join(own, 'logs', 'integration.log'), `evidence-${batch.id}`);
+        const poison = join(r.options.stateDir, 'regress/lane-artifacts/qa/other-lane');
+        mkdirSync(join(poison, 'logs'), { recursive: true });
+        writeFileSync(join(poison, 'integration.xml'), `<testcase file="${file}" name="foreign-failure"><failure>no</failure></testcase>`);
+        writeFileSync(join(poison, 'logs', 'integration.log'), 'foreign-evidence');
+        writeFileSync(join(poison, 'acceptance.json'), JSON.stringify({ isolation: [{ file, status: 'order-dependent' }] }));
+        if (++arrived === 2) release!(); else await both;
+        const paths = regressionBatchArtifactPaths([], root);
+        expect(regressionBatchArtifactPaths([own, poison], root)).toEqual([own]);
+        const tests = paths.flatMap(path => existsSync(join(path, 'integration.xml'))
+          ? parseJUnit(readFileSync(join(path, 'integration.xml'), 'utf8'), 'integration') : []);
+        const logs = paths.flatMap(path => {
+          const logDir = join(path, 'logs');
+          return existsSync(logDir) ? readdirSync(logDir).map(name => readFileSync(join(logDir, name), 'utf8')) : [];
+        });
+        const found = logs.join('\n');
+        evidence.set(batch.id, found);
+        return { code: 1, outcomes: Object.fromEntries(batch.files.map(item => [item, item === file ? 'failed' as const : 'passed' as const])),
+          artifactPaths: [directory, ...paths], queueMs: 1, testMs: 1, totalMs: 2, evidence: found,
+          failingTests: tests.filter(test => test.failed).map(test => `${test.file}: ${test.name}`) };
+      }});
+      const lanes = result.batches.filter(batch => batch.tier === 'integration');
+      expect(lanes).toHaveLength(2);
+      expect(arrived).toBe(2);
+      expect(result.diagnoses.length).toBeGreaterThan(0);
+      for (const batch of lanes) {
+        const attempt = batch.attempts[0]!;
+        expect(attempt.failingTests).toEqual([`${batch.files[0]}: fail-${batch.id}`]);
+        expect(evidence.get(batch.id)).toBe(`evidence-${batch.id}`);
+        expect(attempt.artifactPaths?.some(path => path.includes('other-lane'))).toBe(false);
+        expect(attempt.artifactPaths).toContain(join(r.options.stateDir, 'regress/lane-artifacts/qa', batch.id, 'attempt-1', 'run'));
+      }
+      for (const diagnosis of result.diagnoses) {
+        expect(diagnosis.artifactPaths.some(path => path.includes('other-lane'))).toBe(false);
+        const lane = lanes.find(batch => diagnosis.artifactPaths.some(path => path.includes(`/${batch.id}/`)));
+        expect(lane).toBeDefined();
+        expect(diagnosis.artifactPaths.every(path => !lanes.some(batch => batch !== lane && path.includes(`/${batch.id}/`)))).toBe(true);
+      }
+    } finally { release?.(); r.cleanup(); }
   });
 
   test('a failed lane waits for concurrent children to settle and resume retains their passes', async () => {

@@ -597,17 +597,25 @@ export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: numbe
     ...(artifactRoot ? { REZICS_QA_ARTIFACT_ROOT: artifactRoot } : {}) };
 }
 
+/** Paths from slot.json when they already name this batch's artifact root; otherwise that root's own runs. */
+export function regressionBatchArtifactPaths(reported: readonly string[], artifactRoot?: string): string[] {
+  if (!artifactRoot) return [...reported];
+  const root = resolve(artifactRoot);
+  const named = reported.filter(path => { const resolved = resolve(path); return resolved === root || resolved.startsWith(`${root}/`); });
+  if (named.length) return named;
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => join(root, entry.name));
+}
+
 async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string): Promise<Execution> {
   mkdirSync(directory, { recursive: true });
-  const prior = new Set(artifactRoot && existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
   const report = join(directory, 'slot.json');
   const storyXmlPath = join(directory, 'storybook.xml');
   const started = Date.now();
   const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
     batch.tier === 'jena:check' ? 75_000 : undefined, regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
-  const created = artifactRoot && existsSync(artifactRoot) ? readdirSync(artifactRoot).filter(name => !prior.has(name)).map(name => join(artifactRoot, name)) : [];
-  const artifactPaths = [...new Set([...metadata.artifactPaths, ...created])];
+  const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);
   const tests: TestResult[] = [];
   let evidence = readFileSync(join(directory, 'runner.log'), 'utf8');
   let storyLog = '';
@@ -822,7 +830,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
       if (browserTier(batch.tier) && options.waitForTurn) await options.waitForTurn(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
-      const result = await runner(tree, batch, join(directory, label), runManifest.shards, slotLimit, join(directory, 'qa'));
+      const result = await runner(tree, batch, join(directory, label), runManifest.shards, slotLimit, join(directory, 'qa', label));
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
       if (result.code && result.classification) {
