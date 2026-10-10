@@ -10,7 +10,7 @@ import { isStructuralProperty } from '../entity-page/structural-properties.ts';
 import { visibleResourceReferences } from '../entity-page/read.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
 import { resolveTargets } from '../target/resolve.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
@@ -21,7 +21,7 @@ import {
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { readFactObligations, resolveStatementAcceptancesAt, statementValueFromManifest } from './read.ts';
-import type { StatementSeekOrder } from './seek.ts';
+import { PUBLICATION_RECONSTRUCTION_PENDING, type StatementSeekCandidate, type StatementSeekOrder } from './seek.ts';
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
 import { propertyRevelationRecord } from '../reading-position/store.ts';
@@ -53,6 +53,42 @@ type Page = Static<typeof subjectStatementPage>;
 type Item = Page['groups'][number]['items'][number];
 const nativeReference =
   /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+const meaningKeyReference = /^urn:rezics:meaning:[0-9a-f]{64}$/u;
+type StatementInventory = 'publication' | 'raw' | 'neighbourhood';
+
+/** One subject's active statements, in seek order, when the seek index is absent
+ * or behind the read. The subject is bound, so the scan cannot walk the dataset.
+ * A torn coverage row is refused by the caller; this path is only the lag. */
+async function subjectNeighbourhood(session: WorkReadSession, resource: string,
+  after: StatementSeekOrder | null, frames?: readonly Coordinate[]): Promise<StatementSeekCandidate[]> {
+  const frame = frames ? framePattern(frames, '?statement', GRAPHS.current) : null;
+  const score = frame ? frame.score : '0';
+  const continued = after ? `FILTER(?neighbourScore < ${after.score} || (?neighbourScore = ${after.score} && (
+    STR(?predicate) > ${lit(after.predicate)} || (STR(?predicate) = ${lit(after.predicate)} && (
+      STR(?key) > ${lit(after.meaningKey)} || (STR(?key) = ${lit(after.meaningKey)}
+        && STR(?statement) > ${lit(after.statementId)}))))))` : '';
+  const limit = SUBJECT_STATEMENT_COST.candidates;
+  const rows = await session.query(`SELECT ?statement ?predicate ?key ?neighbourScore WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
+      rv:statementState rv:Active ; rdf:predicate ?predicate ; rv:meaningKey ?key . }
+    ${frame ? frame.filter : ''}
+    BIND(${score} AS ?neighbourScore)
+    ${continued}
+  } ORDER BY DESC(?neighbourScore) STR(?predicate) STR(?key) STR(?statement) LIMIT ${limit}`, limit);
+  return rows.map((row) => {
+    const statementId = row.statement?.value;
+    const predicate = row.predicate?.value;
+    const meaningKey = row.key?.value;
+    const specificity = Number(row.neighbourScore?.value);
+    if (row.statement?.type !== 'uri' || !statementId || !nativeReference.test(statementId)
+      || row.predicate?.type !== 'uri' || !predicate || !/^(https?:\/\/|urn:)/u.test(predicate)
+      || row.key?.type !== 'uri' || !meaningKey || !meaningKeyReference.test(meaningKey)
+      || !Number.isInteger(specificity) || specificity < 0 || specificity > 136) {
+      throw new WorkReadUnavailable('Statement neighbourhood reference is invalid');
+    }
+    return { statementId, predicate, meaningKey, score: specificity };
+  });
+}
 
 function reference(value: string) {
   if (!/^https?:\/\/[^\s<>"{}|\\^`]+$/u.test(value) && value !== GLOBAL_CLASSIFICATION_CONTEXT)
@@ -172,11 +208,25 @@ export async function readSubjectStatements(
   // no current Global facts of any predicate before enabling this narrow branch.
   const publicationBasis = !frames && !scope && context === GLOBAL_CLASSIFICATION_CONTEXT
     ? await seek.capturePublicationBasis(resource) : null;
-  if (publicationBasis) await seek.requirePublicationCoverage(publicationBasis);
-  else {
+  // Coverage that has not been built, or has not reached this read, is lag.
+  // The subject's own graph is already the answer: an empty subject is a complete
+  // page, and statements already recorded are read in one bounded neighbourhood.
+  // A torn row (complete false) and a basis that moved stay unavailable.
+  let inventory: StatementInventory;
+  if (publicationBasis) {
+    try {
+      await seek.requirePublicationCoverage(publicationBasis);
+      inventory = 'publication';
+    } catch (error) {
+      if (!(error instanceof WorkReadUnavailable) || error.message !== PUBLICATION_RECONSTRUCTION_PENDING)
+        throw error;
+      inventory = 'neighbourhood';
+    }
+  } else {
     const indexed = await seek.coverage();
-    if (!indexed?.complete || indexed.through_sequence !== session.position.sequence)
-      throw new WorkReadUnavailable('Statement seek coverage is unavailable');
+    if (indexed && !indexed.complete) throw new WorkReadUnavailable('Statement seek coverage is corrupt');
+    inventory = indexed?.complete && indexed.through_sequence === session.position.sequence
+      ? 'raw' : 'neighbourhood';
   }
   const limit = session.options.limit ?? SUBJECT_STATEMENT_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > SUBJECT_STATEMENT_COST.pageSize) {
@@ -193,6 +243,7 @@ export async function readSubjectStatements(
   ];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   let after: { phase: 'component' | 'statement'; predicate?: string; meaningKey?: string; score?: number;
+    inventory?: 'neighbourhood';
   } = { phase: frames ? 'statement' : 'component' };
   if (cursor) {
     try {
@@ -202,12 +253,14 @@ export async function readSubjectStatements(
     }
     if (
       !['component', 'statement'].includes(after.phase) ||
+      (after.inventory !== undefined && after.inventory !== 'neighbourhood') ||
       (after.phase === 'statement' && (typeof after.predicate !== 'string' || typeof after.meaningKey !== 'string'
         ||
           (frames && (!Number.isInteger(after.score) || after.score! < 0 || after.score! > 136))))
     ) {
       throw new WorkReadInvalid('Statement cursor is invalid');
     }
+    if (after.inventory === 'neighbourhood') inventory = 'neighbourhood';
   }
   const visibleReferences = new Set<string>();
   const checkReferences = async (refs: string[]) => {
@@ -307,9 +360,11 @@ export async function readSubjectStatements(
       while (page.length < batchSize && (pending.length || !rawExhausted)) {
         if (!pending.length) {
           session.checkDeadline();
-          const sought = publicationBasis
-            ? await seek.seekPotentialPublication(publicationBasis,statementAfter)
-            : await seek.seek(session.position,resource,statementAfter,frames);
+          const sought = inventory === 'publication'
+            ? await seek.seekPotentialPublication(publicationBasis!,statementAfter)
+            : inventory === 'raw'
+              ? await seek.seek(session.position,resource,statementAfter,frames)
+              : { candidates: await subjectNeighbourhood(session, resource, statementAfter, frames) };
           const rows: ReadRow[] = sought.candidates.map((row) => ({
             statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
             key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
@@ -568,6 +623,7 @@ export async function readSubjectStatements(
       last.key,
       JSON.stringify({
         phase: last.phase,
+        ...(inventory === 'neighbourhood' ? { inventory: 'neighbourhood' as const } : {}),
         ...(last.predicate ? { predicate: last.predicate } : {}),
         ...(last.meaningKey ? { meaningKey: last.meaningKey } : {}),
         ...(last.score !== undefined ? { score: last.score } : {}),
@@ -597,7 +653,7 @@ export async function readSubjectStatements(
     if (!(await canReadPrivate(ctx))) throw new WorkReadMissing('Context is unavailable');
   await resolveTargets(session, [resource], 'discussion');
   await boundary.fence();
-  if (publicationBasis) await seek.fencePublicationBasis(publicationBasis);
+  if (inventory === 'publication' && publicationBasis) await seek.fencePublicationBasis(publicationBasis);
   const groups = new Map<string, Item[]>();
   for (const item of items)
     groups.set(item.predicate, [...(groups.get(item.predicate) ?? []), item]);

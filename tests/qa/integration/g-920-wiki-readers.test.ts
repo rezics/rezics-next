@@ -701,11 +701,15 @@ test('G-920: published franchise entities, contradictory claims and relations di
         deps.account.verify = verify;
       }
     }
-    // Published claims are already in the graph. The page reads them from the
-    // seek index at the current position, so catch that index up before the
-    // first statement page and again after later statement writes.
+    // Published claims are already in the graph. Reconstruction of the
+    // publication index can still be pending; that lag answers from the
+    // subject's graph. Catch the index up afterwards for the positioned pages.
     await f.statementSeek.rebuild();
-    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    const pendingFacts = await json<Static<typeof subjectStatementPage>>(
+      await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+    );
+    expect(pendingFacts.profile).toBe('subject-statements-v1');
+    expect(pendingFacts.count.kind).toBe('exact-page');
     await completePublication();
     // Raw writes cannot manufacture default-only source storage. The native
     // controlled TDB preparation test covers that imported representation and
@@ -1056,7 +1060,12 @@ test('G-920: published franchise entities, contradictory claims and relations di
     expect(sourceCount).toBe(324);
     await f.accessPool.query(`DELETE FROM access.statement_publication_seek_coverage
       WHERE data_epoch=$1 AND subject=$2`,[f.env.lineage.dataEpoch,entity]);
-    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    // Missing publication coverage is lag, so the subject's graph answers.
+    const uncovered = await json<Static<typeof subjectStatementPage>>(
+      await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+    );
+    expect(uncovered.profile).toBe('subject-statements-v1');
+    expect(uncovered.count.kind).toBe('exact-page');
     const coldStart = sourcePages.length;
     await completePublication();
     const coldSourcePages = sourcePages.slice(coldStart);
@@ -1079,7 +1088,13 @@ test('G-920: published franchise entities, contradictory claims and relations di
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ${globalFacts} } }`);
       try {
         expect(await f.statementSeek.capturePublicationBasis(entity)).toBeNull();
-        expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+        // Global facts disable the publication index. Raw coverage is behind
+        // these writes, and that lag still answers from the subject graph.
+        const withoutPublication = await json<Static<typeof subjectStatementPage>>(
+          await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+        );
+        expect(withoutPublication.profile).toBe('subject-statements-v1');
+        expect(withoutPublication.count.kind).toBe('exact-page');
       } finally {
         await f.env.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.current)} {
           ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ?predicate ?object } }`);
@@ -1231,7 +1246,13 @@ test('G-920: published franchise entities, contradictory claims and relations di
       applicability: [],interpretation: {kind: 'selected'},evidence: [delayedEvidence],
       actingSubject: reviewerB.actor,
     },reviewerB.token),201);
-    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    // The new statement is not bound yet. Coverage lags, and the graph page
+    // keeps the already published statements.
+    const beforeLegacyIndex = await json<Static<typeof subjectStatementPage>>(
+      await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+    );
+    expect(beforeLegacyIndex.groups.flatMap(group => group.items).flatMap(item =>
+      item.kind === 'statement' ? [item.statement] : []).sort()).toEqual([statement, laterStatement].sort());
     const legacyBasis = await completePublication();
     const legacyRows = (await f.accessPool.query<{publication_source: string | null;publication_evidence: boolean}>(
       `SELECT publication_source,publication_evidence FROM access.statement_seek
@@ -1259,7 +1280,9 @@ test('G-920: published franchise entities, contradictory claims and relations di
       profile: 'statement-v1',expectedHead: legacy.revision,speaker: {kind: 'personal'},
       actingSubject: reviewerB.actor,
     },reviewerB.token),201);
-    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    // Withdrawal is already in the graph. A lagging publication index does not
+    // keep the withdrawn statement on the page.
+    expect(await statementIds()).toEqual([statement,laterStatement].sort());
     await completePublication();
     expect(await statementIds()).toEqual([statement,laterStatement].sort());
 
@@ -1376,7 +1399,11 @@ test('G-920: published franchise entities, contradictory claims and relations di
     );
     const afterWithdrawalBasis = await f.statementSeek.capturePublicationBasis(entity);
     expect(afterWithdrawalBasis?.membershipHead).not.toBe(beforeMembership?.membershipHead);
-    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    const withdrawnBeforeIndex = await json<Static<typeof subjectStatementPage>>(
+      await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+    );
+    expect(withdrawnBeforeIndex.groups.flatMap((group) => group.items).flatMap((item) =>
+      item.kind === 'statement' ? [item.statement] : [])).toEqual([laterStatement]);
     await f.statementSeek.rebuild();
     await completePublication();
     const withdrawn = await json<Static<typeof subjectStatementPage>>(

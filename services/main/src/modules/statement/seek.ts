@@ -9,6 +9,9 @@ import { StatementPublicationSeek, type StatementPublicationBasis,
   type StatementPublicationReference, type StatementPublicationPhysicalCursor } from './publication-seek.ts';
 import type { StatementPublicationNativeResult } from '../../infrastructure/fuseki.ts';
 
+/** A subject whose publication index has not been built yet. The read answers
+ * from the graph; this is not a torn index or a moved basis. */
+export const PUBLICATION_RECONSTRUCTION_PENDING = 'Publication subject reconstruction is pending';
 export const STATEMENT_SEEK_COST = { candidates: 20, frameChannels: 256, visitedRows: 4096,
   projectionSequences: 64, rebuildBatch: 128, projectionReferences: 8192, responseBytes: 1024 * 1024 } as const;
 export interface StatementSeekReference { subject: string; predicate: string; meaningKey: string;
@@ -142,7 +145,7 @@ export class StatementSeek {
       return;
     }
     await this.publication.begin(basis);
-    throw new WorkReadUnavailable('Publication subject reconstruction is pending');
+    throw new WorkReadUnavailable(PUBLICATION_RECONSTRUCTION_PENDING);
   }
   async seekPotentialPublication(basis: StatementPublicationBasis, after: StatementSeekOrder | null) {
     return this.publication.seek(basis,after);

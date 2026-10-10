@@ -305,6 +305,8 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   let acceptanceRealm: string | null = null;
   let globalFacts = true;
   let rawCoverageComplete = true;
+  let coverageAbsent = false;
+  const graphInventory: StatementSeekCandidate[] = [];
   let rawCoverageSequence = '1';
   let rawSeekSequence = '1';
   let localComplete = true;
@@ -330,6 +332,12 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
     return [...selected.matchAll(/<([^>]+)>/gu)].map(match => match[1]!);
   };
   graph.query = async query => {
+    if (query.includes('?neighbourScore')) {
+      return { results: { bindings: graphInventory.map(row => ({
+        statement: iriTerm(row.statementId), predicate: iriTerm(row.predicate), key: iriTerm(row.meaningKey),
+        neighbourScore: term(String(row.score)),
+      })) } };
+    }
     if (query.includes('SELECT ?policy ?realm')) return { results: { bindings: hasAcceptanceScope
       ? [{ policy: iriTerm(CLASSIFICATION_INHERIT_POLICY),
         ...(acceptanceRealm ? { realm: iriTerm(acceptanceRealm) } : {}) }] : [] } };
@@ -418,7 +426,7 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
       withheld: async () => new Set<string>(),
     },
     statementSeek: {
-      coverage: async () => { rawCoverageReads++; return {
+      coverage: async () => { rawCoverageReads++; return coverageAbsent ? null : {
         complete: rawCoverageComplete, through_sequence: rawCoverageSequence,
       }; },
       capturePublicationBasis: async (subject: string): Promise<StatementPublicationBasis | null> => {
@@ -475,6 +483,8 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
       if (seek) rawSeekSequence = '0';
     },
     incompleteRaw() { rawCoverageComplete = false; },
+    absentCoverage() { coverageAbsent = true; },
+    graphStatements(rows: readonly StatementSeekCandidate[]) { graphInventory.push(...rows); },
     incompleteLocal() { localComplete = false; },
     moveMembership() { membershipHead = subjectId(82); },
     moveRecovery() { recoveryBasis = '2'; },
@@ -545,7 +555,7 @@ test('complete locally empty subject hydrates no ordinary proposals while raw co
 });
 
 for (const guard of ['missing-policy-leaf', 'missing-policy-seek', 'active-global', 'framed', 'realm'] as const) {
-  test(`${guard} preserves the raw global gate instead of selecting locally covered publication`, async () => {
+  test(`${guard} does not read publication coverage when the raw gate applies`, async () => {
     const run = subjectReader([statementCandidate(100)]);
     if (guard === 'active-global') run.scope();
     if (guard === 'framed' || guard === 'realm') run.absentGlobal();
@@ -558,10 +568,18 @@ for (const guard of ['missing-policy-leaf', 'missing-policy-seek', 'active-globa
       return { visibility: 'public', reviewMode: 'open', revision: null,
         space: subjectId(53), realmRevision: null, listing: 'listed', history: 'everything', admission: 'open' };
     };
-    await expect(readSubjectStatements(session, run.resource,
+    const read = readSubjectStatements(session, run.resource,
       guard === 'realm' ? subjectId(51) : GLOBAL_CLASSIFICATION_CONTEXT,
-      guard === 'framed' ? [{ iri: subjectId(52), dimension: 'work' }] : undefined))
-      .rejects.toThrow('Statement seek coverage is unavailable');
+      guard === 'framed' ? [{ iri: subjectId(52), dimension: 'work' }] : undefined);
+    // The leaf and the seek agree in production. This split is the seek's own
+    // refusal when a check that just passed no longer matches.
+    if (guard === 'missing-policy-seek') await expect(read).rejects.toThrow('Statement seek coverage is unavailable');
+    else {
+      const page = await read;
+      expect(page.groups).toEqual([]);
+      expect(page.nextCursor).toBeNull();
+      expect(page.count).toEqual({ value: 0, kind: 'exact-page', total: null });
+    }
     expect(run.rawCoverageReads).toBe(1);
     expect(run.publicationAfter).toEqual([]);
     expect(run.publicationFences).toBe(0);
@@ -572,17 +590,67 @@ for (const guard of ['missing-policy-leaf', 'missing-policy-seek', 'active-globa
   });
 }
 
-test('local incompleteness refuses before candidate and Wiki reads despite healthy raw coverage', async () => {
+test('pending publication reconstruction with no subject statements is an empty complete page', async () => {
   const candidate = statementCandidate(100);
   const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
   run.absentGlobal();
   run.incompleteLocal();
-  await expect(readSubjectStatements(run.session(), run.resource))
-    .rejects.toThrow('Publication subject reconstruction is pending');
+  const page = await readSubjectStatements(run.session(), run.resource);
+  expect(page.groups).toEqual([]);
+  expect(page.nextCursor).toBeNull();
+  expect(page.count).toEqual({ value: 0, kind: 'exact-page', total: null });
   expect(run.rawCoverageReads).toBe(0);
   expect(run.publicationAfter).toEqual([]);
+  expect(run.publicationFences).toBe(0);
   expect(run.wikiBatches).toEqual([]);
   expect(run.hydration).toEqual([]);
+});
+
+test('absent seek coverage answers the subject graph, and torn coverage stays unavailable', async () => {
+  const candidate = statementCandidate(100);
+  const evidence = [wikiCitation(candidate.statementId, 300)];
+  const present = subjectReader([candidate], evidence);
+  present.absentCoverage();
+  present.graphStatements([candidate]);
+  const page = await readSubjectStatements(present.session(), present.resource);
+  expect(page.groups[0]?.items).toMatchObject([{ statement: candidate.statementId, acceptance: null,
+    publication: { kind: 'wiki-bundle' } }]);
+  expect(page.nextCursor).toBeNull();
+  expect(page.count).toEqual({ value: 1, kind: 'exact-page', total: null });
+  expect(present.seekAfter).toEqual([]);
+
+  const empty = subjectReader([]);
+  empty.absentCoverage();
+  const blank = await readSubjectStatements(empty.session(), empty.resource);
+  expect(blank.groups).toEqual([]);
+  expect(blank.nextCursor).toBeNull();
+  expect(blank.count).toEqual({ value: 0, kind: 'exact-page', total: null });
+
+  const behind = subjectReader([candidate], evidence);
+  behind.rawLag();
+  behind.graphStatements([candidate]);
+  const lagged = await readSubjectStatements(behind.session(), behind.resource);
+  expect(lagged.groups[0]?.items).toMatchObject([{ statement: candidate.statementId }]);
+  expect(lagged.count.kind).toBe('exact-page');
+  expect(behind.seekAfter).toEqual([]);
+
+  const corrupt = subjectReader([candidate], evidence);
+  corrupt.incompleteRaw();
+  await expect(readSubjectStatements(corrupt.session(), corrupt.resource))
+    .rejects.toThrow('Statement seek coverage is corrupt');
+});
+
+test('pending publication reconstruction answers a statement the graph already holds', async () => {
+  const candidate = statementCandidate(100);
+  const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
+  run.absentGlobal();
+  run.incompleteLocal();
+  run.graphStatements([candidate]);
+  const page = await readSubjectStatements(run.session(), run.resource);
+  expect(page.groups[0]?.items).toMatchObject([{ statement: candidate.statementId, acceptance: null }]);
+  expect(page.count).toEqual({ value: 1, kind: 'exact-page', total: null });
+  expect(run.publicationAfter).toEqual([]);
+  expect(run.publicationFences).toBe(0);
 });
 
 for (const race of ['membership', 'Global-current-facts', 'recovery-generation', 'restore-hold', 'local-coverage', 'source-reopen'] as const) {

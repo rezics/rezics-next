@@ -14,6 +14,7 @@ test('a published Work statement read catches up while statements are still bein
   let writer = Promise.resolve();
   let relay = Promise.resolve();
   let notifyWrite = () => {};
+  let releaseWriter = () => {};
   try {
     console.log('statement seek progress: stack ready');
     const author = await stack.member('statement-author');
@@ -54,6 +55,12 @@ test('a published Work statement read catches up while statements are still bein
     let written = 0;
     let writesDuringRelay = 0;
     let writeInFlight = false;
+    // The lagging read needs a settled graph. Later turns release the writer
+    // so the index still has to catch up while statements continue.
+    let holdAfterFirst = true;
+    const writerHold = new Promise<void>((resolve) => {
+      releaseWriter = resolve;
+    });
     const writeWaiters: (() => void)[] = [];
     notifyWrite = () => { for (const resolve of writeWaiters.splice(0)) resolve(); };
     let firstSettled = false;
@@ -61,6 +68,8 @@ test('a published Work statement read catches up while statements are still bein
     const firstWrite = new Promise<void>(resolve => { settleFirst = () => { if (!firstSettled) { firstSettled = true; resolve(); } }; });
     writer = (async () => {
       while (!stop) {
+        if (holdAfterFirst && written > 0) await writerHold;
+        if (stop) return;
         writeInFlight = true;
         try {
           await writeStatement();
@@ -85,8 +94,10 @@ test('a published Work statement read catches up while statements are still bein
     if (writeFailure) throw writeFailure;
     const behind = await stack.call('GET', `/v1/resources/${work.work.slice(-36)}/statements`);
     const behindBody = await behind.text();
-    expect(behind.status, behindBody).toBe(503);
-    expect(JSON.parse(behindBody).code).toBe('work_read_unavailable');
+    expect(behind.status, behindBody).toBe(200);
+    expect(JSON.parse(behindBody).count.kind).toBe('exact-page');
+    holdAfterFirst = false;
+    releaseWriter();
 
     let turns = 0;
     let observedTurns = 0;
@@ -140,6 +151,7 @@ test('a published Work statement read catches up while statements are still bein
   } finally {
     stop = true;
     projecting = false;
+    releaseWriter();
     notifyWrite();
     await relay;
     await writer;
