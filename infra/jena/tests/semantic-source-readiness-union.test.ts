@@ -18,9 +18,6 @@ const classes = [
   'WorkNameScopeBasisTest',
   'WorkNameScopeCommandTest',
   'SemanticSourceBasisTest',
-  'ClaimFoldInventoryCommandTest',
-  'ClaimFoldInventoryTest',
-  'ClaimStatementFoldTest',
   'SearchDeltaJournalTest',
   'TextEntityDocumentsTest',
   'MembershipSeekTest',
@@ -151,7 +148,7 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
     const result = spawnSync('docker', arguments_, {
       cwd: root,
       encoding: 'utf8',
-      // Fourteen sequential original classes share one Maven invocation; this
+      // The remaining original classes share one Maven invocation; this
       // aggregate allowance leaves each owner's native turn budgets unchanged.
       timeout: 900_000,
       maxBuffer: 8_388_608,
