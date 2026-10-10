@@ -70,12 +70,11 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
       expect(response.headers.get('cache-control')).toBe('no-store');
       return await response.json() as Snapshot;
     };
-    const draftRequest = () => app.handle(new Request('http://main.local/v1/content-drafts', {
+    const draftRequest = (resourceId: string) => app.handle(new Request('http://main.local/v1/content-drafts', {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer a.b.c',
         'idempotency-key': `draft-${randomUUID()}` },
       body: JSON.stringify({ profile: 'content-text-v1',
-        resourceId: `https://rezics.com/id/${randomUUID()}`,
-        variantId: `urn:rezics:variant:${randomUUID()}`,
+        resourceId, variantId: `urn:rezics:variant:${randomUUID()}`,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
         expectedHead: null, body: 'backpressure', actingSubject: agent }) }));
 
@@ -103,16 +102,28 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     }
     // OPS05: positions, not rows, are read; growth adds no Content statements.
     expect(new Set(scales.map(scale => scale.calls))).toEqual(new Set([2]));
+    // Target resolution chooses work:edit or zone:edit before Account. A current
+    // Work reaches verification; a resource that is not a Work is unavailable first.
+    const draftTitle = `Backpressure target ${randomUUID()}`;
+    const draftAdmission = randomUUID();
+    const admittedTarget = await activateMetadataWork({ fuseki, lineage, objectDirectory: join(state, 'objects') }, {
+      title: draftTitle, admission: { id: draftAdmission, scope: 'work:create:root', action: 'work.create',
+        idempotencyKey: `backpressure-target-${draftAdmission}`, requestDigest: metadataWorkRequestDigest(draftTitle),
+        authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
     // Below the budget a Content command passes admission and reaches its owner path.
     const beforeOpen = verified;
-    expect((await draftRequest()).status).toBe(401);
+    expect((await draftRequest(admittedTarget.work)).status).toBe(401);
+    expect(verified).toBe(beforeOpen + 1);
+    const missingTarget = await draftRequest(`https://rezics.com/id/${randomUUID()}`);
+    expect(missingTarget.status).toBe(503);
+    expect((await missingTarget.json() as { code: string }).code).toBe('content_unavailable');
     expect(verified).toBe(beforeOpen + 1);
 
     await save(saved++);
     const saturated = await read();
     expect(saturated.lanes[0]).toMatchObject({ state: 'saturated', backlog: String(max) });
     const ownerBefore = await content.ownerPosition();
-    const refused = await draftRequest();
+    const refused = await draftRequest(admittedTarget.work);
     expect(refused.status).toBe(503);
     expect(refused.headers.get('retry-after')).toBe(String(BACKPRESSURE_PROFILE_V1.worker.retryAfterSeconds));
     expect((await refused.json() as { code: string }).code).toBe('backpressure_saturated');
@@ -134,7 +145,7 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     const drained = await read();
     expect(drained.lanes[0]).toMatchObject({ state: 'open', backlog: String(max - 5),
       delivered: delivered.sequence });
-    expect((await draftRequest()).status).toBe(401);
+    expect((await draftRequest(admittedTarget.work)).status).toBe(401);
     const retained = await pool.query<{ count: string; first: string; last: string }>(`
       SELECT count(*)::text AS count, min(sequence)::text AS first, max(sequence)::text AS last
       FROM content.outbox WHERE data_epoch = $1`, [initial.dataEpoch]);
@@ -145,7 +156,7 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     await pool.query('ALTER TABLE content.projection_checkpoint DISABLE TRIGGER USER');
     await pool.query('UPDATE content.projection_checkpoint SET data_epoch = $2 WHERE consumer = $1',
       [consumer, randomUUID()]);
-    const unprovable = await draftRequest();
+    const unprovable = await draftRequest(admittedTarget.work);
     expect(unprovable.status).toBe(503);
     expect((await unprovable.json() as { code: string }).code).toBe('backpressure_unavailable');
     expect((await read()).lanes[0].state).toBe('unavailable');
