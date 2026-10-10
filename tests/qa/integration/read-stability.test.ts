@@ -35,7 +35,9 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
       profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),
-      libraryRatings: new ReaderLibraryRatings(stack.accessPool), follows: new FollowsStore(stack.accessPool) };
+      libraryRatings: new ReaderLibraryRatings(stack.accessPool), follows: new FollowsStore(stack.accessPool),
+      // Reviewed template reads (the versions read) page through the local seek index.
+      templateSeek: stack.templateSeek };
     const app = createMainApp(stack.fuseki, deps);
     const agent = await json<{ agent: string }>(await app.handle(new Request('http://main.local/v1/agents', {
       method: 'POST', headers: { authorization: 'Bearer reader', 'content-type': 'application/json',
@@ -69,8 +71,14 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     const page = await json<Page>(await get('/v1/works?limit=1'));
     expect(page.stale).toBe(false);
     expect(page.nextCursor).not.toBeNull();
-    const versionsPath = `/v1/works/${first.work.slice(-36)}/versions`;
-    const versions = await json<{ nextCursor: string }>(await get(`${versionsPath}?limit=1`));
+    // The versions read is the reviewed `work-versions` template (the per-Work
+    // route is retired): one root, one version per page, a signed cursor.
+    const versionsQuery = (cursor?: string) => app.handle(new Request('http://main.local/v1/query', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'template-query-v1', query: 'https://rezics.com/query/work-versions',
+        revision: 1, parameters: { roots: [first.work] }, limit: 1, ...(cursor ? { cursor } : {}) }) }));
+    // The template envelope is `query-v1`; the page (items, complete, nextCursor) is its `result`.
+    const versions = (await json<{ result: { nextCursor: string } }>(await versionsQuery())).result;
     expect(versions.nextCursor).toBeString();
 
     // A command burst lands after the first graph position was captured. The
@@ -102,11 +110,18 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
       await writes;
     } finally { stack.fuseki.query = originalQuery; }
 
-    // G336 characterization, not retained-snapshot acceptance: even unrelated
-    // writes expire ordinary graph cursors. Removing this check without retaining
-    // their relation/order would silently return a page from a different basis.
-    const moved = await json<{ code: string }>(await get(`${versionsPath}?cursor=${versions.nextCursor}`), 409);
-    expect(moved.code).toBe('read_basis_changed');
+    // The versions read is a reviewed template paged by its own keyset over the
+    // Work's local seek base, so unrelated writes (the burst above touched other
+    // Works) do not expire its cursor: the continuation answers the Work's next
+    // version with its own position, not a different basis. (The retired per-Work
+    // graph route refused any cursor after any write: that was a site-wide
+    // order the record's C3 removes.)
+    const firstVersion = (await json<{ result: { items: { id: string }[] } }>(await versionsQuery())).result.items[0]!;
+    const nextVersion = (await json<{ result: { items: { id: string; language: string }[]; complete: boolean } }>(
+      await versionsQuery(versions.nextCursor))).result;
+    expect(nextVersion.items).toHaveLength(1);
+    expect(nextVersion.items[0]!.id).not.toBe(firstVersion.id);
+    expect(nextVersion.complete).toBe(true);
 
     const stale = await json<Page>(await get('/v1/works?limit=5'));
     expect(stale.stale).toBe(true);
