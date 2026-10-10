@@ -6,6 +6,7 @@ import { DEFAULT_SEED } from './corpus.ts';
 export const DEV_COMPOSE_PROJECT = 'rezics-dev';
 const FIXTURE_ID = /^fx-(small|medium)-[0-9a-f]{12}$/;
 const FIXTURE_LOCK = /^(fx-(?:small|medium)-[0-9a-f]{12})\.lock$/;
+const SEED_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 export const FIXTURE_KEEP_REASONS = ['current', 'pinned', 'retained', 'in-use'] as const;
 export type FixtureKeepReason = (typeof FIXTURE_KEEP_REASONS)[number];
@@ -99,6 +100,21 @@ function volumesForGeneration(
   return [...new Set([...generation.volumes, ...(grouped.get(generation.project) ?? [])])].sort();
 }
 
+/** Pinned, retained, and in-use, including a held build lock. The current id is separate. */
+function generationKeepReasons(
+  generation: ListedGeneration,
+  volumes: readonly string[],
+  inventory: PruneInventory,
+  retained: ReadonlySet<string>,
+): FixtureKeepReason[] {
+  const reasons: FixtureKeepReason[] = [];
+  if (inventory.pins.includes(generation.id)) reasons.push('pinned');
+  if (retained.has(generation.id)) reasons.push('retained');
+  if (generation.buildInProgress || volumes.some((name) => inventory.mountedVolumes.includes(name)))
+    reasons.push('in-use');
+  return reasons;
+}
+
 /**
  * Keep a generation when a current consumer can still restore it.
  * `current` is the id `fixture:build` computes for the default seed.
@@ -114,7 +130,6 @@ function volumesForGeneration(
  */
 export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const current = new Set(inventory.currentIds);
-  const pins = new Set(inventory.pins);
   const mounted = new Set(inventory.mountedVolumes);
   const retained = retainedGenerationIds(inventory.generations);
   const groupedVolumes = volumesByProject(inventory.volumes);
@@ -123,12 +138,8 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const removeGenerations: RemovedGeneration[] = [];
   for (const generation of inventory.generations) {
     const volumes = volumesForGeneration(generation, groupedVolumes);
-    const reasons: FixtureKeepReason[] = [];
-    if (current.has(generation.id)) reasons.push('current');
-    if (pins.has(generation.id)) reasons.push('pinned');
-    if (retained.has(generation.id)) reasons.push('retained');
-    if (generation.buildInProgress || volumes.some((name) => mounted.has(name)))
-      reasons.push('in-use');
+    const reasons = generationKeepReasons(generation, volumes, inventory, retained);
+    if (current.has(generation.id)) reasons.unshift('current');
     const uncomputedSeed =
       generation.manifest && generation.seed !== '' && generation.seed !== DEFAULT_SEED
         ? generation.seed
@@ -249,20 +260,13 @@ export function seedPruneTargets(
   inventory: PruneInventory,
   request: SeedPruneRequest,
 ): RemovedGeneration[] {
-  const pins = new Set(inventory.pins);
-  const mounted = new Set(inventory.mountedVolumes);
   const retained = retainedGenerationIds(inventory.generations);
   const groupedVolumes = volumesByProject(inventory.volumes);
   const remove: RemovedGeneration[] = [];
   for (const generation of inventory.generations) {
     if (generation.seed !== request.seed || generation.id === request.keepId) continue;
     const volumes = volumesForGeneration(generation, groupedVolumes);
-    const protectedGeneration =
-      pins.has(generation.id) ||
-      retained.has(generation.id) ||
-      generation.buildInProgress ||
-      volumes.some((name) => mounted.has(name));
-    if (protectedGeneration) continue;
+    if (generationKeepReasons(generation, volumes, inventory, retained).length) continue;
     remove.push({
       id: generation.id,
       profile: generation.profile,
@@ -392,7 +396,7 @@ async function collectInventory(): Promise<PruneInventory> {
   const pairs = new Map<string, { profile: 'small' | 'medium'; seed: string }>();
   const addPair = (profile: string, seed: string) => {
     if (profile !== 'small' && profile !== 'medium') return;
-    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(seed)) return;
+    if (!SEED_NAME.test(seed)) return;
     pairs.set(`${profile}\0${seed}`, { profile, seed });
   };
   for (const profile of Object.keys(PROFILES)) addPair(profile, DEFAULT_SEED);
@@ -511,8 +515,6 @@ export async function pruneSupersededGenerations(
   return outcome.removedIds;
 }
 
-const SEED_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
-
 export interface SeedPruneOutcome {
   mode: 'dry-run' | 'apply';
   removeGenerations: RemovedGeneration[];
@@ -549,14 +551,27 @@ export async function executeSeedPrune(
   };
 }
 
-/** After a seed's builder has its current id, drop that seed's other generations. */
-export async function pruneSeedGenerations(seed: string, keepId: string): Promise<string[]> {
-  const outcome = await executeSeedPrune({ seed, keepId, apply: true });
-  if (outcome.failures.length) {
+/** Applies the seed prune. `failure` names how many generations failed and why. */
+export async function pruneSeedGenerations(
+  seed: string,
+  keepId: string,
+): Promise<{ removedIds: string[]; failure?: string }> {
+  try {
+    const outcome = await executeSeedPrune({ seed, keepId, apply: true });
+    if (!outcome.failures.length) return { removedIds: outcome.removedIds };
     const why = outcome.failures
-      .map((failure) => `${failure.target}: ${failure.error}`)
+      .map((failure) => `${failure.target}: ${redactCommandOutput(failure.error)}`)
       .join('; ');
-    throw new Error(`${outcome.failures.length} generations failed: ${why}`);
+    return {
+      removedIds: outcome.removedIds,
+      failure: `seed prune failed for ${outcome.failures.length} generations: ${why}`,
+    };
+  } catch (error) {
+    return {
+      removedIds: [],
+      failure: `seed prune failed: ${redactCommandOutput(
+        error instanceof Error ? error.message : String(error),
+      )}`,
+    };
   }
-  return outcome.removedIds;
 }

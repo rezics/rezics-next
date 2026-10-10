@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildFixtureCorpus } from '../../../scripts/fixture/build.ts';
-import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
-import { executeSeedPrune } from '../../../scripts/fixture/prune.ts';
+import { pruneSeedGenerations } from '../../../scripts/fixture/prune.ts';
 import {
   fixtureCorpus,
   publicUnitAt,
@@ -118,30 +117,11 @@ export const rankedFixtureOwners = fixtureOwners.map((owner) =>
 export async function buildRankedFixture() {
   const manifest = await buildFixtureCorpus(rankedCorpus, rankedFixtureOwners);
   // A failed prune must not discard the backup this build just kept.
-  try {
-    const outcome = await executeSeedPrune({
-      seed: rankedCorpus.seed,
-      keepId: manifest.id,
-      apply: true,
-    });
-    if (outcome.failures.length) {
-      const why = outcome.failures
-        .map((failure) => `${failure.target}: ${redactCommandOutput(failure.error)}`)
-        .join('; ');
-      console.error(
-        `fixture ${manifest.id}: seed prune failed for ${outcome.failures.length} generations: ${why}`,
-      );
-    } else if (outcome.removedIds.length) {
-      console.log(
-        `fixture ${manifest.id}: pruned superseded ${rankedCorpus.seed}: ${outcome.removedIds.join(' ')}`,
-      );
-    }
-  } catch (error) {
-    console.error(
-      `fixture ${manifest.id}: seed prune failed: ${
-        redactCommandOutput(error instanceof Error ? error.message : String(error))
-      }`,
+  const pruned = await pruneSeedGenerations(rankedCorpus.seed, manifest.id);
+  if (pruned.failure) console.error(`fixture ${manifest.id}: ${pruned.failure}`);
+  else if (pruned.removedIds.length)
+    console.log(
+      `fixture ${manifest.id}: pruned superseded ${rankedCorpus.seed}: ${pruned.removedIds.join(' ')}`,
     );
-  }
   return manifest;
 }
