@@ -146,6 +146,12 @@ export function checkProductionEnv(
   // cannot set it, and a production process must not start with it present.
   if (Object.hasOwn(env, 'REZICS_QA_RESTORE_CUTOVER_CRASH'))
     throw new Error('Production forbids REZICS_QA_RESTORE_CUTOVER_CRASH');
+  // Fault tests arm a search-rebuild crash seam with these variables. A request
+  // cannot set them, and a production process must not start with either present.
+  if (Object.hasOwn(env, 'REZICS_QA_SEARCH_REBUILD_CRASH'))
+    throw new Error('Production forbids REZICS_QA_SEARCH_REBUILD_CRASH');
+  if (Object.hasOwn(env, 'REZICS_QA_SEARCH_REBUILD_CRASH_AT'))
+    throw new Error('Production forbids REZICS_QA_SEARCH_REBUILD_CRASH_AT');
   if (roles.includes('main')) requiredMatcherMode(env.MAIN_REQUIRED_MEDIA_MATCHER, true);
   telemetryConfig(env);
   assertClassifiedDefaults();

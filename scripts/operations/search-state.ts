@@ -4,12 +4,14 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ContentCore } from '../../services/content/src/core.ts';
 import type { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
-import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
-  quarantinePublicContentSearch, readContentRebuildStep, replayQuarantinedContentCut }
+import { CONTENT_REBUILD_NONEMPTY_REFUSAL, ContentRebuildUnavailable,
+  activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, crashSearchRebuild,
+  nextContentRebuildStep, quarantinePublicContentSearch, readContentRebuildStep,
+  readContentRebuildProgress, reclearQuarantinedContentUnits, recordOfflineContentRebuild,
+  replayQuarantinedContentCut }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
-import { RV, iri, textIndexProbePattern, type WorkActivationEnvironment }
+import { RV, textIndexProbePattern, type WorkActivationEnvironment }
   from '../../services/main/src/modules/work/activate.ts';
-import { PUBLIC_SEARCH_GRAPH } from '../../services/main/src/modules/work/select-main.ts';
 import { backfillCatalogueNames } from '../../services/main/src/modules/search/names.ts';
 import type { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
@@ -242,8 +244,10 @@ export interface RebuildInput {
   publicConsumer: string;
   expected: ExpectedPins;
   reserveBytes: number;
-  /** Called before the service stops; it must prove no Main writer remains. */
+  /** Called before the indexer, replay, and activation; it must prove no Main writer remains. */
   assertWritersStopped: () => Promise<void>;
+  /** Printed by the operator command. Absent in tests. */
+  onStep?: (step: 'quarantined' | 'cleared' | 'offline-indexed' | 'replayed' | 'activated') => void;
 }
 
 export interface RebuildResult {
@@ -259,65 +263,120 @@ export interface RebuildResult {
 
 /** Quarantine, empty-Content offline rebuild, exact Content replay and activation
  * of one new text generation. Pins and headroom refuse before quarantine.
- * Cost: one constant-size pin/headroom inspection, bounded Content clear/replay
- * batches, then one O(indexed RDF bytes) native indexer scan. The native pass
- * has a 300-second command timeout; elapsed phases and storage are returned. */
+ * A rerun continues from the stored receipts. Units that return while the
+ * anchor is absent are cleared again. The indexer runs when no offline receipt
+ * covers the current generation and sequence. A subject the clear cannot delete
+ * still refuses. Cost: one constant-size pin/headroom inspection, bounded
+ * Content clear/replay batches, then one O(indexed RDF bytes) native indexer
+ * scan when that pass is not already recorded. The native pass has a 300-second
+ * command timeout; elapsed phases and storage are returned. */
 export async function rebuildPublicContentSearch(input: RebuildInput): Promise<RebuildResult> {
   const clock = () => performance.now();
   let started = clock();
-  assertPinnedState(await inspectFusekiState(input.runner, input.dockerEnv, input.env.fuseki), input.expected);
+  let pins = await inspectFusekiState(input.runner, input.dockerEnv, input.env.fuseki);
+  assertPinnedState(pins, input.expected);
   const storage = storageHeadroom(input.runner, input.reserveBytes);
   assertStorageHeadroom(storage);
   let verify = clock() - started;
-  started = clock();
   const job = await quarantinePublicContentSearch(input.env, input.content, input.id);
-  const removed = await clearQuarantinedContentUnits(input.env, job);
-  await input.assertWritersStopped();
-  // A terminal clear receipt preserves partial replay on retry. It does not
-  // prove this job completed an offline pass, so nonempty retries refuse.
-  const assertNoContent = async () => {
-    const result = await readContentRebuildStep('rebuild command', () => input.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit ?predicate ?value
-        FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")) }
-    }`));
-    if (result.boolean !== false) {
-      throw new SearchStateRefused('Content units remain after terminal clear; offline rebuild refused');
+  input.onStep?.('quarantined');
+  crashSearchRebuild('after-quarantine');
+  let removed = 0;
+  let replayed = 0;
+  let offlineLog = '';
+  let offlineMs = 0;
+  let replayMs = 0;
+  let activateMs = 0;
+  let offlineDigest: string | undefined;
+  for (let guard = 0; guard < 8; guard++) {
+    const at = await input.cursor.initialize(job.consumer);
+    const progress = await readContentRebuildProgress(input.env, input.id, at.sequence);
+    const next = nextContentRebuildStep(progress);
+    if (typeof next !== 'string') {
+      if (next.refuse === CONTENT_REBUILD_NONEMPTY_REFUSAL) throw new SearchStateRefused(next.refuse);
+      throw new ContentRebuildUnavailable(next.refuse);
     }
-  };
-  await assertNoContent();
-  await backfillCatalogueNames(input.env);
-  await assertNoContent();
-  const preparation = clock() - started;
-  started = clock();
-  const offlineLog = await offlineTextIndex(input.runner);
-  const offline = clock() - started;
-  started = clock();
-  const pins = await inspectFusekiState(input.runner, input.dockerEnv, input.env.fuseki);
-  assertPinnedState(pins, input.expected);
-  const health = await readContentRebuildStep('command health', () => input.env.fuseki.commandHealth()) as { textIndexUncertain?: unknown };
-  if (health.textIndexUncertain !== false) {
-    throw new SearchStateRefused('rebuilt text index is still reported uncertain');
+    if (next === 'done') {
+      if (!progress.generation) throw new ContentRebuildUnavailable('activate: generation is absent');
+      await input.cursor.adoptRebuildCheckpoint(input.publicConsumer, job.consumer, job.cut);
+      return { job: input.id, removed, replayed, generation: progress.generation, offlineLog, storage, pins,
+        elapsedMs: { verify: Math.round(verify), replay: Math.round(replayMs),
+          offline: Math.round(offlineMs), activate: Math.round(activateMs) } };
+    }
+    if (next === 'quarantine') {
+      throw new ContentRebuildUnavailable('quarantine: anchor is absent and this job has no receipt');
+    }
+    if (next === 'clear') {
+      const cleared = progress.clearReceipt
+        ? await reclearQuarantinedContentUnits(input.env, job)
+        : await clearQuarantinedContentUnits(input.env, job);
+      if (cleared === 0 && progress.contentUnits) {
+        throw new ContentRebuildUnavailable('clear: Content unit inventory is invalid');
+      }
+      removed += cleared;
+      input.onStep?.('cleared');
+      crashSearchRebuild('after-clear');
+      continue;
+    }
+    if (next === 'offline') {
+      started = clock();
+      await input.assertWritersStopped();
+      await backfillCatalogueNames(input.env);
+      const prepared = await readContentRebuildProgress(input.env, input.id, at.sequence);
+      if (prepared.malformedContent) throw new SearchStateRefused(CONTENT_REBUILD_NONEMPTY_REFUSAL);
+      if (prepared.contentUnits) continue;
+      offlineLog = await offlineTextIndex(input.runner);
+      offlineMs += clock() - started;
+      started = clock();
+      pins = await inspectFusekiState(input.runner, input.dockerEnv, input.env.fuseki);
+      assertPinnedState(pins, input.expected);
+      const health = await readContentRebuildStep('command health', () => input.env.fuseki.commandHealth()) as { textIndexUncertain?: unknown };
+      if (health.textIndexUncertain !== false) {
+        throw new SearchStateRefused('rebuilt text index is still reported uncertain');
+      }
+      const probe = await readContentRebuildStep('probe', () => input.env.fuseki.query(`PREFIX rv: <${RV}>
+        PREFIX text: <http://jena.apache.org/text#> ASK { ${textIndexProbePattern()} }`));
+      if (probe.boolean !== true) throw new SearchStateRefused('rebuilt text index probe is absent');
+      const indexed = await readContentRebuildProgress(input.env, input.id, at.sequence);
+      if (indexed.malformedContent || indexed.contentUnits) {
+        throw new SearchStateRefused(CONTENT_REBUILD_NONEMPTY_REFUSAL);
+      }
+      if (!indexed.generation || !indexed.sequence) {
+        throw new ContentRebuildUnavailable('offline: graph control is unavailable');
+      }
+      offlineDigest = sha256(JSON.stringify({ family: 'jena-textindexer-v2',
+        image: pins.imageId, stateVolume: pins.stateVolume,
+        assembler: pins.indexerAssemblerSha256, analyzer: pins.facts.analyzer,
+        fusekiJar: pins.fusekiJarSha256, commandJar: pins.commandJarSha256,
+        moduleVersion: pins.moduleVersion, output: sha256(offlineLog) }));
+      await recordOfflineContentRebuild(input.env, job, indexed.generation, indexed.sequence, offlineDigest);
+      verify += clock() - started;
+      input.onStep?.('offline-indexed');
+      crashSearchRebuild('after-offline-index');
+      continue;
+    }
+    if (next === 'replay') {
+      await input.assertWritersStopped();
+      started = clock();
+      replayed += await replayQuarantinedContentCut(input.env, input.content, input.cursor, job);
+      replayMs += clock() - started;
+      input.onStep?.('replayed');
+      crashSearchRebuild('after-replay');
+      continue;
+    }
+    await input.assertWritersStopped();
+    const digest = offlineDigest ?? progress.offlineDigest ?? undefined;
+    if (!digest) throw new ContentRebuildUnavailable('activate: offline index evidence is absent');
+    started = clock();
+    const generation = await activateRebuiltPublicContentSearch(input.env, input.content,
+      input.cursor, job, input.publicConsumer, digest);
+    activateMs += clock() - started;
+    input.onStep?.('activated');
+    return { job: input.id, removed, replayed, generation, offlineLog, storage, pins,
+      elapsedMs: { verify: Math.round(verify), replay: Math.round(replayMs),
+        offline: Math.round(offlineMs), activate: Math.round(activateMs) } };
   }
-  const probe = await readContentRebuildStep('probe', () => input.env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX text: <http://jena.apache.org/text#> ASK { ${textIndexProbePattern()} }`));
-  if (probe.boolean !== true) throw new SearchStateRefused('rebuilt text index probe is absent');
-  await assertNoContent();
-  verify += clock() - started;
-  started = clock();
-  const replayed = await replayQuarantinedContentCut(input.env, input.content, input.cursor, job);
-  const replay = preparation + clock() - started;
-  started = clock();
-  const offlineIndexDigest = sha256(JSON.stringify({ family: 'jena-textindexer-v2',
-    image: pins.imageId, stateVolume: pins.stateVolume,
-    assembler: pins.indexerAssemblerSha256, analyzer: pins.facts.analyzer,
-    fusekiJar: pins.fusekiJarSha256, commandJar: pins.commandJarSha256,
-    moduleVersion: pins.moduleVersion, output: sha256(offlineLog) }));
-  const generation = await activateRebuiltPublicContentSearch(input.env, input.content,
-    input.cursor, job, input.publicConsumer, offlineIndexDigest);
-  const activate = clock() - started;
-  return { job: input.id, removed, replayed, generation, offlineLog, storage, pins,
-    elapsedMs: { verify: Math.round(verify), replay: Math.round(replay),
-      offline: Math.round(offline), activate: Math.round(activate) } };
+  throw new ContentRebuildUnavailable('rebuild: did not converge');
 }
 
 /**

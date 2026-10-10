@@ -7,7 +7,8 @@ import { ContentCore } from '../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
-import { contentRebuildFailureLine, readContentRebuildStep, resumeActivatedContentRebuild }
+import { ContentRebuildUnavailable, contentRebuildFailureLine, publicSearchAnchorPresent,
+  readAdoptedQuarantineJob, readContentRebuildStep, resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
 import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvironment,
   parseOptions, projectName,
@@ -72,7 +73,6 @@ const apps = readEnv(join(stack, 'apps.env'));
 const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as { id: string } : null;
 if (saved && !UUID.test(saved.id)) throw new Error('saved Content rebuild job is invalid');
 if (saved && jobArg && saved.id !== jobArg) throw new Error('resume the saved Content rebuild job');
-const id = saved?.id ?? jobArg ?? randomUUID();
 const docker = loadDockerEnvironment();
 const runner: FusekiStateRunner = {
   exec: script => compose(['exec', '-T', 'fuseki', 'sh', '-ec', script], docker),
@@ -91,13 +91,24 @@ try {
   if (health.moduleVersion !== COMMAND_MODULE_VERSION) {
     throw new Error(`Fuseki command module ${COMMAND_MODULE_VERSION} is required; run task toolchain:install and restart the stack`);
   }
+  const env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
+    routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
+  let id = saved?.id ?? jobArg;
+  if (!id) {
+    if (!await publicSearchAnchorPresent(env)) {
+      const adopted = await readAdoptedQuarantineJob(env);
+      if (!adopted) {
+        throw new ContentRebuildUnavailable(
+          'quarantine: anchor is absent and the receipt has no job id; pass --job');
+      }
+      id = adopted;
+    } else id = randomUUID();
+  }
   if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
   try {
     const content = new ContentCore(pool);
     const cursor = new ContentProjectionCursor(pool);
-    const env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
-      routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
     const publicConsumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
     const activated = await resumeActivatedContentRebuild(env, cursor, id, publicConsumer);
     if (activated) {
@@ -106,7 +117,8 @@ try {
     } else {
       const result = await rebuildPublicContentSearch({ runner, dockerEnv: docker, env, content, cursor,
         id, publicConsumer, reserveBytes, assertWritersStopped: () => assertWritersStopped(apps.MAIN_ORIGIN!),
-        expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`) });
+        expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`),
+        onStep: step => console.log(`content-rebuild step: ${step}`) });
       const logPath = join(stack, `content-rebuild-${id}.log`);
       writeFileSync(logPath, result.offlineLog, { mode: 0o600 });
       rmSync(jobFile);

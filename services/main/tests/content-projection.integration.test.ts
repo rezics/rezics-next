@@ -537,24 +537,16 @@ sync`); }
     const partialBody = await receiptBody(partialDelivery.envelope.receipt);
     const partialJob = await quarantinePublicContentSearch(env, content, interruptedId);
     expect(await clearQuarantinedContentUnits(env, partialJob)).toBe(0);
-    const partialState = await retainedState(interruptedId);
     const partialPasses = offlinePasses;
-    await expect(rebuild(interruptedId)).rejects.toThrow('Content units remain after terminal clear');
+    // Replay has left sequence 0, so a rerun continues it and activates. It does
+    // not delete those units and does not run the indexer over the partial graph.
+    const resumed = await rebuild(interruptedId);
     expect(offlinePasses).toBe(partialPasses);
-    expect(await retainedState(interruptedId)).toEqual(partialState);
+    expect(resumed.replayed).toBe(1);
+    expect(resumed.generation).toMatch(/^urn:rezics:text-index-generation:/);
     expect(await receiptBody(partialDelivery.envelope.receipt)).toEqual(partialBody);
     expect(await physicalBody(partialBody.unit!.value)).toMatchObject([{ literal: {
       value: body, 'xml:lang': language }, datatype: { value: datatype } }]);
-    // The lower-level exact relay seam remains usable without running offline
-    // over partial documents; the production entrypoint cannot infer that phase.
-    expect(await replayQuarantinedContentCut(env, content, cursor, partialJob)).toBe(1);
-    expect(fuseki.deliveries.at(-1)).toEqual(partialDelivery);
-    expect(await verifyQuarantinedContentIndex(env, content, cursor, partialJob))
-      .toMatchObject({ contentUnitCount: 1 });
-    const completeState = await retainedState(interruptedId);
-    await expect(rebuild(interruptedId)).rejects.toThrow('Content units remain after terminal clear');
-    expect(offlinePasses).toBe(partialPasses);
-    expect(await retainedState(interruptedId)).toEqual(completeState);
     expect(await sourceEvidence()).toEqual(originalEvidence);
     expect(await native.command(partialDelivery.envelope)).toMatchObject({
       status: 'committed', position: partialDelivery.position });

@@ -5,19 +5,52 @@ import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, TEXT_INDEX_PROBE,
   TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_GRAPH, TEXT_INDEX_PROFILE, hash, iri, lit, textIndexProbePattern,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
+import { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRASH_POINTS,
+  SearchRebuildCrash, crashSearchRebuild, type SearchRebuildCrashPoint }
+  from '../../infrastructure/search-rebuild-crash.ts';
 import { relayContentProjectionOnce } from './relay.ts';
 import { extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
 
+export { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRASH_POINTS,
+  SearchRebuildCrash, crashSearchRebuild, type SearchRebuildCrashPoint };
+
+/**
+ * One public Content rebuild. The anchor is absent from quarantine until
+ * activation, and activation writes the new text generation and the anchor in
+ * the same command. A rerun reaches activation from any earlier state:
+ *
+ * - not-started: no quarantine receipt, anchor present. Rerun quarantines and
+ *   stores the Content owner cut.
+ * - quarantined: anchor absent, quarantine receipt stored. Rerun finishes the
+ *   profile receipt if needed, then clears Content units.
+ * - cleared: a terminal clear receipt and no Content MatchUnit. Units that
+ *   return while readers are closed are cleared again on the same keyed pages
+ *   and the clear receipt is re-asserted. Rerun does not treat that as an error.
+ * - offline-indexed: a receipt records the indexer pass for this generation and
+ *   control sequence. Rerun repeats the indexer when that receipt is absent.
+ *   The admitted command is the cleared-family receipt: it advances sequence
+ *   and writes no public triple. Its digest family is content-rebuild-offline-v1.
+ * - replayed: the rebuild cursor is at the stored quarantine cut. Rerun adopts
+ *   that checkpoint idempotently (the cursor does not rewind) and activates.
+ * - activated: the activate receipt, control generation, and anchor agree.
+ *   Rerun only finishes SQL checkpoint promotion.
+ *
+ * A content-match-unit subject that is not a MatchUnit with a Content
+ * projection still refuses. That subject cannot be cleared, and it must not
+ * enter the indexer. A live index (anchor present) is never rebuilt in place.
+ */
+
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
-const CLEAR_BATCH = 64;
 // Four retained revisions at at most 1 MiB each fit Content's 4 MiB read budget.
 const SOURCE_READ_BATCH = 4;
 const MAX_CLEAR_BATCHES = 2_000;
 const MAX_REPLAY_EVENTS = 100_000;
 const MAX_REBUILD_UNITS = 50_000;
-/** Variants or MatchUnits in one verification read. Measured pages of this size stay far under Fuseki's 10s query timeout. */
+/** Variants or MatchUnits in one verification read. Measured pages of this size stay far under Fuseki's 10s query timeout. The native clear command admits at most this many subjects. */
 export const CONTENT_REBUILD_PAGE = 64;
+/** A subject the clear command cannot delete. The indexer must not see it. */
+export const CONTENT_REBUILD_NONEMPTY_REFUSAL = 'Content units remain after terminal clear; offline rebuild refused';
 /** One verification read must finish inside this budget, leaving margin under Fuseki's 10s query timeout. */
 export const CONTENT_REBUILD_READ_BUDGET_MS = 8_000;
 
@@ -74,6 +107,58 @@ export interface ContentRebuildJob {
   id: string;
   cut: ContentPosition;
   consumer: string;
+}
+
+export interface ContentRebuildProgress {
+  anchor: boolean;
+  quarantine: boolean;
+  clearReceipt: boolean;
+  /** Proper Content MatchUnits: typed, with a Content projection. */
+  contentUnits: boolean;
+  /** A content-match-unit subject the clear command cannot delete. */
+  malformedContent: boolean;
+  /** The offline record is the latest control command and the graph has no Content units. */
+  offlineCovers: boolean;
+  /** Latest offline digest for the current generation, including after replay advanced sequence. */
+  offlineDigest: string | null;
+  replaySequence: string | null;
+  cutSequence: string | null;
+  sequence: string | null;
+  generation: string | null;
+  activated: boolean;
+}
+
+export type ContentRebuildResume =
+  | 'quarantine'
+  | 'clear'
+  | 'offline'
+  | 'replay'
+  | 'activate'
+  | 'done'
+  | { refuse: string };
+
+/** The next command a rerun must run. A rotated generation is not a refusal:
+ * activation reads the live generation. Units after a clear are a clear, while
+ * the graph stays closed. */
+export function nextContentRebuildStep(progress: ContentRebuildProgress): ContentRebuildResume {
+  if (progress.activated) {
+    if (!progress.anchor) return { refuse: 'activate: anchor is absent after activation' };
+    return 'done';
+  }
+  if (!progress.quarantine) {
+    if (!progress.anchor) return { refuse: 'quarantine: anchor is absent and this job has no receipt' };
+    return 'quarantine';
+  }
+  if (progress.anchor) return { refuse: 'quarantine: anchor returned before activation' };
+  const atCut = progress.cutSequence !== null && progress.replaySequence === progress.cutSequence;
+  // Sequence 0 has not replayed. A non-zero cursor, or a cursor already at the
+  // cut, has units whose projection receipts cannot be inserted again.
+  const replayStarted = progress.replaySequence !== null && progress.replaySequence !== '0';
+  if (!replayStarted && (!progress.clearReceipt || progress.contentUnits)) return 'clear';
+  if (progress.malformedContent && !atCut) return { refuse: CONTENT_REBUILD_NONEMPTY_REFUSAL };
+  if (!replayStarted && !progress.offlineCovers) return 'offline';
+  if (!atCut) return 'replay';
+  return 'activate';
 }
 
 type Phase = 'quarantine' | 'profile' | 'clear' | 'cleared' | 'activate';
@@ -193,10 +278,17 @@ export async function resumeActivatedContentRebuild(env: WorkActivationEnvironme
   return generation;
 }
 
-async function assertQuarantined(env: WorkActivationEnvironment): Promise<void> {
+export async function publicSearchAnchorPresent(env: WorkActivationEnvironment): Promise<boolean> {
   const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
     ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`));
-  if (answer.boolean !== false) throw new ContentRebuildUnavailable('public search is not quarantined');
+  if (answer.boolean !== true && answer.boolean !== false) {
+    throw new ContentRebuildUnavailable('quarantine: public search anchor is unreadable');
+  }
+  return answer.boolean === true;
+}
+
+async function assertQuarantined(env: WorkActivationEnvironment): Promise<void> {
+  if (await publicSearchAnchorPresent(env)) throw new ContentRebuildUnavailable('public search is not quarantined');
 }
 
 /** Persistently remove the public-search anchor before any replacement work. */
@@ -206,6 +298,9 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
   const consumer = `content-rebuild.${id}`;
   let cut = await readQuarantine(env, id);
   if (!cut) {
+    if (!await publicSearchAnchorPresent(env)) {
+      throw new ContentRebuildUnavailable('quarantine: anchor is absent and this job has no receipt');
+    }
     cut = await content.ownerPosition();
     sourceCut(cut);
     await command(env, 'quarantine', id, { family: 'content-rebuild-quarantine-v1', id, cut }, {
@@ -213,7 +308,7 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
       condition: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
-      receiptFacts: `; rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ${lit(cut.sequence)}`,
+      receiptFacts: `; rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ${lit(cut.sequence)} ; rv:rebuildJob ${lit(id)}`,
     });
     cut = await readQuarantine(env, id);
     if (!cut) throw new ContentRebuildUnavailable('quarantine receipt is absent');
@@ -243,12 +338,17 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
   return { id, cut, consumer };
 }
 
-async function listContentUnits(env: WorkActivationEnvironment): Promise<string[]> {
-  const result = await readContentRebuildStep('clear page', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?unit WHERE {
+/** One ordered page of clearable Content units. The native command admits at most 64 subjects. */
+export function contentRebuildClearPageQuery(): string {
+  return `PREFIX rv: <${RV}> SELECT DISTINCT ?unit WHERE {
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:projection ?projection .
       FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")
         && STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) }
-  } LIMIT ${CLEAR_BATCH}`));
+  } ORDER BY STR(?unit) LIMIT ${CONTENT_REBUILD_PAGE}`;
+}
+
+async function listContentUnits(env: WorkActivationEnvironment): Promise<string[]> {
+  const result = await readContentRebuildStep('clear page', () => env.fuseki.query(contentRebuildClearPageQuery()));
   const rows = result.results?.bindings ?? [];
   const units = rows.map(row => row.unit?.value);
   if (units.some(unit => !unit || !unit.startsWith('urn:rezics:content:match-unit:'))
@@ -284,6 +384,181 @@ export async function clearQuarantinedContentUnits(env: WorkActivationEnvironmen
     removed += units.length;
   }
   throw new ContentRebuildUnavailable('Content unit cleanup exceeded bounded batches');
+}
+
+/** Delete Content units that returned after the terminal clear, while the anchor
+ * stays absent. The original clear receipt is left in place; a new cleared
+ * receipt records this cut. Replay that has left sequence 0 is not cleared:
+ * those units belong to receipts that cannot be inserted again. */
+export async function reclearQuarantinedContentUnits(env: WorkActivationEnvironment,
+  job: ContentRebuildJob): Promise<number> {
+  await assertQuarantined(env);
+  if (!await isReceiptCommitted(env, 'cleared', job.id)) return clearQuarantinedContentUnits(env, job);
+  let removed = 0;
+  for (let batch = 0; batch < MAX_CLEAR_BATCHES; batch++) {
+    const units = await listContentUnits(env);
+    if (units.length === 0) {
+      if (removed > 0) await recordReclear(env, job);
+      return removed;
+    }
+    const control = await readIndexControl(env);
+    const identity = `${job.id}\0${control.sequence}\0${units.join('\0')}`;
+    await command(env, 'clear', identity,
+      { family: 'content-rebuild-clear-v1', id: job.id, cut: job.cut, units, sequence: control.sequence }, {
+        deletion: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${units.map(unit => `${iri(unit)} ?oldPredicate ?oldValue .`).join('\n')}
+        }`,
+        condition: `VALUES ?oldUnit { ${units.map(iri).join(' ')} }
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit a rv:MatchUnit ;
+            rv:projection ?projection ; ?oldPredicate ?oldValue . }`,
+      });
+    removed += units.length;
+  }
+  throw new ContentRebuildUnavailable('clear: Content unit cleanup exceeded bounded batches');
+}
+
+async function recordReclear(env: WorkActivationEnvironment, job: ContentRebuildJob): Promise<void> {
+  const control = await readIndexControl(env);
+  await command(env, 'cleared', `reclear\0${job.id}\0${control.sequence}`,
+    { family: 'content-rebuild-reclear-v1', id: job.id, cut: job.cut, sequence: control.sequence }, {
+      condition: `FILTER(?n = ${control.sequence})
+        FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ?unit a rv:MatchUnit ; rv:projection ?projection .
+          FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")
+            && STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) } }
+        FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`,
+      receiptFacts: `; rv:rebuildJob ${lit(job.id)} ; rv:ownerDataEpoch ${lit(job.cut.dataEpoch)}
+        ; rv:ownerSequence ${lit(job.cut.sequence)}`,
+    });
+}
+
+/** The admitted cleared-family command records an indexer pass. It advances
+ * sequence and writes no public triple, and it omits priorIndexGeneration so
+ * a generation read does not treat it as activation. A later command makes
+ * the record stop covering the graph, so the indexer runs again. */
+export async function recordOfflineContentRebuild(env: WorkActivationEnvironment, job: ContentRebuildJob,
+  generation: string, preSequence: string, digest: string): Promise<void> {
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new ContentRebuildUnavailable('offline: index evidence digest is required');
+  if (!DECIMAL.test(preSequence) || !/^urn:rezics:text-index-generation:[0-9a-f-]{36}$/.test(generation)) {
+    throw new ContentRebuildUnavailable('offline: graph control is unavailable');
+  }
+  await command(env, 'cleared', `offline\0${job.id}\0${generation}\0${preSequence}`,
+    { family: 'content-rebuild-offline-v1', id: job.id, generation, sequence: preSequence, digest }, {
+      condition: `FILTER(?n = ${preSequence})
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:textIndexGeneration ${iri(generation)} . }
+        FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`,
+      receiptFacts: `; rv:rebuildJob ${lit(job.id)} ; rv:textIndexGeneration ${iri(generation)}
+        ; rv:indexRebuildDigest ${lit(digest)}`,
+    });
+}
+
+async function readIndexControl(env: WorkActivationEnvironment): Promise<{ sequence: string; generation: string }> {
+  const result = await readContentRebuildStep('control', () => env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?sequence ?generation WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:sequence ?sequence ; rv:textIndexGeneration ?generation .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    }`));
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !DECIMAL.test(row?.sequence?.value ?? '')
+    || !/^urn:rezics:text-index-generation:[0-9a-f-]{36}$/.test(row?.generation?.value ?? '')) {
+    throw new ContentRebuildUnavailable('control: graph control is unavailable');
+  }
+  return { sequence: row!.sequence!.value, generation: row!.generation!.value };
+}
+
+async function askContent(env: WorkActivationEnvironment, kind: 'units' | 'malformed'): Promise<boolean> {
+  const pattern = kind === 'units'
+    ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:projection ?projection .
+        FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:")
+          && STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) }`
+    : `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit ?predicate ?value .
+        FILTER(STRSTARTS(STR(?unit), "urn:rezics:content:match-unit:"))
+        FILTER NOT EXISTS { ?unit a rv:MatchUnit ; rv:projection ?projection .
+          FILTER(STRSTARTS(STR(?projection), "urn:rezics:content:projection:")) } }`;
+  const answer = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${pattern} }`));
+  if (answer.boolean !== true && answer.boolean !== false) {
+    throw new ContentRebuildUnavailable('clear: Content unit inventory is unreadable');
+  }
+  return answer.boolean === true;
+}
+
+async function readLatestOffline(env: WorkActivationEnvironment, id: string,
+  generation: string): Promise<{ digest: string; sequence: string } | null> {
+  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?digest ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence ;
+        rv:rebuildJob ${lit(id)} ; rv:indexRebuildDigest ?digest ;
+        rv:textIndexGeneration ${iri(generation)} .
+        FILTER(STRSTARTS(STR(?receipt), "urn:rezics:receipt:content-rebuild:cleared:")) }
+    } ORDER BY DESC(xsd:integer(?sequence)) LIMIT 1`));
+  const rows = result.results?.bindings ?? [];
+  if (rows.length === 0) return null;
+  const digest = rows[0]?.digest?.value ?? '';
+  const sequence = rows[0]?.sequence?.value ?? '';
+  if (rows.length !== 1 || !/^[0-9a-f]{64}$/.test(digest) || !DECIMAL.test(sequence)) {
+    throw new ContentRebuildUnavailable('offline: index evidence is incomplete');
+  }
+  return { digest, sequence };
+}
+
+async function readActivationGeneration(env: WorkActivationEnvironment, id: string): Promise<string | null> {
+  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?generation WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+      ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:textIndexGeneration ?generation . } }`));
+  const rows = result.results?.bindings ?? [];
+  if (rows.length === 0) return null;
+  const generation = rows[0]?.generation?.value ?? '';
+  if (rows.length !== 1 || !/^urn:rezics:text-index-generation:[0-9a-f-]{36}$/.test(generation)) {
+    throw new ContentRebuildUnavailable('activate: receipt is incomplete');
+  }
+  return generation;
+}
+
+/** Facts a rerun needs. `replaySequence` is the rebuild cursor, 0 before replay. */
+export async function readContentRebuildProgress(env: WorkActivationEnvironment, id: string,
+  replaySequence: string | null): Promise<ContentRebuildProgress> {
+  rebuildId(id);
+  if (replaySequence !== null && !DECIMAL.test(replaySequence)) {
+    throw new ContentRebuildUnavailable('replay: cursor is invalid');
+  }
+  const anchor = await publicSearchAnchorPresent(env);
+  const quarantine = await readQuarantine(env, id);
+  const clearReceipt = await isReceiptCommitted(env, 'cleared', id);
+  const contentUnits = await askContent(env, 'units');
+  const malformedContent = await askContent(env, 'malformed');
+  const control = await readIndexControl(env);
+  const offline = await readLatestOffline(env, id, control.generation);
+  const activation = await readActivationGeneration(env, id);
+  return { anchor, quarantine: quarantine !== null, clearReceipt, contentUnits, malformedContent,
+    offlineCovers: Boolean(offline && offline.sequence === control.sequence && !contentUnits),
+    offlineDigest: offline?.digest ?? null, replaySequence, cutSequence: quarantine?.sequence ?? null,
+    sequence: control.sequence, generation: control.generation,
+    activated: activation !== null && activation === control.generation };
+}
+
+/** Latest quarantine receipt that stored its job id. Older receipts have none. */
+export async function readAdoptedQuarantineJob(env: WorkActivationEnvironment): Promise<string | null> {
+  const result = await readContentRebuildStep('rebuild command', () => env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?job WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence ; rv:rebuildJob ?job .
+        FILTER(STRSTARTS(STR(?receipt), "urn:rezics:receipt:content-rebuild:quarantine:")) }
+    } ORDER BY DESC(xsd:integer(?sequence)) LIMIT 1`));
+  const rows = result.results?.bindings ?? [];
+  if (rows.length === 0) return null;
+  const job = rows[0]?.job?.value ?? '';
+  if (rows.length !== 1 || !UUID.test(job)) {
+    throw new ContentRebuildUnavailable('quarantine: receipt job id is invalid');
+  }
+  return job;
 }
 
 /** Replays the retained source cut into fresh, job-scoped receipt/unit identities. */
@@ -608,6 +883,7 @@ export async function activateRebuiltPublicContentSearch(env: WorkActivationEnvi
     throw new ContentRebuildUnavailable('offline Lucene rebuild evidence digest is required');
   }
   const snapshot = await verifyQuarantinedContentIndex(env, content, cursor, job);
+  crashSearchRebuild('before-activation');
   const nextGeneration = `urn:rezics:text-index-generation:${randomUUID()}`;
   await content.withOwnerPositionLock(job.cut, async () => {
     await command(env, 'activate', job.id,

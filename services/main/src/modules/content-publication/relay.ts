@@ -1,7 +1,8 @@
 import type { ContentCore, ContentOutboxEvent, ProjectionPublication } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor, CONTENT_PROJECTION_COST } from '../../../../content/src/projection-cursor.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
-import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, hash, iri, lit,
+  type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ContentProjectionUnavailable, extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
 import { graphRevisionSuppressed } from '../erasure/graph.ts';
@@ -340,6 +341,15 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
   return disposition;
 }
 
+async function publicSearchOpen(env: WorkActivationEnvironment): Promise<boolean> {
+  const answer = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`);
+  if (answer.boolean !== true && answer.boolean !== false) {
+    throw new ContentProjectionUnavailable('public search anchor is unreadable');
+  }
+  return answer.boolean === true;
+}
+
 /** Advance one source event and independently retry a bounded set of failed targets. */
 export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
@@ -347,6 +357,12 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   if (rebuildId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rebuildId)) {
     throw new ContentProjectionUnavailable('invalid rebuild identity');
   }
+  // The public consumer waits while the anchor is absent. Quarantine closes
+  // readers, and a live projection uses a different receipt from the rebuild
+  // replay, so it must not land in the closed graph. Replay passes a rebuild
+  // id and is the writer that refills that graph. Returning idle leaves no
+  // pending row, which would block checkpoint adoption.
+  if (!rebuildId && !await publicSearchOpen(env)) return null;
   let retried: ContentProjectionResult | null = null;
   for (const event of await cursor.retries(consumer)) {
     let disposition: ContentProjectionResult['disposition'];
