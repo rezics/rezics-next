@@ -228,10 +228,6 @@
     "imported": "services/main/src/modules/access/author-baseline.ts"
   },
   {
-    "importer": "services/main/src/modules/verification/claim-fold.ts",
-    "imported": "services/main/src/modules/access/assessment-history.ts"
-  },
-  {
     "importer": "services/main/src/modules/verification/operations.ts",
     "imported": "services/main/src/modules/access/assessment-history.ts"
   },

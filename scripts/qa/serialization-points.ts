@@ -232,8 +232,6 @@ export const serializationAllowlist: SerializationAllowance[] = [
       main + 'modules/access/platform-administrator.ts',
       main + 'modules/work/restore-lineage.ts',
       main + 'modules/erasure/reconcile.ts',
-      // Operator closes an already-held graph before bounded Claim folding.
-      main + 'modules/verification/claim-fold.ts',
       // Offline raw StatementSeek rebuild, reached only through convertPopulatedStatements under
       // restoreHold and statementUpgradeFence (upgradeStoredStatements, scripts/statement/convert.ts --fenced).
       main + 'modules/statement/seek.ts',
