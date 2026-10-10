@@ -4,7 +4,7 @@ import { saveWorkDetails, detailsValues } from '../studio/details-api.ts';
 import type { DetailsValues } from '../studio/details-form.tsx';
 import { publishText, readLatest, readTextRevision, saveText, selectMainText } from '../studio/text-api.ts';
 import type { MainClient } from '../studio/types.ts';
-import { editingAccess } from './access.ts';
+import { problemOf } from '../work-levels-edit/write.ts';
 
 // The recipe's title, description and notes live beside the Composition, each on its own head, so
 // they are saved by their own writers. The same rules hold as for the Composition: one write in
@@ -64,13 +64,13 @@ export function latestLane<I, R>(run: (input: I, newest: () => I) => Promise<R>,
 export type SaveRefusal = 'sign-in' | 'denied' | 'invalid' | 'unavailable' | 'pending' | 'moved' | 'empty';
 export type SaveOutcome = { kind: 'saved' } | { kind: 'unchanged' } | { kind: 'refused'; refusal: SaveRefusal };
 
-/** The one access rule, applied: only removed access closes further writes. */
+/** A lapsed session asks for sign-in. Removed access, including a private resource that looks missing, closes further writes. */
 function applyAccess(status: number | undefined, close: () => void): SaveRefusal | null {
   if (status === undefined) return null;
-  const access = editingAccess(status);
-  if (!access) return null;
-  if (access.revoked) close();
-  return access.refusal;
+  const problem = problemOf({ status }).problem;
+  if (problem === 'denied') { close(); return 'denied'; }
+  if (problem === 'sign-in') return 'sign-in';
+  return null;
 }
 
 const studioStatus = (saved: StudioSave): number | undefined =>

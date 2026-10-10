@@ -1,15 +1,6 @@
 import { expect, test } from 'bun:test';
-import { editingAccess } from './access.ts';
 import { actingSubject, detailsValues, fakeMain, id, mainVersion, noNotes, startRecipe, work } from './fixtures.ts';
 import { createDetailsSaver, createNotesWriter, entryOf, latestLane } from './saves.ts';
-
-test('editing access is one rule: a lapsed session stays open, removed access closes it', () => {
-  expect(editingAccess(401)).toEqual({ refusal: 'sign-in', revoked: false });
-  expect(editingAccess(403)).toEqual({ refusal: 'denied', revoked: true });
-  expect(editingAccess(404)).toEqual({ refusal: 'denied', revoked: true });
-  expect(editingAccess(409)).toBeNull();
-  expect(editingAccess(500)).toBeNull();
-});
 
 test('a title saved over a head that moved is read again and written over what Main holds', async () => {
   const fake = fakeMain({ recipe: startRecipe, metadataHead: id(701) });

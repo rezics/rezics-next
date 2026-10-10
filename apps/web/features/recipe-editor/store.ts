@@ -1,6 +1,5 @@
 import { commandInstance, type CommandInstance, type WriteRound } from '../api/command.ts';
 import type { MainClient } from '../studio/types.ts';
-import { editingAccess } from './access.ts';
 import { type Answer, createRecipe, readRecipe, writePlan } from './api.ts';
 import { applyPlan, type Intent, plan, type Plan, type Reason } from './intents.ts';
 import type { RecipeState } from './model.ts';
@@ -71,9 +70,6 @@ function keyOf(intent: Intent): string | null {
 }
 
 const refusalOf = (answer: Extract<Answer<unknown>, { ok: false }>): Refusal => {
-  const access = editingAccess(answer.status);
-  if (access?.refusal === 'sign-in') return { kind: 'sign-in' };
-  if (access?.refusal === 'denied') return { kind: 'denied' };
   switch (answer.problem) {
     case 'sign-in': return { kind: 'sign-in' };
     case 'denied': return { kind: 'denied' };
@@ -169,7 +165,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
       if (!state.structure || !state.head) {
         const created = await createRecipe(main(), { work, mainVersion, actingSubject });
         if (!created.ok) {
-          if (editingAccess(created.status)?.revoked) revoked = true;
+          if (created.problem === 'denied') revoked = true;
           return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(created) } };
         }
         // The Composition may already hold edits from another tab: read it rather than assume it is empty.
@@ -204,8 +200,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     if (open(answer)) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(answer) } };
     entry.command.finish({ ok: false, failure: answer.problem });
     entry.flight = null;
-    // Removed access closes further writes. A lapsed session does not: the next save is sent after signing in.
-    if (editingAccess(answer.status)?.revoked) revoked = true;
+    // The cook no longer has editing access. The recipe held here stays as it was.
+    if (answer.problem === 'denied') revoked = true;
     if (answer.status !== 409) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(answer) } };
     return { kind: 'conflict' };
   }
