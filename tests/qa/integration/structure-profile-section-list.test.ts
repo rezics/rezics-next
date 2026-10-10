@@ -58,11 +58,10 @@ test('a section list is created, noted, updated, withheld and refused as a cycle
     expect(editor.occurrences.map(item => item.qualifier?.values?.note)).toEqual(['revised', 'second']);
     await f.accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'work.read', now() + interval '1 hour')`, [randomUUID(), f.otherPrincipal, f.actor]);
-    for (const scope of [`work:read:${owner.work}`, `work:read:${visible.work}`]) {
-      await f.accessPool.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,'work.read', now() + interval '1 hour')`, [randomUUID(), f.actor, scope]);
-    }
+    // Creation already granted this subject every Work. Another grant to the same
+    // recipient cannot withhold one of them; revoke the hidden Work instead.
+    await f.accessPool.query('DELETE FROM access.permission_grant WHERE scope_id = $1',
+      [`work:read:${hidden.work}`]);
     const withheld = await read(sectionA!, f.account.tokenB);
     expect(withheld.occurrences.map(item => item.target)).toEqual([visible.work]);
     const cycle = await f.call('POST', `/v1/compositions/${shortId(created.structure)}/changes`, {
