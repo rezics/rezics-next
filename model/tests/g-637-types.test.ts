@@ -247,6 +247,11 @@ test('G-637: policy metadata can be refined without an accepted type lock', asyn
 
 test('G-637: generation detects type registry drift', () => {
   const root = scratch();
+  // The generator also derives the native revision-class constant from the model
+  // definitions and writes it under infra; both come from the repository.
+  mkdirSync(join(root, 'model'), { recursive: true });
+  symlinkSync(join(repo, 'model/definitions'), join(root, 'model/definitions'));
+  symlinkSync(join(repo, 'infra'), join(root, 'infra'));
   generate(root, false);
   expect(() => generate(root, true)).not.toThrow();
   const file = join(root, 'packages/model/src/generated/types.ts');
