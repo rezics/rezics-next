@@ -1,0 +1,3787 @@
+[
+  {
+    "operation": "GET /v1/access/authority-state",
+    "ids": [
+      "query:actingSubject",
+      "query:scopeId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/eligible-org-member-set-grants/{grantId}",
+    "ids": [
+      "path:grantId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/grants",
+    "ids": [
+      "query:after",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/grants/{grantId}",
+    "ids": [
+      "path:grantId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/grants/{grantId}/lineage",
+    "ids": [
+      "path:grantId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/group-impact-proposals/{proposalId}",
+    "ids": [
+      "path:proposalId",
+      "query:approverSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/group-scope",
+    "ids": [
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/managed-organization-grants/{grantId}",
+    "ids": [
+      "path:grantId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/org-realm-participation",
+    "ids": [
+      "query:organizationSubject",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/organization-management",
+    "ids": [
+      "query:organizationSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/policies/{policyId}/revisions/{revision}",
+    "ids": [
+      "path:policyId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/protected-change-proposals/{proposalId}",
+    "ids": [
+      "path:proposalId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/representation-edges/{edgeId}",
+    "ids": [
+      "path:edgeId",
+      "query:representedSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/representation-requests/{requestId}",
+    "ids": [
+      "path:requestId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/representations/{representationId}",
+    "ids": [
+      "path:representationId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/representative-policies/{policyId}",
+    "ids": [
+      "path:policyId",
+      "query:institutionSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/represented-org-membership-requests/{requestId}",
+    "ids": [
+      "path:requestId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/revocation-sources/{sourceId}",
+    "ids": [
+      "path:sourceId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/revocations/{revocationId}",
+    "ids": [
+      "path:revocationId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/role-bindings",
+    "ids": [
+      "query:after",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/role-bindings/{bindingId}",
+    "ids": [
+      "path:bindingId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/access/roles/{familyId}",
+    "ids": [
+      "path:familyId",
+      "query:issuerSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/addresses/availability",
+    "ids": [
+      "query:actingSubject",
+      "query:alias",
+      "query:scope"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/addresses/current",
+    "ids": [
+      "query:actingSubject",
+      "query:holder",
+      "query:scope"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/addresses/resolve",
+    "ids": [
+      "query:actingSubject",
+      "query:key",
+      "query:scope"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/addresses/revisions/{revision}",
+    "ids": [
+      "path:revision",
+      "query:actingSubject",
+      "query:key",
+      "query:scope"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/access",
+    "ids": [
+      "path:id",
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/collections",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/library-visibility",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/listing",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/realm-contributions",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/shelves",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/shelves/status/{status}/works",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/{id}/works",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:context"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/control",
+    "ids": [
+      "query:subjectId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/agents/invitations/{invitationId}",
+    "ids": [
+      "path:invitationId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/also-enjoyed/generations/{generation}",
+    "ids": [
+      "path:generation",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/authors/open-library/{author}",
+    "ids": [
+      "path:author",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/authors/open-library/{author}/follow",
+    "ids": [
+      "path:author",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/authors/open-library/{author}/works",
+    "ids": [
+      "path:author",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/chapters/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/claims/{claim}",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/claims/{claim}/assessments/{assessment}",
+    "ids": [
+      "path:assessment",
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/claims/{claim}/challenges",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/claims/{claim}/corrections",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/claims/{claim}/evidence/{revision}",
+    "ids": [
+      "path:claim",
+      "path:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/classification-propositions/{sense}",
+    "ids": [
+      "path:sense"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/collection-definitions/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/collections/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:parent",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/collections/{id}/name",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/collections/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject",
+      "query:parent",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/collections/{id}/works",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:parent"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}/occurrences/{occurrence}",
+    "ids": [
+      "path:id",
+      "path:occurrence",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}/occurrences/{occurrence}/progress",
+    "ids": [
+      "path:id",
+      "path:occurrence",
+      "query:actingSubject",
+      "query:selectedRevision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}/progress",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject",
+      "query:parent"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}/seals/{seal}",
+    "ids": [
+      "path:id",
+      "path:seal",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/compositions/{id}/stages/{stage}",
+    "ids": [
+      "path:id",
+      "path:stage",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/concepts",
+    "ids": [
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/concepts/{id}",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/concepts/{id}/works",
+    "ids": [
+      "path:id",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/connected-apps/invocations/{invocation}",
+    "ids": [
+      "path:invocation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/content-comments/{comment}",
+    "ids": [
+      "path:comment",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/content-revisions/{revision}",
+    "ids": [
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/content-revisions/{revision}/comments",
+    "ids": [
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/context-definition-equivalences",
+    "ids": [
+      "query:actingSubject",
+      "query:mapping"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/context-definition-states",
+    "ids": [
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/context-rule-dependencies",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/context-rules",
+    "ids": [
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/contexts/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/contexts/{id}/preferences",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/contexts/{id}/skos",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:preferenceRevision",
+      "query:semanticRevision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/contributions/{contribution}",
+    "ids": [
+      "path:contribution",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/contributions/{contribution}/drafts/{revision}",
+    "ids": [
+      "path:contribution",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/corrections",
+    "ids": [
+      "query:actingSubject",
+      "query:resourceId",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/corrections/{proposalRevision}",
+    "ids": [
+      "path:proposalRevision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/deliveries/{delivery}",
+    "ids": [
+      "path:delivery"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/discovery/concepts",
+    "ids": [
+      "query:actingSubject",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/discovery/generations/{generation}",
+    "ids": [
+      "path:generation",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/discovery/popular-terms",
+    "ids": [
+      "query:context",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/discovery/sections",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/editorial/proposals",
+    "ids": [
+      "query:actingSubject",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/editorial/proposals/{proposal}",
+    "ids": [
+      "path:proposal",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/erasures/{erasureId}",
+    "ids": [
+      "path:erasureId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/exports/{export}",
+    "ids": [
+      "path:export"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/feed",
+    "ids": [
+      "query:actingSubject",
+      "query:requiredConcept",
+      "query:savedFilter"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/feed/head",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/fixed-releases/{release}",
+    "ids": [
+      "path:release",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/follows/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/global-rating-contexts/{id}",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/graph-layouts/{layoutId}",
+    "ids": [
+      "path:layoutId",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/handles/{handle}",
+    "ids": [
+      "path:handle",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/hub/imports/{import}",
+    "ids": [
+      "path:import",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/hub/works/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/lexicon/definitions/{key}",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/lexicon/presentations",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/lexicon/presentations/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/lexicon/presentations/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/native-variants",
+    "ids": [
+      "path:mainVersion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/package-release-recommendations",
+    "ids": [
+      "path:mainVersion",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/package-release-recommendations/{revision}",
+    "ids": [
+      "path:mainVersion",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/revisions/{revision}",
+    "ids": [
+      "path:mainVersion",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/revisions/{revision}/translation-links",
+    "ids": [
+      "path:mainVersion",
+      "path:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations",
+    "ids": [
+      "path:mainVersion",
+      "path:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/main-versions/{mainVersion}/selection",
+    "ids": [
+      "path:mainVersion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/agent-invitations",
+    "ids": [
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/agents/{agent}/works",
+    "ids": [
+      "path:agent"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/agents/{agent}/works/{id}",
+    "ids": [
+      "path:agent",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/agents/{agent}/works/{id}/chapters",
+    "ids": [
+      "path:agent",
+      "path:id",
+      "query:parent"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/authority-admissions/{admissionId}/consumption",
+    "ids": [
+      "path:admissionId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/context-selections",
+    "ids": [
+      "query:object"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/continue",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/continue/{work}",
+    "ids": [
+      "path:work",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/contributions",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/edition-preferences/{work}",
+    "ids": [
+      "path:work",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/feed-preferences",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/feed-watermarks",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/follow-state",
+    "ids": [
+      "query:actingSubject",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/follows",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/follows/authors",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/import-reviews",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/library-export",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/library-imports/{id}/apply",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/library-imports/{id}/rows",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/library-loans",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/main-versions/{mainVersion}/selection",
+    "ids": [
+      "path:mainVersion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/managed-realms",
+    "ids": [
+      "query:actingSubject",
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/memberships",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/mutes",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/person-preferences",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/private-memberships",
+    "ids": [
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/progress-summaries/{resource}",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:parent"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/proposal-subscriptions/{proposal}",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/ratings",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/reading-goal",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/reading-stats",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/realm-invitations",
+    "ids": [
+      "query:actingSubject",
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/realms/{realm}/main-versions/{mainVersion}/selection",
+    "ids": [
+      "path:mainVersion",
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/saved-filters",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/sessions",
+    "ids": [
+      "query:actingSubject",
+      "query:target",
+      "query:work"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/shelves",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/shelves/status/{status}/works",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/me/watches",
+    "ids": [
+      "query:actingSubject",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/me/work-states",
+    "ids": [
+      "query:actingSubject",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/media/assets/{asset}/bytes",
+    "ids": [
+      "path:asset",
+      "query:actingSubject",
+      "query:context",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/media/avatars/{selection}",
+    "ids": [
+      "path:selection",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/media/representations/{representation}",
+    "ids": [
+      "path:representation",
+      "query:actingSubject",
+      "query:use"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/media/representations/{representation}/bytes",
+    "ids": [
+      "path:representation",
+      "query:actingSubject",
+      "query:use"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/media/uploads/{upload}",
+    "ids": [
+      "path:upload"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/media/uses/{use}",
+    "ids": [
+      "path:use",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/member-replies",
+    "ids": [
+      "query:actingSubject",
+      "query:after",
+      "query:realm",
+      "query:rootRevision",
+      "query:rootTarget"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/member-replies/{reply}",
+    "ids": [
+      "path:reply",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/mod-compatibility/{work}",
+    "ids": [
+      "path:work"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/mod-compatibility/{work}/exact",
+    "ids": [
+      "path:work"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/mod-releases/{work}",
+    "ids": [
+      "path:work"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/my/submissions",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/onboarding/suggested-follows",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/owners/reconciliations/{id}",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/owners/relocations/{id}",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-installations/{installation}",
+    "ids": [
+      "path:installation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-installations/{installation}/generations/{generation}",
+    "ids": [
+      "path:generation",
+      "path:installation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-lock-replays/{replay}",
+    "ids": [
+      "path:replay"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-locks/{lock}",
+    "ids": [
+      "path:lock"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-resolutions/{resolution}",
+    "ids": [
+      "path:resolution"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-resolutions/cargo/{resolution}",
+    "ids": [
+      "path:resolution"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-resolutions/mods/{resolution}",
+    "ids": [
+      "path:resolution"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-resolutions/nix/{resolution}",
+    "ids": [
+      "path:resolution"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-resolutions/npm/{resolution}",
+    "ids": [
+      "path:resolution"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-sources/go-verifications/{verification}",
+    "ids": [
+      "path:verification"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/package-sources/go/{capture}",
+    "ids": [
+      "path:capture"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/polls/{poll}",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/polls/{poll}/ballots/{seat}",
+    "ids": [
+      "path:poll",
+      "path:seat"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/polls/{poll}/holder-charters/{entitlement}",
+    "ids": [
+      "path:entitlement",
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/polls/{poll}/proxies/{seat}",
+    "ids": [
+      "path:poll",
+      "path:seat"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/polls/{poll}/resolutions",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/polls/{poll}/tallies",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/post-identifications/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/posts/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/posts/{id}/identifications",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:operation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/projections",
+    "ids": [
+      "query:actingSubject",
+      "query:frame",
+      "query:position",
+      "query:subject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/prompts/revisions/{revision}",
+    "ids": [
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/public-previews/{resource}",
+    "ids": [
+      "path:resource"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/public-reports/{caseId}",
+    "ids": [
+      "path:caseId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-contexts",
+    "ids": [
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-contexts/{id}",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-contexts/{id}/policy-revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-observations/{observation}/revisions/{revision}",
+    "ids": [
+      "path:observation",
+      "path:revision",
+      "query:actingSubject",
+      "query:context",
+      "query:mainVersion",
+      "query:release",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-populations",
+    "ids": [
+      "query:actingSubject",
+      "query:target"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-question-presentations",
+    "ids": [
+      "query:actingSubject",
+      "query:context"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-question-presentations/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rating-question-presentations/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/reader/settings",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/reading-positions/{work}",
+    "ids": [
+      "path:work",
+      "query:actingSubject",
+      "query:around",
+      "query:firstSeen",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms",
+    "ids": [
+      "query:topic"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/audit",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/classification-context",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/decisions",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/decisions/{decision}",
+    "ids": [
+      "path:decision",
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/invitations",
+    "ids": [
+      "path:realm",
+      "query:actingSubject",
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-page",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-requests",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-requests/basis",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-requests/mine",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/joining",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/main-versions/{mainVersion}/selection",
+    "ids": [
+      "path:mainVersion",
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/main-versions/{mainVersion}/selections/{selection}/media/{use}",
+    "ids": [
+      "path:mainVersion",
+      "path:realm",
+      "path:selection",
+      "path:use"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/member-ban",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/member-receipts/{receiptId}/appeal",
+    "ids": [
+      "path:realm",
+      "path:receiptId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/members",
+    "ids": [
+      "path:realm",
+      "query:actingSubject",
+      "query:after"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/moderation",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/moderation/{caseId}",
+    "ids": [
+      "path:caseId",
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/moderation/context",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/browse",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/discussions",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/editor-lists",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/genres/{context}",
+    "ids": [
+      "path:context",
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/latest-chapters",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/new-adoptions",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/reader-quotes",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/recent-decisions",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/recently-completed",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/rising",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/quota-reservations",
+    "ids": [
+      "path:realm",
+      "query:beneficiary",
+      "query:operationId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/rankings",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/replies/{reply}",
+    "ids": [
+      "path:realm",
+      "path:reply",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/reply-roots/{rootTarget}/count",
+    "ids": [
+      "path:realm",
+      "path:rootTarget",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/roles",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/roster",
+    "ids": [
+      "path:realm",
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/settings",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/submissions/{submission}",
+    "ids": [
+      "path:realm",
+      "path:submission",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/submitted-publications",
+    "ids": [
+      "path:realm",
+      "query:actingSubject",
+      "query:work"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/threads",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/threads/{reply}",
+    "ids": [
+      "path:realm",
+      "path:reply",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/works",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/zone",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/zone-attachments",
+    "ids": [
+      "path:realm",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/recipes/{id}/exports/schema-org",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/recipes/{id}/measures",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/recipes/works/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/recommendations/generations/{generation}",
+    "ids": [
+      "path:generation",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/relations/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/relations/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/releases",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/reports/{report}",
+    "ids": [
+      "path:report",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:context",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/continuities",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/discussion",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/page",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/parts",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:parent"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/rating-contexts",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/ratings",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:context",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/relations",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/reviews",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:context"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/statements",
+    "ids": [
+      "path:resource",
+      "query:actingSubject",
+      "query:context",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/wholes",
+    "ids": [
+      "path:resource",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/review-quotes/realms/{id}",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/reviews/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/revisions/{revision}",
+    "ids": [
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rights/offerings/{offering}",
+    "ids": [
+      "path:offering",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/rights/offerings/{offering}/revisions/{revision}",
+    "ids": [
+      "path:offering",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/safety-cases",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/safety-cases/{caseId}",
+    "ids": [
+      "path:caseId",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/safety-cases/due-steps",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/search/catalogue",
+    "ids": [
+      "query:author",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/semantic/resources/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/semantic/resources/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sitemap",
+    "ids": [
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/author-credit-supports/{support}",
+    "ids": [
+      "path:support"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/conversions/{base}/child-correspondences/{candidate}",
+    "ids": [
+      "path:base",
+      "path:candidate"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/conversions/{base}/drift/{candidate}",
+    "ids": [
+      "path:base",
+      "path:candidate"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/conversions/{conversion}",
+    "ids": [
+      "path:conversion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/conversions/{conversion}/source-graph",
+    "ids": [
+      "path:conversion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/correspondences/{correspondence}",
+    "ids": [
+      "path:correspondence"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/feeds/{feed}",
+    "ids": [
+      "path:feed"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/field-supports/{support}",
+    "ids": [
+      "path:support"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/identity-changes/{change}",
+    "ids": [
+      "path:change"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/identity-corrections/{proposal}",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/native-child-supports/{support}",
+    "ids": [
+      "path:support"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/observations/{observation}",
+    "ids": [
+      "path:observation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/open-library/authors/{author}/name",
+    "ids": [
+      "path:author"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/proposals/{proposal}",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/proposals/{proposal}/adoption/native-work",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/runs/{base}/drift/{candidate}",
+    "ids": [
+      "path:base",
+      "path:candidate"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/runs/{run}",
+    "ids": [
+      "path:run"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/statistics/{statistic}",
+    "ids": [
+      "path:statistic"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/sources/supports/{support}",
+    "ids": [
+      "path:support"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/spaces/{space}",
+    "ids": [
+      "path:space"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/spaces/{space}/settings",
+    "ids": [
+      "path:space",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/statements/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:position",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/statements/{id}/judgments",
+    "ids": [
+      "path:id",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/subscriptions/{subscriptionId}",
+    "ids": [
+      "path:subscriptionId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/subscriptions/benefits",
+    "ids": [
+      "query:beneficiary"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/themes/{theme}",
+    "ids": [
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/themes/{theme}/first-party",
+    "ids": [
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/trending",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
+    "operation": "GET /v1/wiki/{work}/history",
+    "ids": [
+      "path:work",
+      "query:actingSubject",
+      "query:entity",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/wiki/evidence/{id}",
+    "ids": [
+      "path:id",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/work-title-corrections/{proposalRevision}",
+    "ids": [
+      "path:proposalRevision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works",
+    "ids": [
+      "query:actingSubject",
+      "query:context",
+      "query:realm",
+      "query:term"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/agent-credits",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/also-enjoyed",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/author-credits/{credit}/retirement",
+    "ids": [
+      "path:credit",
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/author-credits/{credit}/revisions/{revision}",
+    "ids": [
+      "path:credit",
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/classifications",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:realm"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/content-variants",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/contents",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:parent",
+      "query:version"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/copies",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/credits",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/editions",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/editions/{edition}",
+    "ids": [
+      "path:edition",
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/editorial-state",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/fields/synopsis/control",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/history",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/maintainers",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/metadata",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/native-children/{child}/retirements",
+    "ids": [
+      "path:child",
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/native-children/{child}/revisions/{revision}",
+    "ids": [
+      "path:child",
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/reader-state",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/reader-stats",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:context"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/realizations",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/realizations/{realization}",
+    "ids": [
+      "path:id",
+      "path:realization",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/releases",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/releases/{release}",
+    "ids": [
+      "path:id",
+      "path:release",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/scalar-value",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/scalar-value/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/source-refresh-assessments/{candidateProposal}",
+    "ids": [
+      "path:candidateProposal",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/source-support",
+    "ids": [
+      "path:id"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/source-title-applications/{candidateProposal}",
+    "ids": [
+      "path:candidateProposal",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/title-control",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones",
+    "ids": [
+      "query:after"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}/configuration",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}/presentation",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}/query-blocks",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}/revisions/{revision}",
+    "ids": [
+      "path:id",
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}/routes",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:position"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/zones/{id}/showcase-editor",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v2/works/{id}/source-supports",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "GET /v2/works/{id}/source-supports/{binding}",
+    "ids": [
+      "path:binding",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/also-enjoyed/generations/{generation}/advance",
+    "ids": [
+      "path:generation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/claims/{claim}/assessments",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/claims/{claim}/challenges",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/claims/{claim}/challenges/{challenge}/withdrawal",
+    "ids": [
+      "path:challenge",
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/claims/{claim}/correction-subscriptions",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/claims/{claim}/evidence",
+    "ids": [
+      "path:claim"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/collection-definitions/{id}/captures",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/collection-definitions/{id}/queries",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/collection-definitions/{id}/revisions",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/collections/{id}/changes",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/collections/{id}/display-groups/{group}/moves",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/changes",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/refreshes",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/restorations",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/seals",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/stages",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/stages/{stage}/activate",
+    "ids": [
+      "path:id",
+      "path:stage"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/stages/{stage}/lease",
+    "ids": [
+      "path:id",
+      "path:stage"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/compositions/{id}/stages/{stage}/seal",
+    "ids": [
+      "path:id",
+      "path:stage"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/concepts/{id}/spoiler-hints",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/context-rule-dependencies",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/contexts/{id}/preferences",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/contexts/{id}/semantic-revisions",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/contexts/{id}/state-transitions",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/corrections/{proposalRevision}/decisions",
+    "ids": [
+      "path:proposalRevision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/discovery/generations/{generation}/advance",
+    "ids": [
+      "path:generation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/discovery/generations/{generation}/cancel",
+    "ids": [
+      "path:generation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial-state-queries",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial/proposals/{proposal}/decisions",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial/proposals/{proposal}/recovery",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial/proposals/{proposal}/reversal",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial/proposals/{proposal}/reviews",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial/proposals/{proposal}/revisions",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/editorial/proposals/{proposal}/withdrawal",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/exports",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/feed/{id}/vote",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/hub/revisions/{revision}/dependencies",
+    "ids": [
+      "path:revision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/main-versions/{mainVersion}/package-release-recommendations",
+    "ids": [
+      "path:mainVersion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/me/authority-admissions/{admissionId}/checks",
+    "ids": [
+      "path:admissionId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/me/follows/batch",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/me/library-imports/{id}/apply",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/me/library-imports/{id}/rows/{row}/adoptions",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/me/library-loans/{id}/extend",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/me/library-loans/{id}/return",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/media/assets/{asset}/state",
+    "ids": [
+      "path:asset"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/media/representations/{representation}/inferences",
+    "ids": [
+      "path:representation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/media/representations/{representation}/labels",
+    "ids": [
+      "path:representation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/media/uses/{use}/conceal",
+    "ids": [
+      "path:use"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/moderation/decisions",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/package-installations/{installation}/generations",
+    "ids": [
+      "path:installation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/package-installations/{installation}/generations/{generation}/apply",
+    "ids": [
+      "path:generation",
+      "path:installation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/package-locks/{lock}/replays",
+    "ids": [
+      "path:lock"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/package-resolutions/mods/{resolution}/work-binding",
+    "ids": [
+      "path:resolution"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/package-sources/go/{capture}/verify",
+    "ids": [
+      "path:capture"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/allocations",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/ballot-invalidations",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/ballots",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/closures",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/holder-charters",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/mandate-approvals",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/openings",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/proxies",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/representative-policies",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/polls/{poll}/resolutions",
+    "ids": [
+      "path:poll"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/posts/{id}/identifications",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/public-reports/{caseId}/correspondence",
+    "ids": [
+      "path:caseId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/queries",
+    "ids": [
+      "body:resources"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/rating-contexts/{id}/policy-revisions",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/rating-rollups",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/context-selections",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/escalations",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/invitations",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/invitations/{invitation}/response",
+    "ids": [
+      "path:invitation",
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/invitations/{invitation}/revoke",
+    "ids": [
+      "path:invitation",
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/join",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/join-requests",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/join-requests/{request}/decisions",
+    "ids": [
+      "path:realm",
+      "path:request"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/join-requests/{request}/withdraw",
+    "ids": [
+      "path:realm",
+      "path:request"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/management",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/member-receipts/{receiptId}/appeal",
+    "ids": [
+      "path:realm",
+      "path:receiptId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/members",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/quota-reservations",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/role-changes",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/role-impact",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/submissions",
+    "ids": [
+      "path:realm"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/submissions/{submission}/decisions",
+    "ids": [
+      "path:realm",
+      "path:submission"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/realms/{realm}/submissions/{submission}/withdrawals",
+    "ids": [
+      "path:realm",
+      "path:submission"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/recipes/{id}/imports",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/recipes/{id}/measures",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/recipes/{id}/scalings",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/recipes/{id}/timings",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/resources/{resource}/derivations",
+    "ids": [
+      "path:resource"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/resources/showcase",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/resources/summaries",
+    "ids": [
+      "body:resources"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/rights/offerings/{offering}/changes",
+    "ids": [
+      "path:offering"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/rights/restrictions",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/safety-cases/{caseId}/claim",
+    "ids": [
+      "path:caseId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/safety-cases/{caseId}/decisions",
+    "ids": [
+      "body:targets",
+      "path:caseId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/safety-cases/{caseId}/preservation-holds",
+    "ids": [
+      "path:caseId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/safety-decisions/{decisionId}/cancellation",
+    "ids": [
+      "path:decisionId"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/author-credit-supports/{support}/withdrawals",
+    "ids": [
+      "path:support"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/conversions/{conversion}/proposals/native-work",
+    "ids": [
+      "path:conversion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/conversions/{conversion}/source-graph",
+    "ids": [
+      "path:conversion"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/feeds/{feed}/baselines",
+    "ids": [
+      "path:feed"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/feeds/{feed}/windows",
+    "ids": [
+      "path:feed"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/native-child-supports/{support}/withdrawals",
+    "ids": [
+      "path:support"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/observations/{observation}/conversions/open-library-work",
+    "ids": [
+      "path:observation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/observations/{observation}/derivation",
+    "ids": [
+      "path:observation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/observations/{observation}/disposition",
+    "ids": [
+      "path:observation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/observations/{observation}/lineage",
+    "ids": [
+      "path:observation"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/open-library/authors/{author}/name",
+    "ids": [
+      "path:author"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/proposals/{proposal}/adoption/native-work",
+    "ids": [
+      "path:proposal"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/statements/{id}/judgments",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/statements/{id}/withdrawals",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/suitability/reads",
+    "ids": [
+      "body:targets"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/themes/{theme}/activations",
+    "ids": [
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/themes/{theme}/first-party-activations",
+    "ids": [
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/themes/{theme}/revisions",
+    "ids": [
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/themes/{theme}/revisions/{revision}/reviews",
+    "ids": [
+      "path:revision",
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/themes/{theme}/revocations",
+    "ids": [
+      "path:theme"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/verification/lineage/{edge}/retraction",
+    "ids": [
+      "path:edge"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/work-title-corrections/{proposalRevision}/decisions",
+    "ids": [
+      "path:proposalRevision"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/agent-credits",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/author-credits/{credit}/retirements",
+    "ids": [
+      "path:credit",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/catalogue-verifications",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/chapters",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/fields/synopsis/control",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/native-children/{child}/retirements",
+    "ids": [
+      "path:child",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/scalar-value",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/source-author-credits",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/source-children",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/source-support/withdrawal",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/source-title-applications/{candidateProposal}",
+    "ids": [
+      "path:candidateProposal",
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/title-control/source-return",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/works/{id}/web-publications/{release}/snapshots",
+    "ids": [
+      "path:id",
+      "path:release"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/zones/{id}/campaign-art",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/zones/{id}/mounts",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/zones/{id}/realm-attachment-withdrawals",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/zones/{id}/recoveries",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/zones/{id}/retirements",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/zones/{id}/site-publications",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v2/works/{id}/source-supports",
+    "ids": [
+      "path:id"
+    ],
+    "status": "unregistered"
+  },
+  {
+    "operation": "POST /v2/works/{id}/source-supports/{binding}/withdrawal",
+    "ids": [
+      "path:binding",
+      "path:id"
+    ],
+    "status": "unregistered"
+  }
+]

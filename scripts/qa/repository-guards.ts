@@ -115,4 +115,9 @@ export const repositoryGuards = [
     file: 'scripts/static/docker-ownership.test.ts',
     reason: 'Every QA docker spawn must keep the reap owner, and the frozen exceptions stay exact.',
   },
+  {
+    file: 'scripts/qa/hidden-id-equality.test.ts',
+    reason:
+      'Every id-accepting GET or POST must be registered, exempted, or kept on the frozen hidden-id debt list.',
+  },
 ] as const;

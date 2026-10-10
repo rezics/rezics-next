@@ -101,3 +101,5 @@ explains QA tiers, evidence and `.artifacts/qa/<run-id>/summary.md`.
 For documentation changes, run `task docs:check`; it checks local links,
 fragments and navigation. It does not qualify runtime behavior or check external
 URLs. Use the [primary-source procedure](external-sources.md) for upstream facts.
+A read that accepts an id answers a hidden id and an absent id the same way;
+[hidden ids](hidden-ids.md) records how that inventory is registered and exempted.
