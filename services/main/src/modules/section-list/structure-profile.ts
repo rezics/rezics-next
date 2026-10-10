@@ -1,4 +1,5 @@
 import { RV } from '../work/activate.ts';
+import { genericWorkType } from '../work/work-kinds.ts';
 import { authorizeWorkTarget, workTargetGuard } from '../composition/structure-profile.ts';
 import type { StructureProfileRegistration } from '../structure/profiles.ts';
 import { hydrateQualifierFields, projectQualifierFields, type QualifierTemplate } from '../structure/qualifier-template.ts';
@@ -12,7 +13,7 @@ const entryNote: QualifierTemplate = {
 
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
   id: 'section-list-v1', graphProfile: `${RV}SectionList`,
-  ownerType: 'https://schema.org/CreativeWork', componentType: `${RV}MainVersion`,
+  ownerType: genericWorkType, componentType: `${RV}MainVersion`,
   componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',
   editPermission: 'work:edit', editAction: 'work.edit', receiptFamily: 'edit-metadata-work',
   targetReadPermission: 'work:read', targetDisclosure: 'work',

@@ -130,7 +130,7 @@
     "services/main/src/modules/semantic/schema.ts": {
       "https://schema.org/CreativeWork": 1
     },
-    "services/main/src/modules/structure/profiles.ts": {
+    "services/main/src/modules/structure/structure-profile.ts": {
       "https://schema.org/Book": 2,
       "https://schema.org/DigitalDocument": 1
     },
