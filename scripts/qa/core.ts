@@ -859,6 +859,7 @@ export const selfManagedFaultAdmission = new Map<string, 'host' | 'startup'>([
   ['tests/qa/fault-recovery/search-ops-lock.test.ts', 'startup'],
   ['tests/qa/fault-recovery/search-ops-quickstart.test.ts', 'host'],
   ['tests/qa/fault-recovery/search-raw-import.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/search-rebuild-interrupted.test.ts', 'startup'],
   ['tests/qa/fault-recovery/second-host-format-upgrade.test.ts', 'startup'],
   ['tests/qa/fault-recovery/source-author-credit.test.ts', 'startup'],
   ['tests/qa/fault-recovery/source-field-child.test.ts', 'startup'],
