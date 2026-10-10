@@ -36,7 +36,7 @@ export function realmReplyDigest(value: unknown): string {
  * Sealing it would make the same key answer denied after the dependency recovers. */
 function unavailableReply(error: unknown): RealmReplyUnavailable | null {
   if (error instanceof RealmReplyUnavailable) return error;
-  if (error instanceof WorkReadUnavailable || error instanceof TargetUnavailable || error instanceof AdmissionExpired) {
+  if (error instanceof WorkReadUnavailable || error instanceof AdmissionExpired) {
     return new RealmReplyUnavailable(error.message);
   }
   if (error instanceof AdmissionDenied && /fenced|unavailable|expired/i.test(error.message)) {
@@ -252,6 +252,9 @@ export class RealmReplyStore {
       return result;
     }
     catch (error) {
+      // Shared root proofs answer false for a hidden or absent target. A target
+      // lost after this write started is an unsealed 503.
+      if (error instanceof TargetUnavailable) throw new RealmReplyUnavailable(error.message);
       const unavailable = unavailableReply(error);
       if (unavailable) throw unavailable;
       if (error instanceof WorkReadMissing) throw error;
