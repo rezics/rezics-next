@@ -2,6 +2,7 @@ import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
 import { failureOf, type Loaded, settle, uuidOf } from '../feed/types.ts';
+import { resumeName } from './media.ts';
 
 // The browser side of episode progress. A series Structure places its episodes as occurrences, with
 // specials in a group of their own: Main lists them page by page (`/v1/compositions/{id}`) and keeps
@@ -39,10 +40,11 @@ export interface EpisodeApi {
   /** A page of the Structure's root, or of one group with `parent`; `after` continues it. */
   page(structure: string, query?: { parent?: string; after?: string }): Promise<Loaded<StructurePage>>;
   /**
-   * The furthest occurrence this reader has completed, from the progress order index.
-   * Null when they have not started. A read that does not answer is a failure.
+   * The furthest occurrence this reader has completed, from the progress order index,
+   * and the name that resume item carries. Null when they have not started. A label
+   * that is private or missing is null. A read that does not answer is a failure.
    */
-  resume(work: string): Promise<Loaded<string | null>>;
+  resume(work: string): Promise<Loaded<{ occurrence: string; label: string | null } | null>>;
   progress(episode: EpisodeRef): Promise<Loaded<EpisodeProgress>>;
   /**
    * Sets one occurrence's completion. Without `conflict`, a write another device got to first is
@@ -103,10 +105,14 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
       const read = await restarted(() => settle(() => main().v1['reading-positions']({ work: uuidOf(work) }).get({
         query: { actingSubject, position: 'mine', limit: 1 } })));
       if (!read.ok) return read;
-      const page = read.data as { scope?: string; resolved?: string; items?: { occurrence?: string }[] };
+      const page = read.data as { scope?: string; resolved?: string; items?: {
+        occurrence?: string; displayLabel?: string; labels?: { value: string }[] }[] };
       const named = page.scope === 'resume' || page.resolved?.startsWith('https://') === true;
       if (!named) return { ok: true, data: null };
-      return { ok: true, data: page.items?.[0]?.occurrence ?? page.resolved ?? null };
+      const item = page.items?.[0];
+      const occurrence = item?.occurrence ?? (page.resolved?.startsWith('https://') ? page.resolved : null);
+      if (!occurrence) return { ok: true, data: null };
+      return { ok: true, data: { occurrence, label: resumeName(item) } };
     },
     progress: read,
     async mark(episode, change, options) {

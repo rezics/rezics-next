@@ -2,7 +2,7 @@ import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { type Loaded, settle, uuidOf } from '../feed/types.ts';
 import { type EpisodeProgress, type ProgressStale, mainEpisodeApi } from './episode-api.ts';
-import type { ChapterRef, Place, RouteRef } from './media.ts';
+import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.ts';
 
 // The same occurrence progress episodes use. A manga is placed by one resume read and one page of
 // the Work's positions; a game by one page of its parts and one page of completed occurrences.
@@ -63,8 +63,7 @@ type PositionItem = { occurrence: string; structure: string; role: 'part' | 'cha
   displayLabel?: string; labels?: { value: string }[] };
 
 const placeOf = (item: PositionItem): Place => ({
-  structure: item.structure, occurrence: item.occurrence,
-  label: item.displayLabel || item.labels?.[0]?.value || '',
+  structure: item.structure, occurrence: item.occurrence, label: resumeName(item) ?? '',
 });
 
 const chaptersOf = (items: readonly PositionItem[]): Place[] =>

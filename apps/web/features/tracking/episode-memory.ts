@@ -43,11 +43,11 @@ export function memoryEpisodeApi(store: MemoryEpisodes): EpisodeApi {
     },
     async resume() {
       store.calls.push('resume');
-      let furthest: string | null = null;
+      let furthest: EpisodePart | null = null;
       for (const part of store.mains) {
-        if (store.progress.get(part.occurrence)?.completed) furthest = part.occurrence;
+        if (store.progress.get(part.occurrence)?.completed) furthest = part;
       }
-      return { ok: true, data: furthest };
+      return { ok: true, data: furthest ? { occurrence: furthest.occurrence, label: furthest.label } : null };
     },
     async progress(episode) {
       store.calls.push(`progress:${episode.occurrence.slice(-3)}`);

@@ -367,8 +367,14 @@ export class ReadingBoundary {
       const location = await traversal.location(resolved);
       const items: ReadingOccurrence[] = [];
       if (location) {
-        const { ordinal: _ordinal, ...item } = location.item;
-        items.push(item);
+        // The same one-occurrence label read a positions page attaches. A label
+        // the reader cannot see is absent; the place itself still resumes.
+        const named = await traversal.labelsFor(location.item);
+        const { ordinal: _ordinal, ...item } = named;
+        if (item.target && NATIVE_ID.test(item.target) && !(await this.disclosed([item.target])).has(item.target)) {
+          const { labels: _labels, displayLabel: _displayLabel, ...rest } = item;
+          items.push({ ...rest, target: null });
+        } else items.push(item);
       }
       await this.fence();
       return { work, resolved, items, next: null, complete: true, search: undefined,

@@ -20,6 +20,21 @@ export interface Place {
   label: string;
 }
 
+/**
+ * The name a resume item carries: its display label, or the first chapter label.
+ * A private or missing label is absent, so a chapter past the loaded page is still
+ * named from the item itself.
+ */
+export function resumeName(item: {
+  displayLabel?: string | null;
+  labels?: readonly { value?: string | null }[] | null;
+} | null | undefined): string | null {
+  const display = item?.displayLabel?.trim();
+  if (display) return display;
+  const label = item?.labels?.find(entry => entry.value?.trim())?.value?.trim();
+  return label || null;
+}
+
 export interface ChapterRef {
   structure: string;
   occurrence: string;

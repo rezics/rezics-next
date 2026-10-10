@@ -141,8 +141,11 @@ export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<
     let next: Episode | null = mains.items[length] ?? null;
     const resumed = await api.resume(work);
     if (resumed.ok && resumed.data) {
-      const following = await episodeAfter(api, mains, resumed.data);
+      const following = await episodeAfter(api, mains, resumed.data.occurrence);
       if (following !== undefined) next = following;
+      // The resume item names the episode even when this walk has not reached its page.
+      const stopped = mains.items.find(item => item.occurrence === resumed.data!.occurrence);
+      if (stopped && resumed.data.label) stopped.label = resumed.data.label;
     }
     return { ok: true, data: { structure, mains, specials: present, through: mains.items[length - 1] ?? null, next } };
   } catch {

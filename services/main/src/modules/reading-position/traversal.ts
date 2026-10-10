@@ -464,10 +464,15 @@ export class ReadingPositionTraversal {
     return this.scan(frames, false);
   }
 
-  /** The labels and display label a scan-path item carries (`range`, `hydrate`), for one chapter `recordsFor`
-   * already located. That read is one row per occurrence, so it cannot carry the label rows. One query, capped
-   * at the label limit: the cost does not grow with the Work or the chapter's place. */
-  private async labelled(item: ReadingOccurrence): Promise<ReadingOccurrence> {
+  /** The labels and display label a positions-page item carries (`range`, `hydrate`), for one
+   * occurrence `recordsFor` already located. That read is one row per occurrence, so it cannot carry
+   * the label rows. One query, capped at the label limit: the cost does not grow with the Work or
+   * the chapter's place. `absent` is the resume item: a label the graph does not show, because it is
+   * private or missing, is left off. It does not fail the read. */
+  async labelsFor(item: ReadingOccurrence): Promise<ReadingOccurrence> {
+    return this.labelled(item, true);
+  }
+  private async labelled(item: ReadingOccurrence, absent = false): Promise<ReadingOccurrence> {
     const rows = await this.session.query(`# reading-position:chapter-labels
       SELECT ?label ?displayLabel WHERE {
         GRAPH ${current} {
@@ -483,10 +488,13 @@ export class ReadingPositionTraversal {
           OPTIONAL { ?placement rv:qualifier/rv:displayLabel ?displayLabel }
         }
       } LIMIT ${READING_POSITION_COST.labels}`, READING_POSITION_COST.labels);
-    if (!rows.length) throw new WorkReadUnavailable('Reading placement is unavailable');
     const named = bare(item);
     delete named.labels;
     delete named.displayLabel;
+    if (!rows.length) {
+      if (absent) return named;
+      throw new WorkReadUnavailable('Reading placement is unavailable');
+    }
     for (const row of rows) {
       if (row.displayLabel) {
         if (named.displayLabel && named.displayLabel !== row.displayLabel.value) {
@@ -496,7 +504,10 @@ export class ReadingPositionTraversal {
       }
       if (!row.label) continue;
       const language = row.label['xml:lang'];
-      if (!language) throw new WorkReadUnavailable('Reading label language is unavailable');
+      if (!language) {
+        if (absent) continue;
+        throw new WorkReadUnavailable('Reading label language is unavailable');
+      }
       named.labels ??= [];
       if (!named.labels.some(label => label.value === row.label!.value && label.language === language)) {
         named.labels.push({ value: row.label.value, language });

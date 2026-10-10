@@ -15,7 +15,7 @@ type Read = { status: 'loading' } | { status: 'failed' } | { status: 'ready'; pr
 
 const named = (place: Place, t: Copy) => place.label || t.unnamedPart;
 
-/** The resume record names the chapter and omits its label. A page that already includes it supplies the label. */
+/** The resume item carries its own name. A page supplies one only when that item has none. */
 function withLabel(place: Place | null, known: readonly Place[]): Place | null {
   if (!place || place.label) return place;
   const label = known.find(item => item.occurrence === place.occurrence)?.label;

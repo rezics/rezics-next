@@ -168,8 +168,8 @@ describe('Main behind the episode api', () => {
 
   test('Mine names the furthest completed occurrence, and a start has none', async () => {
     const resumed = main({ resume: () => ({ data: { scope: 'resume', resolved: at('e1001'),
-      items: [{ occurrence: at('e1001') }] }, error: null }) });
-    expect(await resumed.api.resume(saoOne)).toEqual({ ok: true, data: at('e1001') });
+      items: [{ occurrence: at('e1001'), displayLabel: 'Episode 1001' }] }, error: null }) });
+    expect(await resumed.api.resume(saoOne)).toEqual({ ok: true, data: { occurrence: at('e1001'), label: 'Episode 1001' } });
     expect(resumed.asked.resumes).toEqual([{ actingSubject: 'https://rezics.com/id/agent', position: 'mine', limit: 1 }]);
     expect(await main({}).api.resume(saoOne)).toEqual({ ok: true, data: null });
   });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chapterPosition, flattenChapters, gameStatus, mediumOf, resumeAt, type ChapterRef } from '../features/tracking/media.ts';
+import { chapterPosition, flattenChapters, gameStatus, mediumOf, resumeAt, resumeName, type ChapterRef } from '../features/tracking/media.ts';
 
 const chapter = (volume: number, number: number, id = `${volume}-${number}`): ChapterRef => ({
   volume: { number: volume, label: String(volume) },
@@ -33,6 +33,18 @@ describe('medium progress', () => {
     expect(resumeAt(omnibus, shared, new Set([shared])).next?.occurrence)
       .toBe(resumeAt(series, shared, new Set([shared])).next?.occurrence);
     expect(chapterPosition(series[2]!)).toBe('chapter:2:3');
+  });
+
+  test('a resume item names its chapter or episode when that part is past the loaded page', () => {
+    const loaded = flattenChapters([{ number: 1, label: '1', chapters: [chapter(1, 1), chapter(1, 2)] }]);
+    const stopped = 'https://example.test/occ/1150';
+    expect(loaded.some(item => item.occurrence === stopped)).toBe(false);
+    expect(resumeName({ displayLabel: 'Chapter 1150', labels: [{ value: 'Chapter 1150' }] })).toBe('Chapter 1150');
+    expect(resumeName({ labels: [{ value: 'Chapter 1150' }] })).toBe('Chapter 1150');
+    expect(resumeName({ displayLabel: 'Episode 1002' })).toBe('Episode 1002');
+    expect(resumeName({ labels: [] })).toBeNull();
+    expect(resumeName({})).toBeNull();
+    expect(resumeName(null)).toBeNull();
   });
 
   test('a game is completed from its required parts, and a route alone leaves it played', () => {
