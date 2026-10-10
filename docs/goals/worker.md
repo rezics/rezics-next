@@ -75,8 +75,10 @@ only your paths with `git commit --only`.
 
 ## Handoff
 
-Commit coherent progress, leave the worktree clean, and end with this message
-(a headless worker exits when its turn ends, so never end a turn to wait):
+Commit each step as soon as it stands, because a session can end without
+warning and the next session only sees what is in the tree. Leave the worktree
+clean, and end with this message (a headless worker exits when its turn ends,
+so never end a turn to wait):
 
 ```text
 RESULT: done | partial | blocked

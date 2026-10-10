@@ -2617,6 +2617,140 @@ child.on('close', code => process.exit(code ?? 1));
     } finally { r.cleanup(); }
   }, 30_000);
 
+  test('wait continues once after a transport drop, names dirty files, and finishes on the next result', async () => {
+    const r = repo();
+    const script = join(r.dir, '.temp/worker-script.json');
+    const log = join(r.dir, '.temp/worker-launches.jsonl');
+    const firstRelease = join(r.dir, '.temp/release-1');
+    const secondRelease = join(r.dir, '.temp/release-2');
+    const transport = 'RetriableError: Connection stalled repeatedly\n';
+    const handoff = 'RESULT: done\nCASES: none\nCOMMITS: none\nCHECKS: none\nOWNER CHANGES: none\nPROPOSED TASKS: none\nBLOCKERS: none\nNEXT: none\n';
+    writeFileSync(script, JSON.stringify([
+      { stderr: transport, release: firstRelease },
+      { stdout: JSON.stringify({ result: handoff }) + '\n', release: secondRelease },
+    ]));
+    try {
+      const result = r.run(['dispatch', r.brief('G-001')], {
+        GOAL_WORKER_SCRIPT: script, GOAL_WORKER_LOG: log,
+      });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      const ready = join(r.dir, '.temp/ready', 'G-001');
+      const deadline = Date.now() + 5000;
+      while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
+      const task = r.ledger().tasks['G-001']!;
+      const dirty = 'worker-001.ts';
+      writeFileSync(join(task.worktree, dirty), "export const value = 'left behind';\n");
+      const waiter = spawn('bun', [join(import.meta.dir, 'goalctl.ts'), 'wait', 'G-001'], {
+        cwd: r.dir, env: { ...r.env, GOAL_WORKER_SCRIPT: script, GOAL_WORKER_LOG: log },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let printed = '';
+      waiter.stdout?.on('data', chunk => { printed += String(chunk); });
+      waiter.stderr?.on('data', chunk => { printed += String(chunk); });
+      const exited = new Promise<number | null>((resolve, reject) => {
+        waiter.on('error', reject);
+        waiter.on('exit', code => resolve(code));
+      });
+      writeFileSync(firstRelease, '');
+      const continued = Date.now() + 30_000;
+      while (Date.now() < continued) {
+        if (existsSync(log) && readFileSync(log, 'utf8').trim().split('\n').length >= 2) break;
+        await Bun.sleep(50);
+      }
+      expect(existsSync(secondRelease)).toBe(false);
+      const live = r.run(['status']);
+      expect(live.status).toBe(0);
+      expect(live.stdout).toContain('continued by itself 1');
+      writeFileSync(secondRelease, '');
+      expect(await exited).toBe(0);
+      expect(printed).toContain('continued by itself after a transport error');
+      expect(printed).toContain('RESULT: done');
+      const launches = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { argv: string[] });
+      expect(launches).toHaveLength(2);
+      const continuation = launches[1]!.argv.find(arg => arg.startsWith('--single=')) ?? '';
+      expect(continuation).toContain('The previous session lost its connection. It left these files uncommitted:');
+      expect(continuation).toContain(`- ${dirty}`);
+      expect(continuation).toContain('Review them, commit what stands, and continue the brief.');
+      const ended = r.ledger().tasks['G-001']!;
+      expect(ended.state).toBe('exited');
+      expect(ended.attempts).toHaveLength(2);
+      expect(ended.attempts[1]!.continuedFor).toBe('transport');
+      expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout)
+        .toContain(dirty);
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('wait stops after two transport continuations and status names the repeated drop', async () => {
+    const r = repo();
+    const script = join(r.dir, '.temp/worker-script.json');
+    const transport = 'RetriableError: [internal] HTTP/2 keepalive ping timed out after 5000ms\n';
+    writeFileSync(script, JSON.stringify([
+      { stderr: transport },
+      { stderr: transport },
+      { stderr: transport },
+    ]));
+    try {
+      const dispatched = r.run(['dispatch', r.brief('G-001')], { GOAL_WORKER_SCRIPT: script });
+      expect(dispatched.stderr).toBe('');
+      expect(dispatched.status).toBe(0);
+      const waited = r.run(['wait', 'G-001'], { GOAL_WORKER_SCRIPT: script }, 60_000);
+      expect(waited.status).toBe(0);
+      expect(waited.stdout).toContain('continued by itself after a transport error');
+      expect(waited.stdout).toContain('stopped after repeated transport errors');
+      const task = r.ledger().tasks['G-001']!;
+      expect(task.state).toBe('exited');
+      expect(task.attempts).toHaveLength(3);
+      expect(task.attempts.filter(attempt => attempt.continuedFor === 'transport')).toHaveLength(2);
+      const status = r.run(['status']);
+      expect(status.status).toBe(0);
+      expect(status.stdout).toContain('stopped after repeated transport errors');
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('a transport drop that a launch gate refuses to continue is still recorded as ended', async () => {
+    const r = repo();
+    const script = join(r.dir, '.temp/worker-script.json');
+    writeFileSync(script, JSON.stringify([{ stderr: 'RetriableError: Connection stalled repeatedly\n' }]));
+    try {
+      const dispatched = r.run(['dispatch', r.brief('G-001')], { GOAL_WORKER_SCRIPT: script });
+      expect(dispatched.stderr).toBe('');
+      expect(dispatched.status).toBe(0);
+      const waited = r.run(['wait', 'G-001'], { GOAL_WORKER_SCRIPT: script, GOAL_MEMORY_FLOOR_GIB: '1000000000' }, 60_000);
+      expect(waited.status).toBe(0);
+      expect(waited.stdout).toContain('G-001 attempt 1 ended');
+      expect(waited.stdout).toContain('G-001 not continued after a transport error: ');
+      expect(waited.stdout).toContain('--- handoff ---');
+      const task = r.ledger().tasks['G-001']!;
+      expect(task.state).toBe('exited');
+      expect(task.attempts).toHaveLength(1);
+      expect(task.attempts[0]!.endedAt).toBeDefined();
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('quota and ordinary failures do not start a transport continuation', async () => {
+    const r = repo();
+    try {
+      for (const [id, step] of [
+        ['G-001', { stderr: "ActionRequiredError: Increase limits for faster responses You're out of usage. Switch to Auto, or ask your admin to increase your limit to continue.\n" }],
+        ['G-002', { stdout: JSON.stringify({ result: '', is_error: true }) + '\n', stderr: 'Error: worker crashed\n' }],
+      ] as const) {
+        const script = join(r.dir, `.temp/worker-script-${id}.json`);
+        writeFileSync(script, JSON.stringify([step]));
+        const dispatched = r.run(['dispatch', r.brief(id)], { GOAL_WORKER_SCRIPT: script });
+        expect(dispatched.stderr).toBe('');
+        expect(dispatched.status).toBe(0);
+        const waited = r.run(['wait', id], { GOAL_WORKER_SCRIPT: script }, 60_000);
+        expect(waited.status).toBe(0);
+        expect(waited.stdout).not.toContain('continued by itself after a transport error');
+        const task = r.ledger().tasks[id]!;
+        expect(task.state).toBe('exited');
+        expect(task.attempts).toHaveLength(1);
+        expect(task.attempts[0]!.continuedFor).toBeUndefined();
+      }
+    } finally { r.cleanup(); }
+  }, 60_000);
+
   test('changing the affected text format does not change the selected files', () => {
     const dir = mkdtempSync(join(tmpdir(), 'typed-affected-plan-'));
     try {

@@ -319,7 +319,9 @@ A Goal gets a manager once its directory exists, with `GOAL.md` and
 `state.md`. Any agent CLI can manage that runs shell commands without
 approval prompts, keeps `goalctl wait` running in the background and hears when
 it exits (or polls `goalctl status`), and can message other sessions; the
-maintainer chooses the model at launch. The maintainer starts it from the
+maintainer chooses the model at launch. A session that drops on a transport
+error continues by itself twice; after that the manager resumes the task with
+`goalctl resume <id> --fresh`. The maintainer starts it from the
 repository root, in tmux so that it survives a closed terminal, with `GOAL_ID`
 set, for example with Claude Code:
 

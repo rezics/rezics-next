@@ -41,6 +41,8 @@ export interface Brief {
 export interface Attempt {
   n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
   startedAt: string; endedAt?: string;
+  /** Wait started this attempt because the previous session lost its connection. */
+  continuedFor?: 'transport';
 }
 export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];
@@ -120,6 +122,11 @@ const ENGINE_EFFORTS: Record<Engine, string[]> = {
   cursor: ['low', 'medium', 'high', 'xhigh'],
 };
 const ENGINES = Object.keys(ENGINE_EFFORTS) as Engine[];
+// The last line of an engine's error output that means the session's connection dropped. Cursor names
+// every such exit RetriableError ("Connection stalled repeatedly", "HTTP/2 keepalive ping timed out").
+// Quota, limit and authentication failures stay off this list, so those exits are left as they are.
+const TRANSPORT_ERRORS: readonly RegExp[] = [/^RetriableError: /];
+const MAX_TRANSPORT_CONTINUATIONS = 2;
 export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
 // `codex` (Sol) and `luna` use the default Codex account; `codex-1` runs Sol on the second account in a
 // separate CODEX_HOME (the `codex-1` wrapper sets the same directory), so Sol work can continue on
@@ -1359,6 +1366,33 @@ function elapsed(fromIso: string): string {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}m`;
 }
 
+/** Trailing attempts wait started after a dropped connection. A later manual resume breaks the streak. */
+function transportContinuations(task: Task): number {
+  let count = 0;
+  for (const attempt of [...task.attempts].reverse()) {
+    if (attempt.continuedFor !== 'transport') break;
+    count++;
+  }
+  return count;
+}
+
+/** No result, and the error output's last line is a connection drop. Any other failure is left exited. */
+function transportDrop(attempt: Attempt): boolean {
+  if (!readResult(attempt).error) return false;
+  const errPath = attempt.output.replace(/\.json$/, '.err');
+  if (!existsSync(errPath)) return false;
+  const last = readFileSync(errPath, 'utf8').trimEnd().split(/\r?\n/).filter(line => line.trim()).at(-1)?.trim() ?? '';
+  return TRANSPORT_ERRORS.some(pattern => pattern.test(last));
+}
+
+/** Names the work the dropped session left behind. Wait never commits it. */
+function transportContinuationPrompt(dirty: readonly string[]): string {
+  return dirty.length
+    ? ['The previous session lost its connection. It left these files uncommitted:',
+      ...dirty.map(file => `- ${file}`), 'Review them, commit what stands, and continue the brief.'].join('\n')
+    : 'The previous session lost its connection. The worktree is clean; continue the brief from its commits.';
+}
+
 async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
@@ -1433,27 +1467,62 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
 async function waitFor(id: string): Promise<void> {
   // A killed waiter must never record the worker as ended (an expired monitor once marked live workers exited).
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
-  const initial = taskOf(readLedger(), id);
-  const attempt = lastAttempt(initial);
-  const alive = () => pidAlive(attempt.pid, programOf(engineOf(attempt)));
-  while (alive() || (await Bun.sleep(3000), alive())) await Bun.sleep(5000);
-  const result = readResult(attempt);
-  const task = await withLedger(ledger => {
-    const current = taskOf(ledger, id);
-    const last = lastAttempt(current);
-    if (last.n === attempt.n) {
+  let watching = lastAttempt(taskOf(readLedger(), id));
+  for (;;) {
+    const alive = () => pidAlive(watching.pid, programOf(engineOf(watching)));
+    while (alive() || (await Bun.sleep(3000), alive())) await Bun.sleep(5000);
+    const result = readResult(watching);
+    const outcome = await withLedger(ledger => {
+      const current = taskOf(ledger, id);
+      const last = lastAttempt(current);
+      if (last.n !== watching.n) return { kind: 'replaced' as const, task: current };
       last.endedAt ??= new Date().toISOString();
       if (result.session && !last.session) last.session = result.session;
+      // Status may already have marked a dead pid exited. A stop or a close still stands.
+      const open = current.state === 'running' || current.state === 'exited';
+      const drop = transportDrop(last);
+      let refused: string | undefined;
+      if (drop && open && transportContinuations(current) < MAX_TRANSPORT_CONTINUATIONS) {
+        const engine = engineOf(last);
+        const effort = last.effort;
+        // A refused gate or a failed start must still record this attempt as ended.
+        try {
+          launchGates(Object.values(ledger.tasks), engine, false);
+          const manager = managerOf(ledger, current.goal);
+          const session = isClaudeCode(engine) ? randomUUID() : '';
+          const prompt = `${workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
+          const next = launch(current, effort, session, prompt, false, manager, engine);
+          next.continuedFor = 'transport';
+          current.attempts.push(next);
+          current.engine = engine;
+          current.state = 'running';
+          clearRefusal(current);
+          return { kind: 'continued' as const, task: current, next };
+        } catch (error) {
+          refused = error instanceof Error ? error.message : String(error);
+        }
+      }
+      const repeated = drop && open && transportContinuations(current) >= MAX_TRANSPORT_CONTINUATIONS;
       if (current.state === 'running') { current.state = 'exited'; clearRefusal(current); }
+      return { kind: 'ended' as const, task: current, repeated, refused };
+    });
+    const task = outcome.task;
+    console.log(`${task.id} attempt ${watching.n} ended after ${elapsed(watching.startedAt)}`
+      + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
+      + `${result.tokens ? `; ${modelOf(engineOf(watching))} tokens ${result.tokens}` : ''}`);
+    if (outcome.kind === 'continued') {
+      console.log(`${task.id} continued by itself after a transport error; fresh ${modelOf(engineOf(outcome.next))}/`
+        + `${outcome.next.effort} session, pid ${outcome.next.pid}`);
+      watching = outcome.next;
+      continue;
     }
-    return current;
-  });
-  console.log(`${task.id} attempt ${attempt.n} ended after ${elapsed(attempt.startedAt)}`
-    + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
-    + `${result.tokens ? `; ${modelOf(engineOf(attempt))} tokens ${result.tokens}` : ''}`);
-  console.log(describe(task));
-  console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
-  if (task.land === 'auto' && lastAttempt(task).n === attempt.n) await landTask(task.id);
+    console.log(describe(task));
+    if (outcome.kind === 'ended' && outcome.repeated) console.log(`${task.id} stopped after repeated transport errors`);
+    if (outcome.kind === 'ended' && outcome.refused) console.log(`${task.id} not continued after a transport error: ${outcome.refused}`);
+    console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
+    if (outcome.kind === 'ended' && task.land === 'auto' && lastAttempt(task).n === watching.n) await landTask(task.id);
+    return;
+  }
 }
 
 async function landTask(id: string): Promise<void> {
@@ -5066,8 +5135,12 @@ async function status(): Promise<void> {
   }
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);
+    const continuations = transportContinuations(task);
+    const repeated = task.state === 'exited' && transportDrop(attempt) && continuations >= MAX_TRANSPORT_CONTINUATIONS;
     console.log(`${task.id} ${task.state.padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
+      + (running(task) && continuations > 0 ? `; continued by itself ${continuations}` : '')
+      + (repeated ? '\n  stopped after repeated transport errors' : '')
       + (task.state === 'conflict' && task.refusal ? `\n  ${task.refusal}` : ''));
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;
