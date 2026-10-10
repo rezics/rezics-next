@@ -233,6 +233,26 @@ export const PublishesWithNotes: Story = {
   },
 };
 
+/** Editing access removed mid-note: the text stays, the reason is specific, and save is no longer offered. */
+export const EditingAccessRemoved: Story = {
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const notes = canvas.getByRole('textbox', { name: 'Notes' });
+    await userEvent.type(notes, 'A note I still need.');
+    current.interference.accessDenied = true;
+    await userEvent.tab();
+    await waitFor(() => expect(canvas.getByRole('alert')).toHaveTextContent(t.failDenied));
+    await expect(notes).toHaveValue('A note I still need.');
+    await expect(notes).toBeEnabled();
+    await expect(canvas.queryByRole('button', { name: 'Publish' })).toBeNull();
+    await expect(canvas.queryAllByRole('button', { name: /^Add$/ })).toEqual([]);
+    await expect(canvas.queryByRole('button', { name: 'Save' })).toBeNull();
+    await expect(canvas.queryByText('All changes saved')).toBeNull();
+    await noOverflow();
+  },
+};
+
 /** On a phone the editor and its preview are two views, and nothing runs off the screen. */
 export const OnAPhone: Story = {
   globals: { viewport: { value: 'phone' } },

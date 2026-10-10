@@ -80,7 +80,7 @@ const en = {
 
   retry: 'Try again', dismiss: 'Dismiss', reload: 'Show the latest',
   failSignIn: 'Sign in again to keep editing.',
-  failDenied: 'You can’t change this recipe.',
+  failDenied: 'Your editing access was removed. What you typed is still here.',
   failInvalid: 'That change wasn’t accepted.',
   failUnavailable: 'The change couldn’t be saved. Try again.',
   failPending: 'Still being applied. Try again in a moment; it won’t be applied twice.',

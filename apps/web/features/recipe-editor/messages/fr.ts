@@ -66,7 +66,7 @@ export default {
 
   retry: 'Réessayer', dismiss: 'Fermer', reload: 'Afficher la dernière version',
   failSignIn: 'Reconnectez-vous pour continuer à modifier.',
-  failDenied: 'Vous ne pouvez pas modifier cette recette.',
+  failDenied: 'Votre accès à la modification a été retiré. Ce que vous avez saisi est toujours là.',
   failInvalid: 'Cette modification n’a pas été acceptée.',
   failUnavailable: 'La modification n’a pas pu être enregistrée. Réessayez.',
   failPending: 'Encore en cours d’application. Réessayez dans un instant ; elle ne sera pas appliquée deux fois.',

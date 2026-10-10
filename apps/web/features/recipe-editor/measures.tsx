@@ -9,12 +9,14 @@ import { timingLeave, timingShown } from './timing-field.ts';
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
 
-interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean }
+interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean;
+  /** Editing access is gone. The amounts stay readable; leaving a field does not save. */
+  closed: boolean }
 
 const rationalText = (value: Rational | undefined) => amountText(value);
 
 /** Yield, servings and the three times. Each field is written when it is left, as one intent for the field's measure. */
-export function MeasuresSection({ store, state, language, t }: Common) {
+export function MeasuresSection({ store, state, language, t, closed }: Common) {
   const [invalid, setInvalid] = useState<Record<string, string>>({});
   const yieldMeasure = measureOf(state, 'yield');
   const servings = measureOf(state, 'servings');
@@ -23,6 +25,7 @@ export function MeasuresSection({ store, state, language, t }: Common) {
     setInvalid(current => { const next = { ...current }; if (message) next[name] = message; else delete next[name]; return next; });
 
   const commitYield = (form: HTMLElement) => {
+    if (closed) return;
     const amount = read(form, 'makes');
     const unitText = read(form, 'makesUnit');
     const people = read(form, 'servings');
@@ -35,6 +38,7 @@ export function MeasuresSection({ store, state, language, t }: Common) {
     void store.submit({ kind: 'yield', yield: makes ? { value: makes, unitText } : null, servings: serves, servingsWord: t.servingsWord });
   };
   const commitTime = (name: TimingName, input: HTMLInputElement) => {
+    if (closed) return;
     const decision = timingLeave(measureOf(state, name), input.value);
     if (decision.kind === 'invalid') { flag(name, t.minutesInvalid); return; }
     flag(name, null);

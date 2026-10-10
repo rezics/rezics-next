@@ -14,7 +14,9 @@ import { groups, type GroupNode, type IngredientNode, linesOf, type RecipeState 
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
 
-interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean }
+interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean;
+  /** Editing access is gone. Typed text stays; nothing here is written. */
+  closed: boolean }
 
 const fieldClass = 'grid min-w-0 gap-1 text-sm';
 
@@ -47,7 +49,7 @@ function LineFields({ line, parts, onLine, onParts, onSubmit, onCancel, t, langu
 }
 
 /** Adds an ingredient to a section: type the line, press Enter, and the field is ready for the next. */
-function AddLine({ section, label, store, language, t }: Common & { section: string | null; label: string | null }) {
+function AddLine({ section, label, store, language, t, closed }: Common & { section: string | null; label: string | null }) {
   const [line, setLine] = useState('');
   const [parts, setParts] = useState<IngredientParts>(emptyParts);
   const id = useId();
@@ -57,6 +59,7 @@ function AddLine({ section, label, store, language, t }: Common & { section: str
   const typed = useRef(emptyParts);
   const problem = partsProblem(parts);
   const add = async () => {
+    if (closed) return;
     const submitted = typed.current;
     if (partsProblem(submitted)) return;
     await store.whenIdle();
@@ -76,12 +79,12 @@ function AddLine({ section, label, store, language, t }: Common & { section: str
         onParts={value => { typed.current = value; setParts(value); setLine(composeLine(value)); }} />
     </div>
     <p className="text-muted-foreground text-xs">{t.ingredientHelp}</p>
-    <div><Button type="submit" size="md" disabled={Boolean(problem)} className="pointer-coarse:h-11">
-      <PlusIcon aria-hidden="true" />{t.addAction}</Button></div>
+    {closed ? null : <div><Button type="submit" size="md" disabled={Boolean(problem)} className="pointer-coarse:h-11">
+      <PlusIcon aria-hidden="true" />{t.addAction}</Button></div>}
   </form>;
 }
 
-function LineEditor({ node, store, state, language, t, onDone }: Common & { node: IngredientNode; onDone: () => void }) {
+function LineEditor({ node, store, state, language, t, closed, onDone }: Common & { node: IngredientNode; onDone: () => void }) {
   const initial = partsOf(node.qualifier);
   const [parts, setParts] = useState(initial);
   const [line, setLine] = useState(composeLine(initial));
@@ -89,7 +92,7 @@ function LineEditor({ node, store, state, language, t, onDone }: Common & { node
   const id = useId();
   const problem = partsProblem(parts);
   const save = async () => {
-    if (problem) return;
+    if (closed || problem) return;
     const moved = (section || null) !== (node.parent === state.structure ? null : node.parent);
     const edited = await store.submit({ kind: 'editLine', occurrence: node.occurrence, qualifier: qualifierOf(parts, language, node.qualifier) });
     if (edited.kind === 'refused') return;
@@ -109,7 +112,7 @@ function LineEditor({ node, store, state, language, t, onDone }: Common & { node
       <ChoiceSelect value={section} onValueChange={setSection} label={t.moveToSection} className="w-full" portalled={false}
         options={[{ value: '', label: t.noSection }, ...sections.map(group => ({ value: group.occurrence, label: group.label?.value ?? '' }))]} /></div> : null}
     <div className="flex flex-wrap gap-2">
-      <Button type="submit" disabled={Boolean(problem)} className="pointer-coarse:h-11">{t.saveAction}</Button>
+      {closed ? null : <Button type="submit" disabled={Boolean(problem)} className="pointer-coarse:h-11">{t.saveAction}</Button>}
       <Button type="button" variant="outline" onClick={onDone} className="pointer-coarse:h-11">{t.cancel}</Button>
     </div>
   </form>;
@@ -122,6 +125,7 @@ function LineRow({ node, index, count, ...common }: Common & { node: IngredientN
   if (editing) return <li data-line={node.occurrence}><LineEditor node={node} {...common} onDone={() => setEditing(false)} /></li>;
   return <li data-line={node.occurrence} className="flex items-center gap-1 border-border/60 border-b py-1 last:border-0">
     <span lang={language} dir={directionOf(language)} className="min-w-0 flex-1 text-pretty break-words py-1.5 font-medium">{text}</span>
+    {common.closed ? null : <>
     <IconAction label={t.moveUp({ name: text })} disabled={busy || index === 0}
       onClick={() => void store.submit({ kind: 'moveLine', occurrence: node.occurrence, direction: 'up' })}><ArrowUpIcon aria-hidden="true" /></IconAction>
     <IconAction label={t.moveDown({ name: text })} disabled={busy || index === count - 1}
@@ -129,32 +133,36 @@ function LineRow({ node, index, count, ...common }: Common & { node: IngredientN
     <IconAction label={t.edit({ name: text })} onClick={() => setEditing(true)}><PencilIcon aria-hidden="true" /></IconAction>
     <IconAction label={t.remove({ name: text })} disabled={busy}
       onClick={() => void store.submit({ kind: 'removeLine', occurrence: node.occurrence })}><Trash2Icon aria-hidden="true" /></IconAction>
+    </>}
   </li>;
 }
 
-function SectionHeader({ group, index, count, store, state, t, busy, language }: Common & { group: GroupNode; index: number; count: number }) {
+function SectionHeader({ group, index, count, store, state, t, busy, language, closed }: Common & { group: GroupNode; index: number; count: number }) {
   const [confirming, setConfirming] = useState(false);
   const name = group.label?.value ?? '';
   const lines = linesOf(state, group.occurrence);
   const rename = (value: string) => {
+    if (closed) return;
     const next = value.trim();
     if (next && next !== name) void store.submit({ kind: 'renameSection', occurrence: group.occurrence, label: next, language });
   };
-  const remove = () => void store.submit({ kind: 'removeSection', occurrence: group.occurrence }).then(() => setConfirming(false));
+  const remove = () => { if (!closed) void store.submit({ kind: 'removeSection', occurrence: group.occurrence }).then(() => setConfirming(false)); };
   return <div className="grid gap-2">
     <div className="flex items-center gap-1">
       <SyncedInput value={name} aria-label={t.sectionName} maxLength={500} lang={language} dir={directionOf(language)}
         className="font-semibold" autoComplete="off"
         onBlur={event => rename(event.target.value)}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />
+      {closed ? null : <>
       <IconAction label={t.moveUp({ name: name })} disabled={busy || index === 0}
         onClick={() => void store.submit({ kind: 'moveSection', occurrence: group.occurrence, direction: 'up' })}><ArrowUpIcon aria-hidden="true" /></IconAction>
       <IconAction label={t.moveDown({ name: name })} disabled={busy || index === count - 1}
         onClick={() => void store.submit({ kind: 'moveSection', occurrence: group.occurrence, direction: 'down' })}><ArrowDownIcon aria-hidden="true" /></IconAction>
       <IconAction label={t.removeSection({ name: name })} disabled={busy}
         onClick={() => lines.length ? setConfirming(true) : remove()}><Trash2Icon aria-hidden="true" /></IconAction>
+      </>}
     </div>
-    {confirming ? <div role="alertdialog" aria-label={t.removeSection({ name: name })} className="grid gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
+    {confirming && !closed ? <div role="alertdialog" aria-label={t.removeSection({ name: name })} className="grid gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
       <p>{t.removeSectionConfirm({ name: name })}</p>
       <div className="flex gap-2">
         <Button type="button" variant="destructive" size="sm" disabled={busy} onClick={remove}>{t.confirmRemove}</Button>
@@ -170,10 +178,11 @@ function Lines({ lines, ...common }: Common & { lines: IngredientNode[] }) {
     : <p className="text-muted-foreground text-sm">{common.t.emptySection}</p>;
 }
 
-function AddSection({ store, language, t }: Common) {
+function AddSection({ store, language, t, closed }: Common) {
   const [name, setName] = useState('');
   const typed = useRef('');
   const add = async () => {
+    if (closed) return;
     const submitted = typed.current.trim();
     if (!submitted) return;
     await store.whenIdle();
@@ -185,8 +194,8 @@ function AddSection({ store, language, t }: Common) {
       <Input value={name} onChange={event => { typed.current = event.target.value; setName(event.target.value); }} placeholder={t.sectionPlaceholder} maxLength={500}
         autoComplete="off" lang={language} dir={directionOf(language)} aria-label={t.sectionName} /></label>
     <p className="text-muted-foreground text-xs">{t.addSectionHelp}</p>
-    <div><Button type="submit" variant="outline" disabled={!name.trim()} className="pointer-coarse:h-11">
-      <PlusIcon aria-hidden="true" />{t.addSectionAction}</Button></div>
+    {closed ? null : <div><Button type="submit" variant="outline" disabled={!name.trim()} className="pointer-coarse:h-11">
+      <PlusIcon aria-hidden="true" />{t.addSectionAction}</Button></div>}
   </form>;
 }
 

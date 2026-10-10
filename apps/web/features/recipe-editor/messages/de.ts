@@ -66,7 +66,7 @@ export default {
 
   retry: 'Erneut versuchen', dismiss: 'Schließen', reload: 'Neueste Fassung zeigen',
   failSignIn: 'Melde dich erneut an, um weiter zu bearbeiten.',
-  failDenied: 'Du kannst dieses Rezept nicht ändern.',
+  failDenied: 'Dein Bearbeitungszugang wurde entfernt. Was du geschrieben hast, ist noch da.',
   failInvalid: 'Diese Änderung wurde nicht angenommen.',
   failUnavailable: 'Die Änderung konnte nicht gespeichert werden. Versuche es erneut.',
   failPending: 'Wird noch angewendet. Versuche es gleich noch einmal; es wird nicht doppelt angewendet.',

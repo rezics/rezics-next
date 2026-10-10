@@ -66,7 +66,7 @@ export default {
 
   retry: 'Reintentar', dismiss: 'Cerrar', reload: 'Mostrar lo más reciente',
   failSignIn: 'Inicia sesión de nuevo para seguir editando.',
-  failDenied: 'No puedes cambiar esta receta.',
+  failDenied: 'Se retiró tu acceso de edición. Lo que escribiste sigue aquí.',
   failInvalid: 'Ese cambio no fue aceptado.',
   failUnavailable: 'No se pudo guardar el cambio. Inténtalo de nuevo.',
   failPending: 'Aún se está aplicando. Inténtalo de nuevo en un momento; no se aplicará dos veces.',

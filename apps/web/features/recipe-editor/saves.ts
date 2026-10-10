@@ -65,7 +65,9 @@ export type SaveOutcome = { kind: 'saved' } | { kind: 'unchanged' } | { kind: 'r
 // -- title and description --------------------------------------------------------------------
 
 export interface DetailsSnapshot { head: string | null; values: DetailsValues; busy: boolean;
-  failure: SaveRefusal | null }
+  failure: SaveRefusal | null;
+  /** A denial closed further writes. The fields still hold what was typed. */
+  revoked: boolean }
 
 const ownIndex = (values: DetailsValues, language: string) =>
   values.entries.findIndex(entry => entry.language.toLowerCase() === language.toLowerCase());
@@ -90,15 +92,17 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
   let head = initial.head;
   let values = initial.values;
   let failure: SaveRefusal | null = null;
-  let snapshot: DetailsSnapshot = { head, values, busy: false, failure };
+  let revoked = false;
+  let snapshot: DetailsSnapshot = { head, values, busy: false, failure, revoked };
   const listeners = new Set<() => void>();
   const notify = (busy = lane.busy()) => {
-    snapshot = { head, values, busy, failure };
+    snapshot = { head, values, busy, failure, revoked };
     for (const listener of listeners) listener();
   };
 
   async function run(first: { title: string; description: string },
     newest: () => { title: string; description: string }): Promise<SaveOutcome> {
+    if (revoked) return refuse('denied');
     failure = null;
     let change = first;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -122,12 +126,16 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
     }
     return refuse('moved');
   }
-  const refuse = (refusal: SaveRefusal): SaveOutcome => { failure = refusal; notify(); return { kind: 'refused', refusal }; };
+  const refuse = (refusal: SaveRefusal): SaveOutcome => {
+    if (refusal === 'denied') revoked = true;
+    failure = refusal; notify(); return { kind: 'refused', refusal };
+  };
   const lane = latestLane(run, { kind: 'refused', refusal: 'unavailable' } as SaveOutcome, () => notify());
   return {
     snapshot: () => snapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    submit: (change: { title: string; description: string }) => lane.submit(change),
+    submit: (change: { title: string; description: string }) => revoked
+      ? Promise.resolve({ kind: 'refused' as const, refusal: 'denied' as const }) : lane.submit(change),
     whenIdle: () => lane.whenIdle(),
   };
 }
@@ -138,7 +146,9 @@ export type DetailsSaver = ReturnType<typeof createDetailsSaver>;
 export interface NotesState { text: string | null; head: string | null; body: string; publicationHead: string | null }
 export interface NotesSnapshot { notes: NotesState; busy: boolean; publishing: boolean; failure: SaveRefusal | null;
   /** True once this editor has published, or the notes were already published when it opened. */
-  published: boolean }
+  published: boolean;
+  /** A denial closed further writes. The notes field still holds what was typed. */
+  revoked: boolean }
 export type PublishOutcome = { kind: 'published' } | { kind: 'refused'; refusal: SaveRefusal };
 type NotesOutcome = SaveOutcome | { kind: 'published' };
 
@@ -150,10 +160,11 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
   let notes = initial;
   let failure: SaveRefusal | null = null;
   let publishing = false;
-  let snapshot: NotesSnapshot = { notes, busy: false, publishing, failure, published: Boolean(initial.publicationHead) };
+  let revoked = false;
+  let snapshot: NotesSnapshot = { notes, busy: false, publishing, failure, published: Boolean(initial.publicationHead), revoked };
   const listeners = new Set<() => void>();
   const notify = () => {
-    snapshot = { notes, busy: lane.busy(), publishing, failure, published: Boolean(notes.publicationHead) };
+    snapshot = { notes, busy: lane.busy(), publishing, failure, published: Boolean(notes.publicationHead), revoked };
     for (const listener of listeners) listener();
   };
   const target = { actingSubject, work, language };
@@ -161,6 +172,7 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
 
   /** Writes `body` as the draft; a moved draft head is read, and the newest body is written over it. */
   async function write(first: string, adopt: () => string): Promise<SaveOutcome> {
+    if (revoked) return { kind: 'refused', refusal: 'denied' };
     let body = first;
     for (let attempt = 0; attempt < 2; attempt++) {
       if (notes.text && notes.body === body) return { kind: 'unchanged' };
@@ -175,6 +187,7 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
         body = adopt();
         continue;
       }
+      if (saved.kind === 'denied') revoked = true;
       return { kind: 'refused', refusal: saved.kind === 'denied' ? 'denied' : saved.kind === 'conflict' ? 'moved' : 'unavailable' };
     }
     return { kind: 'refused', refusal: 'moved' };
@@ -188,14 +201,15 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
   async function runTask(first: Task, newest: () => Task): Promise<NotesOutcome> {
     let task = first;
     const adopt = () => { task = newest(); return task.body; };
-    failure = null;
-    publishing = task.publish;
-    notify();
     const finish = (outcome: NotesOutcome): NotesOutcome => {
       failure = outcome.kind === 'refused' ? outcome.refusal : null;
       return outcome;
     };
     const fail = (refusal: SaveRefusal) => finish({ kind: 'refused', refusal });
+    if (revoked) return fail('denied');
+    failure = null;
+    publishing = task.publish;
+    notify();
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         const saved = await write(task.body, adopt);
@@ -216,12 +230,12 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
           adopt();
           continue;
         }
-        if (published.outcome === 'denied') return fail('denied');
+        if (published.outcome === 'denied') { revoked = true; return fail('denied'); }
         if (published.outcome === 'pending') return fail('pending');
         if (published.outcome !== 'done' || !published.publication) return fail('unavailable');
         const selected = await selectMainText({ actingSubject, work, mainVersion, text: notes.text,
           publication: published.publication, key: crypto.randomUUID() }, main());
-        if (selected === 'denied') return fail('denied');
+        if (selected === 'denied') { revoked = true; return fail('denied'); }
         if (selected === 'pending') return fail('pending');
         if (selected !== 'done') return fail('unavailable');
         notes = { ...notes, publicationHead: published.publication.publicationDecision };
@@ -239,10 +253,12 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     whenIdle: () => lane.whenIdle(),
     async save(body: string): Promise<SaveOutcome> {
+      if (revoked) return { kind: 'refused', refusal: 'denied' };
       const outcome = await lane.submit({ body, publish: false });
       return outcome.kind === 'published' ? { kind: 'saved' } : outcome;
     },
     async publish(body: string): Promise<PublishOutcome> {
+      if (revoked) return { kind: 'refused', refusal: 'denied' };
       const outcome = await lane.submit({ body, publish: true });
       return outcome.kind === 'published' || outcome.kind === 'refused' ? outcome : { kind: 'refused', refusal: 'unavailable' };
     },

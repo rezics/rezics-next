@@ -66,7 +66,7 @@ export default {
 
   retry: '다시 시도', dismiss: '닫기', reload: '최신 내용 보기',
   failSignIn: '계속 편집하려면 다시 로그인하세요.',
-  failDenied: '이 레시피는 변경할 수 없습니다.',
+  failDenied: '편집 권한이 제거되었습니다. 입력한 내용은 그대로 남아 있습니다.',
   failInvalid: '그 변경은 받아들여지지 않았습니다.',
   failUnavailable: '변경 사항을 저장하지 못했습니다. 다시 시도하세요.',
   failPending: '아직 적용 중입니다. 잠시 후 다시 시도하세요. 두 번 적용되지는 않습니다.',

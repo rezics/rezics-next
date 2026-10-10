@@ -66,7 +66,7 @@ export default {
 
   retry: 'もう一度試す', dismiss: '閉じる', reload: '最新の内容を表示',
   failSignIn: '編集を続けるには、もう一度ログインしてください。',
-  failDenied: 'このレシピは変更できません。',
+  failDenied: '編集する権限が取り消されました。入力した内容はそのまま残っています。',
   failInvalid: 'その変更は受け付けられませんでした。',
   failUnavailable: '変更を保存できませんでした。もう一度お試しください。',
   failPending: 'まだ適用中です。少し待ってからもう一度お試しください。二重には適用されません。',

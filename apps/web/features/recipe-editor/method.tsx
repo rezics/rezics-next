@@ -13,7 +13,9 @@ import { selectionWhilePending, textWhilePending, toggleIngredient } from './ste
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
 
-interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean }
+interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean;
+  /** Editing access is gone. Typed text stays; nothing here is written. */
+  closed: boolean }
 
 /** The name an ingredient goes by in a list of links: its own line, which is unique through its section heading. */
 const nameOf = (node: IngredientNode) => readingLine(node.qualifier);
@@ -39,7 +41,7 @@ function UsesPicker({ state, value, onChange, t, idPrefix }: {
   </div>;
 }
 
-function StepRow({ node, index, count, store, state, language, t, busy }: Common & { node: StepNode; index: number; count: number }) {
+function StepRow({ node, index, count, store, state, language, t, busy, closed }: Common & { node: StepNode; index: number; count: number }) {
   const [linking, setLinking] = useState(false);
   const text = useRef<HTMLTextAreaElement>(null);
   // Newest text and ingredient selection while this step's write has not settled. A late response
@@ -52,6 +54,7 @@ function StepRow({ node, index, count, store, state, language, t, busy }: Common
   const parent = state.nodes.find(item => item.occurrence === node.parent);
   const section = parent?.role === 'group' ? parent.label?.value : null;
   const commit = (next?: readonly string[]) => {
+    if (closed) return;
     const base = selectionWhilePending(savedUses, pending.current?.uses ?? null);
     const list = [...(next ?? base)];
     const value = textWhilePending(stored, pending.current?.text ?? null, text.current?.value.trim() ?? stored);
@@ -76,7 +79,7 @@ function StepRow({ node, index, count, store, state, language, t, busy }: Common
           lang={language} dir={directionOf(language)} onBlur={() => commit()} className="min-h-16" />
       </div>
     </div>
-    <div className="flex flex-wrap items-center gap-1 ps-11">
+    {closed ? null : <div className="flex flex-wrap items-center gap-1 ps-11">
       <Button type="button" variant="ghost" size="sm" aria-expanded={linking} className="pointer-coarse:h-11"
         onClick={() => setLinking(value => !value)}><LinkIcon aria-hidden="true" />
         {uses.length ? t.usesCount(uses.length) : t.usesChoose}</Button>
@@ -87,19 +90,20 @@ function StepRow({ node, index, count, store, state, language, t, busy }: Common
         onClick={() => void store.submit({ kind: 'moveStep', occurrence: node.occurrence, direction: 'down' })}><ArrowDownIcon aria-hidden="true" /></IconAction>
       <IconAction label={t.remove({ name: t.stepNumber({ number: String(number) }) })} disabled={busy}
         onClick={() => void store.submit({ kind: 'removeStep', occurrence: node.occurrence })}><Trash2Icon aria-hidden="true" /></IconAction>
-    </div>
-    {linking ? <div className="ms-11 rounded-xl border border-border/60 bg-background p-3">
+    </div>}
+    {linking && !closed ? <div className="ms-11 rounded-xl border border-border/60 bg-background p-3">
       <UsesPicker state={state} value={uses} idPrefix={`uses-${node.occurrence.slice(-12)}`} t={t} onChange={next => commit(next)} />
     </div> : null}
   </li>;
 }
 
-function AddStep({ store, state, language, t }: Common) {
+function AddStep({ store, state, language, t, closed }: Common) {
   const [text, setText] = useState('');
   const [uses, setUses] = useState<string[]>([]);
   const [linking, setLinking] = useState(false);
   const typed = useRef({ text: '', uses: [] as string[] });
   const add = async () => {
+    if (closed) return;
     const submitted = typed.current;
     if (!submitted.text.trim()) return;
     await store.whenIdle();
@@ -117,13 +121,13 @@ function AddStep({ store, state, language, t }: Common) {
       <Textarea value={text} onChange={event => { typed.current = { ...typed.current, text: event.target.value }; setText(event.target.value); }} onKeyDown={keys} placeholder={t.stepPlaceholder}
         maxLength={4000} lang={language} dir={directionOf(language)} className="min-h-20" /></label>
     <p className="text-muted-foreground text-xs">{t.stepHelp}</p>
-    <div className="flex flex-wrap items-center gap-2">
+    {closed ? null : <div className="flex flex-wrap items-center gap-2">
       <Button type="submit" disabled={!text.trim()} className="pointer-coarse:h-11"><PlusIcon aria-hidden="true" />{t.addAction}</Button>
       <Button type="button" variant="ghost" size="sm" aria-expanded={linking} className="pointer-coarse:h-11"
         onClick={() => setLinking(value => !value)}><LinkIcon aria-hidden="true" />
         {uses.length ? t.usesCount(uses.length) : t.usesChoose}</Button>
-    </div>
-    {linking ? <div className="rounded-xl border border-border/60 bg-background p-3">
+    </div>}
+    {linking && !closed ? <div className="rounded-xl border border-border/60 bg-background p-3">
       <UsesPicker state={state} value={uses} onChange={next => { typed.current = { ...typed.current, uses: next }; setUses(next); }} idPrefix="uses-new" t={t} /></div> : null}
   </form>;
 }

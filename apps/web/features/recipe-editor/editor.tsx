@@ -82,12 +82,15 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
         : t.loadingRestCount({ count: String(loaded) });
   const missing = missingBeforePublishing({ title: entry.title, ingredients: ingredients(state).length, steps: steps(state).length,
     notes: typedNotes });
-  const common = { store, state, language, t, busy: recipe.busy };
+  const accessRemoved = recipe.revoked || saved.revoked || written.revoked;
+  const common = { store, state, language, t, busy: recipe.busy, closed: accessRemoved };
   const detailsFailure = saved.failure && saved.failure !== dismissed.details ? saved.failure : null;
   const notesFailure = written.failure && written.failure !== dismissed.notes ? written.failure : null;
+  const denialAlert = recipe.failure?.refusal.kind === 'denied' || detailsFailure === 'denied' || notesFailure === 'denied';
   // What Main holds replaces the typed text once it is saved, as the field does.
   useEffect(() => setTypedNotes(written.notes.body), [written.notes.body]);
   const publish = async () => {
+    if (store.snapshot().revoked || details.snapshot().revoked || notes.snapshot().revoked) return;
     // A cooking time can be waiting behind preparation. Publication waits for every such write,
     // then reads the notes field, which may not have been left yet.
     const outcome = await publishWhenSettled({
@@ -107,9 +110,11 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
           {recipe.loading ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.loadingRest}</>
             : saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
             : recipe.loadFailure ? <span>{loadMessage}</span>
+            : accessRemoved ? (denialAlert ? null : <span>{t.failDenied}</span>)
             : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
       </div>
-      <PublishBar snapshot={written} missing={missing} pending={saving || held} held={held} onPublish={() => void publish()} workHref={workHref} t={t} />
+      <PublishBar snapshot={written} missing={missing} pending={saving || held} held={held} closed={accessRemoved}
+        onPublish={() => void publish()} workHref={workHref} t={t} />
     </div>
     {published && written.published && !saving ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
       <AlertDescription>{t.publishedNotice}</AlertDescription></Alert> : null}
@@ -125,7 +130,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
     </div>
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className={cn('grid min-w-0 content-start gap-10', view === 'preview' && 'hidden lg:grid')}>
-        <DetailsSection details={details} notes={notes} notesField={notesField} onNotesInput={setTypedNotes} language={language} t={t} />
+        <DetailsSection details={details} notes={notes} notesField={notesField} onNotesInput={setTypedNotes} language={language} t={t} closed={accessRemoved} />
         {held ? <section aria-busy={recipe.loading || undefined} className="grid justify-items-start gap-3 rounded-2xl border border-border/60 p-4">
           <h2 className="font-semibold text-lg">{t.loadingRest}</h2>
           <p role="status">{loadMessage}</p>

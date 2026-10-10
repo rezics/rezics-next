@@ -7,15 +7,18 @@ import { type DetailsSaver, entryOf, type NotesWriter } from './saves.ts';
 import { directionOf } from '../studio/types.ts';
 
 /** Title and description share one header record, so leaving either writes both as they are typed. */
-export function DetailsSection({ details, notes, notesField, onNotesInput, language, t }: { details: DetailsSaver; notes: NotesWriter;
+export function DetailsSection({ details, notes, notesField, onNotesInput, language, t, closed = false }: { details: DetailsSaver; notes: NotesWriter;
   notesField: RefObject<HTMLTextAreaElement | null>; /** Tells the editor what is typed, before the field is left and saved. */ onNotesInput: (value: string) => void;
-  language: string; t: Copy }) {
+  language: string; t: Copy;
+  /** Editing access is gone. Fields stay so the text can be copied; leaving one does not save. */
+  closed?: boolean }) {
   const saved = useSnapshot(details);
   const written = useSnapshot(notes);
   const title = useRef<HTMLInputElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
   const current = entryOf(saved.values, language);
   const commit = () => {
+    if (closed) return;
     const next = { title: title.current?.value.trim() ?? current.title, description: description.current?.value.trim() ?? current.description };
     if (!next.title) { if (title.current) title.current.value = current.title; return; }
     void details.submit(next);
@@ -35,7 +38,7 @@ export function DetailsSection({ details, notes, notesField, onNotesInput, langu
       <SyncedTextarea id="recipe-notes" ref={notesField} value={written.notes.body} maxLength={20000}
         className="min-h-28" aria-describedby="recipe-notes-help" {...lang}
         onChange={event => onNotesInput(event.currentTarget.value)}
-        onBlur={event => void notes.save(event.currentTarget.value.trim())} />
+        onBlur={event => { if (!closed) void notes.save(event.currentTarget.value.trim()); }} />
       <span id="recipe-notes-help" className="text-muted-foreground text-xs">{t.notesHelp}</span></div>
   </section>;
 }

@@ -138,3 +138,20 @@ test('a form that adds something waits for the writes in flight instead of dropp
   expect(idle).toBe(true);
   expect(await store.submit({ kind: 'addSection', label: 'Crumb', language: 'en' })).toEqual({ kind: 'saved' });
 });
+
+test('a denied edit leaves the recipe as it was and is not sent again', async () => {
+  const { fake, store } = open();
+  const before = store.snapshot().state;
+  fake.interference.accessDenied = true;
+  expect(await store.submit({ kind: 'editLine', occurrence: id(21), qualifier: line('2 cups butter') }))
+    .toEqual({ kind: 'refused', refusal: { kind: 'denied' } });
+  expect(store.snapshot().revoked).toBe(true);
+  expect(store.snapshot().state).toEqual(before);
+  expect(fake.calls.filter(call => call.name === 'changes')).toHaveLength(1);
+  store.dismiss();
+  expect(store.snapshot().revoked).toBe(true);
+  expect(store.snapshot().failure).toBeNull();
+  expect(await store.submit({ kind: 'editLine', occurrence: id(21), qualifier: line('3 cups butter') }))
+    .toEqual({ kind: 'refused', refusal: { kind: 'denied' } });
+  expect(fake.calls.filter(call => call.name === 'changes')).toHaveLength(1);
+});

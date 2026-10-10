@@ -66,7 +66,7 @@ export default {
 
   retry: '再試一次', dismiss: '關閉', reload: '顯示最新內容',
   failSignIn: '請重新登入以繼續編輯。',
-  failDenied: '你無法修改這道食譜。',
+  failDenied: '你的編輯權限已被移除。你輸入的內容還在。',
   failInvalid: '這項變更未被接受。',
   failUnavailable: '變更無法儲存，請再試一次。',
   failPending: '仍在套用中。請稍後再試，不會重複套用。',

@@ -66,7 +66,7 @@ export default {
 
   retry: '再试一次', dismiss: '关闭', reload: '显示最新内容',
   failSignIn: '请重新登录以继续编辑。',
-  failDenied: '你不能修改这道食谱。',
+  failDenied: '你的编辑权限已被移除。你输入的内容还在。',
   failInvalid: '这项更改未被接受。',
   failUnavailable: '更改无法保存，请再试一次。',
   failPending: '仍在应用中。请稍后再试，不会重复应用。',

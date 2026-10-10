@@ -177,3 +177,17 @@ test('publication of a moved draft that already holds this tab\'s text publishes
   expect(fake.world().notes.body).toBe('Our notes.');
   expect(writer.snapshot().published).toBe(true);
 });
+
+test('a denied notes save keeps the previous body and is not sent again', async () => {
+  const fake = fakeMain({ recipe: startRecipe, notes: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
+  fake.interference.accessDenied = true;
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en',
+    initial: { text: id(300), head: id(1500), body: 'old', publicationHead: null } });
+  expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'denied' });
+  expect(writer.snapshot().revoked).toBe(true);
+  expect(writer.snapshot().notes.body).toBe('old');
+  expect(fake.world().notes.body).toBe('old');
+  expect(fake.calls.filter(call => call.name === 'notes-edit')).toHaveLength(1);
+  expect(await writer.save('Kept.')).toEqual({ kind: 'refused', refusal: 'denied' });
+  expect(fake.calls.filter(call => call.name === 'notes-edit')).toHaveLength(1);
+});

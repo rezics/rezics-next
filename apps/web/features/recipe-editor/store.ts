@@ -33,6 +33,8 @@ export interface Snapshot {
   loadFailure: RecipeLoadFailure | null;
   /** What the last write ran into, until the next one starts. */
   failure: { intent: Intent; refusal: Refusal } | null;
+  /** A denial closed further writes. Dismissing the alert does not reopen them. */
+  revoked: boolean;
 }
 
 export interface RecipeStore {
@@ -91,7 +93,9 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   /** The command as it was sent. Retry resolves this before planning against a newer head. */
   type Flight = { plan: Sent; head: string };
   let failure: { intent: Intent; refusal: Refusal; id: string; key: string; command: CommandInstance; flight: Flight | null } | null = null;
-  let snapshot: Snapshot = { state, busy: false, loading, loadFailure, failure: null };
+  /** Set when Main refuses a write for lack of authority. Later submits do not ask again. */
+  let revoked = false;
+  let snapshot: Snapshot = { state, busy: false, loading, loadFailure, failure: null, revoked };
   let disposed = false;
   type Resolver = (outcome: Outcome) => void;
   type Entry = { key: string; intent: Intent; id: string; command: CommandInstance; flight: Flight | null; resolvers: Resolver[] };
@@ -111,7 +115,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   let draining = false;
   const outstanding = () => active > 0 || slots.size > 0;
   const notify = () => {
-    snapshot = { state, busy: outstanding(), loading, loadFailure, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
+    snapshot = { state, busy: outstanding(), loading, loadFailure, revoked,
+      failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
     for (const listener of listeners) listener();
   };
   const wake = () => { if (!outstanding()) for (const resolve of idlers.splice(0)) resolve(); };
@@ -159,7 +164,10 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     if (!entry.flight) {
       if (!state.structure || !state.head) {
         const created = await createRecipe(main(), { work, mainVersion, actingSubject });
-        if (!created.ok) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(created) } };
+        if (!created.ok) {
+          if (created.problem === 'denied') revoked = true;
+          return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(created) } };
+        }
         // The Composition may already hold edits from another tab: read it rather than assume it is empty.
         if (!state.structure) {
           state = { ...state, structure: created.data.structure, head: created.data.revision };
@@ -192,6 +200,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     if (open(answer)) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(answer) } };
     entry.command.finish({ ok: false, failure: answer.problem });
     entry.flight = null;
+    // The cook no longer has editing access. The recipe held here stays as it was.
+    if (answer.problem === 'denied') revoked = true;
     if (answer.status !== 409) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(answer) } };
     return { kind: 'conflict' };
   }
@@ -276,6 +286,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   function submit(intent: Intent, carried?: { id: string; command: CommandInstance; flight: Flight | null }): Promise<Outcome> {
     // A plan built from the first page would drop every later section, step and link.
     if (disposed || loading || loadFailure) return Promise.resolve({ kind: 'busy' });
+    if (revoked) return Promise.resolve({ kind: 'refused', refusal: { kind: 'denied' } });
     const id = carried?.id ?? newId();
     const command = carried?.command ?? commandInstance();
     const flight = carried?.flight ?? null;

@@ -67,6 +67,8 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     dropOccurrences?: boolean;
     /** A measure write is applied even when the head it names has already moved. */
     acceptStale?: boolean;
+    /** Writes are refused as removed editing access and are not applied. */
+    accessDenied?: boolean;
     /**
      * Replaces one recipe read. `current` is the recipe Main holds at the moment of the read.
      * Returning nothing uses that recipe; returning a value uses it instead, so a late read can be stale.
@@ -79,7 +81,10 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   /** Commands that already committed, keyed by Idempotency-Key. A repeat is a replay, not a second apply. */
   const committed = new Map<string, { digest: string; revision: string }>();
   const answer = (data: unknown) => ({ data, error: null });
-  const refuse = (status: number, code: string) => ({ data: null, error: { status, value: { code } } });
+  const refuse = (status: number, code: string, title?: string) => ({ data: null,
+    error: { status, value: title === undefined ? { code } : { code, title, status } } });
+  const removed = () => interference.accessDenied === true
+    ? refuse(403, 'authority_denied', 'Authority is not admitted') : null;
   const record = async (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
     const call = { name, body, key: options?.headers?.['idempotency-key'] };
     calls.push(call);
@@ -109,6 +114,8 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
       return answer({ structure: recipe.structure, revision: prior.revision, receipt: 'receipt', replayed: true });
     }
     await record('changes', body, options);
+    const denied = removed();
+    if (denied) return denied;
     const stale = cas(body.expectedHead);
     if (stale) return stale;
     const created = body.operations.filter(operation => operation.op === 'insert').map(() => next());
@@ -126,6 +133,8 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   } };
   const measurePost = (kind: 'measures' | 'timings') => async (body: Record<string, unknown> & { expectedHead: string }, options?: never) => {
     await record(kind, body, options);
+    const denied = removed();
+    if (denied) return denied;
     const stale = interference.acceptStale ? null : cas(body.expectedHead);
     if (stale) return stale;
     let measures = recipe.measures;
@@ -157,6 +166,8 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     compositions: Object.assign((_: { id: string }) => ({ changes: compositionChanges }), {
       post: async (body: unknown, options?: never) => {
         await record('create', body, options);
+        const denied = removed();
+        if (denied) return denied;
         if (!recipe.structure) recipe = { ...recipe, structure, head: next() };
         return answer({ structure, revision: recipe.head, receipt: 'receipt', replayed: false });
       } }),
@@ -166,6 +177,8 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
       put: async (body: { expectedHead: string | null; state: { localized: { language: string; title: string | null; description: string | null; tagline: string | null; mainVersionLabel: string | null }[] } },
         options?: never) => {
         await record('details', body, options);
+        const denied = removed();
+        if (denied) return denied;
         if (body.expectedHead !== metadata.head) return refuse(409, 'stale_work_head');
         metadata = { head: next(), values: { ...metadata.values, entries: body.state.localized.map(entry => ({ language: entry.language,
           title: entry.title ?? '', description: entry.description ?? '', tagline: entry.tagline ?? '', label: entry.mainVersionLabel })) } };
@@ -178,17 +191,23 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
         : answer({ body: notes.body, work, language: 'en', contribution: notes.text, revision: notes.head }) }) }), {
       post: async (body: { body?: string }, options?: never) => {
         await record('notes-create', body, options);
+        const denied = removed();
+        if (denied) return denied;
         notes = { ...notes, text: id(300), head: next(), body: body.body ?? '' };
         return answer({ contribution: notes.text, draftRevision: notes.head });
       } }),
     'contribution-edits': { post: async (body: { body?: string; expectedHead: string }, options?: never) => {
       await record('notes-edit', body, options);
+      const denied = removed();
+      if (denied) return denied;
       if (body.expectedHead !== notes.head) return refuse(409, 'stale_draft');
       notes = { ...notes, head: next(), body: body.body ?? '' };
       return answer({ draftRevision: notes.head });
     } },
     'contribution-publications': { post: async (body: { expectedDraftHead: string; expectedPublicationHead?: string | null }, options?: never) => {
       await record('publish', body, options);
+      const denied = removed();
+      if (denied) return denied;
       // A moved draft or publication head is the refusal the editor has to recover from.
       if (body.expectedDraftHead !== notes.head || (body.expectedPublicationHead ?? null) !== (notes.publicationHead ?? null)) {
         return refuse(409, 'stale_draft');
@@ -197,7 +216,12 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
       return answer({ publicationDecision: notes.publicationHead, selectedDraft: notes.head });
     } },
     'main-versions': (_: { mainVersion: string }) => ({ selection: { get: async () => refuse(404, 'not_found') } }),
-    'publication-selections': { post: async (body: unknown, options?: never) => { await record('select', body, options); return answer({ receipt: 'receipt' }); } },
+    'publication-selections': { post: async (body: unknown, options?: never) => {
+      await record('select', body, options);
+      const denied = removed();
+      if (denied) return denied;
+      return answer({ receipt: 'receipt' });
+    } },
   } } as unknown as MainClient;
   return { main: () => main, calls, interference, world: () => ({ recipe, notes, metadata }),
     /** Another tab's write: the head moves under the editor. */

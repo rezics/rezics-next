@@ -81,7 +81,7 @@ test('leaving the editor waits while a write is still outstanding', () => {
 });
 
 test('View recipe is withheld while a write is still outstanding', () => {
-  const snapshot = { notes: publishedNotes, busy: false, publishing: false, failure: null, published: true };
+  const snapshot = { notes: publishedNotes, busy: false, publishing: false, failure: null, published: true, revoked: false };
   const missing = { title: false, ingredients: false, steps: false, notes: false };
   const workHref = resourceHref('/w/', work.slice(-36));
   const waiting = renderToStaticMarkup(createElement(PublishBar, {
