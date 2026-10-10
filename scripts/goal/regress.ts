@@ -597,12 +597,33 @@ export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: numbe
     ...(artifactRoot ? { REZICS_QA_ARTIFACT_ROOT: artifactRoot } : {}) };
 }
 
-/** Paths from slot.json when they already name this batch's artifact root; otherwise that root's own runs. */
+function moveDirectory(from: string, to: string): void {
+  try { renameSync(from, to); }
+  catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'EXDEV') throw error;
+    filesystem.cpSync(from, to, { recursive: true });
+    filesystem.rmSync(from, { recursive: true });
+  }
+}
+
+/** Paths already under this batch's artifact root, or directories slot.json reported elsewhere after they move there.
+ * Older checkouts ignore the artifact-root override and write `<checkout>/.artifacts/qa/<id>`. */
 export function regressionBatchArtifactPaths(reported: readonly string[], artifactRoot?: string): string[] {
   if (!artifactRoot) return [...reported];
   const root = resolve(artifactRoot);
-  const named = reported.filter(path => { const resolved = resolve(path); return resolved === root || resolved.startsWith(`${root}/`); });
+  const inside = (path: string) => { const resolved = resolve(path); return resolved === root || resolved.startsWith(`${root}/`); };
+  const named = reported.filter(inside);
   if (named.length) return named;
+  const moved: string[] = [];
+  for (const path of reported) {
+    if (!existsSync(path) || !filesystem.lstatSync(path).isDirectory() || inside(path)) continue;
+    mkdirSync(root, { recursive: true });
+    let destination = join(root, basename(path));
+    for (let suffix = 2; existsSync(destination); suffix++) destination = join(root, `${basename(path)}-${suffix}`);
+    moveDirectory(path, destination);
+    moved.push(destination);
+  }
+  if (moved.length) return moved;
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => join(root, entry.name));
 }

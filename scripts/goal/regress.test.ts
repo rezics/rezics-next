@@ -657,6 +657,40 @@ describe('pinned main-wide regression', () => {
     } finally { release?.(); r.cleanup(); }
   });
 
+  test('an old checkout’s QA artifacts move into the run directory before the checkout is removed', async () => {
+    const r = repo();
+    let source = '';
+    const artifactId = '20261010t000000-abcdef';
+    try {
+      const result = await r.run({ runId: 'old-artifacts', only: ['integration'], runner: async (checkout, batch, directory, shards, slotLimit, artifactRoot) => {
+        if (batch.tier !== 'integration' || !directory.endsWith('/attempt-1')) return r.runner(checkout, batch, directory, shards, slotLimit);
+        source = checkout;
+        const written = join(checkout, '.artifacts/qa', artifactId);
+        mkdirSync(join(written, 'logs'), { recursive: true });
+        const file = batch.files[0]!;
+        writeFileSync(join(written, 'integration.xml'), `<testcase file="${file}" name="old-failure"><failure>no</failure></testcase>`);
+        writeFileSync(join(written, 'logs', 'integration.log'), 'old-evidence');
+        const paths = regressionBatchArtifactPaths([written], artifactRoot);
+        const kept = join(artifactRoot!, artifactId);
+        expect(paths).toEqual([kept]);
+        expect(existsSync(written)).toBe(false);
+        const tests = parseJUnit(readFileSync(join(kept, 'integration.xml'), 'utf8'), 'integration');
+        return { code: 1, outcomes: Object.fromEntries(batch.files.map(item => [item, item === file ? 'failed' as const : 'passed' as const])),
+          artifactPaths: [directory, ...paths], queueMs: 1, testMs: 1, totalMs: 2,
+          evidence: readFileSync(join(kept, 'logs', 'integration.log'), 'utf8'),
+          failingTests: tests.filter(test => test.failed).map(test => `${test.file}: ${test.name}`) };
+      }});
+      const attempt = result.batches.find(batch => batch.id === 'integration-1')!.attempts[0]!;
+      expect(attempt.failingTests).toEqual([`${result.batches.find(batch => batch.id === 'integration-1')!.files[0]}: old-failure`]);
+      const kept = join(r.options.stateDir, 'regress/old-artifacts/qa/integration-1/attempt-1', artifactId);
+      expect(attempt.artifactPaths).toContain(kept);
+      expect(result.diagnoses.some(diagnosis => diagnosis.artifactPaths.includes(kept))).toBe(true);
+      expect(existsSync(join(kept, 'logs/integration.log'))).toBe(true);
+      expect(readFileSync(join(kept, 'logs/integration.log'), 'utf8')).toBe('old-evidence');
+      expect(existsSync(source)).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
   test('a failed lane waits for concurrent children to settle and resume retains their passes', async () => {
     const r = repo(60);
     let started = 0;
