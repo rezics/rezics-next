@@ -79,7 +79,7 @@ test('G1024: captured query produces a real pinned ARQ plan and candidate count 
 
 test('G1024: three corpus Work scales use real public commands and preserve exact selected content within the preparation budget', async () => {
   const started = performance.now();
-  const stack = await startMediaStack('g-1024-public-corpus', { agents: true, library: true });
+  const stack = await startMediaStack('g-1024-public-corpus', { library: true });
   const relay = new Pool({ connectionString: process.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
     const member = await stack.member('author');

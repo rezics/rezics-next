@@ -48,7 +48,7 @@ const reader = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH,
   principalId: string;
   actingSubject: string;
 };
-const f = await startMediaStack('g856-q7', { agents: true, rights: true, library: true });
+const f = await startMediaStack('g856-q7', { library: true });
 const workObjects = f.objects('semantic/work/');
 await workObjects.initialize();
 Object.assign(f.env, { objectDirectory: process.env.MAIN_OBJECT_DIRECTORY, workObjects });

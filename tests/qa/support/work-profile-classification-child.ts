@@ -57,7 +57,6 @@ export async function classificationCostProfile() {
   // Earlier files' outbox positions are outside this fixture's preparation.
   const home = await startHomeStack('g-1041-classification', {
     projectionStart: 'current',
-    platformAccess: true,
   });
   const { stack, author } = home;
   const definitions = [...(corpus?.definitions ?? [])];

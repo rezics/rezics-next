@@ -18,7 +18,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 
 test('a projection page links its real ratings, reviews and discussion through the resource section reads', async () => {
-  const stack = await startMediaStack('projection-sections', { library: true, agents: true });
+  const stack = await startMediaStack('projection-sections', { library: true });
   try {
     const owner = await stack.member('owner');
     const person = (await json<{ agent: string }>(await owner.send('POST', '/v1/agents', {

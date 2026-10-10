@@ -31,7 +31,7 @@ const fixture = (edition: number) => {
 // Follow the installed skill: convert locally, verify exact passages, discover
 // names over MCP, validate, propose, review and apply. No model or uploaded book.
 test('G856: English and Finnish Pride editions extract the same character through MCP and a later bundle preserves earlier claims', async () => {
-  const f = await startMediaStack('g856-wiki', { agents: true, rights: true, library: true });
+  const f = await startMediaStack('g856-wiki', { library: true });
   try {
     const seed = await seedWiki(f, null);
     const steward = await f.member('g856-steward');

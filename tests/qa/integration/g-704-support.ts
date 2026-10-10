@@ -80,7 +80,7 @@ export const memberState = (member: Member): MemberState => ({
 export type Roles = Record<'holder' | 'steward' | 'second' | 'assistant', MemberState>;
 
 export async function loopStack(label: string, attach?: Roles) {
-  const f = await startMediaStack(label, { profileCredits: true, rights: true });
+  const f = await startMediaStack(label, { profileCredits: true });
   const reattached = (state: MemberState) =>
     ({
       name: state.name,

@@ -29,7 +29,7 @@ import { ANONYMOUS_VIEWER } from '../../../services/main/src/modules/suitability
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
 test('Public shelf continuation keeps its count approximate when Work read gates close mid-walk', async () => {
-  const stack = await startMediaStack('shelf-count-disclosure', { library: true, agents: true });
+  const stack = await startMediaStack('shelf-count-disclosure', { library: true });
   try {
     const disclosure = new DisclosureStore(stack.accessPool);
     configureDisclosure(stack.env, disclosure);

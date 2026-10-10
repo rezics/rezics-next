@@ -62,7 +62,7 @@ const member = async (name: string) => {
 };
 
 beforeAll(async () => {
-  stack = await startMediaStack('projection', { library: true, agents: true });
+  stack = await startMediaStack('projection', { library: true });
   stack.access.configureBaseline(stack.fuseki);
   owner = await member('projection-owner');
   outsider = await member('projection-outsider');

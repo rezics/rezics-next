@@ -16,7 +16,7 @@ if (!objectDirectory || !authPath) {
 }
 const reader = JSON.parse(readFileSync(authPath, 'utf8')) as { principalId: string; actingSubject: string };
 
-const stack = await startMediaStack('g849-e2e', { agents: true, rights: true, library: true });
+const stack = await startMediaStack('g849-e2e', { library: true });
 const workObjects = stack.objects('semantic/work/');
 await workObjects.initialize();
 Object.assign(stack.env, { objectDirectory, workObjects });

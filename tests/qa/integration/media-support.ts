@@ -64,7 +64,7 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
  * bearer-to-principal table so several isolated members can act concurrently. */
 export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean;
-  autoClearUploads?: boolean; agents?: boolean; rights?: boolean; library?: boolean;
+  autoClearUploads?: boolean; library?: boolean;
   matcherMode?: string;
   matchUploads?: boolean;
   ownerUrls?: { access: string; content: string; relay: string } } = {}) {

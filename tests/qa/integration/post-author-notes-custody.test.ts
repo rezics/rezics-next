@@ -15,7 +15,7 @@ async function json<T>(response: Response, expected = 200): Promise<T> {
 }
 
 test('A second Person identity reads and edits its own unpublished chapter Post revision without per-resource grants', async () => {
-  const stack = await startMediaStack('post-note-custody', { library: true, agents: true, contentProjection: true });
+  const stack = await startMediaStack('post-note-custody', { library: true, contentProjection: true });
   try {
     const member = await stack.member('chapter-account');
     const person = async (name: string) => (await json<{ agent: string }>(await member.send('POST', '/v1/agents',

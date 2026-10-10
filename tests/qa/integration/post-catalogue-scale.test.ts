@@ -36,7 +36,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 
 test('A Book with 1000 chapter Posts stays one Work and reads have the same graph cost as 10 chapters', async () => {
   const setupStarted = performance.now();
-  const stack = await startMediaStack('post-catalogue-scale', { library: true, agents: true });
+  const stack = await startMediaStack('post-catalogue-scale', { library: true });
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
     const member = await stack.member('scale-author');

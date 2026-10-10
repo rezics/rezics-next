@@ -24,7 +24,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 
 test('Posts retain independent custody, shared text and comments, and per-occurrence progress through migration', async () => {
-  const stack = await startMediaStack('post-lifecycle', { library: true, agents: true });
+  const stack = await startMediaStack('post-lifecycle', { library: true });
   try {
     const members = await Promise.all(['author', 'cowriter', 'reader'].map(name => stack.member(name)));
     const actors = [];

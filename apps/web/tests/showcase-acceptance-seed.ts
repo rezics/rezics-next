@@ -24,7 +24,7 @@ const reader = JSON.parse(readFileSync(authPath, 'utf8')) as { principalId: stri
 const short = (iri: string) => iri.slice(-36);
 const ref = () => `https://rezics.com/id/${randomUUID()}`;
 
-const stack = await startMediaStack('showcase-acceptance', { agents: true, rights: true, library: true });
+const stack = await startMediaStack('showcase-acceptance', { library: true });
 for (const prefix of ['semantic/work/', 'semantic/structure/']) {
   const objects = stack.objects(prefix);
   await objects.initialize();

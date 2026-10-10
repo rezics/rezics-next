@@ -125,7 +125,7 @@ test('G852: the committed VNDB slice stays inside the admitted columns', () => {
 
 test('G852: two Zones share one catalogue Work and one usable visual-novel release', async () => {
   await integrationOrderPrelude('g-852-zones');
-  const stack = await startMediaStack('g-852-zones', { agents: true, rights: true, library: true });
+  const stack = await startMediaStack('g-852-zones', { library: true });
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
   try {
     const objects = new S3ImmutableObjects({

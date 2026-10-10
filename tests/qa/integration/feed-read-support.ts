@@ -131,9 +131,6 @@ export function meterStatements() {
  * relay delivery and the projection worker, without a web server. */
 export async function startHomeStack(label: string, options: {
   projectionStart?: 'current';
-  // Closed catalogue commands consult grants only when a caller asks. Other
-  // Home reads stay on public routes and do not pay that lookup.
-  platformAccess?: boolean;
 } = {}) {
   const stack = await startMediaStack(label);
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
@@ -164,8 +161,7 @@ export async function startHomeStack(label: string, options: {
     content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
     profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool), agentHandles: new AgentVanityHandles(stack.accessPool),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
-    relayPosition: new RelayHandoffPositions(relay, consumer),
-    ...(options.platformAccess ? { platformAccess: new AccessExposure(stack.accessPool) } : {}) };
+    relayPosition: new RelayHandoffPositions(relay, consumer) };
   const app = createMainApp(stack.fuseki, deps);
   const call = (method: string, path: string, body?: unknown, token?: string, key = randomUUID()) => app.handle(
     new Request(`http://main.local${path}`, { method, headers: {

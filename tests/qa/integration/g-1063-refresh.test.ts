@@ -36,7 +36,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 
 test('G1063: rating/follow readiness, retained cursors, concurrent edits during a build, rollback and terminal retention', async () => {
-  const f = await startMediaStack('g-1063-refresh', { agents: true, library: true });
+  const f = await startMediaStack('g-1063-refresh', { library: true });
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
     const a = await f.member('writer');

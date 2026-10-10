@@ -26,7 +26,7 @@ type Identification = Work & Structure & { identification: string; post: string;
   relation: string; relationRevision: string; receipt: string; replayed: boolean };
 
 test('A writer identifies one Post as a Work without moving text, custody, discussion or Book occurrences', async () => {
-  const stack = await startMediaStack('post-identification', { library: true, agents: true });
+  const stack = await startMediaStack('post-identification', { library: true });
   try {
     const actors = [];
     for (const name of ['writer', 'maintainer', 'stranger']) {

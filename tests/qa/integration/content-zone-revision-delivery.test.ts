@@ -27,7 +27,7 @@ function gate() {
 }
 
 async function fixture() {
-  const stack = await startMediaStack('content-zone-delivery', { library: true, agents: true });
+  const stack = await startMediaStack('content-zone-delivery', { library: true });
   try {
     const member = await stack.member('site-editor');
     const principal = { ...member.principal, emailVerified: true as const };

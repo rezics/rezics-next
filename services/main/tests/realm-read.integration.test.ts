@@ -46,7 +46,7 @@ async function measuredDecisionPage<T>(stack: MediaStack, path: string, sample: 
 }
 
 test('Realm reads: public home, scoped Works, indexed decisions, privacy and stale pages', async () => {
-  const stack = await startMediaStack('realm-read', { library: true, agents: true });
+  const stack = await startMediaStack('realm-read', { library: true });
   try {
     const editor = await stack.member('realm-reader');
     const first = await stack.publicWork(editor.actor, ['en'], 'Realm first');
@@ -225,7 +225,7 @@ test('Realm reads: public home, scoped Works, indexed decisions, privacy and sta
 }, 120_000);
 
 test('Statement classification disclosure hides judgments, private meaning, withheld Concepts and unsettled Realm facts', async () => {
-  const stack = await startMediaStack('classification-disclosure', { library: true, agents: true });
+  const stack = await startMediaStack('classification-disclosure', { library: true });
   try {
     const editor = await stack.member('classification-editor');
     const book = await stack.publicWork(editor.actor, ['en'], 'Disclosure book');
