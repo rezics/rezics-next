@@ -32,6 +32,12 @@ test('an interrupted public search rebuild resumes through activation', async ()
   let started = false;
   let contentPool: Pool | undefined;
   let accessPool: Pool | undefined;
+  let fuseki: FusekiClient | undefined;
+  let lineage: { dataEpoch: string; routingEpoch: string } | undefined;
+  let env: { fuseki: FusekiClient; lineage: { dataEpoch: string; routingEpoch: string }; objectDirectory: string } | undefined;
+  let content: ContentCore | undefined;
+  let cursor: ContentProjectionCursor | undefined;
+  let consumer = '';
   const previousFlag = process.env[SEARCH_REBUILD_CRASH_FLAG];
   const previousAt = process.env[SEARCH_REBUILD_CRASH_AT];
   try {
@@ -40,17 +46,17 @@ test('an interrupted public search rebuild resumes through activation', async ()
     delete process.env[SEARCH_REBUILD_CRASH_AT];
     await rootCommand(['stack:up', ...stack.args], 180_000);
     const apps = stack.apps;
-    const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
-    const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
-    const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
+    fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
+    lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
+    env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
     await initializeFreshGraph(fuseki, lineage);
     await migrateAccess(apps.ACCESS_DATABASE_URL!);
     contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
     accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 4 });
     await migrateContent(contentPool);
-    const content = new ContentCore(contentPool);
-    const cursor = new ContentProjectionCursor(contentPool);
-    const consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
+    content = new ContentCore(contentPool);
+    cursor = new ContentProjectionCursor(contentPool);
+    consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
     await seedRecoveryContent(env, contentPool, accessPool);
     const cut = await content.ownerPosition();
     await cursor.initialize(consumer);
@@ -107,6 +113,7 @@ test('an interrupted public search rebuild resumes through activation', async ()
   }
 
   async function expectReady(expectedGeneration: string, units: number): Promise<void> {
+    if (!fuseki || !lineage || !env || !content || !cursor) throw new Error('search rebuild fixture is absent');
     expect(await anchorPresent(fuseki)).toBe(true);
     expect((await fuseki.searchDeltaSince('-1')).available).toBe(true);
     expect(await contentUnitCount(fuseki)).toBe(units);

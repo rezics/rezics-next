@@ -1,4 +1,5 @@
 import type { ContentCore, ContentOutboxEvent, ProjectionPublication } from '../../../../content/src/core.ts';
+import { ContentUnavailable } from '../../../../content/src/errors.ts';
 import { ContentProjectionCursor, CONTENT_PROJECTION_COST } from '../../../../content/src/projection-cursor.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, hash, iri, lit,
@@ -370,7 +371,10 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
       const publication = await terminalPublication(content, event);
       disposition = await projectEvent(env, content, event, publication, rebuildId);
     }
-    catch {
+    catch (error) {
+      // An erased exact revision will not become readable on retry. Deferring it
+      // would hide the refusal and leave a pending row that blocks adoption.
+      if (error instanceof ContentUnavailable) throw error;
       await cursor.finishRetry(consumer, event, false);
       continue;
     }
@@ -400,7 +404,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   let disposition: ContentProjectionResult['disposition'] = 'deferred';
   if (!target || !await cursor.hasPendingTarget(consumer, event.position.dataEpoch, target)) {
     try { disposition = await projectEvent(env, content, event, publication, rebuildId); }
-    catch (error) { if (!target) throw error; }
+    catch (error) { if (!target || error instanceof ContentUnavailable) throw error; }
   }
   await cursor.acknowledge(consumer, checkpoint, event.position,
     disposition === 'deferred' ? { event, target: target! } : undefined);
