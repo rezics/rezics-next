@@ -1,4 +1,4 @@
-import { workRead, decodeReadCursor, encodeReadCursor } from '../modules/work/read-session.ts';
+import { workRead, decodeReadCursor, encodeReadCursor, WorkReadMissing, publicWork } from '../modules/work/read-session.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { decodeWorkStanding, encodeWorkStanding, WorkHasParts } from '../modules/progress/work-standing.ts';
@@ -225,6 +225,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       try {
         const workId = `https://rezics.com/id/${params.id}`;
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read']);
         const basis = await workProgressBasis(work, request, workId, query.actingSubject);
         if (basis.parts) return Response.json({ work: workId, parts: true },
@@ -249,6 +250,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       }
       try {
         const workId = `https://rezics.com/id/${params.id}`;
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read', 'library:write']);
         const basis = await workProgressBasis(work, request, workId, body.actingSubject);
         if (basis.parts) throw new WorkHasParts('Progress for this Work is kept on its parts');
@@ -269,10 +271,20 @@ function standingFailure(error: unknown): Response {
   return workReadError(error);
 }
 
-/** The Work is visible, and whether any part Structure exists. One basis read and one probe.
- * An empty composition still counts: the parts are the Structure, not the first page of them. */
+/** The Work is visible, and whether any part Structure exists.
+ * An empty composition still counts: the parts are the Structure, not the first page of them.
+ * A Work the caller cannot read takes the same access decision as an id that is not a Work
+ * and stops before the basis read, so those two answers share one cost. */
 async function workProgressBasis(deps: MainWorkDependencies, request: Request, workId: string, actingSubject: string) {
   return workRead(deps, request, { actingSubject }, async session => {
+    const publication = await session.query(`SELECT ?public WHERE {
+      BIND(EXISTS { ${publicWork(iri(workId), '?partlessMain')} } AS ?public)
+    }`, 1);
+    if (publication[0]?.public?.value !== 'true') {
+      const readable = !!session.principal && !!session.options.actingSubject
+        && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, workId);
+      if (!readable) throw new WorkReadMissing('Work is unavailable');
+    }
     const basis = await readWorkBasis(session, workId);
     const structures = await session.query(`SELECT ?structure WHERE { GRAPH ${iri(GRAPHS.current)} {
       ?structure a rv:Structure ; rv:structureOf ${iri(basis.card.mainVersion)} ; rv:structureProfile ?profile .

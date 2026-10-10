@@ -22,6 +22,7 @@ export const registeredHiddenIdReads = [
   'GET /v1/works/{id}/editions',
   'GET /v1/works/{id}/editorial-state',
   'GET /v1/works/{id}/metadata',
+  'GET /v1/works/{id}/progress',
   'GET /v1/works/{id}/realizations',
   'GET /v1/works/{id}/releases',
   'GET /v1/works/{id}/source-support',

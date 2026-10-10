@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
@@ -11,7 +12,9 @@ import { SeriesSessionReader } from '../../../services/main/src/modules/session/
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
+import { assertHiddenIdEquality, comparableBody, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
 import { startMediaStack } from './media-support.ts';
+import { isForegroundOperation } from './support/operation-cost.ts';
 
 const short = (resource: string) => resource.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -122,6 +125,66 @@ test('a partless Work is marked on one device and read, undone and refused when 
       .toMatchObject({ status: 'dropped' });
     expect((await call('GET', `${path}${query}`, undefined, '')).status).toBe(401);
     expect((await call('GET', `/v1/works/${randomUUID()}/progress${query}`)).status).toBe(404);
+    // A Work this caller cannot read answers like an id that names nothing, and a mark does not land.
+    const sealed = await stack.privateWork(person, 'Sealed novel');
+    const absentId = randomUUID();
+    const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+    const originalQuery = prototype.query;
+    let statements = 0;
+    let countSql = true;
+    let bytes = 0;
+    prototype.query = function (this: unknown, ...args: unknown[]) {
+      if (countSql && isForegroundOperation()) statements++;
+      return originalQuery.apply(this, args);
+    };
+    const progressRows = async (structure: string) => {
+      countSql = false;
+      try {
+        const counted = await stack.contentPool.query<{ n: number }>(
+          'SELECT count(*)::int AS n FROM structure.progress WHERE structure = $1', [structure]);
+        return counted.rows[0]!.n;
+      } finally { countSql = true; }
+    };
+    try {
+      const beforeHidden = await progressRows(sealed.work);
+      const beforeAbsent = await progressRows(`https://rezics.com/id/${absentId}`);
+      const readCounters = async (): Promise<HiddenIdCounters> => {
+        countSql = false;
+        try {
+          const media = await stack.contentPool.query<{ n: number }>('SELECT count(*)::int AS n FROM media.transform_job');
+          const rate = await stack.accessPool.query<{ n: string }>(
+            'SELECT coalesce(sum(count), 0)::int AS n FROM access.rate_limit_v1');
+          return {
+            graphCalls: stack.fuseki.queries, sqlStatements: statements, bytes,
+            mediaGenerations: media.rows[0]!.n, rateLimitCharges: Number(rate.rows[0]!.n),
+          };
+        } finally { countSql = true; }
+      };
+      const outsider = (id: string) =>
+        `/v1/works/${id}/progress?actingSubject=${encodeURIComponent(other)}`;
+      await assertHiddenIdEquality({
+        operation: 'GET /v1/works/{id}/progress',
+        hiddenId: short(sealed.work), absentId, readCounters,
+        call: async (id) => {
+          const response = await call('GET', outsider(id), undefined, b.token);
+          bytes += (await response.clone().arrayBuffer()).byteLength;
+          return response;
+        },
+      });
+      const put = async (id: string) => {
+        const response = await call('PUT', `/v1/works/${id}/progress`,
+          { actingSubject: other, expectedVersion: 0, standing: 'started' }, b.token);
+        bytes += (await response.clone().arrayBuffer()).byteLength;
+        return response;
+      };
+      const hiddenWrite = await put(short(sealed.work));
+      const absentWrite = await put(absentId);
+      expect(hiddenWrite.status).toBe(absentWrite.status);
+      expect(comparableBody(await hiddenWrite.text(), short(sealed.work)))
+        .toBe(comparableBody(await absentWrite.text(), absentId));
+      expect(await progressRows(sealed.work)).toBe(beforeHidden);
+      expect(await progressRows(`https://rezics.com/id/${absentId}`)).toBe(beforeAbsent);
+    } finally { prototype.query = originalQuery; }
     await json(await call('POST', '/v1/compositions', { profile: 'work-composition', work: saved.work,
       mainVersion: saved.mainVersion, actingSubject: person }), 201);
     expect(await json<{ parts: boolean }>(await call('GET', `${path}${query}`))).toEqual({ work: saved.work, parts: true });

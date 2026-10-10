@@ -66,6 +66,8 @@ const mutations: Mutation[] = [
   { family: 'settings', method: 'PUT', path: '/v1/reader/settings', body: { ...command, ...settings } },
   { family: 'progress', method: 'PUT', path: '/v1/compositions/{id}/occurrences/{occurrence}/progress',
     body: { ...command, completed: true, position: null } },
+  { family: 'progress', method: 'PUT', path: '/v1/works/{id}/progress',
+    body: { ...command, standing: 'started' } },
 ];
 
 function respond(plugin: { handle(request: Request): Promise<Response> }, incoming: Request) {
