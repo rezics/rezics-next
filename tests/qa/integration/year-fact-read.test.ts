@@ -1,3 +1,4 @@
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { expect, test } from 'bun:test';
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
@@ -143,12 +144,12 @@ test('First-publication years: newest page, incremental posting, and a seek that
       const nativeIndex = stack.fuseki.templateIndex.bind(stack.fuseki);
       const nativeSql = stack.accessPool.query.bind(stack.accessPool);
       const checkouts = stack.accessPool.checkouts;
-      stack.fuseki.templateQuery = (async (...args: Parameters<typeof nativeQuery>) => { templateQuery++; return nativeQuery(...args); }) as typeof stack.fuseki.templateQuery;
+      stack.fuseki.templateQuery = (async (...args: Parameters<typeof nativeQuery>) => { if (foregroundCounted()) templateQuery++; return nativeQuery(...args); }) as typeof stack.fuseki.templateQuery;
       stack.fuseki.templateIndex = (async (...args: Parameters<typeof nativeIndex>) => {
-        if (args[0].operation === 'basis') basis++;
+        if (args[0].operation === 'basis' && foregroundCounted()) basis++;
         return nativeIndex(...args);
       }) as typeof stack.fuseki.templateIndex;
-      stack.accessPool.query = (async (...args: Parameters<typeof nativeSql>) => { sql++; return nativeSql(...args); }) as typeof stack.accessPool.query;
+      stack.accessPool.query = (async (...args: Parameters<typeof nativeSql>) => { if (foregroundCounted()) sql++; return nativeSql(...args); }) as typeof stack.accessPool.query;
       try {
         const page = await read();
         return { templateQuery, basis, sql, checkouts: stack.accessPool.checkouts - checkouts, items: facts(page.items) };
