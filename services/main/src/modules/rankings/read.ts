@@ -1,6 +1,5 @@
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
-import { FencedDisclosure } from '../work/fenced-disclosure.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
@@ -60,7 +59,6 @@ export async function readRankings(
         limit + 1,
         options.realm,
       );
-  let nameFence: FencedDisclosure | undefined;
   const admitted = await (async (candidates: Candidate[]) => {
       const ids = candidates.map((row) => row.work);
       const visible = ids.length
@@ -97,26 +95,26 @@ export async function readRankings(
       ) {
         throw new WorkReadUnavailable('Ranking public population is ambiguous');
       }
-      const admittedNames = nameFence = await session.fencedDisclosure(
+      const decisions = await session.disclosure(
         visible.map((row) => ({
-          owner: 'graph' as const,
+          owner: 'graph',
           resource: row.work!.value,
           work: row.work!.value,
-          component: 'name' as const,
+          component: 'name',
           revision: row.head!.value,
           workRevision: row.head!.value,
         })),
         'read',
       );
       visible.forEach((row, index) => {
-        if (admittedNames.decisions[index] === 'visible') heads.set(row.work!.value, row);
+        if (decisions[index] === 'visible') heads.set(row.work!.value, row);
       });
       if (candidates.some(row => !heads.has(row.work))) throw new WorkReadMoved('Ranking admission changed');
       return candidates;
     })(candidates);
   const selected = { page: admitted.slice(0,limit), lookahead: admitted[limit], last: admitted.slice(0,limit).at(-1) };
   const page = selected.page, last = selected.last;
-  const summaries = await session.summaries(page.map((row) => row.work), false, nameFence);
+  const summaries = await session.summaries(page.map((row) => row.work));
   const serial = await readSerialSummaries(
     session,
     page

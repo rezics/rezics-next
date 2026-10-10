@@ -6,7 +6,6 @@ import { readFollowTarget } from '../follows/read.ts';
 import { readAgentCards, type AgentCard } from '../profiles/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { readPublicWorkClassifications, WORK_CLASSIFICATION_BATCH_COST } from '../work/read-classifications.ts';
-import { FencedDisclosure } from '../work/fenced-disclosure.ts';
 import { pageResult, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { FEED_COST, feedViewerState, type FeedItem, type FeedQuery } from './contract.ts';
@@ -455,21 +454,6 @@ const normalized = (query: FeedQuery) => [
  * part, then the disclosure fence, then the closing head checks. Every item
  * still passes its checks in the original order, so a hidden part drops that
  * item and any other failure fails the read exactly as a serial read would. */
-function feedDisclosureGroup(source: FeedSource, heads: ReadonlyMap<string, string>) {
-  const work = source.work ?? undefined;
-  const workRevision = work ? heads.get(work) : undefined;
-  const names = [source.work, source.realm].filter((id): id is string => !!id);
-  return [{ owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
-    resource: source.id, component: 'body' as const, revision: source.readerReview?.revision, work: source.work,
-    workRevision, context: source.realm ?? undefined },
-  { owner: 'content' as const, resource: source.reply ?? source.contentTarget ?? source.target,
-    component: 'body' as const, revision: source.contentRevision?.replace(/^urn:rezics:content:revision:/, '') ?? null,
-    work: source.work, workRevision, context: source.realm ?? undefined },
-  ...names.map(resource => ({ owner: 'graph' as const, resource, component: 'name' as const,
-    revision: heads.get(resource), work, workRevision,
-    nameOwnerResolved: true, context: source.realm ?? undefined }))];
-}
-
 export async function readFeed(session: WorkReadSession, query: FeedQuery, reader?: FeedReader) {
   const interests = parseFeedInterests(query.interests);
   if (pinnedConcepts(query).length > 3) throw new WorkReadInvalid('A feed names at most three Concepts');
@@ -603,25 +587,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const kindsRead = interests.length ? readWorkKindMatches(session, [...new Set(sources
     .filter(source => matchingActivityKinds(source.kind).length === 0)
     .flatMap(source => source.work ? [source.work] : []))]) : Promise.resolve(new Map<string, HomeInterestKind[]>());
-  let rulings = new Map<string, readonly FencedDisclosure['decisions'][number][]>();
-  let fenced: Promise<FencedDisclosure> | undefined;
-  const disclosePage = (heads: ReadonlyMap<string, string>) => {
-    const groups = sources.map(source => feedDisclosureGroup(source, heads));
-    const proof = session.fencedDisclosure(groups.flat(), 'feed');
-    fenced = proof.then(value => {
-      let cursor = 0;
-      rulings = new Map(sources.map((source, index) => {
-        const group = groups[index]!;
-        const decisions = value.decisions.slice(cursor, cursor + group.length);
-        cursor += group.length;
-        return [source.id, decisions] as const;
-      }));
-      return value;
-    });
-    return fenced;
-  };
-  const summariesRead = session.summaries(summaryIds, false, summaryIds.length ? disclosePage : undefined)
-    .then(list => new Map(list.map(summary => [summary.reference, summary])));
+  const summariesRead = session.summaries(summaryIds).then(list => new Map(list.map(summary => [summary.reference, summary])));
   const tagRules = personal?.exclusions.filter(rule => rule.kind === 'tag') ?? [];
   // Selection waits only for interest kinds and tag rules, so without them
   // the card parts start alongside the page's presentation batches.
@@ -781,12 +747,18 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       disclosed.push(item);
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
-  if (!fenced) await disclosePage(new Map());
-  else await fenced;
-  const hidden = new Set(disclosed.filter(item => {
-    const decisions = rulings.get(item.id);
-    return !decisions || decisions.some(decision => decision !== 'visible');
-  }).map(item => item.id));
+  const fenceTargets = disclosed.flatMap(item => {
+    const source = final.get(item.id)!;
+    return [{ owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
+      resource: source.id, component: 'body' as const, revision: source.readerReview?.revision, work: source.work,
+      context: source.realm ?? undefined },
+    { owner: 'content' as const, resource: source.reply ?? source.contentTarget ?? source.target,
+      component: 'body' as const, revision: source.contentRevision?.replace(/^urn:rezics:content:revision:/, '') ?? null,
+      work: source.work, context: source.realm ?? undefined }];
+  });
+  const policy = await session.disclosure(fenceTargets, 'feed');
+  const hidden = new Set(disclosed.filter((_item, index) => policy[index * 2] !== 'visible'
+    || policy[index * 2 + 1] !== 'visible').map(item => item.id));
   const safe = disclosed.filter(item => !hidden.has(item.id));
   const { chosen: selected, seen, realms } = select(safe);
   followedSeen = seen; recentRealms = realms;
