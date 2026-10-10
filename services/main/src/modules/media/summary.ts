@@ -484,13 +484,28 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       }
     }
   };
-  // Names, covers and the anonymous-name decision share one statement after
-  // avatars are hydrated. A hidden name or cover is dropped before a summary
-  // is returned. The graph row's type already proves a non-Agent has no agent
-  // name owner. Agents still probe: a missing identity is not that proof.
+  // Check the entire requested batch, including missing identities, before
+  // Access, name or avatar hydration. A hidden row and an absent id then share
+  // the media generation and the cost envelope, as well as the unavailable item.
+  // The graph row's type already proves a non-Agent has no agent name owner.
+  // Absent rows and Agents still probe: a missing identity is not that proof.
   const settledNameOwner = (row: GraphRow | undefined) =>
     input.settleNonAgentNameOwners && row !== undefined && row.type !== 'agent'
       ? { nameOwnerResolved: true as const } : {};
+  const initialTargets = unique.map(reference => {
+    const row = graph.rows.get(reference);
+    return { owner: 'graph' as const, resource: reference, component: 'name' as const,
+      revision: reference === row?.work ? row.head : null, work: row?.work,
+      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+      ...settledNameOwner(row) };
+  });
+  const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
+    input.channel ?? 'summary', client);
+  if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
+  noteNameProbe(initialTargets);
+  for (const [index, reference] of unique.entries()) {
+    if (initialDecisions[index] !== 'visible') graph.rows.delete(reference);
+  }
   const readable = new Map<string, GraphRow>();
   const restricted = new Map<string, string>();
   const special = new Map<string, GraphRow>();
@@ -718,17 +733,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       targets.push({ owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover' });
     }
   }
-  // Identities with no readable row, including an untyped or absent reference,
-  // still share this statement. A missing type is not proof that the name is public.
-  for (const reference of unique) {
-    if (nameIndexes.has(reference)) continue;
-    const row = graph.rows.get(reference);
-    nameIndexes.set(reference, targets.length);
-    targets.push({ owner: 'graph', resource: reference, component: 'name',
-      revision: reference === row?.work ? row.head : null, work: row?.work,
-      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
-      ...settledNameOwner(row) });
-  }
+  // Names, covers and the anonymous-name decision, after avatars exist.
   const final = reader.viewer?.signedIn
     ? await discloseInventoryWithAnonymousNames(env, targets, reader.viewer, input.channel ?? 'summary', client)
     : { decisions: await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
