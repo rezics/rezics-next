@@ -48,6 +48,8 @@ function memoryChapters(read: string[] = [], stale = false, failRead = false): M
       rows.set(part.occurrence, saved);
       return { ok: true, data: saved };
     },
+    workStanding: async () => ({ ok: true, data: { standing: 'not-started', version: 0 } }),
+    markWork: async () => ({ ok: true, data: { standing: 'not-started', version: 1 } }),
   };
 }
 

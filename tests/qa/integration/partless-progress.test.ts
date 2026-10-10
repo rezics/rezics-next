@@ -1,0 +1,114 @@
+import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
+import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
+import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
+import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
+import { startMediaStack } from './media-support.ts';
+
+const short = (resource: string) => resource.slice(-36);
+async function json<T>(response: Response, status = 200): Promise<T> {
+  if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
+  return response.json() as Promise<T>;
+}
+
+test('a partless Work is marked on one device and read, undone and refused when stale on another', async () => {
+  const stack = await startMediaStack('partless-progress');
+  const progress = new StructureProgressStore(stack.contentPool, { automaticOrderProjection: false });
+  try {
+    const a = await stack.member('reader'), b = await stack.member('other');
+    stack.access.configureBaseline(stack.fuseki);
+    const library = new ReaderLibraryStatusStore(stack.contentPool);
+    const objects = stack.objects('semantic/structure/');
+    await objects.initialize();
+    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      libraryStatus: library, sessions: new ConsumptionSessionStore(stack.contentPool, library),
+      editionPreferences: new EditionPreferenceStore(stack.contentPool),
+      seriesSessions: new SeriesSessionReader(stack.contentPool),
+      structureObjects: objects, progress, media: stack.media, mediaAccess: stack.mediaAccess,
+      agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      account: { verify: async request => {
+        const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
+        const member = [a, b].find(item => item.token === token);
+        if (!member) throw new AccountAssertionDenied('Unknown bearer');
+        return { ...member.principal, emailVerified: true };
+      } } });
+    const call = (method: string, path: string, body?: object, token = a.token, key = randomUUID()) =>
+      app.handle(new Request(`http://main.local${path}`, { method, headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}), 'idempotency-key': key,
+        ...(body ? { 'content-type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const person = (await json<{ agent: string }>(await call('POST', '/v1/agents',
+      { profile: 'agent-provision-v1', kind: 'person', displayName: 'Novel reader' }, a.token), 201)).agent;
+    const other = (await json<{ agent: string }>(await call('POST', '/v1/agents',
+      { profile: 'agent-provision-v1', kind: 'person', displayName: 'Other reader' }, b.token), 201)).agent;
+    const grant = async (who: { principalId: string }, agent: string, scope: string, action: string) => {
+      await stack.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await stack.accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), who.principalId, agent, action]);
+      await stack.accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), agent, scope, action]);
+    };
+    await grant(a, person, 'work:create:root', 'work.create');
+    const types = ['https://schema.org/VideoGame'];
+    const saved = await activateMetadataWork(stack.env, { title: 'Paper Cranes', semanticTypes: types,
+      admission: stack.admission(person, 'work:create:root', 'work.create', metadataWorkRequestDigest('Paper Cranes', types)) });
+    const text = await stack.contribution(saved.work, person, 'ja', 'Paper Cranes, a visual novel with no parts.');
+    const selection = { context: { kind: 'main-version-default' as const, id: saved.mainVersion }, work: saved.work,
+      contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer' as const, actingSubject: person };
+    await selectMainDefault(stack.env, stack.admission(person, `publication:select:${saved.mainVersion}`,
+      'publication.select', mainSelectionDigest(selection)), selection);
+    await grant(a, person, `work:read:${saved.work}`, 'work.read');
+    await grant(a, person, `work:edit:${saved.work}`, 'work.edit');
+    const path = `/v1/works/${short(saved.work)}/progress`;
+    const query = `?actingSubject=${encodeURIComponent(person)}`;
+    type Mark = { work: string; standing: string; version: number; replayed?: boolean };
+    expect(await json<Mark>(await call('GET', `${path}${query}`))).toMatchObject({ standing: 'not-started', version: 0 });
+    const started = await json<Mark>(await call('PUT', path, { actingSubject: person, expectedVersion: 0, standing: 'started' }));
+    expect(started).toMatchObject({ standing: 'started', version: 1 });
+    // Another request of the same reader is the other device.
+    expect(await json<Mark>(await call('GET', `${path}${query}`))).toMatchObject({ standing: 'started', version: 1 });
+    const stale = await call('PUT', path, { actingSubject: person, expectedVersion: 0, standing: 'completed' });
+    expect(stale.status).toBe(409);
+    expect((await stale.json() as { code: string }).code).toBe('stale_progress');
+    expect(await json<Mark>(await call('GET', `${path}${query}`))).toMatchObject({ standing: 'started', version: 1 });
+    const key = randomUUID();
+    const completed = await json<Mark>(await call('PUT', path,
+      { actingSubject: person, expectedVersion: 1, standing: 'completed' }, a.token, key));
+    expect(completed).toMatchObject({ standing: 'completed', version: 2 });
+    const replayed = await json<Mark>(await call('PUT', path,
+      { actingSubject: person, expectedVersion: 1, standing: 'completed' }, a.token, key));
+    expect(replayed).toMatchObject({ standing: 'completed', version: 2, replayed: true });
+    expect(await json<{ status: string }>(await call('GET',
+      `/v1/me/progress-summaries/${short(saved.work)}?actingSubject=${encodeURIComponent(person)}`)))
+      .toMatchObject({ status: 'finished' });
+    expect(await json<Mark>(await call('GET', `${path}?actingSubject=${encodeURIComponent(other)}`, undefined, b.token)))
+      .toMatchObject({ standing: 'not-started', version: 0 });
+    const cleared = await json<Mark>(await call('PUT', path, { actingSubject: person, expectedVersion: 2, standing: 'not-started' }));
+    expect(cleared).toMatchObject({ standing: 'not-started', version: 3 });
+    expect(await json<Mark>(await call('GET', `${path}${query}`))).toMatchObject({ standing: 'not-started', version: 3 });
+    const dropped = await json<Mark>(await call('PUT', path, { actingSubject: person, expectedVersion: 3, standing: 'dropped' }));
+    expect(dropped).toMatchObject({ standing: 'dropped', version: 4 });
+    expect(await json<{ status: string }>(await call('GET',
+      `/v1/me/progress-summaries/${short(saved.work)}?actingSubject=${encodeURIComponent(person)}`)))
+      .toMatchObject({ status: 'dropped' });
+    expect((await call('GET', `${path}${query}`, undefined, '')).status).toBe(401);
+    expect((await call('GET', `/v1/works/${randomUUID()}/progress${query}`)).status).toBe(404);
+    await json(await call('POST', '/v1/compositions', { profile: 'work-composition', work: saved.work,
+      mainVersion: saved.mainVersion, actingSubject: person }), 201);
+    const refused = await call('PUT', path, { actingSubject: person, expectedVersion: 4, standing: 'completed' });
+    expect(refused.status).toBe(409);
+    expect((await refused.json() as { code: string }).code).toBe('work_has_parts');
+  } finally {
+    progress.stopOrderProjection();
+    await stack.stop();
+  }
+}, 600_000);

@@ -113,4 +113,7 @@ export default {
   markPlayed: 'プレイ済みにする', markCompleted: 'クリアにする', markNotCompleted: 'クリアを取り消す',
   routesTitle: 'ルート',
   routesNote: 'ルートはゲームの進み方の一つです。クリアは必須の部分に従います。',
+  workPlaying: 'プレイ中', workReading: '読書中', workDropped: 'やめた',
+  markPlaying: 'プレイ中にする', markReading: '読書中にする', markDropped: 'やめたことにする',
+  markNotStarted: '未開始に戻す', workUnavailable: '進捗を読み込めませんでした。',
 } satisfies TrackingMessages;

@@ -1,6 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
-import { type Loaded, settle, uuidOf } from '../feed/types.ts';
+import { commandKey } from '../feed/api.ts';
+import { failureOf, type Loaded, settle, uuidOf } from '../feed/types.ts';
 import { type EpisodeProgress, type ProgressStale, mainEpisodeApi } from './episode-api.ts';
 import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.ts';
 
@@ -25,6 +26,11 @@ export interface PartPage { items: RouteRef[]; next: string | null }
 /** Completed occurrences from one page. `complete` is true when the page is the whole list. */
 export interface CompletionPage { occurrences: string[]; next: string | null; complete: boolean }
 
+/** Playing or reading is `started`: one mark, named for the Work. */
+export type WorkStanding = 'not-started' | 'started' | 'completed' | 'dropped';
+export interface WorkMark { standing: WorkStanding; version: number }
+export interface WorkStale { ok: false; failure: 'stale'; current: WorkMark; submitted: WorkStanding }
+
 export interface MediaApi {
   /** The Work's types, so the served registry can name its kind. Null when the Work is missing. */
   types(work: string): Promise<Loaded<string[] | null>>;
@@ -44,6 +50,10 @@ export interface MediaApi {
   /** Writes one occurrence and, when another device wrote first, returns both sides. */
   mark(part: { structure: string; occurrence: string }, change: { completed: boolean; position?: string | null }):
     Promise<Loaded<EpisodeProgress> | ProgressStale>;
+  /** The whole Work, when it has no parts. */
+  workStanding(work: string): Promise<Loaded<WorkMark>>;
+  /** Writes that mark. A stale version returns both sides and does not merge them. */
+  markWork(work: string, standing: WorkStanding): Promise<Loaded<WorkMark> | WorkStale>;
 }
 
 const PAGE = 20;
@@ -147,5 +157,38 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
     },
     progress: part => episodes.progress(part),
     mark: (part, change) => episodes.mark(part, change, { conflict: true }),
+    async workStanding(work) {
+      return restarted(() => settle(() => main().v1.works({ id: uuidOf(work) }).progress.get({ query: { actingSubject } })));
+    },
+    async markWork(work, standing) {
+      const progress = () => main().v1.works({ id: uuidOf(work) }).progress;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const current = await restarted(() => settle(() => progress().get({ query: { actingSubject } })));
+        if (!current.ok) return current;
+        const key = commandKey();
+        for (let tries = 0; tries < 3; tries++) {
+          try {
+            const { data, error } = await progress().put({ actingSubject, expectedVersion: current.data.version, standing },
+              { headers: { 'idempotency-key': key } });
+            if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
+            if (error.status === 409) {
+              const code = (error.value as { code?: string } | null)?.code;
+              if (code === 'read_basis_changed') { await wait(MOVED_DELAY_MS * 2 ** attempt); break; }
+              if (code === 'stale_progress') {
+                const again = await restarted(() => settle(() => progress().get({ query: { actingSubject } })));
+                if (!again.ok) return again;
+                return { ok: false, failure: 'stale', current: again.data, submitted: standing };
+              }
+              break;
+            }
+            if (error.status < 500 || tries === 2) return { ok: false, failure: failureOf(error.status, error.value) };
+          } catch {
+            if (tries === 2) return { ok: false, failure: 'unavailable' };
+          }
+          await wait(MOVED_DELAY_MS * 2 ** tries);
+        }
+      }
+      return { ok: false, failure: 'moved' };
+    },
   };
 }

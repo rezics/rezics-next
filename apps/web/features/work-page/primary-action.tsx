@@ -101,7 +101,8 @@ export function IdentityStatus({ progress, preference, editionName, locale, mess
       }
     } else if (summary.status) {
       lines.push(summary.status === 'finished' ? tracking.stateFinished
-        : summary.status === 'reading' ? tracking.stateActive : tracking.notStarted);
+        : summary.status === 'reading' ? tracking.stateActive
+          : summary.status === 'dropped' ? tracking.workDropped : tracking.notStarted);
     }
   }
   if (!lines.length) return null;

@@ -159,8 +159,9 @@ type Progress = { language: string; value: ProgressSummary } | { language: strin
  * Where the reader stands in a series, as Main reports it: the four states as separate lines, the
  * next part with its reason, the furthest part finished, and the language and edition choice. Where a
  * correspondence is recorded it offers to mark the counterpart read, only when the reader asks.
- * Nothing is computed here; a Work with no parts and no correspondence shows nothing. A series that
- * places episodes or chapters as Structure occurrences also gets its episode progress above these.
+ * Nothing of the series is computed here; a Work with no parts and no correspondence shows no part
+ * list. That Work's own mark is the progress control above. A series that places episodes or chapters
+ * also gets that progress above these lines.
  */
 export function SeriesProgressPanel(props: {
   work: string; locale: UiLocale; className?: string;
@@ -261,6 +262,7 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
     {failure && !value ? <Alert variant="destructive" role="alert"><AlertDescription>{t.seriesUnavailable}</AlertDescription></Alert> : null}
     {standalone ? <p className="text-sm" data-work-status={standalone.status ?? 'unknown'}>
       {standalone.status === 'finished' ? t.stateFinished : standalone.status === 'reading' ? t.stateActive
+        : standalone.status === 'dropped' ? t.workDropped
         : standalone.status === 'not-started' ? t.notStarted : t.unknown}</p> : null}
     {series ? <>
       <SeriesStates states={series.states} t={t} />

@@ -9,6 +9,15 @@ import type { SessionOwner } from '../session/store.ts';
 import { WORK_PROGRESS_COST } from './contract.ts';
 import { readProgressCoverage } from './coverage.ts';
 import { workProgress } from './policy.ts';
+import { decodeWorkStanding, type WorkStanding } from '../progress/work-standing.ts';
+
+/** One primary-key read of this Work's own mark. Absent when the reader has none. */
+async function wholeWorkStanding(session: WorkReadSession, resource: string): Promise<WorkStanding | null> {
+  const progress = session.deps.progress;
+  if (!progress || !session.principal) return null;
+  const row = await progress.read(session.principal, resource, resource);
+  return row.version > 0 ? decodeWorkStanding(row) : null;
+}
 
 export async function readProgressSummary(session: WorkReadSession, owner: SessionOwner, resource: string,
   options: Parameters<typeof readSeriesProgress>[3]) {
@@ -39,7 +48,8 @@ export async function readProgressSummary(session: WorkReadSession, owner: Sessi
   const pins = await readableSeriesCoverage(session, [resource], candidates);
   const library = await libraryStatus.batch(owner.agent, [resource]);
   const partial = Boolean(options.sessionCursor || attempts.next || options.releaseCursor || releaseNext);
-  const summary = workProgress(resource, attempts.items, pins, partial, library);
+  const summary = workProgress(resource, attempts.items, pins, partial, library,
+    await wholeWorkStanding(session, resource));
   await fenceWorkBasis(session, basis);
   return { resource, scope: 'work' as const, ...summary,
     language: language ? recordedLanguageTag(language) : null, preference,

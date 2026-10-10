@@ -1,4 +1,7 @@
 import { workRead, decodeReadCursor, encodeReadCursor } from '../modules/work/read-session.ts';
+import { readWorkBasis } from '../modules/work/read-header.ts';
+import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
+import { decodeWorkStanding, encodeWorkStanding, WorkHasParts } from '../modules/progress/work-standing.ts';
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -39,9 +42,18 @@ export const openApiOperations = {
   '/v1/compositions/{id}/occurrences/{occurrence}/progress': {
     get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
   },
+  '/v1/works/{id}/progress': {
+    get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
+    put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
+  },
 } as const;
 
+const standingName = t.Union([t.Literal('not-started'), t.Literal('started'), t.Literal('completed'), t.Literal('dropped')]);
+const workStandingResult = t.Object({ work: ref, standing: standingName, version: t.Integer(),
+  replayed: t.Optional(t.Boolean()) });
+
 function failure(error: unknown): Response {
+  if (error instanceof WorkHasParts) return problem(409, 'work_has_parts', error.message);
   if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
   if (error instanceof InvalidStructureProgress) return problem(400, 'invalid_progress', error.message);
   if (error instanceof StaleStructureProgress) return problem(409, 'stale_progress', error.message);
@@ -198,5 +210,69 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           position: body.position, expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return failure(error); }
+    })
+    .get('/v1/works/:id/progress', {
+      params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: workStandingResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
+      try {
+        const workId = `https://rezics.com/id/${params.id}`;
+        const principal = await work.account.verify(request, ['work:read']);
+        await partlessWork(work, request, workId, query.actingSubject);
+        const row = await work.progress.read(principal, workId, workId);
+        return Response.json(standingBody(workId, row), { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) { return standingFailure(error); }
+    })
+    .put('/v1/works/:id/progress', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ actingSubject: ref, expectedVersion: t.Integer({ minimum: 0 }),
+        standing: standingName }, { additionalProperties: false }),
+      response: { 200: workStandingResult, 400: problemResult(400), 401: problemResult(401),
+        403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
+        500: problemResult(500), 503: problemResult(503) },
+    }, async ({ request, params, body }) => {
+      if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      }
+      try {
+        const workId = `https://rezics.com/id/${params.id}`;
+        const principal = await work.account.verify(request, ['work:read', 'library:write']);
+        const canonical = await partlessWork(work, request, workId, body.actingSubject);
+        const encoded = encodeWorkStanding(body.standing);
+        const value = await work.progress.write({ principal, structure: workId, occurrence: workId,
+          library: { agent: body.actingSubject, work: canonical },
+          completed: encoded.completed, position: encoded.position,
+          expectedVersion: body.expectedVersion, idempotencyKey });
+        return Response.json(standingBody(workId, value), { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) { return standingFailure(error); }
     });
+}
+
+function standingFailure(error: unknown): Response {
+  if (error instanceof WorkHasParts || error instanceof InvalidStructureProgress
+    || error instanceof StaleStructureProgress || error instanceof StructureProgressConflict) return failure(error);
+  return workReadError(error);
+}
+
+/** The Work is visible and has no part Structure. One basis read and one probe. */
+async function partlessWork(deps: MainWorkDependencies, request: Request, workId: string, actingSubject: string) {
+  return workRead(deps, request, { actingSubject }, async session => {
+    const basis = await readWorkBasis(session, workId);
+    const structures = await session.query(`SELECT ?structure WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ?structure a rv:Structure ; rv:structureOf ${iri(basis.card.mainVersion)} ; rv:structureProfile ?profile .
+      FILTER(?profile IN (<${RV}WorkComposition>, <${RV}BookComposition>))
+    } } LIMIT 1`, 1);
+    if (structures.length) throw new WorkHasParts('Progress for this Work is kept on its parts');
+    return basis.card.id;
+  });
+}
+
+function standingBody(workId: string, row: { completed: boolean; position: string | null; version: number; replayed?: boolean }) {
+  const standing = decodeWorkStanding(row);
+  if (!standing) throw new InvalidStructureProgress('work standing is unrecognized');
+  return { work: workId, standing, version: row.version, ...(row.replayed ? { replayed: true } : {}) };
 }

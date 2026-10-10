@@ -113,4 +113,7 @@ export default {
   markPlayed: '플레이함으로 표시', markCompleted: '완료로 표시', markNotCompleted: '완료 해제',
   routesTitle: '루트',
   routesNote: '루트는 게임을 진행하는 한 가지 길입니다. 게임 완료는 필수 부분을 따릅니다.',
+  workPlaying: '플레이 중', workReading: '읽는 중', workDropped: '중단함',
+  markPlaying: '플레이 중으로 표시', markReading: '읽는 중으로 표시', markDropped: '중단함으로 표시',
+  markNotStarted: '시작하지 않음으로 표시', workUnavailable: '진행 상황을 불러오지 못했습니다.',
 } satisfies TrackingMessages;

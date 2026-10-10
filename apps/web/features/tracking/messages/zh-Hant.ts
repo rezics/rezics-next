@@ -113,4 +113,7 @@ export default {
   markPlayed: '標為玩過', markCompleted: '標為已通關', markNotCompleted: '標為未通關',
   routesTitle: '路線',
   routesNote: '路線是通關的一種方式。完成遊戲以它的必要部分為準。',
+  workPlaying: '進行中', workReading: '閱讀中', workDropped: '已放棄',
+  markPlaying: '標為進行中', markReading: '標為閱讀中', markDropped: '標為已放棄',
+  markNotStarted: '標為未開始', workUnavailable: '無法載入你的進度。',
 } satisfies TrackingMessages;

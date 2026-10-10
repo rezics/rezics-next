@@ -134,6 +134,15 @@ const en = {
   markNotCompleted: 'Mark not completed',
   routesTitle: 'Routes',
   routesNote: 'A route is one way through the game. Completing the game follows its required parts.',
+
+  workPlaying: 'Playing',
+  workReading: 'Reading',
+  workDropped: 'Dropped',
+  markPlaying: 'Mark playing',
+  markReading: 'Mark reading',
+  markDropped: 'Mark dropped',
+  markNotStarted: 'Mark not started',
+  workUnavailable: 'Your progress could not be loaded.',
 };
 
 export const englishMessages = en;

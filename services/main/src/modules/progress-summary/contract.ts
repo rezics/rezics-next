@@ -8,13 +8,15 @@ export const WORK_PROGRESS_COST = { compositionQueries: 1, releaseQueries: 1,
   coverageQueries: 1, librarySql: 1, preferenceSql: 1, sessionSql: SERIES_COST.sessionSql,
   // With no edition pins: three reader-state reads plus one media batch each
   // for the Work basis, coverage admission and final disclosure fence.
-  directWorkContentSql: 6,
+  // `standingSql` is one more primary-key read when the progress owner is configured.
+  directWorkContentSql: 6, standingSql: 1,
   sessions: SERIES_COST.sessions, releaseCandidates: SERIES_COST.releaseCandidates,
   selectionPins: SERIES_COST.selectionPins } as const;
 
 export const workSummary = t.Object({ resource: readId, scope: t.Literal('work'),
   policy: t.Literal(SERIES_POLICY), language: t.Nullable(readLanguage),
-  status: t.Nullable(t.Union([t.Literal('finished'), t.Literal('reading'), t.Literal('not-started')])),
+  status: t.Nullable(t.Union([t.Literal('finished'), t.Literal('reading'), t.Literal('dropped'),
+    t.Literal('not-started')])),
   counts: t.Object({ completed: t.Integer({ minimum: 0, maximum: 1 }),
     required: t.Literal(1), completedRequired: t.Integer({ minimum: 0, maximum: 1 }) }),
   states: t.Object({ correspondenceUnresolved: t.Boolean() }),

@@ -116,4 +116,8 @@ export default {
   markPlayed: 'Marquer comme joué', markCompleted: 'Marquer comme terminé', markNotCompleted: 'Marquer comme non terminé',
   routesTitle: 'Routes',
   routesNote: 'Une route est une façon de traverser le jeu. Terminer le jeu suit ses parties requises.',
+  workPlaying: 'En cours', workReading: 'En lecture', workDropped: 'Abandonné',
+  markPlaying: 'Marquer comme en cours', markReading: 'Marquer comme en lecture',
+  markDropped: 'Marquer comme abandonné', markNotStarted: 'Marquer comme non commencé',
+  workUnavailable: 'Votre progression n’a pas pu être chargée.',
 } satisfies TrackingMessages;
