@@ -38,6 +38,17 @@ export function roleIri(role: string): string {
   const pascal = role.split('-').map(part => part[0]!.toUpperCase() + part.slice(1)).join('');
   return `${RV}${pascal}Role`;
 }
+
+/** Inverse of roleIri. Persisted roles win; a registration role round-trips through its Role IRI. */
+export function roleFromIri(uri: string): string | undefined {
+  const known = Object.entries(ROLE_IRI).find(([, value]) => value === uri)?.[0];
+  if (known) return known;
+  if (!uri.startsWith(RV) || !uri.endsWith('Role')) return undefined;
+  const pascal = uri.slice(RV.length, -'Role'.length);
+  const role = pascal.replace(/[A-Z]/g, (letter, index) => `${index ? '-' : ''}${letter.toLowerCase()}`);
+  if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(role)) return undefined;
+  return roleIri(role) === uri ? role : undefined;
+}
 export type BookRole = 'group' | 'chapter';
 
 export class CompositionUnavailable extends Error {}
@@ -193,8 +204,8 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     const tombstone = value(row, 'type') === `${RV}OccurrencePlacement`
       && Boolean(value(row, 'removedBy'));
     const active = value(row, 'type') === `${RV}OccurrencePlacement` && !tombstone;
-    const role = (Object.entries(ROLE_IRI).find(([, uri]) => uri === value(row, 'role'))?.[0]
-      ?? null) as OccurrenceRole | null;
+    const roleName = roleFromIri(value(row, 'role') ?? '');
+    const role = (roleName ?? null) as OccurrenceRole | null;
     const mode = value(row, 'mode');
     const item = value(row, 'item');
     const target = role && (registration.targetRoles.includes(role)

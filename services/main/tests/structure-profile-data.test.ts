@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
 import { OccurrenceRecord, checkOccurrenceRecord } from '../src/modules/structure/format.ts';
+import { roleFromIri, roleIri } from '../src/modules/structure/graph.ts';
 import { discoverStructureProfiles, structureProfileFor } from '../src/modules/structure/profiles.ts';
 import type { PlacementState } from '../src/modules/structure/graph.ts';
 
@@ -24,4 +25,7 @@ test('a structure profile document is the allowlist', async () => {
   const triples = projected?.triples.join('\n') ?? '';
   expect(triples).toContain('"A margin note"');
   expect(triples).toContain('rv:composedWork');
+  expect(roleFromIri(roleIri('entry'))).toBe('entry');
+  expect(roleFromIri(roleIri('section'))).toBe('section');
+  expect(roleFromIri(roleIri('chapter'))).toBe('chapter');
 });
