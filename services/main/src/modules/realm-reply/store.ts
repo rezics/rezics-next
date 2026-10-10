@@ -51,19 +51,6 @@ const replyVisibilityMiss = (error: unknown): WorkReadMissing | null => {
   return error instanceof WorkReadMissing ? error : null;
 };
 
-/** A root the write can no longer read is not a decision about a visible root.
- * The same key is answered again once that root can be read. */
-const unsealedReplyRoot = (error: unknown): RealmReplyUnavailable | null => {
-  return error instanceof TargetUnavailable ? new RealmReplyUnavailable(error.message) : null;
-};
-
-/** Root resolution has its own TargetUnavailable type. A missing question or
- * context is a permanent refusal of the admitted reply, even after preflight. */
-const replyQuestionDenied = (error: unknown): RealmReplyDenied | null => {
-  return error instanceof WorkReadMissing && !(error instanceof TargetUnavailable)
-    ? new RealmReplyDenied(error.message) : null;
-};
-
 function sealsReplyRefusal(error: unknown): boolean {
   if (unavailableReply(error) || error instanceof WorkReadMissing) return false;
   return error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale
@@ -278,16 +265,20 @@ export class RealmReplyStore {
       // A root lost after this write started is an unsealed 503. Recording a
       // terminal would deny the same key after the root can be read again.
       // The route already answered 404 when the caller could not see it.
-      const lost = unsealedReplyRoot(error);
-      if (lost) {
+      if (error instanceof TargetUnavailable) {
         recordTerminal = false;
-        throw lost;
+        throw new RealmReplyUnavailable(error.message);
       }
       const unavailable = unavailableReply(error);
       if (unavailable) throw unavailable;
       // An expired admission is a refusal of a key that was admitted, not an outage.
-      const refusal = expiredAdmission(error) ?? replyQuestionDenied(error) ?? error;
-      if (sealsReplyRefusal(refusal)) {
+      // A missing question or context after preflight refuses the admitted
+      // reply about a visible root, so its denial is sealed below.
+      const refusal = expiredAdmission(error)
+        ?? (error instanceof WorkReadMissing ? new RealmReplyDenied(error.message) : error);
+      if (refusal instanceof RealmReplyDenied || refusal instanceof RealmReplyInvalid || refusal instanceof RealmReplyStale
+        || refusal instanceof RatingTargetNotAccepted || refusal instanceof RatingTargetGrainMismatch
+        || refusal instanceof AdmissionDenied || refusal instanceof AdmissionExpired) {
         const refused = await this.refuseUncommittedCreate(admission, graph);
         graph = refused.terminal;
         if (refused.replay) return await this.content.createReply(admission, input);
