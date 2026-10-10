@@ -592,10 +592,12 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     if (sealed) return checkedResult(env, checkedSemanticTerminal(sealed, intent.admission, digest), intent, true);
   }
   if (references.length) {
-    const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
-      `FILTER (${references.map(ref => `NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?t } }`)
-        .join(' || ')})`);
-    if (sealed) return checkedResult(env, sealed, intent, false);
+    // A reference that is not in the graph yet is re-evaluated on retry. It is
+    // the same refusal as a hidden reference. A definition key already taken
+    // stays a sealed refusal: that conflict is a property of the request.
+    const missing = await env.fuseki.query(`ASK { FILTER (${references.map(ref =>
+      `NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?t } }`).join(' || ')}) }`);
+    if (missing.boolean === true) throw new SemanticTargetUnavailable('semantic component is unavailable');
   }
   throw new PendingActivation('semantic change guard did not match');
 }
