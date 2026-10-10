@@ -47,6 +47,8 @@ export interface Manifest {
   probeCounts?: Record<string, number>;
   /** Browser tiers are inventoried but excluded from routine runs; older manifests included them. */
   selection?: 'routine' | 'explicit';
+  /** Set when the run is abandoned. Incomplete with this time is terminal and releases its checkouts. */
+  abandonedAt?: string;
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
@@ -231,13 +233,23 @@ function readCheckoutMap(path: string): Record<string, string> | undefined {
   } catch { return undefined; }
 }
 
-function readManifestStatus(path: string): ManifestStatus {
-  if (!existsSync(path)) return 'absent';
+function readRunManifest(path: string): { status: ManifestStatus; startedAt?: string; abandonedAt?: string } {
+  if (!existsSync(path)) return { status: 'absent' };
   try {
-    const value = json<{ status?: unknown }>(path);
-    if (value.status === 'passed' || value.status === 'failed' || value.status === 'running' || value.status === 'incomplete') return value.status;
-    return 'unrecognized';
-  } catch { return 'unreadable'; }
+    const value = json<{ status?: unknown; startedAt?: unknown; abandonedAt?: unknown }>(path);
+    const status = value.status === 'passed' || value.status === 'failed' || value.status === 'running' || value.status === 'incomplete'
+      ? value.status : 'unrecognized';
+    return { status,
+      ...(typeof value.startedAt === 'string' ? { startedAt: value.startedAt } : {}),
+      ...(typeof value.abandonedAt === 'string' ? { abandonedAt: value.abandonedAt } : {}) };
+  } catch { return { status: 'unreadable' }; }
+}
+
+function runAge(startedAt: string | undefined, now: number): string {
+  const at = startedAt ? Date.parse(startedAt) : Number.NaN;
+  if (!Number.isFinite(at)) return 'unknown age';
+  const hours = Math.max(0, Math.floor((now - at) / 3_600_000));
+  return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
 }
 
 function checkoutBytes(root: string): Map<string, number> | undefined {
@@ -255,6 +267,7 @@ function checkoutBytes(root: string): Map<string, number> | undefined {
 
 interface RegressionRunView {
   id: string; status: ManifestStatus; live: boolean; map?: Record<string, string>;
+  startedAt?: string; abandonedAt?: string;
 }
 
 function regressionRuns(stateDir: string): RegressionRunView[] {
@@ -262,15 +275,30 @@ function regressionRuns(stateDir: string): RegressionRunView[] {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => {
     const directory = join(root, entry.name);
-    return { id: entry.name, status: readManifestStatus(join(directory, 'manifest.json')),
-      live: directoryLeaseHeld(join(directory, 'lock')), map: readCheckoutMap(join(directory, 'checkouts.json')) };
+    const manifest = readRunManifest(join(directory, 'manifest.json'));
+    return { id: entry.name, ...manifest, live: directoryLeaseHeld(join(directory, 'lock')),
+      map: readCheckoutMap(join(directory, 'checkouts.json')) };
   });
 }
 
-/** Running and incomplete manifests can resume. A live lock keeps its checkouts even when the manifest is terminal. */
+function runIsTerminal(run: RegressionRunView): boolean {
+  return !!run.abandonedAt || run.status === 'passed' || run.status === 'failed';
+}
+
+/** A live lock always protects. An abandoned, passed, or failed manifest does not. */
 function runProtectsCheckouts(run: RegressionRunView): boolean {
   if (run.live) return true;
+  if (runIsTerminal(run)) return false;
   return run.status === 'running' || run.status === 'incomplete' || run.status === 'unreadable' || run.status === 'unrecognized';
+}
+
+function runIsStale(run: RegressionRunView): boolean {
+  return !run.live && !runIsTerminal(run) && (run.status === 'running' || run.status === 'incomplete');
+}
+
+function staleLabel(run: RegressionRunView, now: number): string {
+  const count = new Set(Object.values(run.map ?? {})).size;
+  return `stale ${runAge(run.startedAt, now)}; abandon to free ${count} checkouts (${run.id})`;
 }
 
 function removeWorktree(repo: string, path: string): boolean {
@@ -306,6 +334,38 @@ function removeMappedCheckouts(repo: string, map: Record<string, string>, cacheR
   if (removed) pruneWorktreeMetadata(repo);
 }
 
+export interface AbandonRunsOptions {
+  repo: string; stateDir: string; checkoutRoot?: string; legacyRoot?: string; now?: () => string;
+}
+
+/** Mark interrupted runs terminal and remove their checkouts. A lock with a live holder refuses the whole call. */
+export function abandonRegressionRuns(runIds: readonly string[], options: AbandonRunsOptions): void {
+  const ids = [...new Set(runIds)];
+  if (!ids.length || ids.some(id => !validId(id))) throw new Error('Invalid regression run ID');
+  const runs = regressionRuns(options.stateDir);
+  const selected = ids.map(id => {
+    const run = runs.find(candidate => candidate.id === id);
+    if (!run || run.status === 'absent') throw new Error(`Regression ${id} has no manifest`);
+    if (run.status === 'unreadable' || !run.map) throw new Error(`Regression ${id} manifest or checkout map is unreadable`);
+    return run;
+  });
+  const live = selected.filter(run => run.live);
+  if (live.length) throw new Error(`Regression ${live.map(run => run.id).join(', ')} is live`);
+  const cacheRoot = regressionCheckoutRoot(options.repo, options.checkoutRoot);
+  const legacyRoot = resolve(options.legacyRoot ?? join(options.repo, '.temp/regress'));
+  const physicalLegacyRoot = physicalPath(legacyRoot);
+  const legacyOwned = within(realpathSync(options.repo), physicalLegacyRoot) || within(cacheRoot, physicalLegacyRoot);
+  const abandonedAt = options.now?.() ?? new Date().toISOString();
+  for (const run of selected) {
+    const manifestPath = join(options.stateDir, 'regress', run.id, 'manifest.json');
+    const manifest = json<Manifest>(manifestPath);
+    manifest.status = 'incomplete';
+    manifest.abandonedAt = abandonedAt;
+    atomic(manifestPath, manifest);
+    removeMappedCheckouts(options.repo, run.map ?? {}, cacheRoot, legacyRoot, physicalLegacyRoot, legacyOwned);
+  }
+}
+
 /**
  * Remove registered worktrees under the regression cache that no non-terminal run maps.
  * Dry-run unless `apply`. A lock held by a live run keeps that run's checkouts.
@@ -314,6 +374,7 @@ export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneC
   const cacheRoot = regressionCheckoutRoot(options.repo, options.checkoutRoot);
   const listed = registeredWorktrees(options.repo);
   const runs = regressionRuns(options.stateDir);
+  const now = Date.now();
   const sizes = options.measureBytes === false ? undefined : checkoutBytes(cacheRoot);
   const bytesOf = (path: string): number | undefined => sizes?.get(resolve(path)) ?? (existsSync(path) ? sizes?.get(realpathSync(path)) : undefined);
   const kept: PruneCheckoutEntry[] = [];
@@ -332,15 +393,18 @@ export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneC
     if (protectors.length) {
       const live = protectors.filter(run => run.live);
       const names = (group: RegressionRunView[]) => group.map(run => run.id).sort().join(', ');
+      const stale = protectors.filter(runIsStale);
       const reason = protectAll.length
         ? `live run ${names(live)} has an unreadable checkout map`
         : live.length
           ? `live run ${names(live)}`
-          : `resumable run ${protectors.map(run => `${run.id} (${run.status})`).sort().join(', ')}`;
+          : stale.length
+            ? stale.map(run => staleLabel(run, now)).sort().join('; ')
+            : `resumable run ${protectors.map(run => `${run.id} (${run.status})`).sort().join(', ')}`;
       kept.push({ path, reason, ...(bytes !== undefined ? { bytes } : {}) });
       continue;
     }
-    const terminal = owners.filter(run => run.status === 'passed' || run.status === 'failed');
+    const terminal = owners.filter(runIsTerminal);
     const reason = terminal.length ? `terminal run ${terminal.map(run => run.id).sort().join(', ')}` : 'registered worktree with no checkout map';
     removed.push({ path, reason, ...(bytes !== undefined ? { bytes } : {}) });
   }
@@ -374,7 +438,8 @@ export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneC
   for (const run of runs) {
     for (const checkout of new Set(Object.values(run.map ?? {}))) {
       if (cacheChild(cacheRoot, checkout) !== undefined) continue;
-      untouched.push({ path: resolve(checkout), reason: 'outside the cache root' });
+      const reason = runIsStale(run) ? `${staleLabel(run, now)}; outside the cache root` : 'outside the cache root';
+      untouched.push({ path: resolve(checkout), reason });
     }
   }
   const byPath = (left: PruneCheckoutEntry, right: PruneCheckoutEntry) => left.path.localeCompare(right.path) || left.reason.localeCompare(right.reason);
@@ -403,9 +468,9 @@ export function formatPruneReport(report: PruneCheckoutsReport): string {
     ...lines('kept', report.kept), ...lines('removed', report.removed), ...lines('untouched', report.untouched)].join('\n');
 }
 
-/** A passed run is complete and a failed run is finished. Running and incomplete manifests can still resume. */
+/** Passed, failed, and abandoned runs release their checkouts. A live or still-running manifest keeps them. */
 function regressionKeepsCheckouts(manifest: Manifest | undefined, planUnusable: boolean): boolean {
-  if (planUnusable || !manifest) return false;
+  if (planUnusable || !manifest || manifest.abandonedAt) return false;
   return manifest.status === 'running' || manifest.status === 'incomplete';
 }
 

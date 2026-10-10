@@ -12,7 +12,7 @@ import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
-import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
+import { abandonRegressionRuns, appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
   pruneRegressionCheckouts, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
@@ -1460,10 +1460,10 @@ test('prune keeps a live or resumable run and ignores paths outside the cache an
     mkdirSync(plain);
     const escape = join(cache, 'escape');
     symlinkSync(outside, escape);
-    const writeRun = (id: string, status: Manifest['status'], checkout: string) => {
+    const writeRun = (id: string, status: Manifest['status'], checkout: string, startedAt?: string) => {
       const directory = join(r.options.stateDir, 'regress', id);
       mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status }));
+      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status, ...(startedAt ? { startedAt } : {}) }));
       writeFileSync(join(directory, 'checkouts.json'), JSON.stringify({ [`${r.base}:pinned`]: checkout }));
       return directory;
     };
@@ -1471,7 +1471,7 @@ test('prune keeps a live or resumable run and ignores paths outside the cache an
     const acquired = tryAcquireDirectoryLease(join(liveDir, 'lock'));
     if (acquired === 'held') throw new Error('live lock was already held');
     release = acquired.release;
-    writeRun('resumable-run', 'running', resumable);
+    writeRun('resumable-run', 'running', resumable, '2020-01-01T00:00:00.000Z');
     writeRun('finished-run', 'passed', finished);
     writeRun('outside-run', 'passed', outside);
     const stale = writeRun('stale-run', 'failed', finished);
@@ -1491,7 +1491,7 @@ test('prune keeps a live or resumable run and ignores paths outside the cache an
     expect(existsSync(escape)).toBe(true);
     expect(applied.kept.map(entry => [entry.path, entry.reason])).toEqual([
       [live, 'live run live-run'],
-      [resumable, 'resumable run resumable-run (running)'],
+      [resumable, expect.stringMatching(/^stale \d+d; abandon to free 1 checkouts \(resumable-run\)$/)],
     ]);
     expect(applied.removed.map(entry => [entry.path, entry.reason])).toEqual([
       [finished, 'terminal run finished-run, stale-run'],
@@ -1502,6 +1502,47 @@ test('prune keeps a live or resumable run and ignores paths outside the cache an
       { path: escape, reason: 'escapes the cache root' },
       { path: outside, reason: 'outside the cache root' },
     ]));
+  } finally { release?.(); r.cleanup(); }
+});
+
+test('abandon refuses a live run and frees a stale one', () => {
+  const r = repo();
+  let release: (() => void) | undefined;
+  try {
+    const cache = r.options.checkoutRoot!;
+    mkdirSync(cache, { recursive: true });
+    const add = (name: string) => {
+      const path = join(cache, name);
+      r.git('worktree', 'add', '--detach', path, r.base);
+      return path;
+    };
+    const liveTree = add('live');
+    const staleTree = add('stale');
+    const writeRun = (id: string, checkout: string) => {
+      const directory = join(r.options.stateDir, 'regress', id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status: 'running', startedAt: '2020-01-01T00:00:00.000Z' }));
+      writeFileSync(join(directory, 'checkouts.json'), JSON.stringify({ [`${r.base}:pinned`]: checkout }));
+      return directory;
+    };
+    const liveDir = writeRun('live-run', liveTree);
+    const acquired = tryAcquireDirectoryLease(join(liveDir, 'lock'));
+    if (acquired === 'held') throw new Error('live lock was already held');
+    release = acquired.release;
+    writeRun('stale-run', staleTree);
+    const options = { repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, now: () => '2026-10-10T00:00:00.000Z' };
+    const dry = pruneRegressionCheckouts({ ...options, measureBytes: false });
+    expect(dry.kept.find(entry => entry.path === staleTree)?.reason).toMatch(/^stale \d+d; abandon to free 1 checkouts \(stale-run\)$/);
+    expect(dry.kept.find(entry => entry.path === liveTree)?.reason).toBe('live run live-run');
+    expect(() => abandonRegressionRuns(['live-run', 'stale-run'], options)).toThrow('live-run is live');
+    expect(existsSync(staleTree)).toBe(true);
+    expect(JSON.parse(readFileSync(join(r.options.stateDir, 'regress/stale-run/manifest.json'), 'utf8')).status).toBe('running');
+    abandonRegressionRuns(['stale-run'], options);
+    expect(existsSync(staleTree)).toBe(false);
+    expect(existsSync(liveTree)).toBe(true);
+    expect(JSON.parse(readFileSync(join(r.options.stateDir, 'regress/stale-run/manifest.json'), 'utf8')))
+      .toMatchObject({ status: 'incomplete', abandonedAt: '2026-10-10T00:00:00.000Z' });
+    expect(r.git('worktree', 'list', '--porcelain').split('\n')).not.toContain(`worktree ${staleTree}`);
   } finally { release?.(); r.cleanup(); }
 });
 
