@@ -215,9 +215,9 @@ test('erasure journal schema installs empty, upgrades current head and allocates
 
 test('migration 019 keeps populated erasure targets and admits the new kinds', async () => {
   const relay = await database('relay_019');
-  const before = relayFiles(name => name < '019_');
-  expect(before.some(name => name.startsWith('010_'))).toBe(true);
-  expect(before.some(name => name.startsWith('019_'))).toBe(false);
+  const before = relayFiles(name => migrationVersion(name) < 19);
+  expect(before.some(name => migrationVersion(name) === 10)).toBe(true);
+  expect(before.some(name => migrationVersion(name) === 19)).toBe(false);
   await applyRelay(relay, before);
   const erasure = randomUUID();
   await relay.query(`INSERT INTO relay.erasure
@@ -234,7 +234,7 @@ test('migration 019 keeps populated erasure targets and admits the new kinds', a
       VALUES ($1, $2, $3, $4, $5)`, [erasure, ordinal, owner, kind, `old:${kind}`]);
     ordinal += 1;
   }
-  await applyRelay(relay, relayFiles(name => name.startsWith('019_')));
+  await applyRelay(relay, relayFiles(name => migrationVersion(name) === 19));
   const kept = (await relay.query<{ target_kind: string; owner: string; target_ref: string }>(
     `SELECT target_kind, owner, target_ref FROM relay.erasure_target
      WHERE erasure_id = $1 ORDER BY ordinal`, [erasure])).rows;
