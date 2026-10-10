@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { WorkReadMissing } from '../src/modules/work/read-session.ts';
+import { RealmReplyDenied } from '../src/modules/realm-reply/content-store.ts';
+import { TargetUnavailable } from '../src/modules/target/resolve.ts';
 import { growRealmThreads } from './g-1034-fixture.ts';
 import { realmVisibilityFixture } from './realm-visibility-fixture.ts';
 
@@ -226,7 +227,8 @@ test('a same-key create during cancellation cannot leave a live identity under a
     fx.fuseki.query = async (sparql, limit) => {
       if (arm.on && !failedRoot && sparql.includes('rv:ErasedRevision')) {
         failedRoot = true;
-        throw new WorkReadMissing('Reply root is unavailable');
+        // An authority refusal still cancels. A dependency failure must not.
+        throw new RealmReplyDenied('parent is not an exact reply');
       }
       return query(sparql, limit);
     };
@@ -263,6 +265,111 @@ test('a same-key create during cancellation cannot leave a live identity under a
   } finally {
     fx.fuseki.query = query;
     fx.fuseki.commandWithReceipt = command;
+    await fx.close();
+  }
+}, 120_000);
+
+test('a transient target unavailability leaves the same identity key retryable', async () => {
+  const fx = await realmVisibilityFixture();
+  const query = fx.fuseki.query.bind(fx.fuseki);
+  const previousConnect = fx.accessPool.connect;
+  try {
+    const draftInput = fx.draftInput();
+    const draft = await fx.call('POST', '/v1/member-reply-drafts', draftInput);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const body = {
+      profile: 'realm-reply-identity-v1', reply: draftInput.reply, variantId: draftInput.variantId,
+      revisionId: draft.body.revisionId, author: fx.actor, rootTarget: draftInput.rootTarget,
+      rootRevision: draftInput.rootRevision, parentReply: null, parentRevision: null, contextRevision: null,
+    };
+    const key = randomUUID();
+    const arm = { on: false };
+    let failed = false;
+    const connect = fx.accessPool.connect.bind(fx.accessPool) as (...args: unknown[]) => unknown;
+    const seen = new WeakSet<object>();
+    const wrap = (client: PoolClient) => {
+      if (seen.has(client)) return;
+      seen.add(client);
+      const original = client.query.bind(client) as (...args: unknown[]) => unknown;
+      client.query = ((...args: unknown[]) => {
+        const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text;
+        if (typeof text === 'string' && text.includes("'admission.claimed'")) arm.on = true;
+        return original(...args);
+      }) as PoolClient['query'];
+    };
+    fx.accessPool.connect = ((...args: unknown[]) => {
+      if (typeof args[0] === 'function') {
+        const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
+        return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
+          if (client) wrap(client);
+          callback(error, client, done);
+        });
+      }
+      return Promise.resolve(connect()).then(client => {
+        wrap(client as PoolClient);
+        return client;
+      });
+    }) as Pool['connect'];
+    fx.fuseki.query = async (sparql, limit) => {
+      if (arm.on && !failed && sparql.includes('rv:ErasedRevision')) {
+        failed = true;
+        throw new TargetUnavailable();
+      }
+      return query(sparql, limit);
+    };
+    const first = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(first.status, JSON.stringify(first.body)).toBe(503);
+    const admission = await fx.accessPool.query<{ id: string; graph_outcome: string | null }>(
+      `SELECT id, graph_outcome FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [key]);
+    expect(admission.rowCount).toBe(1);
+    expect(admission.rows[0]!.graph_outcome).toBeNull();
+    const rejected = await fx.contentPool.query(
+      `SELECT 1 FROM content.receipt WHERE operation_id = $1 AND outcome = 'rejected'`, [admission.rows[0]!.id]);
+    expect(rejected.rowCount).toBe(0);
+    const retry = await fx.call('POST', '/v1/realm-replies', body, fx.actor, key);
+    expect(retry.status, JSON.stringify(retry.body)).toBe(201);
+    const live = await fx.contentPool.query('SELECT 1 FROM content.reply WHERE id = $1', [body.reply]);
+    expect(live.rowCount).toBe(1);
+  } finally {
+    fx.accessPool.connect = previousConnect;
+    fx.fuseki.query = query;
+    await fx.close();
+  }
+}, 120_000);
+
+test('an unreadable reply root writes no admission, receipt, or graph command', async () => {
+  const fx = await realmVisibilityFixture();
+  const command = fx.fuseki.command.bind(fx.fuseki);
+  const withReceipt = fx.fuseki.commandWithReceipt.bind(fx.fuseki);
+  let commands = 0;
+  fx.fuseki.command = (async (...args: Parameters<FusekiClient['command']>) => {
+    commands += 1;
+    return command(...args);
+  }) as FusekiClient['command'];
+  fx.fuseki.commandWithReceipt = (async (...args: Parameters<FusekiClient['commandWithReceipt']>) => {
+    commands += 1;
+    return withReceipt(...args);
+  }) as FusekiClient['commandWithReceipt'];
+  try {
+    const key = randomUUID();
+    const response = await fx.call('POST', '/v1/realm-replies', {
+      profile: 'realm-reply-identity-v1', reply: `https://rezics.com/id/${randomUUID()}`,
+      variantId: `urn:rezics:variant:${randomUUID()}`, revisionId: randomUUID(), author: fx.actor,
+      rootTarget: `https://rezics.com/id/${randomUUID()}`, rootRevision: `https://rezics.com/id/${randomUUID()}`,
+      parentReply: null, parentRevision: null, contextRevision: null,
+    }, fx.actor, key);
+    expect(response.status, JSON.stringify(response.body)).toBe(404);
+    expect(commands).toBe(0);
+    const admission = await fx.accessPool.query<{ id: string }>(
+      `SELECT id FROM access.admission WHERE idempotency_key = $1`, [key]);
+    expect(admission.rowCount).toBe(0);
+    const receipt = admission.rows[0]
+      ? await fx.contentPool.query('SELECT 1 FROM content.receipt WHERE operation_id = $1', [admission.rows[0].id])
+      : { rowCount: 0 };
+    expect(receipt.rowCount).toBe(0);
+  } finally {
+    fx.fuseki.command = command;
+    fx.fuseki.commandWithReceipt = withReceipt;
     await fx.close();
   }
 }, 120_000);

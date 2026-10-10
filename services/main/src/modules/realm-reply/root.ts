@@ -2,7 +2,7 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { TargetReadSession } from '../target/resolve.ts';
 import type { ResolvedTarget } from '../target/contract.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { WorkReadMissing } from '../work/read-session.ts';
+import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
 
 /** One target resolution shared by the retained-root and current-root probes. */
 async function loadReplyTarget(session: TargetReadSession, resource: string, revision: string,
@@ -100,6 +100,9 @@ export async function publicReplyRoot(graph: Pick<FusekiClient, 'query'>,
     return readReplyRoot(session, resource, revision);
   }); }
   catch (error) {
+    // TargetUnavailable extends WorkReadMissing and carries a code. A resolution
+    // that could not be read is not proof the root is unpublished.
+    if (error instanceof WorkReadUnavailable || (error instanceof WorkReadMissing && 'code' in error)) throw error;
     if (error instanceof WorkReadMissing || error instanceof TargetNotBound) return false;
     throw error;
   }
@@ -115,6 +118,7 @@ export async function readableReplyRoot(environment: WorkActivationEnvironment,
     return await targetRead(environment, { access, principal, actingSubject },
       session => readReplyRoot(session, resource, revision));
   } catch (error) {
+    if (error instanceof WorkReadUnavailable || (error instanceof WorkReadMissing && 'code' in error)) throw error;
     if (error instanceof WorkReadMissing || error instanceof TargetNotBound) return false;
     throw error;
   }

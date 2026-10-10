@@ -11,8 +11,8 @@ import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads, replySlotIri,
   readReplyGraphReceipt, type ReplyGraphReceipt } from './graph.ts';
 import { boundReplyRoot, readableReplyRoot } from './root.ts';
-import { targetRead } from '../target/resolve.ts';
-import { WorkReadMissing } from '../work/read-session.ts';
+import { TargetUnavailable, targetRead } from '../target/resolve.ts';
+import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
 import { readRealmPolicy, reviewPolicy, type RealmPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
 import { discloseInventory } from '../disclosure/read.ts';
@@ -30,6 +30,29 @@ function stable(value: unknown): string {
 }
 export function realmReplyDigest(value: unknown): string {
   return createHash('sha256').update(stable(value)).digest('hex');
+}
+
+/** A busy graph, a fence, or an expired admission is not an authority decision.
+ * Sealing it would make the same key answer denied after the dependency recovers. */
+function unavailableReply(error: unknown): RealmReplyUnavailable | null {
+  if (error instanceof RealmReplyUnavailable) return error;
+  if (error instanceof WorkReadUnavailable || error instanceof TargetUnavailable || error instanceof AdmissionExpired) {
+    return new RealmReplyUnavailable(error.message);
+  }
+  if (error instanceof AdmissionDenied && /fenced|unavailable|expired/i.test(error.message)) {
+    return new RealmReplyUnavailable(error.message);
+  }
+  if (error instanceof RealmReplyStale && /expired/i.test(error.message)) {
+    return new RealmReplyUnavailable(error.message);
+  }
+  return null;
+}
+
+function sealsReplyRefusal(error: unknown): boolean {
+  if (unavailableReply(error) || error instanceof WorkReadMissing) return false;
+  return error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale
+    || error instanceof RatingTargetNotAccepted || error instanceof RatingTargetGrainMismatch
+    || error instanceof AdmissionDenied;
 }
 
 type RealmReadAuthority = Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'canReadWork'
@@ -118,6 +141,8 @@ export class RealmReplyStore {
         if (raced || action !== 'reply.place' && await this.content.hasReceipt(registered.id, contentAction, requestDigest)) {
           return { registered, graph: raced };
         }
+        const unavailable = unavailableReply(error);
+        if (unavailable) throw unavailable;
         if (action === 'reply.place') {
           const terminal = await cancelPlacement(this.env, registered);
           if (terminal.outcome === 'succeeded') return { registered, graph: terminal };
@@ -132,8 +157,6 @@ export class RealmReplyStore {
           if (refused.terminal) await this.access.recordGraphOutcome(registered.id, refused.terminal);
           if (refused.replay) return { registered, graph: refused.terminal };
         }
-        if (error instanceof AdmissionExpired && (action === 'reply.place' || action === 'reply.create'))
-          throw new RealmReplyStale('admission expired during claim verification');
       }
       throw error;
     }
@@ -172,7 +195,7 @@ export class RealmReplyStore {
       if (!this.access.fenceClaim) throw new RealmReplyUnavailable('Realm dispatch authority is unavailable');
       return await this.access.fenceClaim(client, admission.id, admission.requestDigest, principal);
     } catch (error) {
-      if (error instanceof AdmissionExpired) throw new RealmReplyStale('admission expired during claim verification');
+      if (error instanceof AdmissionExpired) throw new RealmReplyUnavailable('admission expired during claim verification');
       throw error;
     }
   }
@@ -209,12 +232,12 @@ export class RealmReplyStore {
         }
         throw new RealmReplyDenied('reply admission was cancelled');
       }
-      // A lost-response retry retains its successful identity after a target edit.
-      // Only a new Content identity must bind to the target's current root.
-      // One resolution covers disclosure and that current-root bind.
+      // The route already disclosed the retained root. A lost-response retry
+      // keeps its identity after a target edit; only a new identity binds the
+      // current root. A miss here is still a read, not a sealed refusal.
       const readable = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
         session => boundReplyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision, !saved));
-      if (!readable) throw new RealmReplyDenied('Reply root is unavailable');
+      if (!readable) throw new WorkReadMissing('Reply root is unavailable');
       const create = async (client?: PoolClient) => {
         if (!saved) await this.fence(admission, principal, client);
         return this.content.createReply(admission, input);
@@ -229,10 +252,10 @@ export class RealmReplyStore {
       return result;
     }
     catch (error) {
-      if (error instanceof WorkReadMissing) error = new RealmReplyDenied('Reply root is unavailable');
-      if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale
-        || error instanceof RatingTargetNotAccepted || error instanceof RatingTargetGrainMismatch
-        || error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
+      const unavailable = unavailableReply(error);
+      if (unavailable) throw unavailable;
+      if (error instanceof WorkReadMissing) throw error;
+      if (sealsReplyRefusal(error)) {
         const refused = await this.refuseUncommittedCreate(admission, graph);
         graph = refused.terminal;
         if (refused.replay) return await this.content.createReply(admission, input);
@@ -271,8 +294,10 @@ export class RealmReplyStore {
       graph = placed.terminal;
       return placed.body;
     } catch (error) {
-      if (error instanceof AdmissionDenied || error instanceof AdmissionExpired
-        || error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
+      const unavailable = unavailableReply(error);
+      if (unavailable) throw unavailable;
+      if (error instanceof WorkReadMissing) throw error;
+      if (sealsReplyRefusal(error)) {
         // The native receipt lock chooses cancellation or the concurrent
         // winner. Transport failures do not imply either terminal outcome.
         const terminal = await cancelPlacement(this.env, admission);
