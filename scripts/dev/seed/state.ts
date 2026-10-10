@@ -26,6 +26,8 @@ export interface SeedState {
   created: Map<string, WorkReceipt>;
   createdRealms: { id: string; receipt: SpaceReceipt; steward: Session }[];
   seededZones: string[];
+  /** Catalogue Zone slugs this run created. The default theme pass approves these; it does not discover them. */
+  catalogueZones?: readonly ('anime' | 'manga')[];
   publishedCount: number;
   selectedCount: number;
   publicForRealm: Map<string, { contribution: string; decision: string }>;

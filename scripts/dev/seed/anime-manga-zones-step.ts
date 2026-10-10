@@ -338,6 +338,7 @@ export async function seedAnimeMangaZones(state: SeedState): Promise<void> {
       refresh: () => refreshSeedTokens(state),
     };
     const created = await applyAnimeMangaZones(port);
+    state.catalogueZones = created.zones.map(zone => zone.id);
     console.log(`Anime and manga: ${created.works.length} works in ${created.zones.map(zone => zone.id).join(', ')}`);
   } finally { await pool.end(); }
 }

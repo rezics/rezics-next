@@ -92,11 +92,25 @@ async function firstPartyView(state: SeedState, theme: string) {
 }
 
 type ThemeRealm = OfficialRealmId | 'franchise-wiki' | 'anime' | 'manga';
+const catalogueSlugs = ['anime', 'manga'] as const;
+
+/**
+ * Themes to approve. An explicit list is used as given. The default list is this
+ * seed's official Realms, plus anime and manga when this run recorded those Zones.
+ */
+export function officialThemeSelection(state: Pick<SeedState, 'createdRealms' | 'catalogueZones'>,
+  selected?: readonly ThemeRealm[]): ThemeRealm[] {
+  if (selected !== undefined) return [...selected];
+  const recorded = new Set(state.catalogueZones ?? []);
+  return [
+    ...state.createdRealms.map(realm => realm.id as OfficialRealmId),
+    ...catalogueSlugs.filter(slug => recorded.has(slug)),
+  ];
+}
 
 /** Dev fixture review uses a second account; each state transition still passes through Main. */
-export async function seedOfficialThemes(state: SeedState,
-  selected: readonly ThemeRealm[] = state.createdRealms.map(realm => realm.id as OfficialRealmId)) {
-  const realms = [...new Set<ThemeRealm>([...selected, 'anime', 'manga'])];
+export async function seedOfficialThemes(state: SeedState, selected?: readonly ThemeRealm[]) {
+  const realms = officialThemeSelection(state, selected);
   const operator = state.operatorSession, input = state.operatorInput;
   const reviewer = state.sessions.find(session => session.id === 'daniel');
   if (!operator || !input || !reviewer) {
@@ -112,12 +126,6 @@ export async function seedOfficialThemes(state: SeedState,
       operator.issuedAt = Date.now();
       const slug = realmId as Slug;
       const zone = `https://rezics.com/id/${stableId(`zone:${slug}`)}`;
-      try {
-        await state.api.getPublic(`/v1/zones/${id(zone)}/presentation`);
-      } catch (error) {
-        if (error instanceof SeedApiError && error.status === 404) return;
-        throw error;
-      }
       const theme = officialTheme(slug);
       await grantOfficialThemeSeed(input, theme, reviewer);
       const digest = await officialSourceDigest(slug);
