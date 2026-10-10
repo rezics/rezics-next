@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
+import { releaseManifest } from '../../../scripts/dev/release-manifest.ts';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
@@ -42,10 +43,11 @@ const repoRoot = resolve(import.meta.dir, '../../..');
 const canary = 'QUOTE-CANARY-ζ-source';
 const annotation = 'authored annotation stays';
 const sourceText = `Opening paragraph\n${canary}\nClosing paragraph`;
-/** Qualified integer runtime. New runs use this pin, the image built with the
- * reviewed command profiles, including the widened native-agent credit roles.
- * A prior run of this file on 835daa8774ac remains that run's evidence. */
-const qualifiedFuseki = 'rezics/fuseki:6.2.0-cmd0.5.39-5fc82f7d04cd';
+/** The engine must install this tree's erasure tombstone profile.
+ * `5fc82f7d04cd` still has erasure-graph-v1 `4f9da339…` (`sh:maxCount 1` on
+ * `rdf:type`). This tree's shape is `bd9971be…`. A mismatched engine makes
+ * graph replay conflict, so the content revision and its publication pin stay held. */
+const qualifiedFuseki = releaseManifest.images.fuseki;
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
