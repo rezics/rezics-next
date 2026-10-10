@@ -3,6 +3,8 @@ import { type TitleControlState } from '../../../services/main/src/modules/work/
 import type { NativeWorkSourceAdoption, NativeWorkSourceTitleApplication } from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import type { NativeWorkSourceProposal } from '../../../services/main/src/modules/source/native-work-proposal.ts';
 import type { CommandEnvelope, FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { currentWorkerTick } from '../../../services/main/src/worker-tick.ts';
+import { isForegroundOperation } from '../integration/support/operation-cost.ts';
 
 /** Focused title harness, reusing the real Account/Access/Source owner bootstrap. */
 export async function titleControlFixture(apps: Record<string, string>, directory: string) {
@@ -13,7 +15,12 @@ export async function titleControlFixture(apps: Record<string, string>, director
   let lose = false, queries = 0, queryBytes = 0;
   f.env.fuseki = new Proxy(f.env.fuseki, { get(target, property) {
     if (property === 'query') return async (...args: Parameters<FusekiClient['query']>) => {
-      const result = await target.query(...args); queries++; queryBytes += Buffer.byteLength(JSON.stringify(result)); return result;
+      // Realm-directory refresh shares this client and advances on every receipt.
+      // Its tick is not the title edit's cost, and it must not vary that cost.
+      const counted = isForegroundOperation() && !currentWorkerTick();
+      const result = await target.query(...args);
+      if (counted) { queries++; queryBytes += Buffer.byteLength(JSON.stringify(result)); }
+      return result;
     };
     if (property === 'commandWithReceipt') return async (command: CommandEnvelope) => {
       const title = command.update.includes('rv:titleControl ');
