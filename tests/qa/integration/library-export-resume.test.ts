@@ -114,15 +114,9 @@ test('a 1,200-record library export resumes after a dropped page and a new expor
     await home.stack.contentPool.query('ANALYZE reader.library_import_source_row');
     await home.stack.contentPool.query('ANALYZE reader.library_import_file');
     const seek = async (after: string) => {
-      const client = await home.stack.contentPool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('SET LOCAL enable_seqscan = off');
-        await client.query('SET LOCAL enable_bitmapscan = off');
-        const explained = await client.query('EXPLAIN (ANALYZE, FORMAT JSON) ' + retainedLibrarySourcePageSql, [agent, after, LIBRARY_EXPORT_COST.page + 1]);
-        await client.query('ROLLBACK');
-        assertSeek(planOf(explained));
-      } finally { client.release(); }
+      const explained = await home.stack.contentPool.query(
+        'EXPLAIN (ANALYZE, FORMAT JSON) ' + retainedLibrarySourcePageSql, [agent, after, LIBRARY_EXPORT_COST.page + 1]);
+      assertSeek(planOf(explained));
     };
     await seek('');
     const resumedAt = await home.stack.contentPool.query<{ digest: string }>(

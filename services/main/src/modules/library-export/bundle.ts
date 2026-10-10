@@ -14,17 +14,20 @@ import { ownershipJsonLd, loanJsonLd } from './ownership.ts';
 
 export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 20, graphPerPage: WORK_READ_COST.graphCalls,
   phases: 10, scopedRatingsPerPage: 20, responseBytes: FILE_IMPORT_COST.bytes } as const;
-// A sequential or bitmap read of every later source can start more cheaply than
-// the primary key when the lateral filter looks rare. These apply only to the
-// retained-source statement, so that seek stops at the page.
+// The inner seek is the partial index of exportable sources, so a page reads at
+// most its limit whatever share of the library qualifies. An unexpired file is
+// time-dependent and is checked only on that already bounded page: a source
+// whose file has expired is left out, and the page returns fewer rows rather
+// than reading further to fill the limit.
 export const retainedLibrarySourcePageSql = `SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.archive_needed,r.match,r.resolution,r.outcome
-  FROM reader.library_import_source s
-  JOIN LATERAL (SELECT r.source_view,r.archive_needed,r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
+  FROM (
+    SELECT agent,digest,source,private_extras FROM reader.library_import_source
+    WHERE agent=$1 AND exportable AND digest>$2 ORDER BY digest LIMIT $3
+  ) s
+  LEFT JOIN LATERAL (SELECT r.source_view,r.archive_needed,r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
     JOIN reader.library_import_file f ON f.agent=r.agent AND f.id=r.file_id
     WHERE r.agent=s.agent AND r.source_digest=s.digest AND f.expires_at>clock_timestamp()
-    ORDER BY r.archive_needed DESC,r.file_id,r.row_number LIMIT 1) r ON true
-  WHERE s.agent=$1 AND (r.archive_needed OR s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb)
-    AND s.digest>$2 ORDER BY s.digest LIMIT $3`;
+    ORDER BY r.archive_needed DESC,r.file_id,r.row_number LIMIT 1) r ON true`;
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
   ({ ...emptyRow(id,'',raw),kind,work });
@@ -85,17 +88,29 @@ export class LibraryBundleExporter {
     while (phase < LIBRARY_EXPORT_COST.phases && rows.length < limit) {
       // Bound exact scoped-record hydration without limiting the traversable inventory.
       const pageLimit = limit;
-      const page = await this.phase(session,agent,phase,after,pageLimit-rows.length+1);
-      const accepted: typeof page = [];
-      for (const item of page) {
+      const requested = pageLimit-rows.length+1;
+      const page = await this.phase(session,agent,phase,after,requested);
+      const accepted: Array<{ key: string; row: CanonicalRow }> = [];
+      let index = 0;
+      for (; index < page.length; index++) {
+        const item = page[index]!;
+        // Expired evidence was already counted by the seek. Skipping it must not
+        // pull another source into this page.
+        if (!item.row) continue;
         const bytes = new TextEncoder().encode(JSON.stringify(item.row)).length + 1;
         if (accepted.length + rows.length >= pageLimit || rowBytes + bytes > LIBRARY_EXPORT_COST.responseBytes - 8192) break;
-        accepted.push(item); rowBytes += bytes;
+        accepted.push({ key: item.key, row: item.row }); rowBytes += bytes;
       }
       rows.push(...accepted.map(item => item.row));
-      if (page.length > accepted.length) {
+      if (index < page.length) {
         if (accepted.length) after = accepted.at(-1)!.key;
         if (!rows.length) throw new WorkReadInvalid('A library record exceeds the portable export row limit');
+        break;
+      }
+      if (page.length === requested) {
+        // The seek window was full. Expiry can leave this response short; the
+        // next page continues after the last source examined.
+        after = page.at(-1)!.key;
         break;
       }
       phase++; after = '';
@@ -111,7 +126,7 @@ export class LibraryBundleExporter {
     }
     return value;
   }
-  private async phase(session: WorkReadSession, agent: string, phase: number, after: string, limit: number): Promise<Array<{ key: string; row: CanonicalRow }>> {
+  private async phase(session: WorkReadSession, agent: string, phase: number, after: string, limit: number): Promise<Array<{ key: string; row: CanonicalRow | null }>> {
     const principal = session.principal!;
     if (phase === 0) {
       if (after && !/^[1-9][0-9]*$/.test(after)) throw new WorkReadInvalid('Invalid attempt export cursor');
@@ -136,15 +151,10 @@ export class LibraryBundleExporter {
         review: { text: r.body,language: r.language,spoiler: r.spoiler } } }));
     }
     if (phase === 3) {
-      const client = await this.content.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('SET LOCAL enable_seqscan = off');
-        await client.query('SET LOCAL enable_bitmapscan = off');
-        const result = await client.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(
-          retainedLibrarySourcePageSql,[agent,after,limit]);
-        await client.query('COMMIT');
-        return result.rows.map(s => ({ key: s.key,row: s.source_view ? { ...s.source_view,raw: { ...s.source_view.raw,source: s.source } }
+      const result = await this.content.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean | null; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(
+        retainedLibrarySourcePageSql,[agent,after,limit]);
+      return result.rows.map(s => ({ key: s.key,row: s.archive_needed == null ? null
+        : s.source_view ? { ...s.source_view,raw: { ...s.source_view.raw,source: s.source } }
         : s.source.kind === 'retained' ? s.source
         : s.source.kind !== 'source' && !s.archive_needed ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
           raw: { sourceId: s.source.sourceId,fields: s.private_extras } }
@@ -155,10 +165,6 @@ export class LibraryBundleExporter {
           raw: { source: s.source,match: s.match && { kind: s.match.kind,work: s.match.work,target: s.match.target,
             truncated: s.match.truncated,openLibraryAvailability: s.match.openLibraryAvailability },
           resolution: s.resolution,outcome: s.outcome } } }));
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
-        throw error;
-      } finally { client.release(); }
     }
     if (phase === 4 || phase === 5) {
       const member = phase === 5;
