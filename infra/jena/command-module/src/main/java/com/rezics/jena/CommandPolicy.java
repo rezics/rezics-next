@@ -195,8 +195,11 @@ final class CommandPolicy {
                 throw new IllegalArgumentException("rebuild may only remove public index triples before activation");
             List<Quad> publicDeletes = delete.stream()
                 .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI())).toList();
-            if (family.startsWith("quarantine:") && (publicDeletes.size() != 1
-                || !isPublicAnchor(publicDeletes.getFirst())))
+            // A live anchor is removed. A job that continues after the anchor is
+            // already absent writes only the receipt; the live-state check pairs
+            // that empty public delete with the missing anchor.
+            if (family.startsWith("quarantine:") && !(publicDeletes.isEmpty()
+                || publicDeletes.size() == 1 && isPublicAnchor(publicDeletes.getFirst())))
                 throw new IllegalArgumentException("quarantine must remove only the public search anchor");
             if ((family.startsWith("cleared:") || family.startsWith("activate:")) && !publicDeletes.isEmpty())
                 throw new IllegalArgumentException("cleared or activation receipt cannot remove index triples");
@@ -265,6 +268,13 @@ final class CommandPolicy {
             && "urn:rezics:search:probe:cjk-bigram-v1".equals(quad.getSubject().getURI())
             && quad.getPredicate().isURI()
             && "https://rezics.com/vocab/searchBody".equals(quad.getPredicate().getURI());
+    }
+
+    /** True when the template deletes the public search anchor, not merely some index triple. */
+    static boolean removesPublicAnchor(Plan plan) {
+        if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)) return false;
+        return modify.getDeleteQuads().stream().anyMatch(quad ->
+            PUBLIC_SEARCH.equals(quad.getGraph().getURI()) && isPublicAnchor(quad));
     }
 
     private static boolean isPublicAnchor(Quad quad) {

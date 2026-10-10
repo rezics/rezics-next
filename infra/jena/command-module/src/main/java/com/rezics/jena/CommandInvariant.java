@@ -152,8 +152,13 @@ final class CommandInvariant {
         if (plan.rebuild()) {
             if (control.held()) return "rebuild cannot run during a graph restore hold";
             boolean open = data.contains(PUBLIC_SEARCH, PUBLIC_ANCHOR, RDF.type.asNode(), rv("SearchGraphAnchor"));
-            if (receipt.startsWith("urn:rezics:receipt:content-rebuild:quarantine:") != open)
-                return "rebuild quarantine state differs";
+            boolean quarantine = receipt.startsWith("urn:rezics:receipt:content-rebuild:quarantine:");
+            // Quarantine either removes a live anchor or continues a job whose
+            // anchor is already absent. Other rebuild receipts still require it gone.
+            if (quarantine) {
+                if (open != CommandPolicy.removesPublicAnchor(plan))
+                    return "rebuild quarantine state differs";
+            } else if (open) return "rebuild quarantine state differs";
         }
         return null;
     }
