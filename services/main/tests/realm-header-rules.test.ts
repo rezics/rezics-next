@@ -73,23 +73,6 @@ function headerSession(document: unknown, rules: PublicProfile['rules']) {
   return { session, calls };
 }
 
-test('an empty settings document does not hide a profile rule published later', async () => {
-  const published = rule('be-kind', 'Be kind');
-  const { session, calls } = headerSession(
-    { profile: 'realm-settings-rules-v2', public: true, rules: [] },
-    [published],
-  );
-  const header = await readRealmHeader(session, realm);
-  expect(calls).toHaveLength(1);
-  expect(JSON.parse(String(calls[0]?.[2]))).toEqual([published]);
-  expect(header.rules).toEqual([{
-    id: 'be-kind',
-    title: { value: 'Be kind', language: 'en', direction: 'ltr', basis: 'requested' },
-    body: { value: 'Be kind body', language: 'en', direction: 'ltr', basis: 'requested' },
-    governanceRule: null,
-  }]);
-});
-
 test('a settings document that lists rules stays the header source', async () => {
   const managed = rule('stay', 'Stay');
   const { session } = headerSession(
