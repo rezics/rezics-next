@@ -5,6 +5,7 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { ReadRankingProjection } from '../../../services/main/src/modules/rankings/projection.ts';
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
@@ -90,6 +91,15 @@ test('a partless Work is marked on one device and read, undone and refused when 
     expect(await json<{ status: string }>(await call('GET',
       `/v1/me/progress-summaries/${short(saved.work)}?actingSubject=${encodeURIComponent(person)}`)))
       .toMatchObject({ status: 'finished' });
+    const rankings = new ReadRankingProjection(stack.accessPool, stack.content, stack.contentPool, stack.env);
+    for (let i = 0; i < 100 && (await rankings.tick()) > 0; i++) { /* project the whole-Work marks */ }
+    await rankings.current();
+    expect((await stack.accessPool.query('SELECT 1 FROM access.read_ranking_pending')).rows).toEqual([]);
+    const bucket = new Date().toISOString().slice(0, 10);
+    expect((await stack.accessPool.query<{ metric: string; score: string }>(
+      `SELECT metric, score::text FROM access.read_ranking_score
+       WHERE work = $1 AND interval = 'day' AND bucket = $2 ORDER BY metric`,
+      [saved.work, bucket])).rows).toEqual([{ metric: 'reads', score: '1' }]);
     expect(await json<Mark>(await call('GET', `${path}?actingSubject=${encodeURIComponent(other)}`, undefined, b.token)))
       .toMatchObject({ standing: 'not-started', version: 0 });
     const cleared = await json<Mark>(await call('PUT', path, { actingSubject: person, expectedVersion: 2, standing: 'not-started' }));
@@ -107,6 +117,20 @@ test('a partless Work is marked on one device and read, undone and refused when 
     const refused = await call('PUT', path, { actingSubject: person, expectedVersion: 4, standing: 'completed' });
     expect(refused.status).toBe(409);
     expect((await refused.json() as { code: string }).code).toBe('work_has_parts');
+    // The same miss as a Structure that names no Work: the event stays pending and rankings stop.
+    const ghost = `https://rezics.com/id/${randomUUID()}`;
+    await progress.write({ principal: a.principal, structure: ghost, occurrence: ghost,
+      completed: true, position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    let parked = false;
+    for (let i = 0; i < 8 && !parked; i++) {
+      await rankings.tick();
+      parked = ((await stack.accessPool.query('SELECT 1 FROM access.read_ranking_pending')).rowCount ?? 0) > 0;
+    }
+    expect((await stack.accessPool.query<{ target: string }>(
+      'SELECT target FROM access.read_ranking_pending ORDER BY target')).rows).toEqual([{ target: ghost }]);
+    await expect(rankings.current()).rejects.toThrow('Rankings are catching up');
+    expect((await stack.accessPool.query('SELECT 1 FROM access.read_ranking_score WHERE work = $1', [ghost])).rows)
+      .toEqual([]);
   } finally {
     progress.stopOrderProjection();
     await stack.stop();

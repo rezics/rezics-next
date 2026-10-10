@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { StatusState } from '../src/modules/library/status.ts';
 import { workProgress } from '../src/modules/progress-summary/policy.ts';
+import { progressRankingMetrics } from '../src/modules/rankings/projection.ts';
 import { decodeWorkStanding, encodeWorkStanding, type WorkStanding } from '../src/modules/progress/work-standing.ts';
 import type { SessionState } from '../src/modules/session/contract.ts';
 
@@ -24,6 +25,14 @@ test('a whole-Work mark is four states on one progress row', () => {
   }
   expect(decodeWorkStanding({ completed: true, position: 'started' })).toBeNull();
   expect(decodeWorkStanding({ completed: false, position: 'chapter:1' })).toBeNull();
+});
+
+test('a partless completion counts as a read and not as a finished chapter', () => {
+  const work = id(1);
+  expect(progressRankingMetrics({ structure: work, occurrence: work, read: true, finished: true })).toEqual(['reads']);
+  expect(progressRankingMetrics({ structure: work, occurrence: work, read: false, finished: true })).toEqual([]);
+  expect(progressRankingMetrics({ structure: id(2), occurrence: id(3), read: true, finished: true }))
+    .toEqual(['reads', 'finished-chapters']);
 });
 
 test('a partless Work is finished, being read, dropped or not started from that one mark', () => {

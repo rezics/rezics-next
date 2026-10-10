@@ -16,6 +16,18 @@ const intervals: readonly RankingInterval[] = ['day', 'week', 'month'];
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 export class RankingProjectionUnavailable extends Error {}
+
+/** What one progress signal adds to the rankings. A row whose structure is the
+ * occurrence is the Work itself: there is no Structure to look up, and the Work
+ * has no chapters. That completion counts as a read and adds nothing to finished
+ * chapters. */
+export function progressRankingMetrics(signal: Pick<ProgressSignal, 'structure' | 'occurrence' | 'read' | 'finished'>): RankingMetric[] {
+  const wholeWork = signal.structure === signal.occurrence;
+  return [
+    ...(signal.read ? ['reads' as const] : []),
+    ...(signal.finished && !wholeWork ? ['finished-chapters' as const] : []),
+  ];
+}
 export interface RankingCheckpoint { generation: string; contentEpoch: string;
   contentSequence: string; graphEpoch: string; reviewPosition: string }
 
@@ -72,6 +84,21 @@ export class ReadRankingProjection {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     await this.running;
+  }
+
+  /** A whole-Work mark names the Work as its structure. One keyed ask proves that
+   * IRI is a current Work; anything else is the same miss as an unknown Structure. */
+  private async rankedWork(signal: ProgressSignal): Promise<string | null> {
+    if (signal.structure !== signal.occurrence) return this.graphWork(signal.structure);
+    if (!ID.test(signal.structure)) return null;
+    const found = await this.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(signal.structure)} a <https://schema.org/CreativeWork> ; rv:mainVersion ?main . }
+    }`, 1024);
+    return found.boolean === true ? signal.structure : null;
   }
 
   private async graphWork(structure: string): Promise<string | null> {
@@ -257,13 +284,13 @@ export class ReadRankingProjection {
           if (blocked) throw new RankingProjectionUnavailable('Earlier target work remains pending');
           if (source === 'content' && !value) throw new RankingProjectionUnavailable('Retained progress proof is unavailable');
           const review = sourceEvent as { work: string; occurred_at: string; delta: number };
-          const work = value ? await this.graphWork(value.structure) : review.work;
+          const work = value ? await this.rankedWork(value) : review.work;
           if (!work) throw new RankingProjectionUnavailable('Progress Structure has no current Work');
           await refreshReadRankingAdmissions(this.env, this.access, [work], client);
           if (value) {
             const at = new Date(value.occurredAt);
-            for (const [enabled, metric] of [[value.read, 'reads'], [value.finished, 'finished-chapters']] as const) {
-              if (enabled) for (const interval of intervals) await this.increment(client, generation, work, metric, interval, at);
+            for (const metric of progressRankingMetrics(value)) {
+              for (const interval of intervals) await this.increment(client, generation, work, metric, interval, at);
             }
           } else {
             for (const interval of intervals) await this.changeReview(client, generation, work, interval,
