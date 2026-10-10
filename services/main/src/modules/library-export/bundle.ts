@@ -14,6 +14,17 @@ import { ownershipJsonLd, loanJsonLd } from './ownership.ts';
 
 export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 20, graphPerPage: WORK_READ_COST.graphCalls,
   phases: 10, scopedRatingsPerPage: 20, responseBytes: FILE_IMPORT_COST.bytes } as const;
+// A sequential or bitmap read of every later source can start more cheaply than
+// the primary key when the lateral filter looks rare. These apply only to the
+// retained-source statement, so that seek stops at the page.
+export const retainedLibrarySourcePageSql = `SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.archive_needed,r.match,r.resolution,r.outcome
+  FROM reader.library_import_source s
+  JOIN LATERAL (SELECT r.source_view,r.archive_needed,r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
+    JOIN reader.library_import_file f ON f.agent=r.agent AND f.id=r.file_id
+    WHERE r.agent=s.agent AND r.source_digest=s.digest AND f.expires_at>clock_timestamp()
+    ORDER BY r.archive_needed DESC,r.file_id,r.row_number LIMIT 1) r ON true
+  WHERE s.agent=$1 AND (r.archive_needed OR s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb)
+    AND s.digest>$2 ORDER BY s.digest LIMIT $3`;
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
   ({ ...emptyRow(id,'',raw),kind,work });
@@ -125,16 +136,15 @@ export class LibraryBundleExporter {
         review: { text: r.body,language: r.language,spoiler: r.spoiler } } }));
     }
     if (phase === 3) {
-      const result = await this.content.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(`
-        SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.archive_needed,r.match,r.resolution,r.outcome
-        FROM reader.library_import_source s
-        JOIN LATERAL (SELECT r.source_view,r.archive_needed,r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
-          JOIN reader.library_import_file f ON f.agent=r.agent AND f.id=r.file_id
-          WHERE r.agent=s.agent AND r.source_digest=s.digest AND f.expires_at>clock_timestamp()
-          ORDER BY r.archive_needed DESC,r.file_id,r.row_number LIMIT 1) r ON true
-        WHERE s.agent=$1 AND (r.archive_needed OR s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb)
-          AND s.digest>$2 ORDER BY s.digest LIMIT $3`,[agent,after,limit]);
-      return result.rows.map(s => ({ key: s.key,row: s.source_view ? { ...s.source_view,raw: { ...s.source_view.raw,source: s.source } }
+      const client = await this.content.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SET LOCAL enable_seqscan = off');
+        await client.query('SET LOCAL enable_bitmapscan = off');
+        const result = await client.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(
+          retainedLibrarySourcePageSql,[agent,after,limit]);
+        await client.query('COMMIT');
+        return result.rows.map(s => ({ key: s.key,row: s.source_view ? { ...s.source_view,raw: { ...s.source_view.raw,source: s.source } }
         : s.source.kind === 'retained' ? s.source
         : s.source.kind !== 'source' && !s.archive_needed ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
           raw: { sourceId: s.source.sourceId,fields: s.private_extras } }
@@ -145,6 +155,10 @@ export class LibraryBundleExporter {
           raw: { source: s.source,match: s.match && { kind: s.match.kind,work: s.match.work,target: s.match.target,
             truncated: s.match.truncated,openLibraryAvailability: s.match.openLibraryAvailability },
           resolution: s.resolution,outcome: s.outcome } } }));
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally { client.release(); }
     }
     if (phase === 4 || phase === 5) {
       const member = phase === 5;
