@@ -123,6 +123,7 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     expect(nextVersion.items[0]!.id).not.toBe(firstVersion.id);
     expect(nextVersion.complete).toBe(true);
 
+
     const stale = await json<Page>(await get('/v1/works?limit=5'));
     expect(stale.stale).toBe(true);
     expect(stale.generation).toBe(page.generation);
@@ -182,5 +183,34 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
       WHERE generation_id=$1`, [page.generation]);
     expect(await refresh.purge()).toBeGreaterThan(0);
     expect((await get(`/v1/works?cursor=${page.nextCursor}`)).status).toBe(409);
+
+    // Last, so the added Work does not change the population the cases above count.
+    // A version written to the SAME Work while a client pages its versions: the
+    // held cursor is refused (the Work's own basis moved), never continued, so the
+    // client can neither see a repeated nor skip an item; restarting from the
+    // first page lists every version exactly once.
+    const paged = await stack.publicWork(agent.agent, ['en', 'fr'], 'Versions written while paging');
+    type VersionPage = { result: { items: { id: string }[]; complete: boolean; nextCursor?: string } };
+    const versionsOf = (work: string, cursor?: string) => app.handle(new Request('http://main.local/v1/query', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'template-query-v1', query: 'https://rezics.com/query/work-versions',
+        revision: 1, parameters: { roots: [work] }, limit: 1, ...(cursor ? { cursor } : {}) }) }));
+    const firstPage = (await json<VersionPage>(await versionsOf(paged.work))).result;
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.nextCursor).toBeString();
+    const late = await stack.contribution(paged.work, agent.agent, 'de', `late version ${randomUUID()}`);
+    const refused = await json<{ code: string }>(await versionsOf(paged.work, firstPage.nextCursor), 409);
+    expect(refused.code).toBe('read_basis_changed');
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 6; guard++) {
+      const page = (await json<VersionPage>(await versionsOf(paged.work, cursor))).result;
+      for (const item of page.items) seen.push(item.id);
+      if (page.complete || !page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    expect(new Set(seen).size).toBe(seen.length);
+    const ids = [...paged.variants.map(v => v.contribution), late.contribution];
+    expect([...seen].sort()).toEqual([...ids].sort());
   } finally { await stack.stop(); }
 }, 240_000);
