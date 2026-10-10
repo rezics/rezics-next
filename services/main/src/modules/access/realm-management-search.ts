@@ -19,57 +19,84 @@ export async function resolveAgentSearch(client: PoolClient, query: string): Pro
   return row?.holder ?? query;
 }
 
+const searchTerms = `WITH query AS MATERIALIZED (
+  SELECT access.realm_member_search_key($3) AS text
+), terms AS MATERIALIZED (
+  SELECT text, access.realm_member_search_terms(text) AS tokens FROM query
+)`;
+/** Display name or handle, in the same casefolded form both searches use. */
+const memberSearchKeyMatch = (column: string) =>
+  `access.realm_member_search_terms(access.realm_member_search_key(${column})) @> q.tokens
+      AND strpos(access.realm_member_search_key(${column}), q.text) > 0`;
+/** Inactive authority keeps a retained name off search. The roster still lists them. */
+const searchableSubject = (id: string) => `JOIN access.authority_subject s ON s.id = ${id} AND s.active`;
+const memberIdentityPrefix = (identity: string, prefixParam: string) => `${identity} LIKE ${prefixParam} || '%'`;
+const onRoster = (member: string) => `(EXISTS (SELECT 1 FROM access.membership m
+      WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = ${member})
+      OR EXISTS (SELECT 1 FROM access.realm_admin_assignment a
+        WHERE a.realm = $1 AND a.member = ${member} AND a.valid_until > clock_timestamp()))`;
+
 /** Each branch seeks an indexed name/handle candidate relation, intersects the
  * exact Realm's public Agent roster, then retains at most page + 1 identities.
  * The final union sorts at most 4 * (page + 1) rows. GIN rechecks cost O(matches),
  * capped by the surrounding management transaction's five-second SQL deadline.
  * No private principal membership or Account name is a search source.
  * Provision display names are immutable; handles are read from their live owner,
- * so handle retirement and failed/compensated provisioning need no index repair. */
-export const REALM_MEMBER_SEARCH_SQL = `WITH query AS MATERIALIZED (
-  SELECT access.realm_member_search_key($3) AS text
-), terms AS MATERIALIZED (
-  SELECT text, access.realm_member_search_terms(text) AS tokens FROM query
-), candidates AS (
+ * so handle retirement and failed/compensated provisioning need no index repair.
+ * A role uses the same name match inside the role-holder keyset, below. */
+export const REALM_MEMBER_SEARCH_SQL = `${searchTerms}, candidates AS (
   (SELECT p.agent_id AS member
     FROM access.agent_provision p
-    JOIN access.authority_subject s ON s.id = p.agent_id AND s.active
+    ${searchableSubject('p.agent_id')}
     CROSS JOIN terms q
-    WHERE p.agent_id > $2 AND (EXISTS (SELECT 1 FROM access.membership m
-      WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = p.agent_id)
-      OR EXISTS (SELECT 1 FROM access.realm_admin_assignment a
-        WHERE a.realm = $1 AND a.member = p.agent_id AND a.valid_until > clock_timestamp()))
+    WHERE p.agent_id > $2 AND ${onRoster('p.agent_id')}
       AND p.state = 'active'
-      AND access.realm_member_search_terms(access.realm_member_search_key(p.display_name)) @> q.tokens
-      AND strpos(access.realm_member_search_key(p.display_name), q.text) > 0
+      AND ${memberSearchKeyMatch('p.display_name')}
     ORDER BY p.agent_id LIMIT $4)
   UNION
   (SELECT h.holder AS member
     FROM access.alias_registry h
-    JOIN access.authority_subject s ON s.id = h.holder AND s.active
+    ${searchableSubject('h.holder')}
     CROSS JOIN terms q
-    WHERE h.holder > $2 AND (EXISTS (SELECT 1 FROM access.membership m
-      WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = h.holder)
-      OR EXISTS (SELECT 1 FROM access.realm_admin_assignment a
-        WHERE a.realm = $1 AND a.member = h.holder AND a.valid_until > clock_timestamp()))
+    WHERE h.holder > $2 AND ${onRoster('h.holder')}
       AND h.scope = 'agent' AND h.state = 'current'
-      AND access.realm_member_search_terms(access.realm_member_search_key(h.key)) @> q.tokens
-      AND strpos(access.realm_member_search_key(h.key), q.text) > 0
+      AND ${memberSearchKeyMatch('h.key')}
     ORDER BY h.holder LIMIT $4)
   UNION
   (SELECT m.member_subject AS member FROM access.membership m
-    JOIN access.authority_subject s ON s.id = m.member_subject AND s.active
+    ${searchableSubject('m.member_subject')}
     WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject > $2
-      AND m.member_subject LIKE $5 || '%'
+      AND ${memberIdentityPrefix('m.member_subject', '$5')}
     ORDER BY m.member_subject LIMIT $4)
   UNION
   (SELECT DISTINCT a.member FROM access.realm_admin_assignment a
-    JOIN access.authority_subject s ON s.id = a.member AND s.active
+    ${searchableSubject('a.member')}
     WHERE a.realm = $1 AND a.valid_until > clock_timestamp() AND a.member > $2
-      AND a.member LIKE $5 || '%'
+      AND ${memberIdentityPrefix('a.member', '$5')}
     ORDER BY a.member LIMIT $4)
 )
 SELECT member FROM candidates ORDER BY member LIMIT $4`;
+
+/** Name match inside the (realm, role, member) keyset. A realm-wide name page
+ * would drop holders who sort after that page and give them no cursor. */
+export const REALM_ROLE_MEMBER_SEARCH_SQL = `${searchTerms}
+SELECT holder.member
+FROM access.realm_admin_assignment holder
+CROSS JOIN terms q
+WHERE holder.realm = $1 AND holder.role_id = $5::uuid AND holder.valid_until > clock_timestamp()
+  AND holder.member > $2
+  AND (
+    EXISTS (SELECT 1 FROM access.agent_provision p
+      ${searchableSubject('p.agent_id')}
+      WHERE p.agent_id = holder.member AND p.state = 'active'
+        AND ${memberSearchKeyMatch('p.display_name')})
+    OR EXISTS (SELECT 1 FROM access.alias_registry h
+      ${searchableSubject('h.holder')}
+      WHERE h.holder = holder.member AND h.scope = 'agent' AND h.state = 'current'
+        AND ${memberSearchKeyMatch('h.key')})
+    OR (${memberIdentityPrefix('holder.member', '$6')} AND EXISTS (
+      SELECT 1 FROM access.authority_subject s WHERE s.id = holder.member AND s.active)))
+ORDER BY holder.member LIMIT $4`;
 
 /** The normalized name query and the identity prefix a member page matches. */
 export async function prepareMemberSearch(client: PoolClient, search: string, limit: number):
@@ -84,9 +111,12 @@ export async function prepareMemberSearch(client: PoolClient, search: string, li
 }
 
 export async function searchRealmMembers(client: PoolClient, realm: string, search: string,
-  after: string | undefined, limit: number): Promise<string[]> {
+  after: string | undefined, limit: number, role?: string): Promise<string[]> {
   const prepared = await prepareMemberSearch(client, search, limit);
-  const rows = await client.query<{ member: string }>(REALM_MEMBER_SEARCH_SQL,
-    [realm, after ?? '', prepared.text, limit, prepared.prefix]);
+  const rows = await client.query<{ member: string }>(
+    role ? REALM_ROLE_MEMBER_SEARCH_SQL : REALM_MEMBER_SEARCH_SQL,
+    role
+      ? [realm, after ?? '', prepared.text, limit, role, prepared.prefix]
+      : [realm, after ?? '', prepared.text, limit, prepared.prefix]);
   return rows.rows.map(row => row.member);
 }

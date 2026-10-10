@@ -5,8 +5,9 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
-import { AccessRealmManagement, REALM_ROLE_HOLDER_PAGE_SQL, REALM_ROLE_HOLDER_PREVIEW_SQL,
-  REALM_ROLE_HOLDER_SEARCH_PAGE_SQL } from '../src/modules/access/realm-management.ts';
+import { AccessRealmManagement, REALM_MEMBER_ROSTER_SQL, REALM_ROLE_HOLDER_MATCH_PAGE_SQL,
+  REALM_ROLE_HOLDER_PAGE_SQL, REALM_ROLE_HOLDER_PREVIEW_SQL } from '../src/modules/access/realm-management.ts';
+import { REALM_MEMBER_SEARCH_SQL, REALM_ROLE_MEMBER_SEARCH_SQL } from '../src/modules/access/realm-management-search.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { REALM_ROLE_CAP, REALM_ROLE_HOLDER_PREVIEW, RealmAdminDenied, RealmAdminLimit,
   RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
@@ -141,7 +142,7 @@ function planNodes(plan: Record<string, unknown>): Record<string, unknown>[] {
   return nodes;
 }
 
-test('role cards preview holders, the role filter pages, and a hidden member stays out as the roster grows', async () => {
+test('role cards and the role filter list the same people the roster shows for that role', async () => {
   const adminSource = watch(pool);
   const admin = new AccessRealmManagement(adminSource.pool);
   const manager = await realmWith(['realm.members.manage', 'realm.roles.manage']);
@@ -150,7 +151,7 @@ test('role cards preview holders, the role filter pages, and a hidden member sta
   await role(manager.realm, 'Empty');
   await people(manager.realm, 1, 25, { role: wide });
   await people(manager.realm, 24, 2, { role: small, assignOnly: true });
-  // Sorts first, so a missing filter would put them at the head of Wide.
+  // Sorts first. The roster lists them, so the role filter and the preview do too.
   await people(manager.realm, 0, 1, { role: wide, active: false });
   await people(manager.realm, 26, 1, { role: wide, banned: true });
   const institution = agent(27);
@@ -164,32 +165,37 @@ test('role cards preview holders, the role filter pages, and a hidden member sta
   const preview = await admin.roles(manager.principal, manager.realm, manager.actor);
   expect(preview.cap).toBe(REALM_ROLE_CAP);
   const byName = Object.fromEntries(preview.roles.map(item => [item.name, item]));
-  expect(byName.Wide).toMatchObject({ moreHolders: true, holders: [agent(1), agent(2), agent(3)] });
+  const shown = (member: string, banned = false) => ({ member, banned });
+  expect(byName.Wide).toMatchObject({ moreHolders: true, holders: [shown(agent(0)), shown(agent(1)), shown(agent(2))] });
   expect(byName.Wide!.holders).toHaveLength(REALM_ROLE_HOLDER_PREVIEW);
-  expect(byName.Small).toEqual(expect.objectContaining({ moreHolders: false, holders: [agent(24), agent(25)] }));
+  expect(byName.Small).toEqual(expect.objectContaining({ moreHolders: false, holders: [shown(agent(24)), shown(agent(25))] }));
   expect(byName.Empty).toEqual(expect.objectContaining({ moreHolders: false, holders: [] }));
-  expect(byName.Sealed).toEqual(expect.objectContaining({ moreHolders: false, holders: [] }));
-  expect(preview.roles.map(item => item.holders).flat()).not.toContain(agent(0));
-  expect(preview.roles.map(item => item.holders).flat()).not.toContain(agent(26));
-  expect(preview.roles.map(item => item.holders).flat()).not.toContain(institution);
+  expect(byName.Sealed).toEqual(expect.objectContaining({
+    moreHolders: false, holders: [shown(agent(0)), shown(agent(26), true)] }));
+
+  const roster = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor, limit: 50 });
+  expect(REALM_MEMBER_ROSTER_SQL).not.toContain('authority_subject');
+  expect(adminSource.statements.some(sql => sql === REALM_MEMBER_ROSTER_SQL)).toBe(true);
+  const withRole = (roleId: string) => roster.items.filter(item => item.roles.some(role => role.id === roleId));
+  const wideHeld = withRole(wide);
+  expect(wideHeld.map(item => item.member)).toEqual([
+    agent(0), ...Array.from({ length: 26 }, (_, index) => agent(index + 1)), institution]);
+  expect(wideHeld.find(item => item.member === agent(26))!.banned).toBe(true);
+  expect(roster.items.map(item => item.member)).toContain(agent(0));
+  expect(roster.items.map(item => item.member)).toContain(institution);
+  expect(byName.Wide!.holders).toEqual(wideHeld.slice(0, REALM_ROLE_HOLDER_PREVIEW).map(item => shown(item.member, item.banned)));
+  expect(byName.Wide!.moreHolders).toBe(wideHeld.length > REALM_ROLE_HOLDER_PREVIEW);
+  expect(byName.Sealed!.holders).toEqual(withRole(sealed).map(item => shown(item.member, item.banned)));
+  expect(byName.Sealed!.moreHolders).toBe(false);
 
   const first = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor, role: wide, limit: 20 });
   const second = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor, role: wide,
     after: first.nextCursor!, limit: 20 });
-  expect(first.items.map(item => item.member)).toEqual(Array.from({ length: 20 }, (_, index) => agent(index + 1)));
-  expect(first.nextCursor).toBe(agent(20));
-  expect(second.items.map(item => item.member)).toEqual([agent(21), agent(22), agent(23), agent(24), agent(25)]);
+  expect(first.items).toEqual(wideHeld.slice(0, 20));
+  expect(first.nextCursor).toBe(wideHeld[19]!.member);
+  expect(second.items).toEqual(wideHeld.slice(20));
   expect(second.nextCursor).toBeNull();
-  const holders = [...first.items, ...second.items].map(item => item.member);
-  expect(holders).not.toContain(agent(0));
-  expect(holders).not.toContain(agent(26));
-  expect(holders).not.toContain(institution);
-
-  const roster = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor, limit: 50 });
-  expect(roster.items[0]?.member).toBe(agent(1));
-  expect(roster.items.map(item => item.member)).toContain(agent(26));
-  expect(roster.items.map(item => item.member)).not.toContain(agent(0));
-  expect(roster.items.map(item => item.member)).not.toContain(institution);
+  expect(second.items.find(item => item.member === agent(26))!.banned).toBe(true);
 
   const unknown = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor, role: randomUUID() });
   expect(unknown.items).toEqual([]);
@@ -217,15 +223,25 @@ test('role cards preview holders, the role filter pages, and a hidden member sta
   expect(adminSource.statements.some(sql => sql === REALM_ROLE_HOLDER_PAGE_SQL)).toBe(true);
 
   await pool.query('ANALYZE access.realm_admin_assignment');
-  const explained = await pool.query<{ 'QUERY PLAN': { Plan: Record<string, unknown> }[] }>(
-    `EXPLAIN (ANALYZE, FORMAT JSON) ${REALM_ROLE_HOLDER_PAGE_SQL}`, [manager.realm, null, null, 21, wide]);
-  const nodes = planNodes(explained.rows[0]!['QUERY PLAN'][0]!.Plan);
-  const scans = nodes.filter(node => node['Index Name'] === 'realm_admin_assignment_role_holders');
-  expect(scans.length, JSON.stringify(nodes.map(node => [node['Node Type'], node['Index Name'], node['Relation Name']]))).toBeGreaterThan(0);
-  expect(nodes.some(node => node['Node Type'] === 'Seq Scan' && node['Relation Name'] === 'realm_admin_assignment')).toBe(false);
-  const holderScan = scans[0]!;
-  const examined = Number(holderScan['Actual Rows']) + Number(holderScan['Rows Removed by Filter'] ?? 0);
-  expect(examined).toBeLessThanOrEqual(21);
+  // On a few hundred rows the planner may scan the whole role and sort. The ordered index plan stops at the page.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL enable_seqscan = off');
+    await client.query('SET LOCAL enable_bitmapscan = off');
+    const explained = await client.query<{ 'QUERY PLAN': { Plan: Record<string, unknown> }[] }>(
+      `EXPLAIN (ANALYZE, FORMAT JSON) ${REALM_ROLE_HOLDER_PAGE_SQL}`, [manager.realm, '', 21, wide]);
+    const nodes = planNodes(explained.rows[0]!['QUERY PLAN'][0]!.Plan);
+    const scans = nodes.filter(node => node['Index Name'] === 'realm_admin_assignment_role_holders');
+    expect(scans.length, JSON.stringify(nodes.map(node => [node['Node Type'], node['Index Name'], node['Relation Name']]))).toBeGreaterThan(0);
+    expect(nodes.some(node => node['Node Type'] === 'Seq Scan' && node['Relation Name'] === 'realm_admin_assignment')).toBe(false);
+    const holderScan = scans[0]!;
+    const examined = Number(holderScan['Actual Rows']) + Number(holderScan['Rows Removed by Filter'] ?? 0);
+    expect(examined).toBeLessThanOrEqual(21);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
   expect(REALM_ROLE_HOLDER_PREVIEW_SQL).toContain('LATERAL');
 }, 60_000);
 
@@ -295,7 +311,7 @@ test('a roles manager who cannot read members does not learn who holds a role', 
   expect(visible.generation).toBe(hidden.generation);
   expect(visible.cap).toBe(hidden.cap);
   expect(visible.roles.map(shown)).toEqual(hidden.roles.map(shown));
-  expect(visible.roles[0]).toMatchObject({ holders: [holder], moreHolders: false });
+  expect(visible.roles[0]).toMatchObject({ holders: [{ member: holder, banned: false }], moreHolders: false });
 });
 
 test('searching inside a role pages holders who sort after the realm-wide name page', async () => {
@@ -327,8 +343,10 @@ test('searching inside a role pages holders who sort after the realm-wide name p
       ('20000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid
     FROM generate_series($1::int, $1::int + $2::int - 1) n`, [from, count]);
 
+  adminSource.statements.length = 0;
   const realmPage = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor,
     search: 'lin', limit: 20 });
+  expect(adminSource.statements.some(sql => sql === REALM_MEMBER_SEARCH_SQL)).toBe(true);
   expect(realmPage.items.map(item => item.member)).toEqual(Array.from({ length: 20 }, (_, index) => agent(from + index)));
   expect(realmPage.nextCursor).toBe(agent(from + 19));
 
@@ -339,7 +357,8 @@ test('searching inside a role pages holders who sort after the realm-wide name p
     adminSource.statements.length = 0;
     const read = await admin.members(manager.principal, manager.realm, { actingSubject: manager.actor,
       search: 'lin', role: wide, limit: 2, ...after ? { after } : {} });
-    expect(adminSource.statements.some(sql => sql === REALM_ROLE_HOLDER_SEARCH_PAGE_SQL)).toBe(true);
+    expect(adminSource.statements.some(sql => sql === REALM_ROLE_MEMBER_SEARCH_SQL)).toBe(true);
+    expect(adminSource.statements.some(sql => sql === REALM_ROLE_HOLDER_MATCH_PAGE_SQL)).toBe(true);
     expect(adminSource.statements.some(sql => sql.includes('candidates'))).toBe(false);
     found.push(...read.items.map(item => item.member));
     after = read.nextCursor;

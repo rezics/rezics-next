@@ -436671,8 +436671,20 @@
                           "holders": {
                             "~elyTyp": 7,
                             "items": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
+                              "properties": {
+                                "banned": {
+                                  "type": "boolean"
+                                },
+                                "member": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "member",
+                                "banned"
+                              ],
+                              "type": "object"
                             },
                             "maxItems": 3,
                             "nullable": true,

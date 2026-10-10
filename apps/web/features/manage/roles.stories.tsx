@@ -62,7 +62,8 @@ export const EditWithImpactPreview: Story = {
 /** More than three holders: the card names the first three and links to the filtered members list. */
 export const ShowAllHolders: Story = {
   args: { list: { generation: '12', cap: 32, roles: [{ ...roles[0]!,
-    holders: [people.daniel, people.an, people.mei], moreHolders: true }] } },
+    holders: [{ member: people.daniel, banned: false }, { member: people.an, banned: false },
+      { member: people.mei, banned: false }], moreHolders: true }] } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const card = canvas.getByRole('heading', { name: 'Community moderators' }).closest('li')!;
@@ -71,6 +72,18 @@ export const ShowAllHolders: Story = {
     await expect(link).toHaveTextContent('Show all');
     await expect(link).toHaveAttribute('href', expect.stringContaining(
       `/manage/r/${realm}/members?role=${roles[0]!.id}`));
+  },
+};
+
+/** Someone the members list marks banned stays on the card with the same mark. */
+export const BannedHolder: Story = {
+  args: { list: { generation: '12', cap: 32, roles: [{ ...roles[0]!,
+    holders: [{ member: people.jun, banned: true }], moreHolders: false }] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const card = canvas.getByRole('heading', { name: 'Community moderators' }).closest('li')!;
+    await expect(card).toHaveTextContent('Jun Zhang 张俊');
+    await expect(within(card).getByText('Banned')).toBeVisible();
   },
 };
 

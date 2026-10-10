@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Field, FieldContent, FieldDescription, FieldError, FieldHelper, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/field';
@@ -74,7 +75,10 @@ export function RolesView({ realm, address = realm, actingSubject, list, agents,
                 className="rounded-md font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {t.tabMembers}</LocalizedLink></p>
               : <>
-                <p>{role.holders.length ? role.holders.map(name).join(', ') : t.roleHoldersHelp}</p>
+                <p>{role.holders.length ? role.holders.map((holder, index) => <span key={holder.member}>
+                  {index ? ', ' : null}{name(holder.member)}
+                  {holder.banned ? <> <Badge variant="destructive">{t.bannedPermanently}</Badge></> : null}
+                </span>) : t.roleHoldersHelp}</p>
                 {role.moreHolders ? <LocalizedLink href={membersHref(address, role.id)}
                   className="w-fit rounded-md font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={t.showAllHoldersLabel({ role: role.name })}>{t.showAllHolders}</LocalizedLink> : null}

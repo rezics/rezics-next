@@ -266,7 +266,7 @@ export const logNames: LogNames = { agents, works, chapters, facts };
 
 export const roles: Role[] = [
   { id: id(2001), name: 'Community moderators', permissions: ['governance.moderate', 'realm.members.manage'],
-    holders: [people.daniel, people.an], moreHolders: false },
+    holders: [{ member: people.daniel, banned: false }, { member: people.an, banned: false }], moreHolders: false },
   { id: id(2002), name: 'Rules editors', permissions: ['governance.rule.publish', 'realm.settings.manage'],
     holders: [], moreHolders: false },
 ];

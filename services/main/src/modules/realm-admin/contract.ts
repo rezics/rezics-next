@@ -49,7 +49,8 @@ export const impact = t.Object({ digest: t.String(), exact: t.Literal(true), aff
 export type RoleImpact = Static<typeof impact>;
 export const roleView = t.Object({ id: readUuid, name: t.String(), permissions: t.Array(realmPermission),
   // Null means this caller cannot read members, not that the role is unused.
-  holders: t.Nullable(t.Array(readId, { maxItems: REALM_ROLE_HOLDER_PREVIEW })),
+  // Each holder is someone the members read lists for this role. `banned` is that row's flag.
+  holders: t.Nullable(t.Array(t.Object({ member: readId, banned: t.Boolean() }), { maxItems: REALM_ROLE_HOLDER_PREVIEW })),
   moreHolders: t.Nullable(t.Boolean()) });
 export const roleList = t.Object({ generation, cap: t.Literal(REALM_ROLE_CAP),
   roles: t.Array(roleView, { maxItems: REALM_ROLE_READ_LIMIT }) });
