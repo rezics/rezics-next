@@ -22,6 +22,7 @@ import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts'
 import type { Viewer } from '../suitability/policy.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { discloseInventory, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
+import { FencedDisclosure } from './fenced-disclosure.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
 export class WorkReadInvalid extends Error {}
@@ -148,14 +149,16 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
-  /** Home already fences names and bodies in one disclosure statement. */
-  callerFencesSummaryDisclosure = false;
-  /** Graph heads from a caller-fenced summary, keyed by resource. */
-  readonly summaryHeads = new Map<string, string>();
+  /** Set only by a completed disclosure statement, then reused by later summary batches. */
+  #summaryDisclosure: FencedDisclosure | null = null;
   get viewer() { return this.principal ? disclosureViewer(this.principal, this.options.actingSubject)
     : this.options.publicViewer ?? disclosureViewer(null); }
   disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
     return discloseInventory(this.deps.environment, targets, this.viewer, channel);
+  }
+  /** Runs the disclosure statement and returns the only value a summary batch accepts in its place. */
+  async fencedDisclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
+    return FencedDisclosure.fromStatement(await this.disclosure(targets, channel));
   }
   stale = false;
   private readonly realmProofs = new Map<string, string>();
@@ -201,7 +204,9 @@ export class WorkReadSession {
     return rows;
   }
 
-  async summaries(resources: string[], optionalMedia = false): Promise<ResourceSummary[]> {
+  async summaries(resources: string[], optionalMedia = false,
+    fence?: FencedDisclosure | ((heads: ReadonlyMap<string, string>) => Promise<FencedDisclosure>),
+  ): Promise<ResourceSummary[]> {
     this.checkDeadline();
     if (!resources.length) return [];
     const reader = { viewer: this.viewer, realmReadProof: this.principal && this.options.actingSubject ? (realm: string) =>
@@ -226,24 +231,30 @@ export class WorkReadSession {
         return row;
       },
     } : undefined;
-    const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
-      { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-        languages: this.displayLanguages, localBasis: this.options.localBasis,
-        settleNonAgentNameOwners: true,
-        callerFencesDisclosure: this.callerFencesSummaryDisclosure,
-        heads: this.callerFencesSummaryDisclosure ? this.summaryHeads : undefined });
+    if (fence instanceof FencedDisclosure) this.#summaryDisclosure = fence;
+    const authorize = this.#summaryDisclosure ? undefined
+      : typeof fence === 'function' ? async (heads: ReadonlyMap<string, string>) => {
+        const proof = await fence(heads);
+        if (!(proof instanceof FencedDisclosure)) throw new WorkReadUnavailable('Summary disclosure fence is missing');
+        this.#summaryDisclosure = proof;
+        return proof;
+      } : undefined;
+    const summaryInput = (localBasis: boolean) => ({
+      resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
+      languages: this.displayLanguages, localBasis, settleNonAgentNameOwners: true,
+      fencedDisclosure: this.#summaryDisclosure ?? undefined, authorizeDisclosure: authorize,
+    });
+    const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(!!this.options.localBasis));
     if (this.options.localBasis) {
       const key = `summaries:${JSON.stringify(resources)}`;
       const token = readDependencyToken([result.generation.graph, result.summaries]);
       const previous = this.ownerDependencies.get(key);
       if (previous && previous.token !== token) throw new WorkReadMoved('Summary dependency changed');
       this.ownerDependencies.set(key, { token, read: async () => {
-        const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
-          { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-            languages: this.displayLanguages, localBasis: true,
-            settleNonAgentNameOwners: true,
-            callerFencesDisclosure: this.callerFencesSummaryDisclosure,
-            heads: this.callerFencesSummaryDisclosure ? this.summaryHeads : undefined });
+        const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader, {
+          ...summaryInput(true), authorizeDisclosure: undefined,
+          fencedDisclosure: this.#summaryDisclosure ?? undefined,
+        });
         return [fresh.generation.graph, fresh.summaries];
       } });
     } else if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {

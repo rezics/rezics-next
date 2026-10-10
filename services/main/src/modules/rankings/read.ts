@@ -1,5 +1,6 @@
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
+import { FencedDisclosure } from '../work/fenced-disclosure.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
@@ -28,9 +29,6 @@ export async function readRankings(
     order: 'score' | 'growth';
   },
 ) {
-  // The page discloses each admitted name before hydration. Summary reads then
-  // keep that split instead of spending their own disclosure statements twice.
-  session.callerFencesSummaryDisclosure = true;
   if (options.realm) await readRealmBasis(session, options.realm);
   const checkpoint = await projection.current();
   const bucket = rankingBuckets(new Date(), options.interval).current;
@@ -62,6 +60,7 @@ export async function readRankings(
         limit + 1,
         options.realm,
       );
+  let nameFence: FencedDisclosure | undefined;
   const admitted = await (async (candidates: Candidate[]) => {
       const ids = candidates.map((row) => row.work);
       const visible = ids.length
@@ -98,26 +97,26 @@ export async function readRankings(
       ) {
         throw new WorkReadUnavailable('Ranking public population is ambiguous');
       }
-      const decisions = await session.disclosure(
+      const admittedNames = nameFence = await session.fencedDisclosure(
         visible.map((row) => ({
-          owner: 'graph',
+          owner: 'graph' as const,
           resource: row.work!.value,
           work: row.work!.value,
-          component: 'name',
+          component: 'name' as const,
           revision: row.head!.value,
           workRevision: row.head!.value,
         })),
         'read',
       );
       visible.forEach((row, index) => {
-        if (decisions[index] === 'visible') heads.set(row.work!.value, row);
+        if (admittedNames.decisions[index] === 'visible') heads.set(row.work!.value, row);
       });
       if (candidates.some(row => !heads.has(row.work))) throw new WorkReadMoved('Ranking admission changed');
       return candidates;
     })(candidates);
   const selected = { page: admitted.slice(0,limit), lookahead: admitted[limit], last: admitted.slice(0,limit).at(-1) };
   const page = selected.page, last = selected.last;
-  const summaries = await session.summaries(page.map((row) => row.work));
+  const summaries = await session.summaries(page.map((row) => row.work), false, nameFence);
   const serial = await readSerialSummaries(
     session,
     page
