@@ -1,5 +1,5 @@
 /**
- * Home request work, G-1025. A feed page does not take more statements as it
+ * Home request work. A feed page does not take more statements as it
  * returns more items. Anonymous is 22 Postgres and 8 Fuseki. Signed is 28
  * Postgres and 8 Fuseki. Some signed Best corpus scales have no shelf read and
  * measure 26; the cap is the page that includes that pair.
