@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { hungTestFile, parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
-import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
+import { directoryLeaseHeld, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
@@ -50,6 +50,8 @@ export interface Manifest {
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
+  /** Dry-run removal of cache worktrees no non-terminal run maps. `--apply` deletes them. */
+  pruneCheckouts?: boolean; apply?: boolean;
   shards?: number; slots?: number; runId?: string; checkoutRoot?: string; legacyRoot?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
@@ -148,10 +150,12 @@ export function checkoutNameLength(checkoutRoot: string): number {
   return length;
 }
 
-export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches'> {
+export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches' | 'pruneCheckouts' | 'apply'> {
   const options: ReturnType<typeof parseRegressArgs> = {};
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
+    if (flag === '--prune-checkouts') { options.pruneCheckouts = true; continue; }
+    if (flag === '--apply') { options.apply = true; continue; }
     const value = args[++index];
     if (!value || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     if (flag === '--at' && /^[A-Za-z0-9._/@^~-]+$/.test(value)) options.at = value;
@@ -161,8 +165,248 @@ export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' |
     } else if (flag === '--integration-batches' && /^\d+$/.test(value)) options.integrationBatches = Number(value);
     else throw new Error(`Invalid regress option: ${flag} ${value}`);
   }
+  if (options.apply && !options.pruneCheckouts) throw new Error('--apply requires --prune-checkouts');
+  if (options.pruneCheckouts && (options.at || options.resume || options.only || options.integrationBatches !== undefined)) {
+    throw new Error('Checkout prune does not take a regression selection');
+  }
   if (options.resume && (options.only || options.integrationBatches !== undefined)) throw new Error('Resume keeps the original selection');
   return options;
+}
+
+export interface PruneCheckoutEntry { path: string; reason: string; bytes?: number }
+export interface PruneCheckoutsReport {
+  cacheRoot: string; apply: boolean;
+  kept: PruneCheckoutEntry[]; removed: PruneCheckoutEntry[]; untouched: PruneCheckoutEntry[];
+}
+export interface PruneCheckoutsOptions {
+  repo: string; stateDir: string; checkoutRoot?: string; apply?: boolean; measureBytes?: boolean;
+}
+
+type ManifestStatus = Manifest['status'] | 'absent' | 'unreadable' | 'unrecognized';
+
+/** A child of `root`, following a symlink only when the target stays inside `root`. */
+function cacheChild(root: string, path: string): string | undefined {
+  const candidate = resolve(path);
+  if (!within(root, candidate) || candidate === root) return undefined;
+  if (!existsSync(candidate)) return candidate;
+  const physical = realpathSync(candidate);
+  return within(root, physical) && physical !== root ? physical : undefined;
+}
+
+function gitResult(repo: string, args: string[]): { ok: boolean; stdout: string; stderr: string } {
+  const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+  return { ok: result.status === 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+}
+
+/** Listed path keyed by every spelling git or the checkout map may use. */
+function registeredWorktrees(repo: string): Map<string, string> {
+  const listed = new Map<string, string>();
+  const result = gitResult(repo, ['worktree', 'list', '--porcelain']);
+  if (!result.ok) throw new Error(`git worktree list --porcelain: ${result.stderr}`);
+  for (const line of result.stdout.split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    const path = resolve(line.slice('worktree '.length).trim());
+    listed.set(path, path);
+    if (existsSync(path)) listed.set(realpathSync(path), path);
+  }
+  return listed;
+}
+
+function registeredPath(listed: Map<string, string>, checkout: string): string | undefined {
+  const resolved = resolve(checkout);
+  return listed.get(resolved) ?? (existsSync(resolved) ? listed.get(realpathSync(resolved)) : undefined);
+}
+
+function readCheckoutMap(path: string): Record<string, string> | undefined {
+  if (!existsSync(path)) return {};
+  try {
+    const value = json<unknown>(path);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const map: Record<string, string> = {};
+    for (const [key, checkout] of Object.entries(value)) {
+      if (typeof checkout !== 'string' || !checkout) return undefined;
+      map[key] = checkout;
+    }
+    return map;
+  } catch { return undefined; }
+}
+
+function readManifestStatus(path: string): ManifestStatus {
+  if (!existsSync(path)) return 'absent';
+  try {
+    const value = json<{ status?: unknown }>(path);
+    if (value.status === 'passed' || value.status === 'failed' || value.status === 'running' || value.status === 'incomplete') return value.status;
+    return 'unrecognized';
+  } catch { return 'unreadable'; }
+}
+
+function checkoutBytes(root: string): Map<string, number> | undefined {
+  const result = spawnSync('du', ['-d', '1', '-B1', root], { encoding: 'utf8' });
+  if (result.status !== 0) return undefined;
+  const sizes = new Map<string, number>();
+  for (const line of result.stdout.split('\n')) {
+    const match = /^(\d+)\t(.+)$/.exec(line);
+    if (!match) continue;
+    const bytes = Number(match[1]);
+    if (Number.isSafeInteger(bytes)) sizes.set(resolve(match[2]!), bytes);
+  }
+  return sizes;
+}
+
+interface RegressionRunView {
+  id: string; status: ManifestStatus; live: boolean; map?: Record<string, string>;
+}
+
+function regressionRuns(stateDir: string): RegressionRunView[] {
+  const root = join(stateDir, 'regress');
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => {
+    const directory = join(root, entry.name);
+    return { id: entry.name, status: readManifestStatus(join(directory, 'manifest.json')),
+      live: directoryLeaseHeld(join(directory, 'lock')), map: readCheckoutMap(join(directory, 'checkouts.json')) };
+  });
+}
+
+/** Running and incomplete manifests can resume. A live lock keeps its checkouts even when the manifest is terminal. */
+function runProtectsCheckouts(run: RegressionRunView): boolean {
+  if (run.live) return true;
+  return run.status === 'running' || run.status === 'incomplete' || run.status === 'unreadable' || run.status === 'unrecognized';
+}
+
+function removeWorktree(repo: string, path: string): boolean {
+  const removed = gitResult(repo, ['worktree', 'remove', '--force', path]);
+  if (removed.ok || !existsSync(path)) return true;
+  console.error(`git worktree remove --force ${path}: ${removed.stderr.trim()}`);
+  return false;
+}
+
+function pruneWorktreeMetadata(repo: string): void {
+  const pruned = gitResult(repo, ['worktree', 'prune']);
+  if (!pruned.ok) console.error(`git worktree prune: ${pruned.stderr.trim()}`);
+}
+
+/** Drop the checkouts this run mapped once it can no longer resume. Paths outside the cache and owned legacy root stay. */
+function removeMappedCheckouts(repo: string, map: Record<string, string>, cacheRoot: string, legacyRoot: string,
+  physicalLegacyRoot: string, legacyOwned: boolean): void {
+  const listed = registeredWorktrees(repo);
+  const repoPath = realpathSync(repo);
+  let removed = false;
+  for (const checkout of new Set(Object.values(map))) {
+    const path = registeredPath(listed, checkout);
+    if (!path || (existsSync(path) && realpathSync(path) === repoPath)) continue;
+    const candidate = resolve(checkout);
+    const physical = existsSync(candidate) ? realpathSync(candidate) : physicalPath(candidate);
+    const legacyCandidate = legacyOwned && (within(legacyRoot, candidate) || within(physicalLegacyRoot, candidate));
+    const legacyPhysical = legacyOwned && within(physicalLegacyRoot, physical);
+    const allowed = (within(cacheRoot, candidate) || legacyCandidate) && (within(cacheRoot, physical) || legacyPhysical)
+      && candidate !== cacheRoot && physical !== cacheRoot && candidate !== resolve(legacyRoot) && physical !== physicalLegacyRoot;
+    if (!allowed) continue;
+    if (removeWorktree(repo, path)) removed = true;
+  }
+  if (removed) pruneWorktreeMetadata(repo);
+}
+
+/**
+ * Remove registered worktrees under the regression cache that no non-terminal run maps.
+ * Dry-run unless `apply`. A lock held by a live run keeps that run's checkouts.
+ */
+export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneCheckoutsReport {
+  const cacheRoot = regressionCheckoutRoot(options.repo, options.checkoutRoot);
+  const listed = registeredWorktrees(options.repo);
+  const runs = regressionRuns(options.stateDir);
+  const sizes = options.measureBytes === false ? undefined : checkoutBytes(cacheRoot);
+  const bytesOf = (path: string): number | undefined => sizes?.get(resolve(path)) ?? (existsSync(path) ? sizes?.get(realpathSync(path)) : undefined);
+  const kept: PruneCheckoutEntry[] = [];
+  const removed: PruneCheckoutEntry[] = [];
+  const untouched: PruneCheckoutEntry[] = [];
+  const seen = new Set<string>();
+  const protectAll = runs.filter(run => run.live && run.map === undefined);
+  const candidates = [...new Set(listed.values())].filter(path => cacheChild(cacheRoot, path) !== undefined);
+  for (const path of candidates) {
+    seen.add(resolve(path));
+    if (existsSync(path)) seen.add(realpathSync(path));
+    const owners = runs.filter(run => run.map && Object.values(run.map).some(checkout => registeredPath(listed, checkout) === path
+      || resolve(checkout) === resolve(path)));
+    const protectors = protectAll.length ? protectAll : owners.filter(runProtectsCheckouts);
+    const bytes = bytesOf(path);
+    if (protectors.length) {
+      const live = protectors.filter(run => run.live);
+      const names = (group: RegressionRunView[]) => group.map(run => run.id).sort().join(', ');
+      const reason = protectAll.length
+        ? `live run ${names(live)} has an unreadable checkout map`
+        : live.length
+          ? `live run ${names(live)}`
+          : `resumable run ${protectors.map(run => `${run.id} (${run.status})`).sort().join(', ')}`;
+      kept.push({ path, reason, ...(bytes !== undefined ? { bytes } : {}) });
+      continue;
+    }
+    const terminal = owners.filter(run => run.status === 'passed' || run.status === 'failed');
+    const reason = terminal.length ? `terminal run ${terminal.map(run => run.id).sort().join(', ')}` : 'registered worktree with no checkout map';
+    removed.push({ path, reason, ...(bytes !== undefined ? { bytes } : {}) });
+  }
+  if (options.apply) {
+    const freshRuns = regressionRuns(options.stateDir);
+    const freshListed = registeredWorktrees(options.repo);
+    const freshProtectAll = freshRuns.some(run => run.live && run.map === undefined);
+    const deleted: PruneCheckoutEntry[] = [];
+    for (const entry of removed) {
+      const protectors = freshProtectAll ? freshRuns.filter(run => run.live && run.map === undefined)
+        : freshRuns.filter(run => run.map && Object.values(run.map).some(checkout => registeredPath(freshListed, checkout) === entry.path
+          || resolve(checkout) === resolve(entry.path)) && runProtectsCheckouts(run));
+      if (protectors.length) {
+        const live = protectors.filter(run => run.live);
+        kept.push({ path: entry.path, reason: live.length ? `live run ${live.map(run => run.id).join(', ')}` : entry.reason,
+          ...(entry.bytes !== undefined ? { bytes: entry.bytes } : {}) });
+        continue;
+      }
+      if (removeWorktree(options.repo, entry.path)) deleted.push(entry);
+    }
+    removed.splice(0, removed.length, ...deleted);
+    if (deleted.length) pruneWorktreeMetadata(options.repo);
+  }
+  for (const entry of readdirSync(cacheRoot, { withFileTypes: true })) {
+    const path = join(cacheRoot, entry.name);
+    if (seen.has(resolve(path)) || (existsSync(path) && seen.has(realpathSync(path)))) continue;
+    const physical = existsSync(path) ? realpathSync(path) : undefined;
+    untouched.push({ path, reason: physical !== undefined && !within(cacheRoot, physical)
+      ? 'escapes the cache root' : 'not a registered worktree' });
+  }
+  for (const run of runs) {
+    for (const checkout of new Set(Object.values(run.map ?? {}))) {
+      if (cacheChild(cacheRoot, checkout) !== undefined) continue;
+      untouched.push({ path: resolve(checkout), reason: 'outside the cache root' });
+    }
+  }
+  const byPath = (left: PruneCheckoutEntry, right: PruneCheckoutEntry) => left.path.localeCompare(right.path) || left.reason.localeCompare(right.reason);
+  const unique = (entries: PruneCheckoutEntry[]) => entries.filter((entry, index) => entries.findIndex(other => other.path === entry.path && other.reason === entry.reason) === index);
+  kept.splice(0, kept.length, ...unique(kept));
+  removed.splice(0, removed.length, ...unique(removed));
+  untouched.splice(0, untouched.length, ...unique(untouched));
+  kept.sort(byPath); removed.sort(byPath); untouched.sort(byPath);
+  return { cacheRoot, apply: options.apply === true, kept, removed, untouched };
+}
+
+export function formatPruneReport(report: PruneCheckoutsReport): string {
+  const lines = (label: string, entries: PruneCheckoutEntry[]) => {
+    const groups = new Map<string, { count: number; bytes: number; measured: boolean }>();
+    for (const entry of entries) {
+      const group = groups.get(entry.reason) ?? { count: 0, bytes: 0, measured: true };
+      group.count++;
+      if (entry.bytes === undefined) group.measured = false;
+      else group.bytes += entry.bytes;
+      groups.set(entry.reason, group);
+    }
+    return [`${label}: ${entries.length}`, ...[...groups.entries()].sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([reason, group]) => `  ${group.count}  ${group.measured ? group.bytes : 'unmeasured'}  ${reason}`)];
+  };
+  return [`cache: ${report.cacheRoot}`, `mode: ${report.apply ? 'apply' : 'dry-run'}`,
+    ...lines('kept', report.kept), ...lines('removed', report.removed), ...lines('untouched', report.untouched)].join('\n');
+}
+
+/** A passed run is complete and a failed run is finished. Running and incomplete manifests can still resume. */
+function regressionKeepsCheckouts(manifest: Manifest | undefined, planUnusable: boolean): boolean {
+  if (planUnusable || !manifest) return false;
+  return manifest.status === 'running' || manifest.status === 'incomplete';
 }
 
 /** Discover the pinned harness, rather than copying its ever-growing gate lists into another runner. */
@@ -459,6 +703,7 @@ export function lastPassingCommit(repo: string, stateDir: string, file: string, 
 }
 
 export async function runRegression(options: RegressionOptions): Promise<Manifest> {
+  if (options.pruneCheckouts) throw new Error('Checkout prune is separate from a regression run');
   const { repo, stateDir } = options;
   const configuredSlots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
   if (!Number.isSafeInteger(configuredSlots) || configuredSlots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
@@ -475,16 +720,25 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
   const stop = () => { interrupted = true; };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  let manifest: Manifest | undefined;
+  let treeMapPath: string | undefined;
+  let worktrees = '';
+  let legacyRoot = '';
+  let physicalLegacyRoot = '';
+  let legacyOwned = false;
+  let planUnusable = false;
+  const rejectResume = (message: string): never => { planUnusable = true; throw new Error(message); };
   try {
     const path = join(directory, 'manifest.json');
     const pinned = options.resume ? json<Manifest>(path).atCommit : git(repo, ['rev-parse', '--verify', `${options.at ?? 'main'}^{commit}`]);
     if (options.resume && options.at && git(repo, ['rev-parse', `${options.at}^{commit}`]) !== pinned) throw new Error('Resume revision differs from the pinned commit');
-    const worktrees = regressionCheckoutRoot(repo, options.checkoutRoot);
-    const legacyRoot = resolve(options.legacyRoot ?? join(repo, '.temp/regress'));
-    const physicalLegacyRoot = physicalPath(legacyRoot);
-    const legacyOwned = within(realpathSync(repo), physicalLegacyRoot) || within(worktrees, physicalLegacyRoot);
-    const treeMapPath = join(directory, 'checkouts.json');
-    const treeMap = existsSync(treeMapPath) ? json<Record<string, string>>(treeMapPath) : {};
+    worktrees = regressionCheckoutRoot(repo, options.checkoutRoot);
+    legacyRoot = resolve(options.legacyRoot ?? join(repo, '.temp/regress'));
+    physicalLegacyRoot = physicalPath(legacyRoot);
+    legacyOwned = within(realpathSync(repo), physicalLegacyRoot) || within(worktrees, physicalLegacyRoot);
+    treeMapPath = join(directory, 'checkouts.json');
+    const checkoutMapPath = treeMapPath;
+    const treeMap = existsSync(checkoutMapPath) ? json<Record<string, string>>(checkoutMapPath) : {};
     const nameLength = checkoutNameLength(worktrees);
     const prepared = new Map<string, Manifest['preflight']>();
     const preparedCheckouts = new Map<string, Manifest['preflight']>();
@@ -516,7 +770,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
           if (existsSync(candidate)) continue;
           diskDirectory(worktrees, 'checkout root');
           git(repo, ['worktree', 'add', '--force', '--detach', candidate, commit]);
-          checkout = candidate; treeMap[key] = checkout; atomic(treeMapPath, treeMap);
+          checkout = candidate; treeMap[key] = checkout; atomic(checkoutMapPath, treeMap);
           break;
         }
         if (!checkout) throw new Error('No short regression worktree path is free; remove completed regression checkouts');
@@ -537,7 +791,6 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       return checkout;
     };
     const checkout = await checkoutAt(pinned, undefined, false);
-    let manifest: Manifest;
     if (options.resume) {
       manifest = json<Manifest>(path);
       for (const batch of manifest.batches) if (batch.state === 'running') batch.state = 'pending';
@@ -556,7 +809,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       // Validate the persisted plan against the same pinned registry; a deleted row cannot turn an incomplete run green.
       const expected = await (options.registry ?? regressionRegistry)(checkout);
       const identities = (files: ExpectedFile[]) => files.map(file => `${file.tier}:${file.file}`).sort().join('\n');
-      if (identities(expected) !== identities(manifest.files)) throw new Error('Incomplete or changed regression manifest');
+      if (identities(expected) !== identities(manifest.files)) rejectResume('Incomplete or changed regression manifest');
       const exclusions = new Map(expected.filter(file => file.outcome === 'excluded').map(file => [`${file.tier}:${file.file}`, file.reason]));
       if (manifest.selection === 'routine') for (const file of expected) {
         if (file.outcome !== 'excluded' && tiers.includes(file.tier as RegressionTier) && browserTier(file.tier as RegressionTier)) {
@@ -565,7 +818,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       }
       if (manifest.files.some(file => (file.outcome === 'excluded') !== exclusions.has(`${file.tier}:${file.file}`)
         || (file.outcome === 'excluded' && file.reason !== exclusions.get(`${file.tier}:${file.file}`)))) {
-        throw new Error('Incomplete or changed regression exclusions');
+        rejectResume('Incomplete or changed regression exclusions');
       }
       const planned = manifest.batches.flatMap(batch => batch.files.map(file => `${batch.tier}:${file}`)).sort();
       const required = manifest.files.filter(file => file.outcome !== 'excluded' && file.outcome !== 'deferred')
@@ -573,7 +826,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       // Older runs used fifteen-file integration batches; resume preserves their original plan.
       if (planned.join('\n') !== required.join('\n') || new Set(planned).size !== planned.length
         || manifest.batches.some(batch => !batch.files.length || (batch.tier === 'integration' && batch.files.length > 15))) {
-        throw new Error('Incomplete regression batch plan');
+        rejectResume('Incomplete regression batch plan');
       }
     } else {
       if (existsSync(path)) throw new Error(`Regression ${runId} already exists; use --resume`);
@@ -587,18 +840,20 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         partial: files.some(file => file.outcome === 'deferred'), status: 'running', files, batches,
         preflight: { commit: pinned, ok: false, artifactPaths: [], reason: 'Pinned preflight pending' }, diagnoses: [] };
     }
-    const save = () => atomic(path, manifest);
-    manifest.probeCounts ??= {};
+    if (!manifest) throw new Error('Regression manifest was not recorded');
+    const runManifest = manifest;
+    const save = () => atomic(path, runManifest);
+    runManifest.probeCounts ??= {};
     save();
     // Persist the SHA and selection before installation, so a stop during preparation can resume that exact revision.
     await checkoutAt(pinned);
-    manifest.preflight = prepared.get(pinned)!; save();
+    runManifest.preflight = prepared.get(pinned)!; save();
     const execute = async (commit: string, batch: Batch, label: string, probeTree?: string): Promise<Execution> => {
       const tree = probeTree ?? await checkoutAt(commit);
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
       if (browserTier(batch.tier) && options.waitForTurn) await options.waitForTurn(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
-      const result = await runner(tree, batch, join(directory, label), manifest.shards, slotLimit);
+      const result = await runner(tree, batch, join(directory, label), runManifest.shards, slotLimit);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
       if (result.code && result.classification) {
@@ -613,9 +868,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     let lane: Batch[] | undefined;
     const continueAfterHang = (parent: Batch, files: string[]) => {
       if (!files.length) return;
-      const continuation: Batch = { id: continuationId(manifest.batches, parent.id), tier: parent.tier, files,
+      const continuation: Batch = { id: continuationId(runManifest.batches, parent.id), tier: parent.tier, files,
         state: 'pending', attempts: [] };
-      manifest.batches.splice(manifest.batches.indexOf(parent) + 1, 0, continuation);
+      runManifest.batches.splice(runManifest.batches.indexOf(parent) + 1, 0, continuation);
       lane?.push(continuation);
     };
     const runInitialBatch = async (batch: Batch, tree?: string): Promise<void> => {
@@ -629,9 +884,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         batch.attempts.push({ ...result, evidence: undefined });
         const voided = result.classification === 'infrastructure';
         // Verified recovery replaces unavailable file diagnoses; the historical inbox event remains.
-        if (!voided) manifest.diagnoses = manifest.diagnoses.filter(diagnosis => !(diagnosis.status === 'unavailable'
+        if (!voided) runManifest.diagnoses = runManifest.diagnoses.filter(diagnosis => !(diagnosis.status === 'unavailable'
           && batch.files.includes(diagnosis.file) && ['passed', 'failed'].includes(result.outcomes[diagnosis.file] ?? 'missing')));
-        for (const file of manifest.files.filter(file => file.tier === batch.tier && batch.files.includes(file.file))) {
+        for (const file of runManifest.files.filter(file => file.tier === batch.tier && batch.files.includes(file.file))) {
           file.outcome = voided ? 'void' : result.outcomes[file.file] ?? 'missing';
           if (!voided && result.hang?.file === file.file) file.reason = hangReason(result.hang.log);
         }
@@ -644,11 +899,11 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const serialTier = (tier: RegressionTier) => tier === 'unit' || tier === 'model' || tier === 'jena:check';
     // Unit batches fit the harness's three-minute budget and run serially; stack and owner batches use measured memory admission.
     // A hang splices its remainder in front of the following batches, so the index walks that new batch too.
-    for (let index = 0; index < manifest.batches.length; index++) {
-      const batch = manifest.batches[index]!;
+    for (let index = 0; index < runManifest.batches.length; index++) {
+      const batch = runManifest.batches[index]!;
       if (serialTier(batch.tier)) await runInitialBatch(batch);
     }
-    const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier) && !serialTier(batch.tier));
+    const pending = runManifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier) && !serialTier(batch.tier));
     lane = pending;
     let next = 0;
     let failure: unknown;
@@ -658,17 +913,17 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         // Each lane has its own sockets and artifact root, reused only after its previous batch finishes.
         tree = await checkoutAt(pinned, `lane-${index}`);
         if (!preparedCheckouts.get(tree)?.ok) {
-          manifest.preflight = preparedCheckouts.get(tree)!; save(); return;
+          runManifest.preflight = preparedCheckouts.get(tree)!; save(); return;
         }
         while (!failure && next < pending.length) await runInitialBatch(pending[next++]!, tree);
       } catch (error) { failure ??= error; }
     });
-    // Keep the manifest lock until all admitted children settle, even when another lane fails.
+    // Keep the runManifest lock until all admitted children settle, even when another lane fails.
     await Promise.all(workers);
     if (failure) throw failure;
     lane = undefined;
-    for (let index = 0; index < manifest.batches.length; index++) {
-      const batch = manifest.batches[index]!;
+    for (let index = 0; index < runManifest.batches.length; index++) {
+      const batch = runManifest.batches[index]!;
       if (browserTier(batch.tier)) await runInitialBatch(batch);
     }
     const eventPath = join(stateDir, 'merges.jsonl');
@@ -678,11 +933,11 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const cause = result.cause ?? fallback ?? `Batch runner ended with ${result.classification ?? 'deterministic'} (exit ${result.code})`;
       const diagnosis: Diagnosis = { file: `batch:${batch.id}`, status: 'unavailable', classification: result.classification ?? 'deterministic',
         after: pinned, probes: [], artifactPaths: result.artifactPaths, reason: `${batch.id}: ${batch.files.length} files; ${cause}` };
-      if (manifest.diagnoses.some(item => item.file === diagnosis.file)) return;
+      if (runManifest.diagnoses.some(item => item.file === diagnosis.file)) return;
       await route({ runId, atCommit: pinned, failingTests: [diagnosis.file], after: pinned, goal: 'program', taskIds: [],
         status: diagnosis.status, classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths,
         runEvent: { batchId: batch.id, tier: batch.tier, fileCount: batch.files.length, cause } });
-      manifest.diagnoses.push(diagnosis); save();
+      runManifest.diagnoses.push(diagnosis); save();
     };
     const routeFileFailure = async (file: string, initial: Execution, diagnosis: Diagnosis) => {
       diagnosis.artifactPaths = [...new Set(diagnosis.artifactPaths)];
@@ -691,22 +946,22 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       await route({ runId, atCommit: pinned, failingTests: failingTests.length ? failingTests : [file], before: diagnosis.before,
       after: diagnosis.after, goal: diagnosis.goal ?? 'program', taskIds: diagnosis.taskIds ?? [], status: diagnosis.status,
       classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
-      manifest.diagnoses.push(diagnosis); save();
+      runManifest.diagnoses.push(diagnosis); save();
     };
     const retainUnavailableAssertions = async (batch: Batch, initial: Execution, artifactPaths: string[], reason: string) => {
       for (const file of assertionFiles(batch, initial)) {
-        if (manifest.diagnoses.some(item => item.file === file)) continue;
+        if (runManifest.diagnoses.some(item => item.file === file)) continue;
         await routeFileFailure(file, initial, { file, status: 'unavailable',
           classification: initial.classification === 'infrastructure' ? 'deterministic' : initial.classification ?? 'deterministic',
           after: pinned, probes: [], artifactPaths: [...initial.artifactPaths, ...artifactPaths], reason });
       }
     };
-    for (const batch of manifest.batches.filter(batch => batch.attempts.length > 0)) {
+    for (const batch of runManifest.batches.filter(batch => batch.attempts.length > 0)) {
       const initial = batch.attempts.at(-1)!;
       const hang = initial.hang;
       // A timeout that names the file still running is that file's failure. Startup and
       // admission, which print no file header, stay a deadline for the whole batch.
-      if (hang && !manifest.diagnoses.some(item => item.file === hang.file)) {
+      if (hang && !runManifest.diagnoses.some(item => item.file === hang.file)) {
         await routeFileFailure(hang.file, initial, { file: hang.file, status: 'unavailable', classification: 'deadline',
           after: pinned, probes: [], artifactPaths: [...new Set([...initial.artifactPaths, hang.log])],
           reason: hangReason(hang.log) });
@@ -715,7 +970,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (batchRunFailure(batch, initial) && !hang) {
         await routeBatchFailure(batch, initial);
       }
-      if (manifest.diagnoses.some(item => item.file === `batch:${batch.id}`)) {
+      if (runManifest.diagnoses.some(item => item.file === `batch:${batch.id}`)) {
         // Missing execution is a batch problem. Probe only files with actual assertion evidence.
         failing = assertionFiles(batch, initial);
       }
@@ -734,7 +989,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       let repeatBatch: Execution | undefined;
       const runnable = hang ? { ...batch, files: batch.files.filter(file => file !== hang.file) } : batch;
       for (const file of failing) {
-        if (manifest.diagnoses.some(item => item.file === file)) continue;
+        if (runManifest.diagnoses.some(item => item.file === file)) continue;
         const diagnosis: Diagnosis = { file, status: 'inconclusive', classification: initial.classification ?? 'deterministic',
           after: pinned, probes: [], artifactPaths: [...initial.artifactPaths] };
         repeatBatch ??= await execute(pinned, runnable, `${batch.id}/confirm`);
@@ -746,7 +1001,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
           await retainUnavailableAssertions(batch, initial, repeat.artifactPaths, 'Batch confirmation unavailable');
           if (repeat.classification === 'infrastructure') {
             batch.state = 'pending';
-            for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
+            for (const expected of runManifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
             save(); break;
           }
           break;
@@ -758,7 +1013,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
           await routeBatchFailure(batch, [repeat, isolated].find(result => result.classification === 'infrastructure')!);
           await retainUnavailableAssertions(batch, initial, [...repeat.artifactPaths, ...isolated.artifactPaths], 'Isolated execution unavailable');
           batch.state = 'pending';
-          for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
+          for (const expected of runManifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
           save(); break;
         }
         if (initial.outcomes[file] === 'missing' || repeat.outcomes[file] === 'missing' || isolated.outcomes[file] === 'missing') {
@@ -771,9 +1026,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
           diagnosis.classification = [initial, repeat, isolated].find(result => result.classification === 'resource' || result.classification === 'deadline')!.classification!;
         } else {
           const takeProbe = () => {
-            const count = manifest.probeCounts![file] ?? 0;
+            const count = runManifest.probeCounts![file] ?? 0;
             if (count >= 8) return undefined;
-            manifest.probeCounts![file] = count + 1; save();
+            runManifest.probeCounts![file] = count + 1; save();
             return count + 1;
           };
           await bisectFailure(repo, stateDir, pinned, file, alone, events, diagnosis, checkoutAt, prepared, execute, takeProbe);
@@ -783,35 +1038,44 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
             artifactPaths: diagnosis.artifactPaths });
           await retainUnavailableAssertions(batch, initial, diagnosis.artifactPaths, 'Regression probe unavailable');
           batch.state = 'pending';
-          for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
+          for (const expected of runManifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
           save(); break;
         }
         await routeFileFailure(file, initial, diagnosis);
       }
     }
-    if (!manifest.preflight.ok && !manifest.diagnoses.some(item => item.file === 'preflight')) {
+    if (!runManifest.preflight.ok && !runManifest.diagnoses.some(item => item.file === 'preflight')) {
       const diagnosis: Diagnosis = { file: 'preflight', status: 'unavailable', classification: 'deterministic', after: pinned,
-        probes: [], artifactPaths: manifest.preflight.artifactPaths, reason: manifest.preflight.reason };
-      await route({ runId, atCommit: pinned, failingTests: [manifest.preflight.reason ?? 'Pinned preflight failed'], after: pinned,
+        probes: [], artifactPaths: runManifest.preflight.artifactPaths, reason: runManifest.preflight.reason };
+      await route({ runId, atCommit: pinned, failingTests: [runManifest.preflight.reason ?? 'Pinned preflight failed'], after: pinned,
         goal: 'program', taskIds: [], status: diagnosis.status, classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
-      manifest.diagnoses.push(diagnosis);
+      runManifest.diagnoses.push(diagnosis);
     }
-    const complete = !manifest.partial && manifest.batches.every(batch => batch.state === 'done' && batch.attempts.length > 0)
-      && manifest.files.every(file => file.outcome === 'passed' || file.outcome === 'excluded');
-    manifest.status = complete && manifest.preflight.ok && !manifest.batches.some(batch => batch.attempts.at(-1)?.code)
-      ? 'passed' : manifest.files.some(file => file.outcome === 'failed') || !manifest.preflight.ok ? 'failed' : 'incomplete';
-    manifest.finishedAt = new Date().toISOString(); save();
+    const complete = !runManifest.partial && runManifest.batches.every(batch => batch.state === 'done' && batch.attempts.length > 0)
+      && runManifest.files.every(file => file.outcome === 'passed' || file.outcome === 'excluded');
+    runManifest.status = complete && runManifest.preflight.ok && !runManifest.batches.some(batch => batch.attempts.at(-1)?.code)
+      ? 'passed' : runManifest.files.some(file => file.outcome === 'failed') || !runManifest.preflight.ok ? 'failed' : 'incomplete';
+    runManifest.finishedAt = new Date().toISOString(); save();
     writeFileSync(join(directory, 'summary.md'), [`# Regression ${runId}`, '', `Commit: ${pinned}`,
-      `Result: ${manifest.status}; complete execution: ${complete}; shards: ${manifest.shards}`,
-      `Preflight: ${manifest.preflight.ok ? 'passed' : manifest.preflight.reason}`, '',
-      ...manifest.batches.map(batch => `${batch.id}: ${batch.state}; ${batch.files.length} files; `
+      `Result: ${runManifest.status}; complete execution: ${complete}; shards: ${runManifest.shards}`,
+      `Preflight: ${runManifest.preflight.ok ? 'passed' : runManifest.preflight.reason}`, '',
+      ...runManifest.batches.map(batch => `${batch.id}: ${batch.state}; ${batch.files.length} files; `
         + batch.attempts.map(result => `queue ${result.queueMs}ms, test ${result.testMs}ms, total ${result.totalMs}ms (${result.classification ?? 'passed'})`
           + (result.hang ? `; hung ${result.hang.file}; ${result.hang.log}` : '')).join('; ')), '',
-      ...manifest.diagnoses.map(item => `${item.file}: ${item.status}, ${item.classification}; ${item.before ?? '?'}..${item.after}; `
+      ...runManifest.diagnoses.map(item => `${item.file}: ${item.status}, ${item.classification}; ${item.before ?? '?'}..${item.after}; `
         + `${item.goal ?? 'program'} ${item.taskIds?.join(', ') ?? ''}; ${item.reason ?? ''}`), '',
     ].join('\n'));
-    return manifest;
+    return runManifest;
   } finally {
+    const manifestPath = join(directory, 'manifest.json');
+    const recorded = manifest ?? (existsSync(manifestPath) ? (() => { try { return json<Manifest>(manifestPath); } catch { return undefined; } })() : undefined);
+    // Complete (passed), failed, and a plan that can no longer resume drop their checkouts. A resumable run keeps them.
+    if (treeMapPath && !regressionKeepsCheckouts(recorded, planUnusable)) {
+      try {
+        const map = readCheckoutMap(treeMapPath);
+        if (map) removeMappedCheckouts(repo, map, worktrees, legacyRoot, physicalLegacyRoot, legacyOwned);
+      } catch (error) { console.error(error instanceof Error ? error.message : error); }
+    }
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
     acquired.release();

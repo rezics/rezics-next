@@ -11,8 +11,9 @@ import { UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
+import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
-  regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
+  pruneRegressionCheckouts, regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 let repoSequence = 0;
@@ -734,7 +735,8 @@ describe('pinned main-wide regression', () => {
 
   test('preflight never falls back to an ancestor Taskfile and executes only the committed Taskfile', async () => {
     const r = repo();
-    const taskfile = (label: string) => `version: '3'\ntasks:\n  install:\n    cmds: ['echo ${label}']\n  gen:check:\n    cmds: ['echo ${label}']\n`;
+    const marker = join(r.options.stateDir, 'task-marker.log');
+    const taskfile = (label: string) => `version: '3'\ntasks:\n  install:\n    cmds: ['echo ${label}', 'echo ${label} >> ${marker}']\n  gen:check:\n    cmds: ['echo ${label}', 'echo ${label} >> ${marker}']\n`;
     try {
       r.write('Taskfile.yml', taskfile('ancestor-task-used'));
       const unsupported = await r.run({ runId: 'no-taskfile', prepare: undefined });
@@ -746,11 +748,9 @@ describe('pinned main-wide regression', () => {
       const supported = await r.run({ runId: 'pinned-taskfile', prepare: undefined });
       expect(supported.status).toBe('passed');
       expect(supported.preflight.artifactPaths).toHaveLength(2);
-      for (const path of supported.preflight.artifactPaths) {
-        const log = readFileSync(path, 'utf8');
-        expect(log).toContain('pinned-task-used');
-        expect(log).not.toContain('ancestor-task-used');
-      }
+      const recorded = readFileSync(marker, 'utf8');
+      expect(recorded).toContain('pinned-task-used');
+      expect(recorded).not.toContain('ancestor-task-used');
     } finally { r.cleanup(); }
   });
 
@@ -1127,6 +1127,9 @@ test('bounded CLI selections preserve the resume configuration', () => {
     .toEqual({ at: 'main', only: ['unit', 'model'], integrationBatches: 2 });
   expect(() => parseRegressArgs(['--resume', 'run', '--only', 'unit'])).toThrow('original selection');
   expect(() => parseRegressArgs(['--integration-batches', '-1'])).toThrow('Invalid');
+  expect(parseRegressArgs(['--apply', '--prune-checkouts'])).toEqual({ pruneCheckouts: true, apply: true });
+  expect(() => parseRegressArgs(['--apply'])).toThrow('--apply requires --prune-checkouts');
+  expect(() => parseRegressArgs(['--prune-checkouts', '--resume', 'run'])).toThrow('does not take a regression selection');
 });
 
 test('only browser and Storybook commands acquire the heavy lock', () => {
@@ -1274,6 +1277,9 @@ test('RAM-backed legacy checkouts relocate to disk without deleting old trees or
   try {
     const legacy = r.options.legacyRoot!;
     const first = await r.run({ runId: 'legacy-ram', checkoutRoot: legacy });
+    // A finished run has already removed this checkout. Put the tree back so relocation still has one to leave in place.
+    expect(existsSync(first.checkout)).toBe(false);
+    r.git('worktree', 'add', '--detach', first.checkout, r.base);
     const original = filesystem.statfsSync;
     probe = spyOn(filesystem, 'statfsSync').mockImplementation(((path: Parameters<typeof original>[0], options?: Parameters<typeof original>[1]) => {
       const stat = original(path, options);
@@ -1371,15 +1377,132 @@ test('resume rejects a legacy root symlink into another repository before prepar
 test('pinned Task preparation uses a verified private disk TMPDIR', async () => {
   const r = repo();
   try {
-    r.write('Taskfile.yml', "version: '3'\ntasks:\n  install:\n    cmds: ['echo $TMPDIR']\n  gen:check:\n    cmds: ['echo $TMPDIR']\n");
+    const marker = join(r.options.stateDir, 'tmpdir.log');
+    r.write('Taskfile.yml', `version: '3'\ntasks:\n  install:\n    cmds: ['echo "$TMPDIR" | tee -a ${marker}']\n  gen:check:\n    cmds: ['echo "$TMPDIR" | tee -a ${marker}']\n`);
     r.commit();
     const result = await r.run({ runId: 'disk-tmp', prepare: undefined });
     expect(result.status).toBe('passed');
-    for (const path of result.preflight.artifactPaths) {
-      expect(readFileSync(path, 'utf8')).toContain(join(result.checkout, '.temp/tmp'));
-    }
-    expect(isRamBackedFileSystem(statfsSync(join(result.checkout, '.temp/tmp')).type)).toBe(false);
+    const temporary = join(result.checkout, '.temp/tmp');
+    expect(readFileSync(marker, 'utf8')).toContain(temporary);
+    expect(existsSync(result.checkout)).toBe(false);
+    expect(isRamBackedFileSystem(statfsSync(dirname(result.checkout)).type)).toBe(false);
   } finally { r.cleanup(); }
+});
+
+function mappedCheckouts(stateDir: string, id: string): string[] {
+  const map = JSON.parse(readFileSync(join(stateDir, 'regress', id, 'checkouts.json'), 'utf8')) as Record<string, string>;
+  return [...new Set(Object.values(map))];
+}
+
+test('a finished run removes exactly its mapped checkouts', async () => {
+  const r = repo();
+  try {
+    const spare = join(r.options.checkoutRoot!, 'keep-extra');
+    mkdirSync(r.options.checkoutRoot!, { recursive: true });
+    r.git('worktree', 'add', '--detach', spare, r.base);
+    const passed = await r.run({ runId: 'finished-pass' });
+    expect(passed.status).toBe('passed');
+    const mapped = mappedCheckouts(r.options.stateDir, 'finished-pass');
+    expect(mapped).toContain(passed.checkout);
+    for (const path of mapped) expect(existsSync(path)).toBe(false);
+    expect(existsSync(spare)).toBe(true);
+    const listed = r.git('worktree', 'list', '--porcelain');
+    for (const path of mapped) expect(listed.split('\n')).not.toContain(`worktree ${path}`);
+    expect(listed).toContain(`worktree ${spare}`);
+    const failed = await r.run({ runId: 'finished-fail', prepare: async () => ({ ok: false, artifactPaths: [], reason: 'pinned build unavailable' }) });
+    expect(failed.status).toBe('failed');
+    for (const path of mappedCheckouts(r.options.stateDir, 'finished-fail')) expect(existsSync(path)).toBe(false);
+    expect(existsSync(spare)).toBe(true);
+  } finally { r.cleanup(); }
+});
+
+test('a resumable run keeps its checkouts', async () => {
+  const r = repo();
+  try {
+    await expect(r.run({ runId: 'resume-keep', runner: async (...args) => {
+      if (args[1].tier === 'owner') throw new Error('stopped');
+      return r.runner(...args);
+    } })).rejects.toThrow('stopped');
+    expect(r.manifest('resume-keep').status).toBe('running');
+    const kept = mappedCheckouts(r.options.stateDir, 'resume-keep');
+    expect(kept.length).toBeGreaterThan(0);
+    for (const path of kept) expect(existsSync(path)).toBe(true);
+    const partial = await r.run({ runId: 'partial-keep', only: ['unit'] });
+    expect(partial.status).toBe('incomplete');
+    for (const path of mappedCheckouts(r.options.stateDir, 'partial-keep')) expect(existsSync(path)).toBe(true);
+    const directory = join(r.options.stateDir, 'regress/resume-keep');
+    const manifest = r.manifest('resume-keep');
+    manifest.files.push({ file: 'tests/qa/unit/added.test.ts', tier: 'unit', outcome: 'pending' });
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify(manifest));
+    await expect(r.run({ resume: 'resume-keep' })).rejects.toThrow('Incomplete or changed regression manifest');
+    for (const path of kept) expect(existsSync(path)).toBe(false);
+  } finally { r.cleanup(); }
+});
+
+test('prune keeps a live or resumable run and ignores paths outside the cache and non-worktrees', async () => {
+  const r = repo();
+  let release: (() => void) | undefined;
+  try {
+    const cache = r.options.checkoutRoot!;
+    mkdirSync(cache, { recursive: true });
+    const add = (name: string) => {
+      const path = join(cache, name);
+      r.git('worktree', 'add', '--detach', path, r.base);
+      return path;
+    };
+    const live = add('live');
+    const resumable = add('resumable');
+    const finished = add('finished');
+    const orphan = add('orphan');
+    const outside = join(r.dir, 'outside-tree');
+    r.git('worktree', 'add', '--detach', outside, r.base);
+    const plain = join(cache, 'plain-dir');
+    mkdirSync(plain);
+    const escape = join(cache, 'escape');
+    symlinkSync(outside, escape);
+    const writeRun = (id: string, status: Manifest['status'], checkout: string) => {
+      const directory = join(r.options.stateDir, 'regress', id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ status }));
+      writeFileSync(join(directory, 'checkouts.json'), JSON.stringify({ [`${r.base}:pinned`]: checkout }));
+      return directory;
+    };
+    const liveDir = writeRun('live-run', 'failed', live);
+    const acquired = tryAcquireDirectoryLease(join(liveDir, 'lock'));
+    if (acquired === 'held') throw new Error('live lock was already held');
+    release = acquired.release;
+    writeRun('resumable-run', 'running', resumable);
+    writeRun('finished-run', 'passed', finished);
+    writeRun('outside-run', 'passed', outside);
+    const stale = writeRun('stale-run', 'failed', finished);
+    mkdirSync(join(stale, 'lock'));
+    writeFileSync(join(stale, 'lock', 'identity.json'), JSON.stringify({ pid: 99999999, token: 'stale', start: '1', boot: 'not-this-boot' }));
+    const dry = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, measureBytes: false });
+    expect(dry.apply).toBe(false);
+    expect(existsSync(finished)).toBe(true);
+    expect(existsSync(orphan)).toBe(true);
+    const applied = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, apply: true, measureBytes: false });
+    expect(existsSync(live)).toBe(true);
+    expect(existsSync(resumable)).toBe(true);
+    expect(existsSync(finished)).toBe(false);
+    expect(existsSync(orphan)).toBe(false);
+    expect(existsSync(outside)).toBe(true);
+    expect(existsSync(plain)).toBe(true);
+    expect(existsSync(escape)).toBe(true);
+    expect(applied.kept.map(entry => [entry.path, entry.reason])).toEqual([
+      [live, 'live run live-run'],
+      [resumable, 'resumable run resumable-run (running)'],
+    ]);
+    expect(applied.removed.map(entry => [entry.path, entry.reason])).toEqual([
+      [finished, 'terminal run finished-run, stale-run'],
+      [orphan, 'registered worktree with no checkout map'],
+    ]);
+    expect(applied.untouched).toEqual(expect.arrayContaining([
+      { path: plain, reason: 'not a registered worktree' },
+      { path: escape, reason: 'escapes the cache root' },
+      { path: outside, reason: 'outside the cache root' },
+    ]));
+  } finally { release?.(); r.cleanup(); }
 });
 
 test('shared UI stories can be selected alone through the web Storybook command', () => {
