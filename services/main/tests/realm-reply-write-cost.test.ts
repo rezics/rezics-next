@@ -380,40 +380,70 @@ test('an unreadable reply root writes no admission, receipt, or graph command', 
   }
 }, 120_000);
 
-/** After the pin is inserted, change the admission so the next claim must refuse. */
-function armPreparedPlacement(pool: Pool, once: () => Promise<void>): () => void {
-  const connect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
-  const seen = new WeakSet<object>();
-  let armed = false;
-  const wrap = (client: PoolClient) => {
-    if (seen.has(client)) return;
-    seen.add(client);
-    const query = client.query.bind(client) as (...args: unknown[]) => unknown;
-    client.query = ((...args: unknown[]) => {
-      const pending = query(...args);
-      const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text;
-      if (armed || typeof text !== 'string' || !text.includes('INSERT INTO content.publication_preparation')) return pending;
-      armed = true;
-      return Promise.resolve(pending).then(async value => {
-        await once();
-        return value;
+function sqlText(args: unknown[]): string | undefined {
+  const first = args[0];
+  if (typeof first === 'string') return first;
+  if (first && typeof first === 'object' && 'text' in first && typeof first.text === 'string') return first.text;
+  return undefined;
+}
+
+function sqlValues(args: unknown[]): unknown[] {
+  const first = args[0];
+  if (typeof first === 'string') return Array.isArray(args[1]) ? args[1] as unknown[] : [];
+  if (first && typeof first === 'object' && 'values' in first && Array.isArray(first.values)) return first.values as unknown[];
+  return [];
+}
+
+/** The placement callback holds the admission until the claim after the pin
+ * commits. Another connection cannot change that row in time for the claim to
+ * see it, so the change runs on the claim's own client. */
+function armSecondClaim(access: Pool, content: Pool,
+  change: (query: PoolClient['query'], admissionId: string) => Promise<void>): () => void {
+  const restore: Array<() => void> = [];
+  const wrap = (pool: Pool, install: (query: (...args: unknown[]) => unknown) => PoolClient['query']) => {
+    const connect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+    const seen = new WeakSet<object>();
+    const wrapClient = (client: PoolClient) => {
+      if (seen.has(client)) return;
+      seen.add(client);
+      const query = client.query.bind(client) as (...args: unknown[]) => unknown;
+      client.query = install(query);
+    };
+    pool.connect = ((...args: unknown[]) => {
+      if (typeof args[0] === 'function') {
+        const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
+        return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
+          if (client) wrapClient(client);
+          callback(error, client, done);
+        });
+      }
+      return Promise.resolve(connect()).then(client => {
+        wrapClient(client as PoolClient);
+        return client;
       });
-    }) as PoolClient['query'];
+    }) as Pool['connect'];
+    restore.push(() => { pool.connect = connect as Pool['connect']; });
   };
-  pool.connect = ((...args: unknown[]) => {
-    if (typeof args[0] === 'function') {
-      const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
-      return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
-        if (client) wrap(client);
-        callback(error, client, done);
-      });
-    }
-    return Promise.resolve(connect()).then(client => {
-      wrap(client as PoolClient);
-      return client;
+  let prepared = false;
+  let changed = false;
+  wrap(content, query => ((...args: unknown[]) => {
+    const pending = query(...args);
+    if (prepared || !sqlText(args)?.includes('INSERT INTO content.publication_preparation')) return pending;
+    return Promise.resolve(pending).then(value => {
+      prepared = true;
+      return value;
     });
-  }) as Pool['connect'];
-  return () => { pool.connect = connect as Pool['connect']; };
+  }) as PoolClient['query']);
+  wrap(access, query => ((...args: unknown[]) => {
+    const text = sqlText(args);
+    if (!changed && prepared && text?.includes('SELECT scope_id, action FROM access.admission WHERE id')) {
+      changed = true;
+      const admissionId = String(sqlValues(args)[0]);
+      return Promise.resolve(change(query as PoolClient['query'], admissionId)).then(() => query(...args));
+    }
+    return query(...args);
+  }) as PoolClient['query']);
+  return () => { for (const undo of restore) undo(); };
 }
 
 async function reviewedPlacement(fx: Awaited<ReturnType<typeof realmVisibilityFixture>>) {
@@ -468,9 +498,9 @@ test('an expired admission retry is refused and sealed with the placement pin re
   try {
     const body = await reviewedPlacement(fx);
     const key = randomUUID();
-    restore = armPreparedPlacement(fx.contentPool, () => fx.accessPool.query(
-      `UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second'
-       WHERE idempotency_key = $1 AND action = 'reply.place'`, [key]).then(() => undefined));
+    restore = armSecondClaim(fx.accessPool, fx.contentPool, (query, admissionId) => query(
+      `UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1`,
+      [admissionId]).then(() => undefined));
     await expectRefusedPlacement(fx, body, key, 409);
   } finally {
     restore();
@@ -484,7 +514,7 @@ test('a revoked authority epoch retry is refused and sealed with the placement p
   try {
     const body = await reviewedPlacement(fx);
     const key = randomUUID();
-    restore = armPreparedPlacement(fx.contentPool, () => fx.accessPool.query(
+    restore = armSecondClaim(fx.accessPool, fx.contentPool, query => query(
       'UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = $1',
       [`reply:place:${fx.realm}`]).then(() => undefined));
     await expectRefusedPlacement(fx, body, key, 403);

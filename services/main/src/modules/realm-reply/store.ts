@@ -33,12 +33,17 @@ export function realmReplyDigest(value: unknown): string {
 }
 
 /** A dependency that can recover is not an authority decision. Sealing it would
- * make the same key answer denied after the outage ends. Expiry, revocation,
- * deactivation and a closed gate are refusals: their classes say so, and the
- * caller seals them. */
+ * make the same key answer denied after the outage ends. These stay unsealed:
+ * a work read that cannot finish, a target the write itself cannot reach, and
+ * a busy graph or content owner (already `RealmReplyUnavailable`). Access
+ * recovery is `AdmissionUnavailable`, a different class from a closed gate.
+ * Expiry, revocation, deactivation, participation and an unverified account
+ * are `AdmissionExpired` or `AdmissionDenied`; the caller seals those. */
 function unavailableReply(error: unknown): RealmReplyUnavailable | null {
   if (error instanceof RealmReplyUnavailable) return error;
-  if (error instanceof WorkReadUnavailable) return new RealmReplyUnavailable(error.message);
+  if (error instanceof WorkReadUnavailable || error instanceof TargetUnavailable) {
+    return new RealmReplyUnavailable(error.message);
+  }
   return null;
 }
 
@@ -254,7 +259,6 @@ export class RealmReplyStore {
     catch (error) {
       // Shared root proofs answer false for a hidden or absent target. A target
       // lost after this write started is an unsealed 503.
-      if (error instanceof TargetUnavailable) throw new RealmReplyUnavailable(error.message);
       const unavailable = unavailableReply(error);
       if (unavailable) throw unavailable;
       // An erased question or other visible root miss is a refusal. A target
