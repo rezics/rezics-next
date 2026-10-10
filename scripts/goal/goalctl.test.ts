@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
@@ -3528,10 +3528,14 @@ process.exit(0);
       expect(runs.map(run => run.args.filter(arg => arg.endsWith('.test.ts')).join(' ')).sort())
         .toEqual([`./${fast}`, `./${slow}`, `./${slow}`]);
       expect(runs[2]!.args.filter(arg => arg.endsWith('.test.ts'))).toEqual([`./${slow}`]);
+      // Only this repository's processes: a merge gate runs this file on two sides at once, and the other
+      // side's slow probe is alive while this one checks.
       const hanging = readdirSync('/proc').some(entry => {
         if (!/^\d+$/.test(entry)) return false;
-        try { return readFileSync(`/proc/${entry}/cmdline`, 'utf8').includes(slow); }
-        catch { return false; }
+        try {
+          return readFileSync(`/proc/${entry}/cmdline`, 'utf8').includes(slow)
+            && realpathSync(`/proc/${entry}/cwd`).startsWith(realpathSync(r.dir));
+        } catch { return false; }
       });
       expect(hanging).toBe(false);
     } finally { r.cleanup(); }
