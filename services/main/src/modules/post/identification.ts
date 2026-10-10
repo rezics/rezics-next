@@ -69,7 +69,8 @@ export async function identifyPost(deps: MainWorkDependencies, request: Request,
   const structure = input.work.kind === 'existing'
     ? await existingIdentificationStructure(deps.environment, work.work, work.mainVersion, post) : null;
   const created = structure ?? await createAdmittedComposition(deps.environment, deps.account, deps.access, request,
-    { work: work.work, mainVersion: work.mainVersion, actingSubject: input.actingSubject, idempotencyKey: subkey('structure') });
+    { profile: 'book-composition', work: work.work, mainVersion: work.mainVersion,
+      actingSubject: input.actingSubject, idempotencyKey: subkey('structure') });
   if (!created.structure || !created.revision) throw new PostIdentificationUnavailable('Structure receipt is incomplete');
   const placement = structure?.occurrence ? { revision: structure.revision, receipt: structure.receipt,
     occurrences: [structure.occurrence] } : await changeAdmittedComposition(deps.environment, deps.account, deps.access, request,

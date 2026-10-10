@@ -21,8 +21,8 @@ import {
   CompositionCorrupt,
   CompositionUnavailable,
   NATIVE_ID,
-  ROLE_IRI,
   derivedId,
+  roleIri,
   itemListIri,
   itemPosition,
   orderTreeKey,
@@ -41,7 +41,7 @@ import {
   type SegmentState,
   type Selection,
 } from './graph.ts';
-import { deepestLevel, isCatalogTarget, structureProfileFor, structureProfileForAction,
+import { deepestLevel, isCatalogTarget, isContainerRole, structureProfileFor, structureProfileForAction,
   type StructureProfileRegistration } from './profiles.ts';
 import { OrderKeyInvalid, evenKeys, keyBetween, segmentKeyBetween, withinBudget } from './order-key.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, StructureTree, newCost,
@@ -172,7 +172,7 @@ export function checkedOperations(operations: readonly CompositionOperation[],
   };
   return operations.map(operation => {
     if (operation.op === 'completion') {
-      if (registration?.id !== 'work-composition' || operations.length !== 1
+      if (!registration?.completion || operations.length !== 1
         || !Value.Check(WorkCompletion, operation.completion)
         || operation.completion.status !== 'unknown' && !operation.completion.evidence.length) {
         throw new InvalidCompositionChange('a Work completion status requires evidence, or explicit unknown');
@@ -206,7 +206,7 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       return { op: 'move', occurrence: native(operation.occurrence, 'occurrence'),
         parent: native(operation.parent, 'parent'), position: checkedPosition(operation.position) };
     }
-    if (operation.op !== 'insert' || !(operation.role in ROLE_IRI)
+    if (operation.op !== 'insert' || !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(operation.role)
       || registration && !registration.roles.includes(operation.role)) {
       throw new InvalidCompositionChange('operation role is not admitted by this Structure profile');
     }
@@ -677,7 +677,8 @@ export interface CreateCompositionIntent {
 /** Allocate an empty Structure for a profile owner; the owner selects its identity grain. */
 export async function createComposition(env: WorkActivationEnvironment,
   intent: CreateCompositionIntent): Promise<{ terminal: CompositionTerminal; committed: boolean }> {
-  const profile = structureProfileFor(intent.profile ?? 'book-composition');
+  if (!intent.profile) throw new InvalidCompositionChange('a Structure profile is required');
+  const profile = structureProfileFor(intent.profile);
   const owner = native(intent.owner ?? intent.work, 'owner');
   const component = profile.componentPredicate
     ? native(intent.component ?? intent.mainVersion, 'component') : owner;
@@ -1119,7 +1120,7 @@ async function ancestry(w: Working, parent: string): Promise<string[]> {
   let current = parent;
   while (current !== w.header.structure) {
     const state = await w.get(current);
-    if (!state?.active || state.role !== 'group') {
+    if (!state?.active || !isContainerRole(w.header.profile, state.role)) {
       throw new CompositionConflict('parent is not an active group of this composition');
     }
     chain.push(current);
@@ -1140,7 +1141,7 @@ async function height(w: Working, occurrence: string): Promise<number> {
       for (const id of await w.segmentsOf(parent)) {
         for (const child of await w.membersOf(id)) {
           found = true;
-          if ((await w.get(child))!.role === 'group') next.push(child);
+          if (isContainerRole(w.header.profile, (await w.get(child))!.role)) next.push(child);
         }
       }
     }
@@ -1209,7 +1210,7 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   if (typeof operation.position === 'object' && operation.position.after === state.occurrence) {
     throw new CompositionConflict('an occurrence cannot be placed after itself');
   }
-  if (chain.length + 1 > deepestLevel(profile, state.role) || state.role === 'group'
+  if (chain.length + 1 > deepestLevel(profile, state.role) || isContainerRole(profile, state.role)
     && operation.parent !== state.parent
     && chain.length + 1 + await height(w, state.occurrence) > (profile.maxDepth ?? STRUCTURE_LIMITS.maxDepth)) {
     throw new CompositionConflict('composition depth exceeded');
@@ -1298,7 +1299,7 @@ function placementTriples(state: PlacementState, generation: string,
   const add = (predicate: string, object: string) => triples.push(`${subject} rv:${predicate} ${object} .`);
   add('occurrence', iri(state.occurrence));
   add('generation', iri(generation));
-  add('occurrenceRole', `<${ROLE_IRI[state.role]}>`);
+  add('occurrenceRole', `<${roleIri(state.role)}>`);
   if (state.active || state.tombstone) {
     add('orderSegment', iri(state.segment!));
     add('orderKey', lit(state.orderKey!));
@@ -2025,7 +2026,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       || record.state === 'active'
       && (!orderKeys.has(orderTreeKey(record as OrderEntry))
         || record.parent !== header.structure
-          && (byOccurrence.get(record.parent)?.role !== 'group'
+          && (!isContainerRole(registration, byOccurrence.get(record.parent)?.role ?? '')
             || byOccurrence.get(record.parent)?.state !== 'active'))) {
       throw new CompositionConflict('restored Structure has an unavailable or undisclosed dependency');
     }
@@ -2051,7 +2052,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       }
       seen.add(parent);
       const owner = byOccurrence.get(parent);
-      if (!owner || owner.state !== 'active' || owner.role !== 'group') {
+      if (!owner || owner.state !== 'active' || !isContainerRole(registration, owner.role)) {
         throw new StructureObjectCorrupt('retained Structure parent is unavailable');
       }
       parent = owner.parent;

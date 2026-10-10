@@ -72895,11 +72895,9 @@
                     "type": "string"
                   },
                   "profile": {
-                    "enum": [
-                      "book-composition",
-                      "work-composition",
-                      "recipe-composition"
-                    ],
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                     "type": "string"
                   },
                   "work": {
@@ -72929,11 +72927,9 @@
                     "type": "string"
                   },
                   "profile": {
-                    "enum": [
-                      "book-composition",
-                      "work-composition",
-                      "recipe-composition"
-                    ],
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                     "type": "string"
                   },
                   "work": {
@@ -72963,11 +72959,9 @@
                     "type": "string"
                   },
                   "profile": {
-                    "enum": [
-                      "book-composition",
-                      "work-composition",
-                      "recipe-composition"
-                    ],
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                     "type": "string"
                   },
                   "work": {
@@ -73938,6 +73932,44 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "id": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "fields",
+                                    "type": "string"
+                                  },
+                                  "values": {
+                                    "patternProperties": {
+                                      "^.*$": {
+                                        "anyOf": [
+                                          {
+                                            "maxLength": 4000,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "id",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
                                   "division": {
                                     "enum": [
                                       "volume",
@@ -73990,14 +74022,9 @@
                             "type": "string"
                           },
                           "role": {
-                            "enum": [
-                              "group",
-                              "chapter",
-                              "part",
-                              "ingredient",
-                              "step",
-                              "equipment"
-                            ],
+                            "maxLength": 32,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                             "type": "string"
                           },
                           "segmentKey": {
@@ -74805,18 +74832,65 @@
                                     "scaling"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "const": "fields",
+                                      "type": "string"
+                                    },
+                                    "values": {
+                                      "patternProperties": {
+                                        "^.*$": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 4000,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id",
+                                    "values"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "note": {
+                                      "maxLength": 4000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "note"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             },
                             "role": {
-                              "enum": [
-                                "group",
-                                "chapter",
-                                "part",
-                                "ingredient",
-                                "step",
-                                "equipment"
-                              ],
+                              "maxLength": 32,
+                              "minLength": 1,
+                              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                               "type": "string"
                             },
                             "selection": {
@@ -75186,6 +75260,58 @@
                                     "scaling"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "const": "fields",
+                                      "type": "string"
+                                    },
+                                    "values": {
+                                      "patternProperties": {
+                                        "^.*$": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 4000,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id",
+                                    "values"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "note": {
+                                      "maxLength": 4000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "note"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             }
@@ -75203,11 +75329,9 @@
                     "type": "array"
                   },
                   "profile": {
-                    "enum": [
-                      "book-composition",
-                      "work-composition",
-                      "recipe-composition"
-                    ],
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                     "type": "string"
                   }
                 },
@@ -75554,18 +75678,65 @@
                                     "scaling"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "const": "fields",
+                                      "type": "string"
+                                    },
+                                    "values": {
+                                      "patternProperties": {
+                                        "^.*$": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 4000,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id",
+                                    "values"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "note": {
+                                      "maxLength": 4000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "note"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             },
                             "role": {
-                              "enum": [
-                                "group",
-                                "chapter",
-                                "part",
-                                "ingredient",
-                                "step",
-                                "equipment"
-                              ],
+                              "maxLength": 32,
+                              "minLength": 1,
+                              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                               "type": "string"
                             },
                             "selection": {
@@ -75935,6 +76106,58 @@
                                     "scaling"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "const": "fields",
+                                      "type": "string"
+                                    },
+                                    "values": {
+                                      "patternProperties": {
+                                        "^.*$": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 4000,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id",
+                                    "values"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "note": {
+                                      "maxLength": 4000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "note"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             }
@@ -75952,11 +76175,9 @@
                     "type": "array"
                   },
                   "profile": {
-                    "enum": [
-                      "book-composition",
-                      "work-composition",
-                      "recipe-composition"
-                    ],
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                     "type": "string"
                   }
                 },
@@ -76303,18 +76524,65 @@
                                     "scaling"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "const": "fields",
+                                      "type": "string"
+                                    },
+                                    "values": {
+                                      "patternProperties": {
+                                        "^.*$": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 4000,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id",
+                                    "values"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "note": {
+                                      "maxLength": 4000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "note"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             },
                             "role": {
-                              "enum": [
-                                "group",
-                                "chapter",
-                                "part",
-                                "ingredient",
-                                "step",
-                                "equipment"
-                              ],
+                              "maxLength": 32,
+                              "minLength": 1,
+                              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                               "type": "string"
                             },
                             "selection": {
@@ -76684,6 +76952,58 @@
                                     "scaling"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "const": "fields",
+                                      "type": "string"
+                                    },
+                                    "values": {
+                                      "patternProperties": {
+                                        "^.*$": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 4000,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "id",
+                                    "values"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "note": {
+                                      "maxLength": 4000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "note"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             }
@@ -76701,11 +77021,9 @@
                     "type": "array"
                   },
                   "profile": {
-                    "enum": [
-                      "book-composition",
-                      "work-composition",
-                      "recipe-composition"
-                    ],
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                     "type": "string"
                   }
                 },
@@ -77654,6 +77972,44 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "id": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "fields",
+                                    "type": "string"
+                                  },
+                                  "values": {
+                                    "patternProperties": {
+                                      "^.*$": {
+                                        "anyOf": [
+                                          {
+                                            "maxLength": 4000,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "id",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
                                   "division": {
                                     "enum": [
                                       "volume",
@@ -77706,14 +78062,9 @@
                             "type": "string"
                           },
                           "role": {
-                            "enum": [
-                              "group",
-                              "chapter",
-                              "part",
-                              "ingredient",
-                              "step",
-                              "equipment"
-                            ],
+                            "maxLength": 32,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                             "type": "string"
                           },
                           "segmentKey": {
@@ -81597,6 +81948,44 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "id": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "fields",
+                                    "type": "string"
+                                  },
+                                  "values": {
+                                    "patternProperties": {
+                                      "^.*$": {
+                                        "anyOf": [
+                                          {
+                                            "maxLength": 4000,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "id",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
                                   "division": {
                                     "enum": [
                                       "volume",
@@ -81649,14 +82038,9 @@
                             "type": "string"
                           },
                           "role": {
-                            "enum": [
-                              "group",
-                              "chapter",
-                              "part",
-                              "ingredient",
-                              "step",
-                              "equipment"
-                            ],
+                            "maxLength": 32,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
                             "type": "string"
                           },
                           "segmentKey": {
@@ -453204,6 +453588,92 @@
                                   "scaling"
                                 ],
                                 "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "fields",
+                                    "type": "string"
+                                  },
+                                  "values": {
+                                    "patternProperties": {
+                                      "^[A-Za-z][A-Za-z0-9]*$": {
+                                        "anyOf": [
+                                          {
+                                            "maxLength": 4000,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "denominator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "numerator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "language": {
+                                                "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "maxLength": 4000,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "items": {
+                                              "maxLength": 2048,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "maxItems": 64,
+                                            "type": "array"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "id",
+                                  "values"
+                                ],
+                                "type": "object"
                               }
                             ]
                           },
@@ -453212,17 +453682,10 @@
                             "type": "string"
                           },
                           "role": {
-                            "enum": [
-                              "group",
-                              "chapter",
-                              "part",
-                              "member",
-                              "mount",
-                              "navigation",
-                              "ingredient",
-                              "step",
-                              "equipment"
-                            ]
+                            "maxLength": 32,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                            "type": "string"
                           },
                           "segmentKey": {
                             "maxLength": 32,

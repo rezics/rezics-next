@@ -41,11 +41,15 @@ const position = t.Union([t.Literal('first'), t.Literal('last'),
   t.Object({ after: ref }, { additionalProperties: false })]);
 /** How a group divides the Book: numbered volumes, titled parts, or unnumbered extras. */
 const division = t.Union([t.Literal('volume'), t.Literal('part'), t.Literal('extras')]);
-const profile = t.Union([
-  t.Literal('book-composition'),
-  t.Literal('work-composition'),
-  t.Literal('recipe-composition'),
-]);
+const profile = t.String({ minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' });
+const roleName = t.String({ minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' });
+const declaredQualifier = t.Object({
+  type: t.Literal('fields'),
+  id: t.String({ minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' }),
+  values: t.Record(t.String(), t.Union([t.String({ minLength: 1, maxLength: 4000 }), t.Boolean()])),
+}, { additionalProperties: false });
+const noteQualifier = t.Object({ note: t.String({ minLength: 1, maxLength: 4000 }) },
+  { additionalProperties: false });
 const inclusion = t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('extra')]);
 const completion = t.Object({ status: t.Union([t.Literal('concluded'), t.Literal('ongoing'), t.Literal('unknown')]),
   evidence: t.Array(t.String({ format: 'uri', maxLength: 2048 }), { maxItems: 16, uniqueItems: true }) }, { additionalProperties: false });
@@ -55,16 +59,9 @@ const operation = t.Union([
       op: t.Literal('insert'),
       parent: ref,
       position,
-      role: t.Union([
-        t.Literal('group'),
-        t.Literal('chapter'),
-        t.Literal('part'),
-        t.Literal('ingredient'),
-        t.Literal('step'),
-        t.Literal('equipment'),
-      ]),
+      role: roleName,
       target: t.Optional(t.String({ format: 'uri' })),
-      qualifier: t.Optional(t.Union([ingredientLine, recipeStep])),
+      qualifier: t.Optional(t.Union([ingredientLine, recipeStep, declaredQualifier, noteQualifier])),
       selection: t.Optional(selection),
       label: t.Optional(label),
       sourceKey: t.Optional(t.String()),
@@ -77,14 +74,14 @@ const operation = t.Union([
     { additionalProperties: false }),
   t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
   t.Object({ op: t.Literal('update'), occurrence: ref, label: t.Optional(label),
-    qualifier: t.Optional(t.Union([ingredientLine, recipeStep])),
+    qualifier: t.Optional(t.Union([ingredientLine, recipeStep, declaredQualifier, noteQualifier])),
     division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
     inclusion: t.Optional(inclusion) }, { additionalProperties: false }),
 ]);
 type BodyOperation = Static<typeof operation>;
 
 /** A group's division travels as the Book group qualifier of the Structure command. */
-function commandOperation(item: BodyOperation): CompositionOperation {
+function commandOperation(item: BodyOperation, profileId: string): CompositionOperation {
   if (item.op !== 'insert' && item.op !== 'update') return item;
   if (
     item.qualifier &&
@@ -92,7 +89,7 @@ function commandOperation(item: BodyOperation): CompositionOperation {
   ) {
     throw new InvalidCompositionChange('an occurrence carries one qualifier');
   }
-  const { division: groupDivision, displayLabel, inclusion: partInclusion, ...rest } = item;
+  const { division: groupDivision, displayLabel, inclusion: partInclusion, qualifier, ...rest } = item;
   if (displayLabel !== undefined || partInclusion !== undefined || item.op === 'insert' && item.role === 'part') {
     if (!displayLabel || !partInclusion || groupDivision || item.op === 'insert' && item.role !== 'part') {
       throw new InvalidCompositionChange('a Work part requires its display label and inclusion');
@@ -102,7 +99,17 @@ function commandOperation(item: BodyOperation): CompositionOperation {
   if (groupDivision && item.op === 'insert' && item.role !== 'group') {
     throw new InvalidCompositionChange('only a group has a division');
   }
-  return { ...rest, ...(groupDivision ? { qualifier: { type: 'book-group' as const, division: groupDivision } } : {}) };
+  if (qualifier && !('type' in qualifier)) {
+    const registration = structureProfileFor(profileId);
+    const spec = item.op === 'insert' ? registration.qualifiers?.[item.role]
+      : Object.values(registration.qualifiers ?? {}).find(candidate => candidate.textFields?.includes('note'));
+    if (!spec || spec.type !== 'fields' || !spec.fieldId) {
+      throw new InvalidCompositionChange('qualifier is not admitted by this Structure profile');
+    }
+    return { ...rest, qualifier: { type: 'fields' as const, id: spec.fieldId, values: { note: qualifier.note } } };
+  }
+  return { ...rest, ...(qualifier ? { qualifier } : {}),
+    ...(groupDivision ? { qualifier: { type: 'book-group' as const, division: groupDivision } } : {}) };
 }
 const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
   sequence: t.String() });
@@ -116,18 +123,12 @@ const writeResult = t.Object({ structure: ref, owner: t.Optional(ref), component
 const occurrence = t.Object({ occurrence: ref, state: t.Union([t.Literal('active'),
   t.Literal('removed')]), parent: ref,
   segmentKey: t.Optional(t.String()), orderKey: t.Optional(t.String()),
-  removedBy: t.Optional(ref), role: t.Union([
-    t.Literal('group'),
-    t.Literal('chapter'),
-    t.Literal('part'),
-    t.Literal('ingredient'),
-    t.Literal('step'),
-    t.Literal('equipment'),
-  ]), target: t.Optional(t.String()), selection: t.Optional(selection),
+  removedBy: t.Optional(ref), role: roleName, target: t.Optional(t.String()), selection: t.Optional(selection),
   labels: t.Array(label), sourceKey: t.Optional(t.String()), introducedBy: ref,
   qualifier: t.Optional(t.Union([
       ingredientLine,
       recipeStep,
+      declaredQualifier,
       t.Object({ type: t.Literal('book-group'), division }, { additionalProperties: false }),
       t.Object(
         { type: t.Literal('work-part'), displayLabel: t.String(), inclusion },
@@ -241,9 +242,8 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     const principal = await work.account.verify(request, ['work:edit', 'work:read']);
     const header = await readCompositionHeader(work.environment, structure);
-    if (!header || header.profile !== 'book-composition') {
-      throw new CompositionUnavailable('composition is unavailable');
-    }
+    if (!header) throw new CompositionUnavailable('composition is unavailable');
+    structureProfileFor(header.profile);
     if (!work.access.withWorkEditAuthority) {
       throw new ObjectUnavailable('Structure staging authority is unavailable');
     }
@@ -302,8 +302,9 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
     }, async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
-        const { proof } = await context(request, structure, body.actingSubject);
+        const { header, proof } = await context(request, structure, body.actingSubject);
         return Response.json(await store().upload({ id: params.stage, principalId: proof.principalId,
+          profile: header.profile,
           structure, holder: body.holder, fence: body.fence, ordinal: params.ordinal,
           entries: body.entries as OccurrenceRecord[] }),
         { headers: { 'cache-control': 'no-store' } });
@@ -319,6 +320,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         const { header, proof, principal } = await context(request, structure, body.actingSubject);
         return Response.json(await store().seal({ id: params.stage, principalId: proof.principalId,
           structure, mainVersion: header.mainVersion, holder: body.holder, fence: body.fence,
+          profile: header.profile,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
             environment: work.environment, access: work.access, principal, actingSubject: body.actingSubject, target,
               targetReader: resourceTargetReader(work, request, body.actingSubject) }) }),
@@ -417,11 +419,12 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
           const records = [...plan.records].sort((a, b) => a.occurrence.localeCompare(b.occurrence));
           for (let ordinal = 0; ordinal * 256 < records.length; ordinal++) {
             stage = await store().upload({ id: stage.id, principalId: proof.principalId,
-              structure, holder: stage.holder!, fence: stage.fence, ordinal,
+              structure, holder: stage.holder!, fence: stage.fence, ordinal, profile: header.profile,
               entries: records.slice(ordinal * 256, ordinal * 256 + 256) });
           }
           stage = await store().seal({ id: stage.id, principalId: proof.principalId,
             structure, mainVersion: header.mainVersion, holder: stage.holder!, fence: stage.fence,
+            profile: header.profile,
             canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
               environment: work.environment, access: work.access, principal, actingSubject: body.actingSubject, target,
               targetReader: resourceTargetReader(work, request, body.actingSubject) }) });
@@ -510,7 +513,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       try {
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
-            profile: body.profile, operations: body.operations.map(commandOperation),
+            profile: body.profile, operations: body.operations.map(item => commandOperation(item, body.profile)),
             actingSubject: body.actingSubject, idempotencyKey },
           resourceTargetReader(work, request, body.actingSubject));
         return Response.json({ structure: result.structure, revision: result.revision,

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { PlacementState } from '../structure/graph.ts';
-import type { StructureProfileRegistration } from '../structure/profiles.ts';
+import type { StructureProfileRegistration, StructureTargetAuthority } from '../structure/profiles.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
 
 const PROFILE = 'https://rezics.com/definition/structure-work-composition-v1';
@@ -67,22 +67,26 @@ export async function workTargetGuard(env: WorkActivationEnvironment, owner: str
     invalid: Boolean(result.results?.bindings.length) };
 }
 
+/** The work reader already used by Work composition and any profile that names it. */
+export async function authorizeWorkTarget({ targetReader, target }: StructureTargetAuthority): Promise<boolean> {
+  const { WorkReadUnavailable } = await import('../work/read-session.ts');
+  if (!targetReader) throw new WorkReadUnavailable('Composition target reader is unavailable');
+  const { resolveTargets } = await import('../target/resolve.ts');
+  await targetReader(session => resolveTargets(session, [target], 'collection-member'));
+  return true;
+}
+
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
   id: 'work-composition', graphProfile: `${RV}WorkComposition`,
   ownerType: 'https://schema.org/CreativeWork', componentType: `${RV}MainVersion`,
   componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',
   editPermission: 'work:edit', editAction: 'work.edit', receiptFamily: 'edit-metadata-work',
-  targetReadPermission: 'work:read',
-  authorizeTarget: async ({ targetReader, target }) => {
-      const { WorkReadUnavailable } = await import('../work/read-session.ts');
-      if (!targetReader) throw new WorkReadUnavailable('Composition target reader is unavailable');
-      const { resolveTargets } = await import('../target/resolve.ts');
-      await targetReader((session) => resolveTargets(session, [target], 'collection-member'));
-      return true;
-    },
+  targetReadPermission: 'work:read', targetDisclosure: 'work',
+  authorizeTarget: authorizeWorkTarget,
   targetGuard: workTargetGuard, withholdUnreadableTargets: true,
   roles: ['group', 'part'], targetRoles: ['part'], selectionRequiredRoles: [],
-  topologyValidationProfile: 'structure-work-composition-v1',
+  completion: true,
+  qualifiers: { part: { type: 'work-part', required: true } },
   projectQualifier: projectWorkPart, hydrateQualifier: hydrateWorkPart,
   qualifierValidations: async (env, changed) => {
     const focus = changed.filter(state => (state.active || state.tombstone) && state.qualifier?.type === 'work-part')

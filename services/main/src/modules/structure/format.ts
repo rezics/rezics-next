@@ -35,20 +35,68 @@ export const STRUCTURE_LIMITS = {
   stageBytes: 1_073_741_824,
 } as const;
 
+/** Persisted profile ids. A registration may add another id; these stay valid for stored objects. */
 export const STRUCTURE_PROFILES = ['book-composition', 'work-composition', 'collection-membership', 'zone-navigation',
-  'wiki-navigation', 'recipe-composition'] as const;
+  'recipe-composition'] as const;
 export const OCCURRENCE_ROLES = ['group', 'chapter', 'part', 'member', 'mount', 'navigation', 'ingredient',
   'step', 'equipment'] as const;
+const profileIdPattern = '^[a-z][a-z0-9]*(-[a-z0-9]+)*$';
 
-/** Roles admitted per Structure profile; checked by the command family, not by node-local SHACL. */
-export const PROFILE_ROLES: Readonly<Record<StructureProfile, readonly OccurrenceRole[]>> = {
+/** Roles of the persisted profiles. The registration is the allowlist once profiles are bound. */
+export const PROFILE_ROLES: Readonly<Record<string, readonly string[]>> = {
   'book-composition': ['group', 'chapter'],
   'work-composition': ['group', 'part'],
   'collection-membership': ['group', 'member'],
   'zone-navigation': ['group', 'mount'],
-  'wiki-navigation': ['group', 'navigation'],
   'recipe-composition': ['group', 'ingredient', 'step', 'equipment'],
 };
+
+/** Qualifier declaration a registration attaches to one role. */
+export interface StructureQualifierSpec {
+  type: string;
+  required: boolean;
+  fieldId?: string;
+  textFields?: readonly string[];
+}
+
+/** The slice of a registration the object-format checks read. Profiles bind this at load. */
+export interface BoundStructureProfile {
+  roles: readonly string[];
+  targetRoles: readonly string[];
+  optionalTargetRoles?: readonly string[];
+  selectionRequiredRoles?: readonly string[];
+  selectionOptionalRoles?: readonly string[];
+  qualifiers?: Readonly<Record<string, StructureQualifierSpec>>;
+}
+
+let boundProfiles: ReadonlyMap<string, BoundStructureProfile> | undefined;
+
+/** Registrations are the profile allowlist. Format checks read them without importing the loader. */
+export function bindStructureProfiles(profiles: ReadonlyMap<string, BoundStructureProfile>): void {
+  boundProfiles = profiles;
+}
+
+function bound(profile: string): BoundStructureProfile | undefined {
+  return boundProfiles?.get(profile);
+}
+
+function admittedRoles(profile: string): readonly string[] {
+  return bound(profile)?.roles ?? PROFILE_ROLES[profile] ?? [];
+}
+
+function targetMode(profile: string, role: string): 'required' | 'forbidden' | 'optional' {
+  const registration = bound(profile);
+  if (!registration) {
+    if (role === 'group' || role === 'step') return 'forbidden';
+    if (role === 'chapter' || role === 'part' || role === 'member' || role === 'mount' || role === 'navigation') {
+      return 'required';
+    }
+    return 'optional';
+  }
+  if (registration.optionalTargetRoles?.includes(role)) return 'optional';
+  if (registration.targetRoles.includes(role)) return 'required';
+  return 'forbidden';
+}
 
 const nativeId = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const reference = Type.String({ minLength: 1, maxLength: 2048, pattern: '^[a-z][a-z0-9+.-]*:\\S+$' });
@@ -103,6 +151,18 @@ const qualifier = Type.Union([
     usesIngredient: Type.Array(nativeId, { maxItems: 64 }),
     media: Type.Array(reference, { maxItems: 16 }), scaling,
   }, { additionalProperties: false }),
+  Type.Object({
+    type: Type.Literal('fields'),
+    id: Type.String({ minLength: 1, maxLength: 64, pattern: profileIdPattern }),
+    values: Type.Record(Type.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9]*$' }),
+      Type.Union([
+        Type.String({ minLength: 1, maxLength: 4000 }),
+        Type.Boolean(),
+        rational,
+        text(4000),
+        Type.Array(Type.String({ minLength: 1, maxLength: 2048 }), { maxItems: 64 }),
+      ])),
+  }, { additionalProperties: false }),
 ]);
 
 /** Complete state of one occurrence use; removed uses keep identity, target and source key. */
@@ -113,7 +173,7 @@ export const OccurrenceRecord = Type.Object({
   parent: nativeId,
   segmentKey: Type.Optional(orderKey),
   orderKey: Type.Optional(orderKey),
-  role: Type.Enum(OCCURRENCE_ROLES),
+  role: Type.String({ minLength: 1, maxLength: 32, pattern: profileIdPattern }),
   target: Type.Optional(reference),
   selection: Type.Optional(selection),
   labels: Type.Array(text(STRUCTURE_LIMITS.labelChars), { maxItems: 16 }),
@@ -198,7 +258,7 @@ export type WorkCompletion = Static<typeof WorkCompletion>;
 const manifestProperties = {
   structure: nativeId,
   structureOf: reference,
-  profile: Type.Enum(STRUCTURE_PROFILES),
+  profile: Type.String({ minLength: 1, maxLength: 64, pattern: profileIdPattern }),
   generation: nativeId,
   pageFormat: Type.Literal(STRUCTURE_PAGE_FORMAT),
   records: treeRoot,
@@ -239,8 +299,8 @@ export const StructureSealManifest = Type.Object({
   model: Type.Literal(STRUCTURE_PROFILE),
 }, { additionalProperties: false });
 
-export type StructureProfile = (typeof STRUCTURE_PROFILES)[number];
-export type OccurrenceRole = (typeof OCCURRENCE_ROLES)[number];
+export type StructureProfile = string;
+export type OccurrenceRole = string;
 export type OccurrenceRecord = Static<typeof OccurrenceRecord>;
 export type OrderEntry = Static<typeof OrderEntry>;
 export type PinEntry = Static<typeof PinEntry>;
@@ -305,8 +365,11 @@ export function checkStructureSealManifest(bytes: Uint8Array): StructureSealMani
 /** Record-level invariants that JSON Schema alone does not express. */
 export function checkOccurrenceRecord(record: OccurrenceRecord, profile: StructureProfile,
   catalogTargetTypes: readonly string[] = [],
-  selectionRequiredRoles: readonly OccurrenceRole[] = profile === 'book-composition' ? ['chapter'] : [],
-  selectionOptionalRoles: readonly OccurrenceRole[] = []): void {
+  selectionRequiredRoles?: readonly string[],
+  selectionOptionalRoles?: readonly string[]): void {
+  const registration = bound(profile);
+  const requiredSelection = selectionRequiredRoles ?? registration?.selectionRequiredRoles ?? [];
+  const optionalSelection = selectionOptionalRoles ?? registration?.selectionOptionalRoles ?? [];
   if (record.labels.length > 16 || new Set(record.labels.map(label => label.language.toLowerCase())).size !== record.labels.length) {
     throw new InvalidStructureObject('occurrence labels repeat a language or exceed their bound');
   }
@@ -316,7 +379,7 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   if ((active ? !complete : positioned) || active === (record.removedBy !== undefined)) {
     throw new InvalidStructureObject('active uses need an order position; removed uses need removedBy');
   }
-  if (!PROFILE_ROLES[profile].includes(record.role)) {
+  if (!admittedRoles(profile).includes(record.role)) {
     throw new InvalidStructureObject(`role ${record.role} is not admitted by ${profile}`);
   }
   if (record.target === undefined && record.selection !== undefined) {
@@ -324,18 +387,17 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   }
   if (record.target !== undefined) {
     const catalog = catalogTargetTypes.includes(record.target);
-    const needsSelection = !catalog && selectionRequiredRoles.includes(record.role);
+    const needsSelection = !catalog && requiredSelection.includes(record.role);
     if (needsSelection && record.selection === undefined) {
       throw new InvalidStructureObject('a content target requires a selection policy');
     }
     if (!needsSelection && record.selection !== undefined
-      && (catalog || !selectionOptionalRoles.includes(record.role))) {
+      && (catalog || !optionalSelection.includes(record.role))) {
       throw new InvalidStructureObject('this target role does not have a content selection policy');
     }
   }
-  const structural = record.role === 'group' || record.role === 'step';
-  const targeted = ['chapter', 'part', 'member', 'mount', 'navigation'].includes(record.role);
-  if ((structural && record.target !== undefined) || (targeted && record.target === undefined)) {
+  const mode = targetMode(profile, record.role);
+  if ((mode === 'forbidden' && record.target !== undefined) || (mode === 'required' && record.target === undefined)) {
     throw new InvalidStructureObject(`role ${record.role} target cardinality differs`);
   }
   checkOccurrenceQualifierRole(record, profile);
@@ -354,19 +416,33 @@ export function checkOccurrenceQualifier(value: unknown): NonNullable<Occurrence
   return checked;
 }
 
-/** Shared role normalization: edits must obey the same meaning as authored records. */
+/** Shared role normalization: the registration names the qualifier a role requires. */
 export function checkOccurrenceQualifierRole(record: Pick<OccurrenceRecord, 'role' | 'qualifier'>,
   profile: StructureProfile): void {
-  if (!PROFILE_ROLES[profile].includes(record.role)) throw new InvalidStructureObject(`role ${record.role} is not admitted by ${profile}`);
+  if (!admittedRoles(profile).includes(record.role)) throw new InvalidStructureObject(`role ${record.role} is not admitted by ${profile}`);
   if (record.qualifier !== undefined) checkOccurrenceQualifier(record.qualifier);
-  const qualifierType = record.qualifier?.type;
-  const expected = profile === 'work-composition' && record.role === 'part' ? 'work-part'
-    : record.role === 'mount' ? 'zone-mount' : record.role === 'ingredient'
-    ? 'ingredient-line' : record.role === 'step' ? 'recipe-step' : undefined;
-  // A Book group may say how it divides the book; one without a division reads as a plain part.
-  const bookGroup = profile === 'book-composition' && record.role === 'group' && qualifierType === 'book-group';
-  if (qualifierType !== expected && !bookGroup) {
-    throw new InvalidStructureObject(`role ${record.role} requires qualifier ${expected ?? 'none'}`);
+  const spec = bound(profile)?.qualifiers?.[record.role];
+  const actual = record.qualifier?.type;
+  if (!spec) {
+    if (actual !== undefined) throw new InvalidStructureObject(`role ${record.role} requires qualifier none`);
+    return;
+  }
+  if (actual === undefined) {
+    if (spec.required) throw new InvalidStructureObject(`role ${record.role} requires qualifier ${spec.type}`);
+    return;
+  }
+  if (actual !== spec.type) throw new InvalidStructureObject(`role ${record.role} requires qualifier ${spec.type}`);
+  if (actual === 'fields' && record.qualifier?.type === 'fields') {
+    if (spec.fieldId !== undefined && record.qualifier.id !== spec.fieldId) {
+      throw new InvalidStructureObject(`role ${record.role} requires qualifier ${spec.fieldId}`);
+    }
+    for (const name of spec.textFields ?? []) {
+      const value = record.qualifier.values[name];
+      if (typeof value !== 'string' || !value.length || value.length > 4000
+        || /[\u0000-\u001f\u007f]/u.test(value)) {
+        throw new InvalidStructureObject(`${name} differs from its format`);
+      }
+    }
   }
 }
 

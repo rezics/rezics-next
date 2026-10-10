@@ -12,10 +12,6 @@
       "@id": "http://www.w3.org/2001/XMLSchema#",
       "@prefix": true
     },
-    "schema": {
-      "@id": "https://schema.org/",
-      "@prefix": true
-    },
     "rv": {
       "@id": "https://rezics.com/vocab/",
       "@prefix": true
@@ -31,77 +27,9 @@
       "@id": "https://rezics.com/vocab/generation",
       "@type": "@id"
     },
-    "rv:lastParent": {
-      "@id": "https://rezics.com/vocab/lastParent",
-      "@type": "@id"
-    },
-    "rv:occurrence": {
-      "@id": "https://rezics.com/vocab/occurrence",
-      "@type": "@id"
-    },
-    "rv:occurrenceLabel": {
-      "@id": "https://rezics.com/vocab/occurrenceLabel"
-    },
-    "rv:occurrenceRole": {
-      "@id": "https://rezics.com/vocab/occurrenceRole",
-      "@type": "@id"
-    },
-    "rv:orderKey": {
-      "@id": "https://rezics.com/vocab/orderKey"
-    },
-    "rv:orderSegment": {
-      "@id": "https://rezics.com/vocab/orderSegment",
-      "@type": "@id"
-    },
     "rv:partInclusion": {
       "@id": "https://rezics.com/vocab/partInclusion",
       "@type": "@id"
-    },
-    "rv:pinnedRevision": {
-      "@id": "https://rezics.com/vocab/pinnedRevision",
-      "@type": "@id"
-    },
-    "rv:qualifier": {
-      "@id": "https://rezics.com/vocab/qualifier",
-      "@type": "@id"
-    },
-    "rv:removedBy": {
-      "@id": "https://rezics.com/vocab/removedBy",
-      "@type": "@id"
-    },
-    "rv:selectedGeneration": {
-      "@id": "https://rezics.com/vocab/selectedGeneration",
-      "@type": "@id"
-    },
-    "rv:selectionMode": {
-      "@id": "https://rezics.com/vocab/selectionMode",
-      "@type": "@id"
-    },
-    "rv:selectionRealm": {
-      "@id": "https://rezics.com/vocab/selectionRealm",
-      "@type": "@id"
-    },
-    "rv:sourceKey": {
-      "@id": "https://rezics.com/vocab/sourceKey"
-    },
-    "rv:structureHead": {
-      "@id": "https://rezics.com/vocab/structureHead",
-      "@type": "@id"
-    },
-    "rv:structureOf": {
-      "@id": "https://rezics.com/vocab/structureOf",
-      "@type": "@id"
-    },
-    "rv:structureProfile": {
-      "@id": "https://rezics.com/vocab/structureProfile",
-      "@type": "@id"
-    },
-    "schema:item": {
-      "@id": "https://schema.org/item",
-      "@type": "@id"
-    },
-    "schema:position": {
-      "@id": "https://schema.org/position"
     }
   }
 }

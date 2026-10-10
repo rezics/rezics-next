@@ -40,8 +40,7 @@ public final class OccurrenceLabelIndex {
     static Node activeRevision(DatasetGraph data, Node generation) {
         Node structure = one(data, CURRENT, generation, p("structure"));
         Node profile = structure == null ? null : one(data, CURRENT, structure, p("structureProfile"));
-        if (profile == null || !Set.of(p("BookComposition"), p("WorkComposition")).contains(
-            profile)
+        if (profile == null
             || !generation.equals(one(data, CURRENT, structure, p("selectedGeneration")))
             || !data.contains(CURRENT, generation, p("generationState"), p("Active"))) return null;
         return one(data, CURRENT, structure, p("structureHead"));

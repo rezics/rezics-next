@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
-import { RV } from '../work/activate.ts';
-import { PROFILE_ROLES, STRUCTURE_LIMITS, type OccurrenceRole, type StructureProfile } from './format.ts';
+import { bindStructureProfiles, STRUCTURE_LIMITS, type OccurrenceRole, type StructureProfile,
+  type StructureQualifierSpec } from './format.ts';
 import type { OccurrenceRecord } from './format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { PlacementState } from './graph.ts';
@@ -8,7 +8,6 @@ import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { ProfileId } from '../../infrastructure/profile.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
-import { hydrateBookGroup, projectBookGroup, validateBookGroups } from './book-group.ts';
 import type { TargetReadSession } from '../target/resolve.ts';
 
 export type StructureTargetReader = <T>(operation: (session: TargetReadSession) => Promise<T>) => Promise<T>;
@@ -45,6 +44,8 @@ export interface StructureProfileRegistration {
   targetReadPermission?: string;
   /** Current target disclosure. The Book default remains work:read. */
   authorizeTarget?: (authority: StructureTargetAuthority) => Promise<boolean>;
+  /** Existing reader used when disclosing occurrence targets. */
+  targetDisclosure?: 'work' | 'resource' | 'structure-target';
   /** Owner target invariants, checked before planning and again inside the graph transaction. */
   targetGuard?: (env: WorkActivationEnvironment, owner: string, targets: readonly string[]) =>
     Promise<{ guard: string; rejection: string; invalid?: boolean }>;
@@ -58,6 +59,14 @@ export interface StructureProfileRegistration {
   /** Declared external catalog terms accepted as non-content occurrence targets. */
   catalogTargetTypes?: readonly string[];
   roles: readonly OccurrenceRole[];
+  /** Roles that may parent other occurrences. Defaults to `group`. */
+  containerRoles?: readonly OccurrenceRole[];
+  /** Qualifier required or optional on a role. Absent means the role carries none. */
+  qualifiers?: Readonly<Record<string, StructureQualifierSpec>>;
+  /** The manifest retains recipe measures only when the profile declares them. */
+  measures?: boolean;
+  /** Completion is present only when the profile declares it. */
+  completion?: boolean;
   /** These roles may omit a target; all other non-target roles forbid it. */
   optionalTargetRoles?: readonly OccurrenceRole[];
   targetRoles: readonly OccurrenceRole[];
@@ -90,24 +99,16 @@ export interface StructureProfileRegistration {
   maxDepth?: number;
 }
 
-const book: StructureProfileRegistration = {
-  id: 'book-composition', graphProfile: `${RV}BookComposition`,
-  ownerType: 'https://schema.org/Book', componentType: `${RV}MainVersion`,
-  componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',
-  editPermission: 'work:edit', editAction: 'work.edit', receiptFamily: 'edit-metadata-work',
-  targetReadPermission: 'work:read',
-  catalogTargetTypes: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'],
-  roles: ['group', 'chapter'], targetRoles: ['chapter'], selectionRequiredRoles: ['chapter'],
-  // Volumes, parts and extras sit directly under the book; chapters under the book or one group.
-  maxDepth: 2,
-  projectQualifier: projectBookGroup, hydrateQualifier: hydrateBookGroup,
-  qualifierValidations: validateBookGroups,
-};
-
 /** The deepest level an occurrence of this role may take in a profile's Structure (1 = under the root). */
 export function deepestLevel(profile: StructureProfileRegistration, role: OccurrenceRole): number {
   if (profile.maxDepth === undefined) return STRUCTURE_LIMITS.maxDepth;
-  return role === 'group' ? profile.maxDepth - 1 : profile.maxDepth;
+  return isContainerRole(profile, role) ? profile.maxDepth - 1 : profile.maxDepth;
+}
+
+/** A container role may parent other occurrences. Persisted profiles use `group`. */
+export function isContainerRole(profile: StructureProfileRegistration | string, role: string): boolean {
+  const registration = typeof profile === 'string' ? structureProfileFor(profile) : profile;
+  return (registration.containerRoles ?? ['group']).includes(role);
 }
 
 function validUri(value: unknown): value is string {
@@ -116,9 +117,11 @@ function validUri(value: unknown): value is string {
   catch { return false; }
 }
 
+const profileIdPattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
 export async function discoverStructureProfiles(directory = join(import.meta.dir, '..')) {
-  const profiles = new Map<StructureProfile, StructureProfileRegistration>([[book.id, book]]);
-  const graphProfiles = new Set([book.graphProfile]);
+  const profiles = new Map<StructureProfile, StructureProfileRegistration>();
+  const graphProfiles = new Set<string>();
   for (const file of [...new Bun.Glob('*/structure-profile.ts').scanSync({ cwd: directory })].sort()) {
     const module = await import(resolve(directory, file)) as { structureProfiles?: unknown };
     if (!Array.isArray(module.structureProfiles) || !module.structureProfiles.length) {
@@ -126,7 +129,8 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
     }
     for (const candidate of module.structureProfiles) {
       const profile = candidate as Partial<StructureProfileRegistration>;
-      if (typeof profile.id !== 'string' || !Object.hasOwn(PROFILE_ROLES, profile.id)
+      const containers = profile.containerRoles ?? ['group'];
+      if (typeof profile.id !== 'string' || !profileIdPattern.test(profile.id) || profile.id.length > 64
         || profiles.has(profile.id as StructureProfile)
         || !validUri(profile.graphProfile) || graphProfiles.has(profile.graphProfile)
         || !validUri(profile.ownerType) || !validUri(profile.componentType)
@@ -159,12 +163,20 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || profile.optionalTargetRoles !== undefined && !Array.isArray(profile.optionalTargetRoles)
         || profile.selectionRequiredRoles !== undefined && !Array.isArray(profile.selectionRequiredRoles)
         || profile.selectionOptionalRoles !== undefined && !Array.isArray(profile.selectionOptionalRoles)
-        || !profile.roles.includes('group') || new Set(profile.roles).size !== profile.roles.length
+        || !containers.length || containers.some(role => !profile.roles?.includes(role))
+        || new Set(profile.roles).size !== profile.roles.length
         || new Set(profile.targetRoles).size !== profile.targetRoles.length
         || new Set(profile.optionalTargetRoles ?? []).size !== (profile.optionalTargetRoles?.length ?? 0)
         || new Set(profile.selectionRequiredRoles ?? []).size !== (profile.selectionRequiredRoles?.length ?? 0)
         || new Set(profile.selectionOptionalRoles ?? []).size !== (profile.selectionOptionalRoles?.length ?? 0)
-        || profile.roles.some(role => !PROFILE_ROLES[profile.id as StructureProfile].includes(role))
+        || profile.roles.some(role => typeof role !== 'string' || !profileIdPattern.test(role))
+        || profile.qualifiers !== undefined && (typeof profile.qualifiers !== 'object'
+          || Object.entries(profile.qualifiers).some(([role, spec]) => !profile.roles?.includes(role)
+            || !spec || typeof spec.type !== 'string' || typeof spec.required !== 'boolean'))
+        || profile.measures !== undefined && typeof profile.measures !== 'boolean'
+        || profile.completion !== undefined && typeof profile.completion !== 'boolean'
+        || profile.targetDisclosure !== undefined && profile.targetDisclosure !== 'work'
+          && profile.targetDisclosure !== 'resource' && profile.targetDisclosure !== 'structure-target'
         || profile.targetRoles.some(role => !profile.roles?.includes(role))
         || profile.optionalTargetRoles?.some(role => !profile.roles?.includes(role)
           || profile.targetRoles?.includes(role))
@@ -188,6 +200,7 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
 }
 
 const profiles = await discoverStructureProfiles();
+bindStructureProfiles(profiles);
 const byGraph = new Map([...profiles.values()].map(profile => [profile.graphProfile, profile]));
 const byAction = new Map<string, StructureProfileRegistration>();
 for (const profile of profiles.values()) {

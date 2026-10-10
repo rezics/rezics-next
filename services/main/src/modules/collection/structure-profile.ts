@@ -13,6 +13,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   editScopePrefix: 'collection:edit:',
   editPermission: 'collection:edit',
   targetReadPermission: 'work:read',
+  targetDisclosure: 'work',
   authorizeTarget: async ({ targetReader, target }) => {
     const { WorkReadUnavailable } = await import('../work/read-session.ts');
     if (!targetReader) throw new WorkReadUnavailable('Collection target reader is unavailable');

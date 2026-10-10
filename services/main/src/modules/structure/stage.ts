@@ -9,10 +9,8 @@ import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage,
   STRUCTURE_INDEXED_MANIFEST_FORMAT,
   type OccurrenceRecord, type OrderEntry } from './format.ts';
 import { newCost } from './tree.ts';
-import { deepestLevel, structureProfileFor } from './profiles.ts';
+import { deepestLevel, isContainerRole, structureProfileFor } from './profiles.ts';
 import { createQualifierKeyIndex } from './qualifier-index.ts';
-
-const book = structureProfileFor('book-composition');
 
 export class StructureStageInvalid extends Error {}
 export class StructureStageConflict extends Error {}
@@ -123,7 +121,7 @@ export class StructureStageStore {
   }
 
   async upload(input: { id: string; principalId: string; structure: string; holder: string;
-    fence: string; ordinal: number; entries: readonly OccurrenceRecord[] }): Promise<StructureStage> {
+    fence: string; ordinal: number; entries: readonly OccurrenceRecord[]; profile?: string }): Promise<StructureStage> {
     if (!Number.isInteger(input.ordinal) || input.ordinal < 0
       || input.ordinal >= STRUCTURE_LIMITS.stagePages || !input.entries.length
       || input.entries.length > STRUCTURE_LIMITS.pageEntries) {
@@ -133,7 +131,9 @@ export class StructureStageStore {
       level: 0 as const, entries: input.entries };
     const bytes = new TextEncoder().encode(JSON.stringify(page));
     checkStructurePage(bytes);
-    for (const record of input.entries) checkOccurrenceRecord(record, 'book-composition');
+    const uploaded = structureProfileFor(input.profile ?? 'book-composition');
+    for (const record of input.entries) checkOccurrenceRecord(record, uploaded.id, uploaded.catalogTargetTypes,
+      uploaded.selectionRequiredRoles ?? uploaded.targetRoles, uploaded.selectionOptionalRoles);
     const digest = hash(bytes);
     const stage = await this.read(input.id, input.principalId, input.structure);
     if (input.ordinal < stage.pages) {
@@ -165,7 +165,8 @@ export class StructureStageStore {
   }
 
   async seal(input: { id: string; principalId: string; structure: string; mainVersion: string;
-    holder: string; fence: string; canReadTarget: (target: string) => Promise<boolean> }):
+    holder: string; fence: string; canReadTarget: (target: string) => Promise<boolean>;
+    profile?: string }):
     Promise<StructureStage> {
     const stage = await this.read(input.id, input.principalId, input.structure);
     if (stage.status === 'sealed') return stage;
@@ -194,21 +195,23 @@ export class StructureStageStore {
     // Authorization belongs to this seal request, not each use of the target.
     // Activation makes a fresh decision so revocation between requests is seen.
     const readableTargets = new Set<string>();
+    const sealed = structureProfileFor(input.profile ?? 'book-composition');
     for (const record of records) {
-      checkOccurrenceRecord(record, 'book-composition');
+      checkOccurrenceRecord(record, sealed.id, sealed.catalogTargetTypes,
+        sealed.selectionRequiredRoles ?? sealed.targetRoles, sealed.selectionOptionalRoles);
       if (record.state !== 'active') continue;
       const chain = new Set([record.occurrence]);
       let parent = record.parent;
       while (parent !== stage.structure) {
         const owner = byId.get(parent);
-        if (!owner || owner.state !== 'active' || owner.role !== 'group'
+        if (!owner || owner.state !== 'active' || !isContainerRole(sealed, owner.role)
           || chain.has(parent) || chain.size > STRUCTURE_LIMITS.maxDepth) {
           throw new StructureStageInvalid('stage parent chain is unavailable or cyclic');
         }
         chain.add(parent);
         parent = owner.parent;
       }
-      if (chain.size > deepestLevel(book, record.role)) {
+      if (chain.size > deepestLevel(sealed, record.role)) {
         throw new StructureStageInvalid('stage nests deeper than a Book allows');
       }
       if (record.target && !readableTargets.has(record.target)) {
@@ -235,7 +238,7 @@ export class StructureStageStore {
     const groupRoot = await orderTree(this.objects).apply(await orderTree(this.objects).empty(cost),
       groups, cost);
     const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: stage.structure,
-      structureOf: input.mainVersion, profile: 'book-composition' as const,
+      structureOf: input.mainVersion, profile: sealed.id,
       generation: stage.generation, pageFormat: STRUCTURE_PAGE_FORMAT,
       records: recordRoot, order: orderRoot, topGroups: groupRoot, placementCount: order.size, measures: [],
       ...(stage.sourceRef && stage.sourceRevision && stage.mappingPolicy

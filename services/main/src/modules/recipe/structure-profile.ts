@@ -152,7 +152,13 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
     'https://schema.org/HowToSection', 'https://schema.org/Thing'],
   roles: ['group', 'ingredient', 'step', 'equipment'],
   targetRoles: [],
+  optionalTargetRoles: ['ingredient', 'equipment'],
   selectionRequiredRoles: [],
+  measures: true,
+  qualifiers: {
+    ingredient: { type: 'ingredient-line', required: true },
+    step: { type: 'recipe-step', required: true },
+  },
   projectQualifier: project,
   hydrateQualifier: hydrate,
   qualifierValidations: validations,

@@ -276,10 +276,10 @@ public class MembershipSeekTest {
                     else if (defect.equals("conflicting-target")) data.add(CURRENT, id(10000), s("item"), id(999));
                     else if (defect.equals("owner-role")) {
                         data.deleteAny(CURRENT, id(10000), p("occurrenceRole"), Node.ANY);
-                        data.add(CURRENT, id(10000), p("occurrenceRole"), p("PartRole"));
+                        data.add(CURRENT, id(10000), p("occurrenceRole"), text("PartRole"));
                     } else if (defect.equals("unknown-profile")) {
                         data.deleteAny(CURRENT, STRUCTURE, p("structureProfile"), Node.ANY);
-                        data.add(CURRENT, STRUCTURE, p("structureProfile"), p("UnknownComposition"));
+                        data.add(CURRENT, STRUCTURE, p("structureProfile"), text("UnknownComposition"));
                     }
                     else {
                         normalize(data, id(10000), id(200000), 0);

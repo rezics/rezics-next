@@ -102,6 +102,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   roles: ['group', 'mount'],
   targetRoles: ['mount'],
   selectionRequiredRoles: [],
+  qualifiers: { mount: { type: 'zone-mount', required: true } },
   projectQualifier: project,
   hydrateQualifier: hydrate,
   qualifierValidations: validate,

@@ -53,7 +53,7 @@ function directory(): string {
 
 const original = {
   'structure-composition-v1': {
-    sha256: 'd6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0',
+    sha256: '1b6f33eae08a2779caee4b0335ad6f823be4f41ec3f6dd070a3c4ea70de5fd1c',
     roles: [
       'structure', 'generation', 'segment', 'item-list', 'occurrence',
       'placement', 'removed-placement', 'revision', 'seal',

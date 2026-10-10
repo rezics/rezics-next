@@ -4,7 +4,7 @@ import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage, Inva
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
   readCompositionHeader, type CompositionHeader } from './graph.ts';
-import { isCatalogTarget, structureProfileFor } from './profiles.ts';
+import { isCatalogTarget, isContainerRole, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { resolvePreparedGroups } from './group-root.ts';
@@ -90,7 +90,7 @@ export async function readCompositionOccurrenceByQualifierKey(env: WorkActivatio
   }
   if (parent !== input.structure) {
     const group = (await recordTree(objects).lookup(manifest.records, [parent], cost)).get(parent);
-    if (!group || group.state !== 'active' || group.role !== 'group') throw new CompositionUnavailable('Composition parent is unavailable');
+    if (!group || group.state !== 'active' || !isContainerRole(header.profile, group.role)) throw new CompositionUnavailable('Composition parent is unavailable');
   }
   const profile = structureProfileFor(header.profile), occurrences: OccurrenceRecord[] = [];
   let after = prefix, visits = 0;
@@ -241,7 +241,7 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
     throw new CompositionUnavailable('invalid Structure measure read');
   }
   const header = await readCompositionHeader(env, input.structure);
-  if (!header || header.profile !== 'recipe-composition') {
+  if (!header || !structureProfileFor(header.profile).measures) {
     throw new CompositionUnavailable('Recipe Structure is unavailable');
   }
   const revision = input.revision ?? header.head;
@@ -347,7 +347,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       let parent = record.parent;
       for (let depth = 0; parent !== input.structure && depth < STRUCTURE_LIMITS.maxDepth; depth++) {
         const ancestor = (await recordTree(objects).lookup(manifest.records, [parent], cost)).get(parent);
-        if (!ancestor || ancestor.state !== 'active' || ancestor.role !== 'group') {
+        if (!ancestor || ancestor.state !== 'active' || !isContainerRole(profile, ancestor.role)) {
           throw new StructureObjectCorrupt('Chapter ancestry is unavailable');
         }
         const at = await orderTree(objects).countBefore(manifest.order, orderTreeKey(ancestor as Required<Pick<
@@ -364,7 +364,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       work: header.work, mainVersion: header.mainVersion,
       revision, predecessor,
       placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
-      ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
+      ...(profile.completion ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
       occurrences: !input.visible || input.visible(visible) ? [visible] : [], next: null,
       sourcePosition,
       cost, occurrenceContext };
@@ -374,7 +374,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   if (parent !== input.structure) {
     const found = await recordTree(objects).lookup(manifest.records, [parent], cost);
     parentRecord = found.get(parent);
-    if (!parentRecord || parentRecord.state !== 'active' || parentRecord.role !== 'group') {
+    if (!parentRecord || parentRecord.state !== 'active' || !isContainerRole(profile, parentRecord.role)) {
       throw new CompositionUnavailable('composition parent is unavailable');
     }
   }
@@ -452,7 +452,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const tree = orderTree(objects);
     const childCounts: Record<string, number> = {};
     for (const record of occurrences) {
-      if (record.role !== 'group') continue;
+      if (!isContainerRole(profile, record.role)) continue;
       childCounts[record.occurrence] = await tree.countBefore(manifest.order, `${record.occurrence}\u0002`, cost)
         - await tree.countBefore(manifest.order, `${record.occurrence}\u0001`, cost);
     }
@@ -468,7 +468,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     work: header.work, mainVersion: header.mainVersion,
     revision, predecessor,
     placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
-    ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
+    ...(profile.completion ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
     occurrences, next: hasNext ? (profile.withholdUnreadableTargets
       ? encodeReadCursor(cursorBinding, cursorPosition, orderTreeKey(page.at(-1)!))
       : orderTreeKey(page.at(-1)!)) : null,

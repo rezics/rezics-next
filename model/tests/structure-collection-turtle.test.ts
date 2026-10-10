@@ -98,8 +98,8 @@ const original = {
     '858d2f13c857c644d6e1a9a7022878e52547c73761017bb6a52ded9777be7ff2',
   ],
   'structure-work-composition-v1': [
-    '1361bcfab08143854e4a5cc6db132a79cb1adf737037d82433a839621903a11e',
-    '7803c48dd4ae017e52d7d53e2996659705b397a0e0641b2117e368d081b61e33',
+    'f8b3030ccf4b0bcc882dc360452ec471e4f9d2f9ea125a09120b990a2eda7566',
+    'e079880f669fe3ca5ba02e6dd72fe666b6201f09440079cfc514be1959d1a46f',
   ],
 } as const;
 const roles = {
@@ -113,7 +113,7 @@ const roles = {
   'collection-public-name-v1': ['revision'],
   'recipe-structure-v1': ['ingredient-line', 'step', 'measure'],
   'structure-book-v1': ['group'],
-  'structure-work-composition-v1': ['structure', 'placement', 'removed-placement', 'part'],
+  'structure-work-composition-v1': ['part'],
 } as const;
 interface RegistryManifest {
   profiles: { id: string; binding?: RegistryBinding }[];
@@ -209,7 +209,7 @@ function collectionRevision(dynamic = false): Record<string, unknown> {
   };
 }
 
-test('five Structure and Collection discoveries preserve exact pins, 172 properties, fourteen alternatives and roles', () => {
+test('five Structure and Collection discoveries preserve exact pins, 91 properties, nine alternatives and roles', () => {
   const path = directory();
   for (const id of ids)
     writeFileSync(
@@ -220,10 +220,10 @@ test('five Structure and Collection discoveries preserve exact pins, 172 propert
   expect(discovered.map((profile) => profile.id)).toEqual(ids);
   expect(profiles.map((profile) => profile.id)).toEqual(ids);
   const shapes = discovered.flatMap((profile) => profile.shapes);
-  expect(shapes).toHaveLength(14);
-  expect(shapes.flatMap((shape) => shape.properties)).toHaveLength(120);
-  expect(shapes.flatMap((shape) => shape.or ?? [])).toHaveLength(14);
-  expect(shapes.flatMap((shape) => (shape.or ?? []).flat())).toHaveLength(52);
+  expect(shapes).toHaveLength(11);
+  expect(shapes.flatMap((shape) => shape.properties)).toHaveLength(91);
+  expect(shapes.flatMap((shape) => shape.or ?? [])).toHaveLength(9);
+  expect(shapes.flatMap((shape) => (shape.or ?? []).flat())).toHaveLength(32);
   const published = commandProfiles(discovered, options);
   for (const profile of discovered) {
     const id = profile.id as keyof typeof original;
@@ -248,7 +248,7 @@ test('five Structure and Collection discoveries preserve exact pins, 172 propert
   }
   const registry = selectedRegistry(commandProfiles(authoredProfiles).manifest);
   expect(digest(JSON.stringify(registry))).toBe(
-    '5e3fa6960a5faefc1dd999e7a81bb02a0c8be328d968b40e1f9063b1b3114aa5',
+    '53a43411523337d88fe5e6c3a4391c7bdc5e3164d91f0019130eff8868ebd231',
   );
   const isolated = selectedRegistry(published.manifest);
   expect(isolated.profiles).toEqual(registry.profiles);
@@ -314,103 +314,64 @@ test('current author bytes match historical pins and a temporary author reload c
   }).toEqual(retained);
 });
 
-test('Work composition remains separate from its immutable base and preserves owner routing priority', () => {
+test('Work composition keeps the part qualifier; the shared shape admits any profile and role', () => {
   expect(digest(profileSource(structureCompositionProfile))).toBe(
-    'd6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0',
+    '1b6f33eae08a2779caee4b0335ad6f823be4f41ec3f6dd070a3c4ea70de5fd1c',
   );
   expect(digest(constraints(structureCompositionProfile))).toBe(
-    '055f71dbe6fd9812842bae7814419595207d57d28e422a21e447f01dd31c0490',
+    '240c154991880ff83febd6a3d783b07d3a0c7a939d3c4b6adec69ee174f3dd0c',
   );
+  const kernel = profileSource(structureCompositionProfile);
+  expect(kernel).toContain('sh:path rv:structureProfile ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
+  expect(kernel).toContain('sh:path rv:occurrenceRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
+  expect(kernel).not.toContain('rv:BookComposition');
+  expect(kernel).not.toContain('rv:PartRole');
   const manifest = commandProfiles(authoredProfiles).manifest as unknown as RegistryManifest;
-  for (const [type, role, path, value] of [
-    ['Structure', 'structure', 'structureProfile', 'WorkComposition'],
-    ['OccurrencePlacement', 'placement', 'occurrenceRole', 'PartRole'],
-    ['RemovedPlacement', 'removed-placement', 'occurrenceRole', 'PartRole'],
-  ] as const) {
-    const routes = manifest.canonical.find((entry) => entry.type === `${rv}${type}`)!.routes;
-    const ownerIndex = routes.findIndex(
-      (route) => route.profile === 'structure-work-composition-v1',
-    );
-    const baseIndex = routes.findIndex((route) => route.profile === 'structure-composition-v1');
-    expect(ownerIndex).toBeGreaterThanOrEqual(0);
-    expect(baseIndex).toBeGreaterThan(ownerIndex);
-    expect(routes[ownerIndex]).toEqual({
-      profile: 'structure-work-composition-v1',
-      shape: `${definition}structure-work-composition-v1/${role}-shape`,
-      when: [{ path: `${rv}${path}`, value: `${rv}${value}` }],
-    });
+  const partRoutes = manifest.canonical.find((entry) => entry.type === `${rv}WorkPart`)!.routes;
+  expect(partRoutes).toContainEqual({
+    profile: 'structure-work-composition-v1',
+    shape: `${definition}structure-work-composition-v1/part-shape`,
+    when: [],
+  });
+  for (const type of ['Structure', 'OccurrencePlacement', 'RemovedPlacement']) {
+    const routes = manifest.canonical.find((entry) => entry.type === `${rv}${type}`)?.routes ?? [];
+    expect(routes.some((route) => route.profile === 'structure-work-composition-v1')).toBe(false);
   }
 });
 
-test('Work composition preserves admitted roles and all selection alternatives including required exact references', async () => {
-  const id = 'structure-work-composition-v1';
+test('the shared Structure shape admits a new profile and role and still rejects a broken selection', async () => {
+  const path = join(directory(), 'shared-schemas.ts');
+  writeFileSync(path, buildModelOutputs([structureCompositionProfile]).get('packages/model/src/generated/schemas.ts')!);
+  const schemas = (await import(path)).shapeSchemas as Record<string, TSchema>;
+  const check = (role: string, value: Record<string, unknown>) =>
+    Value.Check(schemas[`${definition}structure-composition-v1/${role}-shape`]!, value);
   const structure = node('Structure', {
     'rv:structureOf': ['urn:work:composing'],
-    'rv:structureProfile': [`${rv}WorkComposition`],
+    'rv:structureProfile': [`${rv}SectionList`],
     'rv:structureHead': ['urn:structure:revision'],
     'rv:selectedGeneration': ['urn:structure:generation'],
   });
-  expect(await accepts(id, 'structure', structure)).toBe(true);
-  expect(
-    await accepts(id, 'structure', {
-      ...structure,
-      'rv:structureProfile': [`${rv}BookComposition`],
-    }),
-  ).toBe(false);
-  const valid = placement();
-  for (const role of ['GroupRole', 'PartRole'])
-    expect(
-      await accepts(id, 'placement', { ...valid, 'rv:occurrenceRole': [`${rv}${role}`] }),
-    ).toBe(true);
-  expect(
-    await accepts(id, 'placement', { ...valid, 'rv:occurrenceRole': [`${rv}ChapterRole`] }),
-  ).toBe(false);
-  expect(await accepts(id, 'placement', valid)).toBe(true);
-  expect(
-    await accepts(id, 'placement', { ...valid, 'rv:selectionMode': [`${rv}FollowContext`] }),
-  ).toBe(true);
-  expect(
-    await accepts(id, 'placement', {
-      ...valid,
-      'rv:selectionMode': [`${rv}FixedRealm`],
-      'rv:selectionRealm': ['urn:realm:one'],
-    }),
-  ).toBe(true);
-  expect(
-    await accepts(id, 'placement', {
-      ...valid,
-      'rv:selectionMode': [`${rv}FixedRevision`],
-      'rv:pinnedRevision': ['urn:work:revision'],
-    }),
-  ).toBe(true);
-  for (const extra of [
-    { 'rv:selectionMode': [`${rv}FixedRealm`] },
-    { 'rv:selectionMode': [`${rv}FixedRevision`] },
-    { 'rv:selectionMode': [`${rv}FollowContext`], 'rv:selectionRealm': ['urn:realm:one'] },
-    {
-      'rv:selectionMode': [`${rv}FixedRevision`],
-      'rv:pinnedRevision': ['urn:work:revision'],
-      'rv:selectionRealm': ['urn:realm:one'],
-    },
-    { 'rv:selectionMode': ['FixedRevision'] },
-    { 'rv:selectionMode': null },
-  ])
-    expect(await accepts(id, 'placement', { ...valid, ...extra })).toBe(false);
+  expect(check('structure', structure)).toBe(true);
+  expect(check('structure', { ...structure, 'rv:structureProfile': [`${rv}WorkComposition`] })).toBe(true);
+  expect(check('structure', { ...structure, 'rv:structureProfile': [] })).toBe(false);
+  const valid = { ...placement(), 'rv:occurrenceRole': [`${rv}SectionRole`] };
+  expect(check('placement', valid)).toBe(true);
+  expect(check('placement', { ...valid, 'rv:occurrenceRole': [`${rv}PartRole`] })).toBe(true);
+  expect(check('placement', { ...valid, 'rv:occurrenceRole': [] })).toBe(false);
+  expect(check('placement', { ...valid, 'rv:selectionMode': [`${rv}FollowContext`] })).toBe(true);
+  expect(check('placement', { ...valid, 'rv:selectionMode': [`${rv}FixedRealm`] })).toBe(false);
   const { 'schema:item': omitted, ...withoutItem } = valid;
   expect(omitted).toEqual(['urn:work:part']);
-  expect(await accepts(id, 'placement', withoutItem)).toBe(false);
+  expect(check('placement', withoutItem)).toBe(false);
   const removed = node('RemovedPlacement', {
     'rv:occurrence': ['urn:structure:occurrence'],
     'rv:generation': ['urn:structure:generation'],
-    'rv:occurrenceRole': [`${rv}PartRole`],
+    'rv:occurrenceRole': [`${rv}EntryRole`],
     'rv:lastParent': ['urn:structure:parent'],
     'rv:removedBy': ['urn:structure:revision'],
   });
-  expect(await accepts(id, 'removed-placement', removed)).toBe(true);
-  for (const path of ['rv:orderSegment', 'rv:orderKey'])
-    expect(
-      await accepts(id, 'removed-placement', { ...removed, [path]: ['urn:structure:removed'] }),
-    ).toBe(false);
+  expect(check('removed-placement', removed)).toBe(true);
+  expect(check('removed-placement', { ...removed, 'rv:orderKey': ['a'] })).toBe(false);
 });
 
 test('WorkPart labels and Book group divisions retain exact bounds and generation links', async () => {

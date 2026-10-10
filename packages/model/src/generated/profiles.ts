@@ -1265,7 +1265,7 @@ export const profileRegistry = {
     ]
   },
   "structure-composition-v1": {
-    "sha256": "d6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0",
+    "sha256": "1b6f33eae08a2779caee4b0335ad6f823be4f41ec3f6dd070a3c4ea70de5fd1c",
     "file": "shapes/structure-composition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/structure-composition-v1/structure-shape",
@@ -1291,18 +1291,12 @@ export const profileRegistry = {
     ]
   },
   "structure-work-composition-v1": {
-    "sha256": "1361bcfab08143854e4a5cc6db132a79cb1adf737037d82433a839621903a11e",
+    "sha256": "f8b3030ccf4b0bcc882dc360452ec471e4f9d2f9ea125a09120b990a2eda7566",
     "file": "shapes/structure-work-composition-v1.ttl",
     "shapes": [
-      "https://rezics.com/definition/structure-work-composition-v1/structure-shape",
-      "https://rezics.com/definition/structure-work-composition-v1/placement-shape",
-      "https://rezics.com/definition/structure-work-composition-v1/removed-placement-shape",
       "https://rezics.com/definition/structure-work-composition-v1/part-shape"
     ],
     "focusRoles": [
-      "structure",
-      "placement",
-      "removed-placement",
       "part"
     ]
   },

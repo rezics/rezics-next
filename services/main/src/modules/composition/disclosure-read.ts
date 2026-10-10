@@ -51,10 +51,11 @@ export async function canReadCompositionResource(session: WorkReadSession, resou
 export function compositionTargetReader(session: WorkReadSession, profile: StructureProfileRegistration) {
   return (target: string) => {
     if (isCatalogTarget(profile, target)) return Promise.resolve(true);
+    const disclosure = profile.targetDisclosure ?? 'structure-target';
     // Studio chapters are Posts; their public/granted disclosure and erasure
     // belong to the resource reader, without a CreativeWork/MainVersion gate.
-    if (profile.id === 'book-composition') return canReadCompositionResource(session, target);
-    if (profile.id === 'collection-membership' || profile.id === 'work-composition') {
+    if (disclosure === 'resource') return canReadCompositionResource(session, target);
+    if (disclosure === 'work') {
       return resolveTargets(session, [target], 'collection-member').then(() => true).catch((error: unknown) => {
         if (error instanceof WorkReadMissing) return false;
         throw error;
@@ -71,7 +72,7 @@ export function compositionTargetReader(session: WorkReadSession, profile: Struc
 /** Match the scalar profile policy while hydrating a candidate range once.
  * Catalog identifiers have no native revision and retain their profile proof. */
 export function compositionTargetBatchReader(session: WorkReadSession, profile: StructureProfileRegistration) {
-  if (profile.id !== 'collection-membership' && profile.id !== 'work-composition') return undefined;
+  if ((profile.targetDisclosure ?? 'structure-target') !== 'work') return undefined;
   const read = collectionTargetBatchReader(session);
   return async (targets: readonly string[]): Promise<ReadonlySet<string>> => {
     const catalog = targets.filter(target => isCatalogTarget(profile, target));

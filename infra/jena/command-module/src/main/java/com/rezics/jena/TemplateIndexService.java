@@ -766,6 +766,11 @@ final class TemplateIndexService {
                     var allowed=property.getProperty(model.createProperty("http://www.w3.org/ns/shacl#in"));
                     if (allowed!=null && allowed.getObject().as(org.apache.jena.rdf.model.RDFList.class).asJavaList().stream().anyMatch(value->value.asNode().equals(graphProfile)))
                         return route.profile();
+                    // A shared shape admits every registered profile IRI. The
+                    // registration, not this list, is the allowlist.
+                    var nodeKind=property.getProperty(model.createProperty("http://www.w3.org/ns/shacl#nodeKind"));
+                    if (allowed==null && nodeKind!=null && "http://www.w3.org/ns/shacl#IRI".equals(nodeKind.getObject().asNode().getURI()))
+                        return route.profile();
                 }
             } finally { properties.close(); }
             throw new IllegalArgumentException("unknown membership owner profile");

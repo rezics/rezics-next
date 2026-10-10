@@ -88,10 +88,10 @@ test('G-830: creation validates the owner Structure shape and pins the current p
   const structure = id();
   const checks = await structureCreationValidations(env, structureProfileFor('work-composition'), id(), structure, id(), id());
   expect(checks.find(check => check.focus.includes(structure))).toMatchObject({
-    profile: 'structure-work-composition-v1',
-    shape: 'https://rezics.com/definition/structure-work-composition-v1/structure-shape' });
-  expect(String(profileRegistry['structure-work-composition-v1'].sha256))
-    .toBe(createHash('sha256').update(profileSource(structureWorkCompositionProfile)).digest('hex'));
+    profile: 'structure-composition-v1',
+    shape: 'https://rezics.com/definition/structure-composition-v1/structure-shape' });
+  expect(createHash('sha256').update(profileSource(structureWorkCompositionProfile)).digest('hex'))
+    .toBe('f8b3030ccf4b0bcc882dc360452ec471e4f9d2f9ea125a09120b990a2eda7566');
 });
 
 test('G-830: seals page disclosed pins only and reveal no private occurrence IDs or counts', async () => {

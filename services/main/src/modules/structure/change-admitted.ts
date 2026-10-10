@@ -104,7 +104,8 @@ export function createAdmittedComposition(env: WorkActivationEnvironment, accoun
   access: Access, request: Request,
   input: { profile?: StructureProfile; owner?: string; component?: string;
     work?: string; mainVersion?: string; actingSubject: string; idempotencyKey: string }) {
-  const profile = structureProfileFor(input.profile ?? 'book-composition');
+  if (!input.profile) throw new InvalidCompositionChange('a Structure profile is required');
+  const profile = structureProfileFor(input.profile);
   const owner = input.owner ?? input.work ?? '';
   const component = profile.componentPredicate ? input.component ?? input.mainVersion ?? '' : owner;
   const digest = profile.id === 'book-composition'

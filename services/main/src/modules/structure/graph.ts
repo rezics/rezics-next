@@ -23,12 +23,21 @@ export const itemListIri = (generation: string, parent: string) =>
 
 /** Text positions preserve sibling byte order without a list-wide renumber. */
 export const itemPosition = (segmentKey: string, orderKey: string) => `${segmentKey}-${orderKey}`;
-export const ROLE_IRI: Record<OccurrenceRole, string> = {
+export const ROLE_IRI: Record<string, string> = {
   group: `${RV}GroupRole`, chapter: `${RV}ChapterRole`, member: `${RV}MemberRole`,
   part: `${RV}PartRole`,
   mount: `${RV}MountRole`, navigation: `${RV}NavigationRole`, ingredient: `${RV}IngredientRole`,
   step: `${RV}StepRole`, equipment: `${RV}EquipmentRole`,
 };
+
+/** Persisted roles keep their IRIs. A registration's role uses the same Role suffix. */
+export function roleIri(role: string): string {
+  const known = ROLE_IRI[role];
+  if (known) return known;
+  if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(role)) throw new Error(`unknown occurrence role ${role}`);
+  const pascal = role.split('-').map(part => part[0]!.toUpperCase() + part.slice(1)).join('');
+  return `${RV}${pascal}Role`;
+}
 export type BookRole = 'group' | 'chapter';
 
 export class CompositionUnavailable extends Error {}
