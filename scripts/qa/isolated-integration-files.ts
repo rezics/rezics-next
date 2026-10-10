@@ -178,6 +178,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/work-name-scope-b-after-reset.test.ts',
   // Name-record planting writes a synthetic outbox batch, so later relays must not see it.
   'tests/qa/integration/g-898-wiki-disclosure.test.ts',
+  // The shared wiki journey plants the same synthetic batch through plantCharacterMerge.
+  'tests/qa/integration/g-693-wiki-delta.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
