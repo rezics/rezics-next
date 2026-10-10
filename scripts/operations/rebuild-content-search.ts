@@ -73,9 +73,10 @@ assertSavedStackRawUpdate(options, readEnv(join(stack, 'compose.env')));
 const apps = readEnv(join(stack, 'apps.env'));
 const GENERATION = /^urn:rezics:text-index-generation:[0-9a-f-]{36}$/;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
-interface SavedRebuildJob { id: string; offlinePreSequence?: string; offlineGeneration?: string }
+/** `continues` names the job a fresh id replaced, so a rerun after a refused first command still continues it. */
+interface SavedRebuildJob { id: string; continues?: string; offlinePreSequence?: string; offlineGeneration?: string }
 const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob : null;
-if (saved && (!UUID.test(saved.id)
+if (saved && (!UUID.test(saved.id) || (saved.continues !== undefined && !UUID.test(saved.continues))
   || (saved.offlinePreSequence !== undefined && !DECIMAL.test(saved.offlinePreSequence))
   || (saved.offlineGeneration !== undefined && !GENERATION.test(saved.offlineGeneration)))) {
   throw new Error('saved Content rebuild job is invalid');
@@ -115,15 +116,15 @@ try {
   if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
   const rememberOffline = (preSequence: string, generation: string) => {
     const current = JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob;
-    writeFileSync(jobFile, JSON.stringify({ id: current.id, offlinePreSequence: preSequence,
-      offlineGeneration: generation }) + '\n', { mode: 0o600 });
+    writeFileSync(jobFile, JSON.stringify({ id: current.id, continues: current.continues,
+      offlinePreSequence: preSequence, offlineGeneration: generation }) + '\n', { mode: 0o600 });
   };
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
   try {
     const content = new ContentCore(pool);
     const cursor = new ContentProjectionCursor(pool);
     const publicConsumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
-    let restartedFrom: string | undefined;
+    let restartedFrom: string | undefined = saved?.continues;
     let offlinePreSequence = saved?.offlinePreSequence;
     for (;;) {
       await assertWritersStopped(apps.MAIN_ORIGIN!);
@@ -158,7 +159,7 @@ try {
         restartedFrom = previous;
         id = nextId;
         offlinePreSequence = undefined;
-        writeFileSync(jobFile, JSON.stringify({ id: nextId }) + '\n', { mode: 0o600 });
+        writeFileSync(jobFile, JSON.stringify({ id: nextId, continues: previous }) + '\n', { mode: 0o600 });
         console.log(freshJobLine(nextId, previous));
       }
     }
