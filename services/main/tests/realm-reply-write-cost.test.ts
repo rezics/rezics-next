@@ -67,7 +67,11 @@ function tallyFuseki(fuseki: FusekiClient) {
   return { get count() { return count }, reset() { count = 0 } };
 }
 
-test('one reply costs the same statements and Fuseki requests at 100 and 1,000 threads', async () => {
+// Scope: the Realm grows in Postgres only (the owner rows the projector writes); the graph holds no
+// filler threads, because the product assembler takes graph writes only through reply commands and
+// 900 of those do not fit a test. This proves the Postgres side of a reply stays flat as the Realm
+// grows. The graph side at size is proven on the Realm ranking corpus, built once through the product.
+test('one reply costs the same Postgres statements at 100 and 1,000 threads of owner rows', async () => {
   const fx = await realmVisibilityFixture();
   try {
     await fx.grant(fx.actor, `review:decide:${fx.realm}`, 'review.decide');
