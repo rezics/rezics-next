@@ -106,6 +106,8 @@ export const SONNET_MODEL = process.env.GOAL_SONNET_MODEL ?? 'claude-sonnet-5-5'
 export const CODEX_MODEL = 'gpt-6.1-sol';
 export const LUNA_MODEL = 'gpt-6-luna';
 export const GROK_MODEL = 'grok-4.7';
+// GOAL_CURSOR_MODEL names another Cursor model verbatim (for example `auto`) when the Grok allowance on Cursor is spent.
+const cursorModel = (effort: string): string => process.env.GOAL_CURSOR_MODEL ?? `${GROK_MODEL}-${effort}`;
 const ENGINE_EFFORTS: Record<Engine, string[]> = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   sonnet: ['low', 'medium', 'high', 'xhigh', 'max'],
@@ -126,7 +128,7 @@ export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex
 export const CODEX_1_HOME = process.env.GOAL_CODEX_1_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
 const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
-  grok: GROK_MODEL, cursor: `${GROK_MODEL} (Cursor)` };
+  grok: GROK_MODEL, cursor: `${process.env.GOAL_CURSOR_MODEL ?? GROK_MODEL} (Cursor)` };
 const modelOf = (engine: Engine): string => MODELS[engine];
 const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
 const isCodex = (engine: Engine): boolean =>
@@ -609,7 +611,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
       '--cwd', options.worktree ?? '.', ...(resume ? ['-r', session] : []), `--single=${prompt}`]];
   }
   if (engine === 'cursor') {
-    return ['cursor-agent', ['-p', '--model', `${GROK_MODEL}-${effort}`, '--force', '--trust',
+    return ['cursor-agent', ['-p', '--model', cursorModel(effort), '--force', '--trust',
       '--sandbox', 'disabled', '--output-format', 'json', '--workspace', options.worktree ?? '.',
       ...(resume ? ['--resume', session] : []), '--', prompt]];
   }

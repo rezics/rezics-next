@@ -1945,6 +1945,18 @@ describe('goalctl runtime policy', () => {
       '--output-format', 'json', '--workspace', '/w', '--resume', 'c']));
   });
 
+  test('runs the Cursor model the environment names instead of Grok', () => {
+    const previous = process.env.GOAL_CURSOR_MODEL;
+    process.env.GOAL_CURSOR_MODEL = 'auto';
+    try {
+      const [, args] = launchCommand({ id: 'G-102', effort: 'high', session: '', prompt: 'p', resume: false,
+        engine: 'cursor', worktree: '/w' });
+      expect(args.slice(0, 3)).toEqual(['-p', '--model', 'auto']);
+    } finally {
+      if (previous === undefined) delete process.env.GOAL_CURSOR_MODEL; else process.env.GOAL_CURSOR_MODEL = previous;
+    }
+  });
+
   test('pins GPT-6 Luna through Codex and Grok 4.7 in bypass mode for simpler workers', () => {
     const luna = launchCommand({ id: 'G-094', effort: 'high', session: '', prompt: 'p', resume: false,
       engine: 'luna', worktree: '/w', lastMessage: '/r/l.md' });
