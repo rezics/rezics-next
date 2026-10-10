@@ -454,6 +454,7 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load, actin
     busy.current = true;
     setLoading(true);
     const requested = continuationRequest(fromStart, shown.cursor);
+    // The server personalises this read from the credential.
     const read = await (load ?? (next => readConceptFeed(browserMainApi(undefined,
       { anonymous: !actingSubject }), topic.id, locale, next)))(requested);
     busy.current = false;

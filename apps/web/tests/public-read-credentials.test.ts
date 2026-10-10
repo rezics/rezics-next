@@ -86,34 +86,68 @@ function initializer(text: string, name: string): string | null {
   return text.slice(open, callEnd(text, open) + 1);
 }
 
-/** Credentials are omitted, or omitted exactly when the call names no acting subject. */
+/** The client sends no cookie. Gating that on an acting subject still sends one when the subject is set. */
 function omits(args: string | null): boolean {
-  if (!args) return false;
-  return (
-    /anonymous\s*:\s*true/.test(args) || (/anonymous\s*:/.test(args) && /actingSubject/.test(args))
-  );
+  return !!args && /anonymous\s*:\s*true\b/.test(args);
 }
 
-function functionBodies(text: string): Map<string, string> {
-  const bodies = new Map<string, string>();
+interface Reader {
+  params: string[];
+  body: string;
+}
+
+function splitTop(text: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (char === '(' || char === '{' || char === '[' || char === '<') depth++;
+    else if (char === ')' || char === '}' || char === ']' || char === '>') depth--;
+    else if (char === ',' && depth === 0) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+function functionBodies(text: string): Map<string, Reader> {
+  const bodies = new Map<string, Reader>();
   const header = /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_]\w*)\s*\(/g;
   for (const found of text.matchAll(header)) {
     const name = found[1]!;
-    const brace = text.indexOf('{', found.index + found[0].length - 1);
-    if (brace < 0) continue;
+    const open = found.index + found[0].length - 1;
+    const close = callEnd(text, open);
     let depth = 0;
+    let brace = -1;
+    for (let index = close + 1; index < text.length; index++) {
+      const char = text[index];
+      if (char === '{' && depth === 0) {
+        brace = index;
+        break;
+      }
+      if (char === '(' || char === '{' || char === '[' || char === '<') depth++;
+      else if (char === ')' || char === '}' || char === ']' || char === '>') depth--;
+    }
+    if (brace < 0) continue;
+    let bodyDepth = 0;
     let end = brace;
     for (let index = brace; index < text.length; index++) {
-      if (text[index] === '{') depth++;
+      if (text[index] === '{') bodyDepth++;
       else if (text[index] === '}') {
-        depth--;
-        if (depth === 0) {
+        bodyDepth--;
+        if (bodyDepth === 0) {
           end = index;
           break;
         }
       }
     }
-    bodies.set(name, text.slice(brace, end + 1));
+    const params = splitTop(text.slice(open + 1, close))
+      .map((part) => part.trim().match(/^(?:\.\.\.)?([A-Za-z_]\w*)/)?.[1] ?? '')
+      .filter((part) => part.length > 0);
+    bodies.set(name, { params, body: text.slice(brace, end + 1) });
   }
   return bodies;
 }
@@ -132,10 +166,15 @@ function clientArgs(text: string, call: PublicCall): string | null {
 }
 
 /**
- * Typeahead has no acting-subject parameter. Main still applies the signed-in reader's mutes from
- * the cookie, so these sites keep it. A new site is a violation until it is listed here.
+ * These reads have no acting-subject parameter, and Main still changes the result from the cookie.
+ * A new site is a violation until it is listed here.
  */
-const credentialPersonalised: readonly { file: string; operation: string; reason: string }[] = [
+const credentialPersonalised: readonly {
+  file: string;
+  operation: string;
+  callee?: string;
+  reason: string;
+}[] = [
   {
     file: 'features/search/typeahead.tsx',
     operation: 'getV1SearchTypeahead',
@@ -151,37 +190,90 @@ const credentialPersonalised: readonly { file: string; operation: string; reason
     operation: 'getV1SearchTypeahead',
     reason: 'the server personalises this read from the credential',
   },
+  {
+    file: 'features/home/tabs.tsx',
+    operation: 'postV1Query',
+    callee: 'readConceptFeed',
+    reason: 'the server personalises this read from the credential',
+  },
 ];
 
-function personalised(file: string, operations: readonly string[]): boolean {
+const personalisation = 'the server personalises this read from the credential';
+
+function personalised(file: string, operations: readonly string[], callee?: string): boolean {
   return credentialPersonalised.some(
     (entry) =>
       entry.file === file &&
-      entry.reason === 'the server personalises this read from the credential' &&
+      entry.reason === personalisation &&
       operations.length === 1 &&
-      operations[0] === entry.operation,
+      operations[0] === entry.operation &&
+      entry.callee === callee,
   );
+}
+
+/** The Eden arguments name an acting subject, or they send the value whose subject gates the cookie. */
+function subjectPassed(apiArgs: string, clientArgs: string | null): boolean {
+  if (/actingSubject/.test(apiArgs)) return true;
+  const binding = /anonymous\s*:\s*!\s*([A-Za-z_][\w.]*)\.actingSubject/
+    .exec(clientArgs ?? '')?.[1]
+    ?.split('.')
+    .pop();
+  return !!binding && new RegExp(`\\b${binding}\\b`).test(apiArgs);
+}
+
+/** The caller's subject reaches the helper's request: as that parameter, or copied onto the body. */
+function subjectForwarded(
+  reader: Reader,
+  invocation: string,
+  clientArgs: string,
+  apiArgs: string,
+): boolean {
+  const args = splitTop(invocation.slice(1, -1));
+  const clientAt = args.findIndex((arg) => arg.includes('browserMainApi('));
+  const binding = /anonymous\s*:\s*!\s*([A-Za-z_][\w.]*)\.actingSubject/
+    .exec(clientArgs)?.[1]
+    ?.split('.')
+    .pop();
+  const passed = args.flatMap((arg, index) => {
+    if (index === clientAt) return [];
+    const param = reader.params[index];
+    if (!param) return [];
+    const namesSubject = binding
+      ? new RegExp(`^${binding}$`).test(arg.trim()) ||
+        new RegExp(`\\b${binding}\\.actingSubject\\b`).test(arg)
+      : /\bactingSubject\b/.test(arg);
+    return namesSubject ? [param] : [];
+  });
+  return passed.some((param) => {
+    if (new RegExp(`\\b${param}\\b`).test(apiArgs)) return true;
+    if (new RegExp(`\\b${param}\\.actingSubject\\b`).test(reader.body)) return true;
+    const rest = new RegExp(`\\.\\.\\.([A-Za-z_]\\w*)\\s*\\}\\s*=\\s*${param}\\b`).exec(
+      reader.body,
+    )?.[1];
+    return !!rest && new RegExp(`\\.{3}${rest}\\b`).test(apiArgs);
+  });
 }
 
 /** Credentialed browser calls to public reads that do not name an acting subject. */
 export function violations(files: Readonly<Record<string, string>>): string[] {
-  const functions = new Map<string, string>();
+  const functions = new Map<string, Reader>();
   for (const text of Object.values(files)) {
-    for (const [name, body] of functionBodies(text)) functions.set(name, body);
+    for (const [name, reader] of functionBodies(text)) functions.set(name, reader);
   }
   const found: string[] = [];
   for (const [file, text] of Object.entries(files)) {
     for (const call of publicCalls(text)) {
-      if (/actingSubject/.test(call.args) || personalised(file, call.operations)) continue;
+      if (personalised(file, call.operations)) continue;
       const args = clientArgs(text, call);
-      if (args === null || omits(args)) continue;
+      if (args === null || omits(args) || subjectPassed(call.args, args)) continue;
       found.push(
         `${file}: ${call.source} reaches ${call.operations.join(', ')} with the session cookie and no acting subject`,
       );
     }
     for (const created of text.matchAll(/browserMainApi\(/g)) {
       const before = text.slice(Math.max(0, created.index - 40), created.index);
-      if (/function\s+$/.test(before) || /=\s*$/.test(before)) continue;
+      // A default `= () => browserMainApi(...)` is the helper's own client, not a call into it.
+      if (/function\s+$/.test(before) || /=\s*$/.test(before) || /=>\s*$/.test(before)) continue;
       const open = created.index + 'browserMainApi'.length;
       const end = callEnd(text, open);
       const args = text.slice(open, end + 1);
@@ -201,12 +293,19 @@ export function violations(files: Readonly<Record<string, string>>): string[] {
       const callee = text.slice(Math.max(0, start - 80), start).match(/([A-Za-z_]\w*)\s*$/)?.[1];
       if (!callee) continue;
       const callText = text.slice(start, callEnd(text, start) + 1);
-      if (/actingSubject/.test(callText)) continue;
-      const body = functions.get(callee);
-      const read = body
-        ? publicCalls(body).find((call) => !/actingSubject/.test(call.args))
-        : undefined;
-      if (read)
+      const reader = functions.get(callee);
+      const handed = splitTop(callText.slice(1, -1)).some(
+        (arg) => !arg.includes('browserMainApi(') && /\bactingSubject\b/.test(arg),
+      );
+      const read =
+        reader && !(handed && /\bactingSubject\b/.test(reader.body))
+          ? publicCalls(reader.body).find(
+              (call) =>
+                !subjectPassed(call.args, args) &&
+                !subjectForwarded(reader, callText, args, call.args),
+            )
+          : undefined;
+      if (read && !personalised(file, read.operations, callee))
         found.push(
           `${file}: ${callee}() reaches ${read.operations.join(', ')} with the session cookie and no acting subject`,
         );
@@ -221,6 +320,7 @@ const readers = `
   export async function readConceptWorks(main) { return main.v1.query.post(query); }
   export async function readDiscovery(main, query) { return main.v1.works.get({ query }); }
   export async function readQueryDiscovery(main, state, page) { return main.v1.query.post(query); }
+  export async function readConceptFeed(main, conceptId, language, cursor) { return main.v1.query.post(query); }
 `;
 
 test('the exposure table has public reads the scan can name', () => {
@@ -244,7 +344,8 @@ test('a credentialed public read is rejected, and an anonymous or acting-subject
       void browserMainApi().v1.agents({ id }).listing.get();
       void browserMainApi().v1.realms({ realm }).get({ query: { actingSubject } });
       const mine = query => readDiscovery(browserMainApi(undefined, { anonymous: !query.actingSubject }), query);
-      const publicList = () => readConceptWorks(browserMainApi(undefined, { anonymous: true }), state, locale, cursor);`,
+      const publicList = () => readConceptWorks(browserMainApi(undefined, { anonymous: true }), state, locale, cursor);
+      const topic = () => readConceptFeed(browserMainApi(undefined, { anonymous: !actingSubject }), conceptId, locale, cursor);`,
     }),
   ).toEqual([
     'features/old.tsx: .v1.realms({realm}).threads.get( reaches getV1RealmsByRealmThreads with the session cookie and no acting subject',
@@ -253,6 +354,7 @@ test('a credentialed public read is rejected, and an anonymous or acting-subject
     'features/old.tsx: readConceptWorks() reaches postV1Query with the session cookie and no acting subject',
     'features/old.tsx: readDiscovery() reaches getV1Works with the session cookie and no acting subject',
     'features/old.tsx: readQueryDiscovery() reaches postV1Query with the session cookie and no acting subject',
+    'features/old.tsx: readConceptFeed() reaches postV1Query with the session cookie and no acting subject',
   ]);
 });
 
@@ -262,13 +364,17 @@ test('browser public reads omit the session cookie unless they name an acting su
 
 test('typeahead keeps the cookie only at the sites the server personalises from it', () => {
   expect(credentialPersonalised.map((entry) => entry.reason)).toEqual([
-    'the server personalises this read from the credential',
-    'the server personalises this read from the credential',
-    'the server personalises this read from the credential',
+    personalisation,
+    personalisation,
+    personalisation,
+    personalisation,
   ]);
-  expect(credentialPersonalised.map((entry) => entry.file)).toEqual([
-    'features/search/typeahead.tsx',
-    'features/post-composer/composer.tsx',
-    'features/work-levels-edit/work-picker.tsx',
+  expect(
+    credentialPersonalised.map((entry) => `${entry.file} ${entry.callee ?? entry.operation}`),
+  ).toEqual([
+    'features/search/typeahead.tsx getV1SearchTypeahead',
+    'features/post-composer/composer.tsx getV1SearchTypeahead',
+    'features/work-levels-edit/work-picker.tsx getV1SearchTypeahead',
+    'features/home/tabs.tsx readConceptFeed',
   ]);
 });
