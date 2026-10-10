@@ -29,6 +29,7 @@ No kernel worktree is dirty and no task is half-done. Next step for each, when q
 | field-disposition projector | decision only (targets Statements, from `source.field_disposition`) | the brief | write after G-1618 settles |
 | G-1603 year template `concept` | brief; native; depends on G-1593 | all; needs a pinned image build | after G-1593 |
 | G-1591 explicit public `mode` | brief (claims `query/**`) | all | after G-1618 (same files) |
+| G-1629 seal guard follows helpers | brief (Program's finding: the scan misses a seal reached through a same-file helper) | the stronger scan, failing fixtures, the list of newly surfaced seals | after G-1593; queue only while paused |
 | G-1582 discovery never-produced reads | brief; depends on landed G-1579 | all | any time |
 | G-1615 maintainer move | brief | waits for Launch's change to `realm-management.ts` | after it lands |
 | G-1300 | old exited task; needs the original G847 integration | Launch wires production Statement seek | close when that lands |
