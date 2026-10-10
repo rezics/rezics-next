@@ -1,5 +1,6 @@
+import { priorRevisionTypes, revisionClassNames } from '../../../model/compiler/revision-classes.ts';
 import { expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -181,15 +182,29 @@ const CLOSED_REVISION_CLASSES: Record<string, string> = {
   ZoneRevision: 'A zone capability revision is not an erasure target.',
 };
 
+function generatedNames(field: 'NAMES' | 'PRIOR'): string[] {
+  const java = readFileSync(resolve(import.meta.dir,
+    '../../../infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java'), 'utf8');
+  const body = new RegExp(`Set<String> ${field} = Set\\.of\\(([\\s\\S]*?)\\);`).exec(java)?.[1];
+  if (!body) throw new Error(`${field} is missing from the generated revision classes`);
+  return [...body.matchAll(/"([A-Za-z0-9]+)"/g)].map(match => match[1]!);
+}
+
+test('the native revision-class constant equals the model set', () => {
+  const definitions = resolve(import.meta.dir, '../../../model/definitions');
+  const names = revisionClassNames(definitions);
+  const source = readFileSync(resolve(import.meta.dir, '../src/modules/erasure/revision-kind.ts'), 'utf8');
+  expect(generatedNames('NAMES')).toEqual(names);
+  expect(generatedNames('PRIOR')).toEqual(priorRevisionTypes(source, names));
+  expect(names).toContain('ErasedRevision');
+  expect(generatedNames('PRIOR')).not.toContain('ErasedRevision');
+  expect(generatedNames('PRIOR')).toContain('RevisionAnchor');
+  expect(generatedNames('PRIOR')).toContain('FixedRelease');
+});
+
 test('every revision class is erasable or explicitly closed', () => {
   const definitions = resolve(import.meta.dir, '../../../model/definitions');
-  const found = new Set<string>();
-  for (const file of readdirSync(definitions)) {
-    if (!file.endsWith('.ttl')) continue;
-    for (const match of readFileSync(resolve(definitions, file), 'utf8').matchAll(/\brv:([A-Z][A-Za-z0-9]*Revision)\b/g)) {
-      found.add(match[1]!);
-    }
-  }
+  const found = new Set(revisionClassNames(definitions));
   const source = readFileSync(resolve(import.meta.dir, '../src/modules/erasure/revision-kind.ts'), 'utf8');
   for (const name of found) {
     if ((ERASABLE_REVISION_CLASSES as readonly string[]).includes(name)) {

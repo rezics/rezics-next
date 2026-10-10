@@ -42,6 +42,13 @@ final class ErasurePolicy {
         if (receipt.startsWith("urn:rezics:receipt:erasure-graph:")) {
             String marker = admitsMarker(plan, receipt);
             if (marker != null) return marker;
+            // An id IRI shares the resource space with Works, Agents and Realms.
+            // A marker is admitted only when that subject is already a revision.
+            // Content URNs stay bare tombstones: they have no revisions-graph type.
+            for (String subject : plan.revisions()) {
+                if (subject.startsWith("urn:rezics:content:revision:")) continue;
+                if (!priorRevision(data, subject)) return "erasure target is not a revision";
+            }
         }
         Update update = plan.request().getOperations().getFirst();
         List<Quad> inserts = update instanceof UpdateModify modify ? modify.getInsertQuads()
@@ -89,6 +96,14 @@ final class ErasurePolicy {
                 .contains(quad.getGraph().getURI())) return "erasure cannot remove owner history";
         }
         return null;
+    }
+
+    private static boolean priorRevision(DatasetGraph data, String subject) {
+        Node node = NodeFactory.createURI(subject);
+        for (String name : RevisionClasses.PRIOR)
+            if (data.contains(REVISIONS, node, RDF.type.asNode(),
+                NodeFactory.createURI("https://rezics.com/vocab/" + name))) return true;
+        return false;
     }
 
     private static boolean erased(DatasetGraph data, Node node) {

@@ -10,6 +10,7 @@ import { isTurtleProfile, parseTurtleProfile, profileSource, type TurtleDeclarat
 import { typesV1 } from '../definitions/types-v1.ts';
 import { workKindV2Profile } from '../definitions/work-kind-v2.ts';
 import { workTypeV2Profile } from '../definitions/work-type-v2.ts';
+import { priorRevisionTypes, renderRevisionClasses, revisionClassNames } from './revision-classes.ts';
 
 export interface ProfileArtifact {
   id: string;
@@ -188,6 +189,20 @@ export function generate(root: string, check: boolean): void {
       writeFileSync(path, expected);
     }
   }
+  // The command module cannot read the model tree. The constant is the same
+  // scan the revision-class enumeration uses, plus the identity-resolution types
+  // that are not named `*Revision`.
+  const revisionClasses = 'infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java';
+  const names = revisionClassNames(join(root, 'model/definitions'));
+  const identity = readFileSync(join(root, 'services/main/src/modules/erasure/revision-kind.ts'), 'utf8');
+  const rendered = renderRevisionClasses(names, priorRevisionTypes(identity, names));
+  const revisionPath = join(root, revisionClasses);
+  if (check) {
+    let actual: string;
+    try { actual = readFileSync(revisionPath, 'utf8'); }
+    catch { throw new Error(`Missing generated artifact: ${revisionClasses}`); }
+    if (actual !== rendered) throw new Error(`Generated artifact differs: ${revisionClasses}; run task gen`);
+  } else writeFileSync(revisionPath, rendered);
 }
 
 if (import.meta.main) {
