@@ -98,10 +98,13 @@ tasks:
 
   # The merge gate that lands scripts:typecheck still names the old tasks; removed right after it lands.
   goal:typecheck:
+    desc: Alias of scripts:typecheck while the merge gate still names it.
     cmds: [task: scripts:typecheck]
   dev:typecheck:
+    desc: Alias of scripts:typecheck while the merge gate still names it.
     cmds: [task: scripts:typecheck]
   observability-scripts:typecheck:
+    desc: Alias of scripts:typecheck while the merge gate still names it.
     cmds: [task: scripts:typecheck]
 
   apphost:typecheck:
