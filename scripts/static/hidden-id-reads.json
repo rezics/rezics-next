@@ -337,9 +337,10 @@
   {
     "operation": "GET /v1/claims/{claim}",
     "ids": [
-      "path:claim"
+      "path:claim",
+      "query:actingSubject"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "GET /v1/claims/{claim}/assessments/{assessment}",
@@ -539,7 +540,7 @@
       "path:revision",
       "query:actingSubject"
     ],
-    "status": "registered"
+    "status": "unregistered"
   },
   {
     "operation": "GET /v1/context-definition-equivalences",

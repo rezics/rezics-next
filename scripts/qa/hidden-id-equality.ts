@@ -11,9 +11,7 @@ const openApiPath = 'generated/openapi/main/public.json';
 /** Equality coverage. A row is `registered` only while it stays in this list. */
 export const registeredHiddenIdReads = [
   'GET /v1/addresses/resolve',
-  'GET /v1/claims/{claim}',
   'GET /v1/concepts/{id}',
-  'GET /v1/content-revisions/{revision}/comments',
   'GET /v1/exports/{export}',
   'GET /v1/public-previews/{resource}',
   'GET /v1/realms/{realm}/members',

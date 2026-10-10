@@ -147,13 +147,19 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       return respond(await createAdmittedClaim(deps(), request, { ...input, idempotencyKey: key }));
     }))
     .get('/v1/claims/:claim', {
-      params: t.Object({ claim: uuid }), query: t.Object({ context: t.Optional(reference) }),
+      params: t.Object({ claim: uuid }),
+      query: t.Object({ context: t.Optional(reference), actingSubject: t.Optional(nativeRef) }),
       response: read,
     }, async ({ request, params, query }) => {
       try {
-        await principal(request, 'claim:read');
+        const verified = await work.account.verify(request, ['claim:read']);
+        if (!await work.access.activePrincipalId(verified)) throw new VerificationDenied('principal is inactive');
+        // The head query joins the claim to its referent. A non-public Work referent
+        // then uses this caller's Work admission. No acting subject has no Work grant.
         const result = await readClaimQuality(deps(), nativeId(params.claim), query.context ?? null,
-          async () => false);
+          query.actingSubject
+            ? referent => work.access.canReadWork(verified, query.actingSubject!, referent)
+            : async () => false);
         return result ? ok(result) : problem(404, 'claim_unavailable', 'Claim is unavailable');
       } catch (error) { return claimError(error); }
     })

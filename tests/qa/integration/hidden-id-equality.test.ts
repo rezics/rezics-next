@@ -9,7 +9,7 @@ import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/m
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { registeredHiddenIdReads } from '../../../scripts/qa/hidden-id-equality.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
-import { assertHiddenIdEquality, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
+import { assertHiddenIdEquality, comparableBody, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { startMediaStack } from './media-support.ts';
 
@@ -150,6 +150,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     const claimedText = await claimed.text();
     if (claimed.status !== 201) throw new Error(`claim ${claimed.status}: ${claimedText}`);
     const claimId = local((JSON.parse(claimedText) as { claim: { claim: string } }).claim.claim);
+    await owner.grant(`work:read:${hiddenWork.work}`, 'work.read');
 
     const http = async (method: string, path: string, body?: unknown, token?: string) => {
       const response = await stack.call(method, path, { token, body, ...(body ? { key: randomUUID() } : {}) });
@@ -204,17 +205,9 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       hidden: workId, absent,
       call: (id) => http('GET', `/v1/addresses/resolve?scope=resource&key=${encodeURIComponent(id)}`),
     });
-    calls.set('GET /v1/claims/{claim}', {
-      hidden: claimId, absent,
-      call: (id) => http('GET', `/v1/claims/${id}`, undefined, outsider.token),
-    });
     calls.set('GET /v1/concepts/{id}', {
       hidden: local(conceptId), absent,
       call: (id) => http('GET', `/v1/concepts/${id}`),
-    });
-    calls.set('GET /v1/content-revisions/{revision}/comments', {
-      hidden: revisionId, absent,
-      call: (id) => http('GET', outsiderQuery(`/v1/content-revisions/${id}/comments`), undefined, outsider.token),
     });
     calls.set('GET /v1/public-previews/{resource}', {
       hidden: workId, absent,
@@ -242,6 +235,24 @@ test('a hidden id and an absent id get the same answer on the registered reads',
         profile: 'resource-summary-batch-v1', resources: [id],
       }),
     });
+    const ownedClaim = await http('GET',
+      `/v1/claims/${claimId}?actingSubject=${encodeURIComponent(owner.actor)}`, undefined, owner.token);
+    expect(ownedClaim.status).toBe(200);
+    expect((await ownedClaim.json() as { claim: { claim: string } }).claim.claim).toBe(`${ID}${claimId}`);
+    const withheldClaim = await http('GET',
+      `/v1/claims/${claimId}?actingSubject=${encodeURIComponent(outsider.actor)}`, undefined, outsider.token);
+    const missingClaim = await http('GET',
+      `/v1/claims/${absent}?actingSubject=${encodeURIComponent(outsider.actor)}`, undefined, outsider.token);
+    expect(withheldClaim.status).toBe(missingClaim.status);
+    expect(comparableBody(await withheldClaim.text(), claimId)).toBe(comparableBody(await missingClaim.text(), absent));
+    const statementsBefore = statements;
+    const absentComments = await http('GET', outsiderQuery(`/v1/content-revisions/${absent}/comments`),
+      undefined, outsider.token);
+    expect(absentComments.status).toBe(404);
+    // One content lookup. The absent revision does not take Work admission.
+    expect(statements - statementsBefore).toBe(1);
+    expect((await http('GET', outsiderQuery(`/v1/content-revisions/${revisionId}/comments`),
+      undefined, outsider.token)).status).toBe(404);
     expect([...calls.keys()].sort()).toEqual([...registeredHiddenIdReads]);
     for (const operation of registeredHiddenIdReads) {
       const spec = calls.get(operation)!;
