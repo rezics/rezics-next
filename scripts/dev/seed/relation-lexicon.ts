@@ -1,3 +1,4 @@
+import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
 import { relationLexiconSeed, variantKindConcepts, canonicityConcepts, workFormatConcepts,
   declaredCountProperties, type LexiconSeedDefinition, type WorkFormatKey } from './relation-lexicon-data.ts';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -213,12 +214,40 @@ export interface WorkFormatSeed {
 }
 
 /**
- * One format scheme and the two declared-count properties, shared by bootstrap and import.
- * Keys stay fixed: a notation is unique, and a second key would register a second property.
+ * The reviewed first-publication property, beside the declared-count properties.
+ * Dev bootstrap reaches it through `seedWorkFormat`: `scripts/dev/seed/franchises-step.ts`
+ * and `scripts/ops/bootstrap/execute.ts`. The notation is unique and the idempotency
+ * key is fixed, so a caller that also creates it receives the existing definition.
+ */
+export async function seedFirstPublicationDate(
+  client: Pick<SeedLexiconClient, 'post' | 'authorizeDefinition'> & Partial<Pick<SeedLexiconClient, 'currentDefinition'>>,
+  actingSubject: string,
+): Promise<SeedLexiconReceipt> {
+  const current = await client.currentDefinition?.(DATE_PUBLISHED_DEFINITION_NOTATION);
+  if (current?.state.lifecycle === 'active' && current.state.kind === 'property'
+    && current.state.notation === DATE_PUBLISHED_DEFINITION_NOTATION && current.state.roles.length === 0
+    && current.state.successor === null) {
+    await client.authorizeDefinition(current);
+    return { component: current.component, revision: current.revision };
+  }
+  const definition = await client.post<SeedLexiconReceipt>('/v1/semantic/changes', {
+    profile: 'semantic-change-v1', actingSubject, expectedHead: null,
+    state: { component: 'definition', kind: 'property', notation: DATE_PUBLISHED_DEFINITION_NOTATION, roles: [] },
+  }, 'statement-first-publication-date:v1:property');
+  await client.authorizeDefinition(definition);
+  return definition;
+}
+
+/**
+ * One format scheme, the two declared-count properties, and the first-publication
+ * property, shared by bootstrap and import. Keys stay fixed: a notation is unique,
+ * and a second key would register a second property.
  * The scheme cannot say "at most one concept"; the importer admits a single format.
  */
-export async function seedWorkFormat(client: Pick<SeedLexiconClient, 'post' | 'authorizeDefinition'>,
-  actingSubject: string): Promise<WorkFormatSeed> {
+export async function seedWorkFormat(
+  client: Pick<SeedLexiconClient, 'post' | 'authorizeDefinition'> & Partial<Pick<SeedLexiconClient, 'currentDefinition'>>,
+  actingSubject: string,
+): Promise<WorkFormatSeed> {
   const concepts = {} as WorkFormatSeed['concepts'];
   let scheme: { id: string; expectedHead: string } | null = null;
   for (const concept of workFormatConcepts) {
@@ -238,5 +267,6 @@ export async function seedWorkFormat(client: Pick<SeedLexiconClient, 'post' | 'a
     await client.authorizeDefinition(definition);
     counts[property.notation] = definition;
   }
+  await seedFirstPublicationDate(client, actingSubject);
   return { scheme: scheme!.id, concepts, counts };
 }
