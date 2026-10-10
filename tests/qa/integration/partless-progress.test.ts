@@ -14,7 +14,7 @@ import { activateMetadataWork, metadataWorkRequestDigest } from '../../../servic
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { assertHiddenIdEquality, comparableBody, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
 import { startMediaStack } from './media-support.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 const short = (resource: string) => resource.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -134,7 +134,7 @@ test('a partless Work is marked on one device and read, undone and refused when 
     let countSql = true;
     let bytes = 0;
     prototype.query = function (this: unknown, ...args: unknown[]) {
-      if (countSql && isForegroundOperation()) statements++;
+      if (countSql && foregroundCounted()) statements++;
       return originalQuery.apply(this, args);
     };
     const progressRows = async (structure: string) => {
