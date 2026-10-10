@@ -6,12 +6,13 @@ import { mainSelectionDigest, selectMainDefault } from '../../../services/main/s
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { importBangumiWorkFacts, type BangumiFactsClient } from '../../../scripts/datasets/bangumi.ts';
-import { animeMangaSamplePlan, importOneShotFacts, type CatalogueSample, type CatalogueZoneId }
-  from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
+import { animeMangaSamplePlan, cataloguePublicationDate, importOneShotFacts, recordCataloguePublicationYear,
+  type CatalogueSample, type CatalogueZoneId } from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
+import { DATE_PUBLISHED_DEFINITION_NOTATION, DATE_PUBLISHED_PREDICATE }
+  from '../../../services/main/src/modules/statement/qualification.ts';
 import { startMediaStack } from './media-support.ts';
 
 const PAGE = 20;
-const DATE = 'http://www.w3.org/2001/XMLSchema#date';
 const YEAR_QUERY = 'https://rezics.com/query/work-publication-years';
 
 interface Recorded {
@@ -64,8 +65,8 @@ test('Anime and manga Zones: format and status filters page, an unclassified Wor
       if (space.outcome !== 'succeeded' || !space.realm) throw new Error(`${id} Realm was not created`);
       realms[id] = space.realm;
     }
-    const publication = await publicationDateProperty(client, author.actor);
     const recorded: Recorded[] = [];
+    let publication: { component: string; revision: string } | undefined;
     for (const sample of animeMangaSamplePlan()) {
       const created = await stack.catalogueWork(author.actor, sample.title);
       await author.grant(`work:edit:${created.work}`, 'work.edit');
@@ -78,8 +79,10 @@ test('Anime and manga Zones: format and status filters page, an unclassified Wor
         throw new Error(`Main selection failed for ${sample.key}`);
       }
       const imported = await importSample(client, author.actor, created, sample);
-      if (sample.year !== null) await recordPublicationYear(client, author.actor, created.work, sample.year,
-        publication, sample.key);
+      if (sample.year !== null) {
+        publication ??= await seededPublicationDate(author);
+        await recordCataloguePublicationYear(client.post, author.actor, created.work, sample.year, publication, sample.key);
+      }
       const adoption = { ...selection, mainVersion: created.mainVersion,
         context: { kind: 'realm-local' as const, id: realms[sample.zone] },
         selectionBasis: 'realm-manager-review' as const };
@@ -103,8 +106,8 @@ test('Anime and manga Zones: format and status filters page, an unclassified Wor
     expect(lexical(await statements(row('long-manga').work), row('long-manga').countPredicate)).toEqual(['21']);
     expect(lexical(await statements(row('anime-unclassified').work), row('long-tv').countPredicate)).toEqual([]);
     expect(lexical(await statements(row('one-shot').work), row('one-shot').countPredicate)).toEqual(['1']);
-    expect(lexical(await statements(row('long-tv').work), publication.component)).toEqual(['1980-01-01']);
-    expect(lexical(await statements(row('tv-3').work), publication.component)).toEqual([]);
+    expect(lexical(await statements(row('long-tv').work), DATE_PUBLISHED_PREDICATE)).toEqual(['1980-01-01']);
+    expect(lexical(await statements(row('tv-3').work), DATE_PUBLISHED_PREDICATE)).toEqual([]);
 
     const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
     await projection.backfill();
@@ -209,28 +212,12 @@ test('Anime and manga Zones: format and status filters page, an unclassified Wor
   }
 }, 600_000);
 
-async function publicationDateProperty(client: BangumiFactsClient, actor: string):
+async function seededPublicationDate(author: { read: (path: string) => Promise<Response> }):
   Promise<{ component: string; revision: string }> {
-  const definition = await client.post<{ component: string; revision: string }>('/v1/semantic/changes', {
-    profile: 'semantic-change-v1', actingSubject: actor, expectedHead: null,
-    state: { component: 'definition', kind: 'property', notation: 'statement-first-publication-date-v1', roles: [] },
-  }, 'catalogue-year:v1:property');
-  await client.authorizeDefinition(definition);
-  return definition;
-}
-
-async function recordPublicationYear(client: BangumiFactsClient, actor: string, work: string, year: number,
-  definition: { component: string; revision: string }, key: string): Promise<void> {
-  const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
-    profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work, predicate: definition.component,
-    relationDefinition: definition.revision,
-    value: { kind: 'literal', lexical: `${year}-01-01`, datatype: DATE, language: null },
-    applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: actor,
-  }, `catalogue-year:v1:${key}`);
-  await client.post('/v1/statement-decisions', {
-    profile: 'statement-decision-v1', target: { kind: 'statement', statement: statement.statement },
-    acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor,
-  }, `catalogue-year:v1:${key}:decision`);
+  const response = await author.read(`/v1/lexicon/definitions/${DATE_PUBLISHED_DEFINITION_NOTATION}`);
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Publication date ${response.status}: ${text.slice(0, 400)}`);
+  return cataloguePublicationDate(JSON.parse(text) as { kind?: unknown; definition?: unknown; revision?: unknown });
 }
 
 async function importSample(client: BangumiFactsClient, actor: string,

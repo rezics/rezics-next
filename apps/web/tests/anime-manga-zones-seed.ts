@@ -1,8 +1,7 @@
 // Writes the anime and manga Zones into the isolated QA stack the browser harness already
-// started, through the same public writes as the dev seed. Years are folded the way the
-// publication-year read is proved, because no public statement both records a first-publication
-// date and indexes it. The fact panel needs the package approval; a failure there is left as
-// the error, not replaced with a stub digest.
+// started, through the same public writes as the dev seed. A dated Work's year is an accepted
+// Statement on the seeded first-publication property. The fact panel needs the package
+// approval; a failure there is left as the error, not replaced with a stub digest.
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -11,16 +10,6 @@ import { applyAnimeMangaZones, approveCataloguePackage, type CatalogueZoneRecord
   from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
 import { stableId } from '../../../scripts/dev/seed/state.ts';
 import type { SeedPort } from '../../../scripts/dev/seed/vn-catalogue-step.ts';
-import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
-import { changeSemanticComponent, semanticChangeDigest, type DefinitionState }
-  from '../../../services/main/src/modules/semantic/change.ts';
-import { DATE_PUBLISHED_DEFINITION_NOTATION, DATE_PUBLISHED_PREDICATE, QUALIFICATION_DEFINITION_NOTATION }
-  from '../../../services/main/src/modules/statement/qualification.ts';
-import { setStatementDecision, statementDecisionRequest } from '../../../services/main/src/modules/statement/graph.ts';
-import { ADMISSIONS, claimDigest, createClaim, type CreateClaimInput }
-  from '../../../services/main/src/modules/verification/graph.ts';
-import { convertEligibleClaimsTurn } from '../../../services/main/src/modules/verification/claim-fold.ts';
-import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
@@ -51,7 +40,7 @@ interface Seeded {
   manga: SeededZone;
 }
 
-// profileCredits records the member's Agent in the graph. An own-work refuses an Agent with no record.
+// Package review names this member's Agent.
 const stack = await startMediaStack('anime-manga-zones', { profileCredits: true });
 for (const prefix of ['semantic/work/', 'semantic/structure/'] as const) {
   const objects = stack.objects(prefix);
@@ -111,8 +100,6 @@ try {
   }
   const longTv = workOf(created.works, 'long-tv');
   const longManga = workOf(created.works, 'long-manga');
-  await foldYears(editor.actor, longTv.work, '1980-04-01', longManga.work, '1995-07-01');
-  await openFence();
   await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
   const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
   await projection.backfill();
@@ -148,59 +135,6 @@ function record(zones: CatalogueZoneRecord[], longTv: CatalogueWorkRecord, longM
     return { handle: id, space: found.space, realm: found.realm, zone: found.zone, longWork: work.work, title: work.title };
   };
   return { anime: zone('anime', longTv), manga: zone('manga', longManga) };
-}
-
-async function openFence(): Promise<void> {
-  await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.control)} {
-    ${iri(DATASET)} rv:restoreHold true } }`);
-  await stack.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
-}
-
-async function foldYears(actor: string, animeWork: string, animeDate: string, mangaWork: string, mangaDate: string): Promise<void> {
-  await openFence();
-  await ensureGlobalClassificationContext(stack.env);
-  const define = async (kind: 'property' | 'interpretation', notation: string) => {
-    const state: DefinitionState = { component: 'definition', kind, roles: [], lifecycle: 'active', successor: null, notation };
-    return changeSemanticComponent(stack.env, { expectedHead: null, state,
-      admission: stack.admission(actor, 'semantic:create:root', 'semantic.change', semanticChangeDigest(undefined, null, state)) });
-  };
-  const relation = await define('property', DATE_PUBLISHED_DEFINITION_NOTATION);
-  const qualification = await define('interpretation', QUALIFICATION_DEFINITION_NOTATION);
-  const claim = async (work: string, lexical: string) => {
-    const input: CreateClaimInput = { referent: work, interpretationContext: 'urn:retained:publication-scope',
-      propositionPredicate: DATE_PUBLISHED_PREDICATE, value: { kind: 'literal', lexical, datatype: 'date' },
-      valuePrecision: 'approximate', valueQualifiers: [], validFrom: '2026-01-01T00:00:00.000Z',
-      validUntil: '2027-01-01T00:00:00.000Z', editionScope: 'https://publisher.example/first-edition',
-      actingSubject: actor };
-    const receipt = await createClaim(stack.env, stack.admission(actor, ADMISSIONS['claim-create'].scope,
-      ADMISSIONS['claim-create'].action, claimDigest(input)), input);
-    return { claim: receipt.result.claim!, claimRevision: receipt.result.claimRevision! };
-  };
-  const dated = await claim(animeWork, animeDate);
-  const mangaYear = await claim(mangaWork, mangaDate);
-  while (await stack.statementSeek.projectOnce()) { /* catch the seek up to the claims */ }
-  if (!(await stack.statementSeek.coverage())?.complete) await stack.statementSeek.rebuild();
-  let pending = [dated, mangaYear];
-  for (let turn = 0; pending.length && turn < 4; turn++) {
-    const result = await convertEligibleClaimsTurn(stack.env, stack.accessPool, {
-      relationDefinition: relation.revision, qualificationDefinition: qualification.revision,
-      job: `catalogue-year-${randomUUID()}`, claims: pending,
-    });
-    if (result.retained.length) throw new Error(`retained claims: ${JSON.stringify(result.retained)}`);
-    const done = new Set(result.converted.map(item => item.claim));
-    if (done.size === 0 && result.reason !== 'budget-expired') throw new Error(`fold made no progress: ${JSON.stringify(result)}`);
-    pending = pending.filter(item => !done.has(item.claim));
-  }
-  if (pending.length) throw new Error(`fold left ${pending.length} claims`);
-  await openFence();
-  for (const statement of [dated, mangaYear]) {
-    const decision = { target: { kind: 'statement' as const, statement: statement.claim },
-      acceptance: { kind: 'global' as const }, expectedDecisionHead: null, outcome: 'accepted' as const,
-      actingSubject: actor };
-    const request = statementDecisionRequest(decision);
-    const decided = await setStatementDecision(stack.env, stack.admission(actor, request.scope, request.action, request.digest), decision);
-    if (decided.outcome !== 'succeeded') throw new Error(`Year statement was not accepted: ${decided.outcome}`);
-  }
 }
 
 interface DiscoveryView {

@@ -1,5 +1,10 @@
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { expect, test } from 'bun:test';
-import { animeMangaSamplePlan, approveCataloguePackage, cataloguePackageDigest } from './anime-manga-zones-step.ts';
+import { catalogueIntakePath } from '../../../tests/fixtures/catalogue/intake.ts';
+import { animeMangaSamplePlan, applyAnimeMangaZones, approveCataloguePackage, cataloguePackageDigest,
+  type CatalogueSample } from './anime-manga-zones-step.ts';
+import { seedKey } from './plan.ts';
 import type { HttpResult, SeedPort } from './vn-catalogue-step.ts';
 
 const native = (suffix: string) => `https://rezics.com/id/00000000-0000-4000-a000-${suffix.padStart(12, '0')}`;
@@ -88,3 +93,111 @@ test('package approval asks another account to review, and names only admitted s
   expect(mangaDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
   expect(animeDigest).not.toBe(mangaDigest);
 });
+
+const DATE = 'http://www.w3.org/2001/XMLSchema#date';
+const publication = {
+  component: 'https://rezics.com/id/00000000-0000-4000-a000-0000000000aa',
+  revision: 'https://rezics.com/id/00000000-0000-4000-a000-0000000000bb',
+};
+
+test('catalogue samples are catalogue Works and record a dated year on the seeded property', async () => {
+  const actor = `https://rezics.com/id/${randomUUID()}`;
+  const epoch = `anime-manga-${randomUUID()}`;
+  const dated: CatalogueSample = { key: 'dated', zone: 'anime', title: 'Dated series', language: 'ja', year: 1980,
+    subject: { kind: 'bangumi', source: { id: 1, type: 2, platform: 1, eps: 12, meta_tags: ['已完结'] } } };
+  const quiet: CatalogueSample = { key: 'quiet', zone: 'manga', title: 'No year', language: 'en', year: null,
+    subject: { kind: 'bangumi', source: { id: 2, type: 1, platform: 1001 } } };
+  const writes: { method: string; path: string; body: unknown; response: unknown }[] = [];
+  const grants: string[] = [];
+  const works = new Map<string, string>();
+  const request: SeedPort['request'] = async (method, path, body) => {
+    const pathname = path.split('?')[0]!;
+    const response = respond(method, pathname, epoch, body, works);
+    writes.push({ method, path: pathname, body, response: response.body });
+    return response;
+  };
+  const port: SeedPort = {
+    actingSubject: actor, request,
+    grant: async (scope, action) => { grants.push(`${action} ${scope}`); },
+  };
+  try {
+    await applyAnimeMangaZones(port, [dated, quiet]);
+    const created = writes.filter(item => item.method === 'POST' && item.path === '/v1/works');
+    expect(created).toHaveLength(2);
+    for (const item of created) {
+      expect(item.body).toMatchObject({
+        profile: 'metadata-only-v1', authoring: 'catalogue', grain: 'new-creative-scope', actingSubject: actor,
+      });
+    }
+    expect(grants).toContain('catalogue.verify catalogue:verify:root');
+    const datedWork = works.get('Dated series');
+    const quietWork = works.get('No year');
+    const years = writes.filter(item => item.method === 'POST' && item.path === '/v1/statements'
+      && (item.body as { value?: { datatype?: string } }).value?.datatype === DATE);
+    expect(years).toHaveLength(1);
+    expect(years[0]?.body).toMatchObject({
+      subject: datedWork, predicate: publication.component, relationDefinition: publication.revision,
+      value: { kind: 'literal', lexical: '1980-01-01', datatype: DATE, language: null },
+    });
+    const statement = (years[0]?.response as { statement: string }).statement;
+    const decisions = writes.filter(item => item.method === 'POST' && item.path === '/v1/statement-decisions'
+      && (item.body as { target?: { statement?: string } }).target?.statement === statement);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.body).toMatchObject({
+      acceptance: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null, actingSubject: actor,
+    });
+    expect(writes.some(item => item.method === 'POST' && item.path === '/v1/statements'
+      && (item.body as { subject?: string }).subject === quietWork
+      && (item.body as { value?: { datatype?: string } }).value?.datatype === DATE)).toBe(false);
+  } finally {
+    for (const sample of [dated, quiet]) {
+      rmSync(catalogueIntakePath(epoch, actor, seedKey('catalogue-work', sample.key)), { force: true });
+    }
+  }
+});
+
+function respond(method: string, pathname: string, epoch: string, body: unknown, works: Map<string, string>): HttpResult {
+  const id = `https://rezics.com/id/${randomUUID()}`;
+  const ok = (value: unknown, status = 200): HttpResult => ({ status, body: value });
+  if (method === 'GET' && pathname === '/v1/lexicon/definitions/statement-first-publication-date-v1') {
+    return ok({ kind: 'property', lifecycle: 'active', definition: publication.component,
+      revision: publication.revision, roles: [] });
+  }
+  if (method === 'GET' && pathname.endsWith('/configuration')) {
+    return ok({ revision: id, name: 'Zone', language: 'en', configuration: { defaultRealm: null, official: null,
+      presentation: null } });
+  }
+  if (method === 'GET' && pathname.startsWith('/v1/collections/')) {
+    return ok({ structure: id, revision: id, next: null, occurrences: [] });
+  }
+  if (method === 'GET' && pathname.startsWith('/v1/zones/')) return ok({ revision: id, mounts: [] });
+  if (method === 'GET' && pathname.endsWith('/metadata')) return { status: 404, body: {} };
+  if (method === 'POST' && pathname === '/v1/catalogue/candidates') {
+    return ok({ candidateReceipt: randomUUID(), sourcePosition: { dataEpoch: epoch } });
+  }
+  if (method === 'POST' && pathname === '/v1/classification-vocabulary') {
+    return ok({ scheme: id, schemeHead: id, concept: id, definitionRevision: id });
+  }
+  if (method === 'POST' && pathname === '/v1/semantic/changes') return ok({ component: id, revision: id });
+  if (method === 'POST' && pathname === '/v1/contexts') return ok({ context: id, semanticRevision: id });
+  if (method === 'POST' && pathname.endsWith('/spoiler-hints')) return ok({});
+  if (method === 'POST' && pathname === '/v1/works') {
+    const title = (body as { title?: string }).title ?? '';
+    works.set(title, id);
+    return ok({ work: id, mainVersion: `https://rezics.com/id/${randomUUID()}`, workRevision: id, mainRevision: id,
+      replayed: false }, 201);
+  }
+  if (method === 'POST' && pathname === '/v1/spaces') {
+    return ok({ space: `https://rezics.com/id/${randomUUID()}`, realm: `https://rezics.com/id/${randomUUID()}` });
+  }
+  if (method === 'POST' && pathname === '/v1/statements') return ok({ statement: id, meaningKey: id });
+  if (method === 'POST' && pathname === '/v1/statement-decisions') return ok({});
+  if (method === 'POST' && pathname === '/v1/contributions') return ok({ contribution: id, draftRevision: id });
+  if (method === 'POST' && pathname === '/v1/contribution-publications') return ok({ publicationDecision: id });
+  if (method === 'POST' && pathname === '/v1/publication-selections') return ok({});
+  if (method === 'POST' && pathname === '/v1/zones' || method === 'POST' && pathname === '/v1/collections') return ok({});
+  if (method === 'POST' && pathname.endsWith('/changes')) return ok({ revision: id });
+  if (method === 'POST' && pathname.endsWith('/mounts')) return ok({});
+  if (method === 'PUT') return ok({ revision: id });
+  throw new Error(`unhandled ${method} ${pathname}`);
+}

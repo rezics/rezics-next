@@ -13,14 +13,17 @@ import { statementDecisionBody, classifiedStatementBody, discloseClassificationC
 import { collectionPage, createSpace } from './ln-vn-zones-step.ts';
 import { grantOfficialThemeSeed, grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
 import { seedKey } from './plan.ts';
+import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
+import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
 import { declaredCountProperties, workFormatConcepts, type WorkFormatKey } from './relation-lexicon-data.ts';
-import { seedWorkFormat } from './relation-lexicon.ts';
+import { seedWorkFormat, type SeedLexiconReceipt } from './relation-lexicon.ts';
 import { refreshSeedTokens, stableId, type SeedState } from './state.ts';
-import { call, createOwnWork, grantVnSeedAuthority, publishCatalogueText, read, seedHttp,
+import { call, createCatalogueWork, grantVnSeedAuthority, publishCatalogueText, read, seedHttp,
   type SeedPort } from './vn-catalogue-step.ts';
 
 const BOOK = 'https://schema.org/Book';
 const INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
+const DATE = 'http://www.w3.org/2001/XMLSchema#date';
 const root = resolve(import.meta.dir, '../../..');
 const short = (iri: string) => iri.slice(-36);
 const zoneIri = (id: string) => `https://rezics.com/id/${stableId(`catalogue-zone:${id}`)}`;
@@ -129,12 +132,57 @@ export interface CatalogueWorkRecord {
 }
 export interface CatalogueZoneRecord { id: CatalogueZoneId; space: string; realm: string; zone: string; theme: string }
 
-function factsClient(port: SeedPort): BangumiFactsClient {
+function factsClient(port: SeedPort): BangumiFactsClient & {
+  currentDefinition(notation: string): Promise<(SeedLexiconReceipt & { state: DefinitionState }) | null>;
+} {
   return {
     post: (path, body, key) => call(port, 'POST', path, body, key),
     put: (path, body, key) => call(port, 'PUT', path, body, key),
     authorizeDefinition: receipt => port.grant(`semantic:read:${receipt.component}`, 'semantic.read'),
+    currentDefinition: notation => currentPublicationProperty(port, notation),
   };
+}
+
+/** The lexicon key of an active property, when this stack already seeded it. */
+async function currentPublicationProperty(port: SeedPort, notation: string):
+  Promise<(SeedLexiconReceipt & { state: DefinitionState }) | null> {
+  const result = await port.request('GET',
+    `/v1/lexicon/definitions/${notation}?actingSubject=${encodeURIComponent(port.actingSubject)}`);
+  if (result.status === 404) return null;
+  if (result.status !== 200) {
+    throw new Error(`GET /v1/lexicon/definitions/${notation} HTTP ${result.status} ${JSON.stringify(result.body).slice(0, 400)}`);
+  }
+  const body = result.body as { kind?: unknown; definition?: unknown; revision?: unknown; lifecycle?: unknown; roles?: unknown };
+  if (body.kind !== 'property' || body.lifecycle !== 'active' || typeof body.definition !== 'string'
+    || typeof body.revision !== 'string' || !Array.isArray(body.roles) || body.roles.length !== 0) return null;
+  return {
+    component: body.definition, revision: body.revision,
+    state: { component: 'definition', kind: 'property', lifecycle: 'active', successor: null, roles: [], notation },
+  };
+}
+
+/** Component and revision of the seeded first-publication property. */
+export function cataloguePublicationDate(body: { kind?: unknown; definition?: unknown; revision?: unknown }):
+  { component: string; revision: string } {
+  if (body.kind !== 'property' || typeof body.definition !== 'string' || typeof body.revision !== 'string') {
+    throw new Error('First-publication date is not a seeded property');
+  }
+  return { component: body.definition, revision: body.revision };
+}
+
+/** An accepted date Statement on the seeded first-publication property. The year read lists that Statement. */
+export async function recordCataloguePublicationYear(post: BangumiFactsClient['post'], actor: string, work: string,
+  year: number, definition: { component: string; revision: string }, key: string): Promise<void> {
+  const statement = await post<{ statement: string }>('/v1/statements', {
+    profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work, predicate: definition.component,
+    relationDefinition: definition.revision,
+    value: { kind: 'literal', lexical: `${year}-01-01`, datatype: DATE, language: null },
+    applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: actor,
+  }, `catalogue-year:v1:${key}`);
+  await post('/v1/statement-decisions', {
+    profile: 'statement-decision-v1', target: { kind: 'statement', statement: statement.statement },
+    acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor,
+  }, `catalogue-year:v1:${key}:decision`);
 }
 
 async function importSample(client: BangumiFactsClient, actor: string, work: { work: string; mainVersion: string },
@@ -270,6 +318,8 @@ export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaS
   const actor = port.actingSubject;
   await port.grant('work:create:root', 'work.create');
   await port.grant('space:create:root', 'space.create');
+  // Catalogue Works. The grant exempts the pending slot limit; it does not record the acting account as an author.
+  await port.grant('catalogue:verify:root', 'catalogue.verify');
   await port.grant('classification:define:global', 'classification.proposition.define');
   await port.grant('semantic:create:root', 'semantic.change');
   await port.grant('context:create:root', 'context.create');
@@ -277,8 +327,9 @@ export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaS
   await port.grant('classification:decide:global', 'statement.decide');
   const client = factsClient(port);
   const works: CatalogueWorkRecord[] = [];
+  let publication: { component: string; revision: string } | undefined;
   for (const sample of samples) {
-    const created = await createOwnWork(port, { key: seedKey('catalogue-work', sample.key), title: sample.title,
+    const created = await createCatalogueWork(port, { key: seedKey('catalogue-work', sample.key), title: sample.title,
       language: sample.language, semanticType: BOOK });
     await port.grant(`work:edit:${created.work}`, 'work.edit');
     await port.grant(`work:read:${created.work}`, 'work.read');
@@ -286,6 +337,11 @@ export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaS
     await port.grant(`publication:select:${created.mainVersion}`, 'publication.select');
     const text = await publishCatalogueText(port, created, sample.key, sample.language, sample.title);
     const concept = await importSample(client, actor, created, sample);
+    if (sample.year !== null) {
+      publication ??= cataloguePublicationDate(await read(port,
+        `/v1/lexicon/definitions/${DATE_PUBLISHED_DEFINITION_NOTATION}`));
+      await recordCataloguePublicationYear(client.post, actor, created.work, sample.year, publication, sample.key);
+    }
     works.push({ key: sample.key, zone: sample.zone, work: created.work, mainVersion: created.mainVersion,
       contribution: text.contribution, decision: text.decision, concept, year: sample.year, title: sample.title });
   }
