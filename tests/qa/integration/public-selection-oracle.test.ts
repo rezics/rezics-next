@@ -4,6 +4,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
@@ -268,7 +269,8 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
       const genuineQuery = faultyFuseki.query.bind(faultyFuseki);
       let faultHits = 0;
       faultyFuseki.query = async (sparql, maxResponseBytes) => {
-        if (!sparql.includes('?localApplication ?localDecision ?localOutcome')
+        if (!foregroundCounted()
+          || !sparql.includes('?localApplication ?localDecision ?localOutcome')
           || !sparql.includes(workA.mainVersion)) {
           return genuineQuery(sparql, maxResponseBytes);
         }

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isForegroundOperation } from '../../../tests/qa/integration/support/operation-cost.ts';
+import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { shareClassificationContext, recordClassifiedStatement, statementDecisionBody,
   discloseClassificationConcept, acceptClassifiedStatement, classificationContextBody, type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
@@ -27,7 +27,7 @@ async function measuredDecisionPage<T>(stack: MediaStack, path: string, sample: 
   const original = stack.fuseki.query;
   const before = stack.fuseki.queries;
   stack.fuseki.query = async (...args) => {
-    if (isForegroundOperation()) queries.push(args[0]);
+    if (foregroundCounted()) queries.push(args[0]);
     return original.apply(stack.fuseki, args);
   };
   try {

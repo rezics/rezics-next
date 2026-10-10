@@ -19,7 +19,7 @@ import { readZoneConfiguration } from '../../../services/main/src/modules/zone/c
 import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { workRead, WorkReadMoved } from '../../../services/main/src/modules/work/read-session.ts';
 import { startMediaStack } from './media-support.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (reference: string) => reference.slice(-36);
@@ -59,7 +59,7 @@ test('retained qualifier keys resolve current/exact Zone mounts without scanning
     get: async digest => {
       let value = await objects.get(digest);
       if (override) value = await override(digest, value);
-      if (measuring && isForegroundOperation()) {
+      if (measuring && foregroundCounted()) {
         pages++; bytes += value.byteLength;
         const page = JSON.parse(new TextDecoder().decode(value)) as { tree?: string };
         if (page.tree === 'order') orderReads++;
@@ -67,7 +67,7 @@ test('retained qualifier keys resolve current/exact Zone mounts without scanning
       return value;
     },
     put: async value => {
-      if (measuring && isForegroundOperation()) { writes++; writeBytes += value.byteLength; }
+      if (measuring && foregroundCounted()) { writes++; writeBytes += value.byteLength; }
       return objects.put(value);
     },
   };

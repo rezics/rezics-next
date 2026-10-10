@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack, sha } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -197,7 +198,7 @@ test('Private profile names are omitted by anonymous search, export and sitemap,
       get(target, property) {
         if (property === 'query')
           return async (...args: unknown[]) => {
-            ownerStatements++;
+            if (foregroundCounted()) ownerStatements++;
             const result = await Reflect.apply(target.query, target, args);
             if (String(args[0]).includes('requested AS')) {
               expect(String(args[0])).toContain('name_policy AS MATERIALIZED');

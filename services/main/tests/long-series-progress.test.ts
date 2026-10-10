@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 import type { Pool } from 'pg';
 import { StructureProgressStore, InvalidStructureProgress, ProgressOrderUnavailable, STRUCTURE_PROGRESS_COST, type StructureProgress } from '../src/modules/progress/store.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -787,7 +788,7 @@ test('a head that moves during an anchor page leaves the scope unprepared', asyn
   f.env.fuseki.query = async (q: string) => {
     const value = await native(q) as { results?: { bindings: Array<Record<string, { value: string }>> } };
     // The series head is read before the page and again before it commits.
-    if (q.includes('SELECT ?component') && q.includes(f.seriesStructure) && ++reads > 1) {
+    if (foregroundCounted() && q.includes('SELECT ?component') && q.includes(f.seriesStructure) && ++reads > 1) {
       for (const binding of value.results?.bindings ?? []) binding.head = { value: id() };
     }
     return value as never;

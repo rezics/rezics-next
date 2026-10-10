@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { ProjectionStore, projectionFrameListSql } from '../../../services/main/src/modules/projection/store.ts';
 import { PROJECTION_CREATION_QUOTA, projectionKey } from '../../../services/main/src/modules/projection/schema.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
@@ -149,7 +149,7 @@ async function settledGraphQueries(action: () => Promise<void>): Promise<number>
   const native = stack.fuseki.query.bind(stack.fuseki);
   stack.fuseki.query = async (sparql: string, maxBytes?: number): Promise<SparqlResult> => {
     const result = await native(sparql, maxBytes);
-    if (projectionRead.getStore() && isForegroundOperation()) {
+    if (projectionRead.getStore() && foregroundCounted()) {
       const fence = workReadPosition(sparql);
       samples.push({
         fence,

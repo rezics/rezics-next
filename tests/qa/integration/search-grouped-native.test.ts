@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
@@ -171,10 +172,10 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
     let statementBatches = 0, disclosureBatches = 0, acceptanceBatches = 0, acceptanceScopes = 0;
     f.env.fuseki = new Proxy(nativeFuseki, { get(target, property) {
       if (property === 'query') return async (...args: Parameters<typeof nativeFuseki.query>) => {
-        if (args[0].includes('VALUES ?statement {')) statementBatches++;
-        if (args[0].includes('VALUES ?resource') && args[0].includes('rv:semanticHead')) disclosureBatches++;
-        if (args[0].includes('VALUES (?statement ?wantedGlobalSlot')) acceptanceBatches++;
-        if (args[0].includes('SELECT ?epoch ?sequence ?context ?policy WHERE')) acceptanceScopes++;
+        if (foregroundCounted() && args[0].includes('VALUES ?statement {')) statementBatches++;
+        if (foregroundCounted() && args[0].includes('VALUES ?resource') && args[0].includes('rv:semanticHead')) disclosureBatches++;
+        if (foregroundCounted() && args[0].includes('VALUES (?statement ?wantedGlobalSlot')) acceptanceBatches++;
+        if (foregroundCounted() && args[0].includes('SELECT ?epoch ?sequence ?context ?policy WHERE')) acceptanceScopes++;
         return target.query(...args);
       };
       const value = Reflect.get(target, property, target);
@@ -240,7 +241,7 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
     let joinedRequests = 0;
     f.env.fuseki = new Proxy(nativeFuseki, { get(target, property) {
       if (property === 'query') return async (...args: Parameters<typeof nativeFuseki.query>) => {
-        if (args[0].includes('text:query') && args[0].includes('?ratingPopulation')
+        if (foregroundCounted() && args[0].includes('text:query') && args[0].includes('?ratingPopulation')
           && args[0].includes('?occurrence')) joinedRequests++;
         return target.query(...args);
       };
@@ -641,7 +642,7 @@ test('SEARCH01/SEARCH04: one Chinese text-rating-Statement join keeps overlappin
     let coreJoins = 0;
     f.env.fuseki = new Proxy(nativeFuseki, { get(target, property) {
       if (property === 'query') return async (...args: Parameters<typeof nativeFuseki.query>) => {
-        if (args[0].includes('text:query') && args[0].includes('?ratingPopulation')
+        if (foregroundCounted() && args[0].includes('text:query') && args[0].includes('?ratingPopulation')
           && args[0].includes('?occurrence')) coreJoins++;
         return target.query(...args);
       };

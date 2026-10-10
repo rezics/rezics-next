@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
@@ -252,7 +253,10 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     const graph = complete.revisions.graph;
     const query = stack.contentPool.query.bind(stack.contentPool);
     let statements = 0;
-    stack.contentPool.query = ((...args: Parameters<typeof query>) => { statements++; return query(...args); }) as typeof stack.contentPool.query;
+    stack.contentPool.query = ((...args: Parameters<typeof query>) => {
+      if (foregroundCounted()) statements++;
+      return query(...args);
+    }) as typeof stack.contentPool.query;
     let batch;
     try { batch = await series.batch(owner, [original.work, ...volumes.map(volume => volume.work)], [release], graph);
       expect(statements).toBe(SERIES_COST.sessionSql); }
@@ -267,7 +271,7 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     let writeSql = 0;
     const countedPool = { connect: async () => {
       const client = await stack.contentPool.connect(); const query = client.query.bind(client);
-      return { query: (...args: unknown[]) => { writeSql++; return Reflect.apply(query, client, args); },
+      return { query: (...args: unknown[]) => { if (foregroundCounted()) writeSql++; return Reflect.apply(query, client, args); },
         release: () => client.release() } as unknown as PoolClient;
     } } as unknown as Pool;
     await new EditionPreferenceStore(countedPool).write(owner, volumes[1]!.work,

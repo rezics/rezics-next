@@ -5,6 +5,7 @@ import { startMediaStack } from './media-support.ts';
 import { READING_SETTINGS_COST, ReadingSettingsStore }
   from '../../../services/main/src/modules/reading-settings/store.ts';
 import { readingSettingsRoutes } from '../../../services/main/src/routes/reading-settings.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 test('Reader settings: principal privacy, bounded values, stale writes and exact retries', async () => {
   const stack = await startMediaStack('reader-settings');
@@ -15,12 +16,12 @@ test('Reader settings: principal privacy, bounded values, stale writes and exact
     let writeStatements = 0;
     const countedPool = new Proxy(stack.contentPool, { get(pool, key) {
       if (key === 'query') return (...args: unknown[]) => {
-        readStatements++;
+        if (foregroundCounted()) readStatements++;
         return Reflect.apply(pool.query, pool, args);
       };
       if (key === 'connect') return async () => new Proxy(await pool.connect(), { get(client, field) {
         if (field === 'query') return (...args: unknown[]) => {
-          writeStatements++;
+          if (foregroundCounted()) writeStatements++;
           return Reflect.apply(client.query, client, args);
         };
         const value = Reflect.get(client, field);

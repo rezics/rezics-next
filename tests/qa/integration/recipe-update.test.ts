@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import type { OccurrenceRecord } from '../../../services/main/src/modules/structure/format.ts';
@@ -195,7 +196,7 @@ test('Recipe qualifier edits retain occurrences and refuse invalid local ingredi
     const queries: string[] = [];
     const query = f.nativeFuseki.query.bind(f.nativeFuseki);
     f.nativeFuseki.query = async (sparql, maxBytes) => {
-      queries.push(sparql);
+      if (foregroundCounted()) queries.push(sparql);
       return query(sparql, maxBytes);
     };
     try {
@@ -274,7 +275,7 @@ test('Recipe atomic reference edits overlay each removed ingredient without chan
     const queries: string[] = [];
     const query = f.nativeFuseki.query.bind(f.nativeFuseki);
     f.nativeFuseki.query = async (sparql, maxBytes) => {
-      queries.push(sparql);
+      if (foregroundCounted()) queries.push(sparql);
       return query(sparql, maxBytes);
     };
     let response: Response;

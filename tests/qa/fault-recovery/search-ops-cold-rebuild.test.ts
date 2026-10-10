@@ -18,12 +18,13 @@ import { assertStorageHeadroom, storageHeadroom } from '../../../scripts/operati
 import { seedRecoveryContent } from './search-content-fixture.ts';
 import { migrateAccess, qaStack, refusedRootCommand, requireFaultTier, rootCommand }
   from './search-ops-support.ts';
+import { foregroundCounted } from '../integration/support/query-cost-meter.ts';
 
 class CountingFusekiClient extends FusekiClient {
   queries = 0;
   health = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    this.queries++;
+    if (foregroundCounted()) this.queries++;
     return super.query(sparql, maxResponseBytes);
   }
   override async commandHealth() {

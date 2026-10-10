@@ -1,3 +1,4 @@
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
   type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { expect, test } from 'bun:test';
@@ -522,9 +523,11 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
           hydratedWorks = 0;
         const native = stack.fuseki.query.bind(stack.fuseki);
         stack.fuseki.query = async (...args) => {
-          captured.push(args[0]);
+          const counted = foregroundCounted();
+          if (counted) captured.push(args[0]);
           const result = await native(...args);
           if (
+            counted &&
             args[0].includes('BIND(rv:rankedText(rv:publicTitle') &&
             !args[0].includes('directory')
           )

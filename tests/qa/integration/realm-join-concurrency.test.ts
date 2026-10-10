@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { startMediaStack } from './media-support.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { RealmDirectoryWorker } from '../../../services/main/src/modules/realm-directory/worker.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
@@ -166,7 +167,7 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
     // Every graph read on the request path must leave the global gate free,
     // including the admission-open read before its Realm policy query.
     stack.fuseki.query = async (...args) => {
-      if (!requestScope.getStore()) return originalQuery(...args);
+      if (!requestScope.getStore() || !foregroundCounted()) return originalQuery(...args);
       requestGraphCalls++;
       const probe = await stack.accessPool.connect();
       try {

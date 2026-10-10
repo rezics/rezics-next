@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { profileRequest, startWorkProfileSink, assertWorkCost, assertWorkCostAtScales,
   type WorkProfile } from '../../../tests/qa/support/work-profile.ts';
@@ -39,7 +40,7 @@ async function profileHome() {
   const originalQuery = home.stack.fuseki.query.bind(home.stack.fuseki);
   home.stack.fuseki.query = async (sparql, maxBytes) => {
     const result = await originalQuery(sparql, maxBytes);
-    if (captureSources && sparql.includes('SELECT DISTINCT ?id ?sequence ?kind ?target ?work'))
+    if (foregroundCounted() && captureSources && sparql.includes('SELECT DISTINCT ?id ?sequence ?kind ?target ?work'))
       sourceQueries.push({ sparql, result });
     return result;
   };

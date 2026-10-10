@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { authorize as oauthAuthorize, postToken } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -198,7 +198,7 @@ export function countStatements(database: string) {
   const counts = { calls: 0 };
   const original = Client.prototype.query;
   Client.prototype.query = function (this: Client, ...args: unknown[]) {
-    if (isForegroundOperation() && this.database === database) counts.calls++;
+    if (foregroundCounted() && this.database === database) counts.calls++;
     return (original as (...values: unknown[]) => unknown).apply(this, args);
   } as typeof Client.prototype.query;
   return { counts, restore: () => { Client.prototype.query = original; } };

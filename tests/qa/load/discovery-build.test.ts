@@ -4,6 +4,7 @@ import { DiscoveryProjection } from '../../../services/main/src/modules/discover
 import { DiscoveryRefreshStore, DISCOVERY_REFRESH_COST } from '../../../services/main/src/modules/discovery/refresh-store.ts';
 import { DiscoveryRefreshWorker } from '../../../services/main/src/modules/discovery/refresh.ts';
 import { startMediaStack } from '../integration/media-support.ts';
+import { foregroundCounted } from '../integration/support/query-cost-meter.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0362-4000-8000-000000000001`;
 
@@ -42,9 +43,12 @@ test('Discovery build: 10,000 public Works below 60 seconds and one outbox delta
     const queryTimes: { query: string; ms: number }[] = [];
     const rawQuery = stack.fuseki.query.bind(stack.fuseki);
     stack.fuseki.query = async (query, bytes) => {
+      const counted = foregroundCounted();
       const started = performance.now();
       try { return await rawQuery(query, bytes); }
-      finally { queryTimes.push({ query: query.match(/SELECT[^\{]*/)?.[0] ?? '', ms: performance.now() - started }); }
+      finally {
+        if (counted) queryTimes.push({ query: query.match(/SELECT[^\{]*/)?.[0] ?? '', ms: performance.now() - started });
+      }
     };
     const registrations: number[] = [];
     const register = projection.register.bind(projection);

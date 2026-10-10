@@ -1,4 +1,5 @@
 import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 import { withQaStackStartup } from '../../../scripts/qa/memory-admission.ts';
 import { composeProcessEnvironment, projectName, readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
@@ -560,7 +561,7 @@ pg_verifybackup --no-parse-wal ${remote}`], 100_000);
       private controlReads = 0;
       override async query(sparql: string) {
         const result = await super.query(sparql);
-        if (sparql.includes('SELECT ?epoch ?routing ?sequence') && ++this.controlReads === 2) {
+        if (foregroundCounted() && sparql.includes('SELECT ?epoch ?routing ?sequence') && ++this.controlReads === 2) {
           await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [racingScope]);
         }
         return result;

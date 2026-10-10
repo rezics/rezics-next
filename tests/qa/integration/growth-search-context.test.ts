@@ -6,7 +6,7 @@ import type {
   FusekiClient,
   SparqlResult,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { CONTEXT_LIMITS } from '../../../services/main/src/modules/context/schema.ts';
@@ -55,7 +55,7 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
           return async (sparql: string, maxResponseBytes?: number): Promise<SparqlResult> => {
             // Schedulers and other files' follow-up reads share this client.
             // Only the interpretation request under measurement is the cost.
-            if (!measured.getStore() || !isForegroundOperation()) {
+            if (!measured.getStore() || !foregroundCounted()) {
               return target.query(sparql, maxResponseBytes);
             }
             queryCalls++;

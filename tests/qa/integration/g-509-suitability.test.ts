@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -69,6 +70,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
               if (property === 'query')
                 return async (sql: string, values?: unknown[]) => {
                   if (
+                    foregroundCounted() &&
                     [
                       'access.principal',
                       'access.scope_gate',

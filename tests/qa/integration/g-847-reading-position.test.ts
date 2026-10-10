@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -402,7 +402,8 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     const poolQuery = stack.contentPool.query.bind(stack.contentPool);
     const statements: string[] = [];
     stack.contentPool.query = ((...args: unknown[]) => {
-      const query = args[0]; if (typeof query === 'string') statements.push(query);
+      const query = args[0];
+      if (foregroundCounted() && typeof query === 'string') statements.push(query);
       return (poolQuery as (...args: unknown[]) => unknown)(...args);
     }) as typeof stack.contentPool.query;
     try {
@@ -418,7 +419,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       const shapes: string[] = [];
       const native = stack.fuseki.query.bind(stack.fuseki);
       stack.fuseki.query = async (sparql: string, maxBytes?: number) => {
-        if (compositionRead.getStore() && isForegroundOperation()) {
+        if (compositionRead.getStore() && foregroundCounted()) {
           shapes.push(sparql.replace(/\s+/g, ' ').slice(0, 140));
         }
         return native(sparql, maxBytes);

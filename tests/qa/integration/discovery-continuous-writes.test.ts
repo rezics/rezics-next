@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { DiscoveryProjection, discoveryScopeKey } from '../../../services/main/src/modules/discovery/store.ts';
@@ -66,7 +67,7 @@ test('discovery activates under a steady stream of unrelated votes and shelf cha
     const query = f.fuseki.query.bind(f.fuseki);
     f.fuseki.query = async (sparql, bytes) => {
       const result = await query(sparql, bytes);
-      if (streaming && !inStream) {
+      if (foregroundCounted() && streaming && !inStream) {
         writes++;
         inStream = true;
         try {

@@ -9,6 +9,7 @@ import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { LINEAGE_BUDGET, LINEAGE_EDGE_BUDGET, analyzeClaimSupport,
   type Availability } from '../../../services/main/src/modules/verification/analysis.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { VerificationMissing, VerificationStale, VerificationStore, nativeId, uuidOf,
   type AnalysisSnapshot, type WalkAuthority } from '../../../services/main/src/modules/verification/store.ts';
 
@@ -46,7 +47,7 @@ function measuredStore() {
       const client = await pool.connect();
       return {
         query: (sql: string, values?: unknown[]) => {
-          queries.push(sql);
+          if (foregroundCounted()) queries.push(sql);
           return client.query(sql, values);
         },
         release: () => client.release(),

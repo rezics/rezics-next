@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { expect } from 'bun:test';
 import pg, { Pool, type QueryResult } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
@@ -28,7 +27,7 @@ import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/s
 import { startMediaStack } from './media-support.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 /** The Home reads whose cost the budget and load tests hold. */
 export const HOME_READS = {
@@ -99,7 +98,7 @@ export function meterStatements() {
   prototype.query = function (this: object, ...args: unknown[]) {
     const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text ?? '';
     const promised = typeof args.at(-1) !== 'function';
-    if (isForegroundOperation()) statements++;
+    if (foregroundCounted()) statements++;
     if (promised && /^BEGIN; SET LOCAL synchronous_commit = off$/.test(text)) {
       return (async () => {
         const result = await (original.apply(this, args) as Promise<unknown>);
@@ -111,7 +110,7 @@ export function meterStatements() {
     if (state && /^(COMMIT|ROLLBACK)$/.test(text)) {
       open.delete(this);
       if (text === 'COMMIT' && promised) {
-        if (isForegroundOperation()) asyncCommits++;
+        if (foregroundCounted()) asyncCommits++;
         return (async () => {
           const changedRows = await writes(this) - state.before;
           const changing = state.sent.filter(statement => /^\s*(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|COPY)\b/i.test(statement));

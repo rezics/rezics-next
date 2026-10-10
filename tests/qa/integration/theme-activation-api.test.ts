@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -24,15 +24,15 @@ const native = (id: string) => 'https://rezics.com/id/' + id;
 class MeteredFusekiClient extends FusekiClient {
   calls = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    if (isForegroundOperation()) this.calls++;
+    if (foregroundCounted()) this.calls++;
     return super.query(sparql, maxResponseBytes);
   }
   override async commandHealth(): Promise<CommandHealth> {
-    if (isForegroundOperation()) this.calls++;
+    if (foregroundCounted()) this.calls++;
     return super.commandHealth();
   }
   override async command(envelope: CommandEnvelope): Promise<CommandResult> {
-    if (isForegroundOperation()) this.calls++;
+    if (foregroundCounted()) this.calls++;
     return super.command(envelope);
   }
 }

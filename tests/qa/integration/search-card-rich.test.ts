@@ -6,6 +6,7 @@ import { mainSelectionDigest, selectMainDefault }
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 test('public phrase page hydrates current Work card fields after the bounded search relation', async () => {
   const stack = await startMediaStack('search-card-rich');
@@ -112,7 +113,7 @@ test('CTX02/CTX09: one and twenty rich cards use the same graph budget and exact
     const nativeQuery = stack.fuseki.query.bind(stack.fuseki);
     stack.fuseki.query = async (query, maxBytes) => {
       const result = await nativeQuery(query, maxBytes);
-      if (query.includes('?targetWork')) {
+      if (foregroundCounted() && query.includes('?targetWork')) {
         const observation = result.results?.bindings.find(row => row.kind?.value === 'observation');
         if (observation) delete observation.head;
       }
@@ -144,7 +145,7 @@ test('CTX02/CTX09: cached card facts retry graph movement and still fence live t
     let move = true, cardBatches = 0;
     stack.fuseki.query = async (query, maxBytes) => {
       const result = await nativeQuery(query, maxBytes);
-      if (query.includes('?searchCardRead')) {
+      if (foregroundCounted() && query.includes('?searchCardRead')) {
         cardBatches++;
         if (move) {
           move = false;

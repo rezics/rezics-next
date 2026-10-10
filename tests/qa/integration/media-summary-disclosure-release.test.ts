@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -87,9 +88,10 @@ test('signed-in and anonymous Realm release queries retain both current summary 
       const budgets = new Map<NonNullable<ReturnType<typeof fusekiReadBudget.getStore>>, number>();
       let ownerProbes = 0;
       s.fuseki.query = (query, maxBytes) => {
+        const counted = foregroundCounted();
         const budget = fusekiReadBudget.getStore();
-        if (budget) budgets.set(budget, (budgets.get(budget) ?? 0) + 1);
-        if (query.includes('SELECT ?work ?head ?nameOwner')) ownerProbes++;
+        if (counted && budget) budgets.set(budget, (budgets.get(budget) ?? 0) + 1);
+        if (counted && query.includes('SELECT ?work ?head ?nameOwner')) ownerProbes++;
         return originalQuery(query, maxBytes);
       };
       const before = statements;

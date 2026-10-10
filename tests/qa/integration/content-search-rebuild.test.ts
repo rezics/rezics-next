@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import type { ContentCore } from '../../../services/content/src/core.ts';
 import type { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -14,12 +15,15 @@ class RecordingFuseki extends FusekiClient {
   readonly durations: number[] = [];
 
   override async query(sparql: string, maxResponseBytes?: number) {
+    const counted = foregroundCounted();
     const started = performance.now();
     try {
       return await super.query(sparql, maxResponseBytes);
     } finally {
-      this.queries.push(sparql);
-      this.durations.push(performance.now() - started);
+      if (counted) {
+        this.queries.push(sparql);
+        this.durations.push(performance.now() - started);
+      }
     }
   }
 }

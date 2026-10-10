@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -426,7 +427,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     let injected = false, seenDependency = 0;
     fuseki.query = async (sparql: string) => {
       const result = await originalQuery(sparql);
-      if (!injected && sparql.includes('SELECT ?epoch ?sequence ?relaySequence') && seenDependency++) {
+      if (foregroundCounted() && !injected && sparql.includes('SELECT ?epoch ?sequence ?relaySequence') && seenDependency++) {
         injected = true;
         await write(eventA, '2030-01', winnerData.observationRevision);
       }

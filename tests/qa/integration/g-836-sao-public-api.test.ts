@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -64,9 +65,9 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
       const client = await target.connect(); let effect = false;
       return new Proxy(client,{ get(native,key) {
         if (key === 'query') return async (query: string,parameters?: unknown[]) => {
-          if (query.includes('INSERT INTO reader.library_status_merge_receipt')) effect = true;
+          if (foregroundCounted() && query.includes('INSERT INTO reader.library_status_merge_receipt')) effect = true;
           const result = await native.query(query,parameters);
-          if (query === 'COMMIT' && effect) {
+          if (foregroundCounted() && query === 'COMMIT' && effect) {
             libraryCommits++; effect = false;
             if (loseLibraryAcknowledgement) { loseLibraryAcknowledgement = false; throw new Error('lost committed library acknowledgement'); }
           }

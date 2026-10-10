@@ -9,6 +9,7 @@ import type { WikiExtraction } from '../../../services/main/src/modules/wiki/pro
 import { GRAPHS } from '../../../services/main/src/modules/work/activate.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 test('G-845: Pride and Prejudice API matches scoped names and previews bounded, aligned holder evidence', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration QA tier');
@@ -110,7 +111,7 @@ test('G-845: Pride and Prejudice API matches scoped names and previews bounded, 
     let nameRecordQueries = 0;
     const graphQuery = f.nativeFuseki.query.bind(f.nativeFuseki);
     f.nativeFuseki.query = async (query, maxResponseBytes) => {
-      if (query.includes('rv:nameRecord') && query.includes('skos-xl#literalForm')) nameRecordQueries++;
+      if (foregroundCounted() && query.includes('rv:nameRecord') && query.includes('skos-xl#literalForm')) nameRecordQueries++;
       return graphQuery(query, maxResponseBytes);
     };
     const candidateRequest = { target: work.work, zone, actingSubject: f.actor,

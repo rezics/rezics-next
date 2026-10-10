@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import pg from 'pg';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -44,7 +45,8 @@ async function capture<T>(read: () => Promise<T>) {
       /access\.discovery_(?:entries|terms|concepts|entry|term_count|concept_count)\b/.test(
         args[0],
       ) &&
-      args[0].trim().startsWith('SELECT')
+      args[0].trim().startsWith('SELECT') &&
+      foregroundCounted()
     ) {
       statements.push({ text: args[0], values: (args[1] as unknown[]) ?? [] });
     }

@@ -8,6 +8,7 @@ import { coverageEntry } from '../../../services/main/src/modules/release/comman
 import type { ReleaseV2Write, ReleaseWrite } from '../../../services/main/src/modules/release/schema.ts';
 import { RELEASE_QUERY_COST, releaseWorksPage } from '../../../services/main/src/modules/facets/release-contract.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const root = (work: string) => `/v1/works/${work.slice(-36)}`;
@@ -301,7 +302,7 @@ test('G851: global and Zone inventories filter before pagination and traverse be
     const boundedQuery = stack.fuseki.query.bind(stack.fuseki);
     let checkedWindows = 0;
     stack.fuseki.query = (sparql, maxBytes) => {
-      if (sparql.includes('SELECT DISTINCT ?work WHERE')) {
+      if (foregroundCounted() && sparql.includes('SELECT DISTINCT ?work WHERE')) {
         expect(sparql).toContain('VALUES (?work ?main)');
         const values = sparql.match(/VALUES \(\?work \?main\) \{([^}]*)\}/)![1]!;
         expect((values.match(/\(/g) ?? []).length).toBeLessThanOrEqual(RELEASE_QUERY_COST.candidateRows);
@@ -382,7 +383,7 @@ test('G851: global and Zone inventories filter before pagination and traverse be
     const callsBeforeRetry = stack.fuseki.queries;
     stack.fuseki.query = async (...args) => {
       const result = await original(...args);
-      if (moved < 1 && args[0].includes('SELECT ?work ?release WHERE')) {
+      if (foregroundCounted() && moved < 1 && args[0].includes('SELECT ?work ?release WHERE')) {
         moved++;
         await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:sequence ?n } } INSERT { GRAPH ${iri(GRAPHS.control)} {

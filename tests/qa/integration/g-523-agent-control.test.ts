@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { AccessTopology } from '../../../services/main/src/modules/access/topology.ts';
@@ -849,7 +850,7 @@ test('G-523: controller edge revocation and controller leave serialize on topolo
       const client = await h.accessPool.connect();
       return new Proxy(client, { get(target, property) {
         if (property === 'query') return (sql: string, values?: unknown[]) => {
-          if (sql.includes('FROM access.scope_gate') && sql.includes('FOR UPDATE')) {
+          if (foregroundCounted() && sql.includes('FROM access.scope_gate') && sql.includes('FOR UPDATE')) {
             gates.push(String(values?.[0] ?? (sql.includes("'work:create:root'") ? 'work:create:root' : 'unknown')));
           }
           return target.query(sql, values);

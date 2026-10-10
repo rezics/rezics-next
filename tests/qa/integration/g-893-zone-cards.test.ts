@@ -5,6 +5,7 @@ import { readZoneConfiguration } from '../../../services/main/src/modules/zone/c
 import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import type { ZoneRoute } from '../../../services/main/src/modules/zone/route.ts';
 import { startMediaStack } from './media-support.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (iri: string) => iri.slice(-36);
@@ -75,7 +76,7 @@ test('G893: HTTP editorial and route indexes batch exact mounted/adopted members
     const originalQuery = stack.fuseki.query;
     let batches: string[] = [];
     stack.fuseki.query = async (...args) => {
-      if (args[0].includes('# Zone population batch')) batches.push(args[0]);
+      if (foregroundCounted() && args[0].includes('# Zone population batch')) batches.push(args[0]);
       return originalQuery.call(stack.fuseki, ...args);
     };
     const lists = await json<Lists>(await stack.call('GET', modulePath));
@@ -108,7 +109,7 @@ test('G893: HTTP editorial and route indexes batch exact mounted/adopted members
     batches = [];
     stack.fuseki.query = async (...args) => {
       const result = await originalQuery.call(stack.fuseki, ...args);
-      if (args[0].includes('# Zone population batch')) {
+      if (foregroundCounted() && args[0].includes('# Zone population batch')) {
         batches.push(args[0]);
         if (!removed) {
           removed = true;

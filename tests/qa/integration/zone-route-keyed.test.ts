@@ -19,7 +19,7 @@ import { readZoneConfiguration, type ZoneSitePublicationReceipt }
 import type { ZoneRoute } from '../../../services/main/src/modules/zone/route.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 // Exercise the published route HTTP operation against admitted Jena state and
 // real S3 bytes. Empty Collection hydration cannot hide a navigation scan.
@@ -50,7 +50,7 @@ for (const mountCount of [16, 1000]) test(`published Zone routes seek one retain
   let queries: string[] = [], reads: string[] = [];
   let hideCollection: { collection: string; work: string } | null = null;
   f.nativeFuseki.query = async (sparql, maxBytes) => {
-    if (measuring && isForegroundOperation()) queries.push(sparql);
+    if (measuring && foregroundCounted()) queries.push(sparql);
     if (hideCollection && sparql.includes('SELECT DISTINCT ?resource ?type')
       && sparql.includes(iri(hideCollection.work))) {
       const selected = hideCollection;
@@ -88,7 +88,7 @@ for (const mountCount of [16, 1000]) test(`published Zone routes seek one retain
     const counted: ImmutableObjects = {
       put: bytes => objects.put(bytes),
       get: async (digest, maxBytes, signal) => {
-        if (measuring && isForegroundOperation()) reads.push(digest);
+        if (measuring && foregroundCounted()) reads.push(digest);
         if (fault === 'missing-key-root' && digest === retainedKeyRoot) {
           throw new ObjectUnavailable('Retained route key root is unavailable');
         }

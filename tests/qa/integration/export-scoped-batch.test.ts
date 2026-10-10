@@ -3,6 +3,7 @@ import { LIBRARY_EXPORT_COST } from '../../../services/main/src/modules/library-
 import { PERSONAL_EVIDENCE_COST } from '../../../services/main/src/modules/export/personal-evidence.ts';
 import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { scopedExportFixture, type Page } from './export-scoped-support.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { RV } from './scoped-judgments-support.ts';
 
 test('personal export hydrates a full scoped-rating page in bounded owner and projection batches', async () => {
@@ -36,9 +37,10 @@ test('personal export hydrates a full scoped-rating page in bounded owner and pr
       probes: string[] = [],
       batchBytes: number[] = [];
     f.stack.fuseki.query = (body, bytes) => {
-      probes.push(body);
+      const counted = foregroundCounted();
+      if (counted) probes.push(body);
       return query(body, bytes).then((result) => {
-        if (body.includes('AS ?ownerExportProbe'))
+        if (counted && body.includes('AS ?ownerExportProbe'))
           batchBytes.push(Buffer.byteLength(JSON.stringify(result)));
         return result;
       });

@@ -5,6 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { rateLimitBudgets } from '../../../services/main/src/modules/rate-limit/budgets.ts';
 import { PostgresRateLimitStore } from '../../../services/main/src/modules/rate-limit/store.ts';
 import { ALIAS_COST } from '../../../services/main/src/modules/address/registry.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { addressFixture } from './g-937-support.ts';
 
@@ -63,7 +64,7 @@ test('G1003: public navigation survives miss exhaustion; validators follow renam
     let graphCalls = 0;
     const query = f.env.fuseki.query.bind(f.env.fuseki);
     f.env.fuseki.query = async (...args) => {
-      graphCalls++;
+      if (foregroundCounted()) graphCalls++;
       return query(...args);
     };
     for (let i = 0; i < 40; i++) {

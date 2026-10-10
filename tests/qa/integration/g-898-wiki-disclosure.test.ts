@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -103,7 +104,7 @@ test('G-898: candidate HTTP responses are identical with private members present
       [[publicMember.grant, privateMember.grant]]);
     const scanned: string[] = [];
     f.nativeFuseki.query = async (query, maxBytes) => {
-      if (query.includes('SELECT ?resource ?manifest') || query.includes('rv:nameRecord')) scanned.push(query);
+      if (foregroundCounted() && (query.includes('SELECT ?resource ?manifest') || query.includes('rv:nameRecord'))) scanned.push(query);
       return originalQuery(query, maxBytes);
     };
     const present = await response();

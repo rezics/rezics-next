@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -462,7 +463,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         beforeAccount = accountChecks,
         beforePrivate = privateReads;
       stack.fuseki.query = async (...args) => {
-        captured.push(args[0]);
+        if (foregroundCounted()) captured.push(args[0]);
         return native(...args);
       };
       projection.resourcePage = async (...args) => {

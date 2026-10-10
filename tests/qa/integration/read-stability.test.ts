@@ -8,6 +8,7 @@ import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/lib
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
 import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
 import { DiscoveryRefreshStore } from '../../../services/main/src/modules/discovery/refresh-store.ts';
 import { projectDiscoveryWork } from '../../../services/main/src/modules/discovery/source.ts';
@@ -77,7 +78,7 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);
     let writes: Promise<unknown[]> | undefined;
     stack.fuseki.query = async (sparql, bytes) => {
-      if (stack.fuseki.isBackgroundContext) return originalQuery(sparql, bytes);
+      if (!foregroundCounted()) return originalQuery(sparql, bytes);
       const result = await originalQuery(sparql, bytes);
       if (!writes && sparql.includes('SELECT ?epoch ?sequence WHERE')) {
         writes = fusekiReadBudget.exit(() => stack.fuseki.runBackground(() =>
@@ -127,7 +128,7 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     // quiet graph interval. A bounded failure must contain no partial page.
     let churn = 0;
     stack.fuseki.query = async (sparql, bytes) => {
-      if (stack.fuseki.isBackgroundContext) return originalQuery(sparql, bytes);
+      if (!foregroundCounted()) return originalQuery(sparql, bytes);
       const result = await originalQuery(sparql, bytes);
       if (sparql.includes('SELECT ?epoch ?sequence WHERE')) {
         await fusekiReadBudget.exit(() => stack.fuseki.runBackground(() =>

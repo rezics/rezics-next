@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -44,7 +44,7 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
   const measured = { connect: async () => {
     const client = await pool.connect();
     return { query: async (sql: string, values?: unknown[]) => {
-      const foreground = isForegroundOperation();
+      const foreground = foregroundCounted();
       if (foreground) { costs.calls++; observe?.(sql); }
       const result = await client.query(sql, values);
       if (foreground) costs.rows += result.rows.length;
@@ -56,12 +56,12 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
   const fuseki = new Proxy(rawFuseki, { get: (client, key) => {
     const value = Reflect.get(client, key);
     if (key === 'query') return async (...args: Parameters<FusekiClient['query']>) => {
-      const foreground = isForegroundOperation();
+      const foreground = foregroundCounted();
       if (foreground) costs.graphCalls++; const result = await client.query(...args);
       if (foreground) costs.graphBytes += JSON.stringify(result).length; return result;
     };
     if (key === 'commandWithReceipt') return async (...args: Parameters<FusekiClient['commandWithReceipt']>) => {
-      if (isForegroundOperation()) costs.graphWrites++; return client.commandWithReceipt(...args);
+      if (foregroundCounted()) costs.graphWrites++; return client.commandWithReceipt(...args);
     };
     return typeof value === 'function' ? value.bind(client) : value;
   } });

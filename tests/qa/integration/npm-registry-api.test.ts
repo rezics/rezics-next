@@ -1,4 +1,4 @@
-import { isForegroundOperation } from './support/operation-cost.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
@@ -32,7 +32,7 @@ test('PKG03/PKG04/PKG12/IAM10: npm registry range receipts are captured once, pr
   const queries: string[] = [];
   const counted = new Proxy(contentPool, { get(target, property, receiver) {
     if (property === 'query') return (text: string, values?: unknown[]) => {
-      if (isForegroundOperation()) queries.push(text.replace(/\s+/g, ' ').trim().split(' ')[0]!);
+      if (foregroundCounted()) queries.push(text.replace(/\s+/g, ' ').trim().split(' ')[0]!);
       return target.query(text, values);
     };
     return Reflect.get(target, property, receiver);

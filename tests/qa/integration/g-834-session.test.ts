@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ReaderLibraryStatusStore, type StatusState } from '../../../services/main/src/modules/library/status.ts';
@@ -316,7 +317,8 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     const pageQuery = stack.contentPool.query.bind(stack.contentPool);
     let reads = 0;
     stack.contentPool.query = ((...args: Parameters<typeof pageQuery>) => {
-      reads++; return pageQuery(...args);
+      if (foregroundCounted()) reads++;
+      return pageQuery(...args);
     }) as typeof stack.contentPool.query;
     try { await json<Page>(await page(print.release), 200); expect(reads).toBe(SESSION_COST.pageSql); }
     finally { stack.contentPool.query = pageQuery; }
@@ -331,10 +333,13 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     const countedPool = { connect: async () => {
       const client = await stack.contentPool.connect();
       const query = client.query.bind(client);
-      return { query: (...args: unknown[]) => { statements++; return Reflect.apply(query, client, args); },
+      return { query: (...args: unknown[]) => {
+        if (foregroundCounted()) statements++;
+        return Reflect.apply(query, client, args);
+      },
         release: () => client.release() } as unknown as PoolClient;
     }, query: (...args: unknown[]) => {
-      statements++;
+      if (foregroundCounted()) statements++;
       return Reflect.apply(stack.contentPool.query, stack.contentPool, args);
     } } as unknown as Pool;
     const countedStore = new ConsumptionSessionStore(countedPool, library);

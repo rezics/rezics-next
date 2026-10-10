@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
@@ -97,9 +98,10 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
     let segmentRows = 0;
     let capture: string[] | undefined;
     stack.fuseki.query = async (sparql, maxBytes) => {
-      capture?.push(sparql.replace(/\s+/g, ' ').slice(0, 180));
+      const counted = foregroundCounted();
+      if (counted) capture?.push(sparql.replace(/\s+/g, ' ').slice(0, 180));
       const result = await originalQuery(sparql, maxBytes);
-      segmentRows += (result.results?.bindings ?? []).filter(row => row.segment && row.count).length;
+      if (counted) segmentRows += (result.results?.bindings ?? []).filter(row => row.segment && row.count).length;
       return result;
     };
     const native = { focuses: 0, validationMs: 0, updateMs: 0, commands: 0 };

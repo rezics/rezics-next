@@ -6,6 +6,7 @@ import { readZoneConfiguration } from '../../../services/main/src/modules/zone/c
 import { ZONE_RESERVED_SEGMENTS } from '../../../services/main/src/modules/zone/route-path.ts';
 import type { ZoneRoute, ZoneNavigationItem } from '../../../services/main/src/modules/zone/route.ts';
 import { zoneRoutes } from '../../../services/main/src/routes/zones.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { readResourceSummaries } from '../../../services/main/src/modules/media/summary.ts';
@@ -180,7 +181,7 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
       let openingProbes = 0;
       stack.fuseki.query = async (...args) => {
         const result = await query.call(stack.fuseki, ...args);
-        if (args[0].includes('SELECT ?sequence WHERE') && ++openingProbes === 1) {
+        if (foregroundCounted() && args[0].includes('SELECT ?sequence WHERE') && ++openingProbes === 1) {
           await stack.privateWork(editor.actor, 'Concurrent unrelated Work');
         }
         return result;

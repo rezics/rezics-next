@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -34,8 +35,9 @@ class ObservedObjects implements ImmutableObjects {
 class ObservedGraph extends FusekiClient {
   reads: Array<{ query: string; bindings: number; bytes: number }> = [];
   override async query(query: string, maxBytes?: number): Promise<SparqlResult> {
+    const counted = foregroundCounted();
     const result = await super.query(query, maxBytes);
-    this.reads.push({ query, bindings: result.results?.bindings.length ?? 0,
+    if (counted) this.reads.push({ query, bindings: result.results?.bindings.length ?? 0,
       bytes: Buffer.byteLength(JSON.stringify(result)) });
     return result;
   }
