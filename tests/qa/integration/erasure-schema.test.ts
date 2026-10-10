@@ -23,6 +23,11 @@ import { CUT_STATUSES, ownerTables, RECONCILIATION_DISPOSITIONS, RECONCILIATION_
 const root = resolve(import.meta.dir, '../../..');
 const relayDirectory = join(root, 'services/main/migrations/relay');
 const ownRelay = /^01\d_/;
+/** `services/main/migrations/relay/022_erasure_revision_kinds.sql`. It widens the
+ * target check created by 010, so an upgrade applies it with that series. */
+const erasureKindsMigration = 22;
+const erasureSeries = (name: string) =>
+  ownRelay.test(name) || migrationVersion(name) === erasureKindsMigration;
 const ownContent = /^12\d_/;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -122,7 +127,7 @@ test('erasure journal schema installs empty, upgrades current head and allocates
 
   // A relay at the current head already retains Account deletion tombstones and a capture.
   const head = await database('relay_head');
-  const before = relayFiles(name => !ownRelay.test(name));
+  const before = relayFiles(name => !erasureSeries(name));
   expect(before.length).toBeGreaterThan(0);
   await applyRelay(head, before);
   const issuer = 'https://account.rezics.test';
@@ -135,7 +140,7 @@ test('erasure journal schema installs empty, upgrades current head and allocates
     VALUES ($1, $2, 3)`, [randomUUID(), principal]);
   await head.query(`INSERT INTO relay.account_subject_deletion (issuer, account_subject, retained_at)
     VALUES ($1, 'subject-b', '2026-09-01T00:00:00Z'), ($1, 'subject-a', '2026-09-02T00:00:00Z')`, [issuer]);
-  await applyRelay(head, relayFiles(name => ownRelay.test(name)));
+  await applyRelay(head, relayFiles(name => erasureSeries(name)));
   expect((await head.query(`SELECT consumer, coverage_digest, coverage_generation::text
     FROM relay.current_authority_coverage`)).rows).toEqual([
     { consumer: 'graph', coverage_digest: digest('capture-1'), coverage_generation: '1' },
@@ -215,9 +220,9 @@ test('erasure journal schema installs empty, upgrades current head and allocates
 
 test('migration 22 keeps populated erasure targets and admits the new kinds', async () => {
   const relay = await database('relay_019');
-  const before = relayFiles(name => migrationVersion(name) < 19);
+  const before = relayFiles(name => migrationVersion(name) < erasureKindsMigration);
   expect(before.some(name => migrationVersion(name) === 10)).toBe(true);
-  expect(before.some(name => migrationVersion(name) === 19)).toBe(false);
+  expect(before.some(name => migrationVersion(name) === erasureKindsMigration)).toBe(false);
   await applyRelay(relay, before);
   const erasure = randomUUID();
   await relay.query(`INSERT INTO relay.erasure
@@ -234,7 +239,7 @@ test('migration 22 keeps populated erasure targets and admits the new kinds', as
       VALUES ($1, $2, $3, $4, $5)`, [erasure, ordinal, owner, kind, `old:${kind}`]);
     ordinal += 1;
   }
-  await applyRelay(relay, relayFiles(name => migrationVersion(name) === 19));
+  await applyRelay(relay, relayFiles(name => migrationVersion(name) === erasureKindsMigration));
   const kept = (await relay.query<{ target_kind: string; owner: string; target_ref: string }>(
     `SELECT target_kind, owner, target_ref FROM relay.erasure_target
      WHERE erasure_id = $1 ORDER BY ordinal`, [erasure])).rows;
