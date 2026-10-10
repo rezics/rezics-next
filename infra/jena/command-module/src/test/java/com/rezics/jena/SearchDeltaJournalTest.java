@@ -36,6 +36,10 @@ import org.apache.lucene.store.FSDirectory;
 import org.junit.Test;
 
 public class SearchDeltaJournalTest {
+    /** Every case here commits a TDB2 transaction per journal entry and fsyncs it; on a
+     * host whose disk is shared with other builds 90 s was exceeded by I/O wait alone. The
+     * bound still catches a hang. */
+    static final int SLOW_STORE_MS = 240_000;
     private static final String RV = "https://rezics.com/vocab/";
     private static final Node PUBLIC = NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CONTROL = NodeFactory.createURI(CommandPolicy.CONTROL);
@@ -741,10 +745,10 @@ public class SearchDeltaJournalTest {
             assertEquals("lost acknowledgement replay duplicated native facts or source delivery", committed, cancellationSnapshot(f));
         }
     }
-    @Test(timeout = 90_000) public void nativePhysicalCopiesCancelAcrossOrdinarySlimAndCatalogueBulkWriters() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void nativePhysicalCopiesCancelAcrossOrdinarySlimAndCatalogueBulkWriters() throws Exception {
         cancellationAcrossWriters(CancellationPoint.COPY);
     }
-    @Test(timeout = 90_000) public void nativeFinalPrecommitCancellationRollsBackEveryBulkOutcomeAndKeepsContentProof() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void nativeFinalPrecommitCancellationRollsBackEveryBulkOutcomeAndKeepsContentProof() throws Exception {
         cancellationAcrossWriters(CancellationPoint.PRECOMMIT);
     }
 
@@ -1031,7 +1035,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void trimmedContentJournalAllowsIntactReplayButNeverInfersRepairEvidence() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void trimmedContentJournalAllowsIntactReplayButNeverInfersRepairEvidence() throws Exception {
         try (var f = new ContentFixture()) {
             var result = f.deliver(1, "retained source", "en");
             assertEquals("committed", result.get("status"));
@@ -1062,7 +1066,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void originalReceiptSourceCannotBeInferredFromAnIntactCurrentDocument() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void originalReceiptSourceCannotBeInferredFromAnIntactCurrentDocument() throws Exception {
         try (var f = new ContentFixture()) {
             assertEquals("committed", f.deliver(1, "retained source", "en").get("status"));
             for (Node source : java.util.Arrays.asList(null, NodeFactory.createLiteralString("corrupt original source"))) {
@@ -1077,7 +1081,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void repairStartedInNativeWriterRollsBackAtFinalDeadlineInterruptAndFailure() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void repairStartedInNativeWriterRollsBackAtFinalDeadlineInterruptAndFailure() throws Exception {
         try (var f = new ContentFixture()) {
             var result = f.deliver(1, "committed source", "en");
             assertEquals("committed", result.get("status"));
@@ -1111,7 +1115,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void populatedLegacyRankDocumentsRequireFreshSourceAdmittedRelayAndAtomicTransition() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void populatedLegacyRankDocumentsRequireFreshSourceAdmittedRelayAndAtomicTransition() throws Exception {
         try (var f = new ContentFixture()) {
             String body = "魔法禁書目錄 東京 alpha beta", language = "zh-Hant";
             String nextUnit = "urn:rezics:content:match-unit:" + "b".repeat(64);
@@ -1187,7 +1191,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void receiptBoundCommittedBodyReadsAndReplayDoNotNeedItsRdfCopy() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void receiptBoundCommittedBodyReadsAndReplayDoNotNeedItsRdfCopy() throws Exception {
         try (var f = new ContentFixture()) {
             var result = f.deliver(1, "魔法禁書目錄 alpha beta", "zh-Hant");
             assertEquals("committed", result.get("status"));
@@ -1250,7 +1254,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void trimmedReceiptBoundBodyAndSourceEvidenceNeverAcceptsWrongPhysicalDelivery() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void trimmedReceiptBoundBodyAndSourceEvidenceNeverAcceptsWrongPhysicalDelivery() throws Exception {
         try (var f = new ContentFixture()) {
             assertEquals("committed", f.deliver(1, "retained source", "en").get("status"));
             Node originalSource = f.receiptField(1, "searchDeltaContentSource"), originalDigest = f.receiptField(1, "searchDeltaContentBodyDigest");
@@ -1290,7 +1294,7 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test(timeout = 90_000) public void missingBodyWithoutCopyRefusesReplayWhileRetainedCopySupportsFreshNativeRecovery() throws Exception {
+    @Test(timeout = SearchDeltaJournalTest.SLOW_STORE_MS) public void missingBodyWithoutCopyRefusesReplayWhileRetainedCopySupportsFreshNativeRecovery() throws Exception {
         String body = "魔法禁書目錄 alpha beta", language = "zh-Hant";
         try (var f = new ContentFixture()) {
             assertEquals("committed", f.deliver(1, body, language).get("status"));
