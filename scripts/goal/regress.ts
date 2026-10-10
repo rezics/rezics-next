@@ -171,7 +171,7 @@ export interface PruneCheckoutsReport {
   kept: PruneCheckoutEntry[]; removed: PruneCheckoutEntry[]; untouched: PruneCheckoutEntry[];
 }
 export interface PruneCheckoutsOptions {
-  repo: string; stateDir: string; checkoutRoot?: string; apply?: boolean; measureBytes?: boolean;
+  repo?: string; stateDir?: string; checkoutRoot?: string; apply?: boolean; measureBytes?: boolean;
 }
 
 /** A child of `root`, following a symlink only when the target stays inside `root`. */
@@ -223,8 +223,14 @@ function readCheckoutMap(path: string): Record<string, string> | undefined {
 
 interface RegressionRunView { id: string; live: boolean; map?: Record<string, string> }
 
+/** Run directories live in `stateDir` when it is already `…/regress`; an orchestration root names that child. */
+function regressionRunDirectory(stateDir: string): string {
+  const directory = resolve(stateDir);
+  return basename(directory) === 'regress' ? directory : join(directory, 'regress');
+}
+
 function regressionRuns(stateDir: string): RegressionRunView[] {
-  const root = join(stateDir, 'regress');
+  const root = regressionRunDirectory(stateDir);
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => {
     const directory = join(root, entry.name);
@@ -299,16 +305,28 @@ function removeMappedCheckouts(repo: string, map: Record<string, string>, cacheR
   if (removed) pruneWorktreeMetadata(repo);
 }
 
+/** The main checkout, even when this process is inside a linked worktree. */
+function regressionRepository(): string {
+  const result = gitResult(process.cwd(), ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  const common = result.stdout.trim();
+  if (!result.ok || !common) throw new Error(`git rev-parse --git-common-dir: ${result.stderr.trim()}`);
+  return dirname(common);
+}
+
 /**
  * Remove registered worktrees under the regression cache that no live run maps.
  * While any run is live, only a non-live run's mapped paths are removable: a checkout
  * is registered with git before it is written to the map. Dry-run unless `apply`.
+ * `repo` defaults to the main checkout and `stateDir` to `<repo>/.temp/goal-orchestration/regress`.
  */
-export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneCheckoutsReport {
-  const cacheRoot = regressionCheckoutRoot(options.repo, options.checkoutRoot);
-  const listed = registeredWorktrees(options.repo);
-  const runs = regressionRuns(options.stateDir);
-  const sizes = options.measureBytes === false ? undefined : checkoutBytes(cacheRoot);
+export function pruneRegressionCheckouts(options: PruneCheckoutsOptions = {}): PruneCheckoutsReport {
+  const repo = options.repo ?? regressionRepository();
+  const stateDir = options.stateDir ?? join(repo, '.temp', 'goal-orchestration', 'regress');
+  const cacheRoot = regressionCheckoutRoot(repo, options.checkoutRoot);
+  const listed = registeredWorktrees(repo);
+  const runs = regressionRuns(stateDir);
+  // A full `du` of every checkout does not change which paths are kept; ask for it explicitly.
+  const sizes = options.measureBytes ? checkoutBytes(cacheRoot) : undefined;
   const bytesOf = (path: string): number | undefined => sizes?.get(resolve(path)) ?? (existsSync(path) ? sizes?.get(realpathSync(path)) : undefined);
   const kept: PruneCheckoutEntry[] = [];
   const removed: PruneCheckoutEntry[] = [];
@@ -323,8 +341,8 @@ export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneC
     (decision.keep ? kept : removed).push({ path, reason: decision.reason, ...(bytes !== undefined ? { bytes } : {}) });
   }
   if (options.apply) {
-    const freshRuns = regressionRuns(options.stateDir);
-    const freshListed = registeredWorktrees(options.repo);
+    const freshRuns = regressionRuns(stateDir);
+    const freshListed = registeredWorktrees(repo);
     const deleted: PruneCheckoutEntry[] = [];
     for (const entry of removed) {
       const decision = checkoutDisposition(entry.path, freshRuns, freshListed);
@@ -332,10 +350,10 @@ export function pruneRegressionCheckouts(options: PruneCheckoutsOptions): PruneC
         kept.push({ path: entry.path, reason: decision.reason, ...(entry.bytes !== undefined ? { bytes: entry.bytes } : {}) });
         continue;
       }
-      if (removeWorktree(options.repo, entry.path)) deleted.push(entry);
+      if (removeWorktree(repo, entry.path)) deleted.push(entry);
     }
     removed.splice(0, removed.length, ...deleted);
-    if (deleted.length) pruneWorktreeMetadata(options.repo);
+    if (deleted.length) pruneWorktreeMetadata(repo);
   }
   for (const entry of readdirSync(cacheRoot, { withFileTypes: true })) {
     const path = join(cacheRoot, entry.name);
@@ -606,8 +624,8 @@ function moveDirectory(from: string, to: string): void {
   }
 }
 
-/** Paths already under this batch's artifact root, or directories slot.json reported elsewhere after they move there.
- * Older checkouts ignore the artifact-root override and write `<checkout>/.artifacts/qa/<id>`. */
+/** Paths slot.json reported: those already under this batch's artifact root, or directories it reported elsewhere after they move there.
+ * Older checkouts ignore the artifact-root override and write `<checkout>/.artifacts/qa/<id>`. An empty report stays empty, so a rerun does not read a stale run left in the root. */
 export function regressionBatchArtifactPaths(reported: readonly string[], artifactRoot?: string): string[] {
   if (!artifactRoot) return [...reported];
   const root = resolve(artifactRoot);
@@ -623,9 +641,7 @@ export function regressionBatchArtifactPaths(reported: readonly string[], artifa
     moveDirectory(path, destination);
     moved.push(destination);
   }
-  if (moved.length) return moved;
-  if (!existsSync(root)) return [];
-  return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => join(root, entry.name));
+  return moved;
 }
 
 async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string): Promise<Execution> {

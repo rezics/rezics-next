@@ -623,7 +623,8 @@ describe('pinned main-wide regression', () => {
         writeFileSync(join(poison, 'logs', 'integration.log'), 'foreign-evidence');
         writeFileSync(join(poison, 'acceptance.json'), JSON.stringify({ isolation: [{ file, status: 'order-dependent' }] }));
         if (++arrived === 2) release!(); else await both;
-        const paths = regressionBatchArtifactPaths([], root);
+        expect(regressionBatchArtifactPaths([], root)).toEqual([]);
+        const paths = regressionBatchArtifactPaths([own], root);
         expect(regressionBatchArtifactPaths([own, poison], root)).toEqual([own]);
         const tests = paths.flatMap(path => existsSync(join(path, 'integration.xml'))
           ? parseJUnit(readFileSync(join(path, 'integration.xml'), 'utf8'), 'integration') : []);
@@ -655,6 +656,18 @@ describe('pinned main-wide regression', () => {
         expect(diagnosis.artifactPaths.every(path => !lanes.some(batch => batch !== lane && path.includes(`/${batch.id}/`)))).toBe(true);
       }
     } finally { release?.(); r.cleanup(); }
+  });
+
+  test('a stale run directory in the label root is ignored', () => {
+    const root = mkdtempSync(join(regressionCheckoutRoot(import.meta.dir, join(import.meta.dir, '../../.temp/r')), 'label-'));
+    try {
+      const stale = join(root, '20261010t000000-stale');
+      mkdirSync(join(stale, 'logs'), { recursive: true });
+      writeFileSync(join(stale, 'integration.xml'), '<testcase file="tests/qa/integration/example.test.ts" name="stale-failure"><failure>no</failure></testcase>');
+      writeFileSync(join(stale, 'logs', 'integration.log'), 'stale-evidence');
+      expect(regressionBatchArtifactPaths([], root)).toEqual([]);
+      expect(readFileSync(join(stale, 'logs/integration.log'), 'utf8')).toBe('stale-evidence');
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
   test('an old checkout’s QA artifacts move into the run directory before the checkout is removed', async () => {
@@ -1580,7 +1593,10 @@ test('prune keeps a live run and an unmapped worktree, and ignores paths outside
     writeRun('stale-run', stale);
     writeRun('outside-run', outside);
     const dry = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, measureBytes: false });
+    const runsDirectory = pruneRegressionCheckouts({ repo: r.dir, stateDir: join(r.options.stateDir, 'regress'), checkoutRoot: cache, measureBytes: false });
     expect(dry.apply).toBe(false);
+    expect(runsDirectory.kept.map(entry => entry.path)).toEqual(dry.kept.map(entry => entry.path));
+    expect(runsDirectory.removed.map(entry => entry.path)).toEqual(dry.removed.map(entry => entry.path));
     expect(existsSync(stale)).toBe(true);
     expect(existsSync(orphan)).toBe(true);
     const applied = pruneRegressionCheckouts({ repo: r.dir, stateDir: r.options.stateDir, checkoutRoot: cache, apply: true, measureBytes: false });
