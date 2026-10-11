@@ -59,6 +59,8 @@ export function decodeWorkSpans(bytes: Uint8Array): WorkSpan[] {
 export interface WorkProfileSource {
   /** The source must include all owner services, not only Main. */
   collect(traceId: string, parentSpanId: string): Promise<WorkSpan[]>;
+  /** Release only after the complete profile has retained its own evidence. */
+  release?(traceId: string): void;
 }
 
 /** Deduplicate exporter retries. A bounded sink refuses dropped evidence. */
@@ -68,7 +70,7 @@ export function startWorkProfileSink(
   const records = new Map<string, WorkSpan>();
   const updated = new Map<string, number>();
   const token = randomBytes(24).toString('hex');
-  let failure: string | undefined;
+  let failure: Error | undefined;
   const maxSpans = options.maxSpans ?? 100_000;
   const settleMs = options.settleMs ?? 1_250;
   const timeoutMs = options.timeoutMs ?? 10_000;
@@ -107,15 +109,21 @@ export function startWorkProfileSink(
               throw new Error('Malformed OTLP span');
             const key = `${span.traceId}:${span.spanId}`;
             if (records.has(key)) continue;
-            if (records.size >= maxSpans) throw new Error('Work profile sink capacity exhausted');
+            if (records.size >= maxSpans)
+              throw new Error(
+                `Work profile sink capacity exhausted (${records.size}/${maxSpans} retained spans)`,
+              );
             records.set(key, span);
             updated.set(span.traceId, performance.now());
           }
         }
         return new Response(null, { status: 200 });
-      } catch {
-        failure = 'OTLP ingestion failed or overflowed; counts are incomplete';
-        return new Response(null, { status: 400 });
+      } catch (error) {
+        const cause = error instanceof Error ? error : new Error(String(error));
+        failure ??= new Error(`OTLP ingestion failed; counts are incomplete: ${cause.message}`, {
+          cause,
+        });
+        return new Response(cause.message, { status: 400 });
       }
     },
   });
@@ -123,7 +131,7 @@ export function startWorkProfileSink(
     async collect(traceId, parentSpanId) {
       const deadline = performance.now() + timeoutMs;
       while (performance.now() < deadline) {
-        if (failure) throw new Error(failure);
+        if (failure) throw failure;
         const spans = [...records.values()].filter((span) => span.traceId === traceId);
         if (
           spans.some((span) => span.kind === 1 && span.parentSpanId === parentSpanId) &&
@@ -135,6 +143,10 @@ export function startWorkProfileSink(
       throw new Error(
         'Request trace did not settle; telemetry is missing, sampled out or unfinished',
       );
+    },
+    release(traceId) {
+      for (const [key, span] of records) if (span.traceId === traceId) records.delete(key);
+      updated.delete(traceId);
     },
   };
   return {
@@ -375,7 +387,9 @@ export async function profileRequest<T>(
   const totalMs = performance.now() - started;
   await options.flush?.();
   const spans = await source.collect(traceId, parentSpanId);
-  return { result, profile: summarizeWorkProfile(spans, traceId, parentSpanId, totalMs, options) };
+  const profile = summarizeWorkProfile(spans, traceId, parentSpanId, totalMs, options);
+  source.release?.(traceId);
+  return { result, profile };
 }
 
 export type WorkCostField = {

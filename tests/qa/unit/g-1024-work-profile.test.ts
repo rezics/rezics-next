@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import protobuf from 'protobufjs';
 import {
   assertWorkCost,
   assertWorkCostAtScales,
   summarizeWorkProfile,
+  profileRequest,
   startWorkProfileSink,
   type WorkProfile,
   type WorkSpan,
@@ -204,6 +206,154 @@ test('G1024: missing OTLP export fails collection rather than returning a zero p
   try {
     expect((await fetch(`${sink.url}/v1/traces`, { method: 'POST' })).status).toBe(401);
     await expect(sink.collect(traceId, parent)).rejects.toThrow('telemetry is missing');
+  } finally {
+    await sink.stop();
+  }
+});
+
+const traceMessage = protobuf
+  .parse(`syntax = "proto3";
+  message Value { string stringValue=1; int64 intValue=3; }
+  message Attribute { string key=1; Value value=2; }
+  message Resource { repeated Attribute attributes=1; }
+  message Span { bytes traceId=1; bytes spanId=2; bytes parentSpanId=4; string name=5;
+    int32 kind=6; fixed64 startTimeUnixNano=7; fixed64 endTimeUnixNano=8;
+    repeated Attribute attributes=9; }
+  message ScopeSpans { repeated Span spans=2; }
+  message ResourceSpans { Resource resource=1; repeated ScopeSpans scopeSpans=2; }
+  message Traces { repeated ResourceSpans resourceSpans=1; }
+`)
+  .root.lookupType('Traces');
+
+async function exportSpans(sink: ReturnType<typeof startWorkProfileSink>, spans: WorkSpan[]) {
+  const body = traceMessage
+    .encode({
+      resourceSpans: [
+        {
+          resource: { attributes: [{ key: 'service.name', value: { stringValue: 'main' } }] },
+          scopeSpans: [
+            {
+              spans: spans.map((span) => ({
+                ...span,
+                traceId: Buffer.from(span.traceId, 'hex'),
+                spanId: Buffer.from(span.spanId, 'hex'),
+                parentSpanId: Buffer.from(span.parentSpanId, 'hex'),
+                kind: span.kind + 1,
+                startTimeUnixNano: span.startMs * 1e6,
+                endTimeUnixNano: span.endMs * 1e6,
+                attributes: Object.entries(span.attributes).map(([key, value]) => ({
+                  key,
+                  value:
+                    typeof value === 'number'
+                      ? { intValue: value }
+                      : { stringValue: String(value) },
+                })),
+              })),
+            },
+          ],
+        },
+      ],
+    })
+    .finish();
+  return fetch(`${sink.url}/v1/traces`, {
+    method: 'POST',
+    headers: {
+      authorization: decodeURIComponent(
+        sink.env.OTEL_EXPORTER_OTLP_HEADERS.slice('authorization='.length),
+      ),
+      'content-type': 'application/x-protobuf',
+    },
+    body,
+  });
+}
+
+function requestSpans(headers: Headers): WorkSpan[] {
+  const [, requestTrace, requestParent] = headers.get('traceparent')!.split('-');
+  const server = { ...successfulRoot, traceId: requestTrace!, parentSpanId: requestParent! };
+  const sql = {
+    ...span('4', server.spanId, { 'db.system.name': 'postgresql' }),
+    traceId: requestTrace!,
+  };
+  return [server, sql];
+}
+
+test('completed profiles release sink capacity while concurrent traces and returned evidence remain complete', async () => {
+  const sink = startWorkProfileSink({ maxSpans: 4, settleMs: 0 });
+  const concurrent = [successfulRoot, span('4', root.spanId, { 'db.system.name': 'postgresql' })];
+  const profiles: WorkProfile[] = [];
+  try {
+    expect((await exportSpans(sink, concurrent)).status).toBe(200);
+    for (let request = 0; request < 10; request++) {
+      const measured = await profileRequest(sink, async (headers) => {
+        const active = requestSpans(headers);
+        // Exporter retries do not consume another slot, even at capacity.
+        const response = await exportSpans(sink, [...active, ...active]);
+        expect(response.status).toBe(200);
+        await response.text();
+        return request;
+      });
+      expect(measured.result).toBe(request);
+      expect(measured.profile.postgresStatements).toBe(1);
+      expect(measured.profile.spans).toHaveLength(2);
+      profiles.push(measured.profile);
+      expect(sink.snapshot()).toHaveLength(2);
+      expect(sink.snapshot().every((span) => span.traceId === traceId)).toBe(true);
+    }
+    expect(await sink.collect(traceId, parent)).toHaveLength(2);
+    expect(
+      profiles.every((profile) => profile.postgresStatements === 1 && profile.spans.length === 2),
+    ).toBe(true);
+  } finally {
+    await sink.stop();
+  }
+});
+
+test('failed profile summarization keeps the raw trace for diagnosis', async () => {
+  const sink = startWorkProfileSink({ maxSpans: 4, settleMs: 0 });
+  try {
+    await expect(
+      profileRequest(sink, async (headers) => {
+        const active = requestSpans(headers);
+        const secondRoot = { ...active[0]!, spanId: '5'.repeat(16) };
+        const response = await exportSpans(sink, [...active, secondRoot]);
+        expect(response.status).toBe(200);
+        await response.text();
+      }),
+    ).rejects.toThrow('exactly one completed request server span');
+    expect(sink.snapshot()).toHaveLength(3);
+  } finally {
+    await sink.stop();
+  }
+});
+
+test('sink overflow exposes its first concrete cause and clearing records cannot make incomplete counts pass', async () => {
+  const sink = startWorkProfileSink({ maxSpans: 1, settleMs: 0 });
+  try {
+    const response = await exportSpans(sink, [successfulRoot, span('4', root.spanId)]);
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe('Work profile sink capacity exhausted (1/1 retained spans)');
+    expect(sink.snapshot()).toHaveLength(1);
+    await expect(sink.collect(traceId, parent)).rejects.toThrow('capacity exhausted');
+    sink.clear();
+    const malformed = await exportSpans(sink, [{ ...successfulRoot, traceId: '01' }]);
+    expect(malformed.status).toBe(400);
+    expect(await malformed.text()).toBe('Malformed OTLP span');
+    await expect(sink.collect(traceId, parent)).rejects.toThrow('capacity exhausted');
+  } finally {
+    await sink.stop();
+  }
+});
+
+test('malformed telemetry is distinguishable from sink capacity and remains a failed collection after clear', async () => {
+  const sink = startWorkProfileSink({ maxSpans: 4, settleMs: 0 });
+  try {
+    const response = await exportSpans(sink, [{ ...successfulRoot, traceId: '01' }]);
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe('Malformed OTLP span');
+    sink.clear();
+    await expect(sink.collect(traceId, parent)).rejects.toThrow(
+      'counts are incomplete: Malformed OTLP span',
+    );
   } finally {
     await sink.stop();
   }
