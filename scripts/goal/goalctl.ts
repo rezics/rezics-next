@@ -5316,6 +5316,15 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
   return lines.sort();
 }
 
+/** Ordinary QA runs share this many slots. Program sets the count for every Goal in `qa-slot-count`
+ * beside the slots; `GOAL_QA_SLOTS` overrides it for one process. Memory admission still decides each start. */
+export function qaSlotCount(directory: string, env: NodeJS.ProcessEnv = process.env): number {
+  if (env.GOAL_QA_SLOTS !== undefined) return Number(env.GOAL_QA_SLOTS);
+  const file = join(dirname(directory), 'qa-slot-count');
+  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : 3;
+}
+
 /** Concurrent type-check and unit gates share this many process-identity leases.
  * A killed gate's lease is stale, so the next gate takes its lane. */
 function gateLaneCount(directory: string = gateLanesDir): number {
@@ -5760,9 +5769,9 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   const listed = (dir: string) => existsSync(dir) ? readdirSync(dir).map(name => join(dir, name)) : [];
   const prior = new Set(artifactDirs.flatMap(listed));
   const deferred = !heavy && harnessOwnsSlot(command);
-  const slots = heavy ? undefined : options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
-  if (!heavy && (!Number.isSafeInteger(slots) || slots! < 1)) throw new Error('GOAL_QA_SLOTS must be a positive integer');
   const dir = options.slotDirectory ?? (deferred ? process.env.GOAL_QA_SLOT_DIRECTORY : undefined) ?? join(stateDir, 'qa-slots');
+  const slots = heavy ? undefined : options.slots ?? qaSlotCount(dir);
+  if (!heavy && (!Number.isSafeInteger(slots) || slots! < 1)) throw new Error('GOAL_QA_SLOTS must be a positive integer');
   const heavyLockDirectory = options.heavyLockDirectory ?? (options.slotDirectory ? join(dir, 'heavy') : heavyLock);
   const waiterDirectory = join(dir, 'waiters');
   const goal = currentQaGoal();

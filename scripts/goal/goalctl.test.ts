@@ -15,7 +15,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
-  gateLaneStatus, gateLaneWaiters, withGateLane,
+  gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
   mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -4676,6 +4676,20 @@ describe('goalctl archive', () => {
       expect(treeMentions(dir, [])).toEqual([]);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+test('the QA slot count comes from the file beside the slots unless the environment names one', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-slot-count-'));
+  try {
+    const slots = join(root, 'qa-slots');
+    expect(qaSlotCount(slots, {})).toBe(3);
+    writeFileSync(join(root, 'qa-slot-count'), '6\n');
+    expect(qaSlotCount(slots, {})).toBe(6);
+    expect(qaSlotCount(slots, { GOAL_QA_SLOTS: '2' })).toBe(2);
+    writeFileSync(join(root, 'qa-slot-count'), 'many\n');
+    expect(qaSlotCount(slots, {})).toBe(3);
+    expect(Number.isNaN(qaSlotCount(slots, { GOAL_QA_SLOTS: 'x' }))).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 describe('gate lanes', () => {
