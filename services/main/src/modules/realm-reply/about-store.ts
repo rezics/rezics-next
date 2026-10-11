@@ -1,9 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { RealmReplyConflict, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable } from './content-store.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const principalIntentKey = (principal: string, key: string) =>
+  createHash('sha256').update(JSON.stringify(['realm-about-post', principal, key])).digest('hex');
 
 /** The digest binds the complete client intent, including omitted fields. It
  * excludes the server's canonical selection, which can retain an older root. */
@@ -92,19 +94,32 @@ export class RealmAboutThreadStore {
     return row;
   }
 
-  async reserve(input: AboutPostIntent): Promise<AboutPostOperation> {
+  async readIntent(principal: string, key: string, digest: string): Promise<AboutPostOperation | null> {
+    const rows = (await this.pool.query<OperationRow>(`SELECT * FROM content.realm_about_post_operation
+      WHERE intent_key = $1 LIMIT 2`, [principalIntentKey(principal, key)])).rows;
+    if (rows.length > 1) throw new RealmReplyUnavailable('discussion intent is ambiguous');
+    const row = rows[0];
+    if (!row) return null;
+    if (row.intent_digest !== digest) throw new RealmReplyConflict('discussion intent key binds different input');
+    return operation(row, true);
+  }
+
+  async reserve(input: AboutPostIntent, principal?: string): Promise<AboutPostOperation> {
     if (![input.realm, input.about, input.actor].every(value => native.test(value))
       || !/^[0-9a-f]{64}$/.test(input.intentDigest)) throw new RealmReplyInvalid('invalid discussion intent');
     assertReference(input.intentKey, 128);
     assertReference(input.rootRevision);
+    const storedKey = principal ? principalIntentKey(principal, input.intentKey) : input.intentKey;
     return this.transaction(async client => {
-      // Serialize retries of one actor's key independently of the canonical key.
+      // Serialize retries of one principal's key independently of the canonical
+      // key; legacy callers retain their actor-scoped owner key.
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-        [JSON.stringify(['realm-about-intent', input.actor, input.intentKey])]);
+        [JSON.stringify(['realm-about-intent', principal ?? input.actor, storedKey])]);
       const prior = (await client.query<OperationRow>(`SELECT * FROM content.realm_about_post_operation
-        WHERE actor = $1 AND intent_key = $2 FOR UPDATE`, [input.actor, input.intentKey])).rows[0];
+        WHERE ${principal ? 'intent_key = $1' : 'actor = $1 AND intent_key = $2'} FOR UPDATE`,
+      principal ? [storedKey] : [input.actor, storedKey])).rows[0];
       if (prior) {
-        if (prior.intent_digest !== input.intentDigest || prior.realm !== input.realm || prior.about !== input.about
+        if (prior.actor !== input.actor || prior.intent_digest !== input.intentDigest || prior.realm !== input.realm || prior.about !== input.about
           || prior.requested_root_revision !== input.rootRevision) {
           throw new RealmReplyConflict('discussion intent key binds different input');
         }
@@ -126,7 +141,7 @@ export class RealmAboutThreadStore {
         (id, actor, intent_key, intent_digest, realm, about, reply, variant_id,
          opener_reply, root_revision, parent_reply, parent_revision, requested_root_revision)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [id, input.actor, input.intentKey, input.intentDigest, input.realm, input.about, reply, variantId,
+      [id, input.actor, storedKey, input.intentDigest, input.realm, input.about, reply, variantId,
         thread.opener_reply, thread.root_revision, parent, parent ? thread.revision_id : null, input.rootRevision])).rows[0]!;
       return operation(row, false);
     });
@@ -189,13 +204,25 @@ export class RealmAboutThreadStore {
     });
   }
 
+  /** Recover the draft's immutable receipt rather than inventing an admission id. */
+  async recordDraftRevision(id: string, revisionId: string): Promise<AboutPostOperation> {
+    const selected = await this.resume(id);
+    const rows = (await this.pool.query<{ operation_id: string }>(`SELECT operation_id FROM content.receipt
+      WHERE action = 'draft.save' AND outcome = 'succeeded' AND variant_id = $1 AND revision_id = $2 LIMIT 2`,
+    [selected.variantId, revisionId])).rows;
+    if (rows.length !== 1) throw new RealmReplyUnavailable('discussion draft receipt is unavailable');
+    return this.recordDraft(id, rows[0]!.operation_id);
+  }
+
   /** Call only after resolving the immutable successful graph placement receipt.
    * This records the owner's decision; it neither authorizes nor places a reply.
    * Unknown/refused effects keep the reservation pending for owner recovery. */
   async recordPosted(id: string, placementOperationId: string, placementReceipt: string): Promise<AboutPostOperation> {
     assertOperationId(id);
     assertReference(placementOperationId);
-    if (!native.test(placementReceipt)) throw new RealmReplyInvalid('invalid placement receipt');
+    if (!native.test(placementReceipt) && !/^urn:rezics:receipt:[0-9a-f]{64}$/.test(placementReceipt)) {
+      throw new RealmReplyInvalid('invalid placement receipt');
+    }
     return this.transaction(async client => {
       const row = await this.selected(client, id);
       if (row.phase === 'posted') {

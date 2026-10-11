@@ -9,6 +9,11 @@ import { resolveTargets, TargetUnavailable, targetRead } from '../modules/target
 import { readReplyRoot } from '../modules/realm-reply/root.ts';
 import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
+import { authoredBodySchema } from '../api-document.ts';
+import { problemResult } from '../api-contract.ts';
+import { readLanguage, readUuid } from '../modules/work/read-contract.ts';
+import { verifyMemberReplyDraftPrincipal } from '../modules/content-publication/reply-draft.ts';
+import { RealmAboutPostCommand } from '../modules/realm-reply/about-command.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -53,6 +58,14 @@ const countResult = t.Object({ profile: t.Literal('realm-reply-root-count-v1'),
   realm: native, rootTarget: native, count: t.Integer({ minimum: 0, maximum: 64 }),
   complete: t.Boolean() });
 const noStore = { headers: { 'cache-control': 'no-store' } };
+const aboutPostBody = authoredBodySchema({ profile: t.Literal('realm-about-post-v1'),
+  about: native, targetRevision: native, zone: native, path: t.String({ minLength: 1, maxLength: 1024 }),
+  routeRevision: native, actingSubject: native, language: readLanguage,
+  direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]), spoiler: t.Optional(t.Boolean()),
+}, 8192, 1);
+const aboutPostResult = t.Object({ profile: t.Literal('realm-about-post-v1'), realm: native, about: native,
+  thread: t.Object({ reply: native, rootRevision: native }), reply: native, revisionId: uuid,
+  placement: native, opened: t.Boolean() }, { additionalProperties: false });
 
 function replyError(error: unknown): Response {
   if (error instanceof RealmReplyInvalid) return problem(400, 'invalid_realm_reply', error.message);
@@ -68,6 +81,7 @@ function key(request: Request): string | null {
 }
 
 export const openApiOperations = {
+  '/v1/realms/{realm}/about-posts': { post: { exposure: 'platform:realm-reply', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realm-replies': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realm-reply-reviews': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realm-reply-placements': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -77,6 +91,42 @@ export const openApiOperations = {
 
 export function realmReplyRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/realms/:realm/about-posts', { params: t.Object({ realm: readUuid }), body: aboutPostBody,
+      detail: { summary: 'Post to the canonical discussion about a Zone page',
+        description: 'Requires comment:create, work:edit and realm:adopt Account scopes and a Person author. '
+          + 'The server checks the published Zone route, current Realm attachment and observed target revision. '
+          + 'It selects the opener or retained-root child and composes admitted draft, identity and placement. '
+          + 'The write family debits three units in the verified principal bucket before dispatch, including retries. '
+          + 'Idempotency-Key is required, limited to 128 characters and scoped to the verified principal. '
+          + 'Changed input under a key returns 409. Successful retries return the exact same 201 body; '
+          + 'pending retries resume the durable operation and 202 contains only operationId. '
+          + 'Keys remain retained with the durable discussion operation. Body content is limited to 8 KiB. '
+          + 'This new platform:realm-reply capability stays closed pending trust-ops review.' },
+      response: { 201: aboutPostResult, 202: t.Object({ operationId: uuid }, { additionalProperties: false }),
+        429: problemResult(429), ...writeProblems, ...workReadProblems },
+    }, async ({ request, params, body }) => {
+      try {
+        await verifyMemberReplyDraftPrincipal(work.account, request);
+        const principal = await work.account.verify(request, ['comment:create', 'work:edit', 'realm:adopt']);
+        const idempotencyKey = key(request);
+        if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        // The global hook debits the command's first unit. Internal owner calls
+        // bypass HTTP hooks, so debit the other two in that exact principal bucket.
+        if (work.rateLimit) {
+          const limit = work.rateLimit;
+          const principalClass = await limit.store.classify(principal);
+          for (let unit = 0; unit < 2; unit++) {
+            const decision = await limit.store.consume(JSON.stringify([principal.issuer, principal.subject]),
+              'write', limit.budgets[principalClass].write);
+            if (!decision.allowed) return problem(429, 'rate_limited', 'Request budget exhausted',
+              { 'retry-after': String(decision.retryAfter) });
+          }
+        }
+        const result = await new RealmAboutPostCommand(work).post(request, principal,
+          `https://rezics.com/id/${params.realm}`, body, idempotencyKey);
+        return Response.json(result.body, { ...noStore, status: result.status });
+      } catch (error) { return replyError(error); }
+    })
     .post('/v1/realm-replies', { body: replyBody,
       response: { 200: replyResult, 201: replyResult, ...writeProblems, ...workReadProblems } },
     async ({ request, body }) => {
