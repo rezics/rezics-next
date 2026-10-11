@@ -117,36 +117,43 @@ function jsonPointerValue(value: unknown, pointer: string): unknown {
   return current;
 }
 
+export function verifyCoverSourceCapture(
+  root: string,
+  captures: readonly Capture[],
+  image: DatasetImage,
+): void {
+  const evidence = image.sourceEvidence;
+  if (!evidence) return;
+  const capture = captures.find(
+    (candidate) =>
+      candidate.url === evidence.captureUrl && candidate.digest === evidence.recordDigest,
+  );
+  if (!capture)
+    throw new Error(`Cover source capture is absent from the snapshot: ${evidence.captureUrl}`);
+  const bytes = verifiedBlob(root, capture.digest);
+  if (bytes.length !== capture.bytes)
+    throw new Error(`Cover source capture length differs: ${evidence.captureUrl}`);
+  let row: unknown;
+  try {
+    row = JSON.parse(bytes.toString('utf8')) as unknown;
+  } catch {
+    throw new Error(`Cover source capture is not JSON: ${evidence.captureUrl}`);
+  }
+  if (jsonPointerValue(row, evidence.field) !== image.url)
+    throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
+  if (evidence.holder && jsonPointerValue(row, evidence.holder.field) !== evidence.holder.name)
+    throw new Error(
+      `Cover holder locator does not identify its holder: ${evidence.holder.field}`,
+    );
+}
+
 function checkCoverEvidenceCaptures(
   root: string,
   sources: readonly DatasetSource[],
   captures: readonly Capture[],
 ): void {
-  const captured = new Map(
-    captures.map((capture) => [canonical([capture.url, capture.digest]), capture]),
-  );
-  for (const image of sources.flatMap((source) => source.images)) {
-    const evidence = image.sourceEvidence;
-    if (!evidence) continue;
-    const capture = captured.get(canonical([evidence.captureUrl, evidence.recordDigest]));
-    if (!capture)
-      throw new Error(`Cover source capture is absent from the snapshot: ${evidence.captureUrl}`);
-    const bytes = verifiedBlob(root, capture.digest);
-    if (bytes.length !== capture.bytes)
-      throw new Error(`Cover source capture length differs: ${evidence.captureUrl}`);
-    let row: unknown;
-    try {
-      row = JSON.parse(bytes.toString('utf8')) as unknown;
-    } catch {
-      throw new Error(`Cover source capture is not JSON: ${evidence.captureUrl}`);
-    }
-    if (jsonPointerValue(row, evidence.field) !== image.url)
-      throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
-    if (evidence.holder && jsonPointerValue(row, evidence.holder.field) !== evidence.holder.name)
-      throw new Error(
-        `Cover holder locator does not identify its holder: ${evidence.holder.field}`,
-      );
-  }
+  for (const image of sources.flatMap((source) => source.images))
+    verifyCoverSourceCapture(root, captures, image);
 }
 
 function checkStoredImages(images: readonly StoredImage[]): void {

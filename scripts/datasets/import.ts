@@ -10,6 +10,7 @@ import { replayCommand } from '../lib/command-journal.ts';
 import { atomicJson, canonical, sha256, verifiedBlob } from './store.ts';
 import { checkedComponentState } from '../../services/main/src/modules/semantic/change.ts';
 import { acquireDatasetImportLock } from './lock.ts';
+import { verifyCoverSourceCapture } from './snapshot.ts';
 import type { DatasetEdge, DatasetRecord, DatasetSnapshot } from './types.ts';
 
 const SCHEMA = 'https://schema.org/';
@@ -1145,11 +1146,18 @@ export async function importDataset(
           || !/^https:\/\//.test(source.sourceUrl)
           || (source.revision !== null && typeof source.revision !== 'string')
           || typeof source.captureUrl !== 'string' || typeof image.url !== 'string'
-          || source.captureUrl !== image.url || capture.url !== source.captureUrl
+          || !/^https:\/\//.test(source.captureUrl) || !/^https:\/\//.test(image.url)
+          || capture.url !== image.url
           || typeof capture.mediaType !== 'string' || !capture.mediaType.startsWith('image/')
           || !Number.isSafeInteger(capture.bytes) || capture.bytes < 1
           || capture.bytes > MAX_COVER_BYTES) {
           pending(capture.bytes > MAX_COVER_BYTES ? 'capture exceeds the Work cover limit' : 'cover descriptor is invalid');
+          continue;
+        }
+        try {
+          verifyCoverSourceCapture(root, snapshot.captures, image);
+        } catch {
+          pending('source record capture is unavailable or corrupt');
           continue;
         }
         let frozenBytes: Buffer;
@@ -1188,7 +1196,7 @@ export async function importDataset(
             href: source.sourceUrl,
           },
           image: {
-            captureUrl: source.captureUrl,
+            captureUrl: capture.url,
             captureDigest: capture.digest,
             byteLength: capture.bytes,
             mediaType: capture.mediaType,
@@ -1255,7 +1263,7 @@ export async function importDataset(
               href: source.sourceUrl,
             },
             image: {
-              captureUrl: source.captureUrl,
+              captureUrl: capture.url,
               captureDigest: capture.digest,
               byteLength: capture.bytes,
               mediaType: capture.mediaType,

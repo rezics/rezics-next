@@ -35,6 +35,7 @@ export interface DatasetCoverEvidence {
   namespace: string;
   externalId: string;
   revision: string | null;
+  /** HTTPS URL of the captured source record JSON paired with recordDigest. */
   captureUrl: string;
   recordDigest: string;
   /** RFC 6901 JSON Pointer into the captured record. */
@@ -62,6 +63,7 @@ export interface DatasetSource {
 export interface StoredImage extends DatasetImage {
   /** Normalized role for capture admission; `all` never promotes an image. */
   captureRole?: 'cover' | 'other';
+  /** Frozen provider image response; its URL is the image URL, not evidence.captureUrl. */
   capture: Capture | null;
   missing: boolean;
   unavailable?: { status: number };

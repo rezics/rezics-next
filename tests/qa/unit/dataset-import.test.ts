@@ -219,14 +219,21 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
 
 function coverSnapshot(directory: string, sourceRecord: DatasetRecord, source?: Partial<DatasetCoverEvidence>) {
   const bytes = Buffer.from('pinned dataset cover bytes\u0000with exact digest');
-  const captureUrl = 'https://images.example.test/covers/pinned.png';
+  const imageUrl = 'https://images.example.test/covers/pinned.png';
+  const sourceProvider = source?.provider ?? sourceRecord.provider;
+  const sourceNamespace = source?.namespace ?? 'subject';
+  const sourceExternalId = source?.externalId ?? `canonical-${sourceRecord.externalId}`;
+  const sourceCaptureUrl = source?.captureUrl
+    ?? `https://records.example.test/${sourceProvider}/${sourceNamespace}/${encodeURIComponent(sourceExternalId)}`;
+  const recordBytes = Buffer.from(JSON.stringify({ id: sourceExternalId, images: { common: imageUrl } }));
+  const recordDigest = putBlob(directory, recordBytes);
   const evidence: DatasetCoverEvidence = {
     provider: sourceRecord.provider,
     namespace: 'subject',
     externalId: `canonical-${sourceRecord.externalId}`,
     revision: null,
-    captureUrl,
-    recordDigest: sha256(`captured-record:${sourceRecord.key}`),
+    captureUrl: sourceCaptureUrl,
+    recordDigest,
     field: '/images/common',
     sourceName: 'Reviewed source',
     sourceUrl: `https://catalogue.example.test/record/${sourceRecord.externalId}`,
@@ -236,14 +243,17 @@ function coverSnapshot(directory: string, sourceRecord: DatasetRecord, source?: 
   const image: StoredImage = {
     record: sourceRecord.key,
     role: 'cover',
-    url: captureUrl,
+    url: imageUrl,
     sourceEvidence: evidence,
     captureRole: 'cover',
-    capture: { url: captureUrl, digest: putBlob(directory, bytes), bytes: bytes.length,
+    capture: { url: imageUrl, digest: putBlob(directory, bytes), bytes: bytes.length,
       mediaType: 'image/png', fetchedAt: '2026-10-02T00:00:00Z', etag: null, lastModified: null },
     missing: false,
   };
   const value = snapshot([sourceRecord]);
+  value.captures = [{ url: evidence.captureUrl, digest: evidence.recordDigest,
+    bytes: recordBytes.length, mediaType: 'application/json', fetchedAt: '2026-10-02T00:00:00Z',
+    etag: null, lastModified: null }];
   value.images = [image];
   value.sources[0]!.images = [image];
   return { snapshot: value, bytes, image, evidence };
@@ -871,7 +881,7 @@ describe('independent public-API dataset import', () => {
       targetWork: string;
       source: { record: string; observation: string; observationDigest: string;
         datasetSnapshotDigest: string; recordDigest: string; externalId: string; sourceRevision: string | null };
-      image: { captureDigest: string; byteLength: number; mediaType: string };
+      image: { captureUrl: string; captureDigest: string; byteLength: number; mediaType: string };
       originalDigest: string;
     };
     expect(importedCover.targetWork).toBe(fixture.nativeWorks[0]);
@@ -880,6 +890,8 @@ describe('independent public-API dataset import', () => {
     expect(importedCover.source.datasetSnapshotDigest).toBe(cover.snapshot.digest);
     expect(importedCover.source.recordDigest).toBe(cover.evidence.recordDigest);
     expect(importedCover.image.captureDigest).toBe(cover.image.capture!.digest);
+    expect(importedCover.image.captureUrl).toBe(cover.image.url);
+    expect(cover.evidence.captureUrl).not.toBe(cover.image.url);
     expect(importedCover.originalDigest).toBe(cover.image.capture!.digest);
     expect(importedCover.source.observationDigest).not.toBe(importedCover.image.captureDigest);
     expect(importedCover.source.record).toMatch(/^https:\/\/rezics\.com\/id\//);
@@ -892,11 +904,15 @@ describe('independent public-API dataset import', () => {
       coverage: { scope: string; complete: boolean }; rawBytesBase64: string;
     };
     const envelopeBytes = Buffer.from(evidenceBody.rawBytesBase64, 'base64');
-    const envelope = JSON.parse(envelopeBytes.toString()) as { profile: string; image: { captureDigest: string } };
+    const envelope = JSON.parse(envelopeBytes.toString()) as {
+      profile: string; image: { captureUrl: string; captureDigest: string };
+    };
     expect(evidenceBody).toMatchObject({ namespace: 'subject', externalId: '715', sourceRevision: null,
       coverage: { scope: 'cover-evidence', complete: false } });
     expect(envelope.profile).toBe('source-cover-evidence-v1');
     expect(envelope.image.captureDigest).toBe(cover.image.capture!.digest);
+    expect(envelope.image.captureUrl).toBe(cover.image.url);
+    expect(cover.evidence.captureUrl).not.toBe(envelope.image.captureUrl);
     expect(sha256(envelopeBytes)).toBe(importedCover.source.observationDigest);
 
     const recordParts = fixture.requests.filter(call => call.path === '/v1/sources/intakes'
@@ -922,6 +938,35 @@ describe('independent public-API dataset import', () => {
     expect(journalEntries).not.toContain(cover.bytes.toString('base64'));
     expect(journalEntries).toContain(cover.image.capture!.digest);
     expect(journalEntries).toContain(`raw/blobs/${cover.image.capture!.digest}`);
+  });
+
+  test('cover import rejects mismatched capture digests or unrelated capture URLs', async () => {
+    for (const defect of [
+      'source record digest',
+      'image digest',
+      'source capture URL',
+      'image capture URL',
+    ] as const) {
+      const fixture = apiFixture();
+      const directory = root();
+      const work = record(`invalid-cover-${defect.replaceAll(' ', '-')}`, 'work');
+      const cover = coverSnapshot(directory, work);
+      if (defect === 'source record digest')
+        cover.evidence.recordDigest = 'f'.repeat(64);
+      else if (defect === 'image digest')
+        cover.image.capture!.digest = 'f'.repeat(64);
+      else if (defect === 'source capture URL')
+        cover.evidence.captureUrl = 'https://records.example.test/unrelated.json';
+      else
+        cover.image.capture!.url = 'https://images.example.test/covers/unrelated.png';
+
+      const result = await importDataset(directory, cover.snapshot, options(fixture.api));
+
+      expect(result.limitations.some(value => value.includes('cover pending'))).toBe(true);
+      expect(fixture.requests.some(call => call.path === '/v1/media/uploads')).toBe(false);
+      expect(fixture.transfers).toHaveLength(0);
+      expect(fixture.requests.some(call => call.path.endsWith('/avatar'))).toBe(false);
+    }
   });
 
   test('cover pending denied restricted and unavailable outcomes preserve imported facts', async () => {

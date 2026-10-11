@@ -135,6 +135,12 @@ test('dataset: cover evidence and bytes change snapshot identity', async () => {
     const snapshot = await freezeSnapshot(acquisition, [initial], 'covers');
     expect(snapshot.images).toHaveLength(1);
     expect(snapshot.images[0]).toMatchObject({ role: 'cover', captureRole: 'cover' });
+    expect(snapshot.sources[0]?.images[0]?.sourceEvidence?.captureUrl).toBe(coverRecordUrl);
+    expect(snapshot.images[0]?.url).toBe(coverUrl);
+    expect(snapshot.images[0]?.capture?.url).toBe(coverUrl);
+    expect(snapshot.sources[0]?.images[0]?.sourceEvidence?.captureUrl).not.toBe(
+      snapshot.images[0]?.capture?.url,
+    );
     expect(verifySnapshot(root, snapshot).images).toBe(1);
 
     const changedEvidence = structuredClone(initial);
@@ -145,6 +151,25 @@ test('dataset: cover evidence and bytes change snapshot identity', async () => {
     const staleLocator = structuredClone(initial);
     staleLocator.images[0]!.sourceEvidence!.field = '/images/medium';
     await expect(freezeSnapshot(acquisition, [staleLocator], 'covers')).rejects.toThrow(
+      'Cover field locator does not identify its image URL',
+    );
+
+    const mismatchedRecordDigest = structuredClone(initial);
+    mismatchedRecordDigest.images[0]!.sourceEvidence!.recordDigest = 'f'.repeat(64);
+    await expect(freezeSnapshot(acquisition, [mismatchedRecordDigest], 'covers')).rejects.toThrow(
+      'Cover source capture is absent from the snapshot',
+    );
+
+    const unrelatedCaptureUrl = structuredClone(initial);
+    unrelatedCaptureUrl.images[0]!.sourceEvidence!.captureUrl =
+      'https://records.example.test/unrelated.json';
+    await expect(freezeSnapshot(acquisition, [unrelatedCaptureUrl], 'covers')).rejects.toThrow(
+      'Cover source capture is absent from the snapshot',
+    );
+
+    const unrelatedImageUrl = structuredClone(initial);
+    unrelatedImageUrl.images[0]!.url = 'https://images.example.test/unrelated.png';
+    await expect(freezeSnapshot(acquisition, [unrelatedImageUrl], 'covers')).rejects.toThrow(
       'Cover field locator does not identify its image URL',
     );
 
