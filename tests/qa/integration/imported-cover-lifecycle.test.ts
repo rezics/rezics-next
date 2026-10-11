@@ -342,13 +342,12 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const publicReceipt = await json<NoticeReceipt>(await govern('POST', '/v1/public-reports', reportInput,
         undefined, reportKey), 201);
       expect(publicReceipt.replayed).toBe(false);
-      const anonymousRead = await govern('GET', `/v1/reports/${publicReceipt.reportId}`,
+      const anonymousRead = await govern('GET', `/v1/public-reports/${publicReceipt.caseId}`,
         undefined, undefined, randomUUID(), publicReceipt.credential);
-      const anonymousReport = await anonymousRead.json() as { evidence: Array<Record<string, unknown>> };
+      const anonymousReport = await anonymousRead.json() as { category: string };
       expect(anonymousRead.status).toBe(200);
-      expect(anonymousReport.evidence).toEqual([expect.objectContaining({ owner: 'media', resource: work,
-        component: 'media_use', revision: importedUse.revision })]);
-      expect(anonymousReport.evidence[0]).not.toHaveProperty('locator');
+      expect(anonymousReport.category).toBe('copyright');
+      expect(JSON.stringify(anonymousReport)).not.toContain(importedUse.use);
       const staffRead = await govern('GET', `/v1/reports/${publicReceipt.reportId}?actingSubject=${encodeURIComponent(moderator.actor)}`,
         undefined, moderator.token);
       const staffReport = await staffRead.json() as { evidence: Array<Record<string, unknown>> };
