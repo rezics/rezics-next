@@ -41,13 +41,17 @@
  * position seeks per admitted Book. History depth and completed chapter
  * prefixes do not add round trips; object-tree seeks depend on tree height.
  *
- * Trending: hydrate <=20 admitted Works, <=100 placements, <=5 follow match
- * batches, <=3 muted-tag predicates per Work/Realm. The ranking reader seeks
- * further candidate batches after rejected admissions: total visits depend on
- * that rejected prefix and still need qualification. Follow/membership
- * inventory size must not add a round trip. Native graph visits, PostgreSQL
- * rows/buffers and backup/restore costs remain separate qualification gaps:
- * HTTP duration and an ARQ algebra plan cannot establish their physical bound.
+ * Trending: page P=5; each ranked seek examines <=min(5, free slots),
+ * plus one unhydrated lookahead. Rejected admissions, missing placements,
+ * hides, mutes and Realm diversity all advance the same cursor. The hard cap
+ * is P*16=80 examined entries, never an unbounded refill. Each chunk hydrates
+ * <=5 Works, reads <=100 placements, <=5 follow-match batches and <=3 muted
+ * tag predicates per placement. See TRENDING_WORK_COST for the fixed cost per
+ * rejected chunk; no rejected identities or counts are published. A sparse
+ * page at the cap answers hasMore and retains the cursor beyond the prefix.
+ * Follow/membership inventory size adds no round trip. Native graph visits,
+ * PostgreSQL rows/buffers and backup/restore remain qualification gaps: HTTP
+ * timing and an ARQ plan cannot establish their physical bound.
  *
  * Preferences, Saved Filter tabs, suggested follows and moderation each have
  * an independent owner; their costs must be composed before qualifying page
@@ -58,4 +62,27 @@ export const HOME_REQUEST_COST = {
   signedFeed: { fusekiRequests: 8, postgresStatements: 30 },
   continue: { fusekiRequests: 30, postgresStatements: 110 },
   suggestions: { fusekiRequests: 25, postgresStatements: 60 },
+} as const;
+
+// Sixteen page-sized opportunities allow useful refill without letting a
+// viewer's rejected population turn one Home request into a catalogue scan.
+const TRENDING_PAGE_SIZE = 5;
+const TRENDING_EXAMINED_PER_ITEM = 16;
+/** Linear in examined chunks, capped independently of rejected population.
+ * Global Work-hide bounds compose as base + perRejectedChunk * chunks,
+ * including the first chunk. Two summary queries send about 24 KiB;
+ * admission, serial, types and placements bring a five-Work chunk below 40 KiB.
+ * WorkProfile currently lacks a Works/rejected-chunk workload dimension;
+ * growth QA applies the existing verdict to these composed absolute bounds. */
+export const TRENDING_WORK_COST = {
+  workload: 'global-work-hide',
+  growthClass: 'linear',
+  pageSize: TRENDING_PAGE_SIZE,
+  chunkSize: TRENDING_PAGE_SIZE,
+  examinedPerItem: TRENDING_EXAMINED_PER_ITEM,
+  examinedLimit: TRENDING_PAGE_SIZE * TRENDING_EXAMINED_PER_ITEM,
+  base: { mainCalls: 1, fusekiRequests: 12, postgresStatements: 40,
+    fusekiSentBytes: 32_768, fusekiReceivedBytes: 65_536 },
+  perRejectedChunk: { mainCalls: 0, fusekiRequests: 12, postgresStatements: 40,
+    fusekiSentBytes: 40 * 1024, fusekiReceivedBytes: 65_536 },
 } as const;

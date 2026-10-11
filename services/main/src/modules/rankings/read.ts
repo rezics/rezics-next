@@ -18,7 +18,7 @@ import {
   type ReadRankingProjection,
 } from './projection.ts';
 
-export async function readRankings(
+export async function readRankingPage(
   session: WorkReadSession,
   projection: ReadRankingProjection,
   options: {
@@ -59,6 +59,9 @@ export async function readRankings(
         limit + 1,
         options.realm,
       );
+  // The extra row proves continuation only; never resolve its disclosure or
+  // hydrate it. A rejected row still advances the owner's ordered seek.
+  const examined = candidates.slice(0, limit);
   const admitted = await (async (candidates: Candidate[]) => {
       const ids = candidates.map((row) => row.work);
       const visible = ids.length
@@ -109,10 +112,9 @@ export async function readRankings(
       visible.forEach((row, index) => {
         if (decisions[index] === 'visible') heads.set(row.work!.value, row);
       });
-      if (candidates.some(row => !heads.has(row.work))) throw new WorkReadMoved('Ranking admission changed');
-      return candidates;
-    })(candidates);
-  const selected = { page: admitted.slice(0,limit), lookahead: admitted[limit], last: admitted.slice(0,limit).at(-1) };
+      return candidates.filter(row => heads.has(row.work));
+    })(examined);
+  const selected = { page: admitted, lookahead: candidates[limit], last: examined.at(-1) };
   const page = selected.page, last = selected.last;
   const summaries = await session.summaries(page.map((row) => row.work));
   const serial = await readSerialSummaries(
@@ -155,7 +157,7 @@ export async function readRankings(
       again?.status !== 'available' ||
       again.disclosure !== 'public'
     ) {
-      throw new WorkReadMoved('Ranking Work admission changed');
+      return []; // Disclosure rejection is indistinguishable from an absent row.
     }
     const facts = serial.get(row.work);
     if (!facts || !head) throw new WorkReadUnavailable('Ranking Work summary is incomplete');
@@ -181,6 +183,7 @@ export async function readRankings(
   if (
     end.generation !== checkpoint.generation ||
     end.contentSequence !== checkpoint.contentSequence ||
+    end.contentEpoch !== checkpoint.contentEpoch ||
     end.reviewPosition !== checkpoint.reviewPosition ||
     rankingBuckets(new Date(), options.interval).current !== bucket
   ) {
@@ -195,6 +198,7 @@ export async function readRankings(
     sourcePosition: session.position,
     contentPosition: { dataEpoch: checkpoint.contentEpoch, sequence: checkpoint.contentSequence },
     items,
+    examined: examined.length,
     count: { value: items.length, kind: 'exact-page' as const, total: null },
     nextCursor:
       selected.lookahead && last
@@ -206,4 +210,10 @@ export async function readRankings(
           )
         : null,
   };
+}
+
+/** Public Rankings publishes admitted rows only, never rejected-population counts. */
+export async function readRankings(...args: Parameters<typeof readRankingPage>) {
+  const { examined: _examined, ...result } = await readRankingPage(...args);
+  return result;
 }
