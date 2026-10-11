@@ -121,5 +121,17 @@ test('GOV01/GOV02/GOV24: public notices bind served Work cover Uses and keep the
       const absentPrivateUse = await unavailable(unrelatedWork.work, privateAsset.revision, randomUUID());
       expect(hidden.status).toBe(404);
       expect(hidden).toEqual(absentPrivateUse);
+
+      const privateWork = await stack.privateWork(reporter.actor, `Private cover ${randomUUID()}`);
+      const privateWorkAsset = await reporter.upload(png(256, 256), 'public');
+      await reporter.grant(`work:read:${privateWork.work}`, 'work.read');
+      const privateWorkCover = await selectCover(stack, reporter, privateWork.work, privateWorkAsset.asset, null);
+      const hiddenPrivateWorkUse = await unavailable(privateWork.work, privateWorkAsset.revision,
+        privateWorkCover.use);
+      const absentPrivateWorkUse = await unavailable(privateWork.work, privateWorkAsset.revision, randomUUID());
+      expect(hiddenPrivateWorkUse.status).toBe(404);
+      expect(Object.keys(hiddenPrivateWorkUse.body).sort())
+        .toEqual(Object.keys(absentPrivateWorkUse.body).sort());
+      expect(hiddenPrivateWorkUse).toEqual(absentPrivateWorkUse);
     } finally { await stack.stop(); }
   }, 240_000);
