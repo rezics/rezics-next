@@ -22,7 +22,7 @@ import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-
 import { issueTitleAdmission } from './title-admission.ts';
 import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed,
+import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed, baselineWorkPreviewAllowed,
   newBaselineProof, saveBaselineProof, savedBaselineProof, type ReplyRootDecision } from './baseline.ts';
 import { resolveZonePageContent, savedZonePageContent, zonePageAdministratorAllowed,
   zoneEditScope, ZONE_PAGE_CONTENT_PROOF } from './zone-content-authority.ts';
@@ -369,8 +369,9 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
       AND active FOR SHARE`, [principal.issuer, principal.subject]);
   const principalId = identity.rows[0]?.id;
   if (!principalId) return false;
+  const hasPolicy = !!(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount;
   if (platformAdministratorAction(action, scope)
-    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+    && !hasPolicy
     && await platformAdministratorProof(client, principalId, actingSubject)
     && await platformAdministratorTargetAllowed(client, graph, principalId, actingSubject, action, scope)) {
     return true;
@@ -378,13 +379,18 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
   const readKind = action === 'work.read' ? 'work' : action === 'semantic.read' ? 'collection'
     : action === 'contribution.read' ? 'contribution' : null;
   const targetId = scope.slice(scope.indexOf(':', scope.indexOf(':') + 1) + 1);
+  if (action === 'work.read' && principal.emailVerified === true
+    && !hasPolicy
+    && await baselineWorkPreviewAllowed(client, graph, principalId, actingSubject, targetId)) {
+    return true;
+  }
   if (action === 'semantic.read'
-    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+    && !hasPolicy
     && await zoneSpaceCreatorAllowed(client, graph, principalId, actingSubject, targetId)) {
     return true;
   }
   if (readKind && principal.emailVerified === true
-    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+    && !hasPolicy
     && await baselineMemberProof(client, principalId, actingSubject)
     && await baselineTargetAllowed(client, graph, principalId, actingSubject,
       { kind: readKind, id: targetId }, false)) {
@@ -401,7 +407,13 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
     `SELECT id FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
       AND action = $3 AND active AND valid_until > clock_timestamp()
       ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
-  return subject.rowCount === 1 && represented.rowCount === 1 && granted.rowCount === 1;
+  if (subject.rowCount !== 1 || represented.rowCount !== 1 || granted.rowCount !== 1) return false;
+  if (!hasPolicy) return true;
+  const witness = await captureAuthorityWitness(client, [
+    { table: 'representation', id: represented.rows[0]!.id },
+    { table: 'permission_grant', id: granted.rows[0]!.id },
+  ]);
+  return admissionPolicyAllowed(client, principalId, actingSubject, scope, action, { witness, eligible: true });
 }
 
 /** Operator-only fence. The update waits for in-flight ordinary Access transactions. */

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
@@ -27,11 +28,16 @@ test('WORK10/RECIPE07: publication settlement, withdrawal replay and restore hol
       'POST', '/v1/works', await fixture.authoredBody({ profile: 'metadata-only-v1', language: 'en',
         title: 'Structured publication recovery', semanticTypes: ['https://schema.org/Recipe'],
         actingSubject: fixture.actor })), 201);
-    await fixture.grant(`work:edit:${work.work}`, 'work.edit');
-    await fixture.grant(`work:edit:${work.work}`, 'recipe.edit');
-    await fixture.grant(`work:read:${work.work}`, 'work.read');
-    await fixture.grant(`work:publish:${work.work}`, 'work.publish');
-    await fixture.grant(`work:publish:${work.work}`, 'work.withdraw-publication');
+    for (const [scope, action] of [
+      [`work:edit:${work.work}`, 'work.edit'], [`work:edit:${work.work}`, 'recipe.edit'],
+      [`work:read:${work.work}`, 'work.read'], [`work:publish:${work.work}`, 'work.publish'],
+      [`work:publish:${work.work}`, 'work.withdraw-publication'],
+    ]) {
+      await grantFixtureAuthority(fixture.accessPool, { scope: scope!, requireDispatch: true,
+        representations: [{ principalId: fixture.principalId, actor: fixture.actor,
+          action: action!, lifetime: '8 hours' }],
+        grant: { actor: fixture.actor, action: action!, lifetime: '8 hours' } });
+    }
     const structure = await fixture.json<{ structure: string; revision: string }>(await fixture.call(
       'POST', '/v1/compositions', { profile: 'recipe-composition', work: work.work,
         mainVersion: work.mainVersion, actingSubject: fixture.actor }, `recovery-structure-${randomUUID()}`), 201);

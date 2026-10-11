@@ -5,11 +5,22 @@ import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credi
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { iri } from '../../../services/main/src/modules/work/activate.ts';
-import { publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
+import { admittedPublicWorks, publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { configureDisclosure, DISCLOSURE_COST, DisclosureStore, type DisclosureTarget }
+  from '../../../services/main/src/modules/disclosure/read.ts';
 
 type PublicationFixture = Awaited<ReturnType<typeof authorCreditFixture>>;
 
 interface PublicationRestriction { caseId: string; decisionId: string; enforcementId: string }
+
+async function grantPublicationAuthority(fixture: PublicationFixture, scope: string, action: string): Promise<void> {
+  await grantFixtureAuthority(fixture.accessPool, {
+    scope, requireDispatch: true,
+    representations: [{ principalId: fixture.principalId, actor: fixture.actor, action, lifetime: '8 hours' }],
+    grant: { actor: fixture.actor, action, lifetime: '8 hours' },
+  });
+}
 
 async function restrictPublicationTarget(fixture: PublicationFixture, target: string): Promise<PublicationRestriction> {
   const caseId = randomUUID(), decisionId = randomUUID(), enforcementId = randomUUID();
@@ -88,9 +99,130 @@ async function expectStructuredWorkAbsent(fixture: PublicationFixture, work: str
   for (const [path, missingPath] of paths) {
     const hidden = await fixture.call('GET', path, undefined, randomUUID(), null);
     const missing = await fixture.call('GET', missingPath, undefined, randomUUID(), null);
-    expect([hidden.status, await hidden.text()]).toEqual([missing.status, await missing.text()]);
+    const hiddenBody = await hidden.text(), missingBody = await missing.text();
+    expect(hidden.status).toBe(missing.status);
+    expect(hiddenBody).toBe(missingBody);
+    expect(Object.keys(JSON.parse(hiddenBody)).sort()).toEqual(Object.keys(JSON.parse(missingBody)).sort());
   }
 }
+
+async function parentPublicationFixture() {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const fixture = await authorCreditFixture(Bun.env as Record<string, string>,
+    resolve('.temp', `structured-work-publication-parent-${randomUUID()}`));
+  try {
+    const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/structure/' });
+    await objects.initialize();
+    (fixture.env as typeof fixture.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
+    const createWork = async (title: string) => fixture.json<{ work: string; mainVersion: string }>(
+      await fixture.call('POST', '/v1/works', await fixture.authoredBody({ profile: 'metadata-only-v1',
+        language: 'en', title, semanticTypes: ['https://schema.org/Recipe'], actingSubject: fixture.actor })), 201);
+    const work = await createWork('Published child with a private container');
+    const parent = await createWork('Private immediate container');
+    await grantPublicationAuthority(fixture, `work:edit:${work.work}`, 'work.edit');
+    await grantPublicationAuthority(fixture, `work:edit:${work.work}`, 'recipe.edit');
+    await grantPublicationAuthority(fixture, `work:read:${work.work}`, 'work.read');
+    await grantPublicationAuthority(fixture, `work:publish:${work.work}`, 'work.publish');
+    const created = await fixture.json<{ structure: string; revision: string }>(await fixture.call(
+      'POST', '/v1/compositions', { profile: 'recipe-composition', work: work.work,
+        mainVersion: work.mainVersion, actingSubject: fixture.actor }, `recipe-${randomUUID()}`), 201);
+    const current = await fixture.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?workHead WHERE { GRAPH <urn:rezics:graph:current> { ${iri(work.work)} rv:head ?workHead } } LIMIT 2`);
+    expect(current.results?.bindings ?? []).toHaveLength(1);
+    await fixture.json(await fixture.call('POST', '/v1/work-publications', {
+      profile: 'work-structure-publication-v1', operation: 'publish', work: work.work,
+      actingSubject: fixture.actor, expectedWorkHead: current.results!.bindings[0]!.workHead!.value,
+      expectedMainVersion: work.mainVersion, structure: created.structure,
+      expectedStructureHead: created.revision, expectedPublicationHead: null,
+      disclosure: 'public', rightsBasis: 'original-contribution',
+    }, `publication-${randomUUID()}`), 201);
+    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
+      INSERT DATA { GRAPH <urn:rezics:graph:current> { ${iri(work.work)} schema:isPartOf ${iri(parent.work)} } }`);
+    return { fixture, work: work.work, parent: parent.work, ...created };
+  } catch (error) {
+    await fixture.close();
+    throw error;
+  }
+}
+
+test('parent admission is bounded: ONLY the immediate parent (no ancestor walk), at most one extra target per candidate inside the existing batch bounds and cost unit; reported cost stays request-shaped', async () => {
+  const { fixture, work, parent } = await parentPublicationFixture();
+  try {
+    const ancestor = nativeId();
+    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
+      INSERT DATA { GRAPH <urn:rezics:graph:current> { ${iri(parent)} schema:isPartOf ${iri(ancestor)} } }`);
+    const ancestorRestriction = await restrictPublicationTarget(fixture, ancestor);
+    const reader = new DisclosureStore(fixture.accessPool);
+    configureDisclosure(fixture.env, reader);
+    const batches: Array<readonly DisclosureTarget[]> = [];
+    configureDisclosure(fixture.env, { read: async (targets, viewer, channel, client) => {
+      batches.push(targets);
+      return reader.read(targets, viewer, channel, client);
+    } });
+    const query = fixture.nativeFuseki.query.bind(fixture.nativeFuseki);
+    const parentQueries: Array<{ text: string; maxBytes: number | undefined }> = [];
+    fixture.nativeFuseki.query = async (text, maxBytes) => {
+      if (text.includes('SELECT ?work ?parent')) parentQueries.push({ text, maxBytes });
+      return query(text, maxBytes);
+    };
+    expect(await admittedPublicWorks(fixture.env, [work, work])).toEqual(new Set([work]));
+    expect(batches).toHaveLength(1);
+    expect(batches[0]!).toHaveLength(3);
+    expect(batches.every(batch => batch.length <= DISCLOSURE_COST.batch)).toBe(true);
+    expect(batches[0]!.filter(target => target.component === 'publication'))
+      .toEqual([{ owner: 'graph', resource: parent, component: 'publication', work: parent,
+        workRevision: expect.any(String) }]);
+    expect(batches[0]!.some(target => target.resource === ancestor)).toBe(false);
+    expect(parentQueries).toHaveLength(1);
+    expect(parentQueries[0]!.maxBytes).toBe(32 * 1024);
+    expect(parentQueries[0]!.text).toContain(`VALUES ?work { ${iri(work)} }`);
+    expect(parentQueries[0]!.text).toContain('LIMIT 2');
+    expect(parentQueries[0]!.text).not.toContain('schema:isPartOf+');
+    expect(parentQueries[0]!.text).not.toContain('schema:isPartOf*');
+    const summaries = async () => fixture.json<{ cost: unknown }>(await fixture.call('POST',
+      '/v1/resources/summaries', { profile: 'resource-summary-batch-v1', resources: [work, work] },
+      randomUUID(), null), 200);
+    const withAncestor = await summaries();
+    expect(withAncestor.cost).toEqual({ graphQueries: 5, mediaQueries: 0, accessChecks: 0, accessQueries: 0 });
+    await removePublicationRestriction(fixture, ancestorRestriction);
+    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
+      DELETE DATA { GRAPH <urn:rezics:graph:current> { ${iri(parent)} schema:isPartOf ${iri(ancestor)} } }`);
+    expect((await summaries()).cost).toEqual(withAncestor.cost);
+  } finally { await fixture.close(); }
+}, 180_000);
+
+test('hidden == absent: a candidate whose parent is restricted answers EXACTLY like a candidate that does not exist (same status, body, keys)', async () => {
+  const { fixture, work, parent, structure, revision } = await parentPublicationFixture();
+  try {
+    await restrictPublicationTarget(fixture, parent);
+    await expectStructuredWorkAbsent(fixture, work, structure, revision);
+    expect(await admittedPublicWorks(fixture.env, [work])).toEqual(new Set());
+  } finally { await fixture.close(); }
+}, 180_000);
+
+test('restoration of the parent restriction restores the candidate (symmetric case); a parent that is merely PRIVATE (not restricted) behaves as today for the candidate\'s own audience', async () => {
+  const { fixture, work, parent, structure, revision } = await parentPublicationFixture();
+  try {
+    expect((await fixture.call('GET', `/v1/works/${shortId(parent)}`, undefined, randomUUID(), null)).status).toBe(404);
+    const recipePath = `/v1/recipes/works/${shortId(work)}`;
+    const before = await fixture.call('GET', recipePath, undefined, randomUUID(), null);
+    expect(before.status).toBe(200);
+    const beforeBody = await before.text();
+    expect(await admittedPublicWorks(fixture.env, [work])).toEqual(new Set([work]));
+    const restriction = await restrictPublicationTarget(fixture, parent);
+    await expectStructuredWorkAbsent(fixture, work, structure, revision);
+    expect(await admittedPublicWorks(fixture.env, [work])).toEqual(new Set());
+    await removePublicationRestriction(fixture, restriction);
+    const restored = await fixture.call('GET', recipePath, undefined, randomUUID(), null);
+    expect(restored.status).toBe(before.status);
+    expect(await restored.text()).toBe(beforeBody);
+    expect(await admittedPublicWorks(fixture.env, [work])).toEqual(new Set([work]));
+    expect((await fixture.call('GET', `/v1/works/${shortId(parent)}`, undefined, randomUUID(), null)).status).toBe(404);
+  } finally { await fixture.close(); }
+}, 180_000);
 
 test('RECIPE07 native admission publishes one exact Work candidate and withdrawal removes its name', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -107,11 +239,11 @@ test('RECIPE07 native admission publishes one exact Work candidate and withdrawa
       'POST', '/v1/works', await fixture.authoredBody({ profile: 'metadata-only-v1', language: 'en',
         title: 'Native structured publication', semanticTypes: ['https://schema.org/Recipe'],
         actingSubject: fixture.actor })), 201);
-    await fixture.grant(`work:edit:${work.work}`, 'work.edit');
-    await fixture.grant(`work:edit:${work.work}`, 'recipe.edit');
-    await fixture.grant(`work:read:${work.work}`, 'work.read');
-    await fixture.grant(`work:publish:${work.work}`, 'work.publish');
-    await fixture.grant(`work:publish:${work.work}`, 'work.withdraw-publication');
+    await grantPublicationAuthority(fixture, `work:edit:${work.work}`, 'work.edit');
+    await grantPublicationAuthority(fixture, `work:edit:${work.work}`, 'recipe.edit');
+    await grantPublicationAuthority(fixture, `work:read:${work.work}`, 'work.read');
+    await grantPublicationAuthority(fixture, `work:publish:${work.work}`, 'work.publish');
+    await grantPublicationAuthority(fixture, `work:publish:${work.work}`, 'work.withdraw-publication');
 
     const created = await fixture.json<{ structure: string; revision: string }>(await fixture.call(
       'POST', '/v1/compositions', { profile: 'recipe-composition', work: work.work,
@@ -207,15 +339,6 @@ test('RECIPE07 native admission publishes one exact Work candidate and withdrawa
     const workRestriction = await restrictPublicationTarget(fixture, work.work);
     await expectStructuredWorkAbsent(fixture, work.work, created.structure, draft.revision);
     await removePublicationRestriction(fixture, workRestriction);
-
-    const parent = nativeId();
-    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
-      INSERT DATA { GRAPH <urn:rezics:graph:current> { ${iri(work.work)} schema:isPartOf ${iri(parent)} } }`);
-    const parentRestriction = await restrictPublicationTarget(fixture, parent);
-    await expectStructuredWorkAbsent(fixture, work.work, created.structure, draft.revision);
-    await removePublicationRestriction(fixture, parentRestriction);
-    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
-      DELETE DATA { GRAPH <urn:rezics:graph:current> { ${iri(work.work)} schema:isPartOf ${iri(parent)} } }`);
 
     const oldPublishedRevision = await fixture.call('GET',
       `/v1/compositions/${shortId(created.structure)}/revisions/${shortId(created.revision)}`,

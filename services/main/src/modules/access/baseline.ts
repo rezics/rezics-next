@@ -63,6 +63,17 @@ function controllerProofFor(target: BaselineTarget, relatedWork?: string | null)
     ? maintainerControllerProof : baselineMemberProof;
 }
 
+/** Private preview uses the same current controller and sealed native creation
+ * proof as authoring. The caller retains identity, policy, gate and recovery
+ * fences; publication never supplies this authority. */
+export async function baselineWorkPreviewAllowed(client: PoolClient,
+  graph: Pick<FusekiClient, 'query'> | undefined, principalId: string,
+  actingSubject: string, work: string): Promise<boolean> {
+  const target: BaselineTarget = { kind: 'author-work', id: work };
+  return !!await controllerProofFor(target)(client, principalId, actingSubject)
+    && await baselineTargetAllowed(client, graph, principalId, actingSubject, target, false);
+}
+
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
 export function baselineTarget(action: string, scope: string): BaselineTarget | null {
