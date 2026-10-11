@@ -61,6 +61,165 @@ test('G265: controlled Persons author exact contribution comments and replay wit
   } finally { await h.close(); }
 }, 180_000);
 
+test('restricted Work reply roots require exact live read authority through draft and identity', async () => {
+  const h = await memberFixture();
+  try {
+    const reader = await h.agent('Restricted Work reader');
+    expect(reader).not.toBe(h.actor);
+    expect((await h.accessPool.query('SELECT agent_kind FROM access.agent_provision WHERE agent_id = $1', [reader]))
+      .rows[0]?.agent_kind).toBe('person');
+
+    const workResponse = await h.post('/v1/works', { ...h.workBody, authoring: 'own-work',
+      title: `Restricted reply root ${randomUUID()}` });
+    expect(workResponse.status, JSON.stringify(workResponse.body)).toBe(201);
+    const root = workResponse.body as { work: string; workRevision: string };
+    expect(root.workRevision).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+    const workPath = `/v1/works/${root.work.slice(-36)}`;
+    const get = async (path: string, bearer?: string) => {
+      const response = await h.app.handle(new Request(`http://main.local${path}`,
+        bearer ? { headers: { authorization: `Bearer ${bearer}` } } : {}));
+      return { status: response.status, body: await response.json() as Record<string, any> };
+    };
+
+    const principal = await h.principal();
+    const principalId = (await h.accessPool.query(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0].id as string;
+    const workReadScope = `work:read:${root.work}`;
+    await h.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [workReadScope]);
+    async function readerAuthority() {
+      const ids = { representation: randomUUID(), grant: randomUUID() };
+      await h.accessPool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,'work.read',now() + interval '1 hour')`, [ids.representation, principalId, reader]);
+      await h.accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,'work.read',now() + interval '1 hour')`,
+      [ids.grant, h.actor, reader, workReadScope]);
+      return ids;
+    }
+    async function revokeReaderAuthority(ids: { representation: string; grant: string }) {
+      await h.accessPool.query('UPDATE access.representation SET active = false WHERE id = $1', [ids.representation]);
+      await h.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [ids.grant]);
+    }
+    const exactRead = await readerAuthority();
+
+    expect((await get(workPath)).status).toBe(404);
+    const disclosed = await get(`${workPath}?actingSubject=${encodeURIComponent(reader)}`, h.token);
+    expect(disclosed.status, JSON.stringify(disclosed.body)).toBe(200);
+    expect(disclosed.body).toMatchObject({ id: root.work, disclosure: 'restricted' });
+
+    const writeGrants = async (reply: string) => h.accessPool.query(`SELECT id FROM access.permission_grant
+      WHERE recipient_subject = $1 AND ((scope_id = $2 AND action = 'content.draft')
+        OR (scope_id = $3 AND action = 'reply.create'))`,
+    [reader, `content:draft:${reply}`, `reply:create:${root.work}`]);
+    const draftInput = (reply = nativeId()) => ({ profile: 'member-reply-draft-v1', reply,
+      variantId: `urn:rezics:variant:${randomUUID()}`, rootTarget: root.work, rootRevision: root.workRevision,
+      language: 'en', direction: 'ltr', expectedHead: null, body: 'A restricted-root reply.', actingSubject: reader });
+    const revisionCount = async (variantId: string) => (await h.contentPool.query(
+      'SELECT id FROM content.revision WHERE variant_id = $1', [variantId])).rowCount;
+    const replyCount = async (reply: string) => (await h.contentPool.query(
+      'SELECT id FROM content.reply WHERE id = $1', [reply])).rowCount;
+    const noContribution = async (input: ReturnType<typeof draftInput>) => {
+      expect(await revisionCount(input.variantId)).toBe(0);
+      expect(await replyCount(input.reply)).toBe(0);
+    };
+    const noEffectsBeforeRegistration = async (input: ReturnType<typeof draftInput>, key: string) => {
+      await noContribution(input);
+      expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+    };
+
+    const input = draftInput();
+    const key = randomUUID();
+    expect((await writeGrants(input.reply)).rowCount).toBe(0);
+    const draft = await h.post('/v1/member-reply-drafts', input, key);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const countAfterDraft = await revisionCount(input.variantId);
+    expect(countAfterDraft).toBe(1);
+    const replay = await h.post('/v1/member-reply-drafts', input, key);
+    expect(replay.status, JSON.stringify(replay.body)).toBe(200);
+    expect(replay.body).toMatchObject({ reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, replayed: true });
+    expect(await revisionCount(input.variantId)).toBe(countAfterDraft);
+
+    const identity = { profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, author: reader, rootTarget: root.work,
+      rootRevision: root.workRevision, parentReply: null, parentRevision: null, contextRevision: null };
+    const identityKey = randomUUID();
+    const created = await h.post('/v1/realm-replies', identity, identityKey);
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(created.body).toMatchObject({ reply: input.reply, author: reader,
+      rootTarget: root.work, rootRevision: root.workRevision });
+    expect((await h.contentPool.query(`SELECT author, root_target, root_revision FROM content.reply WHERE id = $1`,
+      [input.reply])).rows[0]).toEqual({ author: reader, root_target: root.work, root_revision: root.workRevision });
+    const identityReplay = await h.post('/v1/realm-replies', identity, identityKey);
+    expect(identityReplay.status, JSON.stringify(identityReplay.body)).toBe(200);
+    expect(identityReplay.body).toMatchObject({ author: reader, rootTarget: root.work,
+      rootRevision: root.workRevision, replayed: true });
+    expect(await revisionCount(input.variantId)).toBe(countAfterDraft);
+    expect(await replyCount(input.reply)).toBe(1);
+    expect((await writeGrants(input.reply)).rowCount).toBe(0);
+
+    const privateSelection = await h.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH <urn:rezics:graph:current> { ?contribution a rv:TextContribution ; rv:work <${root.work}> ; rv:publicationHead ?decision }
+      GRAPH <urn:rezics:graph:revisions> { ?decision a rv:PublicationDecision ; rv:disclosure rv:Public ; rv:selectedDraft ?draft }
+    }`);
+    expect(privateSelection.boolean).toBe(false);
+    expect((await get(workPath)).status).toBe(404);
+    expect((await get(`/v1/member-replies/${input.reply.slice(-36)}`)).status).toBe(404);
+
+    // The Content receipt commits before Access settlement, so this retry must
+    // resolve the same intent instead of inserting another revision.
+    const uncertain = draftInput();
+    const uncertainKey = randomUUID();
+    const settle = h.access.recordGraphOutcome.bind(h.access);
+    h.access.recordGraphOutcome = async () => { throw new Error('injected Access settlement outage'); };
+    let failed: Awaited<ReturnType<typeof h.post>> | undefined;
+    try { failed = await h.post('/v1/member-reply-drafts', uncertain, uncertainKey); }
+    finally { h.access.recordGraphOutcome = settle; }
+    expect(failed!.status, JSON.stringify(failed!.body)).toBe(503);
+    expect(await revisionCount(uncertain.variantId)).toBe(1);
+    const recovered = await h.post('/v1/member-reply-drafts', uncertain, uncertainKey);
+    expect(recovered.status, JSON.stringify(recovered.body)).toBe(200);
+    expect(recovered.body).toMatchObject({ reply: uncertain.reply, variantId: uncertain.variantId,
+      revisionId: (await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
+        [uncertain.variantId])).rows[0].id, replayed: true });
+    expect(await revisionCount(uncertain.variantId)).toBe(1);
+
+    await revokeReaderAuthority(exactRead);
+    const hidden = draftInput();
+    const hiddenKey = randomUUID();
+    const hiddenResult = await h.post('/v1/member-reply-drafts', hidden, hiddenKey);
+    expect(hiddenResult.status).toBe(404);
+    const missing = { ...draftInput(), rootTarget: nativeId(), rootRevision: nativeId() };
+    const missingKey = randomUUID();
+    const missingResult = await h.post('/v1/member-reply-drafts', missing, missingKey);
+    expect(missingResult.status).toBe(404);
+    expect(hiddenResult.body).toEqual(missingResult.body);
+    await noEffectsBeforeRegistration(hidden, hiddenKey);
+    await noEffectsBeforeRegistration(missing, missingKey);
+
+    const claimReader = await readerAuthority();
+    const betweenRegisterAndClaim = draftInput();
+    const lateKey = randomUUID();
+    expect((await writeGrants(betweenRegisterAndClaim.reply)).rowCount).toBe(0);
+    const claim = h.access.claim.bind(h.access);
+    let revokedAtClaim = false;
+    h.access.claim = async (admissionId, digest, accountPrincipal) => {
+      revokedAtClaim = true;
+      await revokeReaderAuthority(claimReader);
+      return claim(admissionId, digest, accountPrincipal);
+    };
+    let lateResult: Awaited<ReturnType<typeof h.post>> | undefined;
+    try { lateResult = await h.post('/v1/member-reply-drafts', betweenRegisterAndClaim, lateKey); }
+    finally { h.access.claim = claim; }
+    expect(revokedAtClaim).toBe(true);
+    expect(lateResult!.status, JSON.stringify(lateResult!.body)).toBe(403);
+    await noContribution(betweenRegisterAndClaim);
+    expect((await h.accessPool.query('SELECT state FROM access.admission WHERE idempotency_key = $1', [lateKey]))
+      .rowCount).toBe(1);
+  } finally { await h.close(); }
+}, 180_000);
+
 test('G265: Org and legacy PenName action grants cannot author member reply drafts', async () => {
   const h = await memberFixture();
   try {
