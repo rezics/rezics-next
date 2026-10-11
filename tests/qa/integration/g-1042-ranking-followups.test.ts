@@ -11,6 +11,7 @@ import {
 import { realmHistoryPopulation } from '../../../services/main/src/modules/rankings/realm-threads.ts';
 import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
+import { BACKPRESSURE_PROFILE_V1 } from '../../../services/main/src/operations/backpressure.ts';
 import { restoreRealmRankingCorpus } from '../../../services/main/tests/realm-ranking-corpus.ts';
 
 test('G1042: depth, row and ancestor caps report partial results; retired cuts and deleted references drain through invalidation', async () => {
@@ -23,6 +24,28 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     if (restoreReadyMs >= 600_000)
       throw new Error(`Realm ranking corpus restore, startup and readiness took ${restoreReadyMs} ms`);
     console.log(JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }));
+    // The retained reply commands leave Content projection events in this stopped
+    // copy. Resume the real worker until draft admission has room for this fixture.
+    const projection = stack.composition;
+    const contentHead = BigInt((await stack.content.ownerPosition()).sequence);
+    const maxBacklog = BigInt(BACKPRESSURE_PROFILE_V1.worker.maxBacklog);
+    const targetBacklog = maxBacklog - 100n;
+    const projectionStarted = performance.now();
+    let checkpoint = await projection.cursor.read(projection.consumer);
+    let projectedEvents = 0;
+    while (contentHead - BigInt(checkpoint.sequence) >= targetBacklog) {
+      if (projectedEvents >= 10_000)
+        throw new Error(`Content projection backlog did not fall below ${targetBacklog}`);
+      const event = await projection.contentProjectionWorker.pollOnce();
+      if (!event) throw new Error('Content projection stopped before its checkpoint reached the source');
+      projectedEvents++;
+      checkpoint = await projection.cursor.read(projection.consumer);
+    }
+    console.log(JSON.stringify({
+      realmRankingContentProjectionCatchUpMs: Math.round(performance.now() - projectionStarted),
+      projectedEvents,
+      remainingBacklog: (contentHead - BigInt(checkpoint.sequence)).toString(),
+    }));
     const seed = await seedHome(home, 3);
     // A few hundred product replies exceed one 400-batch relay pass. Resume the
     // same checkpoint instead of treating that bound as a failed population.
