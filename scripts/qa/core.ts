@@ -884,6 +884,13 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
 export const isolatedIntegrationFiles: ReadonlySet<string> = new Set(isolatedIntegrationFileList);
 
 export const isolatedFaultFiles = new Set([
+  'tests/qa/fault-recovery/owner-restore-erasure-authority.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-closure.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-completion.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-interruption.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-production.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-source-closure.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-transition.test.ts',
   'tests/qa/fault-recovery/partition-relocation.test.ts',
   'tests/qa/fault-recovery/rights-restriction-replay.test.ts',
   'tests/qa/fault-recovery/semantic-lost-response.test.ts',
@@ -913,6 +920,7 @@ export const selfManagedFaultAdmission = new Map<string, 'host' | 'startup'>([
   ['tests/qa/fault-recovery/erasure-search-rebuild.test.ts', 'startup'],
   ['tests/qa/fault-recovery/fixed-release-recovery.test.ts', 'startup'],
   ['tests/qa/fault-recovery/organization-publication-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/restore-hold-seam.test.ts', 'startup'],
   ['tests/qa/fault-recovery/protection-restore.test.ts', 'startup'],
   ['tests/qa/fault-recovery/rating-daily.test.ts', 'startup'],
   ['tests/qa/fault-recovery/recovery-coverage-discovery.test.ts', 'startup'],

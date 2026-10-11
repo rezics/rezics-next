@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { acquireFullLock, acquireQaSlots, admissionIntervalMs, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
-  artifactRoots, recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
+  artifactRoots, recordedFileDurations, selfManagedFaultAdmission, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
   testLogEnvironment, writeSummary, withQaMemory,
   implementedTiers, tierArtifactName,
   xmlForCommand, sourceIdentity, type Tier } from '../../../scripts/qa/core.ts';
@@ -479,6 +479,54 @@ test('QA shards: graph reset, outbox gap and fresh-graph files get singleton int
   const one = new Map([['tests/qa/integration/validation-command.test.ts', 1]]);
   expect(planStackProjects(one, 1, 'integration'))
     .toEqual([['tests/qa/integration/validation-command.test.ts']]);
+});
+
+test('QA shards: restore owner, hold and package files use their correct singleton project classes', () => {
+  const ownerFiles = [
+    'tests/qa/fault-recovery/owner-restore-erasure-authority.test.ts',
+    'tests/qa/fault-recovery/owner-restore-erasure-closure.test.ts',
+    'tests/qa/fault-recovery/owner-restore-erasure-completion.test.ts',
+    'tests/qa/fault-recovery/owner-restore-erasure-interruption.test.ts',
+    'tests/qa/fault-recovery/owner-restore-erasure-production.test.ts',
+    'tests/qa/fault-recovery/owner-restore-erasure-source-closure.test.ts',
+    'tests/qa/fault-recovery/owner-restore-erasure-transition.test.ts',
+  ];
+  const holdFile = 'tests/qa/fault-recovery/restore-hold-seam.test.ts';
+  const packageFile = 'tests/qa/fault-recovery/package-install-process-crash.test.ts';
+  const files = [...ownerFiles, holdFile, packageFile];
+  const plans = new Map<number, string[][]>();
+
+  for (const workers of [1, 3]) {
+    const selections = [files, [...files].reverse()].map(input => {
+      const estimates = estimatedDurations(input, new Map());
+      expect([...estimates.values()]).toEqual(Array.from({ length: files.length }, () => 30_000));
+      const plan = planStackProjects(estimates, workers, 'fault/recovery');
+      const selected = plan.flat();
+      expect([...selected].sort()).toEqual([...files].sort());
+      expect(new Set(selected).size).toBe(files.length);
+      for (const file of files) expect(selected.filter(selectedFile => selectedFile === file)).toHaveLength(1);
+      return plan;
+    });
+    expect(selections[1]).toEqual(selections[0]);
+    plans.set(workers, selections[0]!);
+  }
+
+  for (const ownerFile of ownerFiles) {
+    expect(isolatedFaultFiles.has(ownerFile)).toBe(true);
+    expect(selfManagedFaultAdmission.has(ownerFile)).toBe(false);
+    expect(selfManagedFaultFiles.has(ownerFile)).toBe(false);
+    for (const plan of plans.values()) expect(plan.filter(project => project.includes(ownerFile))).toEqual([[ownerFile]]);
+  }
+
+  expect(selfManagedFaultAdmission.get(holdFile)).toBe('startup');
+  expect(selfManagedFaultFiles.has(holdFile)).toBe(true);
+  expect(isolatedFaultFiles.has(holdFile)).toBe(false);
+  for (const plan of plans.values()) expect(plan).toContainEqual([holdFile]);
+
+  expect(isolatedFaultFiles.has(packageFile)).toBe(false);
+  expect(selfManagedFaultAdmission.has(packageFile)).toBe(false);
+  expect(selfManagedFaultFiles.has(packageFile)).toBe(false);
+  for (const plan of plans.values()) expect(plan).toContainEqual([packageFile]);
 });
 
 test('QA shards: long isolated integration files start before the short tail', () => {
