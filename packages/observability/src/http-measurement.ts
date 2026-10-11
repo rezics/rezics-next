@@ -55,6 +55,7 @@ export const commandCounters = [
   'rank_selection_units_visited',
   'realm_owner_qualification_visits',
   'work_name_scope_links_visited',
+  'typeahead_prefix_entries_visited',
 ] as const;
 
 export function fusekiCommandWork(headers: Headers): Record<string, number> {

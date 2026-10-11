@@ -897,6 +897,8 @@ final class TemplateIndexService {
             .getOperations().getFirst());
         org.apache.jena.update.UpdateFactory.create(PublicNameProjection.workScopeUncertaintyUpdate())
             .getOperations().forEach(request::add);
+        request.add(org.apache.jena.update.UpdateFactory.create(PublicNameProjection.prefixUncertaintyUpdate())
+            .getOperations().getFirst());
     }
     /** Other bypass mutation protocols have no transactional membership fence. */
     static final class RefuseRawMembershipWrite extends org.apache.jena.fuseki.servlets.ActionService {

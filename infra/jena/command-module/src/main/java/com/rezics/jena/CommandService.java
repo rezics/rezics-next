@@ -26,6 +26,7 @@ import org.apache.jena.fuseki.servlets.HttpAction;
 import org.apache.jena.fuseki.server.Operation;
 import org.apache.jena.fuseki.server.DataService;
 import org.apache.jena.query.DatasetFactory;
+import org.apache.jena.query.ReadWrite;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.ResourceFactory;
@@ -110,7 +111,14 @@ final class CommandService extends ActionService {
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
             "privateSearchWriteActive", (privateEpoch & 1L) != 0L,
             "publicSearchDeltaAvailable", deltaExclusive, "textIndexUncertain", textIndexUncertain,
+            "prefixWalkAvailable", deltaExclusive && !textIndexUncertain
+                && prefixWalkAvailable(action.getDataService().getDataset()),
             "profiles", profiles.digests()));
+    }
+    private static boolean prefixWalkAvailable(DatasetGraph data) {
+        data.begin(ReadWrite.READ);
+        try { return prefixIndex(data) != null && PublicNameProjection.prefixWalkAvailable(data); }
+        finally { data.end(); }
     }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
@@ -122,6 +130,35 @@ final class CommandService extends ActionService {
             String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             TitleControlPolicy.commandJSONDepth(requestJSON);
             JsonObject body = JSON.parse(requestJSON);
+            if (body.get("prefixWalk") != null) {
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (bytes.length > 8192 || !body.keys().equals(Set.of("prefixWalk"))
+                    || !body.get("prefixWalk").isObject())
+                    throw new IllegalArgumentException("invalid prefix walk envelope");
+                if (!deltaExclusive(action.getDataService()) || textIndexUncertain) {
+                    respond(action, 503, Map.of("status", "unavailable")); return;
+                }
+                DatasetGraph data = action.getDataService().getDataset();
+                data.begin(ReadWrite.READ);
+                try {
+                    if (!PublicNameProjection.prefixWalkAvailable(data)) {
+                        respond(action, 503, Map.of("status", "unavailable")); return;
+                    }
+                    JsonObject result = runPrefixWalk(data, body.get("prefixWalk").getAsObject());
+                    action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                    action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                    respond(action, 200, result);
+                } catch (FilteredGraphTextIndex.RankRestart restart) {
+                    action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                    respond(action, 409, Map.of("status", "restart"));
+                } catch (org.apache.jena.query.text.TextIndexException unavailable) {
+                    action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                    respond(action, 503, Map.of("status", "unavailable"));
+                } finally { data.end(); }
+                return;
+            }
             if (body.get("titleCandidate") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -288,6 +325,36 @@ final class CommandService extends ActionService {
         } catch (RuntimeException ex) {
             action.log.error("command failed", ex);
             respond(action, 500, Map.of("status", "error"));
+        }
+    }
+
+    static JsonObject runPrefixWalk(DatasetGraph data, JsonObject request) {
+        if (!request.keys().equals(Set.of("prefix", "language", "pageSize", "cursor"))
+            || request.get("prefix") == null || !request.get("prefix").isString()
+            || request.get("language") == null || !(request.get("language").isNull() || request.get("language").isString())
+            || request.get("cursor") == null || !(request.get("cursor").isNull() || request.get("cursor").isString())
+            || request.get("pageSize") == null || !request.get("pageSize").isNumber()
+            || !request.get("pageSize").getAsNumber().value().toString().matches("[1-9]|10"))
+            throw new IllegalArgumentException("invalid prefix walk request");
+        String prefix = ProfileRegistry.required(request, "prefix");
+        String language = request.get("language").isNull() ? null : request.get("language").getAsString().value();
+        String cursor = request.get("cursor").isNull() ? null : request.get("cursor").getAsString().value();
+        if (prefix.isBlank() || prefix.length() > PublicNameProjection.PREFIX_TEXT_LIMIT || prefix.codePoints().anyMatch(c -> c < 32 || c == 127)
+            || language != null && !language.matches("[a-z]{2,3}(-[A-Za-z0-9]{1,8})*"))
+            throw new IllegalArgumentException("invalid prefix walk scope");
+        FilteredGraphTextIndex index = prefixIndex(data);
+        if (index == null) throw new org.apache.jena.query.text.TextIndexException("prefix walk text index is unavailable");
+        return index.prefixWalk(prefix, language, Integer.parseInt(request.get("pageSize").toString()), cursor, data);
+    }
+
+    private static FilteredGraphTextIndex prefixIndex(DatasetGraph data) {
+        DatasetGraph current = data;
+        while (true) {
+            if (current instanceof org.apache.jena.query.text.DatasetGraphText text
+                && text.getTextIndex() instanceof FilteredGraphTextIndex index)
+                return index;
+            if (!(current instanceof DatasetGraphWrapper wrapper)) return null;
+            current = wrapper.getWrapped();
         }
     }
 
@@ -1108,7 +1175,7 @@ final class CommandService extends ActionService {
                 result.put("templateIndex",templateDelta);
             }
             CommandWork.enter("projections");
-            PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes());
+            PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes(), deadline);
             RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
             CommandWork.enter("journal");
             if (delta != null) {

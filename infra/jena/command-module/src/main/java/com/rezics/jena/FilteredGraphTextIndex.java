@@ -707,6 +707,105 @@ public final class FilteredGraphTextIndex implements TextIndex {
             return new RankPage(List.copyOf(hits), hits.size(), more ? "lower-bound" : "exact", commit, more);
         } catch (IOException ex) { throw new TextIndexException("directory query failed", ex); }
     }
+    /** One ordered PREFIX dictionary page, including dead entries. Qualification
+     * only touches the page's exact maintained membership; a lookahead term
+     * determines continuation without opening another candidate or witness. */
+    JsonObject prefixWalk(String prefix, String language, int size, String cursor,
+                          org.apache.jena.sparql.core.DatasetGraph data) {
+        long deadline = System.nanoTime() + 1_500_000_000L;
+        if (prefix == null) throw new IllegalArgumentException("prefix walk query is not admitted");
+        prefix = PublicNameProjection.normalizedPrefixText(prefix);
+        if (language != null) language = language.toLowerCase(java.util.Locale.ROOT);
+        if (size < 1 || size > 10 || prefix.isEmpty() || prefix.length() > PublicNameProjection.PREFIX_TEXT_LIMIT
+            || language != null && language.length() > 100)
+            throw new IllegalArgumentException("prefix walk query is not admitted");
+        String scope = PublicNameProjection.prefixScope(prefix, language);
+        PrefixAfter after = cursor == null ? null : prefixAfter(cursor, prefix, language);
+        try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
+             DirectoryReader reader = openReader()) {
+            prefixDeadline(deadline);
+            String generation = Long.toString(reader.getIndexCommit().getGeneration());
+            if (after != null && !after.generation().equals(generation)) throw new RankRestart();
+            JsonArray entries = new JsonArray();
+            int rejected = 0;
+            boolean more = false;
+            String last = null;
+            var terms = org.apache.lucene.index.MultiTerms.getTerms(reader, lucene.getDocDef().getEntityField());
+            if (terms != null) {
+                var iterator = terms.iterator();
+                String start = after == null ? scope : scope + after.key();
+                if (iterator.seekCeil(new org.apache.lucene.util.BytesRef(start)) != org.apache.lucene.index.TermsEnum.SeekStatus.END) {
+                    var term = iterator.term();
+                    if (after != null && term.utf8ToString().equals(start)) term = iterator.next();
+                    try (var witnessPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.WITNESS)) {
+                        while (term != null && term.utf8ToString().startsWith(scope) && entries.size() < size) {
+                            prefixDeadline(deadline);
+                            String id = term.utf8ToString(), key = id.substring(scope.length());
+                            if (!prefixKey(key)) throw new TextIndexException("prefix directory identity is invalid");
+                            CommandWork.count("typeahead_prefix_entries_visited", 1);
+                            String main = prefixResource(key.substring(1, 33));
+                            String unit = prefixResource(key.substring(33));
+                            String field = key.charAt(0) == '0' ? "title" : "credit";
+                            boolean invalid = !PublicNameProjection.prefixEntryValid(data, id, main, unit, field);
+                            prefixDeadline(deadline);
+                            JsonObject entry = new JsonObject();
+                            entry.put("key", key); entry.put("mainVersion", main); entry.put("matchUnit", unit);
+                            entry.put("matchedField", field); entry.put("rejected", invalid);
+                            entries.add(entry); if (invalid) rejected++;
+                            last = key;
+                            term = iterator.next();
+                        }
+                    }
+                    more = term != null && term.utf8ToString().startsWith(scope);
+                }
+            }
+            JsonObject result = new JsonObject();
+            result.put("entries", entries); result.put("generation", generation);
+            result.put("examined", entries.size()); result.put("rejected", rejected); result.put("more", more);
+            if (more) result.put("cursor", prefixCursor(prefix, language, generation, last));
+            else result.put("cursor", org.apache.jena.atlas.json.JsonNull.instance);
+            prefixDeadline(deadline);
+            return result;
+        } catch (IOException error) { throw new TextIndexException("prefix directory query failed", error); }
+    }
+    private static void prefixDeadline(long deadline) {
+        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+            throw new TextIndexException("prefix walk deadline exceeded");
+    }
+    private record PrefixAfter(String generation, String key) {}
+    private static boolean prefixKey(String key) { return key != null && key.matches("[01][0-9a-f]{64}"); }
+    private static String prefixResource(String key) {
+        return "https://rezics.com/id/" + key.substring(0, 8) + "-" + key.substring(8, 12) + "-"
+            + key.substring(12, 16) + "-" + key.substring(16, 20) + "-" + key.substring(20);
+    }
+    private static String prefixCursor(String prefix, String language, String generation, String key) {
+        JsonObject state = new JsonObject(); state.put("version", 1); state.put("prefix", prefix);
+        if (language == null) state.put("language", org.apache.jena.atlas.json.JsonNull.instance);
+        else state.put("language", language);
+        state.put("generation", generation); state.put("after", key);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+            org.apache.jena.atlas.json.JSON.toStringFlat(state).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    private static PrefixAfter prefixAfter(String cursor, String prefix, String language) {
+        try {
+            if (cursor.length() > 2_048 || !cursor.matches("[A-Za-z0-9_-]+")) throw new IllegalArgumentException();
+            byte[] bytes = java.util.Base64.getUrlDecoder().decode(cursor);
+            if (!java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes).equals(cursor)) throw new IllegalArgumentException();
+            JsonObject state = org.apache.jena.atlas.json.JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            var version = state.get("version");
+            var statePrefix = state.get("prefix");
+            var stateLanguage = state.get("language");
+            var generation = state.get("generation");
+            var after = state.get("after");
+            if (version == null || !version.isNumber() || !version.getAsNumber().value().toString().equals("1")
+                || statePrefix == null || !statePrefix.isString() || !statePrefix.getAsString().value().equals(prefix)
+                || stateLanguage == null || (language == null ? !stateLanguage.isNull()
+                    : !stateLanguage.isString() || !stateLanguage.getAsString().value().equals(language))
+                || generation == null || !generation.isString() || !generation.getAsString().value().matches("0|[1-9][0-9]{0,63}")
+                || after == null || !after.isString() || !prefixKey(after.getAsString().value())) throw new IllegalArgumentException();
+            return new PrefixAfter(generation.getAsString().value(), after.getAsString().value());
+        } catch (RuntimeException malformed) { throw new IllegalArgumentException("prefix continuation is not admitted", malformed); }
+    }
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static final Node PUBLIC_GRAPH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CURRENT_GRAPH = uri(CommandPolicy.CURRENT);

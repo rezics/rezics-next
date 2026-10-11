@@ -94,7 +94,11 @@ public final class CommandModule implements FusekiAutoModule {
         } else {
             SearchDeltaJournal.revokeExclusiveStartup(data);
             data.begin(org.apache.jena.query.ReadWrite.WRITE);
-            try { SemanticSourceBasis.invalidate(data); CommitHalt.commit(data); }
+            try {
+                SemanticSourceBasis.invalidate(data);
+                PublicNameProjection.invalidatePrefix(data);
+                CommitHalt.commit(data);
+            }
             finally { data.end(); }
         }
     }

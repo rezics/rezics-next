@@ -207,6 +207,9 @@ final class PublicNameProjection {
                 && !data.contains(REVISIONS, draft, RDF.type.asNode(), p("ErasedRevision"));
     }
     static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes) {
+        refresh(data, plan, receipt, validations, changes, Long.MAX_VALUE);
+    }
+    static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes, long deadline) {
         if (plan.bootstrap() || data.contains(uri(CommandPolicy.RECEIPTS), uri(receipt), p("namePoliciesComplete"),
             NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)))
             data.add(PUBLIC, POLICY, p("complete"), NodeFactory.createLiteralByValue(true,
@@ -221,6 +224,10 @@ final class PublicNameProjection {
                 if (productResource(work)) resources.add(work);
             } }
             finally { org.apache.jena.atlas.iterator.Iter.close(units); }
+        }
+        for (String value : plan.revisions()) {
+            Node component = prefixOne(data, REVISIONS, uri(value), "component");
+            if (productResource(component)) resources.add(component);
         }
         for (var validation : validations) if (validation.graphs().contains(CommandPolicy.CURRENT))
             for (String value : validation.focus()) if (productResource(uri(value))) resources.add(uri(value));
@@ -249,10 +256,20 @@ final class PublicNameProjection {
             plan.current().contains(resource.getURI()) || changes.stream().anyMatch(change ->
                 resource.equals(change.work()) || data.contains(PUBLIC, uri(change.unit()), p("work"), resource))
             || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"));
+        refreshPrefixResources(data, resources, deadline, changes);
+        if (plan.bootstrap() && !prefixWalkAvailable(data)) {
+            var existingUnits = data.find(PUBLIC, Node.ANY, RDF.type.asNode(), p("MatchUnit"));
+            try { if (!existingUnits.hasNext()) qualifyPrefix(data); }
+            finally { org.apache.jena.atlas.iterator.Iter.close(existingUnits); }
+        }
+        if (plan.rebuild()) {
+            if (receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:")) rebuildPrefix(data, deadline);
+            else invalidatePrefix(data);
+        }
         // The existing names-maintenance entry point advances one bounded batch
         // after the parent write has committed. Receipt replay cannot advance it.
         if (receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) {
-            repairBatch(data, receipt);
+            repairBatch(data, receipt, deadline);
             repairNameLabels(data, receipt);
         }
     }
@@ -260,6 +277,7 @@ final class PublicNameProjection {
         if (!productResource(resource)) return;
         invalidate(data, resource, uri(PREFIX + "generation:" + java.util.UUID.randomUUID()));
         project(data, resource, true);
+        refreshPrefixResources(data, Set.of(resource));
     }
 
     private static Node state(DatasetGraph data, Node subject, String predicate) {
@@ -860,7 +878,8 @@ final class PublicNameProjection {
      * https://jena.apache.org/documentation/tdb/tdb_transactions.html
      * Cost: <=64 dependent steps, each with constant indexed probes;
      * individual authored-name/Work-unit recipe costs remain unchanged. */
-    static int repairBatch(DatasetGraph data, String receipt) {
+    static int repairBatch(DatasetGraph data, String receipt) { return repairBatch(data, receipt, Long.MAX_VALUE); }
+    private static int repairBatch(DatasetGraph data, String receipt, long deadline) {
         Node replay = uri(receipt);
         if (state(data, replay, "repairApplied") != null) return 0;
         int processed = 0;
@@ -877,6 +896,7 @@ final class PublicNameProjection {
                 if (productResource(resource)) {
                     invalidate(data, resource, replay);
                     project(data, resource, false);
+                    refreshPrefixResources(data, Set.of(resource), deadline);
                 }
                 state(data, parent, "repairCursor", next);
                 processed++;
@@ -1246,5 +1266,273 @@ final class PublicNameProjection {
         desired.add(new Quad(PUBLIC, unit, p("nameDirectoryResource"), resource));
         desired.add(new Quad(PUBLIC, unit, p("nameDirectoryOrder"), rank));
         desired.add(new Quad(PUBLIC, unit, p("publicTitle"), NodeFactory.createLiteralString("rezicspublicdirectory")));
+    }
+
+    /** Prefix scopes share the existing entity term directory. Names are lookup
+     * scopes; only the fixed tier/Main/unit suffix establishes page order. */
+    static final String PREFIX_DIRECTORY = DIRECTORY + "prefix:";
+    private static final Node PREFIX_STATE = uri(PREFIX + "prefix-state");
+    private static final Node PREFIX_SCHEMA = NodeFactory.createLiteralString("1");
+    // NFC and lowercase can expand the public route's raw 80 UTF-16 units.
+    static final int PREFIX_TEXT_LIMIT = 160;
+    private static final java.util.regex.Pattern SEARCH_SPACE = java.util.regex.Pattern.compile(
+        "[\\u0009-\\u000d\\u0020\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+");
+    static String normalizedPrefixText(String text) {
+        String value = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFC).toLowerCase(java.util.Locale.ROOT);
+        return SEARCH_SPACE.matcher(value).replaceAll(" ").strip();
+    }
+    static String prefixScope(String prefix, String language) {
+        var encoder = java.util.Base64.getUrlEncoder().withoutPadding();
+        return PREFIX_DIRECTORY + encoder.encodeToString(prefix.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + ":"
+            + (language == null ? "*" : encoder.encodeToString(language.toLowerCase(java.util.Locale.ROOT)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8))) + ":";
+    }
+    static boolean prefixWalkAvailable(DatasetGraph data) {
+        return data.contains(REPAIR, PREFIX_STATE, p("prefixSchema"), PREFIX_SCHEMA);
+    }
+    static void invalidatePrefix(DatasetGraph data) {
+        data.deleteAny(REPAIR, PREFIX_STATE, p("prefixSchema"), Node.ANY);
+    }
+    static String prefixUncertaintyUpdate() {
+        return "DELETE WHERE { GRAPH <" + REPAIR.getURI() + "> { <" + PREFIX_STATE.getURI()
+            + "> <" + p("prefixSchema").getURI() + "> ?schema } }";
+    }
+    private static void qualifyPrefix(DatasetGraph data) {
+        data.deleteAny(REPAIR, PREFIX_STATE, p("prefixSchema"), Node.ANY);
+        data.add(REPAIR, PREFIX_STATE, p("prefixSchema"), PREFIX_SCHEMA);
+    }
+    /** An explicit owner rebuild, never a request-time or startup scan. The
+     * marker commits only with the complete projection; interruption leaves
+     * the prior committed projection and qualification untouched. */
+    static void rebuildPrefix(DatasetGraph data) { rebuildPrefix(data, Long.MAX_VALUE); }
+    static void rebuildPrefix(DatasetGraph data, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        Set<Node> entries = new LinkedHashSet<>();
+        var prior = data.find(PUBLIC, Node.ANY, p("prefixUnit"), Node.ANY);
+        try { while (prior.hasNext()) { TemplateIndexService.workScopeBudget(deadline); entries.add(prior.next().getSubject()); } }
+        finally { org.apache.jena.atlas.iterator.Iter.close(prior); }
+        for (Node entry : entries) { TemplateIndexService.workScopeBudget(deadline); data.deleteAny(PUBLIC, entry, Node.ANY, Node.ANY); }
+        Set<Node> units = new LinkedHashSet<>();
+        var rows = data.find(PUBLIC, Node.ANY, RDF.type.asNode(), p("MatchUnit"));
+        try { while (rows.hasNext()) { TemplateIndexService.workScopeBudget(deadline); units.add(rows.next().getSubject()); } }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        for (Node unit : units) refreshPrefixUnit(data, unit, deadline);
+        qualifyPrefix(data);
+    }
+    /** Fan-out occurs only on owner mutation/rebuild, never during the page
+     * walk. Both old and current unit links participate so withdrawals and
+     * selection replacement remove every stale entry in the same transaction. */
+    private static void refreshPrefixResources(DatasetGraph data, Set<Node> resources) { refreshPrefixResources(data, resources, Long.MAX_VALUE); }
+    private static void refreshPrefixResources(DatasetGraph data, Set<Node> resources, long deadline) {
+        refreshPrefixResources(data, resources, deadline, java.util.List.of());
+    }
+    private static void refreshPrefixResources(DatasetGraph data, Set<Node> resources, long deadline, java.util.List<SearchDeltaJournal.Change> changes) {
+        if (!prefixWalkAvailable(data)) return;
+        Set<Node> works = new LinkedHashSet<>();
+        for (Node resource : resources) {
+            TemplateIndexService.workScopeBudget(deadline);
+            var linked = data.find(REPAIR, resource, p("prefixOwnerWork"), Node.ANY);
+            try { while (linked.hasNext()) {
+                TemplateIndexService.workScopeBudget(deadline);
+                Node work = linked.next().getObject();
+                if (productResource(work)) works.add(work);
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(linked); }
+            if (type(data, resource, "https://schema.org/CreativeWork")
+                || data.contains(PUBLIC, Node.ANY, p("prefixWork"), resource)) works.add(resource);
+            Node work = one(data, resource, "work");
+            if (productResource(work)) works.add(work);
+            if (type(data, resource, RV + "Agent") || type(data, resource, RV + "AgentTombstone")) {
+                var credits = data.find(CURRENT, Node.ANY, p("agent"), resource);
+                try { while (credits.hasNext()) {
+                    TemplateIndexService.workScopeBudget(deadline);
+                    Node creditWork = one(data, credits.next().getSubject(), "work");
+                    if (productResource(creditWork)) works.add(creditWork);
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(credits); }
+            }
+        }
+        Set<Node> units = new LinkedHashSet<>();
+        for (var change : changes) units.add(uri(change.unit()));
+        for (Node work : works) {
+            TemplateIndexService.workScopeBudget(deadline);
+            Node main = prefixOne(data, CURRENT, work, "mainVersion");
+            if (productResource(main)) {
+                var heads = data.find(CURRENT, main, p("selectionHead"), Node.ANY);
+                try { for (int count = 0; heads.hasNext(); count++) {
+                    TemplateIndexService.workScopeBudget(deadline);
+                    if (count == 64) throw new IllegalArgumentException("Main language heads exceed their admitted bound");
+                    Node selection = heads.next().getObject();
+                    Node unit = prefixOne(data, REVISIONS, selection, "matchUnit");
+                    if (productResource(unit)) units.add(unit);
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
+            }
+            var old = data.find(PUBLIC, Node.ANY, p("prefixWork"), work);
+            try { while (old.hasNext()) {
+                TemplateIndexService.workScopeBudget(deadline);
+                Node unit = prefixOne(data, PUBLIC, old.next().getSubject(), "prefixUnit");
+                if (unit != null) units.add(unit);
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(old); }
+        }
+        for (Node unit : units) refreshPrefixUnit(data, unit, deadline);
+    }
+    private static Node prefixOne(DatasetGraph data, Node graph, Node subject, String predicate) {
+        return exactlyOne(data, graph, subject, predicate);
+    }
+    private static boolean prefixUnitValid(DatasetGraph data, Node unit) {
+        if (!productResource(unit) || !data.contains(PUBLIC, unit, RDF.type.asNode(), p("MatchUnit"))
+            || !data.contains(PUBLIC, unit, p("disclosure"), p("Public"))) return false;
+        Node work = prefixOne(data, PUBLIC, unit, "work"), main = prefixOne(data, PUBLIC, unit, "mainVersion"),
+            selection = prefixOne(data, PUBLIC, unit, "selection"), context = prefixOne(data, PUBLIC, unit, "context");
+        if (!productResource(work) || !productResource(main) || selection == null || !main.equals(context)
+            || !main.equals(prefixOne(data, CURRENT, work, "mainVersion")) || withdrawn(data, work)
+            || !has(data, main, "selectionHead", selection)
+            || !publishedSelection(data, work, main, selection, main)
+            || !java.util.Objects.equals(prefixOne(data, PUBLIC, unit, "contribution"), prefixOne(data, REVISIONS, selection, "contribution"))
+            || !java.util.Objects.equals(prefixOne(data, PUBLIC, unit, "revision"), prefixOne(data, REVISIONS, selection, "selectedDraft"))
+            || !prefixLanguageEqual(prefixOne(data, PUBLIC, unit, "language"), prefixOne(data, REVISIONS, selection, "language"))) return false;
+        Node resultWork = prefixOne(data, PUBLIC, unit, "searchResultWork"),
+            resultMain = prefixOne(data, PUBLIC, unit, "searchResultMain");
+        return resultWork == null && resultMain == null || productResource(resultWork) && productResource(resultMain)
+            && resultMain.equals(prefixOne(data, CURRENT, resultWork, "mainVersion"))
+            && !withdrawn(data, resultWork) && publishedWork(data, resultWork);
+    }
+    private static boolean prefixLanguageEqual(Node first, Node second) {
+        return first != null && second != null && first.isLiteral() && second.isLiteral()
+            && first.getLiteralLexicalForm().equalsIgnoreCase(second.getLiteralLexicalForm());
+    }
+    /** Fixed point probes qualify one directory term, including a term whose
+     * old Lucene posting has not merged away. Rejected entries remain visible
+     * to the bounded reader and advance its cursor. */
+    static boolean prefixEntryValid(DatasetGraph data, String id, String main, String unit, String field) {
+        Node entry = uri(id), matchUnit = uri(unit), mainVersion = uri(main);
+        if (!Set.of("title", "credit").contains(field)
+            || !matchUnit.equals(prefixOne(data, PUBLIC, entry, "prefixUnit"))
+            || !mainVersion.equals(prefixOne(data, PUBLIC, entry, "prefixMain"))
+            || !NodeFactory.createLiteralString(field).equals(prefixOne(data, PUBLIC, entry, "prefixField"))
+            || !prefixUnitValid(data, matchUnit)) return false;
+        if (!id.startsWith(PREFIX_DIRECTORY)) return false;
+        String[] scope = id.substring(PREFIX_DIRECTORY.length()).split(":", -1);
+        Node language = prefixOne(data, PUBLIC, matchUnit, "language");
+        if (scope.length != 3 || language == null || !language.isLiteral()) return false;
+        String expectedLanguage = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+            language.getLiteralLexicalForm().toLowerCase(java.util.Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if (!scope[1].equals("*") && !scope[1].equals(expectedLanguage)) return false;
+        Node resultMain = prefixOne(data, PUBLIC, matchUnit, "searchResultMain");
+        return mainVersion.equals(resultMain == null ? prefixOne(data, PUBLIC, matchUnit, "mainVersion") : resultMain);
+    }
+    private static Set<String> namePrefixes(String text, long deadline) {
+        String normalized = normalizedPrefixText(text);
+        Set<String> prefixes = new LinkedHashSet<>();
+        java.util.List<String> starts = new java.util.ArrayList<>();
+        starts.add(normalized);
+        starts.addAll(java.util.Arrays.asList(normalized.split("[^\\p{L}\\p{N}]+")));
+        for (String start : starts) {
+            int end = Math.min(PREFIX_TEXT_LIMIT, start.length());
+            for (int length = 1; length <= end; length++) {
+                TemplateIndexService.workScopeBudget(deadline);
+                if (Character.isHighSurrogate(start.charAt(length - 1)) && length < start.length()
+                    && Character.isLowSurrogate(start.charAt(length))) continue;
+                String prefix = start.substring(0, length);
+                if (prefix.equals(normalizedPrefixText(prefix)) && !prefix.isEmpty()) prefixes.add(prefix);
+            }
+        }
+        return prefixes;
+    }
+    private static boolean publicCreditAgent(DatasetGraph data, Node agent) {
+        if (!productResource(agent) || !type(data, agent, RV + "Agent") || withdrawn(data, agent)
+            || type(data, agent, RV + "AgentTombstone") || has(data, agent, "profileDisclosure", p("Private"))) return false;
+        Node disclosure = one(data, agent, "profileDisclosure"), head = one(data, agent, "head");
+        return (disclosure == null || disclosure.equals(p("Public"))) && head != null
+            && data.contains(REVISIONS, head, RDF.type.asNode(), p("RevisionAnchor"))
+            && data.contains(REVISIONS, head, p("component"), agent)
+            && data.contains(REVISIONS, head, p("modelRevision"), uri("https://rezics.com/definition/agent-provision-v1"))
+            && !data.contains(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision"));
+    }
+    private static Set<Node> prefixCreditNames(DatasetGraph data, Node work, long deadline) {
+        Set<Node> names = new LinkedHashSet<>();
+        var credits = data.find(CURRENT, Node.ANY, p("work"), work);
+        try { while (credits.hasNext()) {
+            TemplateIndexService.workScopeBudget(deadline);
+            Node credit = credits.next().getSubject();
+            if (!type(data, credit, RV + "NativeAgentCredit")
+                || !data.contains(CURRENT, credit, uri("https://schema.org/roleName"), NodeFactory.createLiteralString("author"))) continue;
+            Node revision = one(data, credit, "creditRevision"), agent = one(data, credit, "agent");
+            if (productResource(agent)) prefixDependency(data, agent, work);
+            prefixDependency(data, credit, work);
+            if (revision == null || agent == null || !publicCreditAgent(data, agent)
+                || !data.contains(REVISIONS, revision, RDF.type.asNode(), p("NativeAgentCreditRevision"))
+                || !data.contains(REVISIONS, revision, p("component"), credit)
+                || !data.contains(REVISIONS, revision, p("agent"), agent)
+                || data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))) continue;
+            var labels = data.find(CURRENT, agent, NAME_PREDICATES.getFirst(), Node.ANY);
+            try { while (labels.hasNext()) {
+                TemplateIndexService.workScopeBudget(deadline);
+                Node name = labels.next().getObject();
+                if (name.isLiteral()) names.add(name);
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(labels); }
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(credits); }
+        return names;
+    }
+    private static void prefixDependency(DatasetGraph data, Node owner, Node work) {
+        // Historical adjacency also refreshes after the owner link is removed.
+        if (productResource(owner) && productResource(work))
+            data.add(REPAIR, owner, p("prefixOwnerWork"), work);
+    }
+    /** Exact title/credit candidate projection maintained with public names.
+     * It stores every normalized prefix admitted by the public raw-text bound,
+     * including Unicode word-boundary prefixes and metadata aliases. */
+    static void refreshPrefixUnit(DatasetGraph data, Node unit) { refreshPrefixUnit(data, unit, Long.MAX_VALUE); }
+    static void refreshPrefixUnit(DatasetGraph data, Node unit, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        Set<Quad> prior = new LinkedHashSet<>(), desired = new LinkedHashSet<>();
+        var entries = data.find(PUBLIC, Node.ANY, p("prefixUnit"), unit);
+        try { while (entries.hasNext()) {
+            TemplateIndexService.workScopeBudget(deadline);
+            Node entry = entries.next().getSubject();
+            var quads = data.find(PUBLIC, entry, Node.ANY, Node.ANY);
+            try { while (quads.hasNext()) { TemplateIndexService.workScopeBudget(deadline); prior.add(quads.next()); } }
+            finally { org.apache.jena.atlas.iterator.Iter.close(quads); }
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(entries); }
+        if (prefixUnitValid(data, unit)) {
+            Node work = prefixOne(data, PUBLIC, unit, "work"), main = prefixOne(data, PUBLIC, unit, "searchResultMain");
+            if (main == null) main = prefixOne(data, PUBLIC, unit, "mainVersion");
+            prefixDependency(data, prefixOne(data, PUBLIC, unit, "mainVersion"), work);
+            prefixDependency(data, prefixOne(data, PUBLIC, unit, "contribution"), work);
+            prefixDependency(data, prefixOne(data, PUBLIC, unit, "searchResultWork"), work);
+            prefixDependency(data, prefixOne(data, PUBLIC, unit, "searchResultMain"), work);
+            Node language = prefixOne(data, PUBLIC, unit, "language");
+            if (language != null && language.isLiteral()) {
+                Set<Node> titles = new LinkedHashSet<>();
+                var labels = data.find(CURRENT, work, NAME_PREDICATES.getFirst(), Node.ANY);
+                try { while (labels.hasNext()) {
+                    TemplateIndexService.workScopeBudget(deadline);
+                    Node name = labels.next().getObject();
+                    if (name.isLiteral()) titles.add(name);
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(labels); }
+                titles.addAll(payloadNames(data, work, "work"));
+                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "title", titles, deadline);
+                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "credit", prefixCreditNames(data, work, deadline), deadline);
+            }
+        }
+        for (Quad quad : prior) { TemplateIndexService.workScopeBudget(deadline); if (!desired.contains(quad)) data.delete(quad); }
+        for (Quad quad : desired) { TemplateIndexService.workScopeBudget(deadline); if (!prior.contains(quad)) data.add(quad); }
+    }
+    private static void prefixEntries(Set<Quad> desired, Node unit, Node work, Node main, String language,
+                                      String field, Set<Node> names, long deadline) {
+        String suffix = (field.equals("title") ? "0" : "1")
+            + main.getURI().substring(PRODUCT.length()).replace("-", "")
+            + unit.getURI().substring(PRODUCT.length()).replace("-", "");
+        Set<String> scopes = new LinkedHashSet<>();
+        for (Node name : names) for (String prefix : namePrefixes(name.getLiteralLexicalForm(), deadline)) {
+            scopes.add(prefixScope(prefix, null)); scopes.add(prefixScope(prefix, language));
+        }
+        for (String scope : scopes) {
+            TemplateIndexService.workScopeBudget(deadline);
+            Node entry = uri(scope + suffix);
+            desired.add(new Quad(PUBLIC, entry, p("prefixUnit"), unit));
+            desired.add(new Quad(PUBLIC, entry, p("prefixWork"), work));
+            desired.add(new Quad(PUBLIC, entry, p("prefixMain"), main));
+            desired.add(new Quad(PUBLIC, entry, p("prefixField"), NodeFactory.createLiteralString(field)));
+            desired.add(new Quad(PUBLIC, entry, p("publicTitle"), NodeFactory.createLiteralString("rezicsprefixdirectory")));
+        }
     }
 }
