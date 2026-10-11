@@ -14,6 +14,8 @@ export interface RecipeImport {
   residual: string;
 }
 
+export const MAX_RECIPE_IMPORT_BYTES = 256 * 1024;
+
 export interface RecipeSourceSupportCandidate {
   sourceKey: string;
   sourceField: 'recipeIngredient' | 'recipeInstructions';
@@ -94,7 +96,9 @@ function instruction(value: unknown): string | undefined {
 /** Parse a bounded Schema.org Recipe object while retaining its full source as a digest anchor. */
 export function importRecipe(value: unknown, sourceKey: string): RecipeImport {
   const raw = JSON.stringify(value);
-  if (raw === undefined || raw.length > 65_536) throw new Error('recipe source exceeds 64 KiB or is absent');
+  if (raw === undefined || Buffer.byteLength(raw, 'utf8') > MAX_RECIPE_IMPORT_BYTES) {
+    throw new Error('recipe source exceeds 256 KiB or is absent');
+  }
   const residual = createHash('sha256').update(raw).digest('hex');
   const root = typeof value === 'string' ? { recipeInstructions: value } : value as Record<string, unknown>;
   if (!root || typeof root !== 'object' || Array.isArray(root)) throw new Error('recipe source must be an object or text');

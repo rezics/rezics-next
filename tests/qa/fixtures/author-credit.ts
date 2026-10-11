@@ -334,6 +334,25 @@ export async function authorCreditFixture(
         ...(body ? { body: JSON.stringify(body) } : {}),
       }),
     );
+  const callRaw = (
+    method: string,
+    path: string,
+    bytes: Uint8Array,
+    mediaType: string,
+    key = randomUUID(),
+    token: string | null = account.tokenA,
+  ) =>
+    app.handle(
+      new Request(`http://main.local${path}`, {
+        method,
+        headers: {
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          'idempotency-key': key,
+          'content-type': mediaType,
+        },
+        body: new Blob([new Uint8Array(bytes)]),
+      }),
+    );
   const json = async <T>(response: Response, status: number): Promise<T> => {
     const result = await response.json();
     if (response.status !== status)
@@ -475,6 +494,7 @@ export async function authorCreditFixture(
     sourceAuthorNames,
     setAuthorName: (key: string, name: string) => retainedAuthorNames.set(key, name),
     call,
+    callRaw,
     json,
     authoredBody,
     catalogueBody,

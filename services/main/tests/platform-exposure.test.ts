@@ -223,7 +223,10 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('putV1WorksByIdProgress');
   expect(matrix.find(entry => entry.path === '/v1/works/{id}/progress' && entry.method === 'put'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
-  expect(publicOperations).toHaveLength(527);
+  expect(publicOperations).toContain('postV1RecipesByIdFile-imports');
+  expect(matrix.find(entry => entry.path === '/v1/recipes/{id}/file-imports' && entry.method === 'post'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true });
+  expect(publicOperations).toHaveLength(528);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );

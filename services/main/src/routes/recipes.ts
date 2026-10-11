@@ -18,7 +18,9 @@ import { AdmissionDenied } from '../modules/access/admission.ts';
 import { structureProfileFor } from '../modules/structure/profiles.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
 import { exactRational, InexactQuantity } from '../modules/recipe/quantity.ts';
-import { importRecipe, recipeSourceSupportCandidates } from '../modules/recipe/importer.ts';
+import { importRecipe, recipeSourceSupportCandidates, type RecipeImport } from '../modules/recipe/importer.ts';
+import { cancelRecipeFileBody, MAX_RECIPE_FILE_BYTES, parseRecipeFile, readRecipeFileBytes,
+  RecipeFileInvalid, RecipeFileTooLarge } from '../modules/recipe/file-intake.ts';
 import { RecipeSourceConversionInvalid, RecipeSourceConversionUnavailable,
   type RecipeSourceConversion }
   from '../modules/recipe/source-conversion.ts';
@@ -85,6 +87,11 @@ const timingKinds = [['preparation', 'preparation-duration'], ['cooking', 'cooki
   ['total', 'total-duration']] as const;
 const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingSubject: ref },
   { additionalProperties: false });
+const recipeFileImportResponse = t.Object({ structure: ref, revision: ref, sourceObservation: ref,
+  residualDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), replayed: t.Boolean(),
+  receipts: t.Array(t.String()), sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }, { additionalProperties: false }) },
+{ additionalProperties: false });
 const recipeExportStep = t.Object({ '@type': t.Literal('HowToStep'), text: t.String(), inLanguage: t.String(),
   sourceKey: t.Optional(t.String()) }, { additionalProperties: false });
 function recipeExportInstruction(depth = 0): TSchema {
@@ -124,6 +131,7 @@ export const openApiOperations = {
   '/v1/recipes/{id}/timings': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/scalings': { post: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/recipes/{id}/imports': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}/file-imports': { post: { rateLimitFamily: 'upload', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/exports/schema-org': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/recipes/nutrition': { post: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
 } as const;
@@ -133,7 +141,14 @@ function key(request: Request): string | null {
   return value && /^[A-Za-z0-9:_./-]{1,128}$/.test(value) ? value : null;
 }
 
+class RecipeImportPending extends Error {}
+
 function routeError(error: unknown): Response {
+  if (error instanceof RecipeImportPending) {
+    return problem(503, 'recipe_import_pending', 'Recipe import is pending');
+  }
+  if (error instanceof RecipeFileInvalid) return problem(422, 'invalid_recipe_file', error.message);
+  if (error instanceof RecipeFileTooLarge) return problem(413, 'recipe_file_too_large', 'Recipe file exceeds 256 KiB');
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_recipe_change', error.message);
   if (error instanceof InexactQuantity) return problem(400, 'invalid_recipe_quantity', error.message);
   if (error instanceof RecipeSourceConversionInvalid || error instanceof FieldWithdrawalInvalid) {
@@ -200,6 +215,82 @@ async function allOccurrences(work: MainWorkDependencies, request: Request, stru
 }
 
 const durationKinds: ReadonlySet<string> = new Set(timingKinds.map(([, kind]) => kind));
+
+interface RecipeImportWrite {
+  expectedHead: string;
+  receipts: string[];
+  sourcePosition?: { datasetId: 'product'; dataEpoch: string; sequence: string };
+  importedOccurrences: Map<string, string>;
+}
+
+/** Shared idempotent Structure writes for both retained observations and direct Recipe files. */
+async function writeRecipeImport(work: MainWorkDependencies, request: Request, input: {
+  structure: string; expectedHead: string; actingSubject: string;
+  idempotencyKey: string; parsed: RecipeImport;
+}): Promise<RecipeImportWrite> {
+  let expectedHead = input.expectedHead;
+  const receipts: string[] = [];
+  let sourcePosition: RecipeImportWrite['sourcePosition'];
+  const groupIndexes = input.parsed.sections.map((_, index) => index);
+  const groups = new Map<number, string>();
+  for (let offset = 0; offset < groupIndexes.length; offset += 16) {
+    const batch = groupIndexes.slice(offset, offset + 16);
+    const result = await changeAdmittedComposition(work.environment, work.account, work.access,
+      request, { structure: input.structure, expectedHead, actingSubject: input.actingSubject,
+        idempotencyKey: `${input.idempotencyKey}.groups.${offset / 16}`,
+        operations: batch.map(index => ({ op: 'insert' as const, parent: input.structure,
+          position: 'last' as const, role: 'group' as const,
+          label: { value: input.parsed.sections[index]!.label,
+            language: input.parsed.sections[index]!.language },
+          sourceKey: input.parsed.sections[index]!.sourceKey })) });
+    if (!result.revision) throw new RecipeImportPending();
+    if (result.occurrences?.length === batch.length) {
+      result.occurrences.forEach((occurrence, index) => groups.set(batch[index]!, occurrence));
+    } else {
+      const { records } = await allOccurrences(work, request, input.structure,
+        input.actingSubject, result.revision);
+      for (const index of batch) {
+        const matches = records.filter(record => record.state === 'active' && record.role === 'group'
+          && record.sourceKey === input.parsed.sections[index]!.sourceKey);
+        if (matches.length !== 1) throw new CompositionCorrupt('recipe import group is unavailable');
+        groups.set(index, matches[0]!.occurrence);
+      }
+    }
+    expectedHead = result.revision;
+    receipts.push(result.receipt);
+    sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
+  }
+  const operations = [
+    ...input.parsed.ingredients.map(item => ({ op: 'insert' as const, parent: input.structure,
+      position: 'last' as const, role: 'ingredient' as const,
+      qualifier: { ...item.qualifier,
+        ...(item.qualifier.parseStatus !== 'parsed'
+          ? { residual: `sha256:${input.parsed.residual}` } : {}) },
+      sourceKey: item.sourceKey })),
+    ...input.parsed.steps.map(item => ({ op: 'insert' as const, parent: item.section >= 0
+      ? groups.get(item.section) ?? input.structure : input.structure, position: 'last' as const,
+      role: 'step' as const, qualifier: { type: 'recipe-step' as const,
+        instructionText: { value: item.text, language: item.language },
+        usesIngredient: [], media: [], scaling: 'linear' as const }, sourceKey: item.sourceKey })),
+  ];
+  const importedOccurrences = new Map<string, string>();
+  for (let offset = 0; offset < operations.length; offset += 16) {
+    const result = await changeAdmittedComposition(work.environment, work.account, work.access,
+      request, { structure: input.structure, expectedHead, actingSubject: input.actingSubject,
+        idempotencyKey: `${input.idempotencyKey}.content.${offset / 16}`,
+        operations: operations.slice(offset, offset + 16) });
+    if (!result.revision) throw new RecipeImportPending();
+    if (result.occurrences?.length === Math.min(16, operations.length - offset)) {
+      result.occurrences.forEach((occurrence, index) => {
+        importedOccurrences.set(operations[offset + index]!.sourceKey, occurrence);
+      });
+    }
+    expectedHead = result.revision;
+    receipts.push(result.receipt);
+    sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
+  }
+  return { expectedHead, receipts, sourcePosition, importedOccurrences };
+}
 
 /**
  * The measures stored at `head`, for an edit that keeps what it does not supply. The caller's
@@ -410,6 +501,74 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             occurrences: scanned.records.length } }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
+    .post('/v1/recipes/:id/file-imports', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref, expectedHead: ref }, { additionalProperties: false }),
+      parse: 'none',
+      detail: { description: `Retain and import one local Schema.org Recipe JSON file, up to ${MAX_RECIPE_FILE_BYTES} bytes. JSON-LD must use the fixed Schema.org context; graph expansion and network access are disabled.`,
+        requestBody: { required: true, content: {
+          'application/json': { schema: { type: 'object', required: ['@type'],
+            properties: { '@type': { const: 'Recipe' } }, additionalProperties: true } },
+          'application/ld+json': { schema: { type: 'object', required: ['@type', '@context'],
+            properties: { '@type': { const: 'Recipe' }, '@context': { const: 'https://schema.org' } },
+            additionalProperties: true } },
+        } } },
+      response: { 200: recipeFileImportResponse, 201: recipeFileImportResponse,
+        ...problems, 413: problemResult(413), 422: problemResult(422) } },
+    async ({ request, params, query }: { request: Request; params: { id: string };
+      query: { actingSubject: string; expectedHead: string } }) => {
+      try {
+        const idempotencyKey = key(request);
+        if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+        if (!work.sourceIntake || !work.access.activePrincipalId || !work.access.assertAuthority) {
+          return problem(503, 'source_intake_unavailable', 'Source intake owner is unavailable');
+        }
+        await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:edit']);
+        const structure = `https://rezics.com/id/${params.id}`;
+        const header = await readCompositionHeader(work.environment, structure);
+        if (!header || header.profile !== 'recipe-composition'
+          || !await work.access.canReadWork(principal, query.actingSubject, header.owner)) {
+          throw new CompositionUnavailable('Recipe is unavailable');
+        }
+        const profile = structureProfileFor(header.profile);
+        await work.access.assertAuthority({ principal, actingSubject: query.actingSubject,
+          action: profile.editAction, scope: `${profile.editScopePrefix}${header.owner}` });
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const intakeKey = `recipe-file-import:${idempotencyKey}`;
+        let prior = await work.sourceIntake.replay(principalId, intakeKey);
+        const bytes = await readRecipeFileBytes(request);
+        const mediaType = request.headers.get('content-type') ?? '';
+        const accepted = parseRecipeFile(bytes, mediaType);
+        if (header.head !== query.expectedHead && !prior) {
+          prior = await work.sourceIntake.replay(principalId, intakeKey);
+          if (!prior) throw new StaleCompositionHead('expected composition head is stale');
+        }
+        const intent = createHash('sha256').update(JSON.stringify([
+          structure, query.actingSubject,
+        ])).digest('hex').slice(0, 32);
+        const retained = await work.sourceIntake.submit(principalId, intakeKey, {
+          provider: 'rezics', namespace: 'recipe-file', externalId: header.owner,
+          sourceRevision: query.expectedHead, mediaType, retention: 'retained',
+          rawBytesBase64: Buffer.from(bytes).toString('base64'),
+          coverage: { scope: `recipe-file-import-v1:${intent}`, complete: true, omittedFields: [] },
+          rightsEvidence: { basis: 'unknown', note: 'User supplied this Recipe file for the Work.' },
+        });
+        const parsed = importRecipe(accepted.source, retained.observation.observation);
+        const written = await writeRecipeImport(work, request, { structure,
+          expectedHead: query.expectedHead, actingSubject: query.actingSubject,
+          idempotencyKey, parsed });
+        if (!written.sourcePosition) throw new CompositionCorrupt('recipe import did not write a composition');
+        return Response.json({ structure, revision: written.expectedHead,
+          sourceObservation: retained.observation.observation, residualDigest: parsed.residual,
+          receipts: written.receipts, sourcePosition: written.sourcePosition,
+          replayed: retained.replayed }, { status: retained.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof RecipeFileInvalid) return problem(422, 'invalid_recipe_file', error.message);
+        return routeError(error);
+      } finally { cancelRecipeFileBody(request); }
+    })
     .post('/v1/recipes/:id/imports', { params: t.Object({ id: groupUuid }),
       body: importBody, response: { 200: t.Any(), 202: problemResult(202), ...problems } },
     async ({ request, params, body }: { request: Request; params: { id: string };
@@ -463,64 +622,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           if (!converted) throw new RecipeSourceConversionUnavailable('Recipe conversion is unavailable');
           conversion = converted;
         }
-        let expectedHead = body.expectedHead;
-        const receipts: string[] = [];
-        let sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } | undefined;
-        const groupIndexes = parsed.sections.map((_, index) => index);
-        const groups = new Map<number, string>();
-        for (let offset = 0; offset < groupIndexes.length; offset += 16) {
-          const batch = groupIndexes.slice(offset, offset + 16);
-          const result = await changeAdmittedComposition(work.environment, work.account, work.access,
-            request, { structure, expectedHead, actingSubject: body.actingSubject,
-              idempotencyKey: `${idempotencyKey}.groups.${offset / 16}`,
-              operations: batch.map(index => ({ op: 'insert' as const, parent: structure,
-                position: 'last' as const, role: 'group' as const,
-                label: { value: parsed.sections[index]!.label,
-                  language: parsed.sections[index]!.language },
-                sourceKey: parsed.sections[index]!.sourceKey })) });
-          if (!result.revision) return problem(503, 'recipe_import_pending', 'Recipe import is pending');
-          if (result.occurrences?.length === batch.length) {
-            result.occurrences.forEach((occurrence, index) => groups.set(batch[index]!, occurrence));
-          } else {
-            const { records } = await allOccurrences(work, request, structure, body.actingSubject, result.revision);
-            for (const index of batch) {
-              const matches = records.filter(record => record.state === 'active' && record.role === 'group'
-                && record.sourceKey === parsed.sections[index]!.sourceKey);
-              if (matches.length !== 1) throw new CompositionCorrupt('recipe import group is unavailable');
-              groups.set(index, matches[0]!.occurrence);
-            }
-          }
-          expectedHead = result.revision; receipts.push(result.receipt);
-          sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
-        }
-        const operations = [
-          ...parsed.ingredients.map(item => ({ op: 'insert' as const, parent: structure,
-            position: 'last' as const, role: 'ingredient' as const,
-            qualifier: { ...item.qualifier,
-              ...(item.qualifier.parseStatus !== 'parsed'
-                ? { residual: `sha256:${parsed.residual}` } : {}) },
-            sourceKey: item.sourceKey })),
-          ...parsed.steps.map(item => ({ op: 'insert' as const, parent: item.section >= 0
-            ? groups.get(item.section) ?? structure : structure, position: 'last' as const,
-            role: 'step' as const, qualifier: { type: 'recipe-step' as const,
-              instructionText: { value: item.text, language: item.language },
-              usesIngredient: [], media: [], scaling: 'linear' as const }, sourceKey: item.sourceKey })),
-        ];
-        const importedOccurrences = new Map<string, string>();
-        for (let offset = 0; offset < operations.length; offset += 16) {
-          const result = await changeAdmittedComposition(work.environment, work.account, work.access,
-            request, { structure, expectedHead, actingSubject: body.actingSubject,
-              idempotencyKey: `${idempotencyKey}.content.${offset / 16}`,
-              operations: operations.slice(offset, offset + 16) });
-          if (!result.revision) return problem(503, 'recipe_import_pending', 'Recipe import is pending');
-          if (result.occurrences?.length === Math.min(16, operations.length - offset)) {
-            result.occurrences.forEach((occurrence, index) => {
-              importedOccurrences.set(operations[offset + index]!.sourceKey, occurrence);
-            });
-          }
-          expectedHead = result.revision; receipts.push(result.receipt);
-          sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
-        }
+        const written = await writeRecipeImport(work, request, { structure,
+          expectedHead: body.expectedHead, actingSubject: body.actingSubject, idempotencyKey, parsed });
+        const { expectedHead, receipts, sourcePosition, importedOccurrences } = written;
         const supports: string[] = [];
         if (conversion && work.sourceFieldAttachments) {
           const current = await readCompositionHeader(work.environment, structure);

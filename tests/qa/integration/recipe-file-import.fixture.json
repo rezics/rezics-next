@@ -1,0 +1,21 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Recipe",
+  "name": "Crème brûlée — family kitchen",
+  "inLanguage": "en",
+  "recipeIngredient": [
+    "1 1/2 cups heavy cream"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToSection",
+      "name": "Custard",
+      "itemListElement": [
+        {
+          "@type": "HowToStep",
+          "text": "Warm the cream gently, then cool it before serving."
+        }
+      ]
+    }
+  ]
+}

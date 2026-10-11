@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { SourceIntakeConflict } from '../modules/source/intake.ts';
+import { SourceIntakeConflict, SourceIntakeInvalid } from '../modules/source/intake.ts';
 import { authorNameProvenance } from '../modules/source/author-name.ts';
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../modules/source/open-library.ts';
 import { compareSourceChildren } from '../modules/source/child-correspondence.ts';
@@ -82,6 +82,7 @@ const sourceIntakeBody = t.Object({ profile: t.Literal('source-manual-intake-v1'
   rawBytesBase64: t.Optional(t.String({ maxLength: 87384 })),
   coverage: sourceCoverage, rightsEvidence: sourceRightsEvidence,
 }, { additionalProperties: false });
+const SOURCE_INTAKE_MAX_BYTES = 65_536;
 
 const sourceObservationResult = t.Object({ profile: t.Union([
   t.Literal('source-manual-intake-v1'), t.Literal('source-acquisition-v1') ]),
@@ -632,6 +633,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/sources/intakes', {
       body: sourceIntakeBody,
+      detail: { description: 'Retained manual sources are limited to 65,536 decoded bytes.' },
       response: { 200: sourceIntakeResult, 201: sourceIntakeResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
@@ -644,6 +646,10 @@ export function sourceRoutes(work: MainWorkDependencies) {
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source intake principal is inactive');
         await requireSourceImportAuthority(work, principal);
+        if (body.retention === 'retained' && body.rawBytesBase64
+          && Buffer.from(body.rawBytesBase64, 'base64').byteLength > SOURCE_INTAKE_MAX_BYTES) {
+          throw new SourceIntakeInvalid('manual source exceeds 64 KiB');
+        }
         const result = await work.sourceIntake.submit(principalId, key, {
           provider: body.provider, namespace: body.namespace, externalId: body.externalId,
           sourceRevision: body.sourceRevision, mediaType: body.mediaType,

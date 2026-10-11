@@ -52,6 +52,7 @@ export interface StagedSourceObservation {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FIELD = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
+export const MAX_RETAINED_SOURCE_BYTES = 256 * 1024;
 
 function checkedText(value: string, max: number): void {
   if (!value || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) {
@@ -89,12 +90,12 @@ function checkedInput(input: ManualSourceIntake): { bytes: Buffer | null; digest
     return { bytes: null, digest: null };
   }
   if (input.retention !== 'retained' || typeof input.rawBytesBase64 !== 'string'
-    || input.rawBytesBase64.length > 87_384
+    || input.rawBytesBase64.length > Math.ceil(MAX_RETAINED_SOURCE_BYTES / 3) * 4
     || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.rawBytesBase64)) {
     throw new SourceIntakeInvalid('invalid retained source bytes');
   }
   const bytes = Buffer.from(input.rawBytesBase64, 'base64');
-  if (bytes.length > 65_536 || bytes.toString('base64') !== input.rawBytesBase64) {
+  if (bytes.length > MAX_RETAINED_SOURCE_BYTES || bytes.toString('base64') !== input.rawBytesBase64) {
     throw new SourceIntakeInvalid('invalid retained source bytes');
   }
   return { bytes, digest: createHash('sha256').update(bytes).digest('hex') };
