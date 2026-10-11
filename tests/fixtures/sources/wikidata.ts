@@ -16,6 +16,7 @@ export interface WikidataFact {
 export interface FixtureRequest {
   id: string;
   url: string;
+  maxResponseBytes?: number;
   records?: readonly { id: string; url: string }[];
 }
 
@@ -26,6 +27,8 @@ export const wikidataAuthors = [
   { id: 'Q535', labels: { ja: 'ヴィクトル・ユーゴー', zh: '维克多·雨果' } },
   { id: 'Q1067', labels: { en: 'Dante Alighieri' } },
   { id: 'Q106143', labels: { en: 'Samuel Pepys' } },
+  { id: 'Q7200', labels: { en: 'Alexander Pushkin', ja: 'アレクサンドル・プーシキン', zh: '亞歷山大·普希金' } },
+  { id: 'Q6849599', labels: {} },
 ] as const;
 
 export const wikidata: FixtureSource = {
@@ -72,7 +75,7 @@ export const wikidata: FixtureSource = {
         ? [{ language, value: label.value.normalize('NFC') }]
         : [];
     });
-    if (!labels.length) throw new Error(`Wikidata entity ${id} has no selected labels`);
+    if (!labels.length && expectedLabels === undefined) throw new Error(`Wikidata entity ${id} has no selected labels`);
     return { id, revision: entity.lastrevid as number, labels };
   },
 };

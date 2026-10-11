@@ -150,7 +150,7 @@ async function fetchNormalized(
   clock: Pace,
 ): Promise<string> {
   const userAgent = `REZICSFixtureHarness/1.0 (+https://github.com/rezics/rezics-next)`;
-  const fetchRaw = async (url: string, id: string): Promise<unknown> => {
+  const fetchRaw = async (url: string, id: string, maxResponseBytes = request.maxResponseBytes ?? 2_000_000): Promise<unknown> => {
     let fetched: Fetched;
     try {
       fetched = await pacedFetch(
@@ -179,7 +179,7 @@ async function fetchNormalized(
     }
     if (fetched.status < 200 || fetched.status >= 300)
       throw new Error(`Fixture fetch ${adapter.name}/${id}: HTTP ${fetched.status}`);
-    if (fetched.bytes.byteLength > 2_000_000)
+    if (fetched.bytes.byteLength > maxResponseBytes)
       throw new Error(`Fixture response too large for ${adapter.name}/${id}`);
     const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
       fetched.bytes,
