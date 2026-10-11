@@ -5,6 +5,7 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
+import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { seedFirstPublicationDate } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { startMediaStack } from './media-support.ts';
@@ -42,6 +43,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
   try {
     const a = await stack.member('anime-manga-reader');
     const b = await stack.member('anime-manga-other-reader');
+    await ensureGlobalClassificationContext(stack.env);
     const library = new ReaderLibraryStatusStore(stack.contentPool);
     const preferences = new EditionPreferenceStore(stack.contentPool);
     const structureObjects = stack.objects('semantic/structure/');
