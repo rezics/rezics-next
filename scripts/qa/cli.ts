@@ -81,6 +81,7 @@ import { exclusiveWorkScopeAssembler, integrationStackAdmitsWorkScope, qaStackEn
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
+import { exclusivePreparationWallMs, preparationTestFiles, WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
 import {
   CAMPAIGN_QUALIFICATION_FILE, campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
   childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
@@ -432,8 +433,9 @@ async function runShardWork(
   const preparationStartedAt = Date.now();
   const shardProjectRunId = projectRunId;
   const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
-  const resourceClass = tier === 'integration' ? integrationResourceClass(files) : undefined;
-  if (resourceClass) budget = qaResourceClasses[resourceClass].budgetMs;
+  const seedBuild = tier === 'fault/recovery' && files.length === 1 && files[0] === WORK_PROFILE_SEED_BUILD_FILE;
+  const resourceClass = tier === 'integration' || seedBuild ? integrationResourceClass(files) : undefined;
+  if (resourceClass && !seedBuild) budget = qaResourceClasses[resourceClass].budgetMs;
   const environment = qaStackEnvironment({
     ...process.env,
     ...(tier === 'fault/recovery' ? faultFixtureEnvironment : {}),
@@ -441,7 +443,7 @@ async function runShardWork(
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
   const startupProtocol = !needsStack && files.every(file => selfManagedFaultAdmission.get(file) === 'startup');
   const persistent = qaStackMode(environment) === 'scale'
-    || tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
+    || files.some(file => commandOnlyIntegrationFiles.has(file));
   // Scale changes storage, not a fixture's endpoints. Product-only native
   // qualification keeps its closed raw-update endpoint in every storage mode.
   const rawUpdate = persistent && !files.some(file => commandOnlyIntegrationFiles.has(file));
@@ -827,15 +829,19 @@ function testWall(runs: ShardRun[]): number {
 async function runStackTier(tier: StackTier): Promise<void> {
   const artifact = tierArtifactName(tier);
   const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosenFor(tier)));
-  // Only the explicitly selected exclusive drill times both 600-second commands.
-  // Routine tier selections retain their existing wall and command deadlines.
-  const exclusiveRecovery = tier === 'fault/recovery' && paths.length === 1
-    && paths[0] === 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
-  const budget = exclusiveRecovery ? 1_320_000 : tier === 'integration' ? 480_000 : 360_000;
+  const selectedFiles = preparationTestFiles(expandTestPaths(root, paths), chosenFor(tier)?.files);
+  if (!selectedFiles.length) {
+    tiers.push({ name: tier, status: 'passed', elapsedMs: 0 });
+    return;
+  }
+  // Explicit preparation owns its aggregate wall; each stage still enforces 600 seconds.
+  const exclusiveWall = tier === 'fault/recovery' ? exclusivePreparationWallMs(selectedFiles) : undefined;
+  const exclusiveRecovery = exclusiveWall !== undefined;
+  const budget = exclusiveWall ?? (tier === 'integration' ? 480_000 : 360_000);
   const recorded = recordedFileDurations(artifactRoots(root), tier);
   const local = tier === 'fault/recovery'
     ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();
-  const estimates = estimatedDurations(expandTestPaths(root, paths),
+  const estimates = estimatedDurations(selectedFiles,
     tier === 'fault/recovery' ? new Map([...recorded, ...faultRecoveryBaselineDurations, ...local]) : recorded);
   // Prepare the small retained fixture once before any fault/recovery shards.
   // Launch and erasure decide independently whether they need the default
