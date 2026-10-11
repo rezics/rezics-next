@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { RealmReplyConflict, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable } from './content-store.ts';
-import type { RealmReplyDispatchBasis } from './graph.ts';
+import type { RealmReplyDispatchBasis, ReplyGraphReceipt } from './graph.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -87,6 +87,12 @@ export class RealmAboutThreadStore {
   }
 
   private async resolve(client: PoolClient, row: OperationRow): Promise<OperationRow> {
+    const canonical = (await client.query<{ opener_reply: string }>(
+      'SELECT opener_reply FROM content.realm_about_thread WHERE realm=$1 AND about=$2 FOR SHARE',
+      [row.realm, row.about])).rows[0];
+    if (!canonical || canonical.opener_reply !== row.opener_reply) {
+      throw new RealmReplyStale('Discussion reservation was released');
+    }
     if (row.parent_reply !== null && row.parent_revision === null) {
       // A committed reservation is visible even before its identity exists.
       // Never infer readiness from a draft or an identity alone.
@@ -159,9 +165,9 @@ export class RealmAboutThreadStore {
     return this.transaction(async client => operation(await this.resolve(client, await this.selected(client, id)), true));
   }
 
-  /** A retained reservation whose placement was cancelled is terminal, not
-   * an in-flight opener. Its graph owner decides that distinction. */
-  async openingPlacement(selected: AboutPostOperation): Promise<string | null> {
+  /** The immutable graph receipt distinguishes a cancelled reservation from
+   * an in-flight opener. */
+  async openingPlacement(selected: Pick<AboutPostOperation, 'openerReply'>): Promise<string | null> {
     const rows = (await this.pool.query<{ placement_admission_id: string | null }>(`
       SELECT placement_admission_id FROM content.realm_about_post_operation WHERE reply=$1 LIMIT 2`,
     [selected.openerReply])).rows;
@@ -169,8 +175,27 @@ export class RealmAboutThreadStore {
     return rows[0]!.placement_admission_id;
   }
 
+  /** Consume the placement owner's terminal cancellation, never its absence
+   * or a caller's inference of expiry. Historical intent selections remain
+   * immutable; activated keys are retained even when their opener is hidden. */
+  async releaseReservation(selected: Pick<AboutPostOperation, 'realm' | 'about' | 'openerReply'>,
+    terminal: ReplyGraphReceipt): Promise<boolean> {
+    if (terminal.outcome !== 'cancelled' || terminal.scope !== `reply:place:${selected.realm}`) {
+      throw new RealmReplyStale('Discussion reservation lacks a cancelled placement');
+    }
+    return this.transaction(async client => {
+      const removed = await client.query(`DELETE FROM content.realm_about_thread t
+        WHERE t.realm=$1 AND t.about=$2 AND t.opener_reply=$3 AND t.state='reserved'
+          AND EXISTS (SELECT 1 FROM content.realm_about_post_operation o
+            WHERE o.reply=t.opener_reply AND o.placement_admission_id=$4 AND o.phase='identified')`,
+      [selected.realm, selected.about, selected.openerReply, terminal.admissionId]);
+      return removed.rowCount === 1;
+    });
+  }
+
   /** Owner lookup includes reservations and hidden openers. Disclosure belongs
-   * to the later lookup command, and must not delete or reallocate this key. */
+   * to the later lookup command; an activated key is never reallocated. Only
+   * the placement owner's terminal cancellation can release a reservation. */
   async readThread(realm: string, about: string): Promise<AboutThread | null> {
     if (![realm, about].every(value => native.test(value))) throw new RealmReplyInvalid('invalid discussion key');
     const rows = (await this.pool.query<{ realm: string | null; about: string | null; opener_reply: string | null;

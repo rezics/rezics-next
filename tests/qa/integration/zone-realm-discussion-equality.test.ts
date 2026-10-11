@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { ensureFixtureScopeGate } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { comparableBody } from '../support/hidden-id-equality.ts';
 import { startHomeStack, type HomeStack } from './feed-read-support.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
@@ -13,7 +14,7 @@ async function hideBody(home: HomeStack, actor: string, reply: string, revision:
   const client = await home.stack.accessPool.connect();
   try {
     await client.query('BEGIN');
-    await client.query("INSERT INTO access.scope_gate (id) VALUES ('governance:platform') ON CONFLICT DO NOTHING");
+    await ensureFixtureScopeGate(client, 'governance:platform');
     await client.query(`INSERT INTO access.governance_case
       (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
       VALUES ($1,'content_report','platform','governance:platform','urn:rezics:context:global','content',$2,'body','private')`,

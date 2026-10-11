@@ -165,7 +165,7 @@ test('lost about-post responses after each durable owner phase resume one opener
   } finally { await home.stop(); }
 }, 300_000);
 
-test('revoke or attachment withdrawal winning before dispatch leaves no public orphan or replacement opener', async () => {
+test('cancelled and expired first posts release their reservation while retaining terminal intent outcomes', async () => {
   const home = await startHomeStack('zone-realm-discussion-dispatch-races');
   try {
     const a = await arrange(home);
@@ -175,12 +175,7 @@ test('revoke or attachment withdrawal winning before dispatch leaves no public o
     replies.place = async function (...args) {
       if (!revoked) {
         revoked = true;
-        // Bind this exact owner admission before revoking its authority epoch.
-        await home.stack.access.register({ principal: args[0], actingSubject: args[1],
-          action: 'reply.place', scope: `reply:place:${args[2].realm}`,
-          idempotencyKey: args[3], requestDigest: args[4] });
-        await home.stack.accessPool.query(`UPDATE access.scope_gate
-          SET authority_epoch=authority_epoch+1 WHERE id=$1`, [`reply:place:${a.realm.realm}`]);
+        await a.policy(a.realm.realm, 'mandatory');
       }
       return originalPlace.apply(this, args);
     };
@@ -193,9 +188,16 @@ test('revoke or attachment withdrawal winning before dispatch leaves no public o
     await noOrphanPublicReply(home, a.realm.realm, revokedOp.reply);
     const retry = await a.post(revokedPage, a.author, 'Revoked before dispatch', home.author.token, revokeKey);
     expect([403, 409], await retry.text()).toContain(retry.status);
+    expect((await a.effects(revokedPage.about)).threads).toBe(0);
+    await a.policy(a.realm.realm, 'open');
+    const reopenedPage = { ...revokedPage, routeRevision: (await a.route(revokedPage.path)).revision };
+    const reopened = await home.json<Posted>(await a.post(reopenedPage, a.reader,
+      'After a terminal cancellation', home.reader.token), 201);
+    expect(reopened.reply).not.toBe(revokedOp.reply);
+    expect((await a.rows(revokedPage.about)).find(row => row.reply === reopened.reply)).toMatchObject({ parent_reply: null });
+    const oldRetry = await a.post(revokedPage, a.author, 'Revoked before dispatch', home.author.token, revokeKey);
+    expect(oldRetry.status, await oldRetry.text()).toBe(409);
     expect((await a.effects(revokedPage.about)).threads).toBe(1);
-    const afterCancellation = await a.post(revokedPage, a.reader, 'After a terminal cancellation', home.reader.token);
-    expect(afterCancellation.status, await afterCancellation.text()).toBe(409);
 
     const expiredPage = await a.page('expired-preparation'), expiredKey = randomUUID();
     const expiryFault = interruptAfter(home, 'preparation');
@@ -206,20 +208,27 @@ test('revoke or attachment withdrawal winning before dispatch leaves no public o
     } finally { expiryFault.restore(); }
     const expired = await operation(home, a.realm.realm, expiredPage.about);
     expect(expired.placement_admission_id).toBeTruthy();
-    // Use the existing Access expiry rather than creating a composite replay clock.
-    const expiredAdmission = await home.stack.accessPool.query(`UPDATE access.admission
-      SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, [expired.placement_admission_id]);
-    expect(expiredAdmission.rowCount).toBe(1);
+    // Wait for Access's native lease; no fixture changes its durable clock.
+    const expiry = (await home.stack.accessPool.query<{ remaining: number }>(`SELECT
+      GREATEST(0,EXTRACT(EPOCH FROM expires_at-clock_timestamp())*1000)::double precision AS remaining
+      FROM access.admission WHERE id=$1`, [expired.placement_admission_id])).rows[0]!;
+    expect(expiry.remaining).toBeLessThanOrEqual(30_000);
+    await Bun.sleep(Math.ceil(expiry.remaining) + 100);
     const expiredRetry = await a.post(expiredPage, a.author, 'Expired prepared contribution', home.author.token, expiredKey);
     expect([403, 409], await expiredRetry.text()).toContain(expiredRetry.status);
     await noOrphanPublicReply(home, a.realm.realm, expired.reply);
-    expect((await a.effects(expiredPage.about)).threads).toBe(1);
+    expect((await a.effects(expiredPage.about)).threads).toBe(0);
     const expiredPreparation = await home.stack.contentPool.query(`SELECT status,pin_active
       FROM content.publication_preparation WHERE operation_id=$1`, [expired.placement_admission_id]);
     expect(expiredPreparation.rows).toEqual([{ status: 'rejected', pin_active: false }]);
     const expiredAgain = await a.post(expiredPage, a.author, 'Expired prepared contribution', home.author.token, expiredKey);
     expect([403, 409], await expiredAgain.text()).toContain(expiredAgain.status);
     expect((await operation(home, a.realm.realm, expiredPage.about)).reply).toBe(expired.reply);
+    const afterExpiry = await home.json<Posted>(await a.post(expiredPage, a.reader,
+      'A fresh intent after native expiry', home.reader.token), 201);
+    expect(afterExpiry.reply).not.toBe(expired.reply);
+    expect((await a.rows(expiredPage.about)).find(row => row.reply === afterExpiry.reply)).toMatchObject({ parent_reply: null });
+    expect((await a.effects(expiredPage.about)).threads).toBe(1);
 
     const page = await a.page('withdrawn-dispatch'), key = randomUUID();
     const graph = home.stack.fuseki, originalCommand = graph.commandWithReceipt;
@@ -244,7 +253,7 @@ test('revoke or attachment withdrawal winning before dispatch leaves no public o
     expect(preparations.rows).toEqual([{ status: 'rejected', pin_active: false }]);
     const retryWithdrawn = await a.post(page, a.author, 'Withdrawal before graph dispatch', home.author.token, key);
     expect(retryWithdrawn.status, await retryWithdrawn.text()).toBe(409);
-    expect((await a.effects(page.about)).threads).toBe(1);
+    expect((await a.effects(page.about)).threads).toBe(0);
   } finally { await home.stop(); }
 }, 300_000);
 
@@ -261,8 +270,7 @@ test('a graph-committed first post survives withdrawal and revocation during los
     const selected = await operation(home, a.realm.realm, page.about);
     expect(await acceptedPlacements(home, a.realm.realm, selected.reply)).toHaveLength(1);
     await withdraw(home, a);
-    await home.stack.accessPool.query(`UPDATE access.scope_gate
-      SET authority_epoch=authority_epoch+1 WHERE id=$1`, [`reply:place:${a.realm.realm}`]);
+    await a.policy(a.realm.realm, 'mandatory');
     const winner = await recovered(home, await a.post(page, a.author, 'Committed winner', home.author.token, key));
     expect(winner.reply).toBe(selected.reply);
     expect(await home.json(await a.post(page, a.author, 'Committed winner', home.author.token, key), 200)).toEqual(winner);

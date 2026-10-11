@@ -6,8 +6,27 @@ import type { SaveDraftCommand } from '../../../services/content/src/core.ts';
 import type { realmAboutThread, realmThread } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import type { TitleControlState } from '../../../services/main/src/modules/work/title-control.ts';
 import { relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { arrange, local, threeWriteDebits, type Page, type Posted } from './zone-realm-discussion-support.ts';
+
+test('about-post accepts supported RFC 5646 language extensions and preserves the author language on replay', async () => {
+  const home = await startHomeStack('zone-realm-discussion-languages');
+  try {
+    const a = await arrange(home), page = await a.page('language-tags');
+    for (const language of ['en-Latn-US-u-ca-gregory', 'de-CH-1901']) {
+      const input = { ...a.input(page, a.author, `Contribution in ${language}`), language };
+      const key = randomUUID();
+      const posted = await home.json<Posted>(await home.call('POST',
+        `/v1/realms/${local(a.realm.realm)}/about-posts`, input, home.author.token, key), 201);
+      expect(await home.json(await home.call('POST', `/v1/realms/${local(a.realm.realm)}/about-posts`,
+        input, home.author.token, key), 200)).toEqual(posted);
+      const variant = await home.stack.contentPool.query(`SELECT v.language_tag,v.original_language_tag
+        FROM content.reply r JOIN content.variant v ON v.id=r.variant_id WHERE r.id=$1`, [posted.reply]);
+      expect(variant.rows).toEqual([{ language_tag: language, original_language_tag: language }]);
+    }
+  } finally { await home.stop(); }
+}, 180_000);
 
 test('a published Zone page opens one canonical discussion and preserves independent concurrent contributions', async () => {
   // Thread reads exercise the real projector: replay acknowledged envelopes
@@ -82,11 +101,9 @@ test('a published Zone page opens one canonical discussion and preserves indepen
     // The fixture Work is catalogue metadata, so editing uses an explicit
     // represented grant rather than inventing native creator authority.
     const editScope = `work:edit:${page.about}`;
-    await home.stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [editScope]);
-    await home.stack.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
-      VALUES ($1,$2,$3,'work.edit',now() + interval '1 hour')`, [randomUUID(), home.author.principalId, a.author]);
-    await home.stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-      VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`, [randomUUID(), a.author, editScope]);
+    await grantFixtureAuthority(home.stack.accessPool, { scope: editScope, requireDispatch: true,
+      representations: [{ principalId: home.author.principalId, actor: a.author, action: 'work.edit', lifetime: '8 hours' }],
+      grant: { actor: a.author, action: 'work.edit', lifetime: '8 hours' } });
     const titleBasis = await home.json<TitleControlState>(await home.call('GET',
       `/v1/works/${local(page.about)}/title-control?${new URLSearchParams({ actingSubject: a.author })}`,
       undefined, home.author.token));

@@ -5,9 +5,12 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { appendContentEvent, ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { RealmAboutPostCommand } from '../src/modules/realm-reply/about-command.ts';
 import { RealmAboutThreadStore } from '../src/modules/realm-reply/about-store.ts';
-import { RealmReplyContentStore, RealmReplyConflict, RealmReplyUnavailable,
+import { RealmReplyContentStore, RealmReplyConflict, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable,
   type ReplyIdentityInput } from '../src/modules/realm-reply/content-store.ts';
+import type { ReplyGraphReceipt } from '../src/modules/realm-reply/graph.ts';
 
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -151,6 +154,57 @@ test('concurrent replay allocates one identity and changed input under an existi
   const resumed = await about.reserve(input);
   expect(resumed.id).toBe(first.id);
   expect(resumed.replayed).toBe(true);
+});
+
+test('terminal opener cancellation releases only the reservation and fences its retained pending selections', async () => {
+  const input = intent(), opener = await about.reserve(input);
+  const childInput = intent({ realm: input.realm, about: input.about, rootRevision: input.rootRevision });
+  const child = await about.reserve(childInput);
+  const identified = await identify(opener);
+  const placement = admission(opener, 'reply.place', `reply:place:${opener.realm}`);
+  await about.recordDispatch(opener.id, placement.id, {
+    zone: nativeId(), zoneRevision: nativeId(), routeRevision: nativeId(),
+  });
+  const terminal: ReplyGraphReceipt = { outcome: 'cancelled', admissionId: placement.id,
+    requestDigest: placement.requestDigest, authorityEpoch: placement.authorityEpoch,
+    scope: placement.scope, receipt: nativeId(), dataEpoch: randomUUID(), sequence: '1' };
+  await expect(about.releaseReservation(opener, { ...terminal, outcome: 'succeeded' })).rejects.toBeInstanceOf(RealmReplyStale);
+  expect(await about.releaseReservation(opener, { ...terminal, admissionId: randomUUID() })).toBe(false);
+  expect(await about.releaseReservation(opener, terminal)).toBe(true);
+  expect(await about.releaseReservation(opener, terminal)).toBe(false);
+  expect(await about.readThread(input.realm, input.about)).toBeNull();
+  expect((await pool.query('SELECT reply,opener_reply,parent_reply,phase FROM content.realm_about_post_operation WHERE id=$1',
+    [opener.id])).rows).toEqual([{ reply: opener.reply, opener_reply: opener.reply, parent_reply: null, phase: 'identified' }]);
+  expect(await identities.readReply(opener.reply)).toMatchObject({ revisionId: identified.saved.revisionId });
+  await expect(about.reserve(input)).rejects.toBeInstanceOf(RealmReplyStale);
+  await expect(about.reserve(childInput)).rejects.toBeInstanceOf(RealmReplyStale);
+  await expect(about.resume(child.id)).rejects.toBeInstanceOf(RealmReplyStale);
+  const fresh = await about.reserve(intent({ realm: input.realm, about: input.about }));
+  expect(fresh.parentReply).toBeNull();
+  expect(fresh.reply).not.toBe(opener.reply);
+  const winner = await post(fresh);
+  expect(await about.releaseReservation(fresh, terminal)).toBe(false);
+  expect(await about.readThread(input.realm, input.about)).toMatchObject({ state: 'active', openerReply: fresh.reply,
+    rootRevision: fresh.rootRevision, revisionId: winner.saved.revisionId });
+});
+
+test('about-post language syntax and operation length bounds refuse before any canonical reservation', async () => {
+  const input = intent();
+  // Invalid input never reaches another owner. The real Content pool proves
+  // that direct command callers cannot bypass the HTTP language constraint.
+  const command = new RealmAboutPostCommand({ realmReplyThreads: { rankingContent: pool },
+    realmReplies: {}, contentAuthoring: {} } as unknown as MainWorkDependencies);
+  const tooLong = `en-x-${['abcdefgh', 'abcdefgh', 'abcdefgh', 'abcdefgh'].join('-')}`;
+  for (const language of ['en-a-foo-a-bar', 'en-1901-1901', 'en-', ' en', tooLong]) {
+    await expect(command.post(new Request('http://main.local'), { issuer: 'test', subject: 'test' }, input.realm, {
+      profile: 'realm-about-post-v1', about: input.about, targetRevision: input.rootRevision,
+      zone: nativeId(), path: '/', routeRevision: nativeId(), actingSubject: input.actor,
+      body: 'Kept words', language, direction: 'ltr',
+    }, randomUUID())).rejects.toBeInstanceOf(RealmReplyInvalid);
+  }
+  expect(await about.readThread(input.realm, input.about)).toBeNull();
+  expect((await pool.query('SELECT id FROM content.realm_about_post_operation WHERE realm=$1 AND about=$2',
+    [input.realm, input.about])).rows).toHaveLength(0);
 });
 
 test('Realm and resource keys select independent openers', async () => {

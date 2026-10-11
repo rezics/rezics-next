@@ -6,7 +6,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { saveVerifiedMemberReplyDraft, type CanonicalAboutReplyDraftResult } from '../content-publication/reply-draft.ts';
 import { resolveTargets } from '../target/resolve.ts';
 import { workRead, WorkReadMissing, WorkReadMoved } from '../work/read-session.ts';
-import { GRAPHS, iri, RV } from '../work/activate.ts';
+import { parseLanguage } from '../display-language/tag.ts';
 import { resolveZoneRoute, ZoneRouteMissing } from '../zone/route.ts';
 import { readZoneConfiguration } from '../zone/configuration.ts';
 import { RealmAboutThreadStore, type AboutPostOperation } from './about-store.ts';
@@ -47,13 +47,6 @@ export class RealmAboutPostCommand {
       const policy = await session.realm(realm);
       const [target] = await resolveTargets(session, [input.about], 'discussion');
       if (target!.revision !== input.targetRevision) throw new WorkReadMoved('Discussion target changed');
-      // This is an input identity constraint; Access still proves control and
-      // authorship on each effect. Broader management never selects an Org author.
-      const rows = await session.query(`SELECT ?kind WHERE { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.actingSubject)} a rv:Agent ; rv:agentKind ?kind . } } LIMIT 2`, 2);
-      if (rows.length !== 1 || rows[0]?.kind?.value !== `${RV}PersonAgent`) {
-        throw new RealmReplyDenied('A Person must author the discussion post');
-      }
       return policy;
     });
     // Disclose identifiers before comparing route coordinates: an unavailable
@@ -122,8 +115,14 @@ export class RealmAboutPostCommand {
         action: 'reply.place', scope: `reply:place:${realm}`, idempotencyKey: phaseKey('placement'),
         requestDigest: realmReplyDigest(placement) });
       selected = await this.store.recordDispatch(selected!.id, admission.id, basis);
-      await this.work.realmReplies!.place(principal, input.actingSubject, placement,
-        phaseKey('placement'), realmReplyDigest(placement), basis);
+      try {
+        await this.work.realmReplies!.place(principal, input.actingSubject, placement,
+          phaseKey('placement'), realmReplyDigest(placement), basis);
+      } catch (error) {
+        const terminal = await readReplyGraphReceipt(this.work.environment, admission);
+        if (terminal?.outcome === 'cancelled') await this.store.releaseReservation(selected!, terminal);
+        throw error;
+      }
       const receipt = await readReplyGraphReceipt(this.work.environment, admission);
       if (receipt?.outcome !== 'succeeded' || receipt.realm !== realm || receipt.reply !== selected.reply
         || receipt.revisionId !== draft.revisionId) throw new RealmReplyUnavailable('Discussion placement is pending');
@@ -137,12 +136,17 @@ export class RealmAboutPostCommand {
       const receipt = await readReplyGraphReceipt(this.work.environment,
         { id: selected.placementAdmissionId, action: 'reply.place' });
       if (receipt) {
+        if (receipt.outcome === 'cancelled') {
+          await this.store.releaseReservation(selected, receipt);
+          throw new RealmReplyStale('Discussion placement was cancelled');
+        }
         const draft = await this.store.savedDraft(selected);
         if (!draft) throw new RealmReplyUnavailable('Discussion draft receipt is unavailable');
         return place(draft, selected.dispatchBasis, true);
       }
     }
     try {
+      if (input.language.length > 35 || !parseLanguage(input.language)) throw new Error('invalid language');
       const authored = authoredDocumentBody(input, 8192);
       if (authored.document ? !hasDocumentContent(authored.document) : !authored.body) {
         throw new Error('empty discussion post');
@@ -159,6 +163,12 @@ export class RealmAboutPostCommand {
       { action: 'reply.place', scope: `reply:place:${realm}` },
     ]) {
       await this.work.access.assertAuthority({ ...request, principal, actingSubject: input.actingSubject });
+    }
+    const canonical = await this.store.readThread(realm, input.about);
+    if (canonical?.state === 'reserved') {
+      const opening = await this.store.openingPlacement(canonical);
+      const terminal = opening ? await readReplyGraphReceipt(this.work.environment, { id: opening, action: 'reply.place' }) : null;
+      if (terminal?.outcome === 'cancelled') await this.store.releaseReservation(canonical, terminal);
     }
     selected = selected ? await this.store.resume(selected.id) : await this.store.reserve({ realm,
       about: input.about, actor: input.actingSubject, intentKey: key, intentDigest: digest,
