@@ -1,14 +1,20 @@
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { ContentCore, type ContentOutboxEvent } from '../../../services/content/src/core.ts';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { ContentProjectionCursor, ContentProjectionSaturated } from '../../../services/content/src/projection-cursor.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds, assessOperationalBounds,
   OperationalBoundsInvalid } from '../../../services/main/src/operations/bounds.ts';
+import { BACKPRESSURE_PROFILE_V1 } from '../../../services/main/src/operations/backpressure.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
+import { startPostgresCluster } from '../support/postgres-cluster.ts';
 
 const issuer = 'https://qa-operational-bounds.test';
 const SCOPE = 'work:create:root';
@@ -328,5 +334,181 @@ test('OPS05: discovery work stays within its derived bound across candidate and 
   } finally {
     await accessPool.end();
     await databases.close();
+  }
+}, 180_000);
+
+test('OPS06: projection pending capacity is transactional and remains visible to backpressure', async () => {
+  requireTier();
+  const cluster = await startPostgresCluster();
+  const contentPool = new Pool({ ...cluster.connection, max: 6 });
+  const consumer = `capacity-${randomUUID()}`;
+  try {
+    await migrateContent(contentPool);
+    const content = new ContentCore(contentPool);
+    const cursor = new ContentProjectionCursor(contentPool, BACKPRESSURE_PROFILE_V1.worker);
+    const initial = await cursor.initialize(consumer);
+    const legacyConsumer = `${consumer}-legacy`;
+    await cursor.initialize(legacyConsumer);
+    expect(initial.sequence).toBe('0');
+    expect((await content.ownerPosition()).sequence).toBe('0');
+
+    const sourcePrefix = `${consumer}-source`;
+    await contentPool.query(`INSERT INTO content.receipt
+      (operation_id, request_digest, action, outcome, data_epoch, sequence)
+      SELECT $1 || '-' || n::text, repeat('a', 64), 'draft.save', 'rejected', $2::uuid, n
+      FROM generate_series(1, 1002) AS series(n)`, [sourcePrefix, initial.dataEpoch]);
+    await contentPool.query(`INSERT INTO content.outbox
+      (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload)
+      SELECT gen_random_uuid(), data_epoch, sequence, operation_id,
+        'capacity.test', 'capacity-test-v1', NULL, jsonb_build_object('index', sequence)
+      FROM content.receipt WHERE operation_id LIKE $1 || '-%'`, [sourcePrefix]);
+    await contentPool.query('UPDATE content.owner_control SET sequence = 1002 WHERE singleton');
+    const rows = await contentPool.query<{ id: string; data_epoch: string; sequence: string;
+      operation_id: string; event_type: string; recipe: string; revision_id: string | null;
+      payload: Record<string, unknown> }>(`SELECT id, data_epoch, sequence::text, operation_id,
+      event_type, recipe, revision_id, payload FROM content.outbox
+      WHERE data_epoch = $1 ORDER BY sequence`, [initial.dataEpoch]);
+    expect(rows.rowCount).toBe(1002);
+    const events: ContentOutboxEvent[] = rows.rows.map(row => ({ id: row.id,
+      position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
+      operationId: row.operation_id, eventType: row.event_type, recipe: row.recipe,
+      revisionId: row.revision_id, payload: row.payload }));
+    const at = (sequence: number) => events.find(event => event.position.sequence === String(sequence))!;
+
+    // Recreate a pre-migration checkpoint, seed an over-cap backlog, then apply
+    // the actual migration SQL to prove it counts and preserves legacy rows.
+    await contentPool.query(`ALTER TABLE content.projection_checkpoint
+      DROP CONSTRAINT projection_checkpoint_pending_count_nonnegative, DROP COLUMN pending_count`);
+    await contentPool.query(`INSERT INTO content.projection_pending
+      (consumer, data_epoch, sequence, event_id, target)
+      SELECT $1, data_epoch, sequence, id,
+        CASE WHEN sequence <= 9 THEN 'legacy:' || sequence::text ELSE 'legacy:1' END
+      FROM content.outbox WHERE data_epoch = $2 AND sequence <= 1001 ORDER BY sequence`,
+    [legacyConsumer, initial.dataEpoch]);
+    await contentPool.query(`INSERT INTO content.projection_target
+      (consumer, data_epoch, target, first_sequence)
+      SELECT consumer, data_epoch, target, min(sequence) FROM content.projection_pending
+      WHERE consumer = $1 GROUP BY consumer, data_epoch, target`, [legacyConsumer]);
+    await contentPool.query(`UPDATE content.projection_checkpoint SET scan_sequence = 1001
+      WHERE consumer = $1`, [legacyConsumer]);
+    await contentPool.query(readFileSync(new URL(
+      '../../../services/content/migrations/900_projection_pending_count.sql', import.meta.url), 'utf8'));
+    expect((await contentPool.query<{ pending: string; pending_count: string }>(`SELECT
+      (SELECT count(*) FROM content.projection_pending WHERE consumer=$1)::text AS pending,
+      pending_count::text FROM content.projection_checkpoint WHERE consumer=$1`, [legacyConsumer])).rows[0])
+      .toEqual({ pending: '1001', pending_count: '1001' });
+
+    // Seed an existing 999-row backlog to test the exact boundary without
+    // issuing a thousand setup transactions through the cursor.
+    await contentPool.query(`INSERT INTO content.projection_pending
+      (consumer, data_epoch, sequence, event_id, target)
+      SELECT $1, data_epoch, sequence, id,
+        CASE WHEN sequence <= 10 THEN 'target:' || sequence::text ELSE 'target:1' END
+      FROM content.outbox WHERE data_epoch = $2 AND sequence <= 999 ORDER BY sequence`,
+    [consumer, initial.dataEpoch]);
+    await contentPool.query(`INSERT INTO content.projection_target
+      (consumer, data_epoch, target, first_sequence)
+      SELECT consumer, data_epoch, target, min(sequence) FROM content.projection_pending
+      WHERE consumer = $1 GROUP BY consumer, data_epoch, target`, [consumer]);
+    await contentPool.query(`UPDATE content.projection_checkpoint
+      SET scan_sequence = 999, pending_count = 999 WHERE consumer = $1`, [consumer]);
+    const atCapacityBoundary = await cursor.readScan(consumer);
+    expect(atCapacityBoundary.sequence).toBe('999');
+    expect(at(1000).position.sequence).toBe('1000');
+    expect(at(1000).position.dataEpoch).toBe(atCapacityBoundary.dataEpoch);
+    expect((await contentPool.query<{ pending_count: string }>(`SELECT pending_count::text
+      FROM content.projection_checkpoint WHERE consumer = $1`, [consumer])).rows[0]?.pending_count).toBe('999');
+
+    // A failed checkpoint update rolls back both the inserted row and count.
+    await contentPool.query(`CREATE FUNCTION content.fail_capacity_ack() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.scan_sequence > OLD.scan_sequence THEN RAISE EXCEPTION 'capacity ack rollback'; END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER fail_capacity_ack BEFORE UPDATE ON content.projection_checkpoint
+      FOR EACH ROW EXECUTE FUNCTION content.fail_capacity_ack()`);
+    await expect(cursor.acknowledge(consumer, atCapacityBoundary, at(1000).position,
+      { event: at(1000), target: 'target:1' })).rejects.toThrow('capacity ack rollback');
+    await contentPool.query('DROP TRIGGER fail_capacity_ack ON content.projection_checkpoint');
+    await contentPool.query('DROP FUNCTION content.fail_capacity_ack()');
+    expect((await contentPool.query<{ pending_count: string; scan_sequence: string }>(`SELECT
+      pending_count::text, scan_sequence::text FROM content.projection_checkpoint WHERE consumer = $1`,
+    [consumer])).rows[0]).toEqual({ pending_count: '999', scan_sequence: '999' });
+    expect((await contentPool.query('SELECT 1 FROM content.projection_pending WHERE consumer=$1 AND sequence=1000',
+      [consumer])).rowCount).toBe(0);
+
+    // Two restarted cursor instances race at one free slot. The checkpoint lock
+    // admits one event; the other sees the advanced source position.
+    const restarted = new ContentProjectionCursor(contentPool, BACKPRESSURE_PROFILE_V1.worker);
+    const expected = await restarted.readScan(consumer);
+    const concurrent = await Promise.allSettled([
+      restarted.acknowledge(consumer, expected, at(1000).position,
+        { event: at(1000), target: 'target:1' }),
+      new ContentProjectionCursor(contentPool, BACKPRESSURE_PROFILE_V1.worker).acknowledge(
+        consumer, expected, at(1000).position, { event: at(1000), target: 'target:1' }),
+    ]);
+    expect(concurrent.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    const checkpointConflict = concurrent.find(result => result.status === 'rejected');
+    expect(checkpointConflict?.status === 'rejected' && checkpointConflict.reason).toMatchObject({
+      message: 'projection checkpoint changed' });
+    expect((await contentPool.query<{ pending_count: string }>(`SELECT pending_count::text
+      FROM content.projection_checkpoint WHERE consumer=$1`, [consumer])).rows[0]?.pending_count).toBe('1000');
+    await expect(restarted.acknowledge(consumer, await restarted.readScan(consumer), at(1001).position,
+      { event: at(1001), target: 'target:1' })).rejects.toBeInstanceOf(ContentProjectionSaturated);
+    expect((await restarted.readScan(consumer)).sequence).toBe('1000');
+    expect((await restarted.read(consumer)).sequence).toBe('0');
+
+    const app = createMainApp({} as FusekiClient, { contentProjection: { content, cursor: restarted, consumer }
+    } as unknown as MainWorkDependencies);
+    const snapshotResponse = await app.handle(new Request('http://main.local/v1/operations/backpressure'));
+    expect(snapshotResponse.status).toBe(200);
+    const snapshot = await snapshotResponse.json() as { lanes: [{ state: string; backlog: string | null;
+      maxBacklog: number }, { state: string }, { state: string }] };
+    expect(snapshot.lanes[0]).toMatchObject({ state: 'saturated', maxBacklog: 1000 });
+    const refused = await app.handle(new Request('http://main.local/v1/content-drafts', { method: 'POST' }));
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get('retry-after')).toBe('5');
+    expect((await refused.json() as { code: string }).code).toBe('backpressure_saturated');
+
+    // Successful completion decrements the durable count; the refused source
+    // position can then be retained without losing or skipping it.
+    await restarted.finishRetry(consumer, at(1), true);
+    expect((await contentPool.query<{ pending_count: string }>(`SELECT pending_count::text
+      FROM content.projection_checkpoint WHERE consumer=$1`, [consumer])).rows[0]?.pending_count).toBe('999');
+    await restarted.acknowledge(consumer, await restarted.readScan(consumer), at(1001).position,
+      { event: at(1001), target: 'target:1' });
+    expect((await restarted.readScan(consumer)).sequence).toBe('1001');
+    expect((await contentPool.query<{ pending_count: string }>(`SELECT pending_count::text
+      FROM content.projection_checkpoint WHERE consumer=$1`, [consumer])).rows[0]?.pending_count).toBe('1000');
+
+    // An over-cap legacy consumer keeps all rows, refuses further retention, and
+    // continues its fair bounded retry schedule until a completion frees a row.
+    const legacy = new ContentProjectionCursor(contentPool, BACKPRESSURE_PROFILE_V1.worker);
+    expect((await contentPool.query<{ pending: string; pending_count: string }>(`SELECT
+      (SELECT count(*) FROM content.projection_pending WHERE consumer=$1)::text AS pending,
+      pending_count::text FROM content.projection_checkpoint WHERE consumer=$1`, [legacyConsumer])).rows[0])
+      .toEqual({ pending: '1001', pending_count: '1001' });
+    await expect(legacy.acknowledge(legacyConsumer, await legacy.readScan(legacyConsumer), at(1002).position,
+      { event: at(1002), target: 'legacy:new' })).rejects.toBeInstanceOf(ContentProjectionSaturated);
+    const firstWave = await legacy.retries(legacyConsumer);
+    expect(firstWave).toHaveLength(8);
+    const firstSequences = new Set(firstWave.map(event => event.position.sequence));
+    for (const event of firstWave) await legacy.finishRetry(legacyConsumer, event, false);
+    const nextWave = await legacy.retries(legacyConsumer);
+    expect(nextWave).toHaveLength(8);
+    expect(nextWave.some(event => !firstSequences.has(event.position.sequence))).toBe(true);
+    for (const event of nextWave) await legacy.finishRetry(legacyConsumer, event, false);
+    expect((await contentPool.query<{ pending: string; pending_count: string }>(`SELECT
+      (SELECT count(*) FROM content.projection_pending WHERE consumer=$1)::text AS pending,
+      pending_count::text FROM content.projection_checkpoint WHERE consumer=$1`, [legacyConsumer])).rows[0])
+      .toEqual({ pending: '1001', pending_count: '1001' });
+    await legacy.finishRetry(legacyConsumer, nextWave[0]!, true);
+    expect((await contentPool.query<{ pending: string; pending_count: string }>(`SELECT
+      (SELECT count(*) FROM content.projection_pending WHERE consumer=$1)::text AS pending,
+      pending_count::text FROM content.projection_checkpoint WHERE consumer=$1`, [legacyConsumer])).rows[0])
+      .toEqual({ pending: '1000', pending_count: '1000' });
+  } finally {
+    await contentPool.end();
+    cluster.remove();
   }
 }, 180_000);

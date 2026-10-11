@@ -22,6 +22,7 @@ import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { mainRateLimit } from './modules/rate-limit/config.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
+import { BACKPRESSURE_PROFILE_V1 } from './operations/backpressure.ts';
 import { LibraryImportRetentionWorker } from './modules/library-import/retention-worker.ts';
 import { AuthorReaders } from './modules/author-page/readers.ts';
 import { WorkReaderStats } from './modules/work/read-stats.ts';
@@ -257,7 +258,7 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceConversions = new OpenLibraryConversionStore(contentPool, sourceIntake);
   const packageCaptures = new GoProxyCaptureStore(contentPool);
   const comments = new ContentComments(contentPool);
-  const cursor = new ContentProjectionCursor(contentPool);
+  const cursor = new ContentProjectionCursor(contentPool, BACKPRESSURE_PROFILE_V1.worker);
   const consumer = config.CONTENT_PROJECTION_CONSUMER;
   await cursor.initialize(consumer);
   const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({

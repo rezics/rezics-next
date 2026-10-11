@@ -4,7 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../services/content/src/core.ts';
-import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
+import { ContentProjectionCursor, ContentProjectionSaturated } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
 import { ContentRebuildFreshJob, ContentRebuildUnavailable, contentRebuildFailureLine,
@@ -15,6 +15,7 @@ import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvir
   parseOptions, projectName,
   readEnv, stackDirectory } from '../dev/config.ts';
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
+import { BACKPRESSURE_PROFILE_V1 } from '../../services/main/src/operations/backpressure.ts';
 import { DEFAULT_RESERVE_BYTES, rebuildPublicContentSearch, repositoryPins, SearchStateRefused,
   type FusekiStateRunner } from './search-state.ts';
 import { startSearchFuseki } from './search-startup.ts';
@@ -122,7 +123,7 @@ try {
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
   try {
     const content = new ContentCore(pool);
-    const cursor = new ContentProjectionCursor(pool);
+    const cursor = new ContentProjectionCursor(pool, BACKPRESSURE_PROFILE_V1.worker);
     const publicConsumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
     let restartedFrom: string | undefined = saved?.continues;
     let offlinePreSequence = saved?.offlinePreSequence;
@@ -167,7 +168,7 @@ try {
     await pool.end();
   }
 } catch (error) {
-  const line = contentRebuildFailureLine(error)
+  const line = error instanceof ContentProjectionSaturated ? error.message : contentRebuildFailureLine(error)
     ?? (error instanceof SearchStateRefused ? error.message : undefined);
   if (!line) throw error;
   console.error(line);

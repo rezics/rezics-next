@@ -3,6 +3,19 @@ import { ContentConflict, ContentUnavailable, type ContentPosition, type Content
 
 export const CONTENT_PROJECTION_COST = { scanEvents: 1, retryEvents: 8, graphCommandsPerEvent: 1, deadlineMs: 10_000 } as const;
 
+export interface ContentProjectionWorkerBudget {
+  maxBacklog: number;
+  retryAfterSeconds: number;
+}
+
+/** A retained source event could not be accepted; the owner worker budget may drain and retry it. */
+export class ContentProjectionSaturated extends Error {
+  constructor(readonly maxPending: number, readonly retryAfterSeconds: number) {
+    super(`Content projection pending capacity is saturated at ${maxPending}; retry after ${retryAfterSeconds} seconds`);
+    this.name = 'ContentProjectionSaturated';
+  }
+}
+
 const decimal = /^(0|[1-9][0-9]*)$/;
 
 function consumerName(value: string): void {
@@ -11,7 +24,12 @@ function consumerName(value: string): void {
 
 /** Durable Content-side acknowledgement; the graph receipt makes replay safe across stores. */
 export class ContentProjectionCursor {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly workerBudget?: ContentProjectionWorkerBudget) {
+    if (workerBudget && (!Number.isSafeInteger(workerBudget.maxBacklog) || workerBudget.maxBacklog < 1
+      || !Number.isSafeInteger(workerBudget.retryAfterSeconds) || workerBudget.retryAfterSeconds < 1)) {
+      throw new Error('Content projection worker budget is invalid');
+    }
+  }
 
   async initialize(consumer: string): Promise<ContentPosition> {
     consumerName(consumer);
@@ -57,7 +75,8 @@ export class ContentProjectionCursor {
       // Only the checkpoint is locked: the owner row belongs to the sequencer, and
       // an epoch cut racing this check leaves a checkpoint that read() rejects.
       const current = await client.query(`SELECT c.data_epoch, c.scan_sequence::text AS sequence,
-        c.sequence::text AS completed, COALESCE((SELECT min(sequence) - 1 FROM content.projection_pending
+        c.sequence::text AS completed, c.pending_count::text AS pending_count,
+        COALESCE((SELECT min(sequence) - 1 FROM content.projection_pending
           WHERE consumer = c.consumer AND data_epoch = c.data_epoch), c.scan_sequence)::text AS covered,
         o.data_epoch AS owner_epoch FROM content.projection_checkpoint c
         CROSS JOIN content.owner_control o WHERE c.consumer = $1 AND o.singleton FOR UPDATE OF c`, [consumer]);
@@ -73,6 +92,9 @@ export class ContentProjectionCursor {
           || retained.event.position.dataEpoch !== next.dataEpoch || retained.event.position.sequence !== next.sequence) {
           throw new ContentConflict('retained projection differs from source event');
         }
+        if (this.workerBudget && BigInt(row.pending_count) >= BigInt(this.workerBudget.maxBacklog)) {
+          throw new ContentProjectionSaturated(this.workerBudget.maxBacklog, this.workerBudget.retryAfterSeconds);
+        }
         await client.query(`INSERT INTO content.projection_pending
           (consumer, data_epoch, sequence, event_id, target) VALUES ($1,$2,$3,$4,$5)`,
         [consumer, next.dataEpoch, next.sequence, retained.event.id, retained.target]);
@@ -81,9 +103,11 @@ export class ContentProjectionCursor {
         [consumer, next.dataEpoch, retained.target, next.sequence]);
       }
       await client.query(`UPDATE content.projection_checkpoint SET scan_sequence = $2::bigint,
+        pending_count = pending_count + $4::bigint,
         sequence = COALESCE((SELECT min(sequence) - 1 FROM content.projection_pending
           WHERE consumer = $1 AND data_epoch = $3), $2::bigint),
-        updated_at = clock_timestamp() WHERE consumer = $1`, [consumer, next.sequence, next.dataEpoch]);
+        updated_at = clock_timestamp() WHERE consumer = $1`,
+      [consumer, next.sequence, next.dataEpoch, retained ? 1 : 0]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -132,10 +156,16 @@ export class ContentProjectionCursor {
         const removed = await client.query(`DELETE FROM content.projection_pending
           WHERE consumer = $1 AND data_epoch = $2 AND sequence = $3 AND event_id = $4 RETURNING target`,
         [consumer, event.position.dataEpoch, event.position.sequence, event.id]);
-        if (removed.rowCount) await client.query(`INSERT INTO content.projection_target(consumer,data_epoch,target,first_sequence)
-          SELECT consumer,data_epoch,target,sequence FROM content.projection_pending
-          WHERE consumer=$1 AND data_epoch=$2 AND target=$3 ORDER BY sequence LIMIT 1`,
-        [consumer, event.position.dataEpoch, removed.rows[0].target]);
+        if (removed.rowCount) {
+          const count = await client.query(`UPDATE content.projection_checkpoint SET pending_count = pending_count - 1
+            WHERE consumer = $1 AND data_epoch = $2 AND pending_count > 0 RETURNING pending_count`,
+          [consumer, event.position.dataEpoch]);
+          if (count.rowCount !== 1) throw new ContentConflict('retained projection count is inconsistent');
+          await client.query(`INSERT INTO content.projection_target(consumer,data_epoch,target,first_sequence)
+            SELECT consumer,data_epoch,target,sequence FROM content.projection_pending
+            WHERE consumer=$1 AND data_epoch=$2 AND target=$3 ORDER BY sequence LIMIT 1`,
+          [consumer, event.position.dataEpoch, removed.rows[0].target]);
+        }
         await client.query(`UPDATE content.projection_checkpoint c SET sequence = COALESCE(
           (SELECT min(sequence) - 1 FROM content.projection_pending WHERE consumer = $1 AND data_epoch = c.data_epoch),
           scan_sequence), updated_at = clock_timestamp() WHERE consumer = $1`, [consumer]);
@@ -179,6 +209,7 @@ export class ContentProjectionCursor {
       await client.query(`INSERT INTO content.projection_checkpoint (consumer, data_epoch, sequence, scan_sequence)
         VALUES ($1, $2::uuid, $3::bigint, $3::bigint)
         ON CONFLICT (consumer) DO UPDATE SET data_epoch = EXCLUDED.data_epoch,
+          pending_count = 0,
           scan_sequence = CASE WHEN content.projection_checkpoint.data_epoch = EXCLUDED.data_epoch
             THEN GREATEST(content.projection_checkpoint.scan_sequence, EXCLUDED.scan_sequence)
             ELSE EXCLUDED.scan_sequence END,

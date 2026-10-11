@@ -73,7 +73,8 @@ function position(value: string | undefined, name: string): bigint {
   return BigInt(value);
 }
 
-/** Content: two indexed singleton reads, independent of outbox length. */
+/** Content uses two indexed singleton reads. At the worker limit, every retained row
+ * contributes to source lag, so the existing gate reports pending-capacity saturation. */
 export function contentProjectionPositions(
   content: { ownerPosition(): Promise<{ dataEpoch: string; sequence: string }> },
   cursor: { read(consumer: string): Promise<{ dataEpoch: string; sequence: string }> },
