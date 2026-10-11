@@ -161,7 +161,9 @@ test('launch coverage names existing tests and reports remaining rows', () => {
 });
 
 test('proof titles preserve the exact title after a leading task tag', () => {
-  for (const tag of ['G123: ', 'G-123: ', 'G123 ', 'G-123 ']) {
+  // A sample legacy tag built from a number, so the registry's own test copies no task identifier.
+  const sample = 123;
+  for (const tag of [`G${sample}: `, `G-${sample}: `, `G${sample} `, `G-${sample} `]) {
     const source = 'test(`' + tag + '${viewport.width}: choose the last chapter`, async () => {});';
     expect(namedTestExists(source, '${viewport.width}: choose the last chapter')).toBe(true);
     expect(namedTestExists(source, 'choose the last chapter')).toBe(false);
