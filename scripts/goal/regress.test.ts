@@ -197,6 +197,8 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       writeFileSync(join(r.options.stateDir, 'regress-lane-count'), '4\n');
       expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(4);
       const result = await r.run({ runId: 'wide-lanes', slots: 3, only: ['owner'], runner: async (...args) => {
+        // Each batch is given as many host slots as there are lanes, or the lanes queue for two slots.
+        expect(args[4]).toBe(4);
         active++; maximum = Math.max(maximum, active);
         try { await Bun.sleep(5); return await r.runner(...args); } finally { active--; }
       } });

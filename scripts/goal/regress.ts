@@ -929,6 +929,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     ? regressionDiagnosisBudgetMs(String(options.diagnosisBudgetMs)) : regressionDiagnosisBudgetMs();
   const slotLimit = Math.min(configuredSlots, 2);
   const laneLimit = regressionLaneLimit(stateDir, slotLimit);
+  // A batch leases only the host slots numbered below the count it is given. With six lanes and a count of
+  // two, four lanes waited for the same two slots.
+  const batchSlots = Math.max(slotLimit, laneLimit);
   const runner = options.runner ?? runBatch;
   const runId = options.resume ?? options.runId ?? newRunId();
   if (!validId(runId)) throw new Error('Invalid regression run ID');
@@ -1074,7 +1077,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
       if (browserTier(batch.tier) && options.waitForTurn) await options.waitForTurn(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
-      const result = await runner(tree, batch, join(directory, label), runManifest.shards, slotLimit, regressionBatchQaDirectory(directory, label));
+      const result = await runner(tree, batch, join(directory, label), runManifest.shards, batchSlots, regressionBatchQaDirectory(directory, label));
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
       if (result.code && result.classification) {
