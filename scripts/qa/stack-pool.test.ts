@@ -96,6 +96,35 @@ test('pool capacity includes active holders and unowned parked stacks', async ()
   expect(readdirSync(f.state).filter(name => name.endsWith('.json'))).toHaveLength(2);
 });
 
+test('a fresh stack with a known fingerprint preserves matching parked stacks', async () => {
+  const f = fixture(3);
+  f.on();
+  for (const project of ['parked-first', 'parked-second']) {
+    const lease = await f.pool().register(project, 'ordinary');
+    expect(await lease!.park(apps, compose)).toBe(true);
+  }
+  const saved = ['parked-first', 'parked-second'].map(project => f.saved(project));
+  const fresh = await f.pool().register('fresh', 'ordinary');
+  expect(fresh?.entry.fingerprint).toBe('ordinary');
+  expect(fresh?.entry.holder).toEqual(f.identity('first'));
+  expect(['parked-first', 'parked-second'].map(project => f.saved(project))).toEqual(saved);
+  expect(f.destroyed).toEqual([]);
+  expect((await f.pool().acquire('ordinary'))?.entry.projectRunId).toBe('parked-first');
+});
+
+test('refusing a fresh stack at capacity preserves matching parked stacks', async () => {
+  const f = fixture(1);
+  f.on();
+  const parked = await f.pool().register('parked', 'ordinary');
+  expect(await parked!.park(apps, compose)).toBe(true);
+  const saved = f.saved('parked');
+  expect(await f.pool().register('fresh', 'ordinary')).toBeUndefined();
+  expect(f.saved('parked')).toEqual(saved);
+  expect(existsSync(join(f.state, 'fresh.json'))).toBe(false);
+  expect(f.destroyed).toEqual([]);
+  expect((await f.pool().acquire('ordinary'))?.entry.projectRunId).toBe('parked');
+});
+
 test('concurrent acquisitions give the parked stack to exactly one holder', async () => {
   const f = fixture(1);
   f.on();
@@ -458,6 +487,17 @@ test('a fresh stack without a resolved fingerprint is destroyed on release', asy
   const f = fixture();
   f.on();
   const fresh = await f.pool().register('unresolved');
+  expect(await fresh!.park(apps, compose)).toBe(false);
+  expect(f.destroyed).toEqual(['unresolved']);
+});
+
+test('unresolved startup images clear the pre-startup identity before release', async () => {
+  const f = fixture();
+  f.on();
+  const fresh = await f.pool().register('unresolved', 'before-startup');
+  await fresh!.recordFingerprint(undefined);
+  expect(fresh!.entry.fingerprint).toBeUndefined();
+  expect(f.saved('unresolved').fingerprint).toBeUndefined();
   expect(await fresh!.park(apps, compose)).toBe(false);
   expect(f.destroyed).toEqual(['unresolved']);
 });

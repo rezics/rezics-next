@@ -451,8 +451,16 @@ async function runShardWork(
   if (admitsWorkScope) environment.REZICS_FUSEKI_ASSEMBLER = exclusiveWorkScopeAssembler;
   let lease: Awaited<ReturnType<typeof stackPool.acquire>> = undefined;
   let leased = false;
-  if (qaStackPoolEnabled(qaSlotDirectory) && integrationStackPoolEligible({ tier, files,
-    keep: options.keep, backend: options.backend, persistent }) && !isolated) {
+  const poolEligible = integrationStackPoolEligible({ tier, files,
+    keep: options.keep, backend: options.backend, persistent }) && !isolated;
+  let poolFingerprint: string | undefined;
+  const notePool = (outcome: string) => {
+    const note = `- Integration shard ${shardProjectRunId} ${outcome}.`;
+    stackLeaseNotes.push(note);
+    // A deadline or SIGKILL can prevent the final summary from being written.
+    appendFileSync(join(directory, 'summary.md'), `${note}\n`);
+  };
+  if (qaStackPoolEnabled(qaSlotDirectory) && poolEligible) {
     const fingerprint = await integrationInfrastructureFingerprint(environment);
     // A warm stack needs host work admission, but no new-container startup turn.
     const rejectionCount = stackPool.rejections.length;
@@ -466,16 +474,14 @@ async function runShardWork(
     if (lease) {
       leased = true;
       projectRunId = lease.entry.projectRunId;
-      const note = `- Integration shard ${shardProjectRunId} leased from rezics-qa-${projectRunId}, parked for ${lease.parkedMs} ms.`;
-      stackLeaseNotes.push(note);
-      // A deadline or SIGKILL can prevent the final summary from being written.
-      appendFileSync(join(directory, 'summary.md'), `${note}\n`);
+      notePool(`leased from rezics-qa-${projectRunId}, parked for ${lease.parkedMs} ms`);
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       mkdirSync(stackDir, { recursive: true, mode: 0o700 });
       replacePrivate(join(stackDir, 'apps.env'), lease.entry.apps);
       replacePrivate(join(stackDir, 'compose.env'), lease.entry.compose);
     } else {
-      lease = await stackPool.register(projectRunId);
+      // A known cold miss must not invalidate matching stacks parked by other shards.
+      lease = await stackPool.register(projectRunId, fingerprint);
     }
   }
   // Pool ownership replaces runner ancestry for these containers. Test-created
@@ -504,12 +510,19 @@ async function runShardWork(
     if (!options.keep && needsStack) {
       const cleanupStarted = Date.now();
       let parked = false;
+      let destroyedReason = !run.ok || record.stage !== 'test' ? 'failed'
+        : !qaStackPoolEnabled(qaSlotDirectory) ? 'switch off' : 'capacity';
       if (lease && run.ok && record.stage === 'test') {
         const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
         const reset = await commandAsync(root, 'bun', ['scripts/qa/integration-reset.ts',
           join(stackDir, 'apps.env'), join(stackDir, 'compose.env')], 180_000, environment, noteMemory, { runDeadline });
-        if (reset.ok) parked = await lease.park(readEnv(join(stackDir, 'apps.env')), readEnv(join(stackDir, 'compose.env')));
+        if (reset.ok) {
+          parked = await lease.park(readEnv(join(stackDir, 'apps.env')), readEnv(join(stackDir, 'compose.env')));
+          destroyedReason = !qaStackPoolEnabled(qaSlotDirectory) ? 'switch off'
+            : !leased && poolFingerprint === undefined ? 'fingerprint unavailable after startup' : 'capacity';
+        }
         else {
+          destroyedReason = 'reset failed';
           run.ok = false;
           errors.push(`integration pool reset failed: ${projectRunId} (see logs/${label}-reset.log)`);
           writeFileSync(join(logs, `${label}-reset.log`), reset.output);
@@ -523,7 +536,10 @@ async function runShardWork(
         if (down.ok) started.splice(started.indexOf(projectRunId), 1);
       }
       record.cleanupMs = Date.now() - cleanupStarted;
+      if (tier === 'integration' && !leased && poolEligible)
+        notePool(parked ? 'started and parked' : `started and destroyed (${destroyedReason})`);
     }
+    if (tier === 'integration' && !poolEligible) notePool('not eligible');
     record.status = run.ok ? 'passed' : 'failed';
     return { record, ...run };
   };
@@ -548,8 +564,8 @@ async function runShardWork(
     }
     if (lease && !leased) {
       // Startup may pull or rebuild images. Only its resolved images qualify a parked stack.
-      const fingerprint = await integrationInfrastructureFingerprint(environment);
-      if (fingerprint !== undefined) await lease.recordFingerprint(fingerprint);
+      poolFingerprint = await integrationInfrastructureFingerprint(environment);
+      await lease.recordFingerprint(poolFingerprint);
     }
     if (resourceClass) {
       const inspected = await commandAsync(root, 'docker', ['inspect', '--format',

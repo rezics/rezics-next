@@ -41,7 +41,8 @@ export interface QaStackPoolEntry {
 export interface QaStackPoolLease {
   entry: QaStackPoolEntry;
   parkedMs: number;
-  recordFingerprint(fingerprint: string): Promise<void>;
+  /** Startup refreshes the identity; unresolved images clear an earlier estimate. */
+  recordFingerprint(fingerprint: string | undefined): Promise<void>;
   /** The caller has reset and verified every store before releasing ownership. */
   park(apps: Record<string, string>, compose: Record<string, string>): Promise<boolean>;
   destroy(): Promise<void>;
@@ -436,7 +437,7 @@ export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
     return {
       entry, parkedMs,
       async recordFingerprint(fingerprint) {
-        if (!fingerprint) throw new Error('QA pool fingerprint is empty');
+        if (fingerprint === '') throw new Error('QA pool fingerprint is empty');
         await locked(async () => {
           const saved = ownedEntry(paths.state, entry);
           if (!saved) throw new Error('QA pool fingerprint lost its ownership record');

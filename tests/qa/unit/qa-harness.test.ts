@@ -53,7 +53,7 @@ function poolStartupBoundary(bindings: Record<string, unknown>) {
     ts.isIfStatement(node) && node.expression.getText(source) === '!needsStack')!;
   const boundary = ts.transpileModule(declaration('integrationInfrastructureFingerprint').getText(source) + '\n'
     + source.text.slice(shard.getStart(source), testBoundary.getStart(source))
-    + "\nrecord.stage = 'test'; return finish({ ok: true, timedOut: false, noMatch: false, xml: '' });\n}\n"
+    + "\nrecord.stage = 'test'; return finish({ ok: testPassed, timedOut: false, noMatch: false, xml: '' });\n}\n"
     + '({ runShardWork, integrationInfrastructureFingerprint });',
     { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
   return new Script(boundary).runInNewContext(bindings) as {
@@ -171,12 +171,15 @@ test.each(['scripts/lib/migration-order.ts', 'scripts/dev/signup-policy-fixture.
   });
 
 function coldPoolHarness(directory: string, inspectionError: string,
-  mode: { initialPresent?: boolean; postMissing?: boolean; rejectSnapshot?: boolean; realPool?: boolean } = {}) {
+  mode: { initialPresent?: boolean; postMissing?: boolean; rejectSnapshot?: boolean; realPool?: boolean;
+    leased?: boolean; capacity?: boolean; enabled?: boolean; eligible?: boolean; keep?: boolean;
+    testFailed?: boolean; resetFailed?: boolean; switchOffAfterReset?: boolean } = {}) {
   const events: string[] = [];
   const errors: string[] = [];
   const computed: string[] = [];
   let imagesPresent = false;
   let recordedFingerprint: string | undefined;
+  let enabled = mode.enabled ?? true;
   const rejections: { projectRunId: string; scope: string; key: string; value: string; reason: string }[] = [];
   const apps = { MAIN_OBJECT_DIRECTORY: join(directory, 'objects') };
   const compose = { REZICS_STACK_PROFILE: 'qa' };
@@ -190,6 +193,7 @@ function coldPoolHarness(directory: string, inspectionError: string,
   const result = (ok = true, output = '') => ({ ok, output, timedOut: false,
     elapsedMs: 1, activeElapsedMs: 1, admissionWaitMs: 0 });
   const lease = {
+    entry: { projectRunId: 'previous-i1', apps, compose }, parkedMs: 123,
     async recordFingerprint(value: string | undefined) {
       events.push(value === undefined ? 'record pending fingerprint' : 'record fingerprint');
       recordedFingerprint = value;
@@ -199,7 +203,8 @@ function coldPoolHarness(directory: string, inspectionError: string,
       events.push(recordedFingerprint === undefined ? 'refuse pending park' : 'park');
       expect(nextApps).toEqual(apps);
       expect(nextCompose).toEqual(compose);
-      if (recordedFingerprint !== undefined) expect(recordedFingerprint).toBe(computed.at(-1));
+      if (recordedFingerprint !== undefined && !mode.leased) expect(recordedFingerprint).toBe(computed.at(-1));
+      if (!enabled) return false;
       return realLease ? await realLease.park(apps, compose) : recordedFingerprint !== undefined;
     },
     async destroy() { events.push('destroy'); await realLease?.destroy(); },
@@ -207,11 +212,12 @@ function coldPoolHarness(directory: string, inspectionError: string,
   const boundary = poolStartupBoundary({
     root, directory, logs: directory, runId: 'cold-pool', Date, Bun, join, fusekiBuildInputs,
     process: { env: {} }, readFileSync, writeFileSync, appendFileSync, mkdirSync,
-    options: {}, faultFixtureEnvironment: {}, qaSlotDirectory: join(directory, 'slots'),
+    options: { keep: mode.keep }, testPassed: !mode.testFailed,
+    faultFixtureEnvironment: {}, qaSlotDirectory: join(directory, 'slots'),
     QA_STACK_TIER: 'REZICS_QA_STACK_TIER',
     startedProjects: [], startedFixtureProjects: [], rawUpdateProjects: new Set(),
     stackLeaseNotes: [], errors, runDeadline: Date.now() + 60_000,
-    qaStackPoolEnabled: () => true, integrationStackPoolEligible: () => true,
+    qaStackPoolEnabled: () => enabled, integrationStackPoolEligible: () => mode.eligible ?? !mode.keep,
     integrationResourceClass: () => 'ordinary', qaResourceClasses: { ordinary: { budgetMs: 60_000 } },
     qaStackEnvironment: (environment: NodeJS.ProcessEnv) => environment, qaStackMode: () => 'test',
     commandOnlyIntegrationFiles: new Set(), integrationStackAdmitsWorkScope: () => false,
@@ -219,6 +225,7 @@ function coldPoolHarness(directory: string, inspectionError: string,
     reserveRunSlot: async () => {}, admitRun: async (work: () => Promise<unknown>) => await work(),
     noteMemory: () => {}, assertQaResourceAllocation: () => {},
     redactCommandOutput: (value: string) => value,
+    replacePrivate: () => {},
     readEnv: (path: string) => path.endsWith('apps.env') ? apps : compose,
     stageQaBootstrap: () => ({ apps, args: ['scripts/qa/bootstrap.ts'] }),
     qaStackFingerprint: (input: Parameters<typeof qaStackFingerprint>[0]) => {
@@ -235,16 +242,17 @@ function coldPoolHarness(directory: string, inspectionError: string,
         if (mode.rejectSnapshot) rejections.push({ projectRunId: 'prior-i1', scope: 'apps',
           key: 'MAIN_EXTRA_CACHE_DIRECTORY', value: '/other-checkout/.temp/cache',
           reason: 'snapshot path belongs to another checkout' });
+        if (mode.leased) { recordedFingerprint = computed.at(-1); return lease; }
         return undefined;
       },
       async register(project: string, fingerprint: string | undefined) {
         expect(project).toBe('cold-pool-i1');
-        expect(fingerprint).toBeUndefined();
+        expect(fingerprint).toBe(mode.initialPresent ? computed[0] : undefined);
         events.push('register pending');
         recordedFingerprint = fingerprint;
         realLease = await realPool?.register(project, fingerprint);
         if (realPool) expect(realLease).toBeDefined();
-        return lease;
+        return mode.capacity ? undefined : lease;
       },
     },
     startRunStack: async () => { events.push('startup'); imagesPresent = true; return result(); },
@@ -257,7 +265,13 @@ function coldPoolHarness(directory: string, inspectionError: string,
       }
       if (command === 'docker' && args[0] === 'inspect') return result(true, '{}');
       if (args[0] === 'scripts/qa/bootstrap.ts') { events.push('bootstrap'); return result(); }
-      if (args[0] === 'scripts/qa/integration-reset.ts') { events.push('reset'); return result(); }
+      if (args[0] === 'scripts/qa/integration-reset.ts') {
+        events.push('reset');
+        if (mode.switchOffAfterReset) enabled = false;
+        return result(!mode.resetFailed);
+      }
+      if (args[1] === 'stack:logs') return result();
+      if (args[1] === 'stack:reset') { events.push('destroy'); return result(); }
       throw new Error(`Unexpected cold-pool command: ${command} ${args.join(' ')}`);
     },
   });
@@ -324,7 +338,7 @@ test.each([false, true])('images still missing after startup refuse to park even
       ['tests/qa/integration/shared-stack.test.ts'], [], 60_000);
     expect(run.ok).toBe(true);
     expect(harness.events).toEqual([...(initialPresent ? ['inspect ready images', 'acquire'] : ['inspect missing images']), 'register pending', 'startup',
-      'inspect missing images', 'bootstrap', 'reset', 'refuse pending park', 'destroy']);
+      'inspect missing images', 'record pending fingerprint', 'bootstrap', 'reset', 'refuse pending park', 'destroy']);
     expect(harness.computed).toHaveLength(initialPresent ? 1 : 0);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
@@ -343,6 +357,33 @@ test('a refused snapshot identifies its path key and value in the run summary an
     expect(harness.events).toEqual(['inspect ready images', 'acquire', 'register pending', 'startup',
       'inspect ready images', 'record fingerprint', 'bootstrap', 'reset', 'park']);
     expect(harness.errors).toEqual([]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test.each([
+  { mode: { initialPresent: true }, line: 'started and parked', ok: true },
+  { mode: { initialPresent: true, leased: true }, line: 'leased from rezics-qa-previous-i1, parked for 123 ms', ok: true },
+  { mode: { initialPresent: true, testFailed: true }, line: 'started and destroyed (failed)', ok: false },
+  { mode: { initialPresent: true, resetFailed: true }, line: 'started and destroyed (reset failed)', ok: false },
+  { mode: { initialPresent: true, capacity: true }, line: 'started and destroyed (capacity)', ok: true },
+  { mode: { enabled: false }, line: 'started and destroyed (switch off)', ok: true },
+  { mode: { initialPresent: true, switchOffAfterReset: true }, line: 'started and destroyed (switch off)', ok: true },
+  { mode: { eligible: false }, line: 'not eligible', ok: true },
+  { mode: { keep: true }, line: 'not eligible', ok: true },
+])('integration project summary records $line', async ({ mode, line, ok }) => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-outcome-'));
+  try {
+    const harness = coldPoolHarness(directory, '', mode);
+    const run = await harness.boundary.runShardWork('integration', 'cold-pool-i1',
+      ['tests/qa/integration/shared-stack.test.ts'], [], 60_000);
+    expect(run.ok).toBe(ok);
+    expect(readFileSync(join(directory, 'summary.md'), 'utf8')).toBe(`- Integration shard cold-pool-i1 ${line}.\n`);
+    if (line === 'started and parked') expect(harness.events.slice(-2)).toEqual(['reset', 'park']);
+    if ('enabled' in mode && !mode.enabled || 'eligible' in mode || 'keep' in mode)
+      expect(harness.events).not.toContain('inspect ready images');
+    if ('testFailed' in mode || 'capacity' in mode || 'enabled' in mode || 'eligible' in mode || 'keep' in mode)
+      expect(harness.events).not.toContain('reset');
+    if ('keep' in mode) expect(harness.events).not.toContain('destroy');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
