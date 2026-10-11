@@ -52,7 +52,8 @@ import { proofRetirementSender } from '../../../services/main/src/modules/graph/
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
-import { createRetainedErasureRecoveryFixture, DirectoryObjects } from './retained-erasure-recovery-fixture.ts';
+import { constructRetainedErasureCandidatesInOrder, createRetainedErasureRecoveryFixture, DirectoryObjects } from
+  './retained-erasure-recovery-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'c5'.repeat(32);
@@ -524,8 +525,6 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     const pinnedErasure = await ownerErasure(later, 'pinned-target');
 
     // OPS11: preserve the real Main erasure proof and all three retained backup domains.
-    const firstCandidateReady = bindCandidate(first);
-    void firstCandidateReady.catch(() => undefined);
     expect(await verifyErasure(relay, { account, access }, accountErasureId, `verify:${accountErasureId}`))
       .toMatchObject({ state: 'reconciled' });
     expect(await verifyErasure(relay, { content: contentPool }, contentErasure.erasureId,
@@ -544,7 +543,8 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       expect(copies.get(`${owner}:backup:after-authority:${runId}`)).toMatchObject({ suppression: 'not_applicable',
         destruction: 'retained', retainedUntil: third.expiresAt.toISOString() });
     }
-    const [secondCandidate, thirdCandidate] = await Promise.all([bindCandidate(second), bindCandidate(third)]);
+    const [firstCandidate, secondCandidate, thirdCandidate] = await constructRetainedErasureCandidatesInOrder(
+      [first, second, third], bindCandidate);
     const secondRestored = secondCandidate.restored;
     const thirdRestored = thirdCandidate.restored;
     expect((await secondRestored.access.query<{ open: boolean }>(
@@ -585,7 +585,6 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       `http://main.local/v1/erasures/${contentErasure.erasureId}`, { headers: { authorization: `Bearer ${token}` } }));
 
     // Backup 1 still holds the erased payload and the erased member's credentials.
-    const firstCandidate = await firstCandidateReady;
     const older = firstCandidate.restored;
     expect(await exact(older.content, payload)).toMatchObject({ status: 'available',
       serializedJson: JSON.stringify({ body: payloadBody }) });

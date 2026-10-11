@@ -95,6 +95,17 @@ export function retainedObjectFiles(directory: string): Array<[string, string]> 
   return found;
 }
 
+export async function constructRetainedErasureCandidatesInOrder<Cut, Candidate>(
+  cuts: readonly [Cut, Cut, Cut],
+  construct: (cut: Cut) => Promise<Candidate>,
+): Promise<[Candidate, Candidate, Candidate]> {
+  const [first, second, third] = cuts;
+  const firstCandidate = await construct(first);
+  const secondCandidate = await construct(second);
+  const thirdCandidate = await construct(third);
+  return [firstCandidate, secondCandidate, thirdCandidate];
+}
+
 export function createRetainedErasureRecoveryFixture(options: RetainedErasureRecoveryFixtureOptions) {
   const preparationStarted = Date.now();
   const artifactDirectory = process.env.REZICS_QA_ARTIFACT_DIR ?? options.state;
