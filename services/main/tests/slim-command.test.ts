@@ -154,29 +154,59 @@ test('fresh edition reconciliation does not require validation shape objects', a
   expect(f.sends()).toBe(1);
 });
 
-test('a reconciled receipt without the closure field is upgraded under its lock before exact erasure', async () => {
-  const f = await fixture();
-  await f.custody.commit(f.input);
-  const retained = f.store.row!;
-  expect(retained.outbox?.custodyObjectReferences).toBeUndefined();
-  const erasure: CustodyPayloadErasure = { revision: f.input.revision,
-    payloadSha256: retained.payloadSha256, erasureId: '10000000-0000-4000-8000-000000000001', erasureEpoch: '12' };
-  f.objects.bytes.delete(f.shapeDigest);
+for (const missingShape of [false, true]) {
+  test(`a reconciled receipt without the closure field is upgraded under its lock before exact erasure (${missingShape ? 'absent' : 'retained'} shape)`, async () => {
+    const f = await fixture();
+    await f.custody.commit(f.input);
+    const retained = f.store.row!;
+    expect(retained.outbox?.custodyObjectReferences).toBeUndefined();
+    const erasure: CustodyPayloadErasure = { revision: f.input.revision,
+      payloadSha256: retained.payloadSha256, erasureId: '10000000-0000-4000-8000-000000000001', erasureEpoch: '12' };
+    if (missingShape) f.objects.bytes.delete(f.shapeDigest);
 
-  const missing = await f.custody.erasePayloadForErasure(f.input.envelope.receipt, erasure);
-  expect(missing).toEqual([f.shapeDigest]);
+    const missing = await f.custody.erasePayloadForErasure(f.input.envelope.receipt, erasure);
+    expect(missing).toEqual(missingShape ? [f.shapeDigest] : []);
 
-  const manifest = JSON.parse(Buffer.from(await f.objects.get(f.input.manifest)).toString('utf8')) as { payload: string };
-  expect(f.store.row).toMatchObject({ payload: null, payloadErasure: {
-    erasureId: erasure.erasureId, erasureEpoch: erasure.erasureEpoch }, reconciled: true,
-    terminal: retained.terminal });
-  expect(f.store.row?.outbox?.custodyObjectReferences).toEqual([
-    { digest: retained.payloadSha256, kind: 'command' },
-    { digest: f.input.manifest, kind: 'manifest' },
-    { digest: manifest.payload.slice(7), kind: 'payload' },
-    { digest: f.shapeDigest, kind: 'shape' },
-  ] satisfies CustodyObjectReference[]);
-});
+    const manifest = JSON.parse(Buffer.from(await f.objects.get(f.input.manifest)).toString('utf8')) as { payload: string };
+    expect(f.store.row).toMatchObject({ payload: null, payloadErasure: {
+      erasureId: erasure.erasureId, erasureEpoch: erasure.erasureEpoch }, reconciled: true,
+      terminal: retained.terminal });
+    expect(f.store.row?.outbox?.custodyObjectReferences).toEqual([
+      { digest: retained.payloadSha256, kind: 'command' },
+      { digest: f.input.manifest, kind: 'manifest' },
+      { digest: manifest.payload.slice(7), kind: 'payload' },
+      { digest: f.shapeDigest, kind: 'shape' },
+    ] satisfies CustodyObjectReference[]);
+    expect(await f.custody.resolve(f.input.envelope.receipt)).toEqual(retained.terminal);
+    expect(await f.custody.commit(f.input)).toMatchObject({ status: 'committed' });
+    expect(f.sends()).toBe(1);
+  });
+}
+
+for (const changed of ['profile', 'role', 'focus', 'graphs', 'duplicate-graph', 'binding', 'count', 'profile-digest'] as const) {
+  test(`committed reads and erasure closure refuse the same unsafe selected validation ${changed}`, async () => {
+    const f = await fixture();
+    const validation = f.input.envelope.validations[0]!;
+    if (changed === 'profile') validation.profile = 'foreign-profile';
+    if (changed === 'role') validation.shape = 'https://rezics.com/definition/work-metadata-details-v1/component-shape';
+    if (changed === 'focus') validation.focus = [f.input.revision];
+    if (changed === 'graphs') validation.graphs = ['urn:rezics:graph:current', 'urn:rezics:graph:foreign'];
+    if (changed === 'duplicate-graph') validation.graphs = ['urn:rezics:graph:current', 'urn:rezics:graph:current'];
+    if (changed === 'binding') validation.binding = {};
+    if (changed === 'count') f.input.envelope.validations.pop();
+    if (changed === 'profile-digest') validation.sha256 = await f.objects.put(Buffer.from('another retained shape'));
+    // Normal commit still requires only its command, manifest and component objects.
+    await f.custody.commit(f.input);
+    const before = JSON.stringify(f.store.row);
+    await expect(f.custody.readCommitted(f.input.envelope.receipt)).rejects.toBeInstanceOf(ObjectIntegrityError);
+    await expect(f.custody.erasePayloadForErasure(f.input.envelope.receipt, {
+      revision: f.input.revision, payloadSha256: f.store.row!.payloadSha256,
+      erasureId: '10000000-0000-4000-8000-000000000001', erasureEpoch: '12',
+    })).rejects.toBeInstanceOf(ObjectIntegrityError);
+    expect(JSON.stringify(f.store.row)).toBe(before);
+    expect(f.sends()).toBe(1);
+  });
+}
 
 test('lost-response replay resolves the same durable receipt, including after proof retirement', async () => {
   const f = await fixture(); f.loseResponse();

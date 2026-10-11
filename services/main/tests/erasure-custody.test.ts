@@ -401,6 +401,7 @@ test('journal-bound terminal command erasure protects every non-journaled root i
   const c = await command(f);
   f.setJournal(journalForCommand(c));
   f.graph.receiptCustody = erasedReader(f, c);
+  f.objects.data.delete(c.roots.command);
   const retained = await f.read(f.relayClient);
   expect(retained.has(c.row.payload_sha256)).toBe(false);
   for (const root of ['manifest', 'payload', 'selectedShape'] as const) {
@@ -408,6 +409,76 @@ test('journal-bound terminal command erasure protects every non-journaled root i
     expect(await replayObjectErasure(f.store, `sha256:${c.roots[root]}`, retained, true)).toBe('conflict');
   }
 });
+
+for (const root of ['manifest', 'payload', 'selectedShape'] as const) {
+  for (const state of ['missing', 'corrupt'] as const) {
+    test(`terminal erased custody refuses a ${state} unjournaled ${root} root`, async () => {
+      const f = fixture();
+      const c = await command(f);
+      f.setJournal(journalForCommand(c));
+      f.graph.receiptCustody = erasedReader(f, c);
+      f.objects.data.delete(c.roots.command);
+      if (state === 'missing') f.objects.data.delete(c.roots[root]);
+      else f.objects.data.set(c.roots[root], Buffer.from('divergent unjournaled original bytes'));
+      await expect(f.read(f.relayClient)).rejects.toBeInstanceOf(
+        state === 'missing' ? ObjectUnavailable : ObjectIntegrityError);
+    });
+  }
+  for (const state of ['changed', 'vanished'] as const) {
+    test(`terminal erased custody rereads the selected unjournaled ${root} when its cached copy has ${state}`, async () => {
+      const f = fixture();
+      const c = await command(f);
+      const remote = cachedObjectStore();
+      f.store.workObjects = remote.store;
+      for (const digest of Object.values(c.roots)) await remote.store.put(f.objects.data.get(digest)!);
+      // A verified read proves the stale value is eligible for the ordinary immutable cache.
+      await remote.store.get(c.roots[root]);
+      f.setJournal(journalForCommand(c));
+      f.graph.receiptCustody = erasedReader(f, c);
+      remote.remove(c.roots.command);
+      if (state === 'changed') remote.replace(c.roots[root], Buffer.from('changed physical unjournaled root'));
+      else remote.remove(c.roots[root]);
+      const getsBeforeRead = remote.counts.gets;
+      await expect(f.read(f.relayClient)).rejects.toBeInstanceOf(
+        state === 'changed' ? ObjectIntegrityError : ObjectUnavailable);
+      expect(remote.counts.gets).toBeGreaterThan(getsBeforeRead);
+    });
+  }
+}
+
+for (const field of ['receipt', 'requestDigest', 'payloadSha256', 'revision', 'erasureId', 'erasureEpoch'] as const) {
+  test(`terminal erased custody refuses a mismatched historical ${field}`, async () => {
+    const f = fixture();
+    const c = await command(f);
+    f.setJournal(journalForCommand(c));
+    f.graph.receiptCustody = { readHistorical: async () => ({ ...erasedHistorical(c), [field]: 'different' }) };
+    await expect(f.read(f.relayClient)).rejects.toThrow('differs from its journal identity');
+  });
+}
+
+for (const field of ['receipt', 'revision', 'dataEpoch', 'streamSequence', 'sequence'] as const) {
+  test(`terminal erased custody refuses a mismatched terminal ${field}`, async () => {
+    const f = fixture();
+    const c = await command(f);
+    f.setJournal(journalForCommand(c));
+    f.graph.receiptCustody = { readHistorical: async () => {
+      const exact = erasedHistorical(c);
+      return { ...exact, terminal: { ...exact.terminal, [field]: 'different' } };
+    } };
+    await expect(f.read(f.relayClient)).rejects.toThrow('differs from its journal identity');
+  });
+}
+
+for (const field of ['custodiedReceipt', 'streamScope', 'dataEpoch', 'sequence', 'graphSequence'] as const) {
+  test(`terminal erased custody refuses a mismatched owner batch ${field}`, async () => {
+    const f = fixture();
+    const c = await command(f);
+    f.setJournal(journalForCommand(c));
+    f.graph.receiptCustody = { readHistorical: async () => ({ ...erasedHistorical(c),
+      outbox: { ...c.result, batch: { ...c.result.batch, [field]: 'different' } } }) };
+    await expect(f.read(f.relayClient)).rejects.toThrow('differs from its journal identity');
+  });
+}
 
 test('a journaled exact metadata root may leave restored custody', async () => {
   const f = fixture();
@@ -418,11 +489,24 @@ test('a journaled exact metadata root may leave restored custody', async () => {
     { owner: 'object', target_kind: 'object', target_ref: `sha256:${c.roots.manifest}` },
   ]));
   f.graph.receiptCustody = erasedReader(f, c);
+  f.objects.data.delete(c.roots.command);
+  f.objects.data.delete(c.roots.manifest);
   const retained = await f.read(f.relayClient);
   expect(retained.has(c.row.payload_sha256)).toBe(false);
   expect(retained.has(c.roots.manifest)).toBe(false);
   expect(retained.has(c.roots.payload)).toBe(true);
   expect(retained.has(c.roots.selectedShape)).toBe(true);
+});
+
+test('a journal for another exact revision cannot authorize command erasure', async () => {
+  const f = fixture();
+  const c = await command(f);
+  f.setJournal(journalForCommand(c, '12', [
+    { owner: 'graph', target_kind: 'work_head', target_ref: '00000000-0000-4000-8000-000000000099' },
+    { owner: 'object', target_kind: 'object', target_ref: `sha256:${c.row.payload_sha256}` },
+  ]));
+  f.graph.receiptCustody = erasedReader(f, c);
+  await expect(f.read(f.relayClient)).rejects.toThrow('not authorized by its exact erasure journal');
 });
 
 test('a graph-owned content revision target cannot authorize command erasure', async () => {
@@ -435,6 +519,26 @@ test('a graph-owned content revision target cannot authorize command erasure', a
   f.graph.receiptCustody = erasedReader(f, c);
   await expect(f.read(f.relayClient)).rejects.toThrow('not authorized by its exact erasure journal');
 });
+
+for (const invalid of ['duplicate target', 'unknown kind', 'wrong object owner', 'oversized closure'] as const) {
+  test(`an erasure journal with ${invalid} cannot release command custody`, async () => {
+    const f = fixture();
+    const c = await command(f);
+    const journal = journalForCommand(c);
+    if (invalid === 'duplicate target') journal.targets.push({ ...journal.targets[0]! });
+    if (invalid === 'unknown kind') journal.targets.push({ owner: 'graph', target_kind: 'unknown_revision',
+      target_ref: '00000000-0000-4000-8000-000000000099' });
+    if (invalid === 'wrong object owner') journal.targets[1]!.owner = 'graph';
+    if (invalid === 'oversized closure') {
+      for (let ordinal = 0; ordinal < 255; ordinal++) {
+        journal.targets.push({ owner: 'object', target_kind: 'object', target_ref: `sha256:${hash(String(ordinal))}` });
+      }
+    }
+    f.setJournal(journal);
+    f.graph.receiptCustody = erasedReader(f, c);
+    await expect(f.read(f.relayClient)).rejects.toThrow('not authorized by its exact erasure journal');
+  });
+}
 
 test('terminal command erasure cannot be accepted without the exact journal epoch', async () => {
   const f = fixture();

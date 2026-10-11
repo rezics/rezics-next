@@ -393,6 +393,36 @@ const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, m
   member && typeof member === 'object' && !Array.isArray(member)
     ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a.localeCompare(b))) : member);
 
+/** C6's selected validation pins are also the only shape roots eligible for closure custody. */
+function verifiedValidationRoots(prepared: PreparedCommand, model: string): Set<string> {
+  const profile = model.slice('https://rezics.com/definition/'.length);
+  const expected = [
+    { profile: 'work-metadata-details-v1', role: 'work', focus: prepared.receipt.work },
+    { profile, role: 'component', focus: prepared.component },
+    { profile, role: 'revision', focus: prepared.revision },
+  ];
+  const validations = prepared.envelope.validations;
+  if (!Array.isArray(validations) || validations.length !== expected.length
+    || expected.some(entry => validations.filter(validation => validation && typeof validation === 'object'
+      && validation.profile === entry.profile
+      && validation.shape === `https://rezics.com/definition/${entry.profile}/${entry.role}-shape`
+      && Array.isArray(validation.focus) && Array.isArray(validation.graphs)
+      && validation.focus.length === 1 && validation.focus[0] === entry.focus
+      && validation.graphs.length === 2 && new Set(validation.graphs).size === 2
+      && validation.graphs.includes('urn:rezics:graph:current')
+      && validation.graphs.includes('urn:rezics:graph:revisions')
+      && validation.binding === undefined && /^[0-9a-f]{64}$/.test(validation.sha256)).length !== 1)) {
+    throw new ObjectIntegrityError('Retained edition validation pins differ from their exact source');
+  }
+  const shapeDigests = new Set(validations.map(validation => validation.sha256));
+  if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles
+    || expected.some(entry => new Set(validations.filter(validation => validation.profile === entry.profile)
+      .map(validation => validation.sha256)).size !== 1)) {
+    throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
+  }
+  return shapeDigests;
+}
+
 export interface PreparedTitleCandidate {
   format: 'rezics-human-title-candidate-custody-v1';
   frame: TitleCandidateFrame;
@@ -737,7 +767,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   private async exactObjectReferences(row: RetainedCustodyRow, prepared: PreparedCommand,
     tolerateMissingShapes = false): Promise<{
     manifestSha256: string; componentPayloadSha256: string; model: string;
-    shapeDigests: Set<string>; objectReferences: CustodyObjectReference[]; missingShapeDigests: Set<string>;
+    objectReferences: CustodyObjectReference[]; missingShapeDigests: Set<string>;
   }> {
     const manifestSha256 = prepared.manifest.replace(/^urn:rezics:sha256:/, '');
     if (!/^[0-9a-f]{64}$/.test(manifestSha256)) throw new ObjectIntegrityError('Invalid component manifest digest');
@@ -754,33 +784,8 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     }
     const model = manifestRecord.model;
     const componentPayloadSha256 = manifestRecord.payload.slice(7);
-    const validations = prepared.envelope.validations;
-    if (!Array.isArray(validations) || validations.length === 0
-      || validations.some(validation => !validation || typeof validation !== 'object'
-        || !/^[0-9a-f]{64}$/.test(validation.sha256))) {
-      throw new ObjectIntegrityError('Retained command validation roots differ');
-    }
-    const profile = model.slice('https://rezics.com/definition/'.length);
-    const expected = [
-      { profile: 'work-metadata-details-v1', role: 'work', focus: prepared.receipt.work },
-      { profile, role: 'component', focus: prepared.component },
-      { profile, role: 'revision', focus: prepared.revision },
-    ];
-    if (validations.length !== expected.length
-      || expected.some(entry => validations.filter(validation => validation.profile === entry.profile
-        && validation.shape === `https://rezics.com/definition/${entry.profile}/${entry.role}-shape`
-        && Array.isArray(validation.focus) && validation.focus.length === 1 && validation.focus[0] === entry.focus
-        && Array.isArray(validation.graphs) && validation.graphs.length === 2
-        && new Set(validation.graphs).size === 2 && validation.graphs.includes('urn:rezics:graph:current')
-        && validation.graphs.includes('urn:rezics:graph:revisions')
-        && validation.binding === undefined).length !== 1)) {
-      throw new ObjectIntegrityError('Retained command validation roots differ');
-    }
-    const shapeDigests = new Set(validations.map(validation => validation.sha256));
+    const shapeDigests = verifiedValidationRoots(prepared, model);
     const missingShapeDigests = new Set<string>();
-    if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles) {
-      throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
-    }
     for (const digest of shapeDigests) {
       let bytes: Uint8Array;
       try { bytes = await this.objects.get(digest); }
@@ -796,7 +801,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       }
     }
     return {
-      manifestSha256, componentPayloadSha256, model, shapeDigests, missingShapeDigests,
+      manifestSha256, componentPayloadSha256, model, missingShapeDigests,
       objectReferences: [
         { digest: row.payloadSha256, kind: 'command' as const },
         { digest: manifestSha256, kind: 'manifest' as const },
@@ -1003,7 +1008,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     if (Buffer.byteLength(JSON.stringify(prepared.state)) > CUSTODY_RECOVERY_COST.stateBytes) {
       throw new ObjectIntegrityError('Retained edition state exceeds its byte bound');
     }
-    const { manifestSha256, componentPayloadSha256, model, shapeDigests, objectReferences, missingShapeDigests } = closure;
+    const { manifestSha256, componentPayloadSha256, model, objectReferences, missingShapeDigests } = closure;
     const state = model.endsWith('-v2') ? checkedEditionV2(prepared.state) : checkedMetadataState(prepared.state);
     const expectedHead = terminal.predecessor === prepared.component ? null : terminal.predecessor ?? null;
     if (state.kind !== 'edition' || canonicalJson(state) !== canonicalJson(prepared.state)
@@ -1011,30 +1016,6 @@ export class ReceiptCustody implements CustodiedOutboxSource {
         ? editionV2Digest({ work: terminal.work,expectedHead,state })
         : metadataDigest({ work: terminal.work,expectedHead,state })) !== terminal.requestDigest) {
       throw new ObjectIntegrityError('Retained edition intent differs from its exact request');
-    }
-    const profile = model.slice('https://rezics.com/definition/'.length);
-    const expected = [
-      { profile: 'work-metadata-details-v1', role: 'work', focus: prepared.receipt.work },
-      { profile, role: 'component', focus: prepared.component },
-      { profile, role: 'revision', focus: prepared.revision },
-    ];
-    const validations = prepared.envelope.validations;
-    if (!Array.isArray(validations) || validations.length !== expected.length
-      || expected.some(entry => validations.filter(validation => validation && typeof validation === 'object'
-        && validation.profile === entry.profile
-        && validation.shape === `https://rezics.com/definition/${entry.profile}/${entry.role}-shape`
-        && Array.isArray(validation.focus) && Array.isArray(validation.graphs)
-        && validation.focus.length === 1 && validation.focus[0] === entry.focus
-        && validation.graphs.length === 2 && new Set(validation.graphs).size === 2
-        && validation.graphs.includes('urn:rezics:graph:current')
-        && validation.graphs.includes('urn:rezics:graph:revisions')
-        && validation.binding === undefined && /^[0-9a-f]{64}$/.test(validation.sha256)).length !== 1)) {
-      throw new ObjectIntegrityError('Retained edition validation pins differ from their exact source');
-    }
-    if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles
-      || expected.some(entry => new Set(validations.filter(validation => validation.profile === entry.profile)
-        .map(validation => validation.sha256)).size !== 1)) {
-      throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
     }
     return {
       prepared, terminal: structuredClone(terminal), outbox: {
