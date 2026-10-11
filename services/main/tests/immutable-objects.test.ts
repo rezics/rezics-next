@@ -22,7 +22,7 @@ function digest(bytes: Uint8Array): string {
 }
 
 function fakeS3(options: { getStatus?: number; headStatus?: number; deleteStatus?: number;
-  retainAfterDelete?: boolean } = {}) {
+  retainAfterDelete?: boolean; existingPutStatus?: 409 | 412; createdPutStatus?: number } = {}) {
   const data = new Map<string, Uint8Array>();
   const puts: { key: string; signedHeaders: string; checksum: string }[] = [];
   let bucketCreates = 0;
@@ -48,9 +48,9 @@ function fakeS3(options: { getStatus?: number; headStatus?: number; deleteStatus
         return new Response(null, { status: 400 });
       }
       puts.push({ key, signedHeaders: auth, checksum });
-      if (data.has(key)) return new Response(null, { status: 412 });
+      if (data.has(key)) return new Response(null, { status: options.existingPutStatus ?? 412 });
       data.set(key, bytes);
-      return new Response(null, { status: 200 });
+      return new Response(null, { status: options.createdPutStatus ?? 200 });
     }
     if (request.method === 'DELETE') {
       if (options.deleteStatus !== undefined) return new Response(null, { status: options.deleteStatus });
@@ -194,6 +194,70 @@ test('P0.5 concurrent same-key writers converge and corrupt read-back fails clos
     lineage: { dataEpoch: 'test', routingEpoch: 'test' } };
   await expect(readWorkComponentState(env, `urn:rezics:sha256:${expected}`, 'work'))
     .rejects.toBeInstanceOf(RevisionCorrupt);
+});
+
+test('tracked conditional writes identify the sole creator and preserve existing digest keys', async () => {
+  for (const existingPutStatus of [409, 412] as const) {
+    const { store, data } = fakeS3({ existingPutStatus });
+    const bytes = Buffer.from(`shared immutable bytes ${existingPutStatus}`);
+    const expected = digest(bytes);
+    const owned: string[] = [];
+    const results = await Promise.all(Array.from({ length: 12 }, () =>
+      store.putTracked(bytes, undefined, created => { owned.push(created); })));
+    expect(results.filter(result => result.created)).toEqual([{ digest: expected, created: true }]);
+    expect(results.filter(result => !result.created)).toHaveLength(11);
+    expect(results.every(result => result.digest === expected)).toBe(true);
+    expect(owned).toEqual([expected]);
+    expect(data.size).toBe(1);
+    expect(await store.put(bytes)).toBe(expected);
+  }
+});
+
+test('tracked create records ownership before failed read-back without claiming existing bytes', async () => {
+  const { store, data } = fakeS3();
+  const bytes = Buffer.from('created before read-back failure');
+  const expected = digest(bytes);
+  const owned: string[] = [];
+  await expect(store.putTracked(bytes, undefined, created => {
+    owned.push(created);
+    // Corruption here also proves the notification precedes uncached read-back.
+    data.set(`semantic/work/sha256/${created}`, Buffer.from('tampered read-back'));
+  })).rejects.toBeInstanceOf(ObjectIntegrityError);
+  expect(owned).toEqual([expected]);
+  const existingOwned: string[] = [];
+  await expect(store.putTracked(bytes, undefined, created => { existingOwned.push(created); }))
+    .rejects.toBeInstanceOf(ObjectIntegrityError);
+  expect(existingOwned).toEqual([]);
+  expect(data.has(`semantic/work/sha256/${expected}`)).toBe(true);
+});
+
+test('an unsuccessful PUT acknowledgment never grants ownership even when bytes arrived', async () => {
+  const { store, data } = fakeS3({ createdPutStatus: 503 });
+  const bytes = Buffer.from('uncertain conditional create outcome');
+  const owned: string[] = [];
+  await expect(store.putTracked(bytes, undefined, created => { owned.push(created); }))
+    .rejects.toBeInstanceOf(ObjectUnavailable);
+  expect(owned).toEqual([]);
+  expect(data.has(`semantic/work/sha256/${digest(bytes)}`)).toBe(true);
+  expect(await store.putTracked(bytes)).toEqual({ digest: digest(bytes), created: false });
+});
+
+test('tracked PUT and its read-back respect a hard abort deadline and report only acknowledged ownership', async () => {
+  for (const stalledMethod of ['PUT', 'GET']) {
+    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+      if (request.method === stalledMethod) return new Promise<Response>(() => {});
+      return new Response(null, { status: 200 });
+    } });
+    servers.push(server);
+    const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+      bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+      prefix: 'semantic/work/' });
+    const bytes = Buffer.from(`deadline on ${stalledMethod}`);
+    const owned: string[] = [];
+    await expect(store.putTracked(bytes, AbortSignal.timeout(100), created => { owned.push(created); }))
+      .rejects.toBeInstanceOf(ObjectUnavailable);
+    expect(owned).toEqual(stalledMethod === 'GET' ? [digest(bytes)] : []);
+  }
 });
 
 test('P0.5 equal bytes in different retention namespaces remain separate objects', async () => {

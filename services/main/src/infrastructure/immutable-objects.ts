@@ -230,6 +230,13 @@ export interface ImmutableObjectListOptions {
 export interface ImmutableObjects {
   /** Return the digest only after a conditional create and verified read-back. */
   put(bytes: Uint8Array, signal?: AbortSignal): Promise<string>;
+  /**
+   * Distinguish an acknowledged conditional create from an existing key.
+   * Notify its creator before read-back so a subsequent failure can retain
+   * ownership evidence. A lost PUT response never establishes ownership.
+   */
+  putTracked?(bytes: Uint8Array, signal?: AbortSignal,
+    onCreated?: (digest: string) => void): Promise<{ digest: string; created: boolean }>;
   /** A missing object is unavailable; bytes with the wrong digest are corrupt. */
   get(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array>;
   /** Probe one exact key; only a 404 is reported as {@link ObjectNotFound}. */
@@ -424,6 +431,11 @@ export class S3ImmutableObjects implements ImmutableObjects {
   }
 
   async put(bytes: Uint8Array, signal?: AbortSignal): Promise<string> {
+    return (await this.putTracked(bytes, signal)).digest;
+  }
+
+  async putTracked(bytes: Uint8Array, signal?: AbortSignal,
+    onCreated?: (digest: string) => void): Promise<{ digest: string; created: boolean }> {
     signal?.throwIfAborted();
     const digest = sha256(bytes);
     const key = this.key(digest);
@@ -450,6 +462,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
     if (!response.ok && response.status !== 412 && response.status !== 409) {
       throw new ObjectUnavailable(`immutable object create failed (${response.status})`);
     }
+    const created = response.ok;
+    if (created) onCreated?.(digest);
     // A competing creator may have won. In either case, do not publish a manifest
     // until the exact bytes can be read through the selected backend. That
     // read-back skips the cache: a hit is not proof this namespace stored them.
@@ -457,7 +471,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
       try {
         await this.readStoreAndRemember(digest, undefined, signal);
         signal?.throwIfAborted();
-        return digest;
+        return { digest, created };
       } catch (error) {
         if (signal?.aborted || !(error instanceof ObjectUnavailable) || attempt === 7) throw error;
         await delay(25 * (attempt + 1), undefined, { signal });
