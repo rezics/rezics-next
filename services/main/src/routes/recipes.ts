@@ -14,7 +14,9 @@ import { StructureObjectCorrupt, StructureObjectUnavailable }
 import { RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
-import { AdmissionDenied } from '../modules/access/admission.ts';
+import { AdmissionDenied, type VerifiedPrincipal } from '../modules/access/admission.ts';
+import { DisclosureUnavailable, discloseInventory } from '../modules/disclosure/read.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { structureProfileFor } from '../modules/structure/profiles.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
 import { exactRational, InexactQuantity } from '../modules/recipe/quantity.ts';
@@ -158,6 +160,7 @@ function routeError(error: unknown): Response {
   if (error instanceof RecipeSourceConversionUnavailable || error instanceof FieldWithdrawalUnavailable) {
     return problem(503, 'recipe_source_support_unavailable', error.message);
   }
+  if (error instanceof DisclosureUnavailable) return problem(503, 'recipe_unavailable', 'Recipe disclosure is unavailable');
   if (error instanceof RecipeExportLimit) return problem(413, 'recipe_export_too_large', error.message);
   if (error instanceof CompositionUnavailable) return problem(404, 'recipe_unavailable', 'Recipe is unavailable');
   if (error instanceof StaleCompositionHead || error instanceof CompositionConflict) {
@@ -170,9 +173,9 @@ function routeError(error: unknown): Response {
   return commandError(error);
 }
 
-async function readPage(work: MainWorkDependencies, request: Request, input: {
+async function withAuthorizedRecipeRevision<T>(work: MainWorkDependencies, request: Request, input: {
   structure: string; actingSubject: string; revision?: string; parent?: string; after?: string; limit: number;
-}) {
+}, read: (principal: VerifiedPrincipal, revision: string) => Promise<T>): Promise<T> {
   await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
   const principal = await work.account.verify(request, ['work:read']);
   const header = await readCompositionHeader(work.environment, input.structure);
@@ -180,11 +183,29 @@ async function readPage(work: MainWorkDependencies, request: Request, input: {
     || !await work.access.canReadWork(principal, input.actingSubject, header.owner)) {
     throw new CompositionUnavailable('Recipe is unavailable');
   }
-  return readCompositionPage(work.environment, { structure: input.structure,
-    ...(input.revision ? { revision: input.revision } : {}),
-    ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
-    limit: input.limit, canReadTarget: target => NATIVE_ID.test(target)
-      ? work.access.canReadWork(principal, input.actingSubject, target) : Promise.resolve(false) });
+  const revision = input.revision ?? header.head;
+  const target = { owner: 'graph' as const, resource: input.structure, component: 'structure' as const,
+    revision, work: header.owner };
+  const visible = async () => {
+    const decisions = await discloseInventory(work.environment, [target],
+      disclosureViewer(principal, input.actingSubject), 'read');
+    if (decisions.length !== 1) throw new DisclosureUnavailable('Recipe Structure disclosure is incomplete');
+    return decisions[0] === 'visible';
+  };
+  if (!await visible()) throw new CompositionUnavailable('Recipe is unavailable');
+  const result = await read(principal, revision);
+  if (!await visible()) throw new CompositionUnavailable('Recipe is unavailable');
+  return result;
+}
+
+async function readPage(work: MainWorkDependencies, request: Request, input: {
+  structure: string; actingSubject: string; revision?: string; parent?: string; after?: string; limit: number;
+}) {
+  return withAuthorizedRecipeRevision(work, request, input, (principal, revision) =>
+    readCompositionPage(work.environment, { structure: input.structure, revision,
+      ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
+      limit: input.limit, canReadTarget: target => NATIVE_ID.test(target)
+        ? work.access.canReadWork(principal, input.actingSubject, target) : Promise.resolve(false) }));
 }
 
 async function allOccurrences(work: MainWorkDependencies, request: Request, structure: string,
@@ -211,6 +232,8 @@ async function allOccurrences(work: MainWorkDependencies, request: Request, stru
       if (records.length > RECIPE_EXPORT_OCCURRENCE_LIMIT) throw new limitError(limitMessage);
     } while (after);
   }
+  await withAuthorizedRecipeRevision(work, request, { structure, actingSubject, revision, limit: 1 },
+    async () => undefined);
   return { records, pages, pagesRead };
 }
 
@@ -453,10 +476,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
-        await readPage(work, request, { structure, actingSubject: query.actingSubject,
-          ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
-        const result = await readStructureMeasures(work.environment, { structure,
-          ...(query.revision ? { revision: query.revision } : {}) });
+        const result = await withAuthorizedRecipeRevision(work, request, { structure,
+          actingSubject: query.actingSubject, ...(query.revision ? { revision: query.revision } : {}), limit: 1 },
+        (_principal, revision) => readStructureMeasures(work.environment, { structure, revision }));
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })

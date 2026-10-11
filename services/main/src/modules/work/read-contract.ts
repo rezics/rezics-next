@@ -80,6 +80,9 @@ export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...work
     contributor: t.String(), admission: t.String(),
     candidateReceipt: t.String(), fields: t.Array(t.String()) })),
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
+  /** Server-established status for the exact structured publication head.
+   * It deliberately carries no private Structure or revision identifiers. */
+  publicationState: t.Union([t.Literal('published'), t.Literal('unpublished')]),
   originalTitle: t.Nullable(t.Object({ ...recordedText.properties,
     direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]) })),
   metadataRevision: t.Nullable(readId), description: t.Nullable(readName),

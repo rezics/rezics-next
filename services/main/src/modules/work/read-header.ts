@@ -1,17 +1,41 @@
 import { RightsInvalid, RightsUnavailable, workDescriptionMaterial, type WikiDisplayObligations } from '../rights/store.ts';
+import { DisclosureUnavailable } from '../disclosure/read.ts';
+import { workPublicationProfileFor, structureProfileForGraph } from '../structure/profiles.ts';
 import { chooseMainLanguage, readMainLanguageHeads } from './selection-heads.ts';
 import type { Static } from 'typebox';
 import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard, workHeader } from './read-contract.ts';
-import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, readRowsToken, readDependencyToken,
+import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, publicWork, unerased, readRowsToken, readDependencyToken,
   type WorkReadSession } from './read-session.ts';
+import { readPublishedStructuredWorkSource, type PublishedStructuredWorkSource } from './public-patterns.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
   dependencyToken: string;
   metadataRevision: string | null; metadata: Awaited<ReturnType<typeof readMetadataHeader>>;
-  disclosure: 'public' | 'restricted'; fieldProvenance?: Static<typeof workHeader>['fieldProvenance'] }
+  disclosure: 'public' | 'restricted'; publicationState: 'published' | 'unpublished';
+  structuredPublication: PublishedStructuredWorkSource | null;
+  fieldProvenance?: Static<typeof workHeader>['fieldProvenance'] }
+
+/** Structure visibility is exact to the admitted revision and its Work. Work
+ * readability alone cannot disclose another Structure revision. */
+export async function structureRevisionDisclosureVisible(session: WorkReadSession, input: {
+  work: string; workRevision?: string; structure: string; revision: string;
+}): Promise<boolean> {
+  try {
+    const decisions = await session.disclosure([{ owner: 'graph', resource: input.structure,
+      component: 'structure', revision: input.revision, work: input.work,
+      ...(input.workRevision ? { workRevision: input.workRevision } : {}) }]);
+    if (decisions.length !== 1) throw new WorkReadUnavailable('Structure disclosure result is incomplete');
+    return decisions[0] === 'visible';
+  } catch (error) {
+    if (error instanceof DisclosureUnavailable) {
+      throw new WorkReadUnavailable('Structure disclosure is unavailable', { cause: error });
+    }
+    throw error;
+  }
+}
 
 export async function readWorkBasis(session: WorkReadSession, work: string): Promise<WorkBasis> {
   const types = `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
@@ -42,6 +66,22 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work))) {
     throw new WorkReadMissing('Work is unavailable');
   }
+  const readPublication = () => readPublishedStructuredWorkSource(session.deps.environment, work, row.main!.value);
+  let source: PublishedStructuredWorkSource | null;
+  try { source = await readPublication(); }
+  catch (error) { throw new WorkReadUnavailable('Work publication state is unavailable', { cause: error }); }
+  if (session.options.localBasis) {
+    session.observeDependency(`structured-work-publication:${work}`, source, readPublication);
+  }
+  if (source) {
+    try {
+      workPublicationProfileFor(structureProfileForGraph(source.structureProfile));
+    } catch (error) {
+      throw new WorkReadUnavailable('Work publication profile is unavailable', { cause: error });
+    }
+    if (!await structureRevisionDisclosureVisible(session, { work, workRevision: row.head.value,
+      structure: source.structure, revision: source.structureRevision })) source = null;
+  }
   const readHeads = async () => isPublic ? (await readMainLanguageHeads(session.deps.environment,
     row.main!.value, true)).sort((a, b) => a.language.localeCompare(b.language)) : [];
   const heads = await readHeads();
@@ -70,9 +110,10 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
     lastUpdatedAt: stats?.lastUpdatedAt ?? null },
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null, metadata,
-  dependencyToken: readDependencyToken([readRowsToken(rows), languageToken, profiles, summary]),
+  dependencyToken: readDependencyToken([readRowsToken(rows), languageToken, profiles, summary, source]),
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted',
+  publicationState: source ? 'published' : 'unpublished', structuredPublication: source,
   ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}) };
 }
 
@@ -82,6 +123,10 @@ export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis)
     || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, basis.card.id))) {
     throw new WorkReadMissing('Work is unavailable');
   }
+  if (basis.structuredPublication && !await structureRevisionDisclosureVisible(session, {
+    work: basis.card.id, workRevision: basis.card.revision,
+    structure: basis.structuredPublication.structure, revision: basis.structuredPublication.structureRevision,
+  })) throw new WorkReadMoved('Published Structure disclosure changed');
   const summary = (await session.summaries([basis.card.id]))[0];
   if (summary?.status !== 'available') throw new WorkReadMissing('Work is unavailable');
 }
@@ -106,6 +151,7 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   }
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
+    publicationState: basis.publicationState,
     descriptionObligations,
     ...(basis.fieldProvenance ? { fieldProvenance: basis.fieldProvenance } : {}),
     title: selected.title ?? basis.card.title, description: selected.description,

@@ -33,7 +33,7 @@ export const work: WorkHeader = {
   profile: 'work-read-v1', id: workId, revision: iri(v7(day('2026-09-20'), 'e3a9c5b7d9f1a3c5e7')), mainVersion,
   title: name('The Cartographer of Tides'),
   cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: '3fa2c9d17b8e4a6f0c2d5e8b1a4f7c90', resourceType: 'work' },
-  types: ['https://schema.org/Book'], disclosure: 'public',
+  types: ['https://schema.org/Book'], disclosure: 'public', publicationState: 'unpublished',
   originalTitle: { value: 'La Cartographe des marées', language: 'fr', direction: 'ltr' },
   metadataRevision: iri('a7c9e1b3-5d6f-4a8b-9c0d-2e4f6a8b0c1d'),
   description: { value: 'A surveyor maps a delta that redraws itself with every tide.\nWhat she records, the river '

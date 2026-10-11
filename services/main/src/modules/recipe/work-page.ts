@@ -1,14 +1,17 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
-import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
+import { fenceWorkBasis, readWorkBasis, structureRevisionDisclosureVisible } from '../work/read-header.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
-import { WorkReadInvalid, WorkReadLimit, WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable }
+  from '../work/read-session.ts';
 import { CompositionUnavailable, compositionForMainVersion, orderTreeKey, readCompositionHeader }
   from '../structure/graph.ts';
 import { readCompositionPage, readStructureMeasures } from '../structure/read.ts';
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type RecipeMeasure } from '../structure/format.ts';
 import { scaleIngredients } from './operations.ts';
 import { exactRational, type ExactRational } from './quantity.ts';
+import { compositionTargetReader } from '../composition/disclosure-read.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 
 /** Occurrences returned by one Recipe work-page call. */
 export const RECIPE_WORK_PAGE_OCCURRENCES = 100;
@@ -288,26 +291,46 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
   // Work basis already fences visibility. A non-Recipe cannot acquire a Recipe view.
   const type = await session.deps.environment.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/Recipe> . } }`);
-  if (!type.boolean) return null;
-  const structure = await compositionForMainVersion(session.deps.environment, basis.card.mainVersion);
-  if (!structure) return null;
+  if (!type.boolean) { await fenceWorkBasis(session, basis); return null; }
+  const hasPrivatePreview = !!session.principal && !!session.options.actingSubject
+    && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
+  if (!hasPrivatePreview && !basis.structuredPublication) {
+    await fenceWorkBasis(session, basis);
+    return null;
+  }
+  const selected = basis.structuredPublication;
+  const structure = hasPrivatePreview
+    ? await compositionForMainVersion(session.deps.environment, basis.card.mainVersion)
+    : selected!.structure;
+  if (!structure) { await fenceWorkBasis(session, basis); return null; }
   const header = await readCompositionHeader(session.deps.environment, structure);
   if (!header || header.profile !== 'recipe-composition' || header.owner !== work
-    || header.component !== basis.card.mainVersion) {
+    || header.component !== basis.card.mainVersion
+    || selected && selected.structureProfile !== `${RV}RecipeComposition`) {
     throw new WorkReadUnavailable('Recipe Structure differs from selected Work');
   }
+  const revision = hasPrivatePreview ? header.head : selected!.structureRevision;
+  if (!await structureRevisionDisclosureVisible(session, { work, workRevision: basis.card.revision,
+    structure, revision })) {
+    if (!hasPrivatePreview) {
+      await fenceWorkBasis(session, basis);
+      return null;
+    }
+    throw new WorkReadMissing('Recipe is unavailable');
+  }
   const env = session.deps.environment;
+  const canReadTarget = compositionTargetReader(session, structureProfileFor('recipe-composition'));
   const composition = (query: { parent?: string; occurrence?: string; after?: string; limit: number }) =>
-    readCompositionPage(env, { structure, revision: header.head,
+    readCompositionPage(env, { structure, revision,
       ...(query.parent ? { parent: query.parent } : {}),
       ...(query.occurrence ? { occurrence: query.occurrence } : {}),
       ...(query.after ? { after: query.after } : {}),
-      limit: query.limit, canReadTarget: async () => false });
-  const page = await readRecipeHierarchyPage({ structure, revision: header.head,
+      limit: query.limit, canReadTarget });
+  const page = await readRecipeHierarchyPage({ structure, revision,
     ...(servings !== undefined ? { servings } : {}),
     ...(cursor ? { cursor } : {}),
     readMeasures: async () => {
-      const measured = await readStructureMeasures(env, { structure, revision: header.head });
+      const measured = await readStructureMeasures(env, { structure, revision });
       return { measures: measured.measures, pagesRead: measured.cost.pagesRead };
     },
     readChildren: async query => {
@@ -326,13 +349,15 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
         throw error;
       }
     } });
-  if (page.profile === 'recipe-work-page-stale') {
+  const fence = async () => {
     await fenceWorkBasis(session, basis);
-    return page;
-  }
+    if (!await structureRevisionDisclosureVisible(session, { work, workRevision: basis.card.revision,
+      structure, revision })) throw new WorkReadMoved('Recipe Structure disclosure changed');
+  };
+  if (page.profile === 'recipe-work-page-stale') { await fence(); return page; }
   if (Buffer.byteLength(JSON.stringify(page)) > RECIPE_WORK_PAGE_BYTES) {
     throw new WorkReadLimit('Recipe page exceeds 1 MiB');
   }
-  await fenceWorkBasis(session, basis);
+  await fence();
   return page;
 }

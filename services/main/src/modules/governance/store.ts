@@ -1554,6 +1554,54 @@ export class GovernanceStore {
     return { phase: result.operation.status === 'completed' ? 'done' : 'restoring', decisionId: result.decisionId };
   }
 
+  /** Serialize a publication decision with every restriction writer for the
+   * Work and its optional parent. The locks cover the source read and the
+   * owner's native CAS, so a restriction cannot land in that interval. */
+  async withPublicationFence<T>(resources: readonly string[], dispatch: (allowed: boolean) => Promise<T>): Promise<T> {
+    const unique = [...new Set(resources)].sort();
+    const components: readonly GovernanceComponent[] = ['publication', 'structure', 'record'];
+    if (!unique.length || unique.length > 2 || unique.some(resource => !agentPattern.test(resource))) {
+      throw new GovernanceInvalid('publication fence resources are invalid');
+    }
+    const client = await this.pool.connect().catch(() => {
+      throw new GovernanceUnavailable('governance owner is unavailable');
+    });
+    let dispatching = false;
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new GovernanceUnavailable('Access is held for recovery');
+
+      const targets = unique.flatMap(resource => components.map(component => ({
+        owner: 'graph' as const, resource, component,
+      }))).sort((left, right) => {
+        const a = canonical([left.owner, left.resource, left.component]);
+        const b = canonical([right.owner, right.resource, right.component]);
+        return a < b ? -1 : a > b ? 1 : 0;
+      });
+      for (const target of targets) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 512))',
+          [canonical([target.owner, target.resource, target.component])]);
+      }
+      const restricted = await client.query(`SELECT 1 FROM access.governance_enforcement
+        WHERE owner = 'graph' AND resource = ANY($1::text[]) AND component = ANY($2::text[])
+          AND effect = 'publication' AND state = 'restricted' LIMIT 1`, [unique, components]);
+      dispatching = true;
+      const result = await dispatch(restricted.rowCount === 0);
+      dispatching = false;
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await rollback(client);
+      throw dispatching ? error : normalizeGovernanceError(error);
+    } finally {
+      client.release();
+    }
+  }
+
   /** Current effective fences for one target component, across scopes and contexts (bounded by index). */
   async readEnforcement(target: { owner: GovernanceOwner; resource: string; component: GovernanceComponent }):
     Promise<Array<{ context: string; scope: string; revision: string | null; effect: string;

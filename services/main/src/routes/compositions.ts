@@ -28,6 +28,9 @@ import { resourceTargetReader } from '../modules/target/resolve.ts';
 import { canReadCompositionWork, canReadCompositionResource,
   compositionTargetReader, compositionTargetBatchReader } from '../modules/composition/disclosure-read.ts';
 import { workRead, type WorkReadSession } from '../modules/work/read-session.ts';
+import { WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
+import { structureRevisionDisclosureVisible } from '../modules/work/read-header.ts';
+import { readPublishedStructuredWorkSource } from '../modules/work/public-patterns.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
 
@@ -150,14 +153,39 @@ function disclosedPage(page: CompositionPage) {
 }
 async function disclosedComposition<T>(work: MainWorkDependencies, request: Request,
   structure: string, actingSubject: string | undefined,
-  read: (session: WorkReadSession, header: NonNullable<Awaited<ReturnType<typeof readCompositionHeader>>>) => Promise<T>) {
+  options: { revision?: string; selectedRoot?: boolean },
+  read: (session: WorkReadSession, header: NonNullable<Awaited<ReturnType<typeof readCompositionHeader>>>,
+    revision: string) => Promise<T>) {
   return workRead(work, request, { actingSubject }, async session => {
     const header = await readCompositionHeader(work.environment, structure);
     if (!header || !await (structureProfileFor(header.profile).componentPredicate
       ? canReadCompositionWork(session, header.work) : canReadCompositionResource(session, header.owner))) {
       throw new CompositionUnavailable('Composition is unavailable');
     }
-    return read(session, header);
+    const profile = structureProfileFor(header.profile);
+    const requestedRevision = options.revision;
+    let revision = requestedRevision ?? header.head;
+    if (options.selectedRoot !== false && profile.workPublication === true) {
+      const hasPrivatePreview = !!session.principal && !!session.options.actingSubject
+        && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, header.work);
+      if (!hasPrivatePreview) {
+        let source;
+        try { source = await readPublishedStructuredWorkSource(work.environment, header.work, header.component); }
+        catch (cause) { throw new WorkReadUnavailable('Published Structure source is unavailable', { cause }); }
+        if (!source || source.structure !== structure || source.structureProfile !== profile.graphProfile
+          || requestedRevision && requestedRevision !== source.structureRevision) {
+          throw new CompositionUnavailable('Composition is unavailable');
+        }
+        revision = source.structureRevision;
+      }
+      if (!await structureRevisionDisclosureVisible(session, { work: header.work,
+        structure, revision })) throw new CompositionUnavailable('Composition is unavailable');
+      const result = await read(session, header, revision);
+      if (!await structureRevisionDisclosureVisible(session, { work: header.work,
+        structure, revision })) throw new WorkReadMoved('Structure disclosure changed during read');
+      return result;
+    }
+    return read(session, header, revision);
   });
 }
 export const openApiOperations = {
@@ -572,8 +600,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       try {
         const structure = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const page = await disclosedComposition(work, request, structure, query.actingSubject,
-          (session, header) => readCompositionPage(work.environment, { structure,
+        const page = await disclosedComposition(work, request, structure, query.actingSubject, {},
+          (session, header, revision) => readCompositionPage(work.environment, { structure, revision,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
@@ -593,8 +621,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const structure = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const page = await disclosedComposition(work, request, structure, query.actingSubject,
-          (session, header) => readCompositionPage(work.environment, { structure,
-          revision: `https://rezics.com/id/${params.revision}`,
+          { revision: `https://rezics.com/id/${params.revision}` },
+          (session, header, revision) => readCompositionPage(work.environment, { structure, revision,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
@@ -614,6 +642,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const structure = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const page = await disclosedComposition(work, request, structure, query.actingSubject,
+          { selectedRoot: false },
           (session, header) => readCompositionSeal(work.environment, { structure,
           seal: `https://rezics.com/id/${params.seal}`,
           ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50,
@@ -630,9 +659,10 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const structure = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const page = await disclosedComposition(work, request, structure, query.actingSubject,
-          (session, header) => readCompositionPage(work.environment, { structure,
+          { ...(query.revision ? { revision: query.revision } : {}) },
+          (session, header, revision) => readCompositionPage(work.environment, { structure, revision,
           occurrence: `https://rezics.com/id/${params.occurrence}`,
-          ...(query.revision ? { revision: query.revision } : {}), limit: 1,
+          limit: 1,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
           canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
           canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
