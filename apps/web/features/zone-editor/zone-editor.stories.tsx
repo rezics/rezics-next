@@ -231,7 +231,7 @@ function navigationClient(calls: { name: string; key: string; segment?: string }
   let inserts = 0;
   return {
     async readNavigation() {
-      return { ok: true, data: { head: navigation, links: [] } };
+      return { ok: true, data: { head: navigation, navigation, links: [], complete: true, zoneHead: null } };
     },
     async insertMount(_zone, body, key) {
       calls.push({ name: 'insert', key, segment: body.routeSegment });
@@ -246,6 +246,10 @@ function navigationClient(calls: { name: string; key: string; segment?: string }
       calls.push({ name: 'remove', key });
       return { ok: true, head: 'https://rezics.com/id/00000000-0000-4000-8000-000000000340', occurrence: null, replayed: false };
     },
+    async moveMount(_navigation, _body, key) {
+      calls.push({ name: 'move', key });
+      return { ok: true, head: 'https://rezics.com/id/00000000-0000-4000-8000-000000000341', occurrence: null, replayed: false };
+    },
     async findPages(query) {
       return query.toLowerCase().startsWith('ha')
         ? [{ target: charts, name: 'Harbor charts' }, { target: tides, name: 'Harbor tides' }] : [];
@@ -258,7 +262,9 @@ function NavigationPage({ mode }: { mode: 'save' | 'stale' }) {
   const [api] = useState(() => navigationClient(calls, mode));
   const [authoring] = useState(() => clientOf([], 'save'));
   const [home] = useState(() => opening(fromPlainText('Morning edition of the harbor', 'blocks'), '00000000-0000-4000-8000-000000000311'));
-  const [initial] = useState<NavigationState>(() => ({ links: [], saved: [], head: navigation, notice: { kind: 'idle' } }));
+  const [initial] = useState<NavigationState>(() => ({
+    links: [], saved: [], head: navigation, navigation, complete: true, notice: { kind: 'idle' },
+  }));
   return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en" manageMessages={manageMessages}
     sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm}>
     <ZoneNavigationEditor zoneId={zoneId} zoneIri={zoneIri} actingSubject={actor} locale="en" copy={messages.en}

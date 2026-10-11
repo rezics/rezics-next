@@ -8,7 +8,10 @@ import {
   draftWire, loadedDraft, publicationWire,
   type AuthoringFailure, type DraftBasis, type DraftChoice, type DraftWire, type LoadedDraft, type PublicationChoice,
 } from './model.ts';
-import { linksFromZone, pageNameOf, type NavWriteFailure, type NavWriteResult, type SiteLink } from './navigation.ts';
+import {
+  foldMountPages, NAV_PAGE_CAP, NAV_PAGE_SIZE, pageNameOf, zoneMountPage,
+  type NavPosition, type NavWriteFailure, type NavWriteResult, type SiteLink,
+} from './navigation.ts';
 
 export type WriteResult<T> =
   | { ok: true; data: T }
@@ -129,8 +132,9 @@ function headsOf(data: unknown): WriteResult<ZoneHeads> | null {
 function failureOf(error: { status: number; value: unknown } | null, thrown: boolean): WriteResult<never> {
   if (thrown || !error || !(error.status >= 100)) return { ok: false, failure: 'unavailable' };
   const code = problemCode(error.value);
-  // A navigation command reports a moved structure head as zone_conflict, without the new head.
-  if (error.status === 409 && (code === 'stale_head' || code === 'stale_zone_head' || code === 'zone_conflict')) {
+  // Zone mount writes report zone_conflict; composition moves report stale_composition_head.
+  if (error.status === 409 && (code === 'stale_head' || code === 'stale_zone_head'
+    || code === 'zone_conflict' || code === 'stale_composition_head')) {
     const head = record(error.value)?.currentHead;
     return { ok: false, failure: 'stale', currentHead: typeof head === 'string' ? head : null };
   }
@@ -148,12 +152,19 @@ function record(value: unknown): Record<string, unknown> | null {
 
 export interface PageChoice { target: string; name: string }
 
-export interface NavigationSnapshot { head: string; links: SiteLink[] }
+export interface NavigationSnapshot {
+  head: string;
+  navigation: string;
+  links: SiteLink[];
+  complete: boolean;
+  zoneHead: string | null;
+}
 
 export interface ZoneNavigationClient {
   readNavigation(zoneId: string, actingSubject: string): Promise<WriteResult<NavigationSnapshot>>;
   insertMount(zoneId: string, body: MountBody, key: string): Promise<NavWriteResult | NavWriteFailure>;
   removeMount(zoneId: string, occurrenceId: string, body: { expectedHead: string; actingSubject: string }, key: string): Promise<NavWriteResult | NavWriteFailure>;
+  moveMount(navigation: string, body: MoveBody, key: string): Promise<NavWriteResult | NavWriteFailure>;
   findPages(query: string, locale: string): Promise<PageChoice[]>;
 }
 
@@ -162,7 +173,14 @@ export interface MountBody {
   target: string;
   routeSegment: string;
   disclosure: 'public' | 'private';
-  position: 'last';
+  position: NavPosition;
+  actingSubject: string;
+}
+
+export interface MoveBody {
+  expectedHead: string;
+  occurrence: string;
+  position: 'first' | { after: string };
   actingSubject: string;
 }
 
@@ -170,11 +188,32 @@ export interface MountBody {
 export function browserZoneNavigation(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneNavigationClient {
   return {
     async readNavigation(zoneId, actingSubject) {
-      const answer = await post(() => main.v1.zones({ id: zoneId }).get({ query: { actingSubject, limit: 50 } }));
-      if (!answer.ok) return answer;
-      const parsed = linksFromZone(answer.data);
-      if (!parsed) return { ok: false, failure: 'unavailable' };
-      return { ok: true, data: { head: parsed.head, links: await withPageNames(main, parsed.links, actingSubject) } };
+      const pages: NonNullable<ReturnType<typeof zoneMountPage>>[] = [];
+      let after: string | undefined;
+      for (let page = 0; page < NAV_PAGE_CAP; page += 1) {
+        const answer = await post(() => main.v1.zones({ id: zoneId }).get({
+          query: { actingSubject, limit: NAV_PAGE_SIZE, ...(after ? { after } : {}) },
+        }));
+        if (!answer.ok) return answer;
+        const parsed = zoneMountPage(answer.data);
+        if (!parsed) return { ok: false, failure: 'unavailable' };
+        pages.push(parsed);
+        if (!parsed.next) break;
+        if (parsed.next === after) return { ok: false, failure: 'unavailable' };
+        after = parsed.next;
+      }
+      const folded = foldMountPages(pages);
+      if (!folded) return { ok: false, failure: 'unavailable' };
+      return {
+        ok: true,
+        data: {
+          head: folded.head,
+          navigation: folded.navigation,
+          links: await withPageNames(main, folded.links, actingSubject),
+          complete: folded.complete,
+          zoneHead: folded.zoneHead,
+        },
+      };
     },
     async insertMount(zoneId, body, key) {
       return mountOf(await post(() => main.v1.zones({ id: zoneId }).mounts.post(body, { headers: { 'idempotency-key': key } })));
@@ -183,8 +222,58 @@ export function browserZoneNavigation(main: ReturnType<typeof browserMainApi> = 
       return mountOf(await post(() => main.v1.zones({ id: zoneId }).mounts({ occurrence: occurrenceId }).delete(
         body, { headers: { 'idempotency-key': key } })));
     },
+    async moveMount(navigation, body, key) {
+      return mountOf(await post(() => main.v1.compositions({ id: navigation.slice(-36) }).changes.post({
+        profile: 'zone-navigation',
+        expectedHead: body.expectedHead,
+        actingSubject: body.actingSubject,
+        operations: [{
+          op: 'move',
+          occurrence: body.occurrence,
+          parent: navigation,
+          position: body.position,
+        }],
+      } as never, { headers: { 'idempotency-key': key } })));
+    },
     findPages(query, locale) {
       return findZonePages(main, query, locale);
+    },
+  };
+}
+
+/**
+ * Server-side Zone navigation read that follows continuation pages.
+ * An outstanding next after the page cap is returned as an incomplete snapshot.
+ */
+export async function loadZoneNavigation(
+  main: MainClient,
+  zoneId: string,
+  actingSubject: string,
+): Promise<{ ok: true; data: NavigationSnapshot } | { ok: false; failure: string }> {
+  const pages: NonNullable<ReturnType<typeof zoneMountPage>>[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < NAV_PAGE_CAP; page += 1) {
+    const read = await settle(() => main.v1.zones({ id: zoneId }).get({
+      query: { actingSubject, limit: NAV_PAGE_SIZE, ...(after ? { after } : {}) },
+    }), { management: true, cursor: after });
+    if (!read.ok) return read;
+    const parsed = zoneMountPage(read.data);
+    if (!parsed) return { ok: false, failure: 'unavailable' };
+    pages.push(parsed);
+    if (!parsed.next) break;
+    if (parsed.next === after) return { ok: false, failure: 'unavailable' };
+    after = parsed.next;
+  }
+  const folded = foldMountPages(pages);
+  if (!folded) return { ok: false, failure: 'unavailable' };
+  return {
+    ok: true,
+    data: {
+      head: folded.head,
+      navigation: folded.navigation,
+      links: await withPageNames(main, folded.links, actingSubject),
+      complete: folded.complete,
+      zoneHead: folded.zoneHead,
     },
   };
 }

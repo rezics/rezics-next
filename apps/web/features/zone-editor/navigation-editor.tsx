@@ -18,7 +18,7 @@ import {
   type EditorState, type PublicationChoice,
 } from './model.ts';
 import {
-  alignLinks, commitNavigation, isNavigationDirty, isSegment, reduceNavigation, segmentFor,
+  alignLinks, commitNavigation, isNavigationDirty, isSegment, pathEditBlocked, reduceNavigation, segmentFor,
   type NavigationState, type SiteLink,
 } from './navigation.ts';
 
@@ -54,6 +54,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   const [picked, setPicked] = useState<PageChoice | null>(null);
   const [paths, setPaths] = useState<Record<string, string>>({});
   const [addNotice, setAddNotice] = useState<string | null>(null);
+  const [pathLimitId, setPathLimitId] = useState<string | null>(null);
   const [searched, setSearched] = useState<string | null>(null);
   const stateRef = useRef(state);
   const pageRef = useRef(page);
@@ -124,13 +125,19 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   }
 
   function applySave(chosen: NavigationState, round: WriteRound): Promise<WriteResult<SavedLinks>> {
+    if (!chosen.complete) return Promise.resolve({ ok: false, failure: 'unavailable' });
     return commitCommand(round, async key => {
       const result = await commitNavigation(chosen.saved, chosen.links, chosen.head, key, (op, opKey, expectedHead) => {
         if (op.kind === 'remove') {
           return client.current!.removeMount(zoneId, op.occurrence.slice(-36), { expectedHead, actingSubject }, opKey);
         }
+        if (op.kind === 'move') {
+          return client.current!.moveMount(chosen.navigation, {
+            expectedHead, occurrence: op.occurrence, position: op.position, actingSubject,
+          }, opKey);
+        }
         return client.current!.insertMount(zoneId, {
-          expectedHead, target: op.target, routeSegment: op.segment, disclosure: op.disclosure, position: 'last', actingSubject,
+          expectedHead, target: op.target, routeSegment: op.segment, disclosure: op.disclosure, position: op.position, actingSubject,
         }, opKey);
       });
       if (result.ok) return { ok: true, data: { head: result.head, links: result.links, replayed: result.replayed } };
@@ -149,7 +156,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   }
 
   function save(next: NavigationState = stateRef.current) {
-    if (busy || !isNavigationDirty(next)) return;
+    if (busy || !next.complete || !isNavigationDirty(next)) return;
     track('save', saveLane.current!.submit(next, applySave).then(result => {
       if (result.ok) put({ type: 'saved', links: result.data.links, head: result.data.head, replayed: result.data.replayed });
       else if (result.failure === 'stale') put({ type: 'stale', currentHead: result.currentHead });
@@ -177,9 +184,16 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
         return;
       }
       const links = alignLinks(stateRef.current.links, read.data.links);
-      const next = reduceNavigation(stateRef.current, { type: 'retarget', head: read.data.head, saved: read.data.links, links });
+      const next = reduceNavigation(stateRef.current, {
+        type: 'retarget', head: read.data.head, saved: read.data.links, links,
+        navigation: read.data.navigation, complete: read.data.complete,
+      });
       stateRef.current = next;
-      put({ type: 'retarget', head: read.data.head, saved: read.data.links, links });
+      put({
+        type: 'retarget', head: read.data.head, saved: read.data.links, links,
+        navigation: read.data.navigation, complete: read.data.complete,
+      });
+      if (!read.data.complete) return;
       if (!isNavigationDirty(next)) {
         put({ type: 'saved', links: next.links, head: next.head, replayed: false });
         return;
@@ -199,7 +213,11 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
         return;
       }
       setPaths({});
-      put({ type: 'loaded', links: result.data.links, head: result.data.head });
+      setPathLimitId(null);
+      put({
+        type: 'loaded', links: result.data.links, head: result.data.head,
+        navigation: result.data.navigation, complete: result.data.complete,
+      });
     }));
   }
 
@@ -216,9 +234,13 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       if (!isNavigationDirty(stateRef.current) && stateRef.current.head !== heads.data.navigationRevision) {
         const next = reduceNavigation(stateRef.current, {
           type: 'retarget', head: heads.data.navigationRevision, saved: stateRef.current.saved, links: stateRef.current.links,
+          navigation: stateRef.current.navigation, complete: stateRef.current.complete,
         });
         stateRef.current = next;
-        put({ type: 'retarget', head: heads.data.navigationRevision, saved: next.saved, links: next.links });
+        put({
+          type: 'retarget', head: heads.data.navigationRevision, saved: next.saved, links: next.links,
+          navigation: next.navigation, complete: next.complete,
+        });
       }
       const choice = siteChoice(stateRef.current.head);
       if (!choice) {
@@ -259,6 +281,11 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
 
   function onPath(link: SiteLink, value: string) {
     setPaths(current => ({ ...current, [link.id]: value }));
+    if (pathEditBlocked(link)) {
+      setPathLimitId(value === link.segment ? null : link.id);
+      return;
+    }
+    setPathLimitId(null);
     if (value === link.segment || !isSegment(value)) return;
     if (state.links.some(other => other.id !== link.id && other.segment === value)) return;
     put({ type: 'segment', id: link.id, segment: value });
@@ -273,13 +300,17 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id="zone-navigation-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.navTitle}</h2>
         <EditorActions copy={copy} canEdit busy={busy} dirty={dirty}
-          saveDisabled={!!busy || !dirty || state.notice.kind === 'stale'}
-          publishDisabled={!!busy || !publishable || page.notice.kind === 'publish-stale'}
+          saveDisabled={!!busy || !dirty || !state.complete || state.notice.kind === 'stale'}
+          publishDisabled={!!busy || !publishable || !state.complete || page.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
       </div>
       <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{copy.navHelp}</p>
       <p className="text-sm" role="status">{copy.navStatus}</p>
     </div>
+    {!state.complete ? <Alert variant="warning" role="status">
+      <AlertTitle>{copy.navTitle}</AlertTitle>
+      <AlertDescription>{copy.navIncomplete}</AlertDescription>
+    </Alert> : null}
     {savedNotice ? <p className="text-sm" role="status">{savedNotice}</p> : null}
     {state.notice.kind === 'saved' ? <p className="text-pretty text-muted-foreground text-sm">{copy.navSavedHint}</p> : null}
     {published ? <p className="text-sm" role="status">{published}</p> : null}
@@ -304,6 +335,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
           </label>
           {invalid ? <p className="text-destructive text-sm">{copy.pathInvalid}</p> : null}
           {taken ? <p className="text-destructive text-sm">{copy.duplicatePath}</p> : null}
+          {pathLimitId === link.id ? <p className="text-pretty text-muted-foreground text-sm">{copy.pathEditLimited}</p> : null}
           <div className="flex flex-wrap gap-1">
             <Button variant="ghost" size="sm" aria-label={`${copy.moveUp} ${link.name}`} disabled={!!busy || index === 0}
               onClick={() => put({ type: 'move', index, direction: -1 })}>{copy.moveUp}</Button>
