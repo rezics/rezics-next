@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { memberFixture, nativeId } from '../../../services/main/tests/member-reply-fixture.ts';
-import { publishRealmProfile } from '../../../services/main/src/modules/realm-profile/commands.ts';
 import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { realmReplyDigest } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { realmVisibilityFixture } from '../../../services/main/tests/realm-visibility-fixture.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
@@ -206,6 +206,8 @@ test('legacy Realm members place reviewed replies; direct policy respects member
     const realm = created.body.realm as string;
     const principal = await h.principal();
     const principalId = await h.access.activePrincipalId(principal);
+    const admin = new AccessRealmManagement(h.accessPool);
+    await admin.initialize(principal, realm, h.actor, h.env);
     await h.accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING", [realm]);
     await h.accessPool.query(`INSERT INTO access.membership_policy
       (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms-1')`, [realm]);
@@ -256,17 +258,14 @@ test('legacy Realm members place reviewed replies; direct policy respects member
     expect(placed.status, JSON.stringify(placed.body)).toBe(201);
     expect((await h.accessPool.query(`SELECT id FROM access.permission_grant
       WHERE recipient_subject = $1 AND action = 'reply.place'`, [h.pen])).rowCount).toBe(0);
-    await grant(`realm:profile:${realm}`, 'realm.profile.publish');
-    let profileHead: string | null = null;
-    const policy = async (replyPolicy: 'moderated' | 'members-direct') => {
-      const result = await publishRealmProfile(h.env, undefined, { verify: async () => principal }, h.access,
-        new Request('http://main.local'), { realm, expectedHead: profileHead, actingSubject: h.actor,
-          idempotencyKey: randomUUID(), profile: { name: { original: 'en', labels: { en: 'Members', 'zh-Hans': '成员' } },
-            description: { original: 'en', labels: { en: 'Replies', 'zh-Hans': '回复' } }, iconSelection: null, bannerSelection: null,
-            rules: [], moderators: [], count: { kind: 'unknown', value: null }, replyPolicy } });
-      profileHead = result.revision;
+    const policy = async (reviewMode: 'mandatory' | 'trusted-members') => {
+      const current = await admin.settings(principal, realm, h.actor, h.env);
+      await admin.changeSettings(principal, realm, { actingSubject: h.actor,
+        expectedGeneration: current.generation, expectedRulesRevision: current.ruleBasis.revision,
+        reason: 'Change reply review policy', settings: { visibility: 'public', reviewMode,
+          reviewRequired: reviewMode === 'mandatory', whoMaySubmit: 'granted', rules: [] } }, randomUUID(), h.env);
     };
-    await policy('members-direct');
+    await policy('trusted-members');
     const edited = await h.post('/v1/member-reply-drafts', { ...input, expectedHead: draft.body.revisionId, body: 'Direct member reply.' });
     expect(edited.status).toBe(201);
     const editedDigest = edited.body.revisionDigest;
@@ -304,7 +303,7 @@ test('legacy Realm members place reviewed replies; direct policy respects member
     const prepare = h.owner.preparePlacement.bind(h.owner);
     h.owner.preparePlacement = async (...args) => {
       const prepared = await prepare(...args);
-      await policy('moderated');
+      await policy('mandatory');
       return prepared;
     };
     const raced = await h.post('/v1/realm-reply-placements', { ...direct,
