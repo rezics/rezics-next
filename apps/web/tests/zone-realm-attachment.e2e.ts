@@ -320,7 +320,11 @@ test('two Persons recover concurrent Zone-page discussion posts, reopen the thre
         // The real server handles both requests. Only delivery to the browser is faulted.
         const answer = await route.fetch();
         attempts.push({ actor, key: request.headers()['idempotency-key'] ?? '', body, status: answer.status() });
-        expect([200, 201, 202]).toContain(answer.status());
+        // A resumed operation can hit a temporary owner/read fence. Deliver
+        // that real 503 to the composer, which must retain the same intent;
+        // below, every Person still has to reach a settled 200/201 receipt.
+        expect(first ? [200, 201, 202] : [200, 201, 202, 503], await answer.text())
+          .toContain(answer.status());
         if (first) {
           first = false;
           if (delivery === 'lost') await route.abort('failed');
