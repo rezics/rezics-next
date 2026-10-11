@@ -4,7 +4,7 @@ The refusal is a **missing ordered-membership preparation proof**, not a rejecte
 Recipe shape, changed model head, or invalid ingredient reference. Preserve the
 native refusal. Isolate the proof-invalidating fixture, expose the bounded native
 reason, and prepare restored membership before operator recovery declares it
-ready. These are separate implementation sessions.
+ready. Four sessions separate those changes from populated-recovery qualification.
 
 ## Evidence and reproduction
 
@@ -40,12 +40,26 @@ to `PATH`. It adds a logging preload; it does not replace validation.
   `.temp/validation-diagnostic/qa/20261011t072343-a242af/logs/integration-1.log`,
   `integration-r1.log`, `integration-r2.log`, and `rejections.jsonl` in the
   diagnostic directory.
-- Exact requested-order reproduction `20261011t072913-f689be` is queued at
-  QA startup admission. Its temporary runner invokes the four unchanged files
-  sequentially against the same stack and merges their JUnit reports. Source
-  checks and the differently ordered first reproduction establish the cause;
-  this queued run has not yet supplied requested-order or marker-transition
-  observations.
+- Run `20261011t072913-f689be` reproduced the **exact requested order** on
+  one database. A temporary runner invoked each unchanged file in a separate
+  Bun process against the same stack, without reset between files, and merged
+  their JUnit reports. Realm submissions **1/1**, Recipe Work page **3/3**, and
+  G-829 **1/1** passed; Recipe update **0/2** failed with the identical native
+  report. Per-file process times were 17.7, 15.5, 28.6 and 6.3 seconds.
+  Its log's `MEMBERSHIP_PROOF` observations show the same epoch-bound proof
+  before/after the first two files and before G-829; no proof exists after
+  G-829 or before/after Recipe update. The first raw protection INSERT changes
+  proof-present to proof-absent; the corresponding DELETE observes absent both
+  before and after. Evidence:
+  `.temp/validation-diagnostic/qa/20261011t072913-f689be/logs/integration-1.log`
+  and `.temp/validation-diagnostic/raw-updates.jsonl`.
+  Its fresh-project Recipe update rerun passed **2/2**, 39.7 seconds; the
+  shared shard took 68.5 seconds. The integration tier resolved through
+  isolation, but the **overall invocation exited 1** with
+  `Source changed during QA run`: this specification was committed and edited
+  while QA ran. Only the report changed in tracked source; no product or test
+  source changed. These logs establish the diagnostic reproduction and isolated
+  outcomes, not a clean acceptance gate. The first run completed with exit 0.
 
 For the first failed Recipe update command, the exact native list focus was
 `urn:rezics:item-list:409072ea74329f6bc5d0d2c05993208b989de006d3ae3a348f510896d69a519b`,
@@ -53,7 +67,9 @@ owned by Structure `https://rezics.com/id/cf545410-8a65-868e-974a-cdc2b70c14c5`
 and generation `https://rezics.com/id/10cb2aa7-70d9-8246-969e-8d332407ca91`.
 Its two ingredient placements already existed. The rejected command adds its
 first step, at `recipe-update.test.ts:76`; the prior two-ingredient insertion at
-line 68 succeeded. The envelope includes the `structure-composition-v1`
+line 68 succeeded. The exact-order run's corresponding list focuses were
+`urn:rezics:item-list:bb0349bfaebb45978698415eaddc6416cdb0a7200297d773eaf8653fd158f183`
+and `urn:rezics:item-list:a4416346d0fbd0f22a83b4399d8794a88dfd83b58a14166d35317c3609a7e3f7`. The envelope includes the `structure-composition-v1`
 `item-list-shape` and `recipe-structure-v1` `step-shape`, but **neither is the
 rejecting shape**: the native membership precondition refuses first.
 
@@ -276,7 +292,10 @@ commands and native preparer. **Native image build: no.**
   measured a complete standalone recovery/serve journey. Confirm whether such
   a deployment may serve before the required stopped-writer preparation, then
   bind readiness to the existing preparer's status if needed. Do not add an
-  independent membership authority or auto-repair in a user command.
+  independent membership authority or auto-repair in a user command. The owning
+  acceptance is OPS03/OPS12; a focused readiness/recovery test must show both
+  unqualified refusal and prepared readiness. Mechanisms: none, use existing
+  preparation status. Native image build: no for a status-only observer.
 - **C — other raw-fixture cleanup classes belong to the existing migration
   work (G-1636), pending runtime attribution.** Source candidates under
   `tests/qa/integration/` include `realm-submission-targets.test.ts`, lines
