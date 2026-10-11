@@ -8,6 +8,11 @@ import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { publicWork } from './public-patterns.ts';
 import { discloseInventory, hasDisclosure, type DisclosureTarget } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
+import {
+  compareRelayPositions,
+  MAIN_RELAY_STREAM_SCOPE,
+  type RelayHandoffPosition,
+} from '../outbox/relay-position.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -39,6 +44,11 @@ interface RelayEvent {
   type: string;
   data?: { receipt?: Record<string, unknown> };
 }
+interface SerialStatsCheckpoint {
+  generation: string;
+  graph_epoch: string;
+  sequence: string;
+}
 
 /** Intl word segmentation handles both space-delimited and CJK text. */
 export function countSerialWords(value: string): number {
@@ -61,6 +71,36 @@ export class SerialStatisticsProjection {
     private readonly content: Pool,
     private readonly env: WorkActivationEnvironment,
   ) {}
+
+  private async mainStreamCoverage(): Promise<RelayHandoffPosition> {
+    const row = (
+      await this.relay.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
+        `SELECT stream_scope, data_epoch, coalesce(max(sequence),0)::text AS sequence
+        FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2
+        GROUP BY stream_scope, data_epoch`,
+        [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch],
+      )
+    ).rows[0];
+    if (!row) {
+      return {
+        streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: this.env.lineage.dataEpoch,
+        sequence: '0',
+      };
+    }
+    const position: RelayHandoffPosition = {
+      streamScope: row.stream_scope,
+      dataEpoch: row.data_epoch,
+      sequence: row.sequence,
+    };
+    if (
+      position.streamScope !== MAIN_RELAY_STREAM_SCOPE ||
+      position.dataEpoch !== this.env.lineage.dataEpoch
+    ) {
+      throw new SerialProjectionUnavailable('Main relay coverage has a foreign stream position');
+    }
+    return position;
+  }
 
   private async sourceTime(
     receipt: Record<string, unknown>,
@@ -244,41 +284,54 @@ export class SerialStatisticsProjection {
   }
 
   async tick(): Promise<number> {
-    const head = (
-      await this.relay.query<{ sequence: string }>(
-        `SELECT coalesce(max(sequence),0)::text AS sequence FROM relay.delivered_batch WHERE data_epoch = $1`,
-        [this.env.lineage.dataEpoch],
-      )
-    ).rows[0]!.sequence;
+    const head = await this.mainStreamCoverage();
     const prior = (
-      await this.access.query<{ generation: string; graph_epoch: string; sequence: string }>(
+      await this.access.query<SerialStatsCheckpoint>(
         `SELECT generation, graph_epoch, sequence::text FROM access.serial_stats_checkpoint WHERE singleton`,
       )
     ).rows[0];
     const reset =
       !prior ||
-      prior.graph_epoch !== this.env.lineage.dataEpoch ||
-      BigInt(prior.sequence) > BigInt(head);
+      prior.graph_epoch !== head.dataEpoch ||
+      compareRelayPositions(
+        { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: prior.graph_epoch, sequence: prior.sequence },
+        head,
+      ) > 0;
     const after = reset ? '0' : prior.sequence;
     const batch = (
-      await this.relay.query<{ sequence: string; event_count: number }>(
-        `SELECT batch.sequence::text, event_count FROM relay.delivered_batch AS batch
-        WHERE data_epoch = $1 AND batch.sequence > $2::numeric ORDER BY batch.sequence LIMIT 1`,
-        [this.env.lineage.dataEpoch, after],
+      await this.relay.query<{
+        stream_scope: string;
+        data_epoch: string;
+        sequence: string;
+        event_count: number;
+      }>(
+        `SELECT batch.stream_scope, batch.data_epoch, batch.sequence::text, event_count
+        FROM relay.delivered_batch AS batch
+        WHERE batch.stream_scope = $1 AND batch.data_epoch = $2
+          AND batch.sequence > $3::numeric ORDER BY batch.sequence LIMIT 1`,
+        [head.streamScope, head.dataEpoch, after],
       )
     ).rows[0];
-    if (
-      (batch && BigInt(batch.sequence) !== BigInt(after) + 1n) ||
-      (!batch && BigInt(after) < BigInt(head))
-    ) {
+    const batchPosition: RelayHandoffPosition | undefined = batch
+      ? {
+          streamScope: batch.stream_scope,
+          dataEpoch: batch.data_epoch,
+          sequence: batch.sequence,
+        }
+      : undefined;
+    if (batchPosition &&
+      compareRelayPositions(batchPosition, { ...head, sequence: (BigInt(after) + 1n).toString() }) !== 0) {
+      throw new SerialProjectionUnavailable('Graph relay has a source gap');
+    }
+    if (!batch && compareRelayPositions({ ...head, sequence: after }, head) < 0) {
       throw new SerialProjectionUnavailable('Graph relay has a source gap');
     }
     const events = batch
       ? (
           await this.relay.query<{ envelope: RelayEvent }>(
-            `SELECT envelope FROM relay.delivered_event WHERE source = $1
-        AND data_epoch = $2 AND sequence = $3::numeric ORDER BY event_id`,
-            [SOURCE, this.env.lineage.dataEpoch, batch.sequence],
+            `SELECT envelope FROM relay.delivered_event WHERE stream_scope = $1 AND source = $2
+        AND data_epoch = $3 AND sequence = $4::numeric ORDER BY event_id`,
+            [head.streamScope, SOURCE, head.dataEpoch, batch.sequence],
           )
         ).rows
       : [];
@@ -458,7 +511,9 @@ export class SerialStatisticsProjection {
     }
   }
 
-  async batch(works: readonly string[], graphSequence?: string) {
+  // The caller's graph diagnostic is not a Main stream position. When enabled,
+  // the disclosure checks below remain the graph visibility fence.
+  async batch(works: readonly string[], _graphSequence?: string) {
     if (
       works.length > SERIAL_COST.summaryBatch ||
       new Set(works).size !== works.length ||
@@ -470,12 +525,7 @@ export class SerialStatisticsProjection {
         string,
         { chapterCount: number | null; wordCount: number | null; lastUpdatedAt: string | null }
       >();
-    const head = (
-      await this.relay.query<{ sequence: string }>(
-        `SELECT coalesce(max(sequence),0)::text AS sequence FROM relay.delivered_batch WHERE data_epoch = $1`,
-        [this.env.lineage.dataEpoch],
-      )
-    ).rows[0]!.sequence;
+    const head = await this.mainStreamCoverage();
     const result = await this.access.query<{
       generation: string;
       graph_epoch: string;
@@ -494,11 +544,13 @@ export class SerialStatisticsProjection {
     const first = result.rows[0];
     if (
       !first ||
-      first.graph_epoch !== this.env.lineage.dataEpoch ||
-      first.sequence !== head ||
-      (graphSequence !== undefined && first.sequence !== graphSequence)
+      first.graph_epoch !== head.dataEpoch ||
+      compareRelayPositions(
+        { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: first.graph_epoch, sequence: first.sequence },
+        head,
+      ) !== 0
     ) {
-      return new Map(); // Unknown until both source and materialization are at one cut.
+      return new Map(); // Unknown until Main stream coverage and its materialization agree.
     }
     const summaries = new Map(
       result.rows.flatMap((row) =>

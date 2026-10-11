@@ -2,14 +2,29 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 test('serial projection reads numeric batch 9 before 10 and advances its checkpoint', async () => {
   let advanced = '';
-  const relay = { query: async (sql: string) => {
-    if (sql.includes('max(sequence)')) return { rows: [{ sequence: '10' }] };
-    if (sql.includes('FROM relay.delivered_batch')) return { rows: [{ sequence:
-      sql.includes('ORDER BY batch.sequence') ? '9' : '10', event_count: 0 }] };
-    if (sql.includes('FROM relay.delivered_event')) return { rows: [] };
+  const relay = { query: async (sql: string, args?: unknown[]) => {
+    if (sql.includes('max(sequence)')) {
+      expect(sql).toContain('stream_scope = $1');
+      expect(sql).toContain('data_epoch = $2');
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '10' }] };
+    }
+    if (sql.includes('FROM relay.delivered_batch')) {
+      expect(sql).toContain('batch.stream_scope = $1');
+      expect(sql).toContain('batch.data_epoch = $2');
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', '8']);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '9', event_count: 0 }] };
+    }
+    if (sql.includes('FROM relay.delivered_event')) {
+      expect(sql).toContain('stream_scope = $1');
+      expect(sql).toContain('data_epoch = $3');
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'https://rezics.com/services/main', 'epoch', '9']);
+      return { rows: [] };
+    }
     throw new Error(`unexpected relay query: ${sql}`);
   } } as unknown as Pool;
   const client = { query: async (sql: string, args?: unknown[]) => {
@@ -29,12 +44,21 @@ test('serial projection reads numeric batch 9 before 10 and advances its checkpo
 test('serial projection restarts at batch 1 after a data epoch change', async () => {
   let reset = false, advanced = '';
   const relay = { query: async (sql: string, args?: unknown[]) => {
-    if (sql.includes('max(sequence)')) return { rows: [{ sequence: '2' }] };
-    if (sql.includes('FROM relay.delivered_batch')) {
-      expect(args?.[1]).toBe('0');
-      return { rows: [{ sequence: '1', event_count: 0 }] };
+    if (sql.includes('max(sequence)')) {
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'new-epoch']);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'new-epoch', sequence: '2' }] };
     }
-    if (sql.includes('FROM relay.delivered_event')) return { rows: [] };
+    if (sql.includes('FROM relay.delivered_batch')) {
+      expect(sql).toContain('batch.stream_scope = $1');
+      expect(sql).toContain('batch.data_epoch = $2');
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'new-epoch', '0']);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'new-epoch', sequence: '1', event_count: 0 }] };
+    }
+    if (sql.includes('FROM relay.delivered_event')) {
+      expect(sql).toContain('stream_scope = $1');
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'https://rezics.com/services/main', 'new-epoch', '1']);
+      return { rows: [] };
+    }
     throw new Error(`unexpected relay query: ${sql}`);
   } } as unknown as Pool;
   const client = { query: async (sql: string, args?: unknown[]) => {
