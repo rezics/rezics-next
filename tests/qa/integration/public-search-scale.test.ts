@@ -40,6 +40,7 @@ const root = resolve(import.meta.dir, '../../..');
 class CountingFusekiClient extends CountingFuseki {
   inventories = 0;
   readinessReads = 0;
+  publicSearchDeltaAvailable: boolean | undefined;
   get queryCalls(): number { return this.queries; }
   phraseQueries = 0;
   healthCalls = 0;
@@ -53,8 +54,12 @@ class CountingFusekiClient extends CountingFuseki {
     return super.query(sparql, maxResponseBytes);
   }
   override async commandHealth() {
-    if (!this.isBackgroundContext) this.healthCalls++;
-    return super.commandHealth();
+    const health = await super.commandHealth();
+    if (!this.isBackgroundContext) {
+      this.healthCalls++;
+      this.publicSearchDeltaAvailable = health.publicSearchDeltaAvailable;
+    }
+    return health;
   }
 }
 
@@ -208,7 +213,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     }
     const works: string[] = [];
     const corpusSamples: Array<{ size: number; queries: number; health: number;
-      inventories: number }> = [];
+      inventories: number; nativeDelta: boolean }> = [];
     for (let index = 0; index < 101; index++) {
       works.push(await addWork(index, 'fr'));
       if (![0, 31, 100].includes(index)) continue;
@@ -220,30 +225,40 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       expect(new Set(sample.results.map(row => row.work)))
         .toEqual(new Set(works));
       corpusSamples.push({ size: index + 1, queries: sampleFuseki.queryCalls,
-        health: sampleFuseki.healthCalls, inventories: sampleFuseki.inventories });
+        health: sampleFuseki.healthCalls, inventories: sampleFuseki.inventories,
+        nativeDelta: sampleFuseki.publicSearchDeltaAvailable === true });
     }
     expect(corpusSamples.map(sample => sample.size)).toEqual([1, 32, 101]);
-    expect(corpusSamples.map(sample => [sample.queries, sample.health, sample.inventories]))
-      .toEqual([[2, 3, 1], [2, 3, 1], [2, 3, 1]]);
+    expect(corpusSamples.map(sample => [sample.queries, sample.health]))
+      .toEqual([[2, 3], [2, 3], [2, 3]]);
+    expect(corpusSamples.map(sample => sample.inventories))
+      .toEqual(corpusSamples.map(sample => sample.nativeDelta ? 0 : 1));
+    function expectInventoryAudits(start = { inventories: 0, readinessReads: 0 }) {
+      const proofs = fuseki.readinessReads - start.readinessReads;
+      expect(fuseki.inventories - start.inventories)
+        .toBe(fuseki.publicSearchDeltaAvailable === true ? 0 : proofs);
+    }
     const lateWork = await addWork(101, 'en');
-    const coldStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
+    const coldStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls,
+      inventories: fuseki.inventories, readinessReads: fuseki.readinessReads };
     const late = await query('en');
     expect(late.complete).toBe(true);
     expect(late.population).toBe(existingPopulation + 102);
     expect(late.total).toBe(1);
     expect(late.results[0]?.work).toBe(lateWork);
-    expect(fuseki.inventories).toBe(fuseki.readinessReads);
+    expectInventoryAudits(coldStart);
     // 3c2a6a52 batches card hydration and adds one final search-health fence.
     // Bypass-writer datasets audit each readiness proof; preserve the graph and health bounds.
     expect(fuseki.queryCalls - coldStart.queries).toBeLessThanOrEqual(14);
     expect(fuseki.healthCalls - coldStart.health).toBe(4);
-    const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
+    const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls,
+      inventories: fuseki.inventories, readinessReads: fuseki.readinessReads };
     const all = await query(null);
     expect(all.complete).toBe(true);
     expect(all.population).toBe(existingPopulation + 102);
     expect(all.total).toBe(102);
     expect(new Set(all.results.map(row => row.work))).toEqual(new Set([...works, lateWork]));
-    expect(fuseki.inventories).toBe(fuseki.readinessReads);
+    expectInventoryAudits(warmStart);
     expect(fuseki.queryCalls - warmStart.queries).toBeLessThanOrEqual(13);
     expect(fuseki.healthCalls - warmStart.health).toBe(4);
     expect(all.cardWindow).toMatchObject({ hydrated: 20, limit: 20 });
@@ -279,8 +294,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect([...firstPage.results, ...secondPage.results, ...thirdPage.results]
       .map(row => row.work)).toEqual(all.results.map(row => row.work));
     expect(fuseki.phraseQueries - pageStart.phrases).toBe(3);
-    expect(fuseki.inventories - pageStart.inventories)
-      .toBe(fuseki.readinessReads - pageStart.readinessReads);
+    expectInventoryAudits(pageStart);
     // Each page adds current-field matching/fencing and a rating-context lookup
     // to the existing bounded card reads; the population does not multiply calls.
     expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(42);
@@ -293,7 +307,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(afterWrite.population).toBe(existingPopulation + 103);
     expect(afterWrite.total).toBe(2);
     expect(new Set(afterWrite.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
-    expect(fuseki.inventories).toBe(fuseki.readinessReads);
+    expectInventoryAudits();
     const corpus = [...works, lateWork, nextWork];
     const beforeAuthorSwitch = await selectedHeads(corpus);
     const alternateInput = { work: lateWork, language: 'en',
@@ -336,7 +350,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const afterSwap = await query('en');
     expect(afterSwap.population).toBe(existingPopulation + 103);
     expect(new Set(afterSwap.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
-    expect(fuseki.inventories).toBe(fuseki.readinessReads);
+    expectInventoryAudits();
     const authorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const firstAuthor = await query('en', actor);
     expect(firstAuthor.complete).toBe(true);
@@ -349,7 +363,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(secondAuthor.results.map(row => row.work)).toEqual([lateWork]);
     expect(fuseki.queryCalls - secondAuthorStart.queries).toBeLessThanOrEqual(13);
     expect(fuseki.healthCalls - secondAuthorStart.health).toBe(4);
-    expect(fuseki.inventories).toBe(fuseki.readinessReads);
+    expectInventoryAudits();
 
     const spaceInput = { name: `Scale Realm ${randomUUID()}`, actingSubject: actor };
     const space = await createRealmSpace(env,

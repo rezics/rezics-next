@@ -1,4 +1,6 @@
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -37,6 +39,8 @@ test('SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a b
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
       objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
     await initializeFreshGraph(fuseki, env.lineage);
+    await applyQaSqlMigrations(apps.ACCESS_DATABASE_URL!, resolve(root, 'services/main/migrations/access'),
+      schemaFiles(root, 'access'));
     const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
     const app = createMainApp(fuseki, { environment: env,
       account: { verify: async () => { throw new Error('public query needs no Account assertion'); } },

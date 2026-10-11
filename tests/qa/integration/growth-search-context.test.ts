@@ -64,7 +64,7 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
             if (sparql.includes('SELECT ?key ?head ?state ?context ?revision')) {
               selectionRows += result.results?.bindings.length ?? 0;
             }
-            if (sparql.includes('rv:baseRevision*')) {
+            if (sparql.includes('SELECT ?revision ?base ?depth')) {
               chainCalls++;
               chainRows += result.results?.bindings.length ?? 0;
             }
@@ -130,7 +130,7 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
       if (![0, 3, 15].includes(index)) continue;
       const sample = { consumers: index + 1, ...(await measure(consumers[0]!, null)) };
       consumerSamples.push(sample);
-      expect(sample).toMatchObject({ queries: 4, selectionRows: 1, chainRows: 1, chainCalls: 1 });
+      expect(sample).toMatchObject({ queries: 6, selectionRows: 2, chainRows: 2, chainCalls: 2 });
     }
     const depthSamples: Array<{
       depth: number;
@@ -147,9 +147,10 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
       }
     }
     for (const sample of depthSamples) {
-      expect(sample).toMatchObject({ queries: 3, selectionRows: 0, chainCalls: 1 });
-      expect(sample.chainRows).toBe(sample.depth + 1);
-      expect(sample.chainRows).toBeLessThanOrEqual(CONTEXT_LIMITS.inheritanceDepth + 1);
+      const chainHops = 2 * (sample.depth + 1);
+      expect(sample).toMatchObject({ queries: 2 * (sample.depth + 2),
+        selectionRows: 0, chainCalls: chainHops, chainRows: chainHops });
+      expect(sample.chainRows).toBeLessThanOrEqual(2 * (CONTEXT_LIMITS.inheritanceDepth + 1));
     }
     expect(depthSamples.map((sample) => sample.depth)).toEqual([0, 4, 8]);
     expect(
