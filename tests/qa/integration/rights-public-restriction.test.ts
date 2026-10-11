@@ -14,6 +14,7 @@ import { accountEmailQueue } from '../../../services/account/src/email.ts';
 import type { DecisionInput, DecisionResult } from '../../../services/main/src/modules/governance/store.ts';
 import { addBusinessDays } from '../../../services/main/src/modules/public-report/contract.ts';
 import type { ModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
+import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 
 type Fixture = Awaited<ReturnType<typeof safetyFixture>>;
 type Member = Awaited<ReturnType<Fixture['stack']['member']>>;
@@ -209,6 +210,12 @@ async function publicStatus(f: Fixture, receipt: Receipt, credential: string, me
     member?.token, randomUUID(), credential), 200);
 }
 
+async function publicContentPhrase(f: Fixture, phrase: string) {
+  return json<{ total: number; results: { revision: string }[] }>(await f.call('POST', '/v1/queries', {
+    profile: 'public-content-phrase-v1', phrase, language: 'en',
+  }));
+}
+
 test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across Work, cover Use, Content and party reads',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
@@ -232,6 +239,18 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       publicReportOwners(f.deps, f.stack.contentPool, f.stack.content),
       () => now,
     );
+    f.deps.contentProjection = { content: f.stack.content, cursor: f.stack.contentCursor,
+      consumer: f.stack.contentConsumer };
+    await f.stack.contentCursor.initialize(f.stack.contentConsumer);
+    const projectContentToHead = async () => {
+      while (BigInt((await f.stack.contentCursor.read(f.stack.contentConsumer)).sequence)
+        < BigInt((await f.stack.content.ownerPosition()).sequence)) {
+        if (!(await relayContentProjectionOnce(f.stack.env, f.stack.content,
+          f.stack.contentCursor, f.stack.contentConsumer))) {
+          throw new Error('Content projection stopped before the current owner head');
+        }
+      }
+    };
     const accountSecret = Bun.env.ACCOUNT_SECRET!;
     const mainSecret = 'rights-notice-private-intake';
     const account = safetyCorrespondenceApi(accountPool, accountSecret, mainSecret,
@@ -270,6 +289,12 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       await selectCover(f, maintainer, contentTarget.work, unrelatedAsset.asset, null);
       const bodyText = `Rights body original ${randomUUID().replaceAll('-', '')}`;
       const content = await publishBody(f, maintainer, contentTarget.work, bodyText);
+      await projectContentToHead();
+      const contentSearchBefore = await publicContentPhrase(f, bodyText);
+      expect(contentSearchBefore.total).toBe(1);
+      expect(contentSearchBefore.results).toContainEqual(expect.objectContaining({
+        revision: revisionIri(content.revision),
+      }));
 
       const missingSignature = await f.call('POST', '/v1/public-reports', {
         profile: 'public-report-v1', target: workTarget.work, category: 'copyright',
@@ -324,11 +349,15 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         const summary = await f.call('GET', `/v1/resources/${id}`);
         expect(header.status).toBe(200);
         expect(summary.status).toBe(200);
-        const search = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(
-          item === cases[2] ? bodyText : (await body<{ title: { value: string } }>(header.clone())).title.value)}&limit=20`);
-        expect(search.status).toBe(200);
+        let searchText = '';
+        if (item !== cases[2]) {
+          const search = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(
+            (await body<{ title: { value: string } }>(header.clone())).title.value)}&limit=20`);
+          expect(search.status).toBe(200);
+          searchText = await search.text();
+        }
         preRestriction.set(item.receipt.caseId, { header: await header.json(), summary: await summary.json(),
-          search: await search.text() });
+          search: searchText });
       }
       const coverSummary = await body<{ avatar: { kind: string; selection?: string; use?: string; url?: string } }>(
         await f.call('GET', `/v1/resources/${shortId(coverTarget.work)}`));
@@ -533,19 +562,25 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         if (JSON.stringify(credentialRead) !== JSON.stringify(restrictedContent))
           gaps.push('a case credential changes restricted Content revision delivery');
       }
-      const absentContentSearch = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(bodyText)}&limit=20`);
-      expect(absentContentSearch.status).toBe(200);
-      expect(await absentContentSearch.text()).not.toContain(bodyText);
+      const restrictedContentSearch = await publicContentPhrase(f, bodyText);
+      const absentPhraseSearch = await publicContentPhrase(f, randomUUID());
+      if (restrictedContentSearch.total !== absentPhraseSearch.total
+        || JSON.stringify(restrictedContentSearch.results) !== JSON.stringify(absentPhraseSearch.results)) {
+        gaps.push('restricted Content phrase search differs from an absent phrase');
+      }
 
       const updatedText = `Rights body replacement ${randomUUID().replaceAll('-', '')}`;
       const updatedContent = await publishBody(f, maintainer, contentTarget.work, updatedText, content);
+      await projectContentToHead();
       expect((await f.call('GET', contentReadPath(content.revision), undefined, maintainer.token)).status).toBe(404);
       const updatedRead = await body<{ body: { body: string } }>(
         await f.call('GET', contentReadPath(updatedContent.revision), undefined, maintainer.token));
       expect(updatedRead.body.body).toBe(updatedText);
-      const updatedSearch = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(updatedText)}&limit=20`);
-      expect(updatedSearch.status).toBe(200);
-      expect(await updatedSearch.text()).toContain(updatedText);
+      const updatedSearch = await publicContentPhrase(f, updatedText);
+      expect(updatedSearch.total).toBe(1);
+      expect(updatedSearch.results).toContainEqual(expect.objectContaining({
+        revision: revisionIri(updatedContent.revision),
+      }));
       const unrelatedCoverAfter = await body<{ avatar: { kind: string; url?: string } }>(
         await f.call('GET', `/v1/resources/${shortId(contentTarget.work)}`));
       expect(unrelatedCoverAfter.avatar.kind).toBe('image');
