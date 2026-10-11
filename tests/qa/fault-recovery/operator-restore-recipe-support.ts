@@ -244,6 +244,7 @@ export async function readMembershipCompletionProof(
     typeof parsed !== 'object' ||
     !('dataEpoch' in parsed) ||
     typeof parsed.dataEpoch !== 'string' ||
+    !('revision' in parsed) ||
     parsed.revision !== 'ordered-membership-v1'
   ) {
     throw new Error('Native membership completion proof has an unsupported form');

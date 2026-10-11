@@ -10,7 +10,7 @@ import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/acco
 import { accountCredentialsPresent } from '../../../services/main/src/modules/erasure/account.ts';
 import { ensureRetentionDomain, readErasure, retireRetentionDomain } from '../../../services/main/src/modules/erasure/journal.ts';
 import { readRestoredGraphReleaseExpectation, readRestoredGraphReleaseProof } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { withRetainedErasureRestoreScenario } from './retained-erasure-recovery-fixture.ts';
+import { withRetainedErasureRestoreScenario, constructRetainedErasureCandidatesInOrder } from './retained-erasure-recovery-fixture.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { publishedWork, unerased } from '../../../services/main/src/modules/work/public-patterns.ts';
 
@@ -18,18 +18,19 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
   await withRetainedErasureRestoreScenario(async scenario => {
     const {
       runId, state, compose, recoveryKey, relay, erased, operator, actor, work,
-      laterAuthorityScope, first, second, third, payload, unrelated, later, staleTarget,
+      laterAuthorityScope, first, second, third, payload, payloadBody, unrelated, later, staleTarget,
       laterPreparation, contentErasure, accountErasureId, pinnedErasure, ownerErasure,
       surviving,
       credentials, exact, bindCandidate, ownerOperationFor, interruptBeforeOwnerRelease,
-      offline, readJournal, refreshOperatorToken, pools, replayClusters,
+      expectBothHoldsClosed, offline, readJournal, refreshOperatorToken, pools, replayClusters,
     } = scenario;
     const staleErasure = await ownerErasure(staleTarget, 'stale-target');
     const sealedDeletionSet = third.deletionSet;
     if (!sealedDeletionSet) throw new Error('final retained Account deletion set is unavailable');
     const ownerRestoreInput = { sealedCoverage: third.authority.sealedCoverage,
       sealedDeletionSets: [sealedDeletionSet] };
-    const successfulCandidate = await bindCandidate(third);
+    const [firstCandidate, secondCandidate, successfulCandidate] = await constructRetainedErasureCandidatesInOrder(
+      [first, second, third], bindCandidate);
     const successfulOperations = ownerOperationFor(successfulCandidate, third);
     const successfulKey = `erasure-restore-owner-${randomUUID()}`;
     await interruptBeforeOwnerRelease(successfulCandidate, third, successfulOperations, successfulKey);
@@ -66,6 +67,19 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
     expect(await credentials(successful.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
     expect(await accountCredentialsPresent(successful.account, [erased.id])).toEqual(new Set());
     expect(await credentials(successful.account, operator.id)).toMatchObject({ users: '1' });
+    // Releasing the current cut must leave the original unsafe copies fenced.
+    for (const candidate of [firstCandidate, secondCandidate]) {
+      await expectBothHoldsClosed(candidate);
+      expect(await exact(candidate.restored.content, payload)).toMatchObject({ status: 'available',
+        serializedJson: JSON.stringify({ body: payloadBody }) });
+      expect((await readJournal(offline(candidate))).status).toBe(503);
+    }
+    expect(await credentials(firstCandidate.restored.account, erased.id))
+      .toEqual({ users: '1', passwords: '1', sessions: '1' });
+    expect(await credentials(secondCandidate.restored.account, erased.id))
+      .toEqual({ users: '0', passwords: '0', sessions: '0' });
+    await firstCandidate.dispose();
+    await secondCandidate.dispose();
     expect((await successful.content.query<{ pin_active: boolean; status: string }>(
       'SELECT pin_active, status FROM content.publication_preparation WHERE operation_id = $1',
       [laterPreparation])).rows[0]).toEqual({ pin_active: true, status: 'active' });

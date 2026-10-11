@@ -9,6 +9,7 @@ import { Pool } from 'pg';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence, AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { ensureFixtureScopeGate, grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { assertObjectRecoveryCoverage, type ObjectRecoveryStore } from '../../../services/main/src/modules/owner/object-coverage.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
@@ -54,6 +55,7 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outb
 import { OwnerOperations, OwnerOperationUnavailable } from '../../../services/main/src/modules/owner/operations.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { createRestoreCopyDisposal } from './owner-restore-erasure-fixture.ts';
 
 export class DirectoryObjects implements ImmutableObjects {
   constructor(readonly directory: string) {
@@ -85,40 +87,6 @@ type RecoveryCandidate = RestoredOwnerPools & {
   objects: CandidateObjectRecoveryStore;
   dispose: () => Promise<void>;
 };
-
-export interface RetainedErasureCleanupAction {
-  resource: string;
-  run: () => void | Promise<void>;
-}
-
-export function createRetainedErasureCandidateDisposal(
-  actions: readonly RetainedErasureCleanupAction[],
-): () => Promise<void> {
-  const completed = new Set<RetainedErasureCleanupAction>();
-  let active: Promise<void> | undefined;
-  return () => {
-    if (active) return active;
-    const run = async () => {
-      const pending = actions.filter(action => !completed.has(action));
-      const failures: Array<{ action: RetainedErasureCleanupAction; error: unknown }> = [];
-      for (const action of pending) {
-        try {
-          await action.run();
-          completed.add(action);
-        } catch (error) {
-          failures.push({ action, error });
-        }
-      }
-      if (failures.length) {
-        throw new AggregateError(failures.map(({ action, error }) =>
-          new Error(`${action.resource} cleanup failed`, { cause: error })),
-        'retained erasure candidate cleanup failed');
-      }
-    };
-    active = run().finally(() => { active = undefined; });
-    return active;
-  };
-}
 
 export interface RetainedErasureRecoveryFixtureOptions {
   runId: string;
@@ -411,7 +379,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     expect(cluster.port).not.toBe(Number(qa.composeEnv.POSTGRES_PORT));
     expect(await relayCoverage(relay, coverage.relay.consumer)).toEqual(coverage.relay);
     assertPreparationBudget();
-    const disposeCandidate = createRetainedErasureCandidateDisposal([
+    const disposeCandidate = createRestoreCopyDisposal([
       ...[...candidatePools].map((pool, index) => ({
         resource: `candidate ${name} PostgreSQL pool ${index + 1}`,
         run: () => removePool(pool),
@@ -735,7 +703,7 @@ export async function createRetainedErasureRestoreScenario() {
       VALUES ($1, $3, $4), ($2, $3, $5)`, [erasedPrincipal, operatorPrincipal, issuer, erased.id, operator.id]);
     await access.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
     const laterAuthorityScope = `authority:restore:${randomUUID()}`;
-    await access.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [laterAuthorityScope]);
+    await ensureFixtureScopeGate(access, laterAuthorityScope);
 
     // Retained frontier: signed coverage head plus the erasure journal epoch it covered.
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
@@ -747,17 +715,11 @@ export async function createRetainedErasureRestoreScenario() {
     await ensureModelGeneration(workEnvironment);
     const request = new Request('http://main.local/v1/works', {
       headers: { authorization: `Bearer ${token}` } });
-    const grant = async (scope: string, action: string) => {
-      await access.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-      await access.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until)
-        VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
-      [randomUUID(), operatorPrincipal, actor, action]);
-      await access.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
-      [randomUUID(), actor, scope, action]);
-    };
+    const grant = (scope: string, action: string) => grantFixtureAuthority(access, {
+      scope, requireDispatch: true,
+      representations: [{ principalId: operatorPrincipal, actor, action, lifetime: '8 hours' }],
+      grant: { actor, action, lifetime: '8 hours' },
+    });
     await grant('work:create:root', 'work.create');
     const createdWork = await createAdmittedMetadataWork(workEnvironment, verifier, registry, request, {
       title: 'Retained erasure recovery Work', language: 'en', actingSubject: actor,
@@ -769,13 +731,7 @@ export async function createRetainedErasureRestoreScenario() {
     [createdWork.admissionId])).rows[0]).toEqual({ state: 'sealed', graph_outcome: 'succeeded',
       graph_receipt: createdWork.receipt, graph_data_epoch: createdWork.dataEpoch,
       graph_sequence: createdWork.sequence });
-    await access.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`erasure:${work}`]);
-    await access.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1, $2, $3, 'erasure.request', now() + interval '1 hour')`, [randomUUID(), operatorPrincipal, actor]);
-    await access.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, 'erasure.request', now() + interval '1 hour')`,
-    [randomUUID(), actor, `erasure:${work}`]);
+    await grant(`erasure:${work}`, 'erasure.request');
 
     // Content targets include one API-erased payload, one published later target,
     // one target for the stale-journal case and unrelated public text.
