@@ -15,6 +15,7 @@ import { mapContentOutboxEvent, OutboxIncomplete,
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 import { TranslationBasisRequired } from '../src/modules/work/translation-links.ts';
+import { classifyContentEligibilityState } from '../src/modules/content-publication/eligibility-state.ts';
 
 const literal = (value: string) => ({ type: 'literal', value });
 const uri = (value: string) => ({ type: 'uri', value });
@@ -197,6 +198,27 @@ test('SEARCH19: eligibility command binds one exact head change, revision, recei
   expect(update).toContain('rv:eventCount 1 ; rv:event');
   expect(update).toContain('a rv:ContentSearchEligibilityEvent ; rv:ordinal 0');
   expect(update).toContain('FILTER(COALESCE(?prior, <urn:rezics:none>) = <urn:rezics:none>)');
+});
+
+test('SEARCH19 projection classification requires the existing exact positive owner decision', () => {
+  const { input } = fixture();
+  const publication = { id: input.publicationDecision, variant: input.variantId,
+    resource: input.resourceId, revision: `urn:rezics:content:revision:${randomUUID()}`,
+    digest: 'a'.repeat(64), ownerDataEpoch: randomUUID(), ownerSequence: '5', graphSequence: '3' };
+  const evidence = { snapshot: { dataEpoch: randomUUID(), routingEpoch: '1', sequence: '10' },
+    owner: { dataEpoch: publication.ownerDataEpoch, sequence: '8' }, variant: input.variantId,
+    resourceCount: 1, resource: uri(input.resourceId), publicationCount: 1,
+    publication: uri(input.publicationDecision), eligibilityCount: 1,
+    eligibility: uri(contentSearchEligibilityDecisionIri(randomUUID())), currentPublication: publication,
+    eligibilityProof: { id: '', variant: input.variantId, resource: input.resourceId,
+      publicationDecision: input.publicationDecision, graphSequence: '6', rightsBasis: `${RV}OriginalContribution` },
+    approvedPublication: publication, restoreOpen: true };
+  const decision = evidence.eligibility!.value;
+  evidence.eligibilityProof = { ...evidence.eligibilityProof!, id: decision };
+  expect(classifyContentEligibilityState(evidence).kind).toBe('public-current');
+  expect(classifyContentEligibilityState({ ...evidence, eligibilityCount: 0,
+    eligibility: undefined, eligibilityProof: undefined, approvedPublication: undefined }).kind)
+    .toBe('closed-absent');
 });
 
 test('PUBLIC-DOMAIN: v2 eligibility binds a current assessment and keeps v1 decision unchanged', async () => {

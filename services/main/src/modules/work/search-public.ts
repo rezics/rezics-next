@@ -16,7 +16,8 @@ import { exactDecisionSupports, readSearchDecisionSupports } from './search-supp
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
 import { publicWork } from './public-patterns.ts';
-import { visibleContentSearchRights } from '../content-publication/search.ts';
+import { assertPublicContentSearchReady, visibleContentSearchRights }
+  from '../content-publication/search.ts';
 import type { RightsStore } from '../rights/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
@@ -54,19 +55,23 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   // Quotes force a literal phrase; backslashes and quotes cannot add Lucene operators.
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const content = input.contentProjection;
-  const contentPosition = content ? await Promise.all([
-    content.content.ownerPosition(), content.cursor.read(content.consumer) ]) : null;
-  if (contentPosition && (contentPosition[0].dataEpoch !== contentPosition[1].dataEpoch
-    || contentPosition[0].sequence !== contentPosition[1].sequence)) {
-    throw new PublicQueryUnavailable('Content chapter projection is behind its source');
-  }
+  const contentReadiness = content
+    ? await assertPublicContentSearchReady(env, content.content, content.cursor, content.consumer) : null;
   // Readiness also fences this lineage and the recovery hold in its control read.
-  const index = await assertPublicTextReady(env.fuseki, env.lineage);
+  const baseIndex = await assertPublicTextReady(env.fuseki, env.lineage);
+  if (contentReadiness && (contentReadiness.graphPosition.dataEpoch !== baseIndex.dataEpoch
+    || contentReadiness.indexGeneration !== baseIndex.generation
+    || BigInt(contentReadiness.graphPosition.sequence) < BigInt(baseIndex.sequence))) {
+    throw new PublicQueryUnavailable('Content chapter readiness crossed the public text index');
+  }
+  const index = contentReadiness
+    ? { ...baseIndex, sequence: contentReadiness.graphPosition.sequence } : baseIndex;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
-      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle ?contentProjection ?rightsBasis ?assessment WHERE {
+      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle ?contentProjection ?rightsBasis ?assessment
+      ?variant ?contentDecision ?contentEligibility WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration .
@@ -205,14 +210,15 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   const population = index.population - chapterUnits.size + chapterMains.size;
   const results = rankedSearchMatches([...disclosed, ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
-  if (contentPosition && content) {
+  if (content && contentReadiness) {
     const [sourceAfter, checkpointAfter] = await Promise.all([
-      content.content.ownerPosition(), content.cursor.read(content.consumer) ]);
-    if (sourceAfter.dataEpoch !== contentPosition[0].dataEpoch
-      || sourceAfter.sequence !== contentPosition[0].sequence
-      || checkpointAfter.dataEpoch !== contentPosition[1].dataEpoch
-      || checkpointAfter.sequence !== contentPosition[1].sequence) {
-      throw new SearchSnapshotMoved('Content chapter source moved during public search');
+      content.content.ownerPosition(), content.cursor.read(content.consumer),
+    ]);
+    if (sourceAfter.dataEpoch !== contentReadiness.contentPosition.dataEpoch
+      || sourceAfter.sequence !== contentReadiness.contentPosition.sequence
+      || checkpointAfter.dataEpoch !== contentReadiness.contentPosition.dataEpoch
+      || checkpointAfter.sequence !== contentReadiness.contentPosition.sequence) {
+      throw new SearchSnapshotMoved('Content source moved during combined search');
     }
   }
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,

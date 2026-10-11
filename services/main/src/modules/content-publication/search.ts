@@ -13,6 +13,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { assertContentProjectionProfiles, ContentProjectionUnavailable } from './relay.ts';
 import type { RightsStore } from '../rights/store.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
+import { readContentEligibilityInventory } from './eligibility-state.ts';
 
 export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
@@ -56,7 +57,7 @@ async function qualifyContent(env: WorkActivationEnvironment, index: PublicTextP
   if (!entries) { entries = new Map(); qualified.set(env.fuseki, entries); }
   const existing = entries.get(key);
   if (existing) return existing;
-  const proof = auditContent(env, index);
+  const proof = auditContent(env, index, source);
   entries.clear();
   entries.set(key, proof);
   try { return await proof; }
@@ -65,7 +66,16 @@ async function qualifyContent(env: WorkActivationEnvironment, index: PublicTextP
 
 /** Full source/projection inventory is read once per joint graph/Content position. */
 async function auditContent(env: WorkActivationEnvironment,
-  index: PublicTextPosition): Promise<ContentQualification> {
+  index: PublicTextPosition, source: SourcePosition): Promise<ContentQualification> {
+  const inventory = await readContentEligibilityInventory(env, source, { maxUnits: MAX_PUBLIC_UNITS });
+  if (inventory.states.some(state => state.kind === 'unresolved')) {
+    throw new ContentProjectionUnavailable('Content eligibility inventory is unresolved');
+  }
+  const requiredProfiles = [...new Set(inventory.states.flatMap(state => state.kind === 'public-current'
+    ? [state.rightsBasis === `${RV}PublicDomain` ? 'content-search-eligibility-v2' : 'content-search-eligibility-v1']
+    : []))];
+  await assertContentProjectionProfiles(env, requiredProfiles);
+  const publicCurrent = inventory.states.filter(state => state.kind === 'public-current').length;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?epoch ?sequence ?generation ?declared ?heads ?missing ?eligible ?contentUnits WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
@@ -108,7 +118,8 @@ async function auditContent(env: WorkActivationEnvironment,
         { SELECT DISTINCT ?eligibleUnit WHERE {
           GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?eligibleUnit a rv:MatchUnit ;
             rv:variant ?eligibleVariant ; rv:publicationDecision ?eligibleDecision ;
-            rv:eligibility ?eligibleEligibility ; rv:projection ?projection . }
+            rv:eligibility ?eligibleEligibility ; rv:projection ?projection .
+            FILTER(STRSTARTS(STR(?eligibleUnit), "urn:rezics:content:match-unit:")) }
           GRAPH ${iri(GRAPHS.current)} { ?eligibleVariant a rv:ContentVariant ;
             rv:contentPublicationHead ?eligibleDecision ;
             rv:publicSearchEligibilityHead ?eligibleEligibility . }
@@ -119,7 +130,8 @@ async function auditContent(env: WorkActivationEnvironment,
       } }
       { SELECT (COUNT(DISTINCT ?contentUnit) AS ?contentUnits) WHERE {
         { SELECT DISTINCT ?contentUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          ?contentUnit a rv:MatchUnit ; rv:projection ?contentProjection .
+          ?contentUnit a rv:MatchUnit .
+          FILTER(STRSTARTS(STR(?contentUnit), "urn:rezics:content:match-unit:"))
         } } LIMIT ${MAX_PUBLIC_UNITS + 1} }
       } }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -129,7 +141,7 @@ async function auditContent(env: WorkActivationEnvironment,
   const sequence = row?.sequence?.value;
   if (rows.length !== 1 || row?.epoch?.value !== index.dataEpoch
     || !sequence || !/^(0|[1-9][0-9]*)$/.test(sequence)
-    || BigInt(sequence) < BigInt(index.sequence)
+    || sequence !== inventory.snapshot.sequence || BigInt(sequence) < BigInt(index.sequence)
     || row.generation?.value !== index.generation) {
     throw new ContentProjectionUnavailable('Content search graph snapshot is unavailable');
   }
@@ -139,13 +151,13 @@ async function auditContent(env: WorkActivationEnvironment,
     throw new ContentProjectionUnavailable('Content search population is invalid');
   }
   const [declared, heads, missing, eligible, contentUnits] = counts;
-  if (declared! > MAX_PUBLIC_UNITS || contentUnits! > MAX_PUBLIC_UNITS) {
+  if ([declared!, heads!, missing!, eligible!, contentUnits!].some(value => value > MAX_PUBLIC_UNITS)) {
     throw new ContentSearchBudgetExceeded('Content search population exceeds admitted bound');
   }
-  if (declared !== heads || missing !== 0 || heads !== eligible || eligible !== contentUnits) {
+  if (eligible !== publicCurrent || contentUnits !== publicCurrent) {
     throw new ContentProjectionUnavailable('Content publication has unprojected or stale search units');
   }
-  return { population: heads!, sequence };
+  return { population: publicCurrent, sequence };
 }
 
 async function prepareContentSearch(env: WorkActivationEnvironment,

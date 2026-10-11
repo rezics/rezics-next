@@ -10,14 +10,17 @@ import { graphRevisionSuppressed } from '../erasure/graph.ts';
 import { readZoneSitePublicationReceipt } from '../zone/configuration.ts';
 import { zonePublishedPageBinding } from '../zone/config-format.ts';
 import { compositionReceiptIri, readCompositionReceipt } from '../structure/change.ts';
+import { readContentEligibilityStatesForVariants } from './eligibility-state.ts';
 export { ContentProjectionUnavailable } from './projection-recipes.ts';
 
 const PROFILE_ID = 'content-match-unit-v1';
 const PROFILE = 'https://rezics.com/definition/content-match-unit-v1';
 const SHAPE = `${PROFILE}/projection-shape`;
 const UNIT_SHAPE = `${PROFILE}/unit-shape`;
-const ELIGIBILITY_PROFILE_ID = 'content-search-eligibility-v1';
-const ELIGIBILITY_SHAPE = 'https://rezics.com/definition/content-search-eligibility-v1/decision-shape';
+const ELIGIBILITY_PROFILES = [
+  { id: 'content-search-eligibility-v1', shape: 'https://rezics.com/definition/content-search-eligibility-v1/decision-shape' },
+  { id: 'content-search-eligibility-v2', shape: 'https://rezics.com/definition/content-search-eligibility-v2/decision-shape' },
+] as const;
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
 const decimal = /^(0|[1-9][0-9]*)$/;
 
@@ -38,33 +41,39 @@ function projectionIdentity(event: ContentOutboxEvent, rebuildId?: string): { re
     unit: `urn:rezics:content:match-unit:${digest}` };
 }
 
-/** Both independently reviewed native profiles are mandatory before public search. */
-export async function assertContentProjectionProfiles(env: WorkActivationEnvironment) {
+/** Installed Content and the retained eligibility profiles are mandatory before public search. */
+export async function assertContentProjectionProfiles(env: WorkActivationEnvironment,
+  additionalEligibilityProfiles: readonly string[] = []) {
   const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
   const profile = registry[PROFILE_ID];
-  const eligibility = registry[ELIGIBILITY_PROFILE_ID];
+  const requiredEligibilityProfiles = new Set(['content-search-eligibility-v1', ...additionalEligibilityProfiles]);
   if (!profile || !profile.shapes.includes(SHAPE) || !profile.shapes.includes(UNIT_SHAPE)
-    || !eligibility || !eligibility.shapes.includes(ELIGIBILITY_SHAPE)) {
+    || [...requiredEligibilityProfiles].some(id => {
+      const reviewed = ELIGIBILITY_PROFILES.find(profileEntry => profileEntry.id === id);
+      return !reviewed || !registry[id]?.shapes.includes(reviewed.shape);
+    })) {
     throw new ContentProjectionProfileUnavailable('reviewed Content search profiles are unavailable');
   }
   const health = await env.fuseki.commandHealth();
   if (health.profiles[PROFILE_ID] !== profile.sha256
-    || health.profiles[ELIGIBILITY_PROFILE_ID] !== eligibility.sha256) {
+    || [...requiredEligibilityProfiles].some(id => health.profiles[id] !== registry[id]!.sha256)) {
     throw new ContentProjectionProfileUnavailable('Fuseki Content search profiles differ');
   }
   return profile;
 }
 
 /** An installed native profile is mandatory before reading bodies or mutating search. */
-async function projectionValidation(env: WorkActivationEnvironment, anchor: string, unit: string) {
-  const profile = await assertContentProjectionProfiles(env);
+async function projectionValidation(env: WorkActivationEnvironment, anchor: string, unit: string,
+  eligibilityProfile: string) {
+  const profile = await assertContentProjectionProfiles(env, [eligibilityProfile]);
   return [{ profile: PROFILE_ID, sha256: profile.sha256, shape: SHAPE,
     focus: [anchor], graphs: [GRAPHS.revisions] },
   { profile: PROFILE_ID, sha256: profile.sha256, shape: UNIT_SHAPE,
     focus: [unit], graphs: [PUBLIC_SEARCH_GRAPH] }];
 }
 
-async function graphPublication(env: WorkActivationEnvironment, publication: ProjectionPublication) {
+async function graphPublication(env: WorkActivationEnvironment, publication: ProjectionPublication,
+  ownerPosition: Awaited<ReturnType<ContentCore['ownerPosition']>>) {
   const { graph, reference, preparationId, preparationPosition } = publication;
   if (graph.dataEpoch !== env.lineage.dataEpoch || !decimal.test(graph.sequence)) {
     throw new ContentProjectionUnavailable('publication owner epoch differs');
@@ -125,9 +134,21 @@ async function graphPublication(env: WorkActivationEnvironment, publication: Pro
     || (publication.status === 'rejected' && value('decision'))) {
     throw new ContentProjectionUnavailable('graph receipt does not prove terminal Content publication');
   }
+  let eligibilityState: Awaited<ReturnType<typeof readContentEligibilityStatesForVariants>>[number] | null = null;
+  if (publication.status === 'active') {
+    [eligibilityState] = await readContentEligibilityStatesForVariants(env, [reference.variantId], ownerPosition,
+      { expectedGraphSequence: value('sequence') });
+    if (!eligibilityState || eligibilityState.kind === 'unresolved') {
+      throw new ContentProjectionUnavailable(`Content eligibility owner proof is unresolved${eligibilityState
+        ? `: ${eligibilityState.reason}` : ''}`);
+    }
+  }
+  const eligibility = eligibilityState?.kind === 'public-current'
+    ? eligibilityState.eligibilityDecision : value('eligibility') ?? null;
+  const eligibleDecision = eligibilityState?.kind === 'public-current'
+    ? eligibilityState.id : null;
   return { kind: 'content' as const, decision: value('decision') ?? null, head: value('head') ?? null,
-    eligibility: value('eligibility') ?? null,
-    eligibleDecision: value('eligibleDecision') ?? null };
+    eligibility, eligibleDecision, eligibilityState };
 }
 
 /** Site publication has one atomic bundle receipt and correlated page bindings,
@@ -291,7 +312,7 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
         return 'superseded';
       }
     }
-    const graph = await graphPublication(env, publication);
+    const graph = await graphPublication(env, publication, await content.ownerPosition());
     if (graph.kind === 'site') return 'ignored';
     if (publication.status === 'rejected') return 'ignored';
     if (graph.head !== graph.decision) {
@@ -304,14 +325,17 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
       return 'ignored';
     }
     if (publication.status === 'active') {
+      if (!graph.eligibilityState || graph.eligibilityState.kind !== 'public-current' || !graph.eligibility
+        || graph.eligibleDecision !== graph.decision) {
+        throw new ContentProjectionUnavailable('public Content search eligibility is unproven');
+      }
       const identity = projectionIdentity(event, rebuildId);
-      const validations = await projectionValidation(env, identity.anchor, identity.unit);
+      const eligibilityProfile = graph.eligibilityState.rightsBasis === `${RV}PublicDomain`
+        ? 'content-search-eligibility-v2' : 'content-search-eligibility-v1';
+      const validations = await projectionValidation(env, identity.anchor, identity.unit, eligibilityProfile);
       // An obsolete head needs only its owner/graph proofs; bytes are required
       // only for the exact current publication that will be projected.
       await content.readProjectionPublication(event);
-      if (!graph.eligibility || graph.eligibleDecision !== graph.decision) {
-        throw new ContentProjectionUnavailable('public Content search eligibility is unproven');
-      }
       const exact = (await content.readExactBatch([publication.reference.revisionId],
         async () => new Set([publication.reference.revisionId])))[0];
       if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {

@@ -10,6 +10,7 @@ import { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRAS
   from '../../infrastructure/search-rebuild-crash.ts';
 import { relayContentProjectionOnce } from './relay.ts';
 import { extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
+import { readContentEligibilityInventory } from './eligibility-state.ts';
 
 export { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRASH_POINTS,
   SearchRebuildCrash, crashSearchRebuild, type SearchRebuildCrashPoint };
@@ -748,47 +749,6 @@ function rebuildKeyset(variable: string, after: string | undefined): string {
   return after ? `FILTER(STR(?${variable}) > ${lit(after)})` : '';
 }
 
-/** Declared public-search variants, one ordered keyset page. */
-export function contentRebuildDeclaredPageQuery(after: string | undefined): string {
-  return `PREFIX rv: <${RV}> SELECT ?variant WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
-      rv:publicSearchEligibilityHead ?eligibility .
-      ${rebuildKeyset('variant', after)} }
-  } ORDER BY STR(?variant) LIMIT ${CONTENT_REBUILD_PAGE}`;
-}
-
-/** Heads, decisions and receipts for one page of variants. Receipts are bound by variant, not scanned by predicate. */
-export function contentRebuildHeadsPageQuery(variants: readonly string[], dataEpoch: string): string {
-  return `PREFIX rv: <${RV}> SELECT ?variant ?resource ?decision ?eligibility
-    ?revision ?digest WHERE {
-    VALUES ?variant { ${variants.map(variant => iri(variant)).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ?resource ;
-      rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
-      rv:variant ?variant ; rv:resource ?resource ; rv:publicationDecision ?decision ;
-      rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public ;
-      rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?eligibilitySequence .
-      ?decision a rv:ContentPublicationDecision ; rv:contentRevision ?revision ;
-        rv:byteDigest ?digest ; rv:resource ?resource ; rv:component ?variant ;
-        rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
-        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?publicationSequence . }
-    GRAPH ${iri(GRAPHS.receipts)} {
-      ?publicationReceipt rv:variant ?variant ;
-        a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-        rv:publicationDecision ?decision ; rv:contentRevision ?revision ;
-        rv:byteDigest ?digest ; rv:resource ?resource ;
-        rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
-        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?publicationSequence .
-      ?eligibilityReceipt rv:variant ?variant ;
-        a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-        rv:eligibilityDecision ?eligibility ; rv:publicationDecision ?decision ;
-        rv:resource ?resource ;
-        rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public ;
-        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?eligibilitySequence . }
-    FILTER(?rightsBasis IN (rv:OriginalContribution, rv:PublicDomain))
-  } LIMIT ${CONTENT_REBUILD_PAGE}`;
-}
-
 /** Public MatchUnits, one ordered keyset page, including non-Content units the Lucene audit counts. */
 export function contentRebuildUnitsPageQuery(after: string | undefined): string {
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
@@ -817,36 +777,6 @@ function pageAdvanced(rows: RebuildBinding[], variable: string, after: string | 
     previous = current;
   }
   return previous;
-}
-
-async function readDeclaredPages(env: WorkActivationEnvironment): Promise<RebuildBinding[]> {
-  const declared: RebuildBinding[] = [];
-  let after: string | undefined;
-  for (let ordinal = 0; ordinal <= MAX_REBUILD_UNITS; ordinal++) {
-    const page = (await readContentRebuildStep(`verify: declared page ${ordinal}`, () => env.fuseki.query(
-      contentRebuildDeclaredPageQuery(after)))).results?.bindings ?? [];
-    if (page.length === 0) return declared;
-    const next = pageAdvanced(page, 'variant', after);
-    if (!next) throw new ContentRebuildUnavailable('declared eligibility inventory differs from exact public heads');
-    declared.push(...page);
-    if (declared.length > MAX_REBUILD_UNITS) throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
-    after = next;
-    if (page.length < CONTENT_REBUILD_PAGE) return declared;
-  }
-  throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
-}
-
-async function readHeadPages(env: WorkActivationEnvironment, declared: readonly RebuildBinding[]): Promise<RebuildBinding[]> {
-  const heads: RebuildBinding[] = [];
-  const variants = declared.map(row => value(row, 'variant')!);
-  for (let ordinal = 0, offset = 0; offset < variants.length; ordinal++, offset += CONTENT_REBUILD_PAGE) {
-    const rows = (await readContentRebuildStep(`verify: heads page ${ordinal}`, () => env.fuseki.query(
-      contentRebuildHeadsPageQuery(variants.slice(offset, offset + CONTENT_REBUILD_PAGE), env.lineage.dataEpoch),
-    ))).results?.bindings ?? [];
-    heads.push(...rows);
-    if (heads.length > MAX_REBUILD_UNITS) throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
-  }
-  return heads;
 }
 
 async function readUnitPages(env: WorkActivationEnvironment): Promise<RebuildBinding[]> {
@@ -906,28 +836,22 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
   const indexResult = await readContentRebuildStep('verify: inventory', () => env.fuseki.query(
     `PREFIX rv: <${RV}> SELECT (rv:publicTextInventory() AS ?population) WHERE {}`));
   const indexedPopulation = Number(indexResult.results?.bindings?.[0]?.population?.value);
-  const declared = await readDeclaredPages(env);
-  const heads = await readHeadPages(env, declared);
+  const eligibility = await readContentEligibilityInventory(env, owner, {
+    maxUnits: MAX_REBUILD_UNITS, expectedGraphSequence: before.sequence,
+    read: (step, sparql) => readContentRebuildStep(`verify: eligibility ${step}`,
+      () => env.fuseki.query(sparql)),
+  });
   const rdf = await readUnitPages(env);
-  if ([declared.length, heads.length, rdf.length, indexedPopulation].some(size => size > MAX_REBUILD_UNITS)) {
+  if ([eligibility.states.length, rdf.length, indexedPopulation].some(size => size > MAX_REBUILD_UNITS)) {
     throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
   }
-  const declaredVariants = new Set(declared.map(row => value(row, 'variant')));
-  if (declaredVariants.has(undefined) || declaredVariants.size !== declared.length
-    || declaredVariants.size !== heads.length) {
-    throw new ContentRebuildUnavailable('declared eligibility inventory differs from exact public heads');
+  if (eligibility.states.some(state => state.kind === 'unresolved')) {
+    throw new ContentRebuildUnavailable('Content eligibility owner inventory is unresolved');
   }
-  const byVariant = new Map<string, typeof heads[number]>();
-  for (const head of heads) {
-    const variant = value(head, 'variant');
-    if (!variant || !value(head, 'resource') || !value(head, 'decision')
-      || !value(head, 'eligibility') || !value(head, 'revision') || !value(head, 'digest')
-      || byVariant.has(variant)) throw new ContentRebuildUnavailable('eligible head inventory is ambiguous');
-    byVariant.set(variant, head);
-  }
-  if ([...byVariant.keys()].some(variant => !declaredVariants.has(variant))) {
-    throw new ContentRebuildUnavailable('public head is absent from eligibility inventory');
-  }
+  const byVariant = new Map(eligibility.states.flatMap(state => state.kind === 'public-current'
+    ? [[state.variant, { resource: state.resource, decision: state.id,
+      eligibility: state.eligibilityDecision, revision: state.revision, digest: state.digest }] as const]
+    : []));
   const rdfKeys = new Set<string>();
   const rdfUnits = new Set<string>();
   const contentUnits = new Map<string, typeof rdf[number]>();
@@ -954,6 +878,9 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
   if (!Number.isSafeInteger(indexedPopulation) || indexedPopulation !== rdfKeys.size) {
     throw new ContentRebuildUnavailable('Lucene membership differs from exact RDF MatchUnits');
   }
+  if ([...contentUnits.keys()].some(variant => !byVariant.has(variant))) {
+    throw new ContentRebuildUnavailable('Content MatchUnit remains for a closed publication');
+  }
   if (contentUnits.size !== byVariant.size) {
     throw new ContentRebuildUnavailable('eligible Content publication has missing MatchUnit');
   }
@@ -961,7 +888,7 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
   for (let offset = 0; offset < expected.length; offset += SOURCE_READ_BATCH) {
     const batch = expected.slice(offset, offset + SOURCE_READ_BATCH);
     const ids = batch.map(([, head]) => {
-      const revision = value(head, 'revision')!;
+      const revision = head.revision;
       if (!/^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(revision)) {
         throw new ContentRebuildUnavailable('eligible Content revision identity is invalid');
       }
@@ -983,12 +910,12 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
         ? extractProjectionText(recipe, body.body, body.reference) : null;
       if (!unit || body?.status !== 'available'
         || body.reference.variantId !== variant
-        || body.reference.resourceId !== value(head, 'resource')
+        || body.reference.resourceId !== head.resource
         || value(unit, 'resource') !== body.reference.resourceId
-        || body.reference.byteDigest !== value(head, 'digest')
-        || value(unit, 'revision') !== value(head, 'revision')
-        || value(unit, 'decision') !== value(head, 'decision')
-        || value(unit, 'eligibility') !== value(head, 'eligibility')
+        || body.reference.byteDigest !== head.digest
+        || value(unit, 'revision') !== head.revision
+        || value(unit, 'decision') !== head.decision
+        || value(unit, 'eligibility') !== head.eligibility
         || value(unit, 'body') !== projected?.text
         || unit.body?.['xml:lang']?.toLowerCase() !== projected?.language.toLowerCase()
 ) {
