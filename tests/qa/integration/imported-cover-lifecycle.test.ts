@@ -121,8 +121,18 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         stack.call(method, path, { token, body, key });
       const govern = (method: string, path: string, body?: unknown, token?: string,
         key: string = randomUUID(), credential?: string) => fixture!.call(method, path, body, token, key, credential);
+      const avatarGrantTargets = new Set<string>();
       const importerApi = {
         request: async (method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, key?: string) => {
+          // Work IDs are allocated by Main; grant the exact avatar target before its selection call.
+          if (path === '/v1/media/uploads' && body && typeof body === 'object'
+            && 'importedCover' in body) {
+            const targetWork = ((body as { importedCover?: { targetWork?: unknown } }).importedCover)?.targetWork;
+            if (typeof targetWork === 'string' && !avatarGrantTargets.has(targetWork)) {
+              await owner.grant(`media:avatar:${targetWork}`, 'media.avatar');
+              avatarGrantTargets.add(targetWork);
+            }
+          }
           const response = await call(method, path, body, owner.token, key);
           const text = await response.text();
           return { status: response.status, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
@@ -140,7 +150,8 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const record = snapshot.sources[0]!.records[0]!;
       const initial = await importDataset(root, snapshot, importOptions);
       expect(initial.completed).toBe(true);
-      expect(initial.limitations.some(item => item.startsWith(`${record.key}: cover pending (`))).toBe(false);
+      expect(initial.coverResults.map(result => result.status)).toEqual(['imported']);
+      expect(initial.limitations.some(item => /^cover [a-f0-9]{16} pending \(/.test(item))).toBe(false);
       const initialJournal = JSON.parse(readFileSync(initial.receiptFile, 'utf8')) as ImportJournal;
       const imported = initialJournal.native[record.key]!;
       const work = imported.id;
