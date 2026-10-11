@@ -10,7 +10,7 @@ import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
 import Link from '../shell/localized-link.tsx';
 import type { TrackingApi } from './api.ts';
-import { languageName, locatorParts } from './display.ts';
+import { languageName, locatorParts, releaseChoiceName } from './display.ts';
 import { EpisodeProgress } from './episode-progress.tsx';
 import { MediumProgress } from './medium-progress.tsx';
 import { copyOf, type Copy } from './messages.ts';
@@ -78,7 +78,7 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
       resource: item.id, revision: item.revision, name: (item.kind === 'original' ? t.originalText : t.translationText)({
         language: languageName(item.language, locale) }) })),
     ...(editions?.releases ?? []).filter(item => item.contentLanguages.some(same)).map(item => ({ kind: 'release' as const,
-      resource: item.id, revision: item.revision, name: item.title.value }))];
+      resource: item.id, revision: item.revision, name: releaseChoiceName(item, locale, t) }))];
 
   async function save(choice: EditionChoice, version: number) {
     setBusy(true);
@@ -93,16 +93,18 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
     const chosen = offered.find(item => `${item.kind}|${item.resource}` === edition);
     return { language, edition: chosen ? { kind: chosen.kind, resource: chosen.resource, revision: chosen.revision } : null };
   };
-  return <form className="grid gap-3" onSubmit={event => { event.preventDefault(); void save(mine(), preference?.version ?? 0); }}>
+  return <form className="grid min-w-0 gap-3 [&_[data-slot=select-content]]:max-w-[calc(100vw-2rem)] [&_[data-slot=select-positioner]]:max-w-[calc(100vw-2rem)]"
+    onSubmit={event => { event.preventDefault(); void save(mine(), preference?.version ?? 0); }}>
     <div className="flex flex-wrap items-end gap-3">
-      <Field className="gap-1">
+      <Field className="min-w-0 gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.language}</FieldLabel>
         <ChoiceSelect portalled={false} size="sm" value={language} onValueChange={value => { setEdition(''); onLanguage(value); }}
           label={t.language} options={languages.map(tag => ({ value: tag, label: languageName(tag, locale) }))} />
       </Field>
-      <Field className="gap-1">
+      <Field className="min-w-0 flex-1 basis-60 gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.edition}</FieldLabel>
-        <ChoiceSelect portalled={false} size="sm" value={edition} onValueChange={setEdition} label={t.edition} className="max-w-60"
+        <ChoiceSelect portalled={false} size="sm" value={edition} onValueChange={setEdition} label={t.edition}
+          className="h-auto min-h-8 py-1.5 [&_[data-part=value-text]]:whitespace-normal [&_[data-part=value-text]]:text-start"
           options={[{ value: '', label: t.anyEdition },
             ...offered.map(item => ({ value: `${item.kind}|${item.resource}`, label: item.name }))]} />
       </Field>

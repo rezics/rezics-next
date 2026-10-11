@@ -296,7 +296,7 @@ export const EditionPreference: Story = {
     const panel = within(
       await within(canvasElement).findByRole('region', { name: 'Series progress' }),
     );
-    await choose(panel, 'Edition', 'Sword Art Online 1: Aincrad');
+    await choose(panel, 'Edition', 'Sword Art Online 1: Aincrad · paperback · English · Yen Press · 2014');
     await userEvent.click(panel.getByRole('button', { name: 'Save choice' }));
     await waitFor(() =>
       expect(args.main.preferences.get(fixture.saoOne)).toMatchObject({

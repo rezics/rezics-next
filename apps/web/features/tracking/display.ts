@@ -1,7 +1,7 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import { isKnownFormat, timeText } from './model.ts';
 import type { Copy } from './messages.ts';
-import type { Editions, Locator, LocatorUnit, Selection, SessionState } from './types.ts';
+import type { Editions, Locator, LocatorUnit, Release, Selection, SessionState } from './types.ts';
 
 // How the words of tracking are chosen: Main's states and units named in the reader's language.
 
@@ -25,6 +25,14 @@ export function formatLabel(format: string | null, t: Copy): string | null {
   if (!isKnownFormat(format)) return format;
   return format === 'print' ? t.formatPrint : format === 'ebook' ? t.formatEbook : format === 'audiobook' ? t.formatAudiobook
     : t.formatWeb;
+}
+
+/** Bibliographic details distinguish releases whose titles are identical. Omit facts Main does not know. */
+export function releaseChoiceName(release: Release, locale: UiLocale, t: Copy): string {
+  return [release.title.value, formatLabel(release.platform, t),
+    release.contentLanguages.map(tag => languageName(tag, locale)).join(', '),
+    release.publisher, release.publicationYear?.toString(), release.editionStatement]
+    .filter(Boolean).join(' · ');
 }
 
 export function unitLabel(unit: LocatorUnit, t: Copy): string {

@@ -160,7 +160,7 @@ export function registerWorkHubJourney(phone: { width: number; height: number } 
     await expect(page).toHaveURL(volumeAddress(uuid(one!.work), '#availability'));
     const availability = page.getByRole('region', { name: 'Your edition and availability' });
     await expect(availability).toBeVisible();
-    await chooseOption(availability, page, 'Edition', 'Sword Art Online 1: Aincrad (audiobook)');
+    await chooseOption(availability, page, 'Edition', 'Sword Art Online 1: Aincrad (audiobook) · Audiobook · English · Yen Press · 2014');
     await availability.getByRole('button', { name: 'Save choice' }).click();
     await expect(availability.getByText('Saved.')).toBeVisible();
     // The edition is what the page says it is, after a reload and in the first screen.
