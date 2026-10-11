@@ -11,17 +11,91 @@ import { migrateContent } from '../../content/src/migrate.ts';
 import { relayContentProjectionOnce } from '../src/modules/content-publication/relay.ts';
 import { ReadRankingProjection, RankingProjectionUnavailable } from '../src/modules/rankings/projection.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
+  contentSearchEligibilityReceiptIri } from '../src/modules/content-publication/eligibility.ts';
+import { contentPublicationDecisionIri, contentPublicationReceiptIri }
+  from '../src/modules/content-publication/publish.ts';
+import { DATASET, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const id = () => `https://rezics.com/id/${crypto.randomUUID()}`;
 const binding = (value: string) => ({ type: 'literal', value });
+const uri = (value: string) => ({ type: 'uri', value });
 const graphEpoch = '11111111-1111-4111-8111-111111111111';
+
+type OwnerRow = Record<string, { type: string; value: string }>;
+type ProjectionOwnerRecord = { variant: string; resource: string; revision: string; publication: string;
+  eligibility: string; publicationRow: OwnerRow; eligibilityRow: OwnerRow };
+
+function projectionOwnerRecord(publication: ProjectionPublication, eligibilityAdmission: string): ProjectionOwnerRecord {
+  const ref = publication.reference;
+  const publicationAdmission = publication.preparationId;
+  const decision = contentPublicationDecisionIri(publicationAdmission);
+  const publicationReceipt = contentPublicationReceiptIri(publicationAdmission);
+  const eligibility = contentSearchEligibilityDecisionIri(eligibilityAdmission);
+  const eligibilityReceipt = contentSearchEligibilityReceiptIri(eligibilityAdmission);
+  const revision = `urn:rezics:content:revision:${ref.revisionId}`;
+  const actor = 'urn:rezics:actor:content-search-reviewer';
+  const preparation = publication.preparationId;
+  const eligibilityInput = { resourceId: ref.resourceId, variantId: ref.variantId,
+    publicationDecision: decision, expectedEligibilityHead: null, actingSubject: actor,
+    rightsBasis: 'original-contribution' as const, disclosure: 'public' as const };
+  const makeRow = (key: string, id: string, receipt: string,
+    fields: Array<[string, string | undefined, 'uri' | 'literal']>) => {
+    const row: OwnerRow = { [key]: uri(id), decisionTypeCount: binding('1'), anchorTypeCount: binding('1'),
+      receiptCount: binding('1'), receipt: uri(receipt), receiptTypeCount: binding('1') };
+    for (const [name, value, type] of fields) {
+      row[`${name}Count`] = binding(value === undefined ? '0' : '1');
+      if (value !== undefined) row[name] = type === 'uri' ? uri(value) : binding(value);
+    }
+    return row;
+  };
+  const publicationRow = makeRow('publication', decision, publicationReceipt, [
+    ['dComponent', ref.variantId, 'uri'], ['dResource', ref.resourceId, 'uri'], ['dRevision', revision, 'uri'],
+    ['dDigest', ref.byteDigest, 'literal'], ['dOwnerEpoch', publication.preparationPosition.dataEpoch, 'literal'],
+    ['dOwnerSequence', publication.preparationPosition.sequence, 'literal'], ['dDataEpoch', graphEpoch, 'literal'],
+    ['dSequence', publication.graph.sequence, 'literal'],
+    ['dModel', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+    ['dShape', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+    ['dDataset', DATASET, 'uri'], ['dPreparation', preparation, 'literal'],
+    ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'], ['rRequestDigest', 'b'.repeat(64), 'literal'],
+    ['rAdmissionId', publicationAdmission, 'literal'], ['rAuthorityEpoch', '2', 'literal'],
+    ['rScope', `content:publish:${ref.variantId}`, 'literal'], ['rPreparation', preparation, 'literal'],
+    ['rRevision', revision, 'uri'], ['rVariant', ref.variantId, 'uri'], ['rResource', ref.resourceId, 'uri'],
+    ['rByteDigest', ref.byteDigest, 'literal'], ['rOwnerEpoch', publication.preparationPosition.dataEpoch, 'literal'],
+    ['rOwnerSequence', publication.preparationPosition.sequence, 'literal'], ['rExpectedHead', 'urn:rezics:none', 'uri'],
+    ['rDataset', DATASET, 'uri'], ['rDataEpoch', graphEpoch, 'literal'],
+    ['rSequence', publication.graph.sequence, 'literal'], ['rDecision', decision, 'uri'],
+  ]);
+  const eligibilitySequence = String(BigInt(publication.graph.sequence) + 1n);
+  const eligibilityRow = makeRow('eligibility', eligibility, eligibilityReceipt, [
+    ['dComponent', ref.variantId, 'uri'], ['dVariant', ref.variantId, 'uri'], ['dResource', ref.resourceId, 'uri'],
+    ['dPublication', decision, 'uri'], ['dRightsBasis', `${RV}OriginalContribution`, 'uri'],
+    ['dAssessment', undefined, 'uri'], ['dDisclosure', `${RV}Public`, 'uri'],
+    ['dAdmissionId', eligibilityAdmission, 'literal'], ['dAuthorityEpoch', '2', 'literal'],
+    ['dScope', `content:search-eligibility:${ref.variantId}`, 'literal'], ['dActor', actor, 'uri'],
+    ['dModel', 'https://rezics.com/definition/content-search-eligibility-v1', 'uri'],
+    ['dShape', 'https://rezics.com/definition/content-search-eligibility-v1', 'uri'],
+    ['dDataset', DATASET, 'uri'], ['dDataEpoch', graphEpoch, 'literal'], ['dSequence', eligibilitySequence, 'literal'],
+    ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'],
+    ['rRequestDigest', contentSearchEligibilityDigest(eligibilityInput), 'literal'],
+    ['rAdmissionId', eligibilityAdmission, 'literal'], ['rAuthorityEpoch', '2', 'literal'],
+    ['rScope', `content:search-eligibility:${ref.variantId}`, 'literal'], ['rActor', actor, 'uri'],
+    ['rResource', ref.resourceId, 'uri'], ['rVariant', ref.variantId, 'uri'], ['rPublication', decision, 'uri'],
+    ['rExpectedHead', 'urn:rezics:none', 'uri'], ['rRightsBasis', `${RV}OriginalContribution`, 'uri'],
+    ['rAssessment', undefined, 'uri'], ['rDisclosure', `${RV}Public`, 'uri'], ['rDataset', DATASET, 'uri'],
+    ['rDataEpoch', graphEpoch, 'literal'], ['rSequence', eligibilitySequence, 'literal'],
+    ['rEligibility', eligibility, 'uri'],
+  ]);
+  return { variant: ref.variantId, resource: ref.resourceId, revision,
+    publication: decision, eligibility, publicationRow, eligibilityRow };
+}
 
 /** Graph faults are injected at the owner boundary; durability uses real PostgreSQL. */
 class ProjectionGraph extends FusekiClient {
   publications: ProjectionPublication[] = [];
   heads = new Map<string, string>();
+  eligibilityAdmissions = new Map<string, string>();
   failed = new Set<string>();
   commands = new Set<string>();
   attempts = 0;
@@ -39,20 +113,50 @@ class ProjectionGraph extends FusekiClient {
       return { results: { bindings: entry && !this.failed.has(entry[0]) ? [{ work: binding(entry[1]) }] : [] } };
     }
     if (sparql.includes('SELECT DISTINCT ?work ?main')) return { results: { bindings: [] } };
+    if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
+      return { results: { bindings: [{ epoch: binding(graphEpoch), routing: binding('1'), sequence: binding('100') }] } };
+    }
+    const currentOwners = [...new Set(this.publications.map(item => item.reference.variantId))]
+      .map(variant => this.currentOwnerRecord(variant)).filter((record): record is ProjectionOwnerRecord => Boolean(record));
+    if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
+      return { results: { bindings: currentOwners.filter(record => sparql.includes(`<${record.variant}>`)).map(record => ({
+        variant: uri(record.variant), resourceCount: binding('1'), resource: uri(record.resource),
+        publicationCount: binding('1'), publication: uri(record.publication),
+        eligibilityCount: binding('1'), eligibility: uri(record.eligibility),
+      })) } };
+    }
+    if (sparql.includes('SELECT ?eligibility') && sparql.includes('?decisionTypeCount')) {
+      return { results: { bindings: currentOwners.filter(record => sparql.includes(`<${record.eligibility}>`))
+        .map(record => record.eligibilityRow) } };
+    }
+    if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
+      return { results: { bindings: currentOwners.filter(record => sparql.includes(`<${record.publication}>`))
+        .map(record => record.publicationRow) } };
+    }
     const publication = this.publications.find(p => sparql.includes(`<${p.graph.receipt}>`));
     if (!publication) throw new Error('unexpected graph proof');
     if (this.failed.has(publication.reference.variantId)) throw new Error('target unavailable');
     const { reference: r, preparationPosition: at, preparationId } = publication;
-    const decision = `urn:rezics:decision:${preparationId}`;
+    const decision = contentPublicationDecisionIri(preparationId);
+    const current = this.currentOwnerRecord(r.variantId);
     return { results: { bindings: [{ epoch: binding(graphEpoch), routing: binding('1'), sequence: binding('100'),
       outcome: binding(`${RV}Succeeded`), receiptEpoch: binding(graphEpoch), receiptSequence: binding(publication.graph.sequence),
       decision: binding(decision), head: binding(this.heads.get(r.variantId) ?? decision),
-      eligibility: binding(`urn:rezics:eligibility:${preparationId}`), eligibleDecision: binding(decision),
+      eligibility: binding(current?.eligibility ?? ''), eligibleDecision: binding(current?.publication ?? decision),
       revision: binding(`urn:rezics:content:revision:${r.revisionId}`), digest: binding(r.byteDigest),
       ownerEpoch: binding(at.dataEpoch), ownerSequence: binding(at.sequence), resource: binding(r.resourceId), variant: binding(r.variantId),
       decisionRevision: binding(`urn:rezics:content:revision:${r.revisionId}`), decisionDigest: binding(r.byteDigest),
       decisionEpoch: binding(at.dataEpoch), decisionSequence: binding(at.sequence),
     }] } };
+  }
+  private currentOwnerRecord(variant: string): ProjectionOwnerRecord | undefined {
+    const currentDecision = this.heads.get(variant);
+    const publication = [...this.publications].reverse().find(item => item.reference.variantId === variant
+      && (!currentDecision || contentPublicationDecisionIri(item.preparationId) === currentDecision));
+    if (!publication) return undefined;
+    let admission = this.eligibilityAdmissions.get(publication.preparationId);
+    if (!admission) { admission = crypto.randomUUID(); this.eligibilityAdmissions.set(publication.preparationId, admission); }
+    return projectionOwnerRecord(publication, admission);
   }
   override async command(command: Parameters<FusekiClient['command']>[0]) {
     this.attempts++;
@@ -87,7 +191,8 @@ test('Content retains failed A while B projects, survives restart, supersedes in
       if (!settled.position) throw new Error('terminal source missing');
       const event = (await content.readOutbox(saved.position.dataEpoch, String(BigInt(settled.position.sequence) - 1n), 1))[0]!;
       const publication = await content.readProjectionPublication(event);
-      graph.publications.push(publication); graph.heads.set(variant.id, `urn:rezics:decision:${preparationId}`);
+      const decision = contentPublicationDecisionIri(preparationId);
+      graph.publications.push(publication); graph.heads.set(variant.id, decision);
       return { revision: saved.revisionId!, event };
     };
     const variant = (language = 'en'): VariantIdentity => ({ id: `urn:rezics:variant:${crypto.randomUUID()}`, resourceId: id(),
