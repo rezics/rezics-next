@@ -132,3 +132,9 @@ export const ProjectionCatchingUp: Story = {
     await expect(body.textContent).toBe('');
   },
 };
+
+export const ProjectionCatchingUpPhoneChinese: Story = {
+  ...ProjectionCatchingUp,
+  args: { locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+};
