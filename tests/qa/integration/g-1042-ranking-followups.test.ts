@@ -11,11 +11,23 @@ import {
 import { realmHistoryPopulation } from '../../../services/main/src/modules/rankings/realm-threads.ts';
 import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
+import { restoreRealmRankingCorpus } from '../../../services/main/tests/realm-ranking-corpus.ts';
 
 test('G1042: depth, row and ancestor caps report partial results; retired cuts and deleted references drain through invalidation', async () => {
-  const home = await startHomeStack('g-1042-ranking-followups', { projectionStart: 'current' });
-  const { stack } = home;
+  const restoreStarted = performance.now();
+  const restored = await restoreRealmRankingCorpus();
+  let activeHome: Awaited<ReturnType<typeof startHomeStack>> | undefined;
   try {
+    await restored.mount(400);
+    const home = activeHome = await startHomeStack('g-1042-ranking-followups', {
+      projectionStart: 'current',
+      stableMembers: true,
+    });
+    const { stack } = home;
+    const restoreReadyMs = Math.round(performance.now() - restoreStarted);
+    if (restoreReadyMs >= 600_000)
+      throw new Error(`Realm ranking corpus restore, startup and readiness took ${restoreReadyMs} ms`);
+    console.log(JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }));
     const seed = await seedHome(home, 3);
     // A few hundred product replies exceed one 400-batch relay pass. Resume the
     // same checkpoint instead of treating that bound as a failed population.
@@ -286,7 +298,13 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     }
     expect(realmHistoryPopulation(floor)).toBe(population);
   } finally {
-    await stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
-    await home.stop();
+    try {
+      if (activeHome) {
+        await activeHome.stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
+        await activeHome.stop();
+      }
+    } finally {
+      await restored.close();
+    }
   }
 }, 420_000);

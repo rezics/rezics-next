@@ -396,7 +396,8 @@ export type WorkCostField = {
   [K in keyof WorkProfile]: WorkProfile[K] extends number | null ? K : never;
 }[keyof WorkProfile];
 export type WorkCostGrowthClass = 'constant' | 'logarithmic' | 'linear' | 'linearithmic';
-type WorkCostGrowthDeclaration = { class: WorkCostGrowthClass; dimension: WorkCostField };
+type WorkCostGrowthDimension = WorkCostField | 'threads';
+type WorkCostGrowthDeclaration = { class: WorkCostGrowthClass; dimension: WorkCostGrowthDimension };
 export type WorkCostContract = Partial<Record<WorkCostField, number>> & {
   growth?: Partial<Record<WorkCostField, WorkCostGrowthDeclaration>>;
 };
@@ -404,7 +405,7 @@ export const WORK_COST_GROWTH_MARGIN = 1.2;
 
 type WorkCostGrowthBreach = {
   counter: WorkCostField;
-  dimension: WorkCostField;
+  dimension: WorkCostGrowthDimension;
   growthClass: WorkCostGrowthClass;
   smallerScale: number;
   largerScale: number;
@@ -457,7 +458,7 @@ export function assertWorkCost(
 
 /** Absolute maxima and optional growth classes apply across every measured scale. */
 export function assertWorkCostAtScales(
-  profiles: WorkProfile[],
+  profiles: (WorkProfile & { dimensions?: { threads?: number } })[],
   contract: WorkCostContract,
   label = 'work-cost',
 ): void {
@@ -483,8 +484,10 @@ export function assertWorkCostAtScales(
     if (!declaration) continue;
     const field = counter as WorkCostField;
     const scales = profiles.map((profile, index) => {
-      const observed = profile[declaration.dimension];
-      if (observed === null || !Number.isFinite(observed) || observed <= 0)
+      const observed = declaration.dimension === 'threads'
+        ? profile.dimensions?.threads
+        : profile[declaration.dimension];
+      if (observed === null || observed === undefined || !Number.isFinite(observed) || observed <= 0)
         throw new Error(
           `Cost growth contract requires an observed positive ${declaration.dimension} scale at profile ${index}`,
         );

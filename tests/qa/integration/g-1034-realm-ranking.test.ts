@@ -12,7 +12,7 @@ if (process.env.G1034_SHARED_SHARD_PROBE === '1') {
   await import('./agent-profile.test.ts');
 }
 
-test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history', async () => {
+test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real threads with retained history', async () => {
   if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
   const started = performance.now();
   await integrationOrderPrelude('g-1034-realm-ranking');
@@ -28,6 +28,7 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 rea
       temperature: string;
       profile: WorkProfile;
     }[];
+    replyWrites: { size: number; profile: WorkProfile; fusekiQueryCalls: number }[];
   };
   // The immutable administrator and recovery fence must never use shard owners.
   for (const [owner, url] of [
@@ -39,6 +40,8 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 rea
     expect(measured.ownerDatabases[owner]).not.toBe(new URL(url!).pathname.slice(1));
   }
   expect(measured.profiles).toHaveLength(24);
+  // Three geometric cuts make the growth class observable between endpoints;
+  // this replaces the former 10,000-thread cut while preserving absolute caps.
   for (const operation of ['best', 'top'])
     for (const viewer of ['anonymous', 'member'])
       for (const temperature of ['first', 'warm']) {
@@ -49,7 +52,7 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 rea
               row.viewer === viewer &&
               row.temperature === temperature,
           )
-          .map((row) => row.profile);
+          .map((row) => ({ ...row.profile, dimensions: { threads: row.size } }));
         assertWorkCostAtScales(profiles, {
           fusekiRequests: 16,
           fusekiReceivedBytes: 16_000,
@@ -57,12 +60,33 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 rea
           accountCalls: 0,
           mainCalls: 0,
           otherFetches: 0,
-        });
+          growth: {
+            postgresStatements: { class: 'constant', dimension: 'threads' },
+            fusekiRequests: { class: 'constant', dimension: 'threads' },
+            fusekiReceivedBytes: { class: 'logarithmic', dimension: 'threads' },
+          },
+        }, `g1034-${operation}-${viewer}-${temperature}`);
         expect(new Set(profiles.map((profile) => profile.postgresStatements)).size).toBe(1);
-        // Hydrated page contents stay identical while complete populations grow 100×.
+        // Hydrated page contents stay identical while complete populations grow 16×.
         expect(
           Math.max(...profiles.map((profile) => profile.fusekiReceivedBytes!)) -
             Math.min(...profiles.map((profile) => profile.fusekiReceivedBytes!)),
         ).toBeLessThan(1024);
       }
+  expect(measured.replyWrites).toHaveLength(3);
+  const replyProfiles = measured.replyWrites.map(({ size, profile }) => ({
+    ...profile,
+    dimensions: { threads: size },
+  }));
+  assertWorkCostAtScales(replyProfiles, {
+    postgresStatements: 840,
+    fusekiRequests: 130,
+    growth: {
+      postgresStatements: { class: 'constant', dimension: 'threads' },
+      fusekiRequests: { class: 'constant', dimension: 'threads' },
+    },
+  }, 'g1034-reply-write');
+  expect(new Set(replyProfiles.map((profile) => profile.postgresStatements)).size).toBe(1);
+  expect(new Set(replyProfiles.map((profile) => profile.fusekiRequests)).size).toBe(1);
+  expect(new Set(measured.replyWrites.map((row) => row.fusekiQueryCalls)).size).toBe(1);
 }, 600_000);

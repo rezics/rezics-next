@@ -10,8 +10,10 @@ import {
   profileRequest,
   startWorkProfileSink,
   assertWorkCost,
+  type WorkProfile,
 } from '../../../tests/qa/support/work-profile.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
+import { meterFuseki, meterPool } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 
 const sink = startWorkProfileSink({ settleMs: 25, maxSpans: 500_000 });
 startTelemetry('main', { ...process.env, ...sink.env });
@@ -23,8 +25,12 @@ const { AccessRealmManagement } = await import('../src/modules/access/realm-mana
 const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
-const { explainUnavailableCorpus, readRealmRankingCorpus, restoreRealmRankingCorpus } =
-  await import('./realm-ranking-corpus.ts');
+const {
+  explainUnavailableCorpus,
+  readRealmRankingCorpus,
+  restoreRealmRankingCorpus,
+  REALM_RANKING_SCALES,
+} = await import('./realm-ranking-corpus.ts');
 
 const corpus = readRealmRankingCorpus();
 if (!corpus) throw new Error(explainUnavailableCorpus());
@@ -52,6 +58,7 @@ const profiles: {
   temperature: string;
   profile: Awaited<ReturnType<typeof profileRequest>>['profile'];
 }[] = [];
+const replyWrites: { size: number; profile: WorkProfile; fusekiQueryCalls: number }[] = [];
 try {
   let { stack } = home;
   for (const [owner, pool] of [
@@ -504,7 +511,7 @@ try {
   );
   let created = 0;
   let winner: string | undefined = corpus.identity.winner.reply;
-  for (const size of [100, 1000, 10000] as const) {
+  for (const size of REALM_RANKING_SCALES) {
     if (size !== 100) {
       await home.stop();
       const mounted = await restored.mount(size);
@@ -565,7 +572,7 @@ try {
       winner,
       'An older high-score thread must beat every newer cohort',
     );
-    if (size >= 1000)
+    if (size >= 400)
       assert(
         raw.filter((row) => row.occurred_at > oracle[0]!.occurred_at).length > 256,
         'The winner must be outside the former newest-256 cohort',
@@ -650,6 +657,71 @@ try {
         evidence.push({ size, sort, after, plan });
       }
     }
+    const poolMeters = [...new Set([
+      stack.accessPool,
+      stack.contentPool,
+      home.relay,
+    ])].map(pool => {
+      const meter = meterPool(pool);
+      pool.query = meter.query as typeof pool.query;
+      pool.connect = meter.connect as typeof pool.connect;
+      return meter;
+    });
+    const fusekiMeter = meterFuseki(stack.fuseki);
+    stack.fuseki.query = fusekiMeter.query as typeof stack.fuseki.query;
+    let replyCommandProfiles: WorkProfile[] | undefined;
+    const profileCommandFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const invoke = async (traceparent?: string) => {
+        const headers = new Headers(init?.headers);
+        if (traceparent) headers.set('traceparent', traceparent);
+        return app.handle(new Request(input, { ...init, headers }));
+      };
+      if (!replyCommandProfiles) return invoke();
+      const measured = await profileRequest(
+        sink,
+        async headers => {
+          const response = await invoke(headers.get('traceparent') ?? undefined);
+          await response.clone().arrayBuffer();
+          return response;
+        },
+        { service: 'main', flush: flushTelemetryTraces },
+      );
+      replyCommandProfiles.push(measured.profile);
+      return measured.result;
+    };
+    api = workProfileCorpusApi('http://main.local', home.author.token, {
+      fetch: profileCommandFetch as typeof fetch,
+    });
+    poolMeters.forEach(meter => meter.reset());
+    fusekiMeter.reset();
+    replyCommandProfiles = [];
+    const posted = await post(`g1034:cost:${size}`);
+    assert(posted.reply.startsWith('https://rezics.com/id/'));
+    const commandProfiles = replyCommandProfiles;
+    replyCommandProfiles = undefined;
+    assert.equal(commandProfiles.length, 4, 'A Realm reply has draft, identity, review, and placement commands');
+    const statements = poolMeters.reduce((sum, meter) => sum + meter.queries, 0);
+    const fusekiRequests = commandProfiles.every(profile => profile.fusekiRequests !== null)
+      ? commandProfiles.reduce((sum, profile) => sum + profile.fusekiRequests!, 0)
+      : null;
+    const unobserved = [...new Set(commandProfiles.flatMap(profile => profile.unobserved))];
+    replyWrites.push({
+      size,
+      profile: {
+        ...commandProfiles.at(-1)!,
+        postgresStatements: statements,
+        fusekiRequests,
+        unclassifiedFetches: commandProfiles.reduce((sum, profile) => sum + profile.unclassifiedFetches, 0),
+        unobserved,
+      },
+      fusekiQueryCalls: fusekiMeter.queries,
+    });
+    evidence.push({
+      replyWrite: size,
+      postgresStatements: statements,
+      fusekiRequests,
+      fusekiQueryCalls: fusekiMeter.queries,
+    });
     assert(
       performance.now() - started < 600_000,
       'Corpus readiness exceeded its preparation budget',
@@ -833,7 +905,7 @@ try {
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
     process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1034.json',
-    JSON.stringify({ evidence, profiles, ownerDatabases }, null, 2) + '\n',
+    JSON.stringify({ evidence, profiles, replyWrites, ownerDatabases }, null, 2) + '\n',
   );
   try {
     await home.stop();
