@@ -140,7 +140,7 @@ export async function discoverJourneyPreparations(root: string): Promise<Journey
   );
 }
 
-function sameJourney(arg: string, journey: string): boolean {
+export function sameJourney(arg: string, journey: string): boolean {
   const path = arg.replaceAll('\\', '/').replace(/^\.\//, '');
   const target = journey.replaceAll('\\', '/');
   const base = target.slice(target.lastIndexOf('/') + 1);

@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 import { pollUntilDeadline } from './readiness.ts';
 import { adoptLeaseOwner, readDirectoryLease, releaseDirectoryLease, tryAcquireDirectoryLease } from './process/lease.ts';
-import { discoverJourneyPreparations, selectJourneyPreparations } from './e2e-preparation.ts';
+import { discoverJourneyPreparations, sameJourney, selectJourneyPreparations, type JourneyPreparation } from './e2e-preparation.ts';
+import { junitSuites, mergeJUnit } from './core.ts';
 
 const claimRoot = join(tmpdir(), 'rezics-e2e-web-ports');
 
@@ -46,6 +47,52 @@ export async function measuredBrowserStep(step: string, budgetMs: number, run: (
     options.record?.(result);
   }
   return result;
+}
+
+export interface JourneyPreparationFailure {
+  preparation: JourneyPreparation;
+  error: string;
+}
+
+/** A preparation owns only its journey. Keep its failure in the same reporter
+ * even when Playwright fails or never starts. */
+export async function runPreparedJourneys(preparations: readonly JourneyPreparation[], playwrightArgs: readonly string[],
+  options: { root: string; artifactDir: string; prepare: (preparation: JourneyPreparation) => Promise<void>;
+    playwright: (args: readonly string[]) => Promise<void> }): Promise<JourneyPreparationFailure[]> {
+  const failures: JourneyPreparationFailure[] = [];
+  const started = Date.now();
+  try {
+    for (const preparation of preparations) {
+      try { await options.prepare(preparation); }
+      catch (error) { failures.push({ preparation, error: error instanceof Error ? error.message : String(error) }); }
+    }
+    let args = playwrightArgs;
+    if (failures.length) {
+      const selected = playwrightArgs.filter(arg => arg.endsWith('.e2e.ts'));
+      const journeys = selected.length ? selected : [...new Bun.Glob('*.e2e.ts').scanSync({
+        cwd: join(options.root, 'apps/web/tests'),
+      })].sort().map(file => `apps/web/tests/${file}`);
+      const runnable = journeys.filter(journey => !failures.some(({ preparation }) => sameJourney(journey, preparation.journey)));
+      if (!runnable.length) return failures;
+      args = [...playwrightArgs.filter(arg => !selected.includes(arg)), ...runnable];
+    }
+    await options.playwright(args);
+    return failures;
+  } finally {
+    if (failures.length) {
+      const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+      const xmlPath = join(options.artifactDir, 'e2e.xml');
+      const suites = existsSync(xmlPath) ? junitSuites(readFileSync(xmlPath, 'utf8')).map(suite => suite.xml) : [];
+      for (const { preparation, error } of failures) {
+        const file = escape(preparation.journey);
+        const step = escape(preparation.step);
+        const detail = escape(`${preparation.step}: ${error}; see logs/e2e-${preparation.slug}.log`);
+        suites.push(`<testsuite name="${file}" file="${file}" tests="1" failures="1"><testcase name="${step}" file="${file}" time="0"><failure message="${detail}" /></testcase></testsuite>`);
+      }
+      writeFileSync(xmlPath, mergeJUnit(suites, Date.now() - started));
+    }
+  }
 }
 
 export interface WebPortReservation { port: number; pid: number; release(): void }
@@ -350,23 +397,32 @@ async function runE2e(): Promise<void> {
       const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
       await ready('Web Worker', `${web.origin}/search`, preview, 240_000);
     });
-    for (const preparation of preparations) {
-      await measured(preparation.step, preparation.budgetMs, async () => {
-        const [program, ...commandArgs] = preparation.command;
-        const child = launch(preparation.slug, program, commandArgs);
-        const code = await completed(preparation.step, child, preparation.budgetMs);
-        if (code !== 0) throw new Error(`${preparation.step} failed (${code}); see logs/e2e-${preparation.slug}.log`);
-      });
-    }
-    await measured('Playwright', budgets.playwright, async () => {
-      const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...playwrightArgs,
-        '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
-        PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
-        REZICS_WEB_E2E_BASE_URL: web.origin,
-      });
-      const code = await completed('Playwright', browser, budgets.playwright);
-      if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
+    const preparationFailures = await runPreparedJourneys(preparations, playwrightArgs, {
+      root, artifactDir,
+      prepare: async preparation => {
+        await measured(preparation.step, preparation.budgetMs, async () => {
+          const [program, ...commandArgs] = preparation.command;
+          const child = launch(preparation.slug, program, commandArgs);
+          const code = await completed(preparation.step, child, preparation.budgetMs);
+          if (code !== 0) throw new Error(`${preparation.step} failed (${code}); see logs/e2e-${preparation.slug}.log`);
+        });
+      },
+      playwright: async args => {
+        await measured('Playwright', budgets.playwright, async () => {
+          const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...args,
+            '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
+            PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
+            REZICS_WEB_E2E_BASE_URL: web.origin,
+          });
+          const code = await completed('Playwright', browser, budgets.playwright);
+          if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
+        });
+      },
     });
+    if (preparationFailures.length) {
+      console.error(`${preparationFailures.length} journey preparations failed; see e2e.xml and their preparation logs`);
+      process.exitCode = 1;
+    }
     if (plan.accountsJourneys) {
       await measured('Accounts Playwright', budgets.accountsPlaywright, async () => {
         const browser = launch('accounts-playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/accounts/playwright.config.ts',
