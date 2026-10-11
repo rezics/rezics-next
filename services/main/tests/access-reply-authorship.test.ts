@@ -16,6 +16,9 @@ const replyRoot = await import('../src/modules/realm-reply/root.ts');
 const authoredWorks = new Map<string, string>();
 const zoneOwnerships = new Set<string>();
 const graph = { query: async () => ({ boolean: true, results: { bindings: [] } }) };
+const { configureDisclosure } = await import('../src/modules/disclosure/read.ts');
+configureDisclosure(({ fuseki: graph,
+  lineage: { dataEpoch: 'reply-authorship-test', routingEpoch: 'test' } } as unknown as WorkActivationEnvironment), null);
 
 await mock.module('../src/modules/access/author-baseline.ts', () => ({
   ...authorBaseline,
@@ -30,6 +33,7 @@ await mock.module('../src/modules/space/create-authority.ts', () => ({
 await mock.module('../src/modules/realm-reply/root.ts', () => ({
   ...replyRoot,
   publicReplyRoot: async () => true,
+  readableReplyRoot: async () => true,
 }));
 
 const { AccessAdmissionRegistry, AdmissionDenied } = await import('../src/modules/access/admission.ts');

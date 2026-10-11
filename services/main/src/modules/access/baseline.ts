@@ -47,6 +47,9 @@ export interface BaselineProof {
   avatar_control_generation?: string | null;
 }
 
+/** Request-local authority for one exact reply root. */
+export type ReplyRootDecision = (resource: string, revision: string) => Promise<boolean>;
+
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
   | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
@@ -170,7 +173,8 @@ async function avatarControllerProof(client: PoolClient, graph: Pick<FusekiClien
 export async function baselineTargetAllowed(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   principalId: string, actingSubject: string, target: BaselineTarget,
   collectionCreate: boolean, relatedWork: string | null = null,
-  sourceRevision: string | null = null, contribution: string | null = null): Promise<boolean> {
+  sourceRevision: string | null = null, contribution: string | null = null,
+  replyRootDecision?: ReplyRootDecision): Promise<boolean> {
   if (target.kind === 'root') return true;
   if (target.kind === 'personal') return target.id === actingSubject;
   if (target.kind === 'definition') {
@@ -211,7 +215,9 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   }
   if (target.kind === 'reply' || target.kind === 'reply-draft') {
     const work = target.kind === 'reply' ? target.id : relatedWork;
-    return !!work && !!sourceRevision && await publicReplyRoot(graph, work, sourceRevision, {
+    if (!work || !sourceRevision) return false;
+    if (replyRootDecision) return replyRootDecision(work, sourceRevision);
+    return await publicReplyRoot(graph, work, sourceRevision, {
       canReadSemanticResource: async (_principal, _actor, resource) =>
         (await publicInTransaction(client, graph, [resource])).has(resource),
     });
@@ -274,7 +280,7 @@ export function baselineWorkTypesAllowed(request: Pick<AdmissionRequest, 'workSe
 }
 
 export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
-  request: AdmissionRequest, principalId: string): Promise<BaselineProof | null> {
+  request: AdmissionRequest, principalId: string, replyRootDecision?: ReplyRootDecision): Promise<BaselineProof | null> {
   if (request.authorityPath === 'direct-principal') return null;
   const zonePage = resolveZonePageContent(request);
   if (zonePage.kind === 'refused') return null;
@@ -323,7 +329,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
       : target.kind === 'submission-withdraw' ? !!withdrawal
       : await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
         target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
-        request.baselineSourceRevision ?? null, request.baselineContribution ?? null));
+        request.baselineSourceRevision ?? null, request.baselineContribution ?? null, replyRootDecision));
   if (!allowed) return null;
   return { ...proof, realm_membership: target.kind === 'realm-reply'
     ? await realmApprovedProof(client, target.id, principalId, request.actingSubject) ?? 'open' : null,
@@ -345,7 +351,7 @@ export async function savedBaselineProof(client: PoolClient, admissionId: string
 
 export async function baselineProofCurrent(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   saved: BaselineProof, admission: { principal_id: string; acting_subject: string; scope_id: string;
-    action: string }): Promise<boolean> {
+    action: string }, replyRootDecision?: ReplyRootDecision): Promise<boolean> {
   const target = baselineTarget(admission.action, admission.scope_id);
   if (!target) return false;
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [admission.scope_id])).rowCount) return false;
@@ -390,7 +396,8 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
       admission.acting_subject, target.id, saved.submission_contribution ?? null);
   }
   return baselineTargetAllowed(client, graph, admission.principal_id, admission.acting_subject,
-    target, saved.collection_create, saved.related_work, saved.source_revision, saved.submission_contribution ?? null);
+    target, saved.collection_create, saved.related_work, saved.source_revision, saved.submission_contribution ?? null,
+    replyRootDecision);
 }
 
 export async function saveBaselineProof(client: PoolClient, admissionId: string, proof: BaselineProof) {

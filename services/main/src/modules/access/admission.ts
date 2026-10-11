@@ -23,7 +23,7 @@ import { issueTitleAdmission } from './title-admission.ts';
 import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed,
-  newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
+  newBaselineProof, saveBaselineProof, savedBaselineProof, type ReplyRootDecision } from './baseline.ts';
 import { resolveZonePageContent, savedZonePageContent, zonePageAdministratorAllowed,
   zoneEditScope, ZONE_PAGE_CONTENT_PROOF } from './zone-content-authority.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
@@ -32,6 +32,11 @@ import { ensureBaselineScopeGate, lockAccessKey, lockAdmissionKey } from './scop
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 import { publicInTransaction, publicSemantics, readReferenceDisclosure, requireDisclosureGraph } from './semantic-disclosure.ts';
+import { disclosureGraphEnvironment } from '../disclosure/read.ts';
+import { readableReplyRoot } from '../realm-reply/root.ts';
+import { realmPermit } from './realm-management-policy.ts';
+import { WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { SummaryGraphMoved } from '../media/summary.ts';
 import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAuthority } from '../editorial-review/admission.ts';
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
@@ -477,6 +482,40 @@ export class AccessAdmissionRegistry {
 
   /** Composition supplies the existing bounded graph client; Access owns the rules. */
   configureBaseline(graph: Pick<FusekiClient, 'query'>): void { this.baselineGraph = graph; }
+
+  /** Root visibility is resolved per request using this admission's held client. */
+  private replyRootDecision(client: PoolClient, principal: VerifiedPrincipal,
+    actingSubject: string): ReplyRootDecision {
+    return async (resource, revision) => {
+      const graph = this.baselineGraph;
+      const environment = graph && disclosureGraphEnvironment(graph);
+      if (!environment) throw new AdmissionUnavailable('authenticated reply root environment is unavailable');
+      const readers = {
+        realmReadProof: async (_principal: VerifiedPrincipal, _actor: string, realm: string) => {
+          try { return (await realmPermit(client, principal, actingSubject, realm, 'read')).stamp; }
+          catch (error) { if (error instanceof AdmissionDenied) return null; throw error; }
+        },
+        canReadWork: (_principal: VerifiedPrincipal, _actor: string, work: string) =>
+          this.canReadWork(principal, actingSubject, work, client),
+        canReadSemanticResource: (_principal: VerifiedPrincipal | null, _actor: string | null,
+          semanticResource: string, semanticRevision?: string) => this.canReadSemanticResource(
+          principal, actingSubject, semanticResource,
+          semanticResource === resource ? revision : semanticRevision, graph, client),
+      };
+      try {
+        return await readableReplyRoot(environment, resource, revision, readers, principal, actingSubject);
+      } catch (error) {
+        if (error instanceof WorkReadMoved || error instanceof SummaryGraphMoved
+          || error instanceof AdmissionDenied || error instanceof AdmissionConflict
+          || error instanceof AdmissionUnavailable || error instanceof AdmissionExpired) throw error;
+        if (error && typeof error === 'object' && 'code' in error) throw error;
+        if (error instanceof WorkReadUnavailable) {
+          throw new AdmissionUnavailable('authenticated reply root owner is unavailable');
+        }
+        throw new AdmissionUnavailable('authenticated reply root owner is unavailable');
+      }
+    };
+  }
 
   issueTitleAdmission(admission: RegisteredAdmission, command: CommandEnvelope) {
     return issueTitleAdmission(this.pool, admission, command, this.titleAdmissionKey);
@@ -1177,7 +1216,8 @@ export class AccessAdmissionRegistry {
           && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
-          && await baselineProofCurrent(client, this.baselineGraph, savedBaseline, existing);
+          && await baselineProofCurrent(client, this.baselineGraph, savedBaseline, existing,
+            this.replyRootDecision(client, request.principal, request.actingSubject));
         if (!transaction) await client.query('COMMIT');
         return { id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, authorityPath: existing.authority_path,
@@ -1301,7 +1341,8 @@ export class AccessAdmissionRegistry {
       if (!existing && ['media.labels.protect','media.conceal.protect'].includes(request.action) && !administrator) {
         throw new AdmissionDenied('media protection requires the platform administrator proof');
       }
-      const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
+      const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request,
+        principalId, memberReply ? this.replyRootDecision(client, request.principal, request.actingSubject) : undefined) : null;
       if (!existing && zonePage.kind === 'refused') {
         throw new AdmissionDenied('Content zone page target is unresolved');
       }
@@ -1733,8 +1774,10 @@ export class AccessAdmissionRegistry {
           || current.subject !== identity.account_subject) {
           throw new AdmissionDenied('baseline claim needs the current verified Account assertion');
         }
+        accountPrincipal = current;
       }
-      if (baseline && !await baselineProofCurrent(client, this.baselineGraph, baseline, row)) {
+      if (baseline && !await baselineProofCurrent(client, this.baselineGraph, baseline, row,
+        this.replyRootDecision(client, accountPrincipal!, row.acting_subject))) {
         throw new AdmissionDenied('baseline member authority changed before claim');
       }
       if (baseline && (await client.query(`SELECT id FROM access.admission
