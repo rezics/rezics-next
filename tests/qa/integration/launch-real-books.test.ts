@@ -14,7 +14,18 @@ import { startMediaStack, type MediaStack } from './media-support.ts';
 const short = (uri: string) => uri.slice(-36);
 function apiFor(stack: MediaStack, token: string) {
   return workProfileCorpusApi('http://main.local', token, {
-    fetch: ((input, init) => stack.main.handle(new Request(input, init))) as typeof fetch,
+    fetch: (async (input, init) => {
+      // A lost command acknowledgement is still pending. Replay the exact key
+      // and bytes as directed by Main; the corpus client only accepts completion.
+      for (let attempt = 0; ; attempt++) {
+        init?.signal?.throwIfAborted();
+        const response = await stack.main.handle(new Request(input, init));
+        if (response.status !== 202 || attempt === 2) return response;
+        const pending = await response.json() as { retry?: { allowed?: boolean; afterMs?: number } };
+        if (!pending.retry?.allowed) throw new Error('Corpus command cannot be retried');
+        await Bun.sleep(Math.min(1000, Math.max(0, pending.retry.afterMs ?? 1000)));
+      }
+    }) as typeof fetch,
   });
 }
 async function openCopy(input: CorpusRestoreSmokeInput) {
