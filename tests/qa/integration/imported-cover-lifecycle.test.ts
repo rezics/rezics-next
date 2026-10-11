@@ -15,6 +15,9 @@ import { MediaRenditionWorker } from '../../../services/main/src/modules/media-r
 import { LocalImageTransformer } from '../../../services/main/src/modules/media-rendition/transform.ts';
 import { requestUseRenditions } from '../../../services/main/src/modules/media-rendition/request.ts';
 import type { DiscoveryRow } from '../../../services/main/src/modules/discovery/contract.ts';
+import { PublicReports } from '../../../services/main/src/modules/public-report/store.ts';
+import { publicReportOwners } from '../../../services/main/src/modules/public-report/owners.ts';
+import { RightsCounterNotices } from '../../../services/main/src/modules/rights/counter-notice-worker.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { requireQa } from './recommendation-support.ts';
@@ -132,6 +135,13 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       fixture = await safetyFixture('imported-cover-lifecycle', true, owners.urls, { contentProjection: true });
       const stack = fixture.stack;
       await stack.contentCursor.initialize(stack.contentConsumer);
+      let rightsClock = new Date();
+      fixture.setClock(rightsClock);
+      fixture.deps.publicReports = new PublicReports(stack.accessPool,
+        publicReportOwners(fixture.deps, stack.contentPool, stack.content), () => rightsClock);
+      // This journey needs the delivered receipt gate; outbound account mail is covered separately.
+      const counterNotices = new RightsCounterNotices(stack.accessPool, fixture.governance,
+        async () => 'sent', () => rightsClock);
       const owner = fixture.author;
       const moderator = fixture.staff;
       await owner.grant('work:create:root', 'work.create');
@@ -142,6 +152,19 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         stack.call(method, path, { token, body, key });
       const govern = (method: string, path: string, body?: unknown, token?: string,
         key: string = randomUUID(), credential?: string) => fixture!.call(method, path, body, token, key, credential);
+      const affectedCredential = async (caseId: string, decisionId: string) => {
+        let cursor: string | null = null;
+        do {
+          const page = await json<{ items: Array<{ caseId: string; decisionId: string; credential: string }>;
+            nextCursor: string | null }>(await call('GET',
+            `/v1/safety-notices${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+            undefined, owner.token));
+          const notice = page.items.find(item => item.caseId === caseId && item.decisionId === decisionId);
+          if (notice) return notice.credential;
+          cursor = page.nextCursor;
+        } while (cursor);
+        throw new Error('The affected uploader did not receive the decision notice through the API');
+      };
       const avatarGrantTargets = new Set<string>();
       const importerApi = {
         request: async (method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, key?: string) => {
@@ -443,19 +466,34 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect(anotherRecordImport.coverResults.map(result => result.status)).toEqual(['imported']);
 
       // The subsequent stages exercise the same owner paths after the digest fence is admitted.
-      const restorationStepKey = randomUUID();
-      const restorationStep = await json<{ stepId: string }>(await govern('POST', '/v1/governance/process-steps', {
-        profile: 'governance-process-step-v1', caseId: publicReceipt.caseId,
-        decisionId: decisionReceipt.decisionId, actingSubject: moderator.actor, process: 'dmca_512',
-        step: 'restoration_window', partySubject: null, statement: 'Restoration window reviewed.',
-        documentDigest: null, occurredAt: new Date().toISOString(), dueAt: null,
-        idempotencyKey: restorationStepKey,
-      }, moderator.token, restorationStepKey), 201);
+      const affected = await affectedCredential(publicReceipt.caseId, decisionReceipt.decisionId);
+      const counterNoticeKey = randomUUID();
+      const counterNotice = await json<{ stepId: string }>(await govern('POST',
+        `/v1/public-reports/${publicReceipt.caseId}/correspondence`, {
+          kind: 'counter_notice', statement: 'The imported artwork was identified by mistake.',
+          contentLanguage: 'en', counterNotice: {
+            signature: 'Subscriber signature', materialLocation: `https://rezics.com/id/${work}`,
+            goodFaithMistakeUnderPerjury: true, name: 'Subscriber', address: '1 Main Street',
+            phone: '+1 555 555 0100', courtJurisdiction: 'Federal District Court',
+            consentToJurisdiction: true, acceptService: true,
+          },
+        }, undefined, counterNoticeKey, affected), 200);
+      expect(counterNotice.replayed).toBe(false);
+      expect(await counterNotices.runPage()).toEqual({ processed: 1, deferred: 0 });
+      const receiptWindow = (await stack.accessPool.query<{ delivered_at: Date | null; not_before: Date }>(
+        `SELECT delivered_at,not_before FROM access.rights_counter_notice WHERE step_id = $1`,
+        [counterNotice.stepId])).rows[0]!;
+      expect(receiptWindow.delivered_at).toBeInstanceOf(Date);
+      const beforeDue = await decide(publicReceipt, target, 'restore', null, undefined,
+        counterNotice.stepId);
+      expect(beforeDue.accepted.status, await beforeDue.accepted.clone().text()).toBe(409);
+      rightsClock = receiptWindow.not_before;
+      fixture.setClock(rightsClock);
       const beforeRestore = await decide(publicReceipt, target, 'restore', null, '0',
-        restorationStep.stepId);
+        counterNotice.stepId);
       expect(beforeRestore.accepted.status, await beforeRestore.accepted.clone().text()).toBe(409);
       const restoreAttempt = await decide(publicReceipt, target, 'restore', null, undefined,
-        restorationStep.stepId);
+        counterNotice.stepId);
       expect(restoreAttempt.accepted.status).toBe(202);
       const restored = await govern('POST', `/v1/safety-cases/${publicReceipt.caseId}/decisions`,
         restoreAttempt.input, moderator.token, restoreAttempt.input.idempotencyKey);
@@ -466,8 +504,12 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         `/v1/media/representations/${before.cover.representation}?use=${importedUse.use}`))).coverCredit)
         .toEqual(expectedCredit);
 
+      const restoredUse = await selectAvatar(stack, owner, work, importedUse.asset, editorUse.selection);
+      expect(restoredUse.asset).toBe(importedUse.asset);
+      expect(restoredUse.use).not.toBe(importedUse.use);
       const reimported = await importDataset(root, snapshot, importOptions);
       expect(reimported.completed).toBe(true);
+      expect(reimported.coverResults.map(result => result.status)).toEqual(['imported']);
       const restoredPage = await json<WorkPage>(await call('GET', workPath));
       expect(restoredPage.cover).toMatchObject({ kind: 'image', coverCredit: expectedCredit });
       const secondRecordResult = await importDataset(root, sameBytesAnotherRecord, importOptions);
@@ -475,7 +517,9 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const secondJournal = JSON.parse(readFileSync(secondRecordResult.receiptFile, 'utf8')) as ImportJournal;
       const secondWork = secondJournal.native[otherRecord.key]!.id;
       const secondCover = await json<WorkPage>(await call('GET', `/v1/works/${secondWork.slice(-36)}`));
-      expect(secondCover.cover).toMatchObject({ kind: 'image', coverCredit: expectedCredit });
+      expect(secondCover.cover).toMatchObject({ kind: 'image', coverCredit: {
+        ...expectedCredit, source: { ...expectedCredit.source, href: otherRecord.sourceUrl },
+      } });
 
       const finalReportInput = copyrightNotice(work, restoredPage.cover.use!,
         (await stack.contentPool.query<{ revision: string }>(
@@ -504,10 +548,13 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         FROM media.imported_cover_revision WHERE asset_id=$1`, [sourceAsset])).rows[0]!.count).toBe(0);
       const duplicateUse = secondCover.cover.use!;
       const duplicateRevision = secondCover.cover.representation!;
-      expect((await call('GET', `/v1/media/representations/${duplicateRevision}/bytes?use=${duplicateUse}`)).status)
-        .toBe(404);
       const suppression = (await stack.contentPool.query<{ count: number }>(`SELECT count(*)::int AS count
         FROM media.suppressed_digest WHERE digest=$1`, [sha(bytes)])).rows[0]!.count;
+      const duplicateBytes = await call('GET',
+        `/v1/media/representations/${duplicateRevision}/bytes?use=${duplicateUse}`);
+      expect(duplicateBytes.status,
+        `identical bytes remained available after source cover erasure; digest suppression markers=${suppression}`)
+        .toBe(404);
       expect(suppression).toBeGreaterThan(0);
       expect((await call('GET', unrelatedUrl)).status).toBe(200);
     } finally {
