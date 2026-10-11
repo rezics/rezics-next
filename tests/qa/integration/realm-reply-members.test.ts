@@ -98,6 +98,11 @@ test('public open replies allow an unjoined Person; trusted replies require a jo
     expect(openPlaced.status, JSON.stringify(openPlaced.body)).toBe(201);
     expect((await h.contentPool.query('SELECT method, outcome FROM content.realm_review_decision WHERE id = $1',
       [openPlaced.body.reviewDecisionId])).rows[0]).toEqual({ method: 'policy', outcome: 'approved' });
+    expect((await h.accessPool.query(`SELECT 1 FROM access.membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2
+      UNION ALL SELECT 1 FROM access.private_membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $3`,
+    [h.realm, h.pen, h.principalId])).rowCount).toBe(0);
     expect((await placementGrants()).rowCount).toBe(0);
 
     await h.policy('public', 'trusted-members');
