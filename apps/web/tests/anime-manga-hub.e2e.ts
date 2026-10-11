@@ -202,12 +202,15 @@ test('anime-manga-hub: a reader chooses anime and manga editions by keyboard and
     await keyboardReach(page, save, found, 'Save choice');
     await page.keyboard.press('Enter');
     await expect(availability.getByRole('status')).toHaveText('Saved.');
+    const status = page.locator('[data-identity-status]:visible').first();
+    // Saving refreshes the server-rendered primary action. Let that refresh
+    // finish before a hard reload starts another navigation.
+    await expect(status).toContainText(`Your edition: ${choiceTitle}`);
 
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
     const reloadedAvailability = page.getByRole('region', { name: 'Your edition and availability' });
     await expect(reloadedAvailability.getByRole('combobox', { name: 'Edition', exact: true }))
       .toContainText(choice!);
-    const status = page.locator('[data-identity-status]:visible').first();
     await expect(status).toContainText(`Your edition: ${choiceTitle}`);
   }
 
