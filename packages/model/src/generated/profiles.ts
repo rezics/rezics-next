@@ -1612,6 +1612,20 @@ export const profileRegistry = {
       "payload"
     ]
   },
+  "work-structure-publication-v1": {
+    "sha256": "aed234ca3a830ffcfa1006a1f5710aed42611a7edb70946567934f52def443c8",
+    "file": "shapes/work-structure-publication-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-structure-publication-v1/work-shape",
+      "https://rezics.com/definition/work-structure-publication-v1/decision-shape",
+      "https://rezics.com/definition/work-structure-publication-v1/source-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "decision",
+      "source"
+    ]
+  },
   "work-title-control-v1": {
     "sha256": "4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822",
     "file": "shapes/work-title-control-v1.ttl",

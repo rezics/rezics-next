@@ -1273,6 +1273,11 @@
       "file": "shapes/work-reference-block-v1.ttl"
     },
     {
+      "id": "work-structure-publication-v1",
+      "sha256": "aed234ca3a830ffcfa1006a1f5710aed42611a7edb70946567934f52def443c8",
+      "file": "shapes/work-structure-publication-v1.ttl"
+    },
+    {
       "id": "work-title-control-v1",
       "sha256": "4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822",
       "file": "shapes/work-title-control-v1.ttl"
@@ -3578,6 +3583,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/WorkStructurePublicSource",
+      "routes": [
+        {
+          "profile": "work-structure-publication-v1",
+          "shape": "https://rezics.com/definition/work-structure-publication-v1/source-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/WorkStructurePublicationDecision",
+      "routes": [
+        {
+          "profile": "work-structure-publication-v1",
+          "shape": "https://rezics.com/definition/work-structure-publication-v1/decision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/Zone",
       "routes": [
         {
@@ -3986,6 +4011,7 @@
     "contexts/work-metadata-v2.jsonld": "13ecca84c696c4e3339c32a6d9d02e92bf9caec95d4923c9e43f59222fd0463e",
     "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
     "contexts/work-reference-block-v1.jsonld": "f2fb459d6b1cce6db2b6734af79fffdfa945529fd95287a33cbf55791c32370d",
+    "contexts/work-structure-publication-v1.jsonld": "9800cd056839fef758a5a5ad2500a523b9f3c5a6d5978dec3f69675536cd72cf",
     "contexts/work-title-control-v1.jsonld": "469a57da332b80e0bdb6eb123c3e85e04facc773964ae271a4d7cbebb3058886",
     "contexts/work-title-control-v2.jsonld": "224805f13abcb6341dbb1d1a9e33d2b6a96fc64f2eb8da1008eb742d9003acbd",
     "contexts/work-type-v1.jsonld": "9836e0759eba77a3e7a5648ca3b223a2973d9ada49038b4c8fcbe8c034f1ea5f",
@@ -4119,6 +4145,7 @@
     "shapes/work-metadata-v2.ttl": "5f2a13cf49bf5d8692bf4a57d5d7e10c080f916d63f5e29c7c16dc217799f866",
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-reference-block-v1.ttl": "c72c3a6b828632aeddc1a3078dead4dd0dfd0f989fca550530ad850dbcb9b9a0",
+    "shapes/work-structure-publication-v1.ttl": "aed234ca3a830ffcfa1006a1f5710aed42611a7edb70946567934f52def443c8",
     "shapes/work-title-control-v1.ttl": "4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822",
     "shapes/work-title-control-v2.ttl": "deeee87603c9babb4211ffc0fd37c8523a88addbe1e56cf2a3aa9fa3769173d8",
     "shapes/work-type-v1.ttl": "e8ad5bd6e3e4bb4754e530c53f4caa5b60ec6e064e0d7b4a66bcdd23c7d7c6a4",
@@ -4127,8 +4154,8 @@
     "shapes/zone-capability-v1.ttl": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "3ad03dbaa65e8296805981022466248c5f7adc072830c7287c3293ea656b5e2d",
-    "packages/model/src/generated/schemas.ts": "e0c2c8bd0291f5d90ec9c6d741396971fcb4892e75e79963f505c92e9f0b5d24",
-    "packages/model/src/generated/vocabulary.ts": "8909b0b753632a9cda32ed53e1d9fceda9d82d580d2e9a1b256a8a6970323f14"
+    "packages/model/src/generated/profiles.ts": "3c3ee038c3fe52848c50d617b6883a92299378c1bee9fb5b69e4351b0421bbbd",
+    "packages/model/src/generated/schemas.ts": "d4bb4c99ca5f9460580d5f9cbb94f86e42f0ea4db505971b9b183ff6203e1091",
+    "packages/model/src/generated/vocabulary.ts": "fd9d813b0c603e29ca2e30a29ef0ea7b0427292b2f8cebbb2ca27d26f5b0b01c"
   }
 }

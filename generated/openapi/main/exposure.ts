@@ -708,6 +708,7 @@ export const operationExposures = {
   "postV1Work-imports": "platform:catalogue-import",
   "postV1Work-importsBulk": "platform:catalogue-import",
   "postV1Work-maintainer-changes": "public",
+  "postV1Work-publications": "public",
   "postV1Work-title-corrections": "public",
   "postV1Work-title-correctionsByProposalRevisionDecisions": "public",
   "postV1Work-title-protections": "public",
