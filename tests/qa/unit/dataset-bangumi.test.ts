@@ -401,7 +401,7 @@ test('Bangumi enrichment keeps licensed archive and API fields, unions tag count
         revision: null,
         captureUrl: 'https://api.bgm.tv/v0/subjects/1',
         recordDigest: 'a'.repeat(64),
-        field: 'images.large',
+        field: '/images/large',
         sourceName: 'Bangumi',
         sourceUrl: 'https://bgm.tv/subject/1',
         holder: null,
@@ -488,7 +488,7 @@ test('Bangumi cover binds the elected captured subject and source page', async (
       revision: null,
       captureUrl: requestedUrl,
       recordDigest: capture.digest,
-      field: 'images.large',
+      field: '/images/large',
       sourceName: 'Bangumi',
       sourceUrl: 'https://bgm.tv/subject/976',
       holder: null,
@@ -560,12 +560,14 @@ test('cover extraction keeps nested image and user-post exclusions', async () =>
       record: 'bangumi:subject:42',
       role: 'cover',
       url: 'https://lain.bgm.tv/cover.jpg',
-      sourceEvidence: { field: 'images.large', recordDigest: capture.digest, holder: null },
+      sourceEvidence: { field: '/images/large', recordDigest: capture.digest, holder: null },
     },
   ]);
   expect(keyNames(apiSubject).filter((name) => omitted.has(name))).toEqual([]);
   expect((apiSubject as Record<string, unknown>).summary).toBeUndefined();
-  expect((apiSubject as Record<string, unknown>).nested).toEqual({ publisher: 'Not holder evidence' });
+  expect((apiSubject as Record<string, unknown>).nested).toEqual({
+    publisher: 'Not holder evidence',
+  });
 });
 
 const omitted = new Set<string>([...BANGUMI_USER_POST_FIELDS, ...BANGUMI_IMAGE_FIELDS]);

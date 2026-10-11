@@ -296,7 +296,7 @@ function bangumiCoverCandidate(
       revision: null,
       captureUrl,
       recordDigest,
-      field: 'images.large',
+      field: '/images/large',
       sourceName: 'Bangumi',
       sourceUrl: bangumiSourceUrl('subject', canonicalId),
       holder: null,

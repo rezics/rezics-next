@@ -37,6 +37,7 @@ export interface DatasetCoverEvidence {
   revision: string | null;
   captureUrl: string;
   recordDigest: string;
+  /** RFC 6901 JSON Pointer into the captured record. */
   field: string;
   sourceName: string;
   sourceUrl: string;
