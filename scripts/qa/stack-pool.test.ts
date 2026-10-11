@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   createQaStackPool, destroyHeldQaStacks, qaStackFingerprint, qaStackPoolEnabled, qaStackPoolMaxParkedMs,
   trackHeldQaStackStartup, type QaStackPoolEntry, type QaStackPoolOptions,
@@ -505,19 +505,70 @@ function fakeDocker(root: string): NodeJS.ProcessEnv {
   writeFileSync(join(bin, 'docker'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_STATE/commands"
 case "$1:$2" in
+  run:*)
+    for arg in "$@"; do
+      case "$arg" in rezics.reap-owner=*) printf '%s' "\${arg#*=}" > "$FAKE_DOCKER_STATE/owner" ;; esac
+    done
+    for kind in containers volumes networks; do printf '%s-id\\n' "$kind" > "$FAKE_DOCKER_STATE/$kind"; done
+    exit 0 ;;
   ps:*) kind=containers ;;
   volume:ls) kind=volumes ;;
   network:ls) kind=networks ;;
+  inspect:*) /bin/cat "$FAKE_DOCKER_STATE/owner"; exit 0 ;;
   rm:*) /bin/rm -f "$FAKE_DOCKER_STATE/containers"; exit 0 ;;
   volume:rm) /bin/rm -f "$FAKE_DOCKER_STATE/volumes"; exit 0 ;;
   network:rm) /bin/rm -f "$FAKE_DOCKER_STATE/networks"; exit 0 ;;
   *) exit 1 ;;
 esac
+case "$*" in *label=rezics.reap-owner*) [ -f "$FAKE_DOCKER_STATE/owner" ] || exit 0 ;; esac
 if [ -f "$FAKE_DOCKER_STATE/$kind" ]; then /bin/cat "$FAKE_DOCKER_STATE/$kind"; fi
 `, { mode: 0o700 });
   for (const kind of ['containers', 'volumes', 'networks']) writeFileSync(join(root, kind), `${kind}-id\n`);
   return { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_DOCKER_STATE: root };
 }
+
+test('a parked stack survives its creator exit and orphan sweep until its pool record expires', async () => {
+  const f = fixture();
+  f.on();
+  const env = fakeDocker(f.root);
+  for (const kind of ['containers', 'volumes', 'networks']) rmSync(join(f.root, kind));
+  // The CLI clears runner ancestry when pool ownership takes over startup.
+  const startupEnv = { ...env, REZICS_REAP_OWNER: '', REZICS_REAP_SCOPE: '', REZICS_REAP_SCOPES: '', REZICS_REAP_STATE: '' };
+  const creator = spawnSync(process.execPath, ['-e', `
+    import { spawnSync } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    import { createQaStackPool } from ${JSON.stringify(resolve(import.meta.dir, 'stack-pool.ts'))};
+    import { preserveReapEnvironment } from ${JSON.stringify(resolve(import.meta.dir, 'container-reaper.ts'))};
+    import { processIdentity } from ${JSON.stringify(resolve(import.meta.dir, 'process/identity.ts'))};
+    const pool = createQaStackPool({ root: ${JSON.stringify(f.root)}, slotDirectory: ${JSON.stringify(f.slotDirectory)},
+      slots: 2, janitor: false, now: () => 1000 });
+    const lease = await pool.register('exited-creator', 'ordinary');
+    const result = spawnSync('docker', ['run', '--label', 'com.docker.compose.project=rezics-qa-exited-creator', 'fake-image'],
+      { env: preserveReapEnvironment(process.env) });
+    if (result.status !== 0) throw new Error('fake stack startup failed');
+    writeFileSync(${JSON.stringify(join(f.root, 'creator.json'))}, JSON.stringify(processIdentity(process.pid)));
+    if (!await lease.park(${JSON.stringify(apps)}, ${JSON.stringify(compose)})) throw new Error('stack did not park');
+  `], { env: startupEnv, encoding: 'utf8', timeout: 5_000 });
+  expect(creator.error).toBeUndefined();
+  expect(creator.status).toBe(0);
+  const identity = JSON.parse(readFileSync(join(f.root, 'creator.json'), 'utf8')) as ProcessIdentity;
+  expect(processAlive(identity)).toBe(false);
+  expect(f.saved('exited-creator').holder).toBeUndefined();
+  expect(existsSync(join(f.root, 'owner'))).toBe(false);
+  const sweep = spawnSync(process.execPath, [resolve(import.meta.dir, 'container-reaper.ts'), '--sweep-orphans'],
+    { env, encoding: 'utf8', timeout: 5_000 });
+  expect(sweep.error).toBeUndefined();
+  expect(sweep.status).toBe(0);
+  const pool = f.pool({ holder: undefined, alive: undefined, destroy: undefined, env });
+  f.advance(qaStackPoolMaxParkedMs - 1);
+  await pool.sweep();
+  expect(existsSync(join(f.state, 'exited-creator.json'))).toBe(true);
+  for (const kind of ['containers', 'volumes', 'networks']) expect(existsSync(join(f.root, kind))).toBe(true);
+  f.advance(1);
+  await pool.sweep();
+  expect(existsSync(join(f.state, 'exited-creator.json'))).toBe(false);
+  for (const kind of ['containers', 'volumes', 'networks']) expect(existsSync(join(f.root, kind))).toBe(false);
+});
 
 test('default teardown removes and verifies blank-snapshot resources by label without the origin worktree', async () => {
   const f = fixture();

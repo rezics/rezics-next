@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from './container-reaper.ts';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { processAlive, processIdentity, type ProcessIdentity } from './process/identity.ts';
@@ -294,7 +295,7 @@ function ownedEntry(state: string, entry: QaStackPoolEntry): QaStackPoolEntry | 
 }
 
 function dockerSync(env: NodeJS.ProcessEnv, args: string[]): string {
-  const result = spawnSync('docker', args, { env, encoding: 'utf8', timeout: 120_000 });
+  const result = spawnSync('docker', args, { env: preserveReapEnvironment(env), encoding: 'utf8', timeout: 120_000 });
   if (result.error || result.status !== 0)
     throw new Error(`docker ${args.join(' ')} failed: ${(result.stderr || result.error?.message || '').trim()}`);
   return result.stdout.trim();
@@ -302,7 +303,7 @@ function dockerSync(env: NodeJS.ProcessEnv, args: string[]): string {
 
 async function dockerAsync(env: NodeJS.ProcessEnv, args: string[]): Promise<string> {
   return await new Promise((accept, reject) => {
-    const child = spawn('docker', args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('docker', args, { env: preserveReapEnvironment(env), stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     let errors = '';
     const timer = setTimeout(() => { child.kill('SIGKILL'); }, 120_000);
