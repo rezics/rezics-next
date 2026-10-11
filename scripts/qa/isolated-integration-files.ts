@@ -214,6 +214,8 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // Explicit seed preparation uses the same product assembler as checkpoint restores.
   'tests/qa/fault-recovery/work-profile-seed-build.test.ts',
+  // Library growth checkpoints retain and restore an API-built Work profile corpus.
+  'tests/qa/integration/library-growth.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
   // API-built Gutenberg recipe corpus uses the product assembler and independent persistent restores.
