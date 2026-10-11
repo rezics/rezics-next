@@ -11,7 +11,14 @@ const epoch = 'epoch-publication';
 const storage = 'native-store';
 const seal = 'ab'.repeat(32);
 
-function scriptedClient(answer: (sql: string, values: unknown[]) => { rows: unknown[]; rowCount?: number }): PoolClient {
+type ScriptedClientOptions = {
+  getTransactionStatus?: () => ReturnType<PoolClient['getTransactionStatus']>;
+  onRelease?: (error?: Error | boolean) => void;
+  onEnd?: () => void;
+};
+
+function scriptedClient(answer: (sql: string, values: unknown[]) => { rows: unknown[]; rowCount?: number },
+  options: ScriptedClientOptions = {}): PoolClient {
   const client = {
     query(sql: string, values?: unknown, cb?: (err: unknown, result?: unknown) => void) {
       const params = typeof values === 'function' ? [] : values ?? [];
@@ -20,7 +27,9 @@ function scriptedClient(answer: (sql: string, values: unknown[]) => { rows: unkn
       if (callback) { callback(undefined, result); return undefined; }
       return Promise.resolve(result);
     },
-    release() {},
+    getTransactionStatus() { return options.getTransactionStatus ? options.getTransactionStatus() : 'I' as const; },
+    release(error?: Error | boolean) { options.onRelease?.(error); },
+    end() { options.onEnd?.(); return Promise.resolve(); },
     on() { return client; },
     once() { return client; },
     removeListener() { return client; },
@@ -28,9 +37,10 @@ function scriptedClient(answer: (sql: string, values: unknown[]) => { rows: unkn
   return client as unknown as PoolClient;
 }
 
-function installConnect(answer: (sql: string, values: unknown[]) => { rows: unknown[]; rowCount?: number }) {
+function installConnect(answer: (sql: string, values: unknown[]) => { rows: unknown[]; rowCount?: number },
+  options: ScriptedClientOptions = {}) {
   return spyOn(Pool.prototype, 'connect').mockImplementation(((callback?: (err: Error | undefined, client: PoolClient, done: () => void) => void) => {
-    const client = scriptedClient(answer);
+    const client = scriptedClient(answer, options);
     if (typeof callback === 'function') {
       callback(undefined, client, () => { client.release(); });
       return undefined as unknown as Promise<PoolClient>;
@@ -85,7 +95,8 @@ test('publication build rechecks its basis on the transaction it already holds',
 test('receipt custody keeps its lock while topology control uses the caller pool', async () => {
   const previous = nestedPoolCheckoutMode();
   const connect = installConnect(sql => ({
-    rows: sql.includes('recovery_fence') ? [{ open: true }] : [], rowCount: 1,
+    rows: sql.includes('recovery_fence') ? [{ open: true }]
+      : sql.includes('pg_advisory_unlock') ? [{ unlocked: true }] : [], rowCount: 1,
   }));
   const pool = boundedPool({ host: '127.0.0.1', port: 1, database: 'access', max: 4, connectionTimeoutMillis: 50 });
   const store = new PostgresReceiptCustodyStore(pool);
@@ -106,6 +117,79 @@ test('receipt custody keeps its lock while topology control uses the caller pool
     expect(guarded).toBe('guarded');
   } finally {
     setNestedPoolCheckoutMode(previous);
+    connect.mockRestore();
+    await pool.end();
+  }
+});
+
+test('receipt custody rejects failed or unknown borrowed transaction status before locking', async () => {
+  const pool = new Pool({ host: '127.0.0.1', port: 1, database: 'access', max: 1, connectionTimeoutMillis: 50 });
+  const store = new PostgresReceiptCustodyStore(pool);
+  try {
+    for (const status of ['E', null] as const) {
+      let queryCalls = 0, releaseCalls = 0, endCalls = 0, callbackCalls = 0;
+      const client = scriptedClient(() => { queryCalls++; return { rows: [] }; }, {
+        getTransactionStatus: () => status,
+        onRelease: () => { releaseCalls++; },
+        onEnd: () => { endCalls++; },
+      });
+      await expect(store.withReceipt('urn:rezics:receipt:unusable', async () => { callbackCalls++; }, client))
+        .rejects.toThrow('requires an idle client or caller transaction');
+      expect(queryCalls).toBe(0);
+      expect(callbackCalls).toBe(0);
+      expect(releaseCalls).toBe(0);
+      expect(endCalls).toBe(0);
+    }
+  } finally {
+    await pool.end();
+  }
+});
+
+test('receipt custody disconnects an owned client after an uncertain lock acquisition', async () => {
+  const acquisitionFailure = new Error('lock response was lost');
+  const statements: string[] = [];
+  const releasedWith: Array<Error | boolean | undefined> = [];
+  let callbackCalls = 0, endCalls = 0;
+  const connect = installConnect(sql => {
+    statements.push(sql);
+    if (sql.includes('pg_advisory_lock')) throw acquisitionFailure;
+    return { rows: [] };
+  }, {
+    getTransactionStatus: () => 'I',
+    onRelease: error => { releasedWith.push(error); },
+    onEnd: () => { endCalls++; },
+  });
+  const pool = new Pool({ host: '127.0.0.1', port: 1, database: 'access', max: 1, connectionTimeoutMillis: 50 });
+  try {
+    const store = new PostgresReceiptCustodyStore(pool);
+    await expect(store.withReceipt('urn:rezics:receipt:acquisition-failure', async () => { callbackCalls++; }))
+      .rejects.toBe(acquisitionFailure);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('pg_advisory_lock');
+    expect(callbackCalls).toBe(0);
+    expect(releasedWith).toEqual([true]);
+    expect(endCalls).toBe(0);
+  } finally {
+    connect.mockRestore();
+    await pool.end();
+  }
+});
+
+test('receipt custody discards an owned client that is not idle at entry', async () => {
+  const releasedWith: Array<Error | boolean | undefined> = [];
+  const statements: string[] = [];
+  const connect = installConnect(sql => { statements.push(sql); return { rows: [] }; }, {
+    getTransactionStatus: () => 'T',
+    onRelease: error => { releasedWith.push(error); },
+  });
+  const pool = new Pool({ host: '127.0.0.1', port: 1, database: 'access', max: 1, connectionTimeoutMillis: 50 });
+  try {
+    const store = new PostgresReceiptCustodyStore(pool);
+    await expect(store.withReceipt('urn:rezics:receipt:owned-transaction', async () => {}))
+      .rejects.toThrow('requires an idle client or caller transaction');
+    expect(statements).toEqual([]);
+    expect(releasedWith).toEqual([true]);
+  } finally {
     connect.mockRestore();
     await pool.end();
   }

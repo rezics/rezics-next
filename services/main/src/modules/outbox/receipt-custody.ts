@@ -81,8 +81,12 @@ export interface ReceiptCustodySession {
 }
 export interface ReceiptCustodyStore {
   receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null>;
-  /** Serialize preparation, dispatch, reconciliation and retirement for one receipt across processes.
-   * Pass the caller's client when that caller already holds one from this database. */
+  /** Serialize receipt work across processes. A borrowed client must be used
+   * exclusively and sequentially, with all prior queries complete. A callback
+   * entered in a caller transaction must leave it and its enclosing savepoints
+   * intact. A callback entered idle may use balanced transactions, but must
+   * return idle. On an idle borrowed client only, uncertain session-lock cleanup
+   * may end the connection; its caller still releases it exactly once. */
   withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>,
     client?: PoolClient): Promise<T>;
 }
@@ -140,17 +144,48 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
     client?: PoolClient): Promise<T> {
     const owned = client === undefined;
     const held = client ?? await this.sessions.connect();
-    const transactionScoped = !owned;
-    let locked = false;
-    let destroyed = false;
+    // pg exposes ReadyForQuery status. Do not infer transaction ownership from
+    // borrowing: an idle borrowed client still needs a session lock and durable
+    // statement transactions, while a caller transaction owns both boundaries.
+    let entryStatus: ReturnType<PoolClient['getTransactionStatus']>;
     try {
+      entryStatus = held.getTransactionStatus();
+    } catch (error) {
+      if (owned) held.release(true);
+      throw error;
+    }
+    const transactionScoped = !owned && entryStatus === 'T';
+    if (entryStatus !== 'I' && !transactionScoped) {
+      const error = new Error(`Receipt custody requires an idle client or caller transaction, got ${String(entryStatus)}`);
+      if (owned) held.release(true);
+      throw error;
+    }
+
+    let sessionLockAttempted = false;
+    let sessionLocked = false;
+    let destroyed = false;
+    let operationFailed = false;
+    let operationError: unknown;
+    let result!: T;
+    let cleanupFailed = false;
+    let cleanupError: unknown;
+    let boundaryError: Error | undefined;
+    const discardSession = async (): Promise<void> => {
+      if (destroyed) return;
+      destroyed = true;
+      if (owned) held.release(true);
+      else await held.end();
+    };
+
+    try {
+      if (!transactionScoped) sessionLockAttempted = true;
       await held.query(`SELECT pg_advisory_${transactionScoped ? 'xact_' : ''}lock(hashtextextended($1, 0))`,
         [`command-custody:${receipt}`]);
-      locked = true;
+      sessionLocked = !transactionScoped;
       const durable = async <T>(write: () => Promise<T>): Promise<T> => {
-        // A borrowed client belongs to its caller, including its transaction
-        // boundary. Only a session we checked out can make this write durable.
-        if (!owned) return write();
+        // Transaction-scoped callers own durability; idle sessions use one
+        // durable transaction per write, preserving preparation-before-dispatch.
+        if (transactionScoped) return write();
         await held.query('BEGIN');
         try {
           await held.query('SET LOCAL synchronous_commit = on');
@@ -162,7 +197,7 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
           throw error;
         }
       };
-      return await operation({
+      const session: ReceiptCustodySession = {
         client: held,
         read: async () => {
           const row = (await held.query<{ receipt: string; request_digest: string; payload_sha256: string;
@@ -223,19 +258,53 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
             && existing.payload_erasure_epoch === erasure.erasureEpoch) return;
           throw new ReceiptCustodyErasureConflict();
         }),
-      });
-    } finally {
-      if (locked && !transactionScoped) {
-        try { await held.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [`command-custody:${receipt}`]); }
-        catch {
-          // A failed unlock leaves a session lock behind. Dispose of that
-          // connection so it cannot return to the pool with the receipt held.
-          held.release(true);
-          destroyed = true;
+      };
+      try {
+        result = await operation(session);
+      } catch (error) {
+        operationFailed = true;
+        operationError = error;
+      }
+    } catch (error) {
+      operationFailed = true;
+      operationError = error;
+    }
+
+    if (!transactionScoped && sessionLockAttempted) {
+      if (!sessionLocked) {
+        // The lock query may have reached PostgreSQL before the client observed
+        // failure, so an attempted acquisition always requires disconnecting.
+        try { await discardSession(); } catch (error) { cleanupFailed = true; cleanupError = error; }
+      } else {
+        try {
+          const finalStatus = held.getTransactionStatus();
+          if (finalStatus === 'T' || finalStatus === 'E') {
+            await held.query('ROLLBACK');
+            if (held.getTransactionStatus() !== 'I') {
+              throw new Error('Receipt custody could not restore its session to idle');
+            }
+            if (!operationFailed) {
+              boundaryError = new Error('Receipt custody callback returned with an open transaction');
+            }
+          } else if (finalStatus !== 'I') {
+            throw new Error(`Receipt custody session status is unknown during cleanup: ${String(finalStatus)}`);
+          }
+          const unlocked = await held.query<{ unlocked: boolean }>(
+            'SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked', [`command-custody:${receipt}`]);
+          if (unlocked.rows[0]?.unlocked !== true) throw new Error('Receipt custody session lock was not held during cleanup');
+        } catch (error) {
+          cleanupFailed = true;
+          cleanupError = error;
+          try { await discardSession(); } catch { /* Preserve callback or cleanup failure. */ }
         }
       }
-      if (owned && !destroyed) held.release();
     }
+
+    if (owned && !destroyed) held.release();
+    if (operationFailed) throw operationError;
+    if (cleanupFailed) throw cleanupError;
+    if (boundaryError) throw boundaryError;
+    return result;
   }
 }
 
