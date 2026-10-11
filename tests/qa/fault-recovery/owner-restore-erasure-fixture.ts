@@ -37,6 +37,7 @@ import {
   releaseAccessRecoveryFence,
 } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
+import type { AccessErasureRecoverySummary } from '../../../services/main/src/modules/access/erasure-recovery.ts';
 import { ContentSearchReadAccess } from '../../../services/main/src/modules/search-disclosure/content-read-lease.ts';
 import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
 import {
@@ -102,7 +103,11 @@ import {
   type OperatorRestoreReleaseContext,
   type RestoreChecks,
 } from '../../../scripts/ops/restore.ts';
-import { RecoveryBudget } from '../../../scripts/ops/recovery-set.ts';
+import {
+  encryptRecoveryAttachment,
+  RecoveryBudget,
+  type EncryptedRecoveryAttachment,
+} from '../../../scripts/ops/recovery-set.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { healthRoutes } from '../../../services/main/src/routes/health.ts';
 import { erasureRoutes } from '../../../services/main/src/routes/erasures.ts';
@@ -126,6 +131,7 @@ import {
   type RestoreFixturePhaseHandle,
 } from '../../../tests/qa/support/restore-fixture-timing.ts';
 import { seedContent } from '../../../tests/qa/load/corpus.ts';
+import { closeRecoveryTestCustody, recoveryTestCustody } from './g-727-recovery-checks.ts';
 import {
   freePort,
   fusekiSecrets,
@@ -418,10 +424,17 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
     if (pgIndex >= 0) pgCopies.splice(pgIndex, 1);
   };
   const objects = new DirectoryObjects(join(directory, 'objects-live'));
+  let attachmentCustody: ReturnType<typeof recoveryTestCustody> | undefined;
+  let nativeAccessAttachment: EncryptedRecoveryAttachment<AccessErasureRecoverySummary> | undefined;
   let authenticated: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   const close = () =>
     timing.phase('fixture.final-disposal', async () => {
       const actions: RestoreCleanupAction[] = [];
+      if (attachmentCustody)
+        actions.push({
+          resource: 'native Access attachment key custody',
+          run: () => closeRecoveryTestCustody(attachmentCustody!),
+        });
       if (authenticated)
         actions.push({
           resource: 'authenticated fixture client',
@@ -550,7 +563,7 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
     await source.access.query("INSERT INTO access.authority_subject(id,kind) VALUES($1,'agent')", [
       actor,
     ]);
-    const registry = new AccessAdmissionRegistry(
+    let registry = new AccessAdmissionRegistry(
       source.access,
       qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY,
     );
@@ -571,13 +584,15 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
       );
     };
     await grant('work:create:root', 'work.create');
-    const custody = new ReceiptCustody(
-      new PostgresReceiptCustodyStore(source.access),
-      objects,
-      native,
-      qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
-      proofRetirementSender(live.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!),
-    );
+    const createCustody = () =>
+      new ReceiptCustody(
+        new PostgresReceiptCustodyStore(source.access),
+        objects,
+        native,
+        qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
+        proofRetirementSender(live.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!),
+      );
+    let custody = createCustody();
     const env: WorkActivationEnvironment = {
       fuseki: native,
       lineage,
@@ -934,6 +949,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       }
     });
     if (!coverage?.objects) throw new Error('fixture signed owner coverage is unavailable');
+    const baseCoverage = coverage;
     const authority = {
       sealedCoverage: JSON.stringify(
         sealRecoveryPayload(coverage, restoreKey, 'graph-recovery-coverage'),
@@ -1024,6 +1040,18 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     let erased: Awaited<ReturnType<typeof journalErasure>>;
     let original: Awaited<ReturnType<typeof readGraphErasureProof>>;
     if (options.laterApiAdmission) {
+      // Retain the exact C0 rows for the owner's delta scan; the physical backup stays untouched.
+      const baseAccess = pool(await databases.snapshot('access', () => closePool(source.access)));
+      source.access = pool(databases.urls.access);
+      const baseRelay = pool(await databases.snapshot('relay', () => closePool(source.relay)));
+      source.relay = pool(databases.urls.relay);
+      registry = new AccessAdmissionRegistry(
+        source.access,
+        qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY,
+      );
+      custody = createCustody();
+      env.receiptCustody = custody;
+      attachmentCustody = recoveryTestCustody(join(directory, 'native-access-custody'), suffix);
       await releaseAccessRecoveryFence(source.access, generation);
       const idempotencyKey = `later-erasure-${randomUUID()}`;
       const erasureApp = new Elysia().use(
@@ -1112,6 +1140,23 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             workObjects: objects,
             structureObjects: objects,
           },
+          undefined,
+          {
+            baseCoverage,
+            baseCoverageEnvelope: authority.sealedCoverage,
+            baseCoverageHmacKey: restoreKey,
+            baseAccessPool: baseAccess,
+            baseRelayPool: baseRelay,
+            encryptAttachment: async (produce) => {
+              nativeAccessAttachment = await encryptRecoveryAttachment(
+                attachmentCustody!.recipient,
+                join(directory, 'native-access-attachments'),
+                produce,
+                attachmentCustody!.publicOnly,
+              );
+              return nativeAccessAttachment;
+            },
+          },
         ),
       );
       newerAuthority = {
@@ -1120,7 +1165,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         ),
         hmacKey: restoreKey,
       };
-      await retainRecoveryCoverageHead(source.relay, newerAuthority.sealedCoverage, restoreKey);
+      await retainRecoveryCoverageHead(source.relay, newerAuthority.sealedCoverage, restoreKey, {
+        attachmentDirectory: join(directory, 'native-access-attachments'),
+      });
       const journalFrontier = await retainErasureCoverage(source.relay, consumer);
       if (journalFrontier !== erased.erasureEpoch) {
         throw new Error('later erasure API fixture did not retain its complete journal frontier');
@@ -1212,6 +1259,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       liveRetentionReason: 'Original physical cut remains retained after logical suppression',
     });
     const retainedRelayTemplate = await databases.snapshot('relay', () => closePool(source.relay));
+    if (options.laterApiAdmission) source.relay = pool(databases.urls.relay);
     timing.finish(sourceProofPhase!);
     sourceProofPhase = undefined;
     let index = 0;
@@ -1551,6 +1599,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       newerAuthority,
       generation,
       laterAdmission,
+      nativeAccessAttachment,
+      attachmentCustody,
       original,
       erased,
       revisionId,
