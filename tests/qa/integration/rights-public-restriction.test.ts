@@ -242,14 +242,15 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
     f.deps.contentProjection = { content: f.stack.content, cursor: f.stack.contentCursor,
       consumer: f.stack.contentConsumer };
     await f.stack.contentCursor.initialize(f.stack.contentConsumer);
-    const projectContentToHead = async () => {
+    const projectContentToHead = async (): Promise<boolean> => {
       while (BigInt((await f.stack.contentCursor.read(f.stack.contentConsumer)).sequence)
         < BigInt((await f.stack.content.ownerPosition()).sequence)) {
         if (!(await relayContentProjectionOnce(f.stack.env, f.stack.content,
           f.stack.contentCursor, f.stack.contentConsumer))) {
-          throw new Error('Content projection stopped before the current owner head');
+          return false;
         }
       }
+      return true;
     };
     const accountSecret = Bun.env.ACCOUNT_SECRET!;
     const mainSecret = 'rights-notice-private-intake';
@@ -268,6 +269,7 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
     }, 'https://accounts.example.test').drain();
 
     try {
+      const gaps: string[] = [];
       const workTarget = await f.stack.publicWork(maintainer.actor, ['en'], `Rights title ${randomUUID()}`);
       const coverTarget = await f.stack.publicWork(maintainer.actor, ['en'], `Rights cover ${randomUUID()}`);
       const sharedCover = await f.stack.publicWork(maintainer.actor, ['en'], `Shared cover ${randomUUID()}`);
@@ -289,12 +291,20 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       await selectCover(f, maintainer, contentTarget.work, unrelatedAsset.asset, null);
       const bodyText = `Rights body original ${randomUUID().replaceAll('-', '')}`;
       const content = await publishBody(f, maintainer, contentTarget.work, bodyText);
-      await projectContentToHead();
-      const contentSearchBefore = await publicContentPhrase(f, bodyText);
-      expect(contentSearchBefore.total).toBe(1);
-      expect(contentSearchBefore.results).toContainEqual(expect.objectContaining({
-        revision: revisionIri(content.revision),
-      }));
+      let contentSearchReady = await projectContentToHead();
+      if (contentSearchReady) {
+        try {
+          const contentSearchBefore = await publicContentPhrase(f, bodyText);
+          contentSearchReady = contentSearchBefore.total === 1
+            && contentSearchBefore.results.some(result => result.revision === revisionIri(content.revision));
+          if (!contentSearchReady) gaps.push('public Content phrase search did not return the published revision before restriction');
+        } catch (error) {
+          contentSearchReady = false;
+          gaps.push(`public Content phrase search failed before restriction: ${String(error)}`);
+        }
+      } else {
+        gaps.push('public Content search anchor is closed before restriction');
+      }
 
       const missingSignature = await f.call('POST', '/v1/public-reports', {
         profile: 'public-report-v1', target: workTarget.work, category: 'copyright',
@@ -340,8 +350,6 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
             scopeKind: 'exact_revision', revision: content.revision, expectedHead: content.revision,
             effect: 'disclosure' } satisfies DecisionInput['targets'][number] },
       ];
-      const gaps: string[] = [];
-
       const preRestriction = new Map<string, { header: unknown; summary: unknown; search: string }>();
       for (const item of cases) {
         const id = shortId(item.work);
@@ -377,7 +385,6 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       const exactContentBefore = await f.call('GET', contentReadPath(content.revision), undefined, maintainer.token);
       expect(exactContentBefore.status).toBe(200);
       expect(await exactContentBefore.text()).toContain(bodyText);
-      expect(preRestriction.get(contentNotice.caseId)!.search).toContain(bodyText);
 
       const receipts = cases.map(item => item.receipt);
       for (const receipt of receipts) {
@@ -497,11 +504,18 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       const restrictedSummary = await observed(await f.call('GET', `/v1/resources/${shortId(workTarget.work)}`));
       if (JSON.stringify(restrictedSummary) !== JSON.stringify(absentSummary))
         gaps.push('restricted Work title summary differs from an absent Work');
-      const restrictedTitleSearch = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(
-        (preRestriction.get(workNotice.caseId)!.header as { title: { value: string } }).title.value)}&limit=20`);
-      expect(restrictedTitleSearch.status).toBe(200);
-      expect(await restrictedTitleSearch.text()).not.toContain(workTarget.title);
-      expect(preRestriction.get(workNotice.caseId)!.search).toContain(workTarget.title);
+      const titleSearchBefore = preRestriction.get(workNotice.caseId)!.search;
+      if (!titleSearchBefore.includes(workTarget.title)) {
+        gaps.push('public Work title search did not return the target before restriction');
+      } else {
+        const restrictedTitleSearch = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(
+          (preRestriction.get(workNotice.caseId)!.header as { title: { value: string } }).title.value)}&limit=20`);
+        if (restrictedTitleSearch.status !== 200) {
+          gaps.push(`public Work title search returned ${restrictedTitleSearch.status} after restriction`);
+        } else if ((await restrictedTitleSearch.text()).includes(workTarget.title)) {
+          gaps.push('restricted Work title remains in public catalogue search');
+        }
+      }
 
       const targetCoverResult = caseResults.get(coverNotice.caseId)!;
       const coverStatus = await publicStatus(f, coverNotice, coverNotice.credential, claimant);
@@ -562,25 +576,42 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         if (JSON.stringify(credentialRead) !== JSON.stringify(restrictedContent))
           gaps.push('a case credential changes restricted Content revision delivery');
       }
-      const restrictedContentSearch = await publicContentPhrase(f, bodyText);
-      const absentPhraseSearch = await publicContentPhrase(f, randomUUID());
-      if (restrictedContentSearch.total !== absentPhraseSearch.total
-        || JSON.stringify(restrictedContentSearch.results) !== JSON.stringify(absentPhraseSearch.results)) {
-        gaps.push('restricted Content phrase search differs from an absent phrase');
+      if (contentSearchReady) {
+        try {
+          const restrictedContentSearch = await publicContentPhrase(f, bodyText);
+          const absentPhraseSearch = await publicContentPhrase(f, randomUUID());
+          if (restrictedContentSearch.total !== absentPhraseSearch.total
+            || JSON.stringify(restrictedContentSearch.results) !== JSON.stringify(absentPhraseSearch.results)) {
+            gaps.push('restricted Content phrase search differs from an absent phrase');
+          }
+        } catch (error) {
+          contentSearchReady = false;
+          gaps.push(`public Content phrase search failed after restriction: ${String(error)}`);
+        }
       }
 
       const updatedText = `Rights body replacement ${randomUUID().replaceAll('-', '')}`;
       const updatedContent = await publishBody(f, maintainer, contentTarget.work, updatedText, content);
-      await projectContentToHead();
+      const updatedProjectionReady = await projectContentToHead();
+      if (contentSearchReady && !updatedProjectionReady) {
+        contentSearchReady = false;
+        gaps.push('public Content projection stopped before the replacement revision');
+      }
       expect((await f.call('GET', contentReadPath(content.revision), undefined, maintainer.token)).status).toBe(404);
       const updatedRead = await body<{ body: { body: string } }>(
         await f.call('GET', contentReadPath(updatedContent.revision), undefined, maintainer.token));
       expect(updatedRead.body.body).toBe(updatedText);
-      const updatedSearch = await publicContentPhrase(f, updatedText);
-      expect(updatedSearch.total).toBe(1);
-      expect(updatedSearch.results).toContainEqual(expect.objectContaining({
-        revision: revisionIri(updatedContent.revision),
-      }));
+      if (contentSearchReady) {
+        try {
+          const updatedSearch = await publicContentPhrase(f, updatedText);
+          if (updatedSearch.total !== 1 || !updatedSearch.results.some(result =>
+            result.revision === revisionIri(updatedContent.revision))) {
+            gaps.push('public Content phrase search did not return the replacement revision');
+          }
+        } catch (error) {
+          gaps.push(`public Content phrase search failed after replacement: ${String(error)}`);
+        }
+      }
       const unrelatedCoverAfter = await body<{ avatar: { kind: string; url?: string } }>(
         await f.call('GET', `/v1/resources/${shortId(contentTarget.work)}`));
       expect(unrelatedCoverAfter.avatar.kind).toBe('image');
