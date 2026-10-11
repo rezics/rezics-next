@@ -9,6 +9,7 @@ import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { ContentErasureInvalid } from '../src/modules/erasure/content.ts';
 import { assertErasureJournalTargetBound, GraphErasureUnavailable,
   inventoryContributionPayloads } from '../src/modules/erasure/graph.ts';
+import { ErasureInvalid, journalErasure } from '../src/modules/erasure/journal.ts';
 import { ErasureService, requestContentErasure } from '../src/modules/erasure/request.ts';
 import { resolveErasureRevisions, type ResolvedErasureRevision } from '../src/modules/erasure/revision-kind.ts';
 import { ID, prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -242,9 +243,28 @@ test('reverse-reference lookahead is applied per manifest across 64 candidates',
   expect(closureSize).toBeLessThan(256);
 });
 
-test('the 257th journal target is rejected before any erasure command', () => {
-  const targets = Array.from({ length: 257 }, (_, index) => ({ kind: 'object', ref: `sha256:${String(index).padStart(64, '0')}` }));
-  expect(() => assertErasureJournalTargetBound(targets)).toThrow(GraphErasureUnavailable);
+test('graph preflight and journal agree at the 256 target boundary', async () => {
+  const makeTargets = (count: number) => Array.from({ length: count }, (_, index) => ({
+    kind: 'object' as const, ref: `sha256:${String(index).padStart(64, '0')}`,
+  }));
+  const accepted = makeTargets(256);
+  const oversized = makeTargets(257);
+
+  expect(() => assertErasureJournalTargetBound(accepted)).not.toThrow();
+  expect(() => assertErasureJournalTargetBound(oversized)).toThrow(GraphErasureUnavailable);
+
+  let connections = 0;
+  const relay = { connect: async () => {
+    connections++;
+    throw new Error('bounded targets reached the journal transaction');
+  } } as unknown as Pool;
+  const intent = { operationId: randomUUID(), requestDigest: '0'.repeat(64), kind: 'revision' as const,
+    principalId: randomUUID(), admissionId: randomUUID(), authorityEpoch: '1', targets: accepted };
+
+  await expect(journalErasure(relay, intent)).rejects.toThrow('reached the journal transaction');
+  expect(connections).toBe(1);
+  await expect(journalErasure(relay, { ...intent, targets: oversized })).rejects.toBeInstanceOf(ErasureInvalid);
+  expect(connections).toBe(1);
 });
 
 test('a 257th requested revision is refused before target reads, journaling or graph mutation', async () => {

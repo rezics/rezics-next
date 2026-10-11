@@ -23,6 +23,16 @@ export const ERASURE_JOURNAL_EPOCH = 'urn:rezics:relay:erasure-journal';
 
 export interface ErasureTargetInput { kind: ErasureTargetKind; ref: string }
 
+/** The complete target-list validation shared by erasure admission and journaling. */
+export function isValidErasureTargetList(
+  targets: readonly { kind: string; ref: string }[],
+): boolean {
+  return targets.length > 0 && targets.length <= MAX_ERASURE_TARGETS
+    && new Set(targets.map(target => `${target.kind}\0${target.ref}`)).size === targets.length
+    && targets.every(target => Object.hasOwn(ERASURE_TARGET_OWNERS, target.kind)
+      && typeof target.ref === 'string' && target.ref.length > 0 && target.ref.length <= 512);
+}
+
 export interface ErasureDisposition {
   domain: string;
   owner: typeof RETENTION_OWNERS[number];
@@ -157,10 +167,7 @@ export interface ErasureIntent {
  */
 export async function journalErasure(relay: Pool, intent: ErasureIntent): Promise<{
   erasureId: string; erasureEpoch: string; replayed: boolean }> {
-  if (!intent.targets.length || intent.targets.length > MAX_ERASURE_TARGETS
-    || new Set(intent.targets.map(target => `${target.kind}\0${target.ref}`)).size !== intent.targets.length
-    || intent.targets.some(target => !(target.kind in ERASURE_TARGET_OWNERS) || !target.ref
-      || target.ref.length > 512)) {
+  if (!isValidErasureTargetList(intent.targets)) {
     throw new ErasureInvalid('erasure targets are invalid');
   }
   return relayTransaction(relay, async client => {

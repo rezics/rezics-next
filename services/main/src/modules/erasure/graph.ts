@@ -16,7 +16,7 @@ import { admittedContributionLanguage, CONTRIBUTION_CREATE_READ_COST, CONTRIBUTI
 import { readComponentState, RevisionCorrupt, RevisionReadBudgetExceeded, RevisionUnavailable,
   type RevisionReadBudget } from '../work/history.ts';
 import type { ResolvedErasureRevision } from './revision-kind.ts';
-import { MAX_ERASURE_TARGETS } from './journal.ts';
+import { isValidErasureTargetList } from './journal.ts';
 
 const PUBLIC = 'urn:rezics:search:public';
 const PRIVATE = 'urn:rezics:search:private';
@@ -159,12 +159,12 @@ export interface ContributionPayloadInventory {
   contentForm: 'body' | 'document';
 }
 
-/** Refuse a complete journal closure before the owner performs any mutation. */
+/** Refuse a closure the erasure journal could not accept before any owner mutation. */
 export function assertErasureJournalTargetBound(
   targets: readonly { kind: string; ref: string }[],
 ): void {
-  if (targets.length > MAX_ERASURE_TARGETS) {
-    throw new GraphErasureUnavailable('erasure target closure exceeds 256 targets');
+  if (!isValidErasureTargetList(targets)) {
+    throw new GraphErasureUnavailable('erasure target closure is invalid for the journal');
   }
 }
 
