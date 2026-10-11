@@ -132,8 +132,12 @@ test('public ranking counts target-form Work receipts, skips non-Works and repor
     [stack.env.lineage.dataEpoch, character])).rows[0]!;
     await relay.query(`UPDATE relay.delivered_event SET envelope=jsonb_set(envelope,'{data,receipt,ratingValue}','11')
       WHERE event_id=$1`, [invalid.event_id]);
-    await worker.tick();
-    const failure = await rankings.publicRankingBuildFailure();
+    let failure = await rankings.publicRankingBuildFailure();
+    for (let tick = 0; tick < 100 && !failure; tick++) {
+      await worker.tick();
+      failure = await rankings.publicRankingBuildFailure();
+    }
+    if (!failure) throw new Error('Public ranking build failure did not appear within 100 ticks');
     expect(failure).toMatchObject({ reason: `source-invalid at ${invalid.sequence}` });
     expect((await stack.accessPool.query('SELECT state,failure_reason FROM access.derived_generation WHERE id=$1',
       [failure!.generation])).rows[0]).toEqual({ state: 'failed', failure_reason: `source-invalid at ${invalid.sequence}` });

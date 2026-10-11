@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
-import { startMediaStack } from './media-support.ts';
+import { startMediaStack, type MediaStack } from './media-support.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { activateMetadataWork, metadataWorkRequestDigest, GRAPHS, RV, iri }
@@ -16,6 +16,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { readFixedRelease } from '../../../services/main/src/modules/work/fixed-release.ts';
 import type { PostNotesInput, PostNotes } from '../../../services/content/src/document-body.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const short = (value: string) => value.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -26,8 +27,10 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 interface Draft { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
 
 test('Post notes stay language-local on exact chapter reads and outside length, search, feed and fixed releases', async () => {
-  const stack = await startMediaStack('post-author-notes', { contentProjection: true });
+  const owners = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'privileged');
+  let stack: MediaStack | undefined;
   try {
+    stack = await startMediaStack('post-author-notes', { ownerUrls: owners.urls, contentProjection: true });
     const author = await stack.member('notes-author');
     const stranger = await stack.member('notes-stranger');
     await stack.contentCursor.initialize(stack.contentConsumer);
@@ -159,7 +162,10 @@ test('Post notes stay language-local on exact chapter reads and outside length, 
     expect(release.body).toBe(bookText);
     expect(JSON.stringify(release)).not.toContain(marker);
     expect(release).not.toHaveProperty('notes');
-  } finally { await stack.stop(); }
+  } finally {
+    try { await stack?.stop(); }
+    finally { await owners.close(); }
+  }
 }, 240_000);
 
 test('Post spoiler publication and reply draft declarations survive exact storage, omission, explicit false and reads', async () => {
