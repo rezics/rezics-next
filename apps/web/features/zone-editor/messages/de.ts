@@ -104,6 +104,7 @@ const messages: ZoneEditorMessages = {
   pathEditLimited: 'Der Pfad eines gespeicherten Links lässt sich noch nicht ändern.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Community',
+  sectionTheme: 'Design',
   realmTitle: 'Community',
   realmHelp:
     'Hängen Sie eine Community über ihren Handle an. Sie erscheint in dieser Zone, und ihre Verwalter können sie zurückziehen.',
@@ -120,6 +121,33 @@ const messages: ZoneEditorMessages = {
   // Machine-drafted; needs native review.
   realmAttachmentLimit: 'Diese Community ist bereits mit der Höchstzahl an Websites verknüpft.',
   realmSaved: 'Angehängt. Diese Zone zeigt diese Community.',
+  themeTitle: 'Layout und Oberfläche',
+  themeHelp: 'Legen Sie fest, wie viele Einträge in eine Regalreihe passen und ob unterstützte Module direkt auf der Seite oder in Karten stehen. Die übrigen gespeicherten Darstellungseinstellungen bleiben erhalten.',
+  themeDensity: 'Regaldichte',
+  themeComfortable: 'Luftig · weniger Einträge pro Reihe',
+  themeCompact: 'Kompakt · mehr Einträge pro Reihe',
+  themePageSurface: 'Seitenfläche',
+  themeFlat: 'Direkt auf der Seite',
+  themeCards: 'In Karten',
+  themeSave: 'Layout speichern',
+  themeSaving: 'Wird gespeichert…',
+  themeSaved: 'Layout gespeichert.',
+  themeSavedReplayed: 'Layout gespeichert. Der vorherige Speichervorgang war bereits erfolgreich.',
+  themeStaleTitle: 'Das Design wurde vor dem Speichern geändert',
+  themeStaleBody: 'Ihre Auswahl ist noch hier. Sehen Sie sich das aktuelle Design an, damit dessen übrige Einstellungen erhalten bleiben.',
+  themeReviewLatest: 'Aktuelles Design prüfen',
+  themeReviewed: 'Das aktuelle Design ist geladen. Ihre Auswahl ist noch hier; speichern Sie, um sie anzuwenden.',
+  themeAbsentTitle: 'Für diese Zone ist keine Darstellung gespeichert',
+  themeAbsentBody: 'Zum Bearbeiten muss eine strukturierte Darstellung vorhanden sein, deren übrige Einstellungen erhalten bleiben. Es wurde keine Standarddarstellung gespeichert.',
+  themeLegacyTitle: 'Diese Zone verwendet eine ältere Darstellung',
+  themeLegacyBody: 'Dieses Design lässt sich hier nicht bearbeiten, ohne die gespeicherten Darstellungseinstellungen zu ersetzen.',
+  themeInvalidTitle: 'Die gespeicherte Darstellung konnte nicht gelesen werden',
+  themeInvalidBody: 'Es wurde nichts geändert. Versuchen Sie es später erneut oder bitten Sie einen Zone-Editor, das gespeicherte Design zu prüfen.',
+  themeDeniedBody: 'Diese Zone steht Ihnen zum Ändern nicht zur Verfügung. Ihre Auswahl ist noch hier.',
+  themeSignInBody: 'Melden Sie sich erneut an und speichern Sie dann. Ihre Auswahl ist noch hier.',
+  themeInvalidSaveBody: 'Die Designänderung wurde nicht angenommen. Ihre Auswahl ist noch hier.',
+  themeConflictBody: 'Diese Designänderung steht im Konflikt mit einer anderen Änderung. Ihre Auswahl ist noch hier.',
+  themeUnavailableBody: 'REZICS hat nicht geantwortet. Ihre Auswahl ist noch hier; versuchen Sie es erneut.',
 };
 
 export default messages;

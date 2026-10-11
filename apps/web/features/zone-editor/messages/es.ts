@@ -99,6 +99,7 @@ const messages: ZoneEditorMessages = {
   pathEditLimited: 'Aún no se puede cambiar la ruta de un enlace guardado.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Comunidad',
+  sectionTheme: 'Tema',
   realmTitle: 'Comunidad',
   realmHelp:
     'Vincula una comunidad por su identificador. Se muestra en esta zona, y sus responsables pueden retirarla.',
@@ -115,6 +116,33 @@ const messages: ZoneEditorMessages = {
   // Machine-drafted; needs native review.
   realmAttachmentLimit: 'Esta comunidad está vinculada al máximo de sitios que puede.',
   realmSaved: 'Vinculada. Esta zona muestra esa comunidad.',
+  themeTitle: 'Diseño y superficie',
+  themeHelp: 'Elige cuántos elementos caben en cada fila y si los módulos compatibles aparecen sobre la página o en tarjetas. El resto de la presentación guardada se conserva.',
+  themeDensity: 'Densidad de las filas',
+  themeComfortable: 'Espaciada · menos elementos por fila',
+  themeCompact: 'Compacta · más elementos por fila',
+  themePageSurface: 'Superficie de la página',
+  themeFlat: 'Sobre la página',
+  themeCards: 'En tarjetas',
+  themeSave: 'Guardar diseño',
+  themeSaving: 'Guardando…',
+  themeSaved: 'Diseño guardado.',
+  themeSavedReplayed: 'Diseño guardado. El guardado anterior ya se había completado.',
+  themeStaleTitle: 'El tema cambió antes de guardar',
+  themeStaleBody: 'Tus opciones siguen aquí. Revisa el tema más reciente para conservar los demás ajustes de la presentación antes de guardar.',
+  themeReviewLatest: 'Revisar el tema actual',
+  themeReviewed: 'Se cargó el tema más reciente. Tus opciones siguen aquí; guarda para aplicarlas.',
+  themeAbsentTitle: 'Esta zona no tiene una presentación guardada',
+  themeAbsentBody: 'Para editar el tema hace falta una presentación estructurada que permita conservar el resto de sus ajustes. No se ha guardado ningún valor predeterminado.',
+  themeLegacyTitle: 'Esta zona usa una presentación antigua',
+  themeLegacyBody: 'No se puede editar este tema sin reemplazar los ajustes de la presentación guardada.',
+  themeInvalidTitle: 'No se pudo leer la presentación guardada',
+  themeInvalidBody: 'No se ha cambiado nada. Inténtalo más tarde o pide a quien edita la zona que revise el tema guardado.',
+  themeDeniedBody: 'Esta zona no está disponible para que la cambies. Tus opciones siguen aquí.',
+  themeSignInBody: 'Inicia sesión de nuevo y guarda. Tus opciones siguen aquí.',
+  themeInvalidSaveBody: 'No se aceptó el cambio de tema. Tus opciones siguen aquí.',
+  themeConflictBody: 'Este cambio de tema entra en conflicto con otra edición. Tus opciones siguen aquí.',
+  themeUnavailableBody: 'REZICS no respondió. Tus opciones siguen aquí; inténtalo de nuevo.',
 };
 
 export default messages;

@@ -10,9 +10,9 @@ import { ZoneEditorSections } from './sections.tsx';
 
 /**
  * The Zone an author is working on: its name, who is acting, and the site sections.
- * Theme joins this list later.
+ * Authors can move between home, navigation, Realm and structural theme settings.
  */
-export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation, sectionRealm, children }: {
+export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation, sectionRealm, sectionTheme, children }: {
   name: string;
   editorPath: string;
   agent: AgentOption;
@@ -22,6 +22,7 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
   sectionHome: string;
   sectionNavigation: string;
   sectionRealm: string;
+  sectionTheme: string;
   children: ReactNode;
 }) {
   const manage = materializeData(manageMessages, { locale });
@@ -38,7 +39,7 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
           <ActingAs agent={agent} locale={locale} messages={manageMessages} />
         </div>
         <h1 className="min-w-0 break-words font-semibold text-xl tracking-tight sm:text-3xl">{name}</h1>
-        <ZoneEditorSections editorPath={editorPath} sectionsLabel={sectionsLabel} sectionHome={sectionHome} sectionNavigation={sectionNavigation} sectionRealm={sectionRealm} />
+        <ZoneEditorSections editorPath={editorPath} sectionsLabel={sectionsLabel} sectionHome={sectionHome} sectionNavigation={sectionNavigation} sectionRealm={sectionRealm} sectionTheme={sectionTheme} />
       </div>
     </div>
     <div className="mx-auto w-full min-w-0 max-w-7xl px-4 py-3 sm:px-6 sm:py-6 lg:px-10">{children}</div>

@@ -148,6 +148,7 @@ function Page({
       sectionHome={messages[locale].sectionHome}
       sectionNavigation={messages[locale].sectionNavigation}
       sectionRealm={messages[locale].sectionRealm}
+      sectionTheme={messages[locale].sectionTheme}
     >
       <ZoneHomeEditor
         zoneId={zoneId}
@@ -250,6 +251,7 @@ export const StaleChoicesOnAPhone: Story = {
         sectionHome={messages.en.sectionHome}
         sectionNavigation={messages.en.sectionNavigation}
         sectionRealm={messages.en.sectionRealm}
+        sectionTheme={messages.en.sectionTheme}
       >
         <ZoneHomeEditor
           zoneId={zoneId}
@@ -346,6 +348,7 @@ export const DraftPreview: Story = {
         sectionHome={messages.en.sectionHome}
         sectionNavigation={messages.en.sectionNavigation}
         sectionRealm={messages.en.sectionRealm}
+        sectionTheme={messages.en.sectionTheme}
       >
         <ZoneDraftPreview
           copy={messages.en}
@@ -602,6 +605,7 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
       sectionHome={messages.en.sectionHome}
       sectionNavigation={messages.en.sectionNavigation}
       sectionRealm={messages.en.sectionRealm}
+      sectionTheme={messages.en.sectionTheme}
     >
       <ZoneNavigationEditor
         zoneId={zoneId}

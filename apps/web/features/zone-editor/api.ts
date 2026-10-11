@@ -12,6 +12,7 @@ import {
   foldMountPages, NAV_LOAD_BATCH, NAV_PAGE_SIZE, navigationReadTarget, pageNameOf, zoneMountPage,
   type NavigationReadTarget, type NavPosition, type NavWriteFailure, type NavWriteResult, type SiteLink,
 } from './navigation.ts';
+import type { ZonePresentationBaseline } from './theme.ts';
 
 export type WriteResult<T> =
   | { ok: true; data: T }
@@ -21,6 +22,18 @@ export type WriteResult<T> =
 export interface SavedDraft extends DraftBasis { replayed: boolean }
 export interface PublishedSite { zoneHead: string; replayed: boolean }
 export interface ZoneHeads { zoneHead: string; navigationRevision: string }
+export interface ZoneThemeSnapshot { revision: string; configuration: Record<string, unknown> }
+export interface SavedZoneTheme { revision: string; replayed: boolean }
+export interface ZoneThemeWrite {
+  expectedHead: string;
+  actingSubject: string;
+  presentation: ZonePresentationBaseline;
+}
+
+export interface ZoneThemeClient {
+  readConfiguration(zoneId: string, actingSubject: string): Promise<WriteResult<ZoneThemeSnapshot>>;
+  saveConfiguration(zoneId: string, body: ZoneThemeWrite, key: string): Promise<WriteResult<SavedZoneTheme>>;
+}
 
 /**
  * One command, retried once when the response is lost. The same Idempotency-Key
@@ -69,6 +82,33 @@ export function browserZoneAuthoring(main: ReturnType<typeof browserMainApi> = b
       const answer = await post(() => main.v1.zones({ id: zoneId }).get({ query: { actingSubject } }));
       if (!answer.ok) return answer;
       return headsOf(answer.data) ?? { ok: false, failure: 'unavailable' };
+    },
+  };
+}
+
+/** Browser access to the public Zone configuration, which applies zone.edit on both operations. */
+export function browserZoneTheme(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneThemeClient {
+  return {
+    async readConfiguration(zoneId, actingSubject) {
+      const answer = await post(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }));
+      if (!answer.ok) return answer;
+      const row = record(answer.data);
+      const revision = row?.revision;
+      const configuration = record(row?.configuration);
+      if (typeof revision !== 'string' || !iriPattern.test(revision) || !configuration) {
+        return { ok: false, failure: 'unavailable' };
+      }
+      return { ok: true, data: { revision, configuration } };
+    },
+    async saveConfiguration(zoneId, body, key) {
+      const answer = await post(() => main.v1.zones({ id: zoneId }).configuration.put(
+        body, { headers: { 'idempotency-key': key } },
+      ));
+      if (!answer.ok) return answer;
+      const row = record(answer.data);
+      const revision = row?.revision;
+      if (typeof revision !== 'string' || !iriPattern.test(revision)) return { ok: false, failure: 'unavailable' };
+      return { ok: true, data: { revision, replayed: row?.replayed === true } };
     },
   };
 }

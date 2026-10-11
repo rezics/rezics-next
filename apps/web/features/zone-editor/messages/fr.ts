@@ -104,6 +104,7 @@ const messages: ZoneEditorMessages = {
     'La modification du chemin d’un lien enregistré n’est pas encore prise en charge.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Communauté',
+  sectionTheme: 'Thème',
   realmTitle: 'Communauté',
   realmHelp:
     'Rattachez une communauté par son identifiant. Elle s’affiche sur cette zone, et ses responsables peuvent la retirer.',
@@ -120,6 +121,33 @@ const messages: ZoneEditorMessages = {
   // Machine-drafted; needs native review.
   realmAttachmentLimit: 'Cette communauté est liée au maximum de sites possible.',
   realmSaved: 'Rattachée. Cette zone affiche cette communauté.',
+  themeTitle: 'Disposition et surface',
+  themeHelp: 'Choisissez le nombre d’éléments par rangée et si les modules compatibles s’affichent sur la page ou dans des cartes. Les autres réglages de présentation restent inchangés.',
+  themeDensity: 'Densité des rangées',
+  themeComfortable: 'Aérée · moins d’éléments par rangée',
+  themeCompact: 'Compacte · plus d’éléments par rangée',
+  themePageSurface: 'Surface de la page',
+  themeFlat: 'Sur la page',
+  themeCards: 'Dans des cartes',
+  themeSave: 'Enregistrer la disposition',
+  themeSaving: 'Enregistrement…',
+  themeSaved: 'Disposition enregistrée.',
+  themeSavedReplayed: 'Disposition enregistrée. L’enregistrement précédent avait déjà abouti.',
+  themeStaleTitle: 'Le thème a changé avant cet enregistrement',
+  themeStaleBody: 'Vos choix sont toujours là. Consultez le thème actuel pour conserver les autres réglages avant d’enregistrer.',
+  themeReviewLatest: 'Consulter le thème actuel',
+  themeReviewed: 'Le thème actuel est chargé. Vos choix sont toujours là ; enregistrez pour les appliquer.',
+  themeAbsentTitle: 'Cette zone n’a pas de présentation enregistrée',
+  themeAbsentBody: 'La modification du thème nécessite une présentation structurée afin de conserver ses autres réglages. Aucune valeur par défaut n’a été enregistrée.',
+  themeLegacyTitle: 'Cette zone utilise une ancienne présentation',
+  themeLegacyBody: 'Ce thème ne peut pas être modifié ici sans remplacer les réglages de présentation enregistrés.',
+  themeInvalidTitle: 'La présentation enregistrée est illisible',
+  themeInvalidBody: 'Aucune modification n’a été faite. Réessayez plus tard ou demandez à un responsable de la zone de vérifier son thème.',
+  themeDeniedBody: 'Vous ne pouvez pas modifier cette zone. Vos choix sont toujours là.',
+  themeSignInBody: 'Reconnectez-vous, puis enregistrez. Vos choix sont toujours là.',
+  themeInvalidSaveBody: 'La modification du thème a été refusée. Vos choix sont toujours là.',
+  themeConflictBody: 'Cette modification du thème entre en conflit avec une autre modification. Vos choix sont toujours là.',
+  themeUnavailableBody: 'REZICS n’a pas répondu. Vos choix sont toujours là ; réessayez.',
 };
 
 export default messages;

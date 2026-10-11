@@ -14,3 +14,7 @@ export function zoneNavigationPath(space: string): string {
 export function zoneRealmPath(space: string): string {
   return `${zoneEditorPath(space)}/realm`;
 }
+
+export function zoneThemePath(space: string): string {
+  return `${zoneEditorPath(space)}/theme`;
+}

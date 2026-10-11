@@ -24,7 +24,8 @@ export default async function ZoneEditorLayout({ children, params }: {
   const copy = messages[locale];
   return <ZoneEditorFrame name={loaded.kind === 'ready' ? loaded.model.name : space} editorPath={zoneEditorPath(space)}
     agent={agent} locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel}
-    sectionHome={copy.sectionHome} sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm}>
+    sectionHome={copy.sectionHome} sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm}
+    sectionTheme={copy.sectionTheme}>
     {children}
   </ZoneEditorFrame>;
 }
