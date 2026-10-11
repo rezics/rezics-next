@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import { seedScopedSubjects } from './scoped-subjects-step.ts';
-import type { ScopedSubjectManifest, ScopedSubjectPort } from './scoped-subjects.ts';
+import { settleScopedSubjectSeed, type ScopedSubjectManifest, type ScopedSubjectPort } from './scoped-subjects.ts';
+import { SeedApiError } from './api.ts';
 import { refreshSeedTokens, type SeedState, type Session } from './state.ts';
 
 const native = (suffix: string) => `https://rezics.com/id/00000000-0000-4000-a000-${suffix.padStart(12, '0')}`;
@@ -10,6 +11,30 @@ const session = (id: string): Session => ({ id, accountId: id, cookie: '', token
 const manifest = { subjects: { misaka: native('misaka') },
   projections: { 'misaka-railgun': native('projection') } } as unknown as ScopedSubjectManifest;
 const index = '.temp/seed/scoped-subjects.json';
+
+test('scoped-subject preparation keeps its command identity across a moving read and pending result', async () => {
+  const body = { expectedHead: native('head'), operations: [{ op: 'insert' }] };
+  const key = 'retained-position';
+  const calls: { key: string; body: object }[] = [];
+  const saved = { occurrences: [native('position')] };
+  expect(await settleScopedSubjectSeed(async () => {
+    calls.push({ key, body });
+    if (calls.length === 1) throw new SeedApiError('composition change', 409, '{"code":"read_basis_changed"}');
+    if (calls.length === 2) throw new SeedApiError('composition change', 202, '{"code":"pending"}');
+    return saved;
+  })).toEqual(saved);
+  expect(calls).toEqual(Array.from({ length: 3 }, () => ({ key, body })));
+});
+
+test('scoped-subject preparation does not retry a denied grant or an unrelated conflict', async () => {
+  for (const [status, detail] of [[403, '{"code":"platform_closed"}'], [409, '{"code":"stale_head"}'],
+    [409, 'not a problem']] as const) {
+    const error = new SeedApiError('composition change', status, detail);
+    let calls = 0;
+    await expect(settleScopedSubjectSeed(async () => { calls++; throw error; })).rejects.toBe(error);
+    expect(calls).toBe(1);
+  }
+});
 
 test('ranking accounts stay off the plan\'s people and still make fifty distinct raters', async () => {
   const signIns: { email: string; password: string; name: string }[] = [];

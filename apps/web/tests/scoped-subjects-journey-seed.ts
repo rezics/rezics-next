@@ -4,8 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { SeedApiError } from '../../../scripts/dev/seed/api.ts';
-import { loadScopedSubjects } from '../../../scripts/dev/seed/scoped-subjects.ts';
+import { loadScopedSubjects, settleScopedSubjectSeed as settled } from '../../../scripts/dev/seed/scoped-subjects.ts';
 import type { ScopedSubjectApi } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
 import { scopedSubjectsFixture } from '../../../tests/qa/integration/scoped-subjects-support.ts';
 import { openActorPlatformGroup } from './g-838-catalogue.ts';
@@ -19,18 +18,6 @@ const web = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH, 'u
 const short = (ref: string) => ref.slice(-36);
 const h = await scopedSubjectsFixture();
 
-/** A command Access has admitted but whose owner has not applied answers 202; the same request under the same key settles it. */
-async function settled<T>(send: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await send();
-    } catch (error) {
-      const pending = error instanceof SeedApiError && [202, 503].includes(error.status);
-      if (!pending || attempt >= 120) throw error;
-      await Bun.sleep(1000);
-    }
-  }
-}
 const patient = (person: Parameters<typeof h.api>[0]): ScopedSubjectApi => {
   const api = h.api(person);
   return {

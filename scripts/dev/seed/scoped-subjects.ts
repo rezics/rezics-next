@@ -13,6 +13,24 @@ const short = (ref: string) => ref.slice(-36);
 const resource = (ref: string) => ({ kind: 'resource' as const, ref });
 const text = (lexical: string) => ({ kind: 'literal' as const, lexical,
   datatype: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString', language: 'en' });
+
+/** Restart an owner's moving read and replay pending commands with the same input and key,
+ * as SeedApi does. A stale write head or a denied capability remains a failure. */
+export async function settleScopedSubjectSeed<T>(send: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await send(); } catch (error) {
+      let movingRead = false;
+      if (error instanceof SeedApiError && error.status === 409) {
+        try { movingRead = (JSON.parse(error.detail) as { code?: string }).code === 'read_basis_changed'; }
+        catch { /* A non-problem response is not a moving read. */ }
+      }
+      const retry = error instanceof SeedApiError && ([202, 503].includes(error.status) || movingRead);
+      if (!retry || attempt >= 120) throw error;
+      await Bun.sleep(1000);
+    }
+  }
+}
+
 export interface ScopedSubjectRater { actor: string; api: ScopedSubjectApi }
 export interface ScopedSubjectPort {
   api: ScopedSubjectApi;

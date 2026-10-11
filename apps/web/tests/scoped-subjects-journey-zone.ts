@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SeedApiError } from '../../../scripts/dev/seed/api.ts';
-import type { ScopedSubjectManifest } from '../../../scripts/dev/seed/scoped-subjects.ts';
+import { settleScopedSubjectSeed as settled, type ScopedSubjectManifest } from '../../../scripts/dev/seed/scoped-subjects.ts';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { scopedSubjectsFixture } from '../../../tests/qa/integration/scoped-subjects-support.ts';
 import { manifest as zoneManifest, sourceDigest } from './g-849-records.ts';
@@ -26,17 +26,6 @@ const short = (ref: string) => ref.slice(-36);
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const h = await scopedSubjectsFixture();
-
-/** A command Main has admitted but not yet applied answers 202; the same request under the same key settles it. */
-async function settled<T>(send: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt += 1) {
-    try { return await send(); } catch (error) {
-      const pending = error instanceof SeedApiError && [202, 503].includes(error.status);
-      if (!pending || attempt >= 120) throw error;
-      await Bun.sleep(1000);
-    }
-  }
-}
 
 try {
   await (async () => {
@@ -191,13 +180,15 @@ try {
     // Theme approval needs the verified Account the fixture's own app presents, which the bare stack app does not.
     await openActorPlatformGroup(holder.principalId, 'executable-themes');
     await openActorPlatformGroup(reviewer.principalId, 'executable-themes');
-    const command = async <T>(method: string, path: string, person: typeof holder, body: object, status: number): Promise<T> => settled(async () => {
+    const command = async <T>(method: string, path: string, person: typeof holder, body: object, status: number): Promise<T> => {
       const key = randomUUID();
-      const response = await h.call(person, method, path, { ...body, ...method === 'PUT' ? {} : { idempotencyKey: key } }, key);
-      const text = await response.text();
-      if (response.status !== status) throw new SeedApiError(`${method} ${path}`, response.status, text);
-      return JSON.parse(text) as T;
-    });
+      return settled(async () => {
+        const response = await h.call(person, method, path, { ...body, ...method === 'PUT' ? {} : { idempotencyKey: key } }, key);
+        const text = await response.text();
+        if (response.status !== status) throw new SeedApiError(`${method} ${path}`, response.status, text);
+        return JSON.parse(text) as T;
+      });
+    };
     await command('POST', '/v1/themes', holder, { theme: short(theme), owner: holder.actor, hostZone: zone, actingSubject: holder.actor }, 201);
     const entry = `assets/${spec.routeSegment}/main.js`;
     const revision = await command<{ operation: string }>('POST', `/v1/themes/${short(theme)}/revisions`, holder,
