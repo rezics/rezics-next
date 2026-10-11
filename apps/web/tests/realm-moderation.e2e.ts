@@ -211,8 +211,12 @@ test('a moderator bans a member through Manage and restores their posting access
     const submit = localizedPath(spaceHref(realmId, 'community', ['submit']), 'en');
     const postTitle = `A member’s first moderation-safe post ${suffix}`;
     await member.page.goto(submit);
+    await interactive(member.page);
+    await expect(member.page.getByText('This community has not published rules yet.', { exact: true }))
+      .toBeVisible({ timeout: 30_000 });
     const workSearch = member.page.getByRole('searchbox', { name: 'Search for a Work' });
     await workSearch.fill(workTitle);
+    await expect(workSearch).toHaveValue(workTitle);
     const workOption = member.page.getByRole('button', { name: workTitle, exact: true });
     await expect(workOption).toBeVisible({ timeout: 60_000 });
     await workOption.click();
