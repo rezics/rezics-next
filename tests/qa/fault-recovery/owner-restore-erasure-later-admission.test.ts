@@ -258,7 +258,7 @@ test(
         const suppressionAfter = await readGraphErasureProof(copy.fuseki, copy.lineage,
           later.erasureId, later.erasureEpoch, [fixture.revisionId]);
         expect(suppressionAfter).toEqual(fixture.original);
-        expect((await copy.ready()).status).toBe(503);
+        expect((await copy.ready()).status).toBe(200);
         const retry = await copy.request(twoCutKey, undefined, body);
         expect(retry.status).toBe(200);
         expect(await retry.json()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
