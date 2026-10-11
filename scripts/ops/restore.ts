@@ -67,8 +67,8 @@ export type OperatorRestoreReleaseContext = Pick<RestoredContext, 'budget' | 'ap
   pools: Pick<RestoredContext['pools'], 'account' | 'access' | 'content'>;
 };
 export interface RestoreChecks<Context extends OperatorRestoreReleaseContext = RestoredContext> {
-  /** Exact samples, authorized/denied reads, deleted subjects, revoked grants,
-   * representative search and Account/library takeout; any failure keeps held. */
+  /** Pre-release exact samples, authorized/denied reads, deleted subjects,
+   * revoked grants, search and takeout; any failure keeps the target held. */
   verify(context: Context): Promise<void>;
   /** Read-only serving check after reconciliation and owner login release. */
   verifyServing(context: Context): Promise<void>;
@@ -101,8 +101,11 @@ export interface RestoreEvidence {
   project: string;
   state: 'held' | 'released' | 'verified';
   reconcileCompleted: boolean;
-  releaseObserved: boolean;
-  ownerLoginsEnabled?: boolean;
+  graphReleaseObserved: boolean;
+  accessReleaseObserved: boolean;
+  membershipPrepared: boolean;
+  loginEnabled: boolean;
+  servingVerified: boolean;
   phases: Record<string, number>;
   elapsedMs: number;
   admissionWaitMs: number;
@@ -110,6 +113,41 @@ export interface RestoreEvidence {
   failure?: string;
   targetStopped?: boolean;
   cleanupFailure?: string;
+}
+
+type RestoreTransition =
+  | 'reconcile-completed'
+  | 'graph-release-observed'
+  | 'access-release-observed'
+  | 'membership-prepared'
+  | 'login-enabled';
+
+function stateFromEvidence(evidence: RestoreEvidence): RestoreEvidence['state'] {
+  const released =
+    evidence.graphReleaseObserved && evidence.accessReleaseObserved && evidence.loginEnabled;
+  if (!released) return 'held';
+  return evidence.servingVerified ? 'verified' : 'released';
+}
+
+function updateEvidenceState(evidence: RestoreEvidence): void {
+  evidence.state = stateFromEvidence(evidence);
+}
+
+function evidenceFacts(evidence: RestoreEvidence): string {
+  return [
+    `reconciliation ${evidence.reconcileCompleted ? 'completed' : 'not completed'}`,
+    `graph release ${evidence.graphReleaseObserved ? 'observed' : 'not observed'}`,
+    `Access release ${evidence.accessReleaseObserved ? 'observed' : 'not observed'}`,
+    `membership preparation ${evidence.membershipPrepared ? 'prepared' : 'not confirmed'}`,
+    `LOGIN ${evidence.loginEnabled ? 'enabled' : 'not enabled'}`,
+    `serving verification ${evidence.servingVerified ? 'passed' : 'not passed'}`,
+  ].join('; ');
+}
+
+function failureDetail(error: unknown): string {
+  const phaseCause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+  const detail = phaseCause instanceof Error ? phaseCause.message : String(phaseCause);
+  return detail.replace(/; serving remains held$/, '');
 }
 
 function requireRestoreChecks(checks?: RestoreChecks): RestoreChecks {
@@ -124,17 +162,14 @@ function requireRestoreChecks(checks?: RestoreChecks): RestoreChecks {
   return checks;
 }
 
-/** The owner operation owns reconciliation and release. Its result records
- * reconciliation completion; the restored target's graph, Access generation,
- * and owner LOGIN state must still be observed before release is evidenced. */
+/** The owner operation owns reconciliation and release. Record reconciliation,
+ * graph, exact Access generation, membership and committed LOGIN independently. */
 export async function finishOperatorRestore<Context extends OperatorRestoreReleaseContext>(
   context: Context,
   checks: Pick<RestoreChecks<Context>, 'reconcile'>,
   idempotencyKey: string,
   beforeReconcile: () => void,
-  onCommittedTransition?: (
-    transition: 'reconcile-completed' | 'owner-logins-enabled' | 'release-observed',
-  ) => void,
+  onCommittedTransition?: (transition: RestoreTransition) => void,
 ): Promise<void> {
   await context.budget.phase('owner-reconciliation-api', async () => {
     beforeReconcile();
@@ -169,6 +204,7 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
     }`);
     if (graph.boolean !== true)
       throw new Error('Owner reconciliation did not release the restored graph');
+    onCommittedTransition?.('graph-release-observed');
     const fence = (
       await context.pools.access.query<{ open: boolean; generation: string }>(
         'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true',
@@ -179,6 +215,7 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       throw new Error(
         'Owner reconciliation did not release the captured Access recovery generation',
       );
+    onCommittedTransition?.('access-release-observed');
   });
   await context.budget.phase('membership-preparation', async () => {
     const deadline = Date.now() + Math.min(540_000, context.budget.remaining());
@@ -209,6 +246,7 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       )
         throw new Error('Native membership preparation did not confirm completion');
     }
+    onCommittedTransition?.('membership-prepared');
   });
   await context.budget.phase('epoch-advancement-and-logins', async () => {
     await context.pools.content.query(
@@ -217,25 +255,32 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
     await context.pools.account.query(
       'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
     );
-    const logins = await context.pools.account.query<{
-      rolname: string;
-      rolcanlogin: boolean;
-    }>(
-      "SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname IN ('account', 'access', 'content', 'relay')",
-    );
+    // The ALTER ROLE statement is the commit point; readback only confirms it.
+    onCommittedTransition?.('login-enabled');
+    let logins: { rows: { rolname: string; rolcanlogin: boolean }[] };
+    try {
+      logins = await context.pools.account.query<{
+        rolname: string;
+        rolcanlogin: boolean;
+      }>(
+        "SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname IN ('account', 'access', 'content', 'relay')",
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`LOGIN enabled, pg_roles readback failed: ${detail}`, { cause: error });
+    }
     const enabled = new Set(
       logins.rows.filter((role) => role.rolcanlogin).map((role) => role.rolname),
     );
     if (!['account', 'access', 'content', 'relay'].every((role) => enabled.has(role)))
-      throw new Error('Restored owner LOGIN roles were not observed enabled');
-    // LOGIN may commit even when the phase's post-work budget check fails.
-    onCommittedTransition?.('owner-logins-enabled');
-    onCommittedTransition?.('release-observed');
+      throw new Error(
+        'LOGIN enabled, but pg_roles readback did not confirm every restored owner role',
+      );
   });
 }
 
-/** Full recovery adds serving verification after the narrower operator finish.
- * Evidence records the target-observed release before readiness can fail. */
+/** Full recovery adds read-only serving verification after operator finish.
+ * Only a successful same-budget readiness check can make evidence verified. */
 export async function finishAndVerifyRestore<Context extends OperatorRestoreReleaseContext>(
   context: Context,
   checks: RestoreChecks<Context>,
@@ -245,44 +290,43 @@ export async function finishAndVerifyRestore<Context extends OperatorRestoreRele
 ): Promise<void> {
   try {
     await finishOperatorRestore(context, checks, idempotencyKey, beforeReconcile, (transition) => {
-      if (transition === 'reconcile-completed') {
-        evidence.reconcileCompleted = true;
-        return;
+      switch (transition) {
+        case 'reconcile-completed':
+          evidence.reconcileCompleted = true;
+          break;
+        case 'graph-release-observed':
+          evidence.graphReleaseObserved = true;
+          break;
+        case 'access-release-observed':
+          evidence.accessReleaseObserved = true;
+          break;
+        case 'membership-prepared':
+          evidence.membershipPrepared = true;
+          break;
+        case 'login-enabled':
+          evidence.loginEnabled = true;
+          break;
       }
-      if (transition === 'release-observed') {
-        evidence.releaseObserved = true;
-        evidence.state = 'released';
-        return;
-      }
-      evidence.ownerLoginsEnabled = true;
+      updateEvidenceState(evidence);
     });
   } catch (error) {
-    const phaseCause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
-    const detail = phaseCause instanceof Error ? phaseCause.message : String(phaseCause);
+    const detail = failureDetail(error);
     const deadlineExpired = /600-second budget|deadline/i.test(detail);
-    if (!evidence.releaseObserved) {
-      if (!evidence.reconcileCompleted) throw error;
-      throw new Error(
-        `Full restore ${deadlineExpired ? 'deadline exceeded' : 'finish failed'} after owner reconciliation completed with target release unobserved: ${detail.replaceAll('; serving remains held', '')}`,
-        { cause: error },
-      );
-    }
     throw new Error(
-      `Full restore ${deadlineExpired ? 'deadline exceeded' : 'finish failed'} after graph and Access release and owner LOGIN were observed: ${detail.replace(/; serving remains held$/, '')}`,
+      `Full restore ${deadlineExpired ? 'deadline exceeded' : 'finish failed'}; ${evidenceFacts(evidence)}: ${detail}`,
       { cause: error },
     );
   }
   try {
     await context.budget.phase('serving-verification', () => checks.verifyServing(context));
   } catch (error) {
-    const phaseCause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
-    const detail = phaseCause instanceof Error ? phaseCause.message : String(phaseCause);
     throw new Error(
-      `Full restore serving verification failed after graph and Access release and owner LOGIN were observed: ${detail.replace(/; serving remains held$/, '')}`,
+      `Full restore serving verification failed; ${evidenceFacts(evidence)}: ${failureDetail(error)}`,
       { cause: error },
     );
   }
-  evidence.state = 'verified';
+  evidence.servingVerified = true;
+  updateEvidenceState(evidence);
 }
 
 /** Preserve the restore failure while recording whether post-failure cleanup
@@ -292,6 +336,7 @@ export function recordRestoreFailure(
   error: unknown,
   stopTarget?: () => void,
 ): void {
+  updateEvidenceState(evidence);
   evidence.failure = error instanceof Error ? error.message : String(error);
   if (!stopTarget) return;
   try {
@@ -320,7 +365,11 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
     project: options.project,
     state: 'held',
     reconcileCompleted: false,
-    releaseObserved: false,
+    graphReleaseObserved: false,
+    accessReleaseObserved: false,
+    membershipPrepared: false,
+    loginEnabled: false,
+    servingVerified: false,
     phases: budget.phases,
     elapsedMs: 0,
     admissionWaitMs: 0,
