@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
   importDataset,
   intakeChunks,
@@ -10,10 +10,10 @@ import {
   nativeBatchSize,
 } from '../../../scripts/datasets/import.ts';
 import { localDatasetSession, type DatasetApi } from '../../../scripts/datasets/auth.ts';
-import { repository, sha256 } from '../../../scripts/datasets/store.ts';
+import { putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts';
 import { datasetStackMarker } from '../../../scripts/datasets/bootstrap.ts';
 import { acquireDatasetImportLock, datasetImportLockPath } from '../../../scripts/datasets/lock.ts';
-import type { DatasetRecord, DatasetSnapshot } from '../../../scripts/datasets/types.ts';
+import type { DatasetCoverEvidence, DatasetRecord, DatasetSnapshot, StoredImage } from '../../../scripts/datasets/types.ts';
 
 const roots: string[] = [];
 const root = () => {
@@ -27,6 +27,7 @@ afterEach(() => {
 });
 const iri = (value: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
+const uuid = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 const record = (key: string, native: DatasetRecord['native'] = 'source-only'): DatasetRecord => ({
   key,
   provider: 'vndb',
@@ -66,13 +67,23 @@ const snapshot = (records: DatasetRecord[]): DatasetSnapshot => ({
   images: [],
   captures: [],
 });
-function apiFixture() {
+function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'selection')[];
+  editorBeforeSelection?: boolean } = {}) {
   const requests: { path: string; key?: string; body: unknown }[] = [],
-    receipts = new Map<string, Record<string, unknown>>();
+    transfers: { path: string; digest: string; bytes: Buffer }[] = [],
+    receipts = new Map<string, Record<string, unknown>>(),
+    selectionReceipts = new Map<string, { status: number; body: Record<string, unknown> }>(),
+    uploads = new Map<string, { asset: string; digest: string; byteLength: number; activated?: Record<string, unknown> }>(),
+    currentSelections = new Map<string, string | null>(),
+    nativeWorks: string[] = [];
   let id = 1,
     lost = false,
-    loseAfterCommit = false;
+    loseAfterCommit = false,
+    lostCoverReplies = new Set<string>(),
+    coverRefusal: { status: number; code: string } | null = null,
+    editorBeforeSelection = options.editorBeforeSelection ?? false;
   const api: DatasetApi = {
+    wait: async () => {},
     async request(_method, path, body, key) {
       requests.push({ path, body, key });
       if (path === '/v1/catalogue/candidates')
@@ -84,11 +95,56 @@ function apiFixture() {
             candidates: [],
           },
         };
+      if (path.startsWith('/v1/resources/') && path.includes('?actingSubject=')) {
+        const target = `https://rezics.com/id/${path.split('/')[3]?.split('?')[0]}`;
+        const selection = currentSelections.get(target) ?? null;
+        return { status: 200, body: { profile: 'resource-summary-v1', status: 'available',
+          type: 'work', avatar: selection ? { kind: 'image', selection } : { kind: 'fallback' } } };
+      }
+      if (path === '/v1/media/uploads') {
+        const uploadBody = body as { sha256: string; byteLength: number; importedCover?: unknown };
+        if (coverRefusal && uploadBody.importedCover)
+          return { status: coverRefusal.status, body: { code: coverRefusal.code } };
+        if (!key) throw new Error('Every product mutation requires an idempotency key');
+        if (receipts.has(key)) return { status: 200, body: receipts.get(key)! };
+        const asset = uuid(7000 + id++), upload = uuid(7000 + id++);
+        const receipt = { asset, upload, uploadUrl: `/v1/media/uploads/${upload}/bytes`, stateHead: uuid(7100) };
+        uploads.set(upload, { asset, digest: uploadBody.sha256, byteLength: uploadBody.byteLength });
+        receipts.set(key, receipt);
+        if (loseCoverReply('reserve')) throw new Error('closed socket after reserve commit');
+        return { status: 201, body: receipt };
+      }
+      if (path.startsWith('/v1/resources/') && path.endsWith('/avatar')) {
+        if (!key) throw new Error('Every product mutation requires an idempotency key');
+        const saved = selectionReceipts.get(key);
+        if (saved) return { status: saved.status === 409 ? 409 : 200, body: saved.body };
+        const target = `https://rezics.com/id/${path.split('/')[3]}`;
+        if (editorBeforeSelection) {
+          currentSelections.set(target, uuid(7999));
+          editorBeforeSelection = false;
+        }
+        const selectionBody = body as { expectedSelection: string | null; asset: string };
+        const current = currentSelections.get(target) ?? null;
+        if (selectionBody.expectedSelection !== current) {
+          const stale = { status: 409, body: { code: 'stale_head', current } };
+          selectionReceipts.set(key, stale);
+          return stale;
+        }
+        const selection = uuid(7200 + id++);
+        currentSelections.set(target, selection);
+        const result = { status: 201, body: { target, selection, predecessor: current, replayed: false } };
+        selectionReceipts.set(key, result);
+        if (loseCoverReply('selection')) throw new Error('closed socket after selection commit');
+        return result;
+      }
       if (!key) throw new Error('Every product mutation requires an idempotency key');
       if (receipts.has(key)) return { status: 200, body: receipts.get(key)! };
       let receipt: Record<string, unknown>;
-      if (path === '/v1/sources/intakes')
-        receipt = { observation: { observation: iri(id++), record: iri(id++) }, replayed: false };
+      if (path === '/v1/sources/intakes') {
+        const intake = body as { rawBytesBase64?: string };
+        const bytes = intake.rawBytesBase64 ? Buffer.from(intake.rawBytesBase64, 'base64') : Buffer.alloc(0);
+        receipt = { observation: { observation: iri(id++), record: iri(id++), byteDigest: sha256(bytes) }, replayed: false };
+      }
       else if (path === '/v1/works') {
         expect(body).not.toHaveProperty('authoring');
         expect(body).toHaveProperty('candidateReceipt');
@@ -100,8 +156,12 @@ function apiFixture() {
         };
       } else if (path === '/v1/work-imports/bulk') {
         const items = (body as { items: { key: string; input: unknown }[] }).items;
-        receipt = { complete: true, partial: false, items: items.map(item => ({ key: item.key, status: 'succeeded',
-          receipt: { outcome: 'succeeded', work: iri(id++), mainVersion: iri(id++), workRevision: iri(id++), mainRevision: iri(id++) } })) };
+        receipt = { complete: true, partial: false, items: items.map(item => {
+          const work = iri(id++);
+          nativeWorks.push(work);
+          return { key: item.key, status: 'succeeded', receipt: { outcome: 'succeeded', work,
+            mainVersion: iri(id++), workRevision: iri(id++), mainRevision: iri(id++) } };
+        }) };
       } else if (path === '/v1/semantic/changes/bulk') {
         expect(body).not.toHaveProperty('target');
         const states = (body as { items: { properties: unknown[] }[] }).items;
@@ -117,16 +177,78 @@ function apiFixture() {
       }
       return { status: 201, body: receipt };
     },
+    async transfer(path, bytes) {
+      const upload = path.match(/^\/v1\/media\/uploads\/([0-9a-f-]{36})\/bytes$/)?.[1];
+      if (!upload || !uploads.has(upload)) return { status: 404, body: { code: 'upload_missing' } };
+      const current = uploads.get(upload)!;
+      const pinned = Buffer.from(bytes);
+      transfers.push({ path, digest: sha256(pinned), bytes: pinned });
+      expect(pinned.byteLength).toBe(current.byteLength);
+      expect(sha256(pinned)).toBe(current.digest);
+      if (current.activated) return { status: 200, body: { ...current.activated, replayed: true } };
+      const activated = { asset: current.asset, upload, status: 'activated', clearance: 'cleared',
+        representation: uuid(7300 + id++), revision: uuid(7400 + id++), replayed: false };
+      current.activated = activated;
+      if (loseCoverReply('transfer')) throw new Error('closed socket after transfer commit');
+      return { status: 201, body: activated };
+    },
   };
+  function loseCoverReply(step: 'reserve' | 'transfer' | 'selection'): boolean {
+    if (!options.loseCoverReplies?.includes(step) || lostCoverReplies.has(step)) return false;
+    lostCoverReplies.add(step);
+    return true;
+  }
   return {
     api,
     requests,
+    transfers,
     receipts,
+    uploads,
+    selectionReceipts,
+    currentSelections,
+    nativeWorks,
     loseNextResponse: () => {
       loseAfterCommit = true;
     },
+    useStaleSelection: () => { editorBeforeSelection = true; },
+    denyCovers: () => { coverRefusal = { status: 403, code: 'media_denied' }; },
+    suppressCovers: () => { coverRefusal = { status: 403, code: 'source_cover_suppressed' }; },
+    makeCoversUnavailable: () => { coverRefusal = { status: 503, code: 'media_unavailable' }; },
   };
 }
+
+function coverSnapshot(directory: string, sourceRecord: DatasetRecord, source?: Partial<DatasetCoverEvidence>) {
+  const bytes = Buffer.from('pinned dataset cover bytes\u0000with exact digest');
+  const captureUrl = 'https://images.example.test/covers/pinned.png';
+  const evidence: DatasetCoverEvidence = {
+    provider: sourceRecord.provider,
+    namespace: 'subject',
+    externalId: `canonical-${sourceRecord.externalId}`,
+    revision: null,
+    captureUrl,
+    recordDigest: sha256(`captured-record:${sourceRecord.key}`),
+    field: '/images/common',
+    sourceName: 'Reviewed source',
+    sourceUrl: `https://catalogue.example.test/record/${sourceRecord.externalId}`,
+    holder: null,
+    ...source,
+  };
+  const image: StoredImage = {
+    record: sourceRecord.key,
+    role: 'cover',
+    url: captureUrl,
+    sourceEvidence: evidence,
+    captureRole: 'cover',
+    capture: { url: captureUrl, digest: putBlob(directory, bytes), bytes: bytes.length,
+      mediaType: 'image/png', fetchedAt: '2026-10-02T00:00:00Z', etag: null, lastModified: null },
+    missing: false,
+  };
+  const value = snapshot([sourceRecord]);
+  value.images = [image];
+  value.sources[0]!.images = [image];
+  return { snapshot: value, bytes, image, evidence };
+}
+
 const options = (api: DatasetApi) => ({
   api,
   actingSubject: iri(9000),
@@ -720,6 +842,185 @@ describe('independent public-API dataset import', () => {
     });
     expect(partial.completed).toBe(false);
   });
+
+  test('cover import resumes lost reserve transfer and selection replies', async () => {
+    const fixture = apiFixture({ loseCoverReplies: ['reserve', 'transfer', 'selection'] });
+    const directory = root();
+    const work = record('subject-715', 'work');
+    work.provider = 'bangumi';
+    work.kind = 'subject';
+    work.externalId = '715';
+    work.sourceUrl = 'https://bgm.tv/subject/715';
+    work.data = { description: 'long source record '.repeat(8_000), nested: { rank: 1 } };
+    const cover = coverSnapshot(directory, work, {
+      provider: 'bangumi', namespace: 'subject', externalId: '715', sourceName: 'Bangumi',
+      sourceUrl: 'https://bgm.tv/subject/715', revision: null,
+    });
+
+    const first = await importDataset(directory, cover.snapshot, options(fixture.api));
+    await importDataset(directory, cover.snapshot, options(fixture.api));
+
+    expect(first.completed).toBe(true);
+    expect(first.limitations.some(value => value.includes('cover pending'))).toBe(false);
+    expect(fixture.nativeWorks).toHaveLength(1);
+    const reserveCalls = fixture.requests.filter(call => call.path === '/v1/media/uploads');
+    expect(reserveCalls.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(reserveCalls.map(call => call.key)).size).toBe(1);
+    const reserveBody = reserveCalls[0]!.body as { importedCover: Record<string, unknown> };
+    const importedCover = reserveBody.importedCover as {
+      targetWork: string;
+      source: { record: string; observation: string; observationDigest: string;
+        datasetSnapshotDigest: string; recordDigest: string; externalId: string; sourceRevision: string | null };
+      image: { captureDigest: string; byteLength: number; mediaType: string };
+      originalDigest: string;
+    };
+    expect(importedCover.targetWork).toBe(fixture.nativeWorks[0]);
+    expect(importedCover.source.externalId).toBe('715');
+    expect(importedCover.source.sourceRevision).toBeNull();
+    expect(importedCover.source.datasetSnapshotDigest).toBe(cover.snapshot.digest);
+    expect(importedCover.source.recordDigest).toBe(cover.evidence.recordDigest);
+    expect(importedCover.image.captureDigest).toBe(cover.image.capture!.digest);
+    expect(importedCover.originalDigest).toBe(cover.image.capture!.digest);
+    expect(importedCover.source.observationDigest).not.toBe(importedCover.image.captureDigest);
+    expect(importedCover.source.record).toMatch(/^https:\/\/rezics\.com\/id\//);
+    expect(importedCover.source.observation).toMatch(/^https:\/\/rezics\.com\/id\//);
+
+    const coverEvidenceCall = fixture.requests.find(call => call.path === '/v1/sources/intakes'
+      && (call.body as { coverage?: { scope?: string } }).coverage?.scope === 'cover-evidence')!;
+    const evidenceBody = coverEvidenceCall.body as {
+      namespace: string; externalId: string; sourceRevision: string | null;
+      coverage: { scope: string; complete: boolean }; rawBytesBase64: string;
+    };
+    const envelopeBytes = Buffer.from(evidenceBody.rawBytesBase64, 'base64');
+    const envelope = JSON.parse(envelopeBytes.toString()) as { profile: string; image: { captureDigest: string } };
+    expect(evidenceBody).toMatchObject({ namespace: 'subject', externalId: '715', sourceRevision: null,
+      coverage: { scope: 'cover-evidence', complete: false } });
+    expect(envelope.profile).toBe('source-cover-evidence-v1');
+    expect(envelope.image.captureDigest).toBe(cover.image.capture!.digest);
+    expect(sha256(envelopeBytes)).toBe(importedCover.source.observationDigest);
+
+    const recordParts = fixture.requests.filter(call => call.path === '/v1/sources/intakes'
+      && (call.body as { namespace?: string }).namespace === 'subject-dataset-part')
+      .map(call => Buffer.from((call.body as { rawBytesBase64: string }).rawBytesBase64, 'base64'));
+    const reconstructed = reconstructIntake(recordParts) as { record: DatasetRecord };
+    expect((reconstructed.record.data.description as string).length).toBeGreaterThan(65_536);
+    expect(fixture.transfers.length).toBeGreaterThanOrEqual(3);
+    for (const sent of fixture.transfers) {
+      expect(sent.bytes).toEqual(cover.bytes);
+      expect(sent.digest).toBe(cover.image.capture!.digest);
+      expect(sent.path).toMatch(/^\/v1\/media\/uploads\/[0-9a-f-]{36}\/bytes$/);
+    }
+    const selectionCalls = fixture.requests.filter(call => call.path.endsWith('/avatar'));
+    expect(selectionCalls.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(selectionCalls.map(call => call.key)).size).toBe(1);
+    expect(fixture.requests.filter(call => call.path.includes('actingSubject=')).length).toBe(1);
+    expect(fixture.requests.some(call => call.path === cover.evidence.captureUrl)).toBe(false);
+
+    const requestDirectory = join(dirname(first.receiptFile), basename(first.receiptFile, '.json'), 'requests');
+    const journalEntries = readdirSync(requestDirectory).filter(file => file.endsWith('.json'))
+      .map(file => readFileSync(join(requestDirectory, file), 'utf8')).join('\n');
+    expect(journalEntries).not.toContain(cover.bytes.toString('base64'));
+    expect(journalEntries).toContain(cover.image.capture!.digest);
+    expect(journalEntries).toContain(`raw/blobs/${cover.image.capture!.digest}`);
+  });
+
+  test('cover pending denied restricted and unavailable outcomes preserve imported facts', async () => {
+    for (const outcome of ['denied', 'restricted', 'unavailable'] as const) {
+      const fixture = apiFixture();
+      if (outcome === 'denied') fixture.denyCovers();
+      if (outcome === 'restricted') fixture.suppressCovers();
+      if (outcome === 'unavailable') fixture.makeCoversUnavailable();
+      const directory = root();
+      const work = record(`facts-${outcome}`, 'work');
+      const cover = coverSnapshot(directory, work);
+      const result = await importDataset(directory, cover.snapshot, options(fixture.api));
+
+      expect(result.completed).toBe(true);
+      expect(result.nativeRecords).toBeGreaterThan(0);
+      expect(result.limitations.some(value => value.includes('cover pending'))).toBe(true);
+      const retainedFacts = fixture.requests.filter(call => call.path === '/v1/sources/intakes'
+        && (call.body as { coverage?: { scope?: string } }).coverage?.scope !== 'cover-evidence');
+      expect(retainedFacts.length).toBeGreaterThanOrEqual(2);
+      expect(fixture.requests.some(call => call.path === '/v1/media/uploads')).toBe(true);
+      expect(fixture.transfers).toHaveLength(0);
+      expect(fixture.requests.some(call => call.path.endsWith('/avatar'))).toBe(false);
+    }
+  });
+
+  test('a configured second provider uses the identical cover API sequence', async () => {
+    const fixture = apiFixture();
+    const directory = root();
+    const work = record('musicbrainz-work', 'work');
+    work.provider = 'musicbrainz';
+    work.kind = 'recording';
+    work.externalId = 'requested-recording-id';
+    work.sourceUrl = 'https://musicbrainz.org/recording/requested-recording-id';
+    const cover = coverSnapshot(directory, work, {
+      provider: 'musicbrainz', namespace: 'recording', externalId: 'elected-recording-id',
+      revision: 'release-revision-17', sourceName: 'MusicBrainz',
+      sourceUrl: 'https://musicbrainz.org/recording/elected-recording-id',
+    });
+    await importDataset(directory, cover.snapshot, options(fixture.api));
+
+    const reservation = fixture.requests.find(call => call.path === '/v1/media/uploads')!.body as {
+      importedCover: { targetWork: string; source: { provider: string; namespace: string; externalId: string;
+        sourceRevision: string | null; href: string } };
+    };
+    expect(reservation.importedCover).toMatchObject({
+      targetWork: fixture.nativeWorks[0],
+      source: { provider: 'musicbrainz', namespace: 'recording', externalId: 'elected-recording-id',
+        sourceRevision: 'release-revision-17', href: 'https://musicbrainz.org/recording/elected-recording-id' },
+    });
+    expect(fixture.transfers).toHaveLength(1);
+    expect(fixture.requests.filter(call => call.path === '/v1/media/uploads')).toHaveLength(1);
+    expect(fixture.requests.filter(call => call.path.endsWith('/avatar'))).toHaveLength(1);
+    expect(fixture.requests.some(call => call.path.includes('requested-recording-id'))).toBe(false);
+  });
+
+  test('import retry never replaces an editor cover after stale selection', async () => {
+    const fixture = apiFixture({ editorBeforeSelection: true });
+    const directory = root();
+    const work = record('stale-cover-work', 'work');
+    const cover = coverSnapshot(directory, work);
+    const first = await importDataset(directory, cover.snapshot, options(fixture.api));
+    expect(first.completed).toBe(true);
+    expect(first.limitations.some(value => value.includes('stale selection'))).toBe(true);
+    const nativeWork = fixture.nativeWorks[0]!;
+    const editorSelection = uuid(7999);
+    expect(fixture.currentSelections.get(nativeWork)).toBe(editorSelection);
+
+    const second = await importDataset(directory, cover.snapshot, options(fixture.api));
+    const selectionCalls = fixture.requests.filter(call => call.path.endsWith('/avatar'));
+    expect(second.limitations.some(value => value.includes('stale selection'))).toBe(true);
+    expect(selectionCalls).toHaveLength(2);
+    expect(new Set(selectionCalls.map(call => call.key)).size).toBe(1);
+    expect(selectionCalls.every(call => (call.body as { expectedSelection: string | null }).expectedSelection === null)).toBe(true);
+    expect(fixture.requests.filter(call => call.path.includes('actingSubject=')).length).toBe(1);
+    expect(fixture.currentSelections.get(nativeWork)).toBe(editorSelection);
+  });
+
+  test('a refused re-import of a taken-down cover leaves the facts and reports pending', async () => {
+    const fixture = apiFixture();
+    const directory = root();
+    const work = record('taken-down-cover-work', 'work');
+    const cover = coverSnapshot(directory, work);
+    const first = await importDataset(directory, cover.snapshot, options(fixture.api));
+    expect(first.limitations.some(value => value.includes('cover pending'))).toBe(false);
+    expect(fixture.transfers).toHaveLength(1);
+    const factIntakesBefore = fixture.requests.filter(call => call.path === '/v1/sources/intakes'
+      && (call.body as { coverage?: { scope?: string } }).coverage?.scope !== 'cover-evidence').length;
+    const selected = fixture.requests.filter(call => call.path.endsWith('/avatar')).length;
+
+    fixture.suppressCovers();
+    const retry = await importDataset(directory, cover.snapshot, options(fixture.api));
+
+    expect(retry.completed).toBe(true);
+    expect(retry.limitations.some(value => value.includes('cover pending') && value.includes('restricted'))).toBe(true);
+    expect(fixture.requests.filter(call => call.path === '/v1/sources/intakes'
+      && (call.body as { coverage?: { scope?: string } }).coverage?.scope !== 'cover-evidence')).toHaveLength(factIntakesBefore);
+    expect(fixture.transfers).toHaveLength(1);
+    expect(fixture.requests.filter(call => call.path.endsWith('/avatar'))).toHaveLength(selected);
+  });
 });
 
 test('development auth registers and installs a public client, consents and exchanges PKCE without owner-store access', async () => {
@@ -746,6 +1047,8 @@ test('development auth registers and installs a public client, consents and exch
   );
   const prior = globalThis.fetch,
     paths: string[] = [];
+  let tokenExchangeCount = 0,
+    rejectFirstTransfer = true;
   const response = (body: unknown, status = 200, headers?: HeadersInit) =>
     Response.json(body, { status, headers });
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -786,7 +1089,19 @@ test('development auth registers and installs a public client, consents and exch
     if (url.pathname === '/api/auth/oauth2/token') {
       const body = new URLSearchParams(String(init?.body));
       expect(body.get('code_verifier')?.length).toBeGreaterThan(30);
+      tokenExchangeCount++;
       return response({ access_token: 'mock-access-token-not-written' });
+    }
+    if (url.pathname === `/v1/media/uploads/${uuid(7654)}/bytes`) {
+      expect(url.origin).toBe('http://127.0.0.1:3301');
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer mock-access-token-not-written');
+      expect(new Headers(init?.headers).get('content-type')).toBe('application/octet-stream');
+      expect(Buffer.from(init?.body as Uint8Array)).toEqual(Buffer.from('binary cover bytes'));
+      if (rejectFirstTransfer) {
+        rejectFirstTransfer = false;
+        return response({ code: 'expired_token' }, 401);
+      }
+      return response({ status: 'activated' }, 201);
     }
     if (url.pathname === '/v1/agents') return response({ agent: iri(7777), state: 'active' }, 201);
     throw new Error(`Unexpected auth route ${url.pathname}`);
@@ -801,6 +1116,12 @@ test('development auth registers and installs a public client, consents and exch
   try {
     const session = await localDatasetSession(directory, 'operator');
     expect(session.actingSubject).toBe(iri(7777));
+    const transfer = await session.api.transfer!(`/v1/media/uploads/${uuid(7654)}/bytes`,
+      Buffer.from('binary cover bytes'));
+    expect(transfer).toMatchObject({ status: 201, body: { status: 'activated' } });
+    expect(tokenExchangeCount).toBe(2);
+    await expect(session.api.transfer!('https://images.example.test/cover.png', Buffer.from('secret')))
+      .rejects.toThrow('Main upload destination');
     expect(paths).not.toContain('/api/auth/admin/oauth2/create-client');
     expect(readFileSync(clientPath, 'utf8')).not.toContain('mock-access-token-not-written');
     expect(readFileSync(clientPath, 'utf8')).not.toContain('mock-password-only');

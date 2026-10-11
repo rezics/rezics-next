@@ -7,13 +7,16 @@ import {
   type DatasetSession,
 } from './auth.ts';
 import { replayCommand } from '../lib/command-journal.ts';
-import { atomicJson, canonical, sha256 } from './store.ts';
+import { atomicJson, canonical, sha256, verifiedBlob } from './store.ts';
 import { checkedComponentState } from '../../services/main/src/modules/semantic/change.ts';
 import { acquireDatasetImportLock } from './lock.ts';
 import type { DatasetEdge, DatasetRecord, DatasetSnapshot } from './types.ts';
 
 const SCHEMA = 'https://schema.org/';
 const RV = 'https://rezics.com/vocab/';
+const MAX_COVER_BYTES = 4 * 1024 * 1024;
+const SHA256 = /^[a-f0-9]{64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const short = (id: string) => id.slice(-36);
 const clean = (value: string) =>
   value
@@ -134,6 +137,9 @@ interface JournalEntry {
   path: string;
   body: unknown;
   result?: Record<string, unknown>;
+  /** Last Main response for a resumable media step, including refusals. */
+  responseStatus?: number;
+  phase?: 'cover-evidence' | 'cover-reserve' | 'cover-transfer' | 'cover-selection' | 'cover-read';
   /** Ordered source/child receipt keys bound to an atomic native batch. */
   itemKeys?: string[];
   receiptOnly?: boolean;
@@ -202,10 +208,28 @@ async function request(
   body?: unknown,
   key?: string,
 ) {
+  const response = await responseWithRetry(api, method, path,
+    () => api.request(method, path, body, key));
+  if (response.status === 202)
+    throw new Error(`${method} ${path}: remains pending; rerun with the retained checkpoint`);
+  if (response.status >= 300)
+    throw new DatasetApiError(method, path, response.status, response.body);
+  return response.body;
+}
+
+type ApiResponse = { status: number; body: Record<string, unknown> };
+
+/** Retries uncertain replies with the same exact request identity and body. */
+async function responseWithRetry(
+  api: DatasetApi,
+  method: 'GET' | 'POST' | 'PUT',
+  path: string,
+  send: () => Promise<ApiResponse>,
+): Promise<ApiResponse> {
   for (let attempt = 0; attempt < 8; attempt++) {
-    let response;
+    let response: ApiResponse;
     try {
-      response = await api.request(method, path, body, key);
+      response = await send();
     } catch (cause) {
       if (attempt === 7)
         throw new Error(`${method} ${path}: response lost; rerun to replay the recorded request`, {
@@ -228,13 +252,27 @@ async function request(
         Bun.sleep(Math.min(4_000, 250 * 2 ** attempt)));
       continue;
     }
-    if (response.status === 202)
-      throw new Error(`${method} ${path}: remains pending; rerun with the retained checkpoint`);
-    if (response.status >= 300)
-      throw new DatasetApiError(method, path, response.status, response.body);
-    return response.body;
+    return response;
   }
   throw new Error(`${method} ${path}: remains pending; rerun with the retained checkpoint`);
+}
+
+async function transferWithRetry(api: DatasetApi, path: string, bytes: Uint8Array): Promise<ApiResponse> {
+  if (!api.transfer) throw new Error('Dataset API has no bounded Main media transfer');
+  return responseWithRetry(api, 'PUT', path, () => api.transfer!(path, bytes));
+}
+
+function responseReason(response: ApiResponse): string {
+  const code = typeof response.body.code === 'string' ? response.body.code : '';
+  const reason = typeof response.body.reason === 'string' ? response.body.reason : '';
+  if (code === 'stale_head') return 'stale selection';
+  if (/suppress|restrict|fenc/i.test(code)) return `restricted${code ? ` (${code})` : ''}`;
+  if ([401, 403].includes(response.status)) return `denied${code ? ` (${code})` : ''}`;
+  if ([502, 503, 504].includes(response.status)) return `owner unavailable${code ? ` (${code})` : ''}`;
+  if (response.status === 413) return 'cover exceeds the Main upload limit';
+  if (reason) return `upload refused (${reason})`;
+  if (code) return `${code} (HTTP ${response.status})`;
+  return `HTTP ${response.status}`;
 }
 function sourceEvidence(record: DatasetRecord) {
   return {
@@ -514,6 +552,59 @@ export async function importDataset(
         ...(itemKeys ? { fields: { itemKeys } } : {}) },
       entry => request(api, entry.method, entry.path, entry.body ?? undefined,
         entry.method === 'GET' ? undefined : key));
+    };
+    /** Cover writes use the same immutable request journal, but are always replayed
+     * against current owner fences before their prior receipt is accepted. */
+    const coverCall = async (label: string, phase: JournalEntry['phase'],
+      method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<ApiResponse> => {
+      let entry = journal.entries[label];
+      if (entry) {
+        if (entry.method !== method || entry.path !== path
+          || canonical(entry.body ?? null) !== canonical(body ?? null)) {
+          throw new Error(`Dataset cover checkpoint changed: ${label}`);
+        }
+      } else {
+        entry = { method, path, body: body ?? null, phase };
+        journal.entries[label] = entry;
+        saveEntry(label, entry);
+        save(true);
+      }
+      entry.phase = phase;
+      const key = method === 'GET' ? undefined : `dataset:${sha256(`${context}:${label}`)}`;
+      const response = await responseWithRetry(api, method, path,
+        () => api.request(method, path, body, key));
+      entry.responseStatus = response.status;
+      entry.result = response.body;
+      saveEntry(label, entry);
+      save(true);
+      return response;
+    };
+    /** Transfer entries checkpoint only a local blob reference and digest. */
+    const coverTransfer = async (label: string, path: string, digest: string,
+      byteLength: number): Promise<ApiResponse> => {
+      const intent = { blobDigest: digest, blobReference: `raw/blobs/${digest}`, byteLength };
+      let entry = journal.entries[label];
+      if (entry) {
+        if (entry.method !== 'PUT' || entry.path !== path
+          || canonical(entry.body ?? null) !== canonical(intent)) {
+          throw new Error(`Dataset cover transfer checkpoint changed: ${label}`);
+        }
+      } else {
+        entry = { method: 'PUT', path, body: intent, phase: 'cover-transfer' };
+        journal.entries[label] = entry;
+        saveEntry(label, entry);
+        save(true);
+      }
+      entry.phase = 'cover-transfer';
+      const bytes = verifiedBlob(root, digest);
+      if (bytes.byteLength !== byteLength || sha256(bytes) !== digest)
+        throw new Error(`Frozen cover bytes changed: ${digest}`);
+      const response = await transferWithRetry(api, path, bytes);
+      entry.responseStatus = response.status;
+      entry.result = response.body;
+      saveEntry(label, entry);
+      save(true);
+      return response;
     };
     const retained = async (label: string, record: DatasetRecord, value: unknown) => {
       const parts = intakeChunks(value),
@@ -1022,6 +1113,240 @@ export async function importDataset(
         note(
           'Elected Work-to-Work relationships are labelled evidence resources, preserving direction, source identity and qualifiers. Accepted classifications, cross-provider merges, native episode compositions and exact realizations require their existing review/owner flows. Every remaining relationship is retained as complete source evidence; it is not expanded into artificial native graph records.',
         );
+      }
+      const selectedKeys = new Set(selected.map(record => record.key));
+      for (const image of snapshot.images) {
+        if (image.captureRole !== 'cover') continue;
+        const record = byKey.get(image.record);
+        if (!record || !selectedKeys.has(image.record)) continue;
+        const pending = (reason: string) => note(`${record.key}: cover pending (${reason})`);
+        const mapped = journal.native[image.record];
+        if (mapped?.kind !== 'work' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(mapped.id)) {
+          pending('native Work receipt unavailable');
+          continue;
+        }
+        const source = image.sourceEvidence;
+        if (!source) {
+          pending('source evidence unavailable');
+          continue;
+        }
+        const capture = image.capture;
+        if (image.missing || image.unavailable || !capture) {
+          pending(image.missing ? 'capture missing' : 'capture unavailable');
+          continue;
+        }
+        if (!SHA256.test(snapshot.digest) || !SHA256.test(capture.digest) || !SHA256.test(source.recordDigest)
+          || typeof source.provider !== 'string' || !source.provider
+          || typeof source.namespace !== 'string' || !source.namespace
+          || typeof source.externalId !== 'string' || !source.externalId
+          || typeof source.sourceName !== 'string' || !source.sourceName
+          || typeof source.field !== 'string' || (!source.field.startsWith('/') && source.field !== '')
+          || /~(?![01])/.test(source.field) || typeof source.sourceUrl !== 'string'
+          || !/^https:\/\//.test(source.sourceUrl)
+          || (source.revision !== null && typeof source.revision !== 'string')
+          || typeof source.captureUrl !== 'string' || typeof image.url !== 'string'
+          || source.captureUrl !== image.url || capture.url !== source.captureUrl
+          || typeof capture.mediaType !== 'string' || !capture.mediaType.startsWith('image/')
+          || !Number.isSafeInteger(capture.bytes) || capture.bytes < 1
+          || capture.bytes > MAX_COVER_BYTES) {
+          pending(capture.bytes > MAX_COVER_BYTES ? 'capture exceeds the Work cover limit' : 'cover descriptor is invalid');
+          continue;
+        }
+        let frozenBytes: Buffer;
+        try {
+          frozenBytes = verifiedBlob(root, capture.digest);
+        } catch {
+          pending('frozen capture is unavailable or corrupt');
+          continue;
+        }
+        if (frozenBytes.byteLength !== capture.bytes || sha256(frozenBytes) !== capture.digest) {
+          pending('frozen capture digest differs');
+          continue;
+        }
+        const holderEvidence = source.holder
+          ? { name: source.holder.name, fieldLocator: source.holder.field }
+          : null;
+        if (holderEvidence && (typeof holderEvidence.name !== 'string' || !holderEvidence.name
+          || typeof holderEvidence.fieldLocator !== 'string'
+          || (!holderEvidence.fieldLocator.startsWith('/') && holderEvidence.fieldLocator !== '')
+          || /~(?![01])/.test(holderEvidence.fieldLocator))) {
+          pending('holder evidence is invalid');
+          continue;
+        }
+        const envelope = {
+          profile: 'source-cover-evidence-v1',
+          source: {
+            provider: source.provider,
+            namespace: source.namespace,
+            externalId: source.externalId,
+            sourceRevision: source.revision,
+            component: null,
+            datasetSnapshotDigest: snapshot.digest,
+            recordDigest: source.recordDigest,
+            fieldLocator: source.field,
+            displayName: source.sourceName,
+            href: source.sourceUrl,
+          },
+          image: {
+            captureUrl: source.captureUrl,
+            captureDigest: capture.digest,
+            byteLength: capture.bytes,
+            mediaType: capture.mediaType,
+          },
+          holderEvidence,
+        };
+        const envelopeBytes = Buffer.from(canonical(envelope));
+        if (envelopeBytes.byteLength > 65_536) {
+          pending('cover evidence exceeds the Source intake limit');
+          continue;
+        }
+        const candidate = sha256(canonical({
+          record: image.record,
+          provider: source.provider,
+          namespace: source.namespace,
+          externalId: source.externalId,
+          field: source.field,
+          captureDigest: capture.digest,
+        }));
+        const label = `cover:${candidate}:${mapped.id}`;
+        const evidenceBody = {
+          profile: 'source-manual-intake-v1',
+          provider: source.provider,
+          namespace: source.namespace,
+          externalId: source.externalId,
+          sourceRevision: source.revision,
+          mediaType: 'application/json',
+          retention: 'retained',
+          rawBytesBase64: envelopeBytes.toString('base64'),
+          coverage: { scope: 'cover-evidence', complete: false, omittedFields: ['description'] },
+          rightsEvidence: sourceEvidence(record),
+        };
+        try {
+          const evidenceReply = await coverCall(`${label}:evidence`, 'cover-evidence', 'POST',
+            '/v1/sources/intakes', evidenceBody);
+          if (evidenceReply.status >= 300) {
+            pending(responseReason(evidenceReply));
+            continue;
+          }
+          const retained = evidenceReply.body.observation as Record<string, unknown> | undefined;
+          if (!retained || typeof retained.byteDigest !== 'string'
+            || retained.byteDigest !== sha256(envelopeBytes)) {
+            pending('Source did not return the retained cover evidence digest');
+            continue;
+          }
+          const sourceRecordId = nativeId(retained, 'record');
+          const sourceObservationId = nativeId(retained, 'observation');
+          const provenance = {
+            format: 'media-imported-cover-v1',
+            targetWork: mapped.id,
+            source: {
+              record: sourceRecordId,
+              component: null,
+              observation: sourceObservationId,
+              provider: source.provider,
+              namespace: source.namespace,
+              externalId: source.externalId,
+              sourceRevision: source.revision,
+              observationDigest: retained.byteDigest,
+              datasetSnapshotDigest: snapshot.digest,
+              recordDigest: source.recordDigest,
+              fieldLocator: source.field,
+              displayName: source.sourceName,
+              href: source.sourceUrl,
+            },
+            image: {
+              captureUrl: source.captureUrl,
+              captureDigest: capture.digest,
+              byteLength: capture.bytes,
+              mediaType: capture.mediaType,
+            },
+            originalDigest: capture.digest,
+            holderEvidence,
+          };
+          const reserveBody = {
+            profile: 'media-image-upload-v1',
+            asset: null,
+            mediaType: capture.mediaType,
+            byteLength: capture.bytes,
+            sha256: capture.digest,
+            disclosure: 'public',
+            actingSubject,
+            importedCover: provenance,
+          };
+          const reserve = await coverCall(`${label}:reserve`, 'cover-reserve', 'POST',
+            '/v1/media/uploads', reserveBody);
+          if (reserve.status >= 300) {
+            pending(responseReason(reserve));
+            continue;
+          }
+          const asset = reserve.body.asset;
+          const upload = reserve.body.upload;
+          const uploadUrl = reserve.body.uploadUrl;
+          if (typeof asset !== 'string' || !UUID.test(asset)
+            || typeof upload !== 'string' || !UUID.test(upload)
+            || uploadUrl !== `/v1/media/uploads/${upload}/bytes`) {
+            pending('Main returned an invalid upload reservation');
+            continue;
+          }
+          const transferred = await coverTransfer(`${label}:transfer`, uploadUrl, capture.digest, capture.bytes);
+          if (transferred.status >= 300 || transferred.body.status !== 'activated'
+            || transferred.body.clearance === 'rejected'
+            || typeof transferred.body.representation !== 'string') {
+            pending(responseReason(transferred));
+            continue;
+          }
+          const selectionLabel = `${label}:selection`;
+          const priorSelection = journal.entries[selectionLabel];
+          let selectionBody: Record<string, unknown>;
+          if (priorSelection) {
+            if (!priorSelection.body || typeof priorSelection.body !== 'object'
+              || Array.isArray(priorSelection.body)) {
+              pending('saved cover selection intent is invalid');
+              continue;
+            }
+            selectionBody = priorSelection.body as Record<string, unknown>;
+            if (selectionBody.profile !== 'resource-avatar-selection-v1'
+              || selectionBody.asset !== asset || selectionBody.actingSubject !== actingSubject
+              || (selectionBody.expectedSelection !== null
+                && (typeof selectionBody.expectedSelection !== 'string' || !UUID.test(selectionBody.expectedSelection)))) {
+              pending('saved cover selection intent does not match its asset or target');
+              continue;
+            }
+          } else {
+            const read = await coverCall(`${label}:read`, 'cover-read', 'GET',
+              `/v1/resources/${short(mapped.id)}?actingSubject=${encodeURIComponent(actingSubject)}`);
+            if (read.status >= 300 || read.body.status !== 'available') {
+              pending(read.status >= 300 ? responseReason(read) : 'Work summary unavailable');
+              continue;
+            }
+            const avatar = read.body.avatar as Record<string, unknown> | undefined;
+            let expectedSelection: string | null;
+            if (avatar?.kind === 'fallback') expectedSelection = null;
+            else if (avatar?.kind === 'image' && typeof avatar.selection === 'string'
+              && UUID.test(avatar.selection)) expectedSelection = avatar.selection;
+            else {
+              pending('current Work cover selection is unavailable');
+              continue;
+            }
+            selectionBody = {
+              profile: 'resource-avatar-selection-v1',
+              expectedSelection,
+              asset,
+              actingSubject,
+            };
+          }
+          const selectedCover = await coverCall(selectionLabel, 'cover-selection', 'PUT',
+            `/v1/resources/${short(mapped.id)}/avatar`, selectionBody);
+          if (selectedCover.status === 409 && selectedCover.body.code === 'stale_head') {
+            pending('stale selection; the current editor cover was preserved');
+            continue;
+          }
+          if (selectedCover.status >= 300 || typeof selectedCover.body.selection !== 'string') {
+            pending(selectedCover.status >= 300 ? responseReason(selectedCover) : 'Main returned no selection receipt');
+          }
+        } catch (error) {
+          pending(error instanceof Error ? error.message : 'cover API unavailable');
+        }
       }
       journal.completed = selected.length === records.length;
       save(true);

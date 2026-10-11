@@ -24,6 +24,8 @@ export interface DatasetApi {
     body?: unknown,
     key?: string,
   ): Promise<{ status: number; body: Record<string, unknown> }>;
+  /** Main-owned upload transfer. The body is sent as bounded raw bytes, never JSON. */
+  transfer?(path: string, bytes: Uint8Array): Promise<{ status: number; body: Record<string, unknown> }>;
 }
 export interface DatasetSession {
   api: DatasetApi;
@@ -233,6 +235,34 @@ export async function localDatasetSession(
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
+      let response = await send();
+      if (response.status === 401) {
+        await response.body?.cancel();
+        token = await datasetToken(tokenEndpoints, authenticated.cookie);
+        response = await send();
+      }
+      const data = (await response.json()) as Record<string, unknown>;
+      return { status: response.status, body: data };
+    },
+    async transfer(path, bytes) {
+      // Cover selection currently admits avatar inputs up to 4 MiB. Keep this
+      // transport independently bounded as well as checking the frozen blob in
+      // the importer before it reaches the API.
+      if (bytes.byteLength < 1 || bytes.byteLength > 4 * 1024 * 1024)
+        throw new Error('Dataset media transfer is outside the cover byte limit');
+      const destination = new URL(path, `${main}/`);
+      if (destination.origin !== main || destination.search || destination.hash
+        || !/^\/v1\/media\/uploads\/[0-9a-f-]{36}\/bytes$/.test(destination.pathname)) {
+        throw new Error('Dataset media transfer must use the Main upload destination');
+      }
+      const send = () => fetch(destination, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/octet-stream',
+        },
+        body: Buffer.from(bytes),
+      });
       let response = await send();
       if (response.status === 401) {
         await response.body?.cancel();
