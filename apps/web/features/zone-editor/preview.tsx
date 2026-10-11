@@ -5,18 +5,20 @@ import type { DocumentSnapshot } from '@rezics/document';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { ZoneHomeDocument } from './home-document.tsx';
+import type { ReactNode } from 'react';
 import type { ZoneEditorMessages } from './messages.ts';
 
 const linkClass = 'h-auto min-h-9 w-full whitespace-normal sm:w-auto';
 
 /** The saved draft, as readers will see it. Unsaved keystrokes are not part of this view. */
-export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status, pageSurface }: {
+export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status, pageSurface, children }: {
   copy: ZoneEditorMessages;
   document: DocumentSnapshot | null;
   editorPath: string;
   sitePath: string;
   status: 'private' | 'live' | 'behind';
   pageSurface?: 'flat' | 'cards';
+  children?: ReactNode;
 }) {
   const statusText = status === 'live' ? copy.statusLive : status === 'behind' ? copy.statusBehind : copy.statusPrivate;
   return <section className="grid min-w-0 gap-4" aria-labelledby="zone-draft-preview">
@@ -31,11 +33,11 @@ export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status,
         <LocalizedLink href={sitePath} className={cn(buttonVariants({ variant: 'outline' }), linkClass)}>{copy.viewSite}</LocalizedLink>
       </div>
     </div>
-    {document
+    {children ?? (document
       ? <article data-zone-preview-page-surface={pageSurface ?? 'flat'}
         className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
         <ZoneHomeDocument document={document} className="text-pretty leading-7" />
       </article>
-      : <EmptyState icon={FileTextIcon} title={copy.previewEmptyTitle} description={copy.previewEmptyBody} headingLevel={3} />}
+      : <EmptyState icon={FileTextIcon} title={copy.previewEmptyTitle} description={copy.previewEmptyBody} headingLevel={3} />)}
   </section>;
 }

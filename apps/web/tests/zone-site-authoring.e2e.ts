@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { Pool } from 'pg';
+import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { spaceHref } from '../features/address/path.ts';
 import { defaultPresentation } from '../features/zones/presentation.ts';
 import { localizedPath } from '../i18n/locale.ts';
@@ -21,6 +23,7 @@ const baselinePresentation = defaultPresentation({
   recentlyCompleted: 'Recently completed', rankings: 'Top reads', quotes: 'Reader quotes',
   rising: 'On the rise', decisions: 'Decisions',
 });
+baselinePresentation.modules = [];
 
 function fixture<T>(name: string): T {
   const path = process.env[name];
@@ -36,24 +39,9 @@ async function grant(scope: string, action: string, principalId: string, actingS
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-    const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
-      'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1', [scope]);
-    if (gate.rows[0]?.open !== true || gate.rows[0]?.dispatch_open !== true) throw new Error(`${scope} is closed`);
-    await client.query(
-      "INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent') ON CONFLICT DO NOTHING", [actingSubject]);
-    const represented = await client.query(`SELECT id FROM access.representation
-      WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active AND valid_until > now()`,
-    [principalId, actingSubject, action]);
-    if (!represented.rowCount) await client.query(`INSERT INTO access.representation
-      (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1, $2, $3, $4, now() + interval '8 hours')`, [randomUUID(), principalId, actingSubject, action]);
-    const allowed = await client.query(`SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > now()`,
-    [actingSubject, scope, action]);
-    if (!allowed.rowCount) await client.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, $4, now() + interval '8 hours')`, [randomUUID(), actingSubject, scope, action]);
+    await grantFixtureAuthority(client, { scope, requireDispatch: true,
+      representations: [{ principalId, actor: actingSubject, action, lifetime: '8 hours' }],
+      grant: { actor: actingSubject, action, lifetime: '8 hours' } });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -187,10 +175,10 @@ async function waitForZoneEditor(page: Page, zoneId: string, actingSubject: stri
 
 /** New Zones have no presentation baseline; theme editing deliberately refuses to invent one. */
 async function ensurePresentationBaseline(page: Page, zoneId: string, actingSubject: string,
-  defaultRealm?: string | null) {
+  defaultRealm?: string | null, installPresentation = true) {
   const current = await zoneConfiguration(page, zoneId, actingSubject);
   const patch: { presentation?: typeof baselinePresentation; defaultRealm?: string | null } = {};
-  if (!current.configuration.presentation) patch.presentation = baselinePresentation;
+  if (installPresentation && !current.configuration.presentation) patch.presentation = baselinePresentation;
   if (defaultRealm !== undefined && current.configuration.defaultRealm !== defaultRealm) patch.defaultRealm = defaultRealm;
   if (!Object.keys(patch).length) return current;
   const response = await page.request.put(`/api/main/v1/zones/${zoneId}/configuration`, {
@@ -200,13 +188,14 @@ async function ensurePresentationBaseline(page: Page, zoneId: string, actingSubj
   expect([200, 202]).toContain(response.status());
   await expect.poll(async () => {
     const latest = await zoneConfiguration(page, zoneId, actingSubject);
-    return Boolean(latest.configuration.presentation)
+    return (!installPresentation || Boolean(latest.configuration.presentation))
       && (defaultRealm === undefined || latest.configuration.defaultRealm === defaultRealm);
   }, { timeout: 30_000 }).toBe(true);
   return await zoneConfiguration(page, zoneId, actingSubject);
 }
 
-async function createZoneFixture(page: Page, actor: AuthorFixture, name: string, withRealm = false): Promise<SiteFixture> {
+async function createZoneFixture(page: Page, actor: AuthorFixture, name: string, withRealm = false,
+  withPresentation = true): Promise<SiteFixture> {
   const created = await createSpace(page, {
     profile: 'space-zone-v1', name, language: 'en', capabilities: ['zone'],
     visibility: 'public', listing: 'listed', actingSubject: actor.actingSubject,
@@ -231,7 +220,7 @@ async function createZoneFixture(page: Page, actor: AuthorFixture, name: string,
     await grant('governance:realm:' + realm, 'realm.owner', actor.principalId, actor.actingSubject);
   }
 
-  const configuration = await ensurePresentationBaseline(page, zoneId, actor.actingSubject, realm ?? undefined);
+  const configuration = await ensurePresentationBaseline(page, zoneId, actor.actingSubject, realm ?? undefined, withPresentation);
   expect(configuration.configuration.defaultRealm ?? null).toBe(realm);
 
   await waitForZoneEditor(page, zoneId, actor.actingSubject);
@@ -374,7 +363,115 @@ async function addNavigationLink(page: Page, name: string) {
   await expect(page.getByRole('list', { name: 'Links' }).getByText(name)).toBeVisible();
 }
 
+const showcaseDefinition = 'https://rezics.com/definition/showcase-block-v1';
+const showcaseFallback = 'A Showcase fallback is not the rendered stage';
+
+function showcaseHome(title: string): DocumentSnapshot {
+  const document = fromPlainText(morning, 'blocks');
+  document.doc.content!.push({ type: 'extensionBlock', attrs: {
+    id: 'harbor-showcase', definition: showcaseDefinition, version: '2', fallback: showcaseFallback,
+    payload: {
+      'rv:module': [{ id: 'harbor-showcase', type: 'hero-carousel', title: 'Harbor showcase',
+        source: { kind: 'query-block', block: 'new-adoptions' } }],
+      'rv:slides': [{ id: 'harbor-exhibition', title, href: '/harbor-exhibition' }],
+      'rv:titleEffect': ['plain'],
+    },
+  } });
+  return document;
+}
+
+async function saveShowcaseHome(page: Page, site: SiteFixture, actingSubject: string, title: string) {
+  const current = await page.request.get(`/api/main/v1/zones/${site.zoneId}/showcase-editor?actingSubject=${encodeURIComponent(actingSubject)}`);
+  expect(current.ok()).toBe(true);
+  const { draft } = await current.json() as { draft: {
+    variantId: string; revisionId: string | null; language: { kind: 'tag'; tag: string; originalTag: string };
+    direction: 'ltr' | 'rtl' | 'none';
+  } };
+  const saved = await page.request.post('/api/main/v1/content-drafts', {
+    headers: { 'idempotency-key': randomUUID() },
+    data: { profile: 'content-text-v1', resourceId: site.zone, variantId: draft.variantId,
+      expectedHead: draft.revisionId, language: draft.language, direction: draft.direction,
+      document: showcaseHome(title), actingSubject },
+  });
+  expect([200, 201]).toContain(saved.status());
+}
+
+async function savePresentationLinks(page: Page, site: SiteFixture, actingSubject: string, label: string) {
+  const current = await zoneConfiguration(page, site.zoneId, actingSubject);
+  const presentation = { ...baselinePresentation, navigation: [{ label, href: '/harbor-guide' }],
+    modules: [{ id: 'harbor-notice', type: 'announcement', title: 'The harbor is open',
+      source: { kind: 'query-block', block: 'new-adoptions' } }] };
+  const saved = await page.request.put(`/api/main/v1/zones/${site.zoneId}/configuration`, {
+    headers: { 'idempotency-key': randomUUID() },
+    data: { expectedHead: current.revision, actingSubject, presentation },
+  });
+  expect([200, 202]).toContain(saved.status());
+  await expect.poll(async () => (await zoneConfiguration(page, site.zoneId, actingSubject)).configuration.presentation,
+    { timeout: 30_000 }).toEqual(presentation);
+}
+
+async function expectShowcaseHome(page: Page, title: string) {
+  await expect(page.locator('.showcase-slide')).toHaveCount(1);
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await expect(page.locator('.rezics-document')).toContainText(morning);
+  await expect(page.locator('.rezics-document')).not.toContainText(showcaseFallback);
+  await expect(page.locator(`.rezics-document [data-document-component="${showcaseDefinition}"]`)).toHaveCount(0);
+}
+
 test.use({ actionTimeout: 15_000 });
+
+for (const withRealm of [false, true]) {
+  test(`Zone home rendering: a ${withRealm ? 'Realm-backed' : 'Realm-less'} Zone previews a new Showcase and publishes modules with saved presentation navigation`,
+    async ({ page, context }, info) => {
+      test.setTimeout(600_000);
+      const actor = await startAuthor(page);
+      const label = withRealm ? 'realm-backed' : 'realm-less';
+      const site = await createZoneFixture(page, actor, 'Harbor exhibition', withRealm, false);
+      expect((await zoneConfiguration(page, site.zoneId, actor.actingSubject)).configuration.presentation).toBeUndefined();
+      await page.goto(site.previewHref);
+      await expect(page.getByRole('heading', { name: 'Draft preview' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'No draft yet' })).toBeVisible();
+
+      await saveShowcaseHome(page, site, actor.actingSubject, 'The morning exhibition');
+      await page.goto(site.previewHref);
+      await expectShowcaseHome(page, 'The morning exhibition');
+      expect((await zoneConfiguration(page, site.zoneId, actor.actingSubject)).configuration.presentation).toBeUndefined();
+      await shoot(page, `zone-new-${label}-showcase-preview`, info);
+
+      await savePresentationLinks(page, site, actor.actingSubject, 'Visitor guide');
+      await page.goto(site.previewHref);
+      await expectShowcaseHome(page, 'The morning exhibition');
+      await expect(page.getByText('The harbor is open', { exact: true })).toBeVisible();
+      await expect(page.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home', 'Visitor guide']);
+
+      const anonymous = await context.browser()!.newContext();
+      const reader = await anonymous.newPage();
+      try {
+        await reader.goto(site.siteHref);
+        await expect(reader.locator('.showcase-slide')).toHaveCount(0);
+        await expect(reader.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home']);
+        await publishSavedSite(page, site);
+        await expect(async () => {
+          await reader.goto(site.siteHref);
+          await expectShowcaseHome(reader, 'The morning exhibition');
+          await expect(reader.getByText('The harbor is open', { exact: true })).toBeVisible();
+          await expect(reader.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home', 'Visitor guide']);
+        }).toPass({ timeout: 90_000 });
+        await shoot(reader, `zone-${label}-published-showcase`, info);
+
+        await savePresentationLinks(page, site, actor.actingSubject, 'Saved visitor guide');
+        await saveShowcaseHome(page, site, actor.actingSubject, 'The evening exhibition');
+        await page.goto(site.previewHref);
+        await expectShowcaseHome(page, 'The evening exhibition');
+        await expect(page.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home', 'Saved visitor guide']);
+        await shoot(page, `zone-saved-${label}-navigation-preview`, info);
+        await reader.goto(site.siteHref);
+        await expectShowcaseHome(reader, 'The morning exhibition');
+        await expect(reader.getByText('The evening exhibition', { exact: true })).toHaveCount(0);
+        await expect(reader.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home', 'Visitor guide']);
+      } finally { await anonymous.close(); }
+    });
+}
 
 test('Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site', async ({ page, context }, info) => {
   test.setTimeout(600_000);

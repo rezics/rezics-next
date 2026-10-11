@@ -1,0 +1,72 @@
+import { fromPlainText } from '@rezics/document';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
+import { fictionZone, zoneMessagesFor } from '../zones/fixtures.ts';
+import { presetTokens } from '../zones/presentation.ts';
+import { savedSiteCuts } from '../zones/site-cuts.ts';
+import { ZoneDocumentHome } from '../zones/site-pages.tsx';
+import { zoneTheme } from '../zones/theme.ts';
+import { ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
+import type { PlacedModule } from '../zones/zone-home.tsx';
+import { ZoneDraftPreview } from './preview.tsx';
+import { messages } from './messages.ts';
+import type { ZoneHomePage } from './home-document.tsx';
+
+const homeDocument = fromPlainText('Morning edition of the harbor', 'blocks');
+const definition = 'https://rezics.com/definition/showcase-block-v1';
+homeDocument.doc.content!.push({ type: 'extensionBlock', attrs: {
+  id: 'showcase', definition, version: '2', payload: {}, fallback: 'Showcase fallback text',
+} });
+const page: ZoneHomePage = { document: homeDocument, blocks: [{ id: 'showcase', definition, version: '2',
+  fallback: 'Showcase fallback text', status: 'resolved', kind: 'showcase', showcase: 'showcase' }] };
+const modules: PlacedModule[] = [
+  { module: { id: 'showcase', type: 'hero-carousel', title: 'Harbor showcase', rail: false,
+    layout: 'covers', shuffle: false, more: null },
+  state: { state: 'ready', data: { slides: [{ id: 'harbor', title: { value: 'The harbor exhibition', lang: 'en', dir: 'ltr' },
+    href: '/harbor-exhibition', work: null }] } } },
+  { module: { id: 'notice', type: 'announcement', title: 'The harbor is open', rail: false,
+    layout: 'covers', shuffle: false, more: null },
+  state: { state: 'ready', data: { text: { value: 'The harbor is open', lang: 'en', dir: 'ltr' }, href: null } } },
+];
+const zone = { ...fictionZone('en'), name: { value: 'Harbor notes', lang: 'en', dir: 'ltr' as const },
+  description: null, icon: null, hero: null,
+  tokens: { ...presetTokens.clean, density: 'compact' as const, pageSurface: 'cards' as const } };
+const cuts = savedSiteCuts({ tokens: zone.tokens, navigation: [{ label: 'Saved visitor guide', href: '/harbor-guide' }] },
+  [{ segment: 'charts', name: { value: 'Harbor charts', lang: 'en', dir: 'ltr' } }], 'harbor', 'en', 'Home');
+
+function Home({ preview = false }: { preview?: boolean }) {
+  const body = <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={null} locale="en"
+    messages={zoneMessagesFor('en')} preview={preview} />;
+  return <ZoneFrame zone={zone} dataZone="harbor" theme={zoneTheme(zone.tokens, { reader: 'light', enabled: true })}
+    pkg={null} members={null} actions={null} tabs={null}
+    masthead={<ZoneMasthead zone={zone} members={null} actions={null} />}
+    site={{ label: zone.name.value, links: cuts.navigation }}>
+    {preview ? <ZoneDraftPreview copy={messages.en} document={homeDocument} editorPath="/manage/z/harbor"
+      sitePath="/z/harbor" status="private">{body}</ZoneDraftPreview> : body}
+  </ZoneFrame>;
+}
+
+const meta = { title: 'Zone editor/Complete home', parameters: { route: { pathname: '/en/z/harbor' } } } satisfies Meta;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+async function checkHome(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await expect(canvas.getByText('The harbor exhibition', { exact: true })).toBeVisible();
+  await expect(canvasElement.querySelectorAll('.showcase-slide')).toHaveLength(1);
+  await expect(canvas.getByText('The harbor is open', { exact: true })).toBeVisible();
+  await expect(canvas.getByText('Morning edition of the harbor')).toBeVisible();
+  await expect(canvas.queryByText('Showcase fallback text')).not.toBeInTheDocument();
+  const navigation = within(canvasElement.querySelector<HTMLElement>('[data-zone-site-navigation]')!);
+  await expect(navigation.getAllByRole('link').map(link => link.textContent)).toEqual(['Home', 'Saved visitor guide', 'Harbor charts']);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
+export const PublishedHome: Story = { render: () => <Home />, async play({ canvasElement }) { await checkHome(canvasElement); } };
+export const PublishedHomePhone: Story = { ...PublishedHome, globals: { viewport: { value: 'phone' } } };
+export const SavedPreview: Story = { render: () => <Home preview />,
+  async play({ canvasElement }) {
+    await checkHome(canvasElement);
+    await expect(within(canvasElement).getByRole('heading', { name: 'Draft preview' })).toBeVisible();
+  } };
+export const SavedPreviewPhone: Story = { ...SavedPreview, globals: { viewport: { value: 'phone' } } };

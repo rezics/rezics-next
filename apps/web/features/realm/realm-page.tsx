@@ -32,7 +32,7 @@ import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { PositionBar } from '../wiki/position-bar.tsx';
 import { withContinuity } from '../wiki/continuity.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
-import { savedSiteCuts, type SiteMountCut } from '../zones/site-cuts.ts';
+import { savedSiteCuts, type SiteMountCut, type SitePresentationCut } from '../zones/site-cuts.ts';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmBanPanel } from '../realm-appeal/panel.tsx';
 import { readOwnRealmBan } from '../realm-appeal/read.ts';
@@ -269,6 +269,7 @@ export async function RealmFrame({
   structuralPreview = false,
   siteMounts,
   siteTokens,
+  siteNavigation,
   children,
 }: {
   view: RealmView;
@@ -284,13 +285,15 @@ export async function RealmFrame({
   siteMounts?: readonly SiteMountCut[];
   /** The authorized editor read supplies the saved structural tokens before publication. */
   siteTokens?: ZoneTokens;
+  /** The authorized editor read supplies presentation links before publication. */
+  siteNavigation?: SitePresentationCut['navigation'];
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, data, zone, messages, zoneMessages, lookEnabled } = view;
   const site = tab === null;
   const tokens = site && structuralPreview && siteTokens ? siteTokens : presentation.tokens;
   const frameZone = site && structuralPreview && siteTokens ? { ...zone, tokens: siteTokens } : zone;
-  const siteCuts = site ? savedSiteCuts({ tokens, navigation: presentation.navigation },
+  const siteCuts = site ? savedSiteCuts({ tokens, navigation: siteNavigation ?? presentation.navigation },
     siteMounts ?? view.mounts.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
     realm.ref, locale, messages.home) : null;
   const theme = zoneTheme(siteCuts?.tokens ?? tokens, {

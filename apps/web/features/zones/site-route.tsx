@@ -49,7 +49,9 @@ import { zoneTheme } from './theme.ts';
 import { savedSiteCuts, type SiteMountCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
 import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
-import { ZoneHomeDocument, zoneHomeDocument } from '../zone-editor/home-document.tsx';
+import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
+import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
+import type { SitePresentationCut } from './site-cuts.ts';
 import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
@@ -201,12 +203,9 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       if (homeView.kind !== 'view') notFound();
       return <RealmFrame view={homeView} tab={null} locale={locale} search={search}
         address={siteHref(locale, homeView.context.ref, path)}>
-        <PageContainer>
-          <div data-zone-site-home-surface={homeView.presentation.tokens.pageSurface}
-            className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
-            <ZoneHomeDocument document={document} className="text-pretty leading-7" />
-          </div>
-        </PageContainer>
+        <ZoneHomeContent page={routed.data.page!} presentation={homeView.presentation}
+          slideMedia={homeView.slideMedia} context={homeView.context} zone={homeView.zone}
+          pkg={homeView.pkg} messages={homeView.zoneMessages} />
       </RealmFrame>;
     }
     return SiteHomeRoute(communityProps);
@@ -421,11 +420,12 @@ async function standaloneSite(
   path: readonly string[],
   search: Search,
 ): Promise<ReactNode> {
-  const [route, presentation, messages, workMessages] = await Promise.all([
+  const [route, presentation, messages, workMessages, zoneMessages] = await Promise.all([
     readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)),
     readPresentation(resolved.zone),
     getMessages('realm', locale),
     getMessages('workPage', locale),
+    getMessages('zones', locale),
   ]);
   if (!route.ok && route.failure === 'missing') notFound();
   if (!route.ok || !presentation.ok) {
@@ -465,12 +465,10 @@ async function standaloneSite(
     // Until a document is published, the page keeps the list of those mounts.
     const document = zoneHomeDocument(read.page);
     if (document) return frame(
-      <PageContainer>
-        <div data-zone-site-home-surface={presentation.data.presentation.tokens.pageSurface}
-          className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
-          <ZoneHomeDocument document={document} className="text-pretty leading-7" />
-        </div>
-      </PageContainer>,
+      <ZoneHomeContent page={read.page!} presentation={presentation.data.presentation}
+        slideMedia={presentation.data.slideMedia} zone={zone} pkg={null} messages={zoneMessages}
+        context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
+          mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }} />,
     );
     return frame(
       <PageContainer>
@@ -531,7 +529,8 @@ async function standaloneSite(
 }
 
 /** The common standalone Zone frame used by its public site and the editor's saved preview. */
-export async function StandaloneZoneSiteFrame({ zone, zoneId, address, locale, messages, presentation, siteMounts, siteTokens, children }: {
+export async function StandaloneZoneSiteFrame({ zone, zoneId, address, locale, messages, presentation, siteMounts, siteTokens,
+  siteNavigation, children }: {
   zone: ZoneContext;
   zoneId: string;
   address: string;
@@ -540,12 +539,13 @@ export async function StandaloneZoneSiteFrame({ zone, zoneId, address, locale, m
   presentation: ZonePresentationRead;
   siteMounts?: readonly SiteMountCut[];
   siteTokens?: ZoneTokens;
+  siteNavigation?: SitePresentationCut['navigation'];
   children: ReactNode;
 }) {
   const [jar, incoming] = await Promise.all([cookies(), headers()]);
   const tokens = siteTokens ?? presentation.presentation.tokens;
   const frameZone = siteTokens ? { ...zone, tokens: siteTokens } : zone;
-  const cuts = savedSiteCuts({ tokens, navigation: presentation.presentation.navigation },
+  const cuts = savedSiteCuts({ tokens, navigation: siteNavigation ?? presentation.presentation.navigation },
     siteMounts ?? presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
     address, locale, messages.home);
   const theme = zoneTheme(cuts.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value), enabled: true });

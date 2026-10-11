@@ -17,11 +17,33 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { WorkHeader, WorkText } from '../work-page/types.ts';
 import { ModuleHeading } from './module-frame.tsx';
 import type { CardRenderer } from './modules.tsx';
+import { ZoneHome, type PlacedModule } from './zone-home.tsx';
+import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
+import type { ZoneMessages } from './messages.ts';
+import { ZoneHomeDocument, type ZoneHomePage } from '../zone-editor/home-document.tsx';
 
 // The pages a Zone's mounts give it: a mounted document, a mounted Collection's index, and the one state for
 // a page this host cannot show yet.
 
 type Route<Kind extends ZoneRouteRead['kind']> = Extract<ZoneRouteRead, { kind: Kind }>;
+
+/** The selected document and the selected presentation are one home page, including its Showcase. */
+export function ZoneDocumentHome({ page, modules, zone, pkg, locale, messages, avatarQuery, preview = false }: {
+  page: ZoneHomePage; modules: readonly PlacedModule[]; zone: ZoneContext; pkg: ZonePackage | null;
+  locale: UiLocale; messages: ZoneMessages; avatarQuery?: string; preview?: boolean;
+}) {
+  return <>
+    {modules.length ? <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={messages}
+      avatarQuery={avatarQuery} empty={null} /> : null}
+    <PageContainer>
+      <article data-zone-site-home-surface={preview ? undefined : zone.tokens.pageSurface}
+        data-zone-preview-page-surface={preview ? zone.tokens.pageSurface : undefined}
+        className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
+        <ZoneHomeDocument document={page.document} blocks={page.blocks} className="text-pretty leading-7" />
+      </article>
+    </PageContainer>
+  </>;
+}
 
 /**
  * A mounted document: its Main Version's published text under its title, in the text's own language and

@@ -9,10 +9,14 @@ import { authoringModel, type ZoneAuthoringModel } from './model.ts';
 import { readZoneLifecycleSnapshot } from './lifecycle.ts';
 import { zoneEditorPath, zonePreviewPath } from './routes.ts';
 
+type EditorRead = NonNullable<Awaited<ReturnType<ReturnType<MainClient['v1']['zones']>['showcase-editor']['get']>>['data']>;
+export type ZoneAuthoringPreview = EditorRead['preview'];
+
 export type ZoneAuthoringLoad =
   | { kind: 'missing' }
   | { kind: 'failure'; failure: ReadFailure }
-  | { kind: 'ready'; model: ZoneAuthoringModel; editorPath: string; previewPath: string; sitePath: string };
+  | { kind: 'ready'; model: ZoneAuthoringModel; preview: ZoneAuthoringPreview;
+    editorPath: string; previewPath: string; sitePath: string };
 
 export type ZoneLifecycleLoad =
   | { kind: 'missing' }
@@ -39,7 +43,7 @@ export const loadZoneAuthoring = cache(async (
   const model = authoringModel(editor.data, zone.data, site.zone, suffix || addressKey(site.address.canonical) || space);
   if (!model) return { kind: 'failure', failure: 'unavailable' };
   return {
-    kind: 'ready', model,
+    kind: 'ready', model, preview: editor.data.preview,
     editorPath: zoneEditorPath(space),
     previewPath: zonePreviewPath(space),
     sitePath: spaceHref(site.address.canonical, 'site'),
