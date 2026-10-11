@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import type { Static } from 'typebox';
 import type { SaveDraftCommand } from '../../../services/content/src/core.ts';
+import type { realmAboutThread, realmThread } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
+import type { TitleControlState } from '../../../services/main/src/modules/work/title-control.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { arrange, local, threeWriteDebits, type Page, type Posted } from './zone-realm-discussion-support.ts';
 
@@ -11,7 +14,18 @@ test('a published Zone page opens one canonical discussion and preserves indepen
     const a = await arrange(home);
     const page = await a.page('first');
     const path = `/v1/realms/${local(a.realm.realm)}/about-posts`;
+    const lookup = (about: string) => home.call('GET',
+      `/v1/realms/${local(a.realm.realm)}/about-thread?${new URLSearchParams({ about })}`);
+    const thread = async (reply: string) => {
+      await home.project();
+      return home.json<Static<typeof realmThread>>(await home.call('GET',
+        `/v1/realms/${local(a.realm.realm)}/threads/${local(reply)}?sort=new`));
+    };
     const before = await a.effects(page.about);
+    expect(before).toEqual({ threads: 0, operations: 0, replies: 0, revisions: 0 });
+    expect(await home.json<Static<typeof realmAboutThread>>(await lookup(page.about)))
+      .toEqual({ realm: a.realm.realm, about: page.about, thread: null });
+    expect(await a.effects(page.about)).toEqual(before);
     const missingKey = await home.app.handle(new Request(`http://main.local${path}`, { method: 'POST',
       headers: { authorization: `Bearer ${home.author.token}`, 'content-type': 'application/json' },
       body: JSON.stringify(a.input(page, a.author, 'First post')) }));
@@ -41,6 +55,67 @@ test('a published Zone page opens one canonical discussion and preserves indepen
     expect(persisted.find(row => row.reply === second.reply)).toMatchObject({ author: a.reader,
       parent_reply: first.reply, root_target: page.about, root_revision: page.targetRevision,
       origin_realm: a.realm.realm, body: { body: 'Second person post' } });
+    const canonical = { realm: a.realm.realm, about: page.about,
+      thread: { reply: first.reply, rootRevision: page.targetRevision } };
+    expect(await home.json(await lookup(page.about))).toEqual(canonical);
+    const originalThread = await thread(first.reply);
+    expect(originalThread).toMatchObject({ realm: a.realm.realm, thread: first.reply,
+      work: { id: page.about }, rootRevision: page.targetRevision });
+    expect(originalThread.items).toHaveLength(2);
+    expect(originalThread.items.find(item => item.reply === first.reply)).toMatchObject({
+      author: { id: a.author }, parent: null, title: 'First post', body: '', language: 'en' });
+    expect(originalThread.items.find(item => item.reply === second.reply)).toMatchObject({
+      author: { id: a.reader }, parent: first.reply, title: null, body: 'Second person post', language: 'en' });
+
+    // Editing the routable resource refreshes posting eligibility, but never the
+    // canonical discussion's retained root or either person's accepted contribution.
+    // The fixture Work is catalogue metadata, so editing uses an explicit
+    // represented grant rather than inventing native creator authority.
+    const editScope = `work:edit:${page.about}`;
+    await home.stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [editScope]);
+    await home.stack.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.edit',now() + interval '1 hour')`, [randomUUID(), home.author.principalId, a.author]);
+    await home.stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`, [randomUUID(), a.author, editScope]);
+    const titleBasis = await home.json<TitleControlState>(await home.call('GET',
+      `/v1/works/${local(page.about)}/title-control?${new URLSearchParams({ actingSubject: a.author })}`,
+      undefined, home.author.token));
+    const edited = await home.json<{ revision: string }>(await home.call('POST', '/v1/content-edits', {
+      profile: 'metadata-only-v1', work: page.about, expectedHead: titleBasis.contentHead,
+      titleControl: titleBasis.basis, title: 'Discussion page after an edit', actingSubject: a.author,
+    }, home.author.token));
+    const editedPage = { ...page, routeRevision: (await a.route(page.path)).revision,
+      targetRevision: await a.targetRevision(page.about) };
+    expect(editedPage.targetRevision).toBe(edited.revision);
+    expect(editedPage.targetRevision).not.toBe(page.targetRevision);
+    expect(await home.json(await lookup(page.about))).toEqual(canonical);
+    const editedText = '編集後の感想。\n最初の作品版についての話を続けます。';
+    const editedIntent = { ...a.input(editedPage, a.reader, editedText), language: 'ja', spoiler: true };
+    const editedKey = randomUUID();
+    const postEdited = () => home.call('POST', path, editedIntent, home.reader.token, editedKey);
+    const afterEdit = await home.json<Posted>(await postEdited(), 201);
+    expect(afterEdit).toMatchObject({ realm: a.realm.realm, about: page.about, author: a.reader });
+    expect(await home.json(await postEdited(), 200)).toEqual(afterEdit);
+    expect(await home.json(await a.post(page, a.author, 'First post', home.author.token, firstKey), 200)).toEqual(first);
+    expect(await home.json(await a.post(page, a.reader, 'Second person post', home.reader.token, secondKey), 200)).toEqual(second);
+    expect(await home.json(await lookup(page.about))).toEqual(canonical);
+    const afterEditRows = await a.rows(page.about);
+    expect(afterEditRows).toHaveLength(3);
+    for (const original of persisted) expect(afterEditRows.find(row => row.reply === original.reply)).toEqual(original);
+    expect(afterEditRows.find(row => row.reply === afterEdit.reply)).toMatchObject({ author: a.reader,
+      parent_reply: first.reply, root_target: page.about, root_revision: page.targetRevision,
+      origin_realm: a.realm.realm, body: { body: editedText, spoiler: true } });
+    const editedThread = await thread(first.reply);
+    expect(editedThread).toMatchObject({ thread: first.reply, rootRevision: page.targetRevision,
+      work: { id: page.about, title: { value: 'Discussion page after an edit' } } });
+    expect(editedThread.items).toHaveLength(3);
+    for (const original of originalThread.items) {
+      const retained = editedThread.items.find(item => item.reply === original.reply);
+      expect(retained).toMatchObject({ author: original.author, revisionId: original.revisionId,
+        title: original.title, body: original.body, language: original.language });
+    }
+    expect(editedThread.items.find(item => item.reply === afterEdit.reply)).toMatchObject({
+      author: { id: a.reader }, parent: first.reply, title: null, body: editedText, language: 'ja', spoiler: true });
 
     const concurrent = await a.page('concurrent');
     const content = home.stack.content;
@@ -87,14 +162,25 @@ test('a published Zone page opens one canonical discussion and preserves indepen
         root_revision: concurrent.targetRevision, body: { body: 'Concurrent opener' } });
       expect(contributions.find(row => row.reply === child.reply)).toMatchObject({ author: a.reader,
         parent_reply: winner.reply, root_revision: concurrent.targetRevision, body: { body: 'Concurrent child' } });
-      const canonical = await home.stack.contentPool.query(`SELECT opener_reply FROM content.realm_about_thread
+      const concurrentCanonical = await home.stack.contentPool.query(`SELECT opener_reply FROM content.realm_about_thread
         WHERE realm=$1 AND about=$2`, [a.realm.realm, concurrent.about]);
-      expect(canonical.rows).toEqual([{ opener_reply: winner.reply }]);
+      expect(concurrentCanonical.rows).toEqual([{ opener_reply: winner.reply }]);
+      expect(await home.json(await lookup(concurrent.about))).toEqual({ realm: a.realm.realm, about: concurrent.about,
+        thread: { reply: winner.reply, rootRevision: concurrent.targetRevision } });
     } finally {
       release();
       content.saveDraft = originalSave;
       await winnerRequest;
     }
+    const retainedEffects = await a.effects(page.about);
+    await home.json(await home.call('POST', `${a.sitePath}/realm-attachment-withdrawals`, {
+      realm: a.realm.realm, actingSubject: a.author,
+    }, home.author.token));
+    expect((await a.route(page.path)).realm).toBeNull();
+    expect(await a.effects(page.about)).toEqual(retainedEffects);
+    expect(await home.json(await lookup(page.about))).toEqual(canonical);
+    expect((await thread(first.reply)).items.map(item => item.reply).sort())
+      .toEqual([first.reply, second.reply, afterEdit.reply].sort());
   } finally { await home.stop(); }
 }, 300_000);
 
