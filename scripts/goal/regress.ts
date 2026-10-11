@@ -126,6 +126,14 @@ export async function waitForRegressionTurn(lockDir?: string, interrupted: () =>
     await sleep(Math.min(10_000, remaining));
   }
 }
+/** Batches in flight. Two never starves worker QA and is the default; the program widens it from
+ * `regress-lane-count` beside the run reports when the host has room. Each batch still takes QA slots
+ * through the host's slot leases, so the slot count stays the bound on stacks. */
+export function regressionLaneLimit(stateDir: string, fallback: number): number {
+  const file = join(stateDir, 'regress-lane-count');
+  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : fallback;
+}
 const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook', 'jena:check'];
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
@@ -920,6 +928,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
   const diagnosisBudget = options.diagnosisBudgetMs !== undefined
     ? regressionDiagnosisBudgetMs(String(options.diagnosisBudgetMs)) : regressionDiagnosisBudgetMs();
   const slotLimit = Math.min(configuredSlots, 2);
+  const laneLimit = regressionLaneLimit(stateDir, slotLimit);
   const runner = options.runner ?? runBatch;
   const runId = options.resume ?? options.runId ?? newRunId();
   if (!validId(runId)) throw new Error('Invalid regression run ID');
@@ -1119,7 +1128,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     lane = pending;
     let next = 0;
     let failure: unknown;
-    const workers = Array.from({ length: Math.min(slotLimit, pending.length) }, async (_, index) => {
+    const workers = Array.from({ length: Math.min(laneLimit, pending.length) }, async (_, index) => {
       let tree: string | undefined;
       try {
         // Each lane has its own sockets and artifact root, reused only after its previous batch finishes.

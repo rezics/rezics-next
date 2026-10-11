@@ -12,7 +12,7 @@ import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
-import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl,
+import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl, regressionLaneLimit,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
@@ -177,6 +177,31 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       expect(batches.map(batch => batch.files.length)).toEqual([15, 15, 1]);
       expect(batches.flatMap(batch => batch.files)).toEqual(r.files.filter(file => file.tier === 'owner').map(file => file.file));
       expect(batches.map(batch => batch.budgetMs)).toEqual([600_000, 600_000, 600_000]);
+    } finally { r.cleanup(); }
+  });
+
+  test('the lane count file widens the batches in flight and its absence keeps two', async () => {
+    const r = repo();
+    let active = 0;
+    let maximum = 0;
+    try {
+      for (let index = 0; index < 60; index++) {
+        const file = `scripts/ops/tests/wide-${index}.test.ts`;
+        r.files.push({ file, tier: 'owner', outcome: 'pending' }); r.write(file, 'pass\n');
+      }
+      r.commit();
+      expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(2);
+      mkdirSync(r.options.stateDir, { recursive: true });
+      writeFileSync(join(r.options.stateDir, 'regress-lane-count'), 'many\n');
+      expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(2);
+      writeFileSync(join(r.options.stateDir, 'regress-lane-count'), '4\n');
+      expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(4);
+      const result = await r.run({ runId: 'wide-lanes', slots: 3, only: ['owner'], runner: async (...args) => {
+        active++; maximum = Math.max(maximum, active);
+        try { await Bun.sleep(5); return await r.runner(...args); } finally { active--; }
+      } });
+      expect(maximum).toBe(4);
+      expect(result.batches.filter(batch => batch.tier === 'owner').every(batch => batch.state === 'done')).toBe(true);
     } finally { r.cleanup(); }
   });
 
