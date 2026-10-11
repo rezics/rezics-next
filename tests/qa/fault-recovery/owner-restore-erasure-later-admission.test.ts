@@ -3,8 +3,9 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
-import { ERASURE_JOURNAL_EPOCH } from '../../../services/main/src/modules/erasure/journal.ts';
+import { ERASURE_JOURNAL_EPOCH, readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import { probeContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
+import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import {
   accessOutboxCoverage,
@@ -225,7 +226,7 @@ test(
         expect(twoCut.status).toBe(201);
         const released = await outerOperation(copy, twoCutKey);
         expect(released.hold_reason).toBeNull();
-        expect(await twoCut.json()).toMatchObject({ state: 'reconciled', disposition: 'erased' });
+        expect(await twoCut.json()).toMatchObject({ state: 'reconciled', disposition: 'matched' });
         expect(released.erasures?.state).toBe('reconciled');
         expect(released.qualifications).toHaveLength(1);
         expect(released.releases).toHaveLength(1);
@@ -242,13 +243,36 @@ test(
           [fixture.revisionId, fixture.laterRevisionId], async ids => new Set(ids));
         expect(erasedAfter?.status).toBe('erased');
         expect(unrelatedAfter).toEqual(unrelatedBefore);
+        const journalAfter = await readErasure(copy.retainedRelay, later.erasureId);
+        expect(journalAfter).toMatchObject({
+          erasureEpoch: later.erasureEpoch,
+          admissionId: later.admissionId,
+          suppression: 'suppressed',
+          blockedReason: null,
+        });
+        expect(journalAfter.targets.map(target => ({
+          kind: target.kind, ref: target.ref, completionState: target.completionState,
+        }))).toEqual([{ kind: 'content_revision', ref: fixture.revisionId, completionState: 'completed' }]);
+        expect(journalAfter.targets[0]?.completionEvidenceRef).toMatch(/^[0-9a-f]{64}$/);
+        expect(journalAfter.targets[0]?.completedAt).not.toBeNull();
+        const suppressionAfter = await readGraphErasureProof(copy.fuseki, copy.lineage,
+          later.erasureId, later.erasureEpoch, [fixture.revisionId]);
+        expect(suppressionAfter).toEqual(fixture.original);
         expect((await copy.ready()).status).toBe(503);
         const retry = await copy.request(twoCutKey, undefined, body);
         expect(retry.status).toBe(200);
-        expect(await retry.json()).toMatchObject({ state: 'reconciled', disposition: 'erased', replayed: true });
+        expect(await retry.json()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
         expect(await outerOperation(copy, twoCutKey)).toEqual(released);
         expect(await accessStateCoverage(copy.owners.access)).toEqual(postState);
         expect(await accessOutboxCoverage(copy.owners.access)).toEqual(currentOutbox);
+        expect(await readErasure(copy.retainedRelay, later.erasureId)).toEqual(journalAfter);
+        expect(await content.readExactBatch([fixture.revisionId, fixture.laterRevisionId],
+          async ids => new Set(ids))).toEqual([erasedAfter, unrelatedBefore]);
+        expect(await readGraphErasureProof(copy.fuseki, copy.lineage,
+          later.erasureId, later.erasureEpoch, [fixture.revisionId])).toEqual(suppressionAfter);
+        expect(await graphReleased(copy)).toBe(true);
+        expect(await accessFence(copy)).toEqual([{ open: true,
+          generation: (BigInt(fixture.generation) + 1n).toString() }]);
         expect((await copy.request(twoCutKey)).status).toBe(409);
       } finally {
         await copy.dispose();
