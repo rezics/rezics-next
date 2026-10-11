@@ -102,11 +102,11 @@ async function mediaFixture(pool: Pool, imported: boolean) {
   const deleted: string[] = [];
   let writes = 0;
   let onPut: ((namespace: string, signal?: AbortSignal) => Promise<void>) | undefined;
+  let onVerify: typeof onPut;
   let onDelete: ((namespace: string, signal?: AbortSignal) => Promise<void>) | undefined;
-  const media: MediaDependencies = { store, content, objects: namespace => ({
-    put: async (bytes: Uint8Array, signal?: AbortSignal) => {
+  const media: MediaDependencies = { store, content, objects: namespace => {
+    const waitFor = async (pending: Promise<void> | undefined, signal?: AbortSignal) => {
       signal?.throwIfAborted();
-      const pending = onPut?.(namespace, signal);
       if (pending && signal) await new Promise<void>((resolve, reject) => {
         const abort = () => reject(signal.reason);
         signal.addEventListener('abort', abort, { once: true });
@@ -115,26 +115,39 @@ async function mediaFixture(pool: Pool, imported: boolean) {
       });
       else await pending;
       signal?.throwIfAborted();
+    };
+    const putTracked = async (bytes: Uint8Array, signal?: AbortSignal, onCreated?: (digest: string) => void) => {
+      await waitFor(onPut?.(namespace, signal), signal);
       writes++;
       const digest = sha(bytes);
-      objects.set(`${namespace}sha256/${digest}`, bytes.slice());
-      return digest;
-    },
-    get: async (digest: string, _maximum?: number, signal?: AbortSignal) => {
-      signal?.throwIfAborted();
-      const bytes = objects.get(`${namespace}sha256/${digest}`);
-      if (!bytes) throw new Error('object is absent');
-      return bytes.slice();
-    },
-    deleteAndVerifyAbsent: async (digest: string, signal?: AbortSignal) => {
-      signal?.throwIfAborted();
-      await onDelete?.(namespace, signal);
       const key = `${namespace}sha256/${digest}`;
-      objects.delete(key);
-      deleted.push(key);
-      expect(objects.has(key)).toBe(false);
-    },
-  } as ImmutableObjects) };
+      const created = !objects.has(key);
+      if (created) {
+        objects.set(key, bytes.slice());
+        onCreated?.(digest);
+      }
+      await waitFor(onVerify?.(namespace, signal), signal);
+      return { digest, created };
+    };
+    return {
+      put: async (bytes: Uint8Array, signal?: AbortSignal) => (await putTracked(bytes, signal)).digest,
+      putTracked,
+      get: async (digest: string, _maximum?: number, signal?: AbortSignal) => {
+        signal?.throwIfAborted();
+        const bytes = objects.get(`${namespace}sha256/${digest}`);
+        if (!bytes) throw new Error('object is absent');
+        return bytes.slice();
+      },
+      deleteAndVerifyAbsent: async (digest: string, signal?: AbortSignal) => {
+        signal?.throwIfAborted();
+        await onDelete?.(namespace, signal);
+        const key = `${namespace}sha256/${digest}`;
+        objects.delete(key);
+        deleted.push(key);
+        expect(objects.has(key)).toBe(false);
+      },
+    } as ImmutableObjects;
+  } };
   const env = { fuseki: new class extends FusekiClient {
     constructor() { super('http://media-fence.invalid'); }
     override async query() { return { boolean: true }; }
@@ -144,14 +157,19 @@ async function mediaFixture(pool: Pool, imported: boolean) {
   const request = new Request('http://media-fence.invalid', { headers: { authorization: 'Bearer owner' } });
   const transfer = (intake: Parameters<typeof activateUploadedBytes>[6] = image) =>
     activateUploadedBytes(env, media, account, access, request, reserved.upload, intake);
-  const persist: NonNullable<Parameters<MediaStore['settleUpload']>[2]> = async (signal, onFailure) => {
-    const quarantine = media.objects(`${reserved.quarantineKey}/`);
-    onFailure(cleanupSignal => quarantine.deleteAndVerifyAbsent!(sha(image), cleanupSignal));
-    const staged = await quarantine.get(await quarantine.put(image, signal), undefined, signal);
-    const original = media.objects(reserved.objectNamespace);
-    onFailure(cleanupSignal => original.deleteAndVerifyAbsent!(sha(staged), cleanupSignal));
-    return original.put(staged, signal);
-  };
+  const persistFor = (reservation: typeof reserved): NonNullable<Parameters<MediaStore['settleUpload']>[2]> =>
+    async (signal, onFailure) => {
+      const quarantine = media.objects(`${reservation.quarantineKey}/`);
+      const stored = await quarantine.putTracked!(image, signal, digest =>
+        onFailure({ digest, cleanup: cleanupSignal => quarantine.deleteAndVerifyAbsent!(digest, cleanupSignal) }));
+      const staged = await quarantine.get(stored.digest, undefined, signal);
+      const original = media.objects(reservation.objectNamespace);
+      return (await original.putTracked!(staged, signal, digest =>
+        onFailure({ digest, cleanup: cleanupSignal => original.deleteAndVerifyAbsent!(digest, cleanupSignal) }))).digest;
+    };
+  const persist = persistFor(reserved);
+  const reserveReplacement = () => store.reserveUpload(admission(), { asset: reserved.asset,
+    mediaType: 'image/gif', byteLength: image.length, sha256: sha(image), disclosure: 'private' });
   const change = async (lifecycle: 'active' | 'deleted' | 'erased', actingSubject = owner) => {
     const state = await store.readAsset(reserved.asset);
     if (!state) throw new Error('asset state is absent');
@@ -169,8 +187,10 @@ async function mediaFixture(pool: Pool, imported: boolean) {
     objects.clear();
     return result;
   };
-  return { pool, content, store, reserved, objects, deleted, principal, owner, transfer, persist, change, erase,
+  return { pool, content, store, reserved, objects, deleted, principal, owner, transfer, persist, persistFor,
+    reserveReplacement, change, erase,
     writes: () => writes, onPut: (callback: typeof onPut) => { onPut = callback; },
+    onVerify: (callback: typeof onVerify) => { onVerify = callback; },
     onDelete: (callback: typeof onDelete) => { onDelete = callback; } };
 }
 
@@ -323,7 +343,7 @@ test('bounded request pools abort stalled quarantine and original writes while e
     const started = barrier(), release = barrier();
     let writeSignal: AbortSignal | undefined;
     let cleanupHeldLock = false;
-    f.onPut(async (namespace, signal) => {
+    f.onVerify(async (namespace, signal) => {
       const stalled = stage === 'original' ? namespace === f.reserved.objectNamespace
         : namespace === `${f.reserved.quarantineKey}/`;
       if (!stalled) return;
@@ -380,6 +400,84 @@ test('both exact objects are cleaned when activation SQL fails after persistence
     expect((await f.store.readUpload(f.reserved.upload))!.status).toBe('reserved');
     expect((await f.pool.query('SELECT 1 FROM media.representation')).rowCount).toBe(0);
     await f.erase();
+  });
+});
+
+test('a replacement failing after PUT keeps the same-digest original referenced by an earlier representation', async () => {
+  for (const restoreMissingOriginal of [false, true]) await fixture(async f => {
+    const first = await f.store.settleUpload(f.reserved.upload, verdict, f.persist);
+    const originalKey = `${f.reserved.objectNamespace}sha256/${sha(image)}`;
+    const earlierQuarantineKey = `${f.reserved.quarantineKey}/sha256/${sha(image)}`;
+    if (restoreMissingOriginal) f.objects.delete(originalKey);
+    const replacement = await f.reserveReplacement();
+    const replacementQuarantineKey = `${replacement.quarantineKey}/sha256/${sha(image)}`;
+    let originalWasPersisted = false;
+    f.onVerify(async namespace => {
+      if (namespace !== f.reserved.objectNamespace) return;
+      originalWasPersisted = true;
+      expect(f.objects.get(originalKey)).toEqual(image);
+      expect(f.objects.get(replacementQuarantineKey)).toEqual(image);
+    });
+    await f.pool.query(`CREATE FUNCTION media.refuse_replacement() RETURNS trigger LANGUAGE plpgsql AS
+      $$ BEGIN RAISE EXCEPTION 'replacement activation unavailable'; END $$;
+      CREATE TRIGGER refuse_replacement BEFORE INSERT ON media.representation
+      FOR EACH ROW EXECUTE FUNCTION media.refuse_replacement()`);
+    await expect(f.store.settleUpload(replacement.upload, verdict, f.persistFor(replacement)))
+      .rejects.toThrow('replacement activation unavailable');
+    expect(originalWasPersisted).toBe(true);
+    expect(f.objects.get(originalKey)).toEqual(image);
+    expect(f.objects.get(earlierQuarantineKey)).toEqual(image);
+    expect(f.deleted).not.toContain(originalKey);
+    expect(f.deleted).not.toContain(earlierQuarantineKey);
+    expect((await f.pool.query('SELECT id,availability FROM media.representation')).rows)
+      .toEqual([{ id: first.representation, availability: 'available' }]);
+    expect((await f.store.readUpload(replacement.upload))!.status).toBe('reserved');
+    expect((await f.pool.query('SELECT 1 FROM content.receipt WHERE operation_id=$1',
+      [`media-activate:${replacement.upload}`])).rowCount).toBe(0);
+  });
+});
+
+test('a lost COMMIT acknowledgement keeps activated objects and retry replays the durable activation', async () => {
+  await fixture(async f => {
+    let lostAcknowledgement = false;
+    const uncertainPool = new Proxy(f.pool, { get(target, property) {
+      if (property === 'connect') return async () => {
+        const client = await target.connect();
+        return new Proxy(client, { get(target, property) {
+          if (property === 'query') return async (...args: unknown[]) => {
+            const result = await Reflect.apply(target.query, target, args);
+            if (args[0] === 'COMMIT' && !lostAcknowledgement) {
+              lostAcknowledgement = true;
+              throw new Error('connection lost before COMMIT acknowledgement');
+            }
+            return result;
+          };
+          const value = Reflect.get(target, property);
+          return typeof value === 'function' ? value.bind(target) : value;
+        } });
+      };
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const store = new MediaStore(uncertainPool, f.content);
+    const activated = await store.settleUpload(f.reserved.upload, verdict, f.persist);
+    expect(lostAcknowledgement).toBe(true);
+    expect(activated.status).toBe('activated');
+    expect(f.objects.get(`${f.reserved.objectNamespace}sha256/${sha(image)}`)).toEqual(image);
+    expect(f.objects.get(`${f.reserved.quarantineKey}/sha256/${sha(image)}`)).toEqual(image);
+    expect(f.deleted).toEqual([]);
+    expect((await f.pool.query('SELECT id,availability FROM media.representation')).rows)
+      .toEqual([{ id: activated.representation, availability: 'available' }]);
+    expect((await f.pool.query('SELECT 1 FROM content.receipt WHERE operation_id=$1',
+      [`media-activate:${f.reserved.upload}`])).rowCount).toBe(1);
+    const replayed = await f.store.settleUpload(f.reserved.upload, verdict, async () => {
+      throw new Error('committed activation replay must not persist');
+    });
+    expect(replayed.status).toBe('activated');
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.representation).toBe(activated.representation);
+    expect(f.writes()).toBe(2);
+    expect(f.deleted).toEqual([]);
   });
 });
 
@@ -515,6 +613,35 @@ test('erase wins a delayed Content save: asset-revision recording cannot republi
         expect((await f.pool.query(`SELECT 1 FROM content.${table} WHERE operation_id=$1`,
           [`media-asset-revision:${f.reserved.upload}`])).rowCount).toBe(0);
       }
+    } finally { writer.mockRestore(); }
+  });
+});
+
+test('erase wins a delayed Content receipt replay: historical recording must re-enter the asset fence', async () => {
+  await fixture(async f => {
+    await f.store.settleUpload(f.reserved.upload, verdict, f.persist);
+    const initial = await f.store.recordAssetRevision(f.reserved.upload);
+    const before = (await f.pool.query('SELECT id FROM content.revision ORDER BY id')).rows;
+    expect(before).toEqual([{ id: initial.revision }]);
+    const save = f.content.saveDraft.bind(f.content), started = barrier(), release = barrier();
+    const writer = spyOn(f.content, 'saveDraft').mockImplementation(async (command, transactionFence) => {
+      started.release(); await release.promise; return save(command, transactionFence);
+    });
+    const recording = f.store.recordAssetRevision(f.reserved.upload);
+    const outcome = recording.then(() => null, error => error as unknown);
+    try {
+      await started.promise;
+      await f.erase();
+    } finally { release.release(); }
+    try {
+      expect(await outcome).toBeInstanceOf(MediaStale);
+      expect(writer).toHaveBeenCalledTimes(1);
+      expect((await f.pool.query('SELECT id FROM content.revision ORDER BY id')).rows).toEqual(before);
+      expect((await f.pool.query('SELECT 1 FROM content.receipt WHERE operation_id=$1',
+        [`media-asset-revision:${f.reserved.upload}`])).rowCount).toBe(1);
+      expect((await f.pool.query('SELECT 1 FROM content.outbox WHERE operation_id=$1',
+        [`media-asset-revision:${f.reserved.upload}`])).rowCount).toBe(1);
+      expect(f.objects.size).toBe(0);
     } finally { writer.mockRestore(); }
   });
 });
