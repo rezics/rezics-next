@@ -4639,6 +4639,9 @@ export interface MainSync {
   fastForward(after: string): { status: number | null; stderr: string };
 }
 
+/** How often one merge may recheck types because main changed a workspace it had checked. */
+const MAX_TYPE_RECHECKS = 5;
+
 export type FastForward =
   | { kind: 'merged'; prepared: PreparedMerge }
   /** The pre-merge gate passed and main was not fast-forwarded. */
@@ -4866,6 +4869,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   const gatedFiles = new Set<string>();
   let regated = false;
   let retyped = false;
+  let typeRechecks = 0;
   const skipTypes = flags.has('--skip-type-gate');
   const skipUnits = flags.has('--skip-unit-gate');
   const laneCommand = `${landPermittedFiles !== undefined ? 'land' : gateOnly ? 'gate' : 'merge'} ${id}`;
@@ -4945,7 +4949,10 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (typeof outcome === 'string') throw new Error(outcome);
     if (!outcome) return;
     preparedMerge = outcome.rerun;
-    retyped = true;
+    // A type check takes seconds. A busy workspace may be rechecked several times before the merge gives up;
+    // a rerun of the unit gate is still allowed once.
+    typeRechecks++;
+    retyped = !outcome.workspaces || typeRechecks >= MAX_TYPE_RECHECKS;
     if (outcome.workspaces) {
       const workspaces = outcome.workspaces;
       const rerun = () => typecheck(outcome.rerun, workspaces);
