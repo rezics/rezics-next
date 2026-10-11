@@ -53,7 +53,7 @@ async function migrateAccess(pool: Pool): Promise<void> {
   } finally { client.release(); }
 }
 
-async function commandFixture(objects: MemoryObjects) {
+async function commandFixture(objects: MemoryObjects, includePredecessor = true) {
   const receipt = `urn:rezics:receipt:${randomUUID()}`;
   const component = `https://rezics.com/id/${randomUUID()}`;
   const revision = `https://rezics.com/id/${randomUUID()}`;
@@ -82,7 +82,7 @@ async function commandFixture(objects: MemoryObjects) {
     input: { envelope, component, revision, manifest, routingEpoch: 'routing-a', state,
       receipt: { outcome: 'succeeded' as const, receipt, admissionId: randomUUID(), requestDigest: digest,
         authorityEpoch: '8', scope: `work:edit:${work}`, dataEpoch: 'epoch-a', work, component, revision,
-        predecessor: component } } };
+        ...(includePredecessor ? { predecessor: component } : {}) } } };
 }
 
 function makeCustody(pool: Pool, objects: MemoryObjects, proof: { value: Proof | null },
@@ -271,6 +271,55 @@ test('erasure waits for a pending command to settle under the same receipt lock'
     await Promise.allSettled([...(commit ? [commit] : []), ...(erase ? [erase] : [])]);
     erasureClient?.release();
     await Promise.all([pool.end(), observer.end()]);
+    cluster.remove();
+  }
+}, 60_000);
+
+test('terminal erased custody replays a committed receipt that has no predecessor', async () => {
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 2, connectionTimeoutMillis: 1_000 });
+  const objects = new MemoryObjects();
+  const proof = { value: null as Proof | null };
+  const nativeQueries: string[] = [], retirements: unknown[] = [];
+  const { store, custody } = makeCustody(pool, objects, proof, nativeQueries, retirements);
+  const fixture = await commandFixture(objects, false);
+  const counters = { dispatches: 0 };
+  try {
+    await migrateAccess(pool);
+    const committedResult = await custody.commit({ ...fixture.input, dispatch: committed(proof, counters) });
+    expect(committedResult).toEqual({ status: 'committed', position: {
+      datasetId: 'urn:rezics:dataset:product', dataEpoch: 'epoch-a', sequence: '17' } });
+    expect(counters.dispatches).toBe(1);
+
+    const payloadSha256 = (await pool.query<{ payload_sha256: string }>(
+      'SELECT payload_sha256 FROM access.command_custody WHERE receipt=$1', [fixture.receipt])).rows[0]!.payload_sha256;
+    await store.withReceipt(fixture.receipt, async session => {
+      if (!session.clearPayloadForErasure) throw new Error('PostgreSQL custody erase capability is unavailable');
+      await session.clearPayloadForErasure({ revision: fixture.revision, payloadSha256,
+        erasureId: randomUUID(), erasureEpoch: '14' });
+    });
+
+    objects.bytes.clear();
+    proof.value = { digest: 'b'.repeat(64), payloadSha256: 'c'.repeat(64), dataEpoch: 'stale-epoch',
+      sequence: '3', streamSequence: '2' };
+    const nativeQueryCount = nativeQueries.length, objectGetCount = objects.gets, objectPutCount = objects.puts;
+    const terminal = await custody.resolve(fixture.receipt);
+    expect(terminal).toMatchObject({ receipt: fixture.receipt, requestDigest: fixture.digest,
+      dataEpoch: 'epoch-a', sequence: '17', streamSequence: '4' });
+    expect(terminal).not.toHaveProperty('predecessor');
+    expect(await custody.commit({ ...fixture.input, dispatch: async () => {
+      counters.dispatches++;
+      throw new Error('erased command custody must never dispatch');
+    } })).toEqual(committedResult);
+    let cancellations = 0;
+    expect(await custody.guardCancellation(fixture.receipt, async () => { cancellations++; })).toEqual(terminal);
+    expect(cancellations).toBe(0);
+    expect(counters.dispatches).toBe(1);
+    expect(nativeQueries).toHaveLength(nativeQueryCount);
+    expect(objects.gets).toBe(objectGetCount);
+    expect(objects.puts).toBe(objectPutCount);
+  } finally {
+    await pool.end();
     cluster.remove();
   }
 }, 60_000);

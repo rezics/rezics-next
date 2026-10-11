@@ -665,6 +665,8 @@ function heldCustodyClient(f: Awaited<ReturnType<typeof fixture>>, restore = fal
     const row = f.store.row;
     if (!row) return { rows: [] };
     return { rows: alter({ receipt: row.receipt,request_digest: row.requestDigest,payload_sha256: row.payloadSha256,
+      payload_erasure_id: row.payloadErasure?.erasureId ?? null,
+      payload_erasure_epoch: row.payloadErasure?.erasureEpoch ?? null,
       payload: row.payload,revision: row.revision,terminal: row.terminal,outbox: row.outbox,
       reconciled: row.reconciled,retired: row.retired,data_epoch: retainedEpoch,stream_sequence: mainSequence }) };
   }, release: () => { releases++; throw new Error('historical reader cannot release the held client'); } } as unknown as PoolClient;
@@ -706,7 +708,8 @@ for (const kind of ['command','manifest','payload','shape'] as const) for (const
       if (corrupt) f.objects.bytes.set(digest,Buffer.from('altered original bytes'));
       else f.objects.bytes.delete(digest);
       const puts = f.objects.puts, original = JSON.stringify(f.store.row);
-      await expect(f.custody.readHistorical({ dataEpoch: retainedEpoch,streamSequence: mainSequence },held.client)).rejects.toThrow();
+      await expect(f.custody.readHistorical({ dataEpoch: retainedEpoch,streamSequence: mainSequence },held.client))
+        .rejects.toBeInstanceOf(corrupt ? ObjectIntegrityError : ObjectUnavailable);
       expect(JSON.stringify(f.store.row)).toBe(original); expect(f.objects.puts).toBe(puts);
       expect(held.queries).toHaveLength(1); expect(held.releases()).toBe(0);
       expect(f.sourceQueries()).toBe(0); expect(f.store.mutations).toBe(0);

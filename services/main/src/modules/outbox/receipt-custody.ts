@@ -432,7 +432,7 @@ function erasedOutbox(row: ErasedCustodyRow, terminal: CustodiedReceipt): Custod
     && metadataValue.revision === terminal.revision
     && typeof metadataValue.manifest === 'string'
     && /^urn:rezics:sha256:[0-9a-f]{64}$/.test(metadataValue.manifest);
-  if (!identity || !terminal.predecessor || terminal.work === undefined
+  if (!identity || terminal.work === undefined
     || !(editionIdentity || metadataIdentity)
     || (editionIdentity ? event.type !== 'com.rezics.work.metadata-revised.v1'
       : event.type !== 'com.rezics.work.metadata-changed.v1')) {
