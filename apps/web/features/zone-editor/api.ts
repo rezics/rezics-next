@@ -12,7 +12,7 @@ import {
   foldMountPages, NAV_LOAD_BATCH, NAV_PAGE_SIZE, navigationReadTarget, pageNameOf, zoneMountPage,
   type NavigationReadTarget, type NavPosition, type NavWriteFailure, type NavWriteResult, type SiteLink,
 } from './navigation.ts';
-import type { ZonePresentationBaseline } from './theme.ts';
+import { readPresentation, type ZonePresentationBaseline } from './theme.ts';
 import { readZoneLifecycleSnapshot } from './lifecycle.ts';
 
 export type WriteResult<T> =
@@ -23,7 +23,12 @@ export type WriteResult<T> =
 export interface SavedDraft extends DraftBasis { replayed: boolean }
 export interface PublishedSite { zoneHead: string; replayed: boolean }
 export interface ZoneHeads { zoneHead: string; navigationRevision: string }
-export interface ZoneThemeSnapshot { revision: string; configuration: Record<string, unknown> }
+export interface ZoneThemeSnapshot {
+  revision: string;
+  configuration: Record<string, unknown>;
+  /** Main's authorized effective presentation when no presentation has been saved. */
+  effectivePresentation?: { revision: string; presentation: ZonePresentationBaseline };
+}
 export interface SavedZoneTheme { revision: string; replayed: boolean }
 export interface ZoneThemeWrite {
   expectedHead: string;
@@ -87,6 +92,15 @@ export function browserZoneAuthoring(main: ReturnType<typeof browserMainApi> = b
       if (!answer.ok) return answer;
       const heads = await this.readHeads(zoneId, actingSubject);
       if (!heads.ok) return heads;
+      const row = record(answer.data);
+      const previewNavigation = record(record(row?.preview)?.navigation);
+      if (typeof row?.revision !== 'string' || !iriPattern.test(row.revision)
+        || typeof previewNavigation?.revision !== 'string' || !iriPattern.test(previewNavigation.revision)) {
+        return { ok: false, failure: 'unavailable' };
+      }
+      if (row.revision !== heads.data.zoneHead || previewNavigation.revision !== heads.data.navigationRevision) {
+        return { ok: false, failure: 'stale', currentHead: heads.data.zoneHead };
+      }
       const draft = loadedDraft(answer.data, { revision: heads.data.navigationRevision, ownerRevision: heads.data.zoneHead });
       return draft ? { ok: true, data: draft } : { ok: false, failure: 'unavailable' };
     },
@@ -110,7 +124,19 @@ export function browserZoneTheme(main: ReturnType<typeof browserMainApi> = brows
       if (typeof revision !== 'string' || !iriPattern.test(revision) || !configuration) {
         return { ok: false, failure: 'unavailable' };
       }
-      return { ok: true, data: { revision, configuration } };
+      if (readPresentation(configuration).kind !== 'absent') return { ok: true, data: { revision, configuration } };
+      const editor = await post(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }));
+      if (!editor.ok) return editor;
+      const editorRow = record(editor.data);
+      const editorRevision = editorRow?.revision;
+      if (typeof editorRevision !== 'string' || !iriPattern.test(editorRevision)) {
+        return { ok: false, failure: 'unavailable' };
+      }
+      if (editorRevision !== revision) return { ok: false, failure: 'stale', currentHead: editorRevision };
+      const presentation = readPresentation({ presentation: record(editorRow?.preview)?.presentation });
+      if (presentation.kind !== 'ready') return { ok: false, failure: 'unavailable' };
+      return { ok: true, data: { revision, configuration,
+        effectivePresentation: { revision: editorRevision, presentation: presentation.presentation } } };
     },
     async saveConfiguration(zoneId, body, key) {
       const answer = await post(() => main.v1.zones({ id: zoneId }).configuration.put(
@@ -330,7 +356,7 @@ export async function loadZoneNavigation(
     }
     return { ok: true as const, data: read.data };
   }, resume);
-  if (!batch.ok) return { ok: false, failure: readFailure ?? 'unavailable' };
+  if (!batch.ok) return { ok: false, failure: readFailure ?? (batch.failure === 'stale' ? 'moved' : 'unavailable') };
   return {
     ok: true,
     data: {
@@ -338,6 +364,66 @@ export async function loadZoneNavigation(
       links: await withPageNames(main, batch.data.links, actingSubject),
     },
   };
+}
+
+/** Preview needs the entire saved inventory, pinned to its authorized configuration and navigation heads. */
+export function loadCompleteZoneNavigation(
+  main: MainClient,
+  zoneId: string,
+  actingSubject: string,
+  expected: ZoneHeads,
+): Promise<Loaded<NavigationSnapshot>> {
+  return completeNavigation<Extract<Loaded<NavigationSnapshot>, { ok: false }>>(
+    resume => loadZoneNavigation(main, zoneId, actingSubject, resume),
+    () => ({ ok: false, failure: 'unavailable' }),
+    () => ({ ok: false, failure: 'moved' }),
+    expected,
+  );
+}
+
+/** Publication review follows the same continuation contract as the authorized server preview. */
+export function readCompleteZoneNavigation(
+  zoneId: string,
+  actingSubject: string,
+  client: Pick<ZoneNavigationClient, 'readNavigation' | 'continueNavigation'>,
+): Promise<WriteResult<NavigationSnapshot>> {
+  return completeNavigation<Extract<WriteResult<NavigationSnapshot>, { ok: false }>>(
+    resume => resume ? client.continueNavigation(zoneId, actingSubject, resume) : client.readNavigation(zoneId, actingSubject),
+    () => ({ ok: false, failure: 'unavailable' }),
+    currentHead => ({ ok: false, failure: 'stale', currentHead }),
+  );
+}
+
+async function completeNavigation<Failure extends { ok: false }>(
+  read: (resume?: NavigationResume) => Promise<{ ok: true; data: NavigationSnapshot } | Failure>,
+  unavailable: () => Failure,
+  changed: (currentHead: string | null) => Failure,
+  expected?: ZoneHeads,
+): Promise<{ ok: true; data: NavigationSnapshot } | Failure> {
+  const initial = await read();
+  if (!initial.ok) return initial;
+  const first = initial.data;
+  if (expected && (first.head !== expected.navigationRevision || first.zoneHead !== expected.zoneHead)) {
+    return changed(first.zoneHead);
+  }
+  const links = [...first.links];
+  const cursors = new Set<string>();
+  let page = first;
+  while (true) {
+    if (page.complete) {
+      if (page.after !== null) return unavailable();
+      return { ok: true, data: { ...first, links, complete: true, after: null } };
+    }
+    if (!page.after || cursors.has(page.after)) return unavailable();
+    cursors.add(page.after);
+    const continued = await read({ head: first.head, after: page.after });
+    if (!continued.ok) return continued;
+    page = continued.data;
+    if (page.head !== first.head || page.navigation !== first.navigation || page.zoneHead !== first.zoneHead) {
+      return changed(page.zoneHead);
+    }
+    links.push(...page.links);
+  }
 }
 
 async function collectBrowserNavigation(
@@ -355,7 +441,7 @@ async function collectBrowserNavigation(
     }
     return { ok: true as const, data: answer.data };
   }, resume);
-  if (!batch.ok) return writeFailure ?? { ok: false, failure: 'unavailable' };
+  if (!batch.ok) return writeFailure ?? batch;
   return {
     ok: true,
     data: {
@@ -392,8 +478,11 @@ async function collectMountPages(
     { ok: true; data: unknown } | { ok: false; failure: string } | WriteResult<unknown>
   >,
   resume?: NavigationResume,
-): Promise<{ ok: true; data: MountBatch } | { ok: false; failure: 'unavailable' | 'stale' }> {
+): Promise<{ ok: true; data: MountBatch }
+  | { ok: false; failure: 'unavailable' }
+  | { ok: false; failure: 'stale'; currentHead: string | null }> {
   const pages: NonNullable<ReturnType<typeof zoneMountPage>>[] = [];
+  const cursors = new Set<string>(resume ? [resume.after] : []);
   let pinned: string | null = resume?.head ?? null;
   let after: string | undefined = resume?.after;
   for (let page = 0; page < NAV_LOAD_BATCH; page += 1) {
@@ -401,15 +490,22 @@ async function collectMountPages(
     if (resume && page === 0 && target.kind !== 'revision') return { ok: false, failure: 'unavailable' };
     const answer = await readPage(target);
     if (!answer.ok) {
-      return { ok: false, failure: answer.failure === 'stale' ? 'stale' : 'unavailable' };
+      return answer.failure === 'stale'
+        ? { ok: false, failure: 'stale', currentHead: null }
+        : { ok: false, failure: 'unavailable' };
     }
     const parsed = zoneMountPage(answer.data);
     if (!parsed) return { ok: false, failure: 'unavailable' };
-    if (pinned && parsed.head !== pinned) return { ok: false, failure: 'unavailable' };
+    if (pinned && parsed.head !== pinned) return { ok: false, failure: 'stale', currentHead: parsed.zoneHead };
+    const first = pages[0];
+    if (first && (parsed.navigation !== first.navigation || parsed.zoneHead !== first.zoneHead)) {
+      return { ok: false, failure: 'stale', currentHead: parsed.zoneHead };
+    }
     pinned = parsed.head;
     pages.push(parsed);
     if (!parsed.next) break;
-    if (parsed.next === after) return { ok: false, failure: 'unavailable' };
+    if (cursors.has(parsed.next)) return { ok: false, failure: 'unavailable' };
+    cursors.add(parsed.next);
     after = parsed.next;
   }
   const folded = foldMountPages(pages);

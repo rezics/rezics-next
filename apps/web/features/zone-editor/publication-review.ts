@@ -1,4 +1,4 @@
-import type { ZoneAuthoringClient, ZoneNavigationClient, ZoneThemeClient, WriteResult } from './api.ts';
+import { readCompleteZoneNavigation, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient, type WriteResult } from './api.ts';
 import type { PublicationChoice, EditorState } from './model.ts';
 import { canPublish, publicationChoice } from './model.ts';
 import type { SiteLink } from './navigation.ts';
@@ -34,47 +34,33 @@ export async function readSavedPublicationSelection(zoneId: string, actingSubjec
 }): Promise<WriteResult<SavedPublicationSelection>> {
   const [heads, navigation, configuration] = await Promise.all([
     clients.authoring.readHeads(zoneId, actingSubject),
-    clients.navigation.readNavigation(zoneId, actingSubject),
+    readCompleteZoneNavigation(zoneId, actingSubject, clients.navigation),
     clients.theme.readConfiguration(zoneId, actingSubject),
   ]);
   if (!heads.ok) return heads;
   if (!navigation.ok) return navigation;
   if (!configuration.ok) return configuration;
 
-  const links = [...navigation.data.links];
-  let after = navigation.data.after;
-  let complete = navigation.data.complete;
-  const cursors = new Set<string>();
-  while (!complete) {
-    if (!after || cursors.has(after)) return { ok: false, failure: 'unavailable' };
-    cursors.add(after);
-    const page = await clients.navigation.continueNavigation(zoneId, actingSubject, {
-      head: navigation.data.head,
-      after,
-    });
-    if (!page.ok) return page;
-    if (page.data.head !== navigation.data.head || page.data.navigation !== navigation.data.navigation) {
-      return { ok: false, failure: 'stale', currentHead: heads.data.zoneHead };
-    }
-    links.push(...page.data.links);
-    after = page.data.after;
-    complete = page.data.complete;
-  }
-
-  const presentation = readPresentation(configuration.data.configuration);
-  if (presentation.kind !== 'ready') return { ok: false, failure: 'unavailable' };
   if (configuration.data.revision !== heads.data.zoneHead
     || navigation.data.head !== heads.data.navigationRevision
-    || (navigation.data.zoneHead !== null && navigation.data.zoneHead !== heads.data.zoneHead)) {
+    || navigation.data.zoneHead !== heads.data.zoneHead) {
     return { ok: false, failure: 'stale', currentHead: heads.data.zoneHead };
   }
+  const savedPresentation = readPresentation(configuration.data.configuration);
+  const effective = configuration.data.effectivePresentation;
+  if (savedPresentation.kind === 'absent' && effective && effective.revision !== heads.data.zoneHead) {
+    return { ok: false, failure: 'stale', currentHead: heads.data.zoneHead };
+  }
+  const presentation = savedPresentation.kind === 'absent' && effective
+    ? readPresentation({ presentation: effective.presentation }) : savedPresentation;
+  if (presentation.kind !== 'ready') return { ok: false, failure: 'unavailable' };
   return {
     ok: true,
     data: {
       zoneHead: heads.data.zoneHead,
       navigationRevision: heads.data.navigationRevision,
       navigationId: navigation.data.navigation,
-      navigation: links,
+      navigation: navigation.data.links,
       presentationNavigation: presentation.presentation.navigation,
       theme: presentation.choice,
     },
