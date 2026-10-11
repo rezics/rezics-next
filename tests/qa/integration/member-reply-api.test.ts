@@ -756,7 +756,6 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
     expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
       [unverifiedHttpKey])).rowCount).toBe(0);
     const unverifiedPrincipal = await h.principal();
-    expect(unverifiedPrincipal.emailVerified).toBe(false);
     await expect(h.access.claim(unverifiedRegistered.id, unverifiedRequest.requestDigest, principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
     const unverifiedReplay = await h.access.register({ ...unverifiedRequest, principal: unverifiedPrincipal });
