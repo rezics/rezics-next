@@ -7,6 +7,8 @@ export const opsErasureCases: CaseDeclarations = {
       name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/content-publication-recovery.test.ts',
       name: 'WORK10: ambiguous, active and rejected Content publication pins reconcile from exact graph receipts' },
+    { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/structured-work-publication-recovery.test.ts',
+      name: 'WORK10: publication settlement, withdrawal replay and restore holds keep one terminal public state' },
     { tier: 'integration', file: 'tests/qa/integration/erasure-published-search.test.ts',
       name: 'WORK10/SEARCH20/SEARCH08/OPS10: published erasure fences replay and replacement search' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/erasure-search-rebuild.test.ts',
