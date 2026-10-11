@@ -96,3 +96,18 @@ NEXT: kernel-sonnet to assign those steps with the acceptance checks above and s
 ## Additional consumer of the consistent capture: Zone browse reconciliation
 
 Added 2026-10-12 from Launch's relay gap recovery. The Zone browse reconciliation (a hole or a late batch reconciled from the authoritative graph at a validated cut) keeps being invalidated under sustained unrelated writes: after three invalidations it waits 30 seconds, shows `waiting-for-cut` (bounded, observable, reads unavailable). It completes under continuous writes only with the scoped consistent capture: it is a consumer of the native capture step, with the Zone's own scope (Zone, mounted resources) as the capture key instead of a global cut. The implementer of the capture step lists it in the acceptance table (unrelated writes during reconciliation do not invalidate its cut).
+
+## Named case: the feed graph cut after a review revocation
+
+`feed/source.ts` `graphPositionAtRelay` resolves a relay (stream) position to a
+graph sequence from the single `relay.delivered_event` row group at exactly that
+sequence. A retained batch with `event_count = 0` (zero-event batches are legal)
+has a `relay.delivered_batch` row and no `delivered_event` row, so a feed cut
+that lands on such a position, or on a slim command's position before its
+events are retained, is reported "unavailable" although the position is whole.
+Rule from this report applies: a cut position is whole when its batch is
+retained; the graph sequence must come from the batch's own custody (physical
+header, or receipt custody for slim commands), never from the event rows only.
+The reverse lookup `mainSequencesForGraphReferences` only needs event rows and
+stays. Evidence needed before the fix: the `delivered_batch` and
+`delivered_event` rows at the failing position (see the mail to Launch).
