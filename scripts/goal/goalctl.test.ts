@@ -5519,6 +5519,7 @@ describe('heavy QA lock', () => {
             return { ok: false, timedOut: false, elapsedMs: 0, activeElapsedMs: 0, output: 'startup stubbed' };
           },
         }));
+        // Integration planning performs the lazy raw-update scan before startup.
         test('heavy QA CLI skips both ordinary slot acquisitions', async () => {
           const argv = process.argv;
           process.argv = ['bun', ${JSON.stringify(cli)}, '--tier', 'integration', '--file',
@@ -5530,7 +5531,7 @@ describe('heavy QA lock', () => {
             process.argv = argv;
             process.exitCode = 0;
           }
-        });
+        }, 15_000);
       `);
       const result = spawnSync('bun', ['test', script], { cwd: process.cwd(), encoding: 'utf8',
         maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GOAL_QA_HEAVY_RUN: '1', GOAL_QA_SLOTS: '3',
