@@ -27,7 +27,7 @@ import { PRIVATE_SEARCH_SEND_WINDOW_MS, PrivateSearchSettlement }
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { PRIVATE_SEARCH_FINAL_FUSEKI_CALLS, PRIVATE_SEARCH_FUSEKI_CALLS,
-  prepareAdmittedPrivateContributionPhrase, PrivateSearchUnavailable, type PrivateSearchAccess }
+  prepareAdmittedPrivateContributionPhrase, PrivateSearchUnavailable }
   from '../../../services/main/src/modules/contribution/search-private.ts';
 import { activateMetadataWork, initializeFreshGraph, DATASET, GRAPHS, ID,
   metadataWorkRequestDigest, RV,
@@ -48,7 +48,14 @@ const root = resolve(import.meta.dir, '../../..');
 class PrivateIndexFuseki extends ObservedFuseki {
   uncertain = false;
   afterPosition: (() => Promise<void>) | undefined;
+  afterPositionWrite: Promise<void> | undefined;
   sequenceBeforeWrite: string | undefined;
+
+  async finishAfterPositionWrite() {
+    const write = this.afterPositionWrite;
+    this.afterPositionWrite = undefined;
+    await write;
+  }
 
   override async commandHealth() {
     const health = await super.commandHealth();
@@ -62,7 +69,9 @@ class PrivateIndexFuseki extends ObservedFuseki {
       this.afterPosition = undefined;
       this.sequenceBeforeWrite = result.results?.bindings[0]?.sequence?.value;
       // A separate Main actor has its own budget and cost attribution.
-      await fusekiReadBudget.exit(() => runBackgroundOperation(write));
+      this.afterPositionWrite = fusekiReadBudget.exit(() => runBackgroundOperation(write));
+      // The test joins this diagnostic operation after the private read completes.
+      void this.afterPositionWrite.catch(() => {});
     }
     return result;
   }
@@ -399,18 +408,14 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   } finally { fuseki.uncertain = false; }
 
   const unrelatedMainWrite = async () => { await createWork(`Unrelated Main ${randomUUID()}`); };
-  const provenanceAccess: PrivateSearchAccess = {
-    admitContributionSearchRead: access.admitContributionSearchRead.bind(access),
-    beginContributionSearchDelivery: access.beginContributionSearchDelivery.bind(access),
-    finishContributionSearchRead: access.finishContributionSearchRead.bind(access),
-    armContributionSearchSend: async (...args) => {
-      await access.armContributionSearchSend(...args);
-      await runBackgroundOperation(unrelatedMainWrite);
-    },
-  };
+  const completeUnrelatedMainWrite = () =>
+    fusekiReadBudget.exit(() => runBackgroundOperation(unrelatedMainWrite));
+  // Delivery-path owner work is complete before the private read is armed.
+  await completeUnrelatedMainWrite();
   fuseki.afterPosition = unrelatedMainWrite;
-  const session = await prepareAdmittedPrivateContributionPhrase(env, provenanceAccess, settlement,
+  const session = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
     principal, actor, { contribution: privateContribution, phrase: hiddenTerm });
+  await fuseki.finishAfterPositionWrite();
   const textQueries = fuseki.queries.filter(query => query.includes('text:query'));
   expect(textQueries).toHaveLength(2);
   for (const query of textQueries) {
@@ -448,10 +453,13 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   expect(await session.receipt(acknowledge(delivered))).toBe(false);
   expect((await lease()).state).toBe('delivered');
 
+  // Keep the miss delivery proof independent of unrelated Work activation time.
+  await completeUnrelatedMainWrite();
   fuseki.afterPosition = unrelatedMainWrite;
-  const miss = await prepareAdmittedPrivateContributionPhrase(env, provenanceAccess, settlement,
+  const miss = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
     principal, actor, { contribution: privateContribution,
       phrase: `absent${randomUUID().replaceAll('-', '')}` });
+  await fuseki.finishAfterPositionWrite();
   let missFrame = '';
   await miss.send(value => { missFrame = value; return Buffer.byteLength(value); });
   const missing = receipt(missFrame);
