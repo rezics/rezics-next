@@ -27,6 +27,9 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 interface Draft { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
 
 test('Post notes stay language-local on exact chapter reads and outside length, search, feed and fixed releases', async () => {
+  // Own owner databases: a publication that stays private (the custody test before this file publishes one) holds
+  // the shared Content projection cursor behind it, because nothing releases a deferred event that is decided
+  // private. This works around that projection defect; drop the clone when private deferred events are released.
   const owners = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay'], 'privileged');
   let stack: MediaStack | undefined;
   try {
