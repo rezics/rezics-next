@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget, type FusekiClient, type TemplateIndexDelta, type TemplateIndexKey,
   type WorkScopeDirectoryPage, type WorkScopeDirectoryRefusal } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable, WorkReadMoved, WorkReadLimit, readDependencyToken } from '../work/read-session.ts';
-import { controlRead, controlTransaction } from '../access/topology-control.ts';
+import { accessClient, controlRead, controlTransaction } from '../access/topology-control.ts';
 import { runWorkerTick } from '../../worker-tick.ts';
 import { FIRST_PUBLICATION_TYPE, invertedPublicationYear } from './year-fact.ts';
 
@@ -225,7 +225,7 @@ export class TemplateSeekIndex {
         ON CONFLICT(epoch) DO UPDATE SET instance=EXCLUDED.instance,cursor=EXCLUDED.cursor,complete=false`,[epoch,instance]);
     });
     while (Date.now()<deadline) {
-      const state = (await this.pool.query<{ complete:boolean; cursor:{ phase:number; after:string } }>('SELECT complete,cursor FROM access.template_seek_checkpoint WHERE epoch=$1',[epoch])).rows[0]!;
+      const state = (await (accessClient(this.pool) ?? this.pool).query<{ complete:boolean; cursor:{ phase:number; after:string } }>('SELECT complete,cursor FROM access.template_seek_checkpoint WHERE epoch=$1',[epoch])).rows[0]!;
       if (state.complete) {await this.recover(epoch,deadline);return {batches,entities,elapsedMs:Date.now()-started,budgetMs};}
       const delta = await this.fuseki.templateIndex({ operation:'backfill',...state.cursor });
       if (delta.position.dataEpoch!==epoch) throw new WorkReadUnavailable('Template directory epoch moved');
@@ -271,7 +271,7 @@ export class TemplateSeekIndex {
       if (filter.kind && (key.type.endsWith('FixedRelease') ? 'release' : 'text-variant')!==filter.kind) continue;
       const bounded = key.type===FIRST_PUBLICATION_TYPE && (filter.fromYear!==undefined || filter.toYear!==undefined);
       const rows = bounded
-        ? await this.pool.query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
+        ? await (accessClient(this.pool) ?? this.pool).query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
         SELECT id,key FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND predicate=$3 AND anchor=$4 AND type=$5
         AND key >= $9::text COLLATE "C" AND key <= $10::text COLLATE "C"
         AND (key,id)>($6::text COLLATE "C",$7::text COLLATE "C") ORDER BY key,id LIMIT $8)
@@ -279,7 +279,7 @@ export class TemplateSeekIndex {
         ORDER BY c.key,c.id`,[epoch,key.graph,key.predicate,key.anchor,key.type,after?.key ?? '',after?.id ?? '',ask+1,
           filter.toYear===undefined?'':invertedPublicationYear(filter.toYear),
           filter.fromYear===undefined?invertedPublicationYear(1):invertedPublicationYear(filter.fromYear)])
-        : await this.pool.query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
+        : await (accessClient(this.pool) ?? this.pool).query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
         SELECT id,key FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND predicate=$3 AND anchor=$4 AND type=$5
         AND (key,id)>($6::text COLLATE "C",$7::text COLLATE "C") ORDER BY key,id LIMIT $8)
         SELECT c.id,c.key,e.payload FROM candidates c JOIN access.template_seek_entity e ON e.epoch=$1 AND e.graph=$2 AND e.id=c.id
@@ -294,7 +294,7 @@ export class TemplateSeekIndex {
   }
   async confirmed(epoch:string, roots:string[], keys:string[]): Promise<Set<string>> {
     if(keys.length>128) throw new WorkReadUnavailable('Source key batch exceeds its bound');
-    const rows=await this.pool.query<{ anchor:string; external_key:string }>(`SELECT wanted.anchor,wanted.external_key FROM
+    const rows=await (accessClient(this.pool) ?? this.pool).query<{ anchor:string; external_key:string }>(`SELECT wanted.anchor,wanted.external_key FROM
       unnest($3::text[],$4::text[]) wanted(anchor,external_key) CROSS JOIN LATERAL (
         SELECT 1 FROM access.template_seek_entry WHERE epoch=$1 AND type=$2
           AND anchor=wanted.anchor AND external_key=wanted.external_key LIMIT 1) present`,[epoch,`${RV}AuthorCredit`,roots,keys]);

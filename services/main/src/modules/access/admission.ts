@@ -41,7 +41,7 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { accessClient,withAccessClient,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -327,19 +327,21 @@ const READ_BEGIN = 'BEGIN; SET LOCAL synchronous_commit = off';
  * read opens and ends its own. */
 async function readAdmission<T>(pool: Pool, client: PoolClient | undefined,
   work: (client: PoolClient) => Promise<T>): Promise<T> {
-  if (client) return work(client);
-  const connected = await pool.connect();
-  try {
-    await connected.query(READ_BEGIN);
-    await connected.query("SET LOCAL lock_timeout = '2s'");
-    await connected.query("SET LOCAL statement_timeout = '5s'");
-    const value = await work(connected);
-    await connected.query('COMMIT');
-    return value;
-  } catch (error) {
-    await rollback(connected);
-    throw error;
-  } finally { connected.release(); }
+  const borrowed = client ?? accessClient(pool);
+  return withAccessClient(pool, async connected => {
+    if (borrowed) return work(connected);
+    try {
+      await connected.query(READ_BEGIN);
+      await connected.query("SET LOCAL lock_timeout = '2s'");
+      await connected.query("SET LOCAL statement_timeout = '5s'");
+      const value = await work(connected);
+      await connected.query('COMMIT');
+      return value;
+    } catch (error) {
+      await rollback(connected);
+      throw error;
+    }
+  }, borrowed);
 }
 
 async function requireRecoveryOpen(client: PoolClient): Promise<string> {
@@ -597,6 +599,7 @@ export class AccessAdmissionRegistry {
   /** Current disclosure decision for a semantic Resource or relation occurrence. */
   async canReadSemanticResource(principal: VerifiedPrincipal | null, actingSubject: string | null,
     resource: string, revision?: string, graph = this.baselineGraph, client?: PoolClient): Promise<boolean> {
+    client ??= accessClient(this.pool);
     if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)) return false;
     const visible = client
       ? await publicInTransaction(client, requireDisclosureGraph(graph), [resource], revision)
@@ -1040,24 +1043,25 @@ export class AccessAdmissionRegistry {
         try { await realmManager(client,request.principal,realm,request.actingSubject,'realm.settings.manage'); }
         catch (error) { if (!(error instanceof RealmAdminDenied)) throw error;
           await realmManager(client,request.principal,realm,request.actingSubject,'realm.owner'); }
-        try { return await operation(client); } catch (error) { ownerError = error;throw error; }
+        try { return await withAccessClient(this.pool, operation, client); } catch (error) { ownerError = error;throw error; }
       }); } catch (error) { if (ownerError !== undefined) throw ownerError;
         if (error instanceof RealmAdminDenied) throw new AdmissionDenied(error.message);
         if (error instanceof RealmAdminUnavailable) throw new AdmissionUnavailable(error.message);throw error; }
     }
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
-      const result = await withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
-        try { await this.registerRequest(probe, client, true); }
-        catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
-        return operation(client);
-      });
-      await client.query('COMMIT');
-      return result;
-    } catch (error) { await rollback(client); throw error; }
-    finally { client.release(); }
+    const borrowed = accessClient(this.pool);
+    return withAccessClient(this.pool, async client => {
+      try {
+        if (!borrowed) await client.query('BEGIN');
+        const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
+        const result = await withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
+          try { await this.registerRequest(probe, client, true); }
+          catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
+          return operation(client);
+        });
+        if (!borrowed) await client.query('COMMIT');
+        return result;
+      } catch (error) { if (!borrowed) await rollback(client); throw error; }
+    }, borrowed);
   }
 
   private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false): Promise<RegisteredAdmission> {

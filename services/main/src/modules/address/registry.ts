@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import { identityKeyUuid } from '@rezics/model/address/sid';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { accessClient, withAccessClient } from '../access/topology-control.ts';
 import { ALIAS_POLICIES, type ScopePolicy } from './policy.ts';
 
 export const NATIVE_ADDRESS_HOLDER =
@@ -84,32 +84,30 @@ export function scopeKind(scope: string): 'agent' | 'space' | 'work' | 'zone' {
 /** The registry is Access-owned. Its transaction and authority locks are the
  * same transaction: revocation cannot acknowledge before an admitted alias write. */
 export class AliasRegistry {
-  private readonly reading = new AsyncLocalStorage<PoolClient>();
   constructor(readonly pool: Pool) {}
 
   async withRead<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
-    const held = this.reading.getStore();
+    const held = accessClient(this.pool);
     if (held) return operation(held);
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      const fence = await client.query(
-        'SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE',
-      );
-      if (!fence.rowCount) throw new AliasUnavailable('Access recovery hold');
-      const result = await this.reading.run(client, () => operation(client));
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      if (error && typeof error === 'object' && 'code' in error)
-        throw new AliasUnavailable('Alias owner is unavailable');
-      throw error;
-    } finally {
-      client.release();
-    }
+    return withAccessClient(this.pool, async client => {
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+        const fence = await client.query(
+          'SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE',
+        );
+        if (!fence.rowCount) throw new AliasUnavailable('Access recovery hold');
+        const result = await operation(client);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (error && typeof error === 'object' && 'code' in error)
+          throw new AliasUnavailable('Alias owner is unavailable');
+        throw error;
+      }
+    });
   }
 
   policy(scope: string): ScopePolicy {
@@ -118,7 +116,7 @@ export class AliasRegistry {
   async isReserved(
     scope: AliasScope,
     key: string,
-    client: Pick<PoolClient, 'query'> = this.reading.getStore() ?? this.pool,
+    client: Pick<PoolClient, 'query'> = accessClient(this.pool) ?? this.pool,
   ) {
     return !!(
       await client.query(
@@ -143,7 +141,7 @@ export class AliasRegistry {
     scopeKind(scope);
     return (
       (
-        await (this.reading.getStore() ?? this.pool).query<AliasRow>(
+        await (accessClient(this.pool) ?? this.pool).query<AliasRow>(
           'SELECT * FROM access.alias_registry WHERE scope = $1 AND key = $2',
           [scope, key],
         )
@@ -173,7 +171,7 @@ export class AliasRegistry {
       holders.some((holder) => !NATIVE_ADDRESS_HOLDER.test(holder))
     )
       throw new AliasInvalid('Invalid address batch');
-    const result = await (client ?? this.pool).query<AliasRow>(
+    const result = await (client ?? accessClient(this.pool) ?? this.pool).query<AliasRow>(
       `SELECT * FROM access.alias_registry
       WHERE holder = ANY($1::text[]) AND state = 'current' AND scope IN ('agent','space','work')`,
       [holders],
@@ -197,7 +195,7 @@ export class AliasRegistry {
         available: false,
         reason: row.state === 'current' ? ('claimed' as const) : ('retained' as const),
       };
-    const confusable = await (this.reading.getStore() ?? this.pool).query(
+    const confusable = await (accessClient(this.pool) ?? this.pool).query(
       `SELECT 1 FROM access.alias_registry WHERE skeleton = $1
       AND (scope = $2 OR $2 IN ('agent','space') AND scope IN ('agent','space')) LIMIT 1`,
       [alias.skeleton, scope],
@@ -223,7 +221,7 @@ export class AliasRegistry {
     });
     if (!aliases.length) return null;
     const row = (
-      await (this.reading.getStore() ?? this.pool).query<{ key: string }>(
+      await (accessClient(this.pool) ?? this.pool).query<{ key: string }>(
         `
       SELECT wanted.key FROM jsonb_to_recordset($1::jsonb)
         AS wanted(key text, skeleton text, ordinal int)
@@ -242,7 +240,7 @@ export class AliasRegistry {
   async heads(scopes: readonly AliasScope[], holders: readonly string[]) {
     if (holders.length > ALIAS_COST.batch || scopes.length !== holders.length)
       throw new AliasInvalid('Invalid alias head batch');
-    const rows = await (this.reading.getStore() ?? this.pool).query<AliasRow>(
+    const rows = await (accessClient(this.pool) ?? this.pool).query<AliasRow>(
       `SELECT head.*
       FROM unnest($1::text[],$2::text[]) AS wanted(scope,holder) CROSS JOIN LATERAL (
         SELECT * FROM access.alias_registry n WHERE n.scope = wanted.scope AND n.holder = wanted.holder

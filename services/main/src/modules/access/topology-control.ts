@@ -1,7 +1,37 @@
 import type { Pool, PoolClient } from 'pg';
+import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import type { VerifiedPrincipal } from './admission.ts';
 import type { AuthorityControlFamily } from './topology-schema.ts';
 import { lockAccessKey } from './scope-gates.ts';
+
+interface AccessCheckout { client: PoolClient; active: boolean }
+const accessCheckouts = new AsyncLocalStorage<ReadonlyMap<Pool, AccessCheckout>>();
+
+/** Only the same Access pool may join this owner's checkout. */
+export function accessClient(pool: Pool): PoolClient | undefined {
+  const held = accessCheckouts.getStore()?.get(pool);
+  return held?.active ? held.client : undefined;
+}
+
+/** Scope the checkout before connecting so concurrent sibling operations do
+ * not inherit each other's pool instrumentation. Explicit clients win, and
+ * callbacks that outlive the owner cannot recover a released client. */
+export function withAccessClient<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
+  client?: PoolClient): Promise<T> {
+  const borrowed = client ?? accessClient(pool);
+  const scope = new AsyncResource('access-checkout');
+  return scope.runInAsyncScope(() => accessCheckouts.run(new Map(accessCheckouts.getStore()), async () => {
+    const connected = borrowed ?? await pool.connect();
+    const held: AccessCheckout = { client: connected, active: true };
+    const checkouts = new Map(accessCheckouts.getStore());
+    checkouts.set(pool, held);
+    try { return await accessCheckouts.run(checkouts, () => work(connected)); }
+    finally {
+      held.active = false;
+      if (!borrowed) connected.release();
+    }
+  })).finally(() => { scope.emitDestroy(); });
+}
 
 async function inExplicitTransaction(client: PoolClient): Promise<boolean> {
   // Two reads share an id only inside an explicit transaction. An idle
@@ -76,22 +106,16 @@ async function boundedControl<T>(client: PoolClient, work: (client: PoolClient) 
  * gets this transaction, because the caller has not begun one. */
 export async function controlTransaction<T>(pool: Pool,
   work: (client: PoolClient) => Promise<T>, read = false, client?: PoolClient): Promise<T> {
-  if (client) {
-    if (await inExplicitTransaction(client)) return work(client);
+  const borrowed = client ?? accessClient(pool);
+  return withAccessClient(pool, async connected => {
+    if (borrowed && await inExplicitTransaction(connected)) return work(connected);
     try {
-      return await boundedControl(client, work, read);
+      return await boundedControl(connected, work, read);
     } catch (error) {
-      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      try { await connected.query('ROLLBACK'); } catch { /* preserve original */ }
       throw normalizeControlError(error);
     }
-  }
-  const connected = await pool.connect();
-  try {
-    return await boundedControl(connected, work, read);
-  } catch (error) {
-    try { await connected.query('ROLLBACK'); } catch { /* preserve original */ }
-    throw normalizeControlError(error);
-  } finally { connected.release(); }
+  }, borrowed);
 }
 
 /** A read whose only writes are FOR SHARE row locks. Locks need no crash
