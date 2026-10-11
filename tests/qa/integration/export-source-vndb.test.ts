@@ -6,7 +6,7 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
-import { classificationPropositionDigest, createClassificationProposition }
+import { CLASSIFICATION_PROPOSITION_PROFILE, classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { readVndbConceptRun } from '../../../services/main/src/modules/source/vndb-concept-run.ts';
@@ -18,7 +18,7 @@ import { captureVndbFixtureRun, vndbConceptBodies } from '../fixtures/vndb-conce
 import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
-import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { contextFixture, RV } from './context-fixture.ts';
 
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -204,7 +204,8 @@ test('LIVE07: source concepts stay distinct while a named narrower concept round
         await f.grant(`statement:speak:${realm.realm}`, 'statement.record');
         return f.json<{ statement: string; meaningKey: string }>(await f.call('POST', '/v1/statements', {
           profile: 'statement-v1', speaker: { kind: 'realm', realm: realm.realm }, subject: work.mainVersion,
-          predicate: relation, relationDefinition: nativeId(), value: { kind: 'resource', iri: narrowG1.concept },
+          predicate: relation, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+          value: { kind: 'resource', iri: narrowG1.concept },
           applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: f.actorA,
         }), 201);
       };
