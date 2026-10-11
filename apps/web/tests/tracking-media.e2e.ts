@@ -72,10 +72,16 @@ async function device(browser: Browser, info: TestInfo, viewport: { width: numbe
 }
 
 async function loaded(page: Page, marker: string, timeout = 90_000) {
-  await expect(async () => {
-    if (await page.getByText('Your place in this series could not be loaded.').count()) await page.reload();
-    await expect(page.locator(marker)).toBeVisible({ timeout: 8_000 });
-  }).toPass({ timeout });
+  try {
+    await expect(async () => {
+      if (await page.getByText('Your place in this series could not be loaded.').count()) await page.reload();
+      await expect(page.locator(marker)).toBeVisible({ timeout: 8_000 });
+    }).toPass({ timeout });
+  } catch (error) {
+    const main = await page.locator('main').innerText().catch(() => '');
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load ${marker} at ${page.url()}; main content: ${main.replace(/\s+/g, ' ').slice(0, 1_200)}; ${detail}`);
+  }
 }
 
 async function shot(page: Page, info: TestInfo, name: string, target?: Locator) {
@@ -86,13 +92,22 @@ async function shot(page: Page, info: TestInfo, name: string, target?: Locator) 
 const chapters = (page: Page) => page.locator('[data-chapter-progress]');
 const play = (page: Page) => page.locator('[data-game-progress]');
 
-test('a manga chapter marked on a phone resumes on the desktop, including from an omnibus, and a simultaneous mark keeps both versions', async ({ browser }, info) => {
+test('identified manga chapter progress resumes across volumes and devices', async ({ browser }, info) => {
   test.setTimeout(300_000);
   const handset = await device(browser, info, phone, seeded.manga.work);
+  await handset.goto(home(seeded.manga.work));
+  await expect(handset.getByRole('link', { name: 'Manga', exact: true })).toBeVisible();
+  await handset.goto(at(seeded.manga.work));
   const phoneChapters = chapters(handset);
   await loaded(handset, '[data-chapter-progress]');
   await expect(phoneChapters.getByText('No chapter read yet')).toBeVisible();
   await expect(phoneChapters.getByText('Continue from Volume 1, chapter 1')).toBeVisible();
+
+  await phoneChapters.getByRole('button', { name: 'Volume 1, chapter 4', exact: true }).click();
+  await expect(phoneChapters.locator('[data-selected]')).toContainText('Volume 1, chapter 4');
+  await phoneChapters.getByRole('button', { name: 'Mark read', exact: true }).click();
+  await expect(phoneChapters.getByText('Last read: Volume 1, chapter 4')).toBeVisible();
+  await expect(phoneChapters.getByText('Continue from Volume 2, chapter 1')).toBeVisible();
 
   await phoneChapters.getByRole('button', { name: 'Volume 2, chapter 3', exact: true }).click();
   await expect(phoneChapters.locator('[data-selected]')).toContainText('Volume 2, chapter 3');
@@ -149,27 +164,90 @@ test('a manga chapter marked on a phone resumes on the desktop, including from a
   await expect(phoneChapters.locator('[data-selected] [data-state="done"]')).toBeVisible();
 });
 
-test('a game marked completed on one device is completed on the other', async ({ browser }, info) => {
-  test.setTimeout(180_000);
+test('game progress resumes across required and extra routes and a partless game on another device', async ({ browser }, info) => {
+  test.setTimeout(300_000);
   const handset = await device(browser, info, phone, seeded.game.work);
   const phonePlay = play(handset);
   await loaded(handset, '[data-game-progress]');
   await expect(phonePlay.getByText('Not played yet')).toBeVisible();
-  await expect(phonePlay.getByRole('button', { name: seeded.game.route })).toBeVisible();
-  await phonePlay.getByRole('button', { name: 'Mark completed' }).click();
-  await expect(phonePlay.locator('[data-where]')).toHaveText('Completed');
-  await expect(phonePlay).toHaveAttribute('data-play-state', 'completed');
-  await expect(phonePlay.locator('[data-route-state="none"]')).toBeVisible();
-  await shot(handset, info, 'game-phone', phonePlay);
+  const phoneRequired = phonePlay.locator('[data-required-parts] [data-route]').filter({ hasText: seeded.game.requiredRoute });
+  const phoneExtra = phonePlay.locator('[data-routes] [data-route]').filter({ hasText: seeded.game.extraRoute });
+  await expect(phoneRequired).toHaveAttribute('data-route-state', 'none');
+  await expect(phoneExtra).toHaveAttribute('data-route-state', 'none');
+  const playedResponsePromise = handset.waitForResponse(response => response.request().method() === 'PUT'
+    && response.url().includes('/progress') && response.ok());
+  await phonePlay.getByRole('button', { name: 'Mark played', exact: true }).click();
+  const playedResponse = await playedResponsePromise;
+  const played = await playedResponse.json() as { version: number; completed: boolean; position: string | null };
+  expect(played).toMatchObject({ version: 1, completed: false, position: 'played' });
+  const playedRequest = playedResponse.request().postDataJSON() as { actingSubject: string; expectedVersion: number };
+  await expect(phonePlay).toHaveAttribute('data-play-state', 'played');
+  await expect(phoneRequired).toHaveAttribute('data-route-state', 'played');
+  await expect(phoneExtra).toHaveAttribute('data-route-state', 'none');
+  await shot(handset, info, 'game-played-phone', phonePlay);
 
   const wide = await device(browser, info, desktop, seeded.game.work);
   const desktopPlay = play(wide);
   await loaded(wide, '[data-game-progress]');
+  const desktopRequired = desktopPlay.locator('[data-required-parts] [data-route]').filter({ hasText: seeded.game.requiredRoute });
+  const desktopExtra = desktopPlay.locator('[data-routes] [data-route]').filter({ hasText: seeded.game.extraRoute });
+  await expect(desktopPlay.locator('[data-where]')).toHaveText('Played');
+  await expect(desktopRequired).toHaveAttribute('data-route-state', 'played');
+  await expect(desktopExtra).toHaveAttribute('data-route-state', 'none');
+  const completedResponsePromise = wide.waitForResponse(response => response.request().method() === 'PUT'
+    && response.url().includes('/progress') && response.ok());
+  await desktopPlay.getByRole('button', { name: 'Mark completed', exact: true }).click();
+  await completedResponsePromise;
   await expect(desktopPlay.locator('[data-where]')).toHaveText('Completed');
-  await expect(desktopPlay.getByRole('button', { name: seeded.game.route })).toBeVisible();
+  await expect(desktopPlay).toHaveAttribute('data-play-state', 'completed');
+  await expect(desktopRequired).toHaveAttribute('data-route-state', 'completed');
+  await expect(desktopExtra).toHaveAttribute('data-route-state', 'none');
   await shot(wide, info, 'game-desktop', desktopPlay);
+  const stale = await handset.request.put(playedResponse.url(), {
+    headers: { 'idempotency-key': `game-stale-${randomUUID()}` },
+    data: { ...playedRequest, expectedVersion: played.version, completed: true, position: 'completed' },
+  });
+  expect(stale.status()).toBe(409);
+  expect(await stale.json()).toMatchObject({ code: 'stale_progress' });
   await desktopPlay.getByRole('button', { name: 'Mark not completed' }).click();
   await expect(desktopPlay.locator('[data-where]')).toHaveText('Not played yet');
+  await expect(desktopRequired).toHaveAttribute('data-route-state', 'none');
+  await expect(desktopExtra).toHaveAttribute('data-route-state', 'none');
+
+  const partlessPhone = await device(browser, info, phone, seeded.partlessGame.work);
+  await expect(partlessPhone.getByRole('heading', { name: seeded.partlessGame.title, exact: true }),
+    `partless phone should open ${home(seeded.partlessGame.work)}`).toBeVisible();
+  const phoneWork = partlessPhone.locator('[data-work-progress][data-verb="play"]');
+  await loaded(partlessPhone, '[data-work-progress][data-verb="play"]');
+  await expect(phoneWork.locator('[data-where]')).toHaveText('Not started');
+  const startedResponsePromise = partlessPhone.waitForResponse(response => response.request().method() === 'PUT'
+    && response.url().includes('/progress') && response.ok());
+  await phoneWork.getByRole('button', { name: 'Mark playing', exact: true }).click();
+  const startedResponse = await startedResponsePromise;
+  const started = await startedResponse.json() as { version: number; standing: string };
+  expect(started).toMatchObject({ version: 1, standing: 'started' });
+  const startedRequest = startedResponse.request().postDataJSON() as { actingSubject: string; expectedVersion: number };
+  await expect(phoneWork.locator('[data-where]')).toHaveText('Playing');
+
+  const partlessDesktop = await device(browser, info, desktop, seeded.partlessGame.work);
+  await expect(partlessDesktop.getByRole('heading', { name: seeded.partlessGame.title, exact: true }),
+    `partless desktop should open ${home(seeded.partlessGame.work)}`).toBeVisible();
+  const desktopWork = partlessDesktop.locator('[data-work-progress][data-verb="play"]');
+  await loaded(partlessDesktop, '[data-work-progress][data-verb="play"]');
+  await expect(desktopWork.locator('[data-where]')).toHaveText('Playing');
+  await desktopWork.getByRole('button', { name: 'Mark completed', exact: true }).click();
+  await expect(desktopWork.locator('[data-where]')).toHaveText('Completed');
+  const stalePartless = await partlessPhone.request.put(startedResponse.url(), {
+    headers: { 'idempotency-key': `partless-game-stale-${randomUUID()}` },
+    data: { ...startedRequest, expectedVersion: started.version, standing: 'started' },
+  });
+  expect(stalePartless.status()).toBe(409);
+  expect(await stalePartless.json()).toMatchObject({ code: 'stale_progress' });
+  await desktopWork.getByRole('button', { name: 'Mark not started', exact: true }).click();
+  await expect(desktopWork.locator('[data-where]')).toHaveText('Not started');
+  await partlessPhone.reload();
+  await loaded(partlessPhone, '[data-work-progress][data-verb="play"]');
+  await expect(phoneWork.locator('[data-where]')).toHaveText('Not started');
 });
 
 test('identified anime watched progress resumes across devices and rejects stale updates', async ({ browser }, info) => {

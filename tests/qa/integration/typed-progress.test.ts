@@ -171,3 +171,173 @@ test('identified anime watched progress resumes across devices and rejects stale
     }
   } finally { await stack.stop(); }
 }, 300_000);
+
+test('identified manga chapter progress resumes across volumes and an omnibus with stale-write recovery through the API', async () => {
+  const stack = await startMediaStack('manga-progress');
+  try {
+    const editor = await stack.member('manga-editor');
+    const viewer = await stack.member('manga-viewer', { verified: true });
+    const structureObjects = stack.objects('semantic/structure/');
+    await structureObjects.initialize();
+    Object.assign(stack.env, { structureObjects });
+
+    // Each app is a separate device session and progress store for the same Account identity.
+    const secondToken = randomUUID();
+    const device = (token: string) => createMainApp(stack.fuseki, {
+      ...stack.composition.dependencies, environment: stack.env, structureObjects,
+      progress: new StructureProgressStore(stack.contentPool),
+      account: { verify: async request => {
+        if (request.headers.get('authorization') !== `Bearer ${token}`) {
+          throw new AccountAssertionDenied('Unknown manga viewer session');
+        }
+        const principal = { ...viewer.principal, emailVerified: true };
+        return { ...principal, currentAssertion: async () => principal };
+      } },
+    });
+    const first = device(viewer.token), second = device(secondToken);
+    const call = (app: typeof first, token: string, method: string, path: string, body?: object) =>
+      app.handle(new Request(`http://main.local${path}`, {
+        method, headers: { authorization: `Bearer ${token}`,
+          ...(body ? { 'content-type': 'application/json', 'idempotency-key': randomUUID() } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      }));
+    const person = (await json<{ agent: string }>(await call(first, viewer.token, 'POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Returning manga reader',
+    }), 201)).agent;
+
+    const work = async (title: string, semanticTypes: string[]) => {
+      const created = await activateMetadataWork(stack.env, { title, semanticTypes,
+        admission: stack.admission(editor.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes)) });
+      const contribution = await stack.contribution(created.work, editor.actor, 'en', title);
+      const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion }, work: created.work,
+        contribution: contribution.contribution, publicationDecision: contribution.decision, expectedSelectionHead: null,
+        selectionBasis: 'main-maintainer' as const, actingSubject: editor.actor };
+      expect((await selectMainDefault(stack.env, stack.admission(editor.actor,
+        `publication:select:${created.mainVersion}`, 'publication.select', mainSelectionDigest(selection)), selection))
+        .outcome).toBe('succeeded');
+      await editor.grant(`work:edit:${created.work}`, 'work.edit');
+      return created;
+    };
+    const compose = async (profile: 'work-composition' | 'book-composition', owner: { work: string; mainVersion: string },
+      operations: (structure: string) => object[]) => {
+      const base = await json<{ structure: string; revision: string }>(await settled(() => editor.send('POST', '/v1/compositions', {
+        profile, work: owner.work, mainVersion: owner.mainVersion, actingSubject: editor.actor,
+      })), 201);
+      const changed = await json<{ occurrences: string[]; revision: string }>(await settled(() => editor.send('POST',
+        `/v1/compositions/${short(base.structure)}/changes`, {
+          profile, expectedHead: base.revision, actingSubject: editor.actor, operations: operations(base.structure),
+        })));
+      return { structure: base.structure, revision: changed.revision, occurrences: changed.occurrences };
+    };
+
+    for (const [scope, action] of [
+      ['classification:define:global', 'classification.proposition.define'],
+      ['classification:decide:global', 'statement.decide'],
+      ['context:create:root', 'context.create'],
+      [`statement:speak:${editor.actor}`, 'statement.record'],
+    ] as const) await editor.grant(scope, action);
+    const post: ClassificationPost = async <T>(path: string, body: unknown, _token: string, key: string) => {
+      const response = await settled(() => editor.send('POST', path, body, key));
+      expect([200, 201]).toContain(response.status);
+      return json<T>(response, response.status);
+    };
+    const volume1 = await work(`Harbour Volume 1 ${randomUUID()}`, ['https://schema.org/Book']);
+    const volume2 = await work(`Harbour Volume 2 ${randomUUID()}`, ['https://schema.org/Book']);
+    const manga = await work(`Harbour Volumes ${randomUUID()}`, ['https://schema.org/BookSeries']);
+    const omnibus = await work(`Harbour Omnibus ${randomUUID()}`, ['https://schema.org/BookSeries']);
+    const term = await post<{ concept: string; sense: string; definitionRevision: string }>('/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2', scheme: null, labels: [{ language: 'en', value: 'Manga' }],
+      alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor,
+    }, editor.token, `manga-classification:${manga.work}:concept`);
+    const interpretation = await shareClassificationContext(post, editor.token, editor.actor, [term],
+      `manga-classification:${manga.work}:context`);
+    await discloseClassificationConcept(post, editor.token, editor.actor, term.concept,
+      `manga-classification:${manga.work}:hint`);
+    const resolve = (stage: 'before' | 'after') => post<ClassificationResolution>('/v1/classification-resolutions', {
+      profile: 'classification-resolution-v1', context: { kind: 'global' }, work: manga.work,
+      mainVersion: manga.mainVersion, sense: term.sense,
+    }, editor.token, `manga-classification:${manga.work}:resolve:${stage}`);
+    await acceptClassifiedStatement(post, editor.token, editor.actor, manga, term.concept, interpretation,
+      { kind: 'global' }, await resolve('before'), { statement: `manga-classification:${manga.work}:statement`,
+        decision: `manga-classification:${manga.work}:decision` });
+    expect(await resolve('after')).toMatchObject({ state: 'accepted', source: 'global', decision: expect.any(String) });
+
+    const chapters = (volume: typeof volume1, volumeNumber: number) => compose('book-composition', volume, structure =>
+      [1, 2].map(number => ({ op: 'insert', role: 'chapter', parent: structure, position: 'last',
+        target: 'https://schema.org/DigitalDocument',
+        label: { value: `Volume ${volumeNumber}, chapter ${number}`, language: 'en' } })));
+    const firstBook = await chapters(volume1, 1);
+    const secondBook = await chapters(volume2, 2);
+    const part = (parent: string, target: string, label: string) => ({ op: 'insert', role: 'part', parent,
+      position: 'last', target, displayLabel: label, inclusion: 'required' });
+    const series = await compose('work-composition', manga, structure => [
+      part(structure, volume1.work, '1'), part(structure, volume2.work, '2'),
+    ]);
+    expect(series.occurrences).toHaveLength(2);
+    await compose('work-composition', omnibus, structure => [part(structure, volume2.work, 'Omnibus')]);
+
+    const actorQuery = `actingSubject=${encodeURIComponent(person)}`;
+    const readingPositions = (app: typeof first, token: string, owner: string, query: URLSearchParams) =>
+      call(app, token, 'GET', `/v1/reading-positions/${short(owner)}?${query}`);
+    const startQuery = () => new URLSearchParams({ actingSubject: person, position: 'start', limit: '20' });
+    const opening = await json<{ items: { occurrence: string; role: string }[]; nextCursor: string | null }>(
+      await readingPositions(first, viewer.token, manga.work, startQuery()));
+    expect(opening.items.filter(item => item.role === 'chapter').map(item => item.occurrence))
+      .toEqual([...firstBook.occurrences, ...secondBook.occurrences]);
+    expect(opening.nextCursor).toBeNull();
+
+    const volumeOneLast = firstBook.occurrences[1]!;
+    const volumeTwoFirst = secondBook.occurrences[0]!;
+    const progressPath = (structure: string, occurrence: string) =>
+      `/v1/compositions/${short(structure)}/occurrences/${short(occurrence)}/progress`;
+    const read = (app: typeof first, token: string, structure: string, occurrence: string) =>
+      call(app, token, 'GET', `${progressPath(structure, occurrence)}?${actorQuery}`).then(response => json<Progress>(response));
+    const write = (app: typeof first, token: string, structure: string, occurrence: string,
+      completed: boolean, expectedVersion: number) => call(app, token, 'PUT', progressPath(structure, occurrence), {
+      actingSubject: person, completed, expectedVersion, position: null,
+    });
+    const volumeOneInitial = await read(first, viewer.token, firstBook.structure, volumeOneLast);
+    expect(volumeOneInitial).toMatchObject({ completed: false, version: 0 });
+    const volumeOneRead = await json<Progress>(await write(first, viewer.token, firstBook.structure,
+      volumeOneLast, true, volumeOneInitial.version));
+    expect(volumeOneRead).toMatchObject({ completed: true, version: 1 });
+
+    const resumeQuery = () => new URLSearchParams({ actingSubject: person, position: 'mine', limit: '1' });
+    const resumed = await json<{ resolved: string; scope: string; items: { occurrence: string }[] }>(
+      await readingPositions(second, secondToken, manga.work, resumeQuery()));
+    expect(resumed).toMatchObject({ resolved: volumeOneLast, scope: 'resume', items: [{ occurrence: volumeOneLast }] });
+    const neighboursQuery = () => new URLSearchParams({ actingSubject: person, position: 'mine', around: volumeOneLast });
+    const neighbours = await json<{ scope: string; items: { occurrence: string }[]; neighbours: {
+      previous: { status: string }; next: { status: string; occurrence?: string };
+    } }>(await readingPositions(second, secondToken, manga.work, neighboursQuery()));
+    expect(neighbours).toMatchObject({ scope: 'neighbours',
+      items: [{ occurrence: firstBook.occurrences[0] }, { occurrence: volumeTwoFirst }],
+      neighbours: { next: { status: 'found', occurrence: volumeTwoFirst } },
+    });
+
+    const volumeTwoCached = await read(second, secondToken, secondBook.structure, volumeTwoFirst);
+    expect(volumeTwoCached).toMatchObject({ completed: false, version: 0 });
+    const volumeTwoInitial = await read(first, viewer.token, secondBook.structure, volumeTwoFirst);
+    expect(volumeTwoInitial).toMatchObject({ completed: false, version: 0 });
+    const volumeTwoRead = await json<Progress>(await write(first, viewer.token, secondBook.structure,
+      volumeTwoFirst, true, volumeTwoInitial.version));
+    expect(volumeTwoRead).toMatchObject({ completed: true, version: 1 });
+    expect(await json<{ resolved: string; scope: string }>(await readingPositions(first, viewer.token,
+      manga.work, resumeQuery()))).toMatchObject({ resolved: volumeTwoFirst, scope: 'resume' });
+    expect(await json<{ resolved: string; scope: string }>(await readingPositions(second, secondToken,
+      omnibus.work, resumeQuery()))).toMatchObject({ resolved: volumeTwoFirst, scope: 'resume' });
+
+    // The second device's cached version is stale. It rereads the winner before undoing that chapter.
+    const refused = await write(second, secondToken, secondBook.structure, volumeTwoFirst, false, volumeTwoCached.version);
+    expect(await json(refused, 409)).toMatchObject({ code: 'stale_progress' });
+    const reread = await read(second, secondToken, secondBook.structure, volumeTwoFirst);
+    expect(reread).toMatchObject({ completed: true, version: 1 });
+    const undone = await json<Progress>(await write(second, secondToken, secondBook.structure,
+      volumeTwoFirst, false, reread.version));
+    expect(undone).toMatchObject({ completed: false, version: 2 });
+    expect(await read(first, viewer.token, secondBook.structure, volumeTwoFirst))
+      .toMatchObject({ completed: false, version: 2 });
+    expect(await json<{ resolved: string; scope: string }>(await readingPositions(first, viewer.token,
+      manga.work, resumeQuery()))).toMatchObject({ resolved: volumeOneLast, scope: 'resume' });
+  } finally { await stack.stop(); }
+}, 300_000);

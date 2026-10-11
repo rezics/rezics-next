@@ -6,8 +6,8 @@ import { readFileSync } from 'node:fs';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
-import { discloseClassificationConcept, recordClassifiedStatement, shareClassificationContext,
-  statementDecisionBody, type ClassificationPost, type ClassificationResolution }
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationPost, type ClassificationResolution }
   from '../../../scripts/dev/seed/classified-statement.ts';
 
 const short = (iri: string) => iri.slice(-36);
@@ -20,7 +20,8 @@ const SHOW = ['https://schema.org/TVSeries'];
 
 export interface MediaFixture {
   manga: { work: string; omnibus: string; title: string };
-  game: { work: string; title: string; route: string };
+  game: { work: string; title: string; requiredRoute: string; extraRoute: string };
+  partlessGame: { work: string; title: string };
   episodes: { work: string; title: string; animeConcept: string };
 }
 
@@ -129,7 +130,8 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
   const game = await work('Harbour Route', GAME);
   const story = await work('Harbour Story', GAME);
   const route = await work('Harbour True Route', GAME);
-  await grantEditor('work.edit', [game, story, route].map(item => `work:edit:${item.work}`));
+  const partlessGame = await work('Harbour Solo Game', GAME);
+  await grantEditor('work.edit', [game, story, route, partlessGame].map(item => `work:edit:${item.work}`));
   await compose('work-composition', game, structure => [
     part(structure, story.work, 'Story'), part(structure, route.work, 'True route', 'extra')]);
   lap('game');
@@ -141,28 +143,36 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
     ['context:create:root', 'context.create'],
     [`statement:speak:${editor.actor}`, 'statement.record'],
   ] as const) await editor.grant(scope, action);
-  const post: ClassificationPost = async <T>(path: string, body: unknown, _token: string, key: string) =>
-    json<T>(await settled(() => editor.send('POST', path, body, key)), 201);
-  const anime = await post<{ concept: string; sense: string; definitionRevision: string }>('/v1/classification-vocabulary', {
-    profile: 'classification-proposition-v2', scheme: null,
-    labels: [{ language: 'en', value: 'Anime' }], alternativeLabels: [], broader: [], narrower: [],
-    actingSubject: editor.actor,
-  }, editor.token, `tracking-anime:${show.work}:concept`);
-  const interpretation = await shareClassificationContext(post, editor.token, editor.actor, [anime],
-    `tracking-anime:${show.work}:context`);
-  await discloseClassificationConcept(post, editor.token, editor.actor, anime.concept,
-    `tracking-anime:${show.work}:hint`);
-  const statement = await recordClassifiedStatement(post, editor.token, editor.actor, show.mainVersion,
-    anime.concept, interpretation, `tracking-anime:${show.work}:statement`);
-  await post('/v1/statement-decisions', statementDecisionBody(editor.actor, statement,
-    { kind: 'global' }, 'accepted', null), editor.token, `tracking-anime:${show.work}:decision`);
-  const identified = await json<ClassificationResolution>(await settled(() => editor.send('POST', '/v1/classification-resolutions', {
-    profile: 'classification-resolution-v1', context: { kind: 'global' }, work: show.work,
-    mainVersion: show.mainVersion, sense: anime.sense,
-  })));
-  if (identified.state !== 'accepted' || identified.source !== 'global' || !identified.decision) {
-    throw new Error('Harbour Nights must have an accepted Anime classification');
-  }
+  const post: ClassificationPost = async <T>(path: string, body: unknown, _token: string, key: string) => {
+    const response = await settled(() => editor.send('POST', path, body, key));
+    if (response.status !== 200 && response.status !== 201) {
+      throw new Error(`Classification POST ${path} returned ${response.status}: ${await response.text()}`);
+    }
+    return json<T>(response, response.status);
+  };
+  const identify = async (owner: { work: string; mainVersion: string }, label: string, key: string) => {
+    const term = await post<{ concept: string; sense: string; definitionRevision: string }>(
+      '/v1/classification-vocabulary', { profile: 'classification-proposition-v2', scheme: null,
+        labels: [{ language: 'en', value: label }], alternativeLabels: [], broader: [], narrower: [],
+        actingSubject: editor.actor }, editor.token, `${key}:${owner.work}:concept`);
+    const interpretation = await shareClassificationContext(post, editor.token, editor.actor, [term],
+      `${key}:${owner.work}:context`);
+    await discloseClassificationConcept(post, editor.token, editor.actor, term.concept,
+      `${key}:${owner.work}:hint`);
+    const resolve = (stage: 'before' | 'after') => post<ClassificationResolution>('/v1/classification-resolutions', {
+      profile: 'classification-resolution-v1', context: { kind: 'global' }, work: owner.work,
+      mainVersion: owner.mainVersion, sense: term.sense,
+    }, editor.token, `${key}:${owner.work}:resolve:${stage}`);
+    await acceptClassifiedStatement(post, editor.token, editor.actor, owner, term.concept, interpretation,
+      { kind: 'global' }, await resolve('before'), { statement: `${key}:${owner.work}:statement`, decision: `${key}:${owner.work}:decision` });
+    const identified = await resolve('after');
+    if (identified.state !== 'accepted' || identified.source !== 'global' || !identified.decision) {
+      throw new Error(`${owner.work} must have an accepted ${label} classification`);
+    }
+    return term;
+  };
+  await identify(manga, 'Manga', 'tracking-manga');
+  const anime = await identify(show, 'Anime', 'tracking-anime');
   await grantEditor('work.edit', [`work:edit:${show.work}`]);
   await grantEditor('work.read', [`work:read:${show.work}`]);
   await editor.grant('semantic:create:root', 'semantic.change');
@@ -192,12 +202,14 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
     occurrences.push(...written.occurrences);
   }
   if (occurrences.length !== EPISODES) throw new Error(`Expected ${EPISODES} episodes, composed ${occurrences.length}`);
-  await grantEditor('work.read', [text, volume1, volume2, manga, omnibus, game, story, route, show].map(item => `work:read:${item.work}`));
+  await grantEditor('work.read', [text, volume1, volume2, manga, omnibus, game, story, route, partlessGame, show]
+    .map(item => `work:read:${item.work}`));
   lap('episodes composed');
 
   return {
     manga: { work: manga.work, omnibus: omnibus.work, title: 'Harbour Volumes' },
-    game: { work: game.work, title: 'Harbour Route', route: 'True route' },
+    game: { work: game.work, title: 'Harbour Route', requiredRoute: 'Story', extraRoute: 'True route' },
+    partlessGame: { work: partlessGame.work, title: 'Harbour Solo Game' },
     episodes: { work: show.work, title: 'Harbour Nights', animeConcept: anime.concept },
   };
 }
