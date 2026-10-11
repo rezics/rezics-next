@@ -46,7 +46,7 @@ async function projectOccurrenceLabelsBatch(env: WorkActivationEnvironment,
     } OPTIONAL { GRAPH ${state} { ?generation rv:indexBatch ?checkpoint ; rv:indexBuild ?build ; rv:targetTextGeneration ?targetText } }
       ${input.reset ? '' : `FILTER NOT EXISTS { GRAPH ${state} { ?generation
         rv:indexVersion "occurrence-lucene-v1" ; rv:indexedRevision ?revision ; rv:indexedTextGeneration ?textGeneration . } }`}
-    } LIMIT 1`, OCCURRENCE_LABEL_BACKFILL_COST.queryBytes)).results?.bindings ?? [];
+    } LIMIT 1`, OCCURRENCE_LABEL_BACKFILL_COST.queryBytes, 'occurrence-discovery')).results?.bindings ?? [];
   if (!rows.length) return null;
   const generation = rows[0]!.generation?.value, revision = rows[0]!.revision?.value;
   const checkpoint = rows[0]!.checkpoint?.value;

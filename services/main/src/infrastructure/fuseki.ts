@@ -372,7 +372,8 @@ export class FusekiClient {
     this.maintenanceCapability = maintenanceCapability;
   }
 
-  async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
+  async query(sparql: string, maxResponseBytes?: number,
+    nativePhase?: 'occurrence-discovery'): Promise<SparqlResult> {
     if (maxResponseBytes !== undefined
       && (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1)) {
       throw new Error('invalid Fuseki query response budget');
@@ -389,6 +390,8 @@ export class FusekiClient {
           'content-type': 'application/sparql-query',
           accept: 'application/sparql-results+json',
           ...searchDiagnosticHeaders(),
+          ...(nativePhase === 'occurrence-discovery'
+            ? { 'x-rezics-native-phase': 'occurrence-discovery' } : {}),
         },
         body: sparql,
         signal,

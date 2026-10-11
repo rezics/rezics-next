@@ -22,8 +22,27 @@ import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
   contentSearchEligibilityReceiptIri } from '../../../services/main/src/modules/content-publication/eligibility.ts';
 import { contentPublicationDecisionIri, contentPublicationReceiptIri }
   from '../../../services/main/src/modules/content-publication/publish.ts';
+import { projectOccurrenceLabelsOnce } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
 
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
+
+test('occurrence maintenance names its native discovery phase without sending query text as evidence', async () => {
+  const phases: (string | null)[] = [];
+  const budgets: (string | null)[] = [];
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+    phases.push(request.headers.get('x-rezics-native-phase'));
+    budgets.push(request.headers.get('x-rezics-search-budget-ms'));
+    return Response.json({ results: { bindings: [] } });
+  } });
+  try {
+    const fuseki = new FusekiClient(`http://127.0.0.1:${server.port}/rezics`);
+    await fuseki.query('ASK {}');
+    const env = { fuseki } as WorkActivationEnvironment;
+    expect(await projectOccurrenceLabelsOnce(env)).toBe(false);
+    expect(phases).toEqual([null, 'occurrence-discovery']);
+    expect(budgets).toEqual([null, null]);
+  } finally { await server.stop(true); }
+});
 const work = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
 const main = 'https://rezics.com/id/22222222-2222-4222-8222-222222222222';
 const sense = 'https://rezics.com/id/33333333-3333-4333-8333-333333333333';

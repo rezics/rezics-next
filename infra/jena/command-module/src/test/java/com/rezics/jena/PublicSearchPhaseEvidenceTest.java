@@ -16,11 +16,15 @@ import org.junit.Test;
 public class PublicSearchPhaseEvidenceTest {
     private static final String TRACE = "00-11111111111111111111111111111111-2222222222222222-01";
     private static HttpServletRequest request(String budget, String trace) {
+        return request(budget, trace, null);
+    }
+    private static HttpServletRequest request(String budget, String trace, String phase) {
         return (HttpServletRequest) Proxy.newProxyInstance(HttpServletRequest.class.getClassLoader(),
             new Class<?>[]{HttpServletRequest.class}, (proxy, method, args) -> {
                 if (method.getName().equals("getHeader")) return switch ((String) args[0]) {
                     case "x-rezics-search-budget-ms" -> budget;
                     case "traceparent" -> trace;
+                    case "x-rezics-native-phase" -> phase;
                     default -> null;
                 };
                 throw new AssertionError("Evidence inspected request data: " + method.getName());
@@ -240,5 +244,28 @@ public class PublicSearchPhaseEvidenceTest {
             } finally { releaseHeader.countDown(); releaseRequest.countDown(); }
             worker.get(5, TimeUnit.SECONDS);
         } finally { releaseHeader.countDown(); releaseRequest.countDown(); evidence.destroy(); }
+    }
+
+    @Test public void callerLabelPublishesPlainSparqlMaintenanceWithoutInspectingItsBody() throws Exception {
+        AtomicLong clock = new AtomicLong(1);
+        List<String> events = new CopyOnWriteArrayList<>();
+        var evidence = new PublicSearchPhaseEvidence(clock::get, events::add, false);
+        evidence.install();
+        try {
+            evidence.doFilter(request(null, null, "occurrence-discovery"), null, (req, res) -> {
+                assertEquals(List.of("OCCURRENCE_DISCOVERY"), evidence.backgroundPhases());
+                evidence.doFilter(request("1", TRACE), null, (search, response) -> {
+                    clock.addAndGet(2_000_000); evidence.scan();
+                });
+            });
+            assertTrue(events.getFirst().contains("\"background\":[\"OCCURRENCE_DISCOVERY\"]"));
+            assertTrue(evidence.backgroundPhases().isEmpty());
+            evidence.doFilter(request("1", TRACE, "occurrence-discovery"), null, (req, res) -> clock.addAndGet(2_000_000));
+            assertTrue(events.getLast().contains("\"active\":\"OCCURRENCE_DISCOVERY\""));
+            for (String invalid : new String[]{"request body secret", "AUDIT", "occurrence-discovery\n"})
+                evidence.doFilter(request(null, null, invalid), null, (req, res) ->
+                    assertEquals(List.of("REQUEST"), evidence.backgroundPhases()));
+            assertTrue(events.stream().noneMatch(line -> line.contains("secret")));
+        } finally { evidence.destroy(); }
     }
 }

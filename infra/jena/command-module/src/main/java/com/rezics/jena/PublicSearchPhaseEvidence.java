@@ -87,14 +87,16 @@ final class PublicSearchPhaseEvidence implements Filter {
         }
         String header = http.getHeader("x-rezics-search-budget-ms");
         String trace = http.getHeader("traceparent");
+        Phase entryPhase = "occurrence-discovery".equals(http.getHeader("x-rezics-native-phase"))
+            ? Phase.OCCURRENCE_DISCOVERY : Phase.REQUEST;
         if (header == null || !header.matches("[1-9][0-9]{0,3}") || Integer.parseInt(header) > 1500
                 || (trace != null && !validTrace(trace))) {
-            // Unlabelled HTTP maintenance is observable without inferring its job from SPARQL.
-            try (Scope ignored = phase(Phase.REQUEST)) { chain.doFilter(servlet, response); }
+            // Only a fixed caller label can identify plain-SPARQL maintenance; never infer its job from the body.
+            try (Scope ignored = phase(entryPhase)) { chain.doFilter(servlet, response); }
             return;
         }
         long now = clock.getAsLong();
-        Request request = new Request(now, now + TimeUnit.MILLISECONDS.toNanos(Integer.parseInt(header)), trace);
+        Request request = new Request(now, now + TimeUnit.MILLISECONDS.toNanos(Integer.parseInt(header)), trace, entryPhase);
         int slot = -1;
         for (int i = 0; i < requests.length(); i++) {
             if (requests.compareAndSet(i, null, request)) { slot = i; break; }
@@ -138,9 +140,9 @@ final class PublicSearchPhaseEvidence implements Filter {
         final String trace;
         final AtomicBoolean emitted = new AtomicBoolean();
         final AtomicReference<View> view;
-        Request(long started, long deadline, String trace) {
+        Request(long started, long deadline, String trace, Phase entryPhase) {
             this.started = started; this.deadline = deadline; this.trace = trace;
-            view = new AtomicReference<>(new View(new Running(Phase.REQUEST, started), Map.of(), 0));
+            view = new AtomicReference<>(new View(new Running(entryPhase, started), Map.of(), 0));
         }
     }
     static final class Scope implements AutoCloseable {
