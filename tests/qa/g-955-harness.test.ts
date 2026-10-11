@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { DOMParser } from '@xmldom/xmldom';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { execFileSync } from 'node:child_process';
 import {
@@ -25,6 +27,8 @@ import { planIntegrationShards } from '../../scripts/qa/integration-shards.ts';
 import { integrationResourceClasses, queuedProjectsBudget } from '../../scripts/qa/resource-classes.ts';
 import {
   clearIntegrationDataset,
+  clearIntegrationBucket,
+  clearIntegrationMailbox,
   filesKeptAfterResetFailure,
   integrationOwnerResetStatements,
   integrationResetHarnessFailure,
@@ -136,6 +140,8 @@ test('G-955: isolated batches get fresh lineage and bytes only after owner and g
           graph: async () => {
             calls.push('graph');
           },
+          objects: async () => { calls.push('objects'); },
+          mail: async () => { calls.push('mail'); },
         },
       ),
     ).rejects.toThrow('owner reset failed');
@@ -155,15 +161,121 @@ test('G-955: isolated batches get fresh lineage and bytes only after owner and g
             'retained by prior file',
           );
         },
+        objects: async () => { calls.push('objects'); },
+        mail: async () => { calls.push('mail'); },
       },
     );
-    expect(calls).toEqual(['owners', 'graph']);
+    expect(calls).toEqual(['owners', 'graph', 'objects', 'mail']);
     expect(next.MAIN_DATA_EPOCH).not.toBe(apps.MAIN_DATA_EPOCH);
     expect(next.MAIN_ROUTING_EPOCH).not.toBe(apps.MAIN_ROUTING_EPOCH);
     expect(next.FUSEKI_URL).toBe(apps.FUSEKI_URL);
     expect(readdirSync(objects)).toEqual([]);
     expect(existsSync(candidates)).toBe(false);
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function resetStoreFixture(failure = '') {
+  const namespace = 'http://s3.amazonaws.com/doc/2006-03-01/';
+  const keys = new Set(Array.from({ length: 1002 }, (_, index) => `other-domain/object-${index}`));
+  keys.add('semantic/work/key with <xml>&/\r日本語');
+  const messages = [{ ID: 'prior-run-mail' }];
+  let listings = 0;
+  let deletions = 0;
+  const xml = (root: string, body = '') => new Response(`<${root} xmlns="${namespace}">${body}</${root}>`,
+    { headers: { 'content-type': 'application/xml' } });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/api/v1/messages') {
+      if (request.method === 'DELETE') {
+        expect(await request.json()).toEqual({});
+        if (failure === 'mail-delete') return new Response('', { status: 503 });
+        if (failure !== 'mail-retained') messages.length = 0;
+        return new Response('ok');
+      }
+      if (failure === 'mail-verify') return new Response('', { status: 503 });
+      if (failure === 'mail-malformed') return Response.json({ messages: [] });
+      return Response.json({ total: messages.length, messages });
+    }
+    expect(url.pathname).toBe('/rezics-semantic');
+    expect(request.headers.get('authorization')).toContain('AWS4-HMAC-SHA256');
+    if (request.method === 'PUT') return new Response('', { status: 409 });
+    if (url.searchParams.has('versioning')) return xml('VersioningConfiguration',
+      failure === 'object-versioned' ? '<Status>Enabled</Status>' : '');
+    if (url.searchParams.has('delete')) {
+      const body = await request.text();
+      expect(request.headers.get('content-md5')).toBe(createHash('md5').update(body).digest('base64'));
+      const entries = new DOMParser().parseFromString(body, 'application/xml').getElementsByTagName('Key');
+      expect(entries.length).toBeLessThanOrEqual(1000);
+      deletions++;
+      if (failure === 'object-delete') return new Response('', { status: 403 });
+      if (failure === 'object-partial') return xml('DeleteResult', '<Error><Code>AccessDenied</Code></Error>');
+      if (failure !== 'object-retained') {
+        for (let index = 0; index < entries.length; index++) keys.delete(entries.item(index)!.textContent!);
+      }
+      return xml('DeleteResult');
+    }
+    listings++;
+    if (failure === 'object-verify' && deletions > 0) return new Response('', { status: 503 });
+    if (failure === 'object-malformed') return xml('ListBucketResult', '<IsTruncated>false</IsTruncated>');
+    const page = [...keys].slice(0, 1000);
+    return xml('ListBucketResult', `<Name>rezics-semantic</Name><EncodingType>url</EncodingType>`
+      + `<KeyCount>${page.length}</KeyCount><IsTruncated>${keys.size > page.length}</IsTruncated>`
+      + page.map(key => `<Contents><Key>${encodeURIComponent(key)}</Key></Contents>`).join(''));
+  } });
+  return { keys, messages, server, counts: () => ({ listings, deletions }),
+    apps: { MAIN_S3_ENDPOINT: server.url.origin, MAIN_S3_BUCKET: 'rezics-semantic',
+      MAIN_S3_ACCESS_KEY: 'qa-access', MAIN_S3_SECRET_KEY: 'qa-secret' },
+    compose: { MAILPIT_HTTP_PORT: String(server.port) } };
+}
+
+test('integration reset drains every bucket page and mailbox, then verifies both empty', async () => {
+  const fixture = resetStoreFixture();
+  const directory = mkdtempSync(join(scratch, 'integration-reset-stores-'));
+  const apps = { ...fixture.apps, MAIN_OBJECT_DIRECTORY: join(directory, 'objects'), MAIN_DATA_EPOCH: 'prior' };
+  try {
+    const next = await resetIntegrationState(apps, fixture.compose, {
+      owners: async () => {}, graph: async () => {}, objects: clearIntegrationBucket, mail: clearIntegrationMailbox,
+    });
+    expect(fixture.keys.size).toBe(0);
+    expect(fixture.messages).toEqual([]);
+    expect(fixture.counts()).toEqual({ listings: 3, deletions: 2 });
+    expect(next.MAIN_DATA_EPOCH).not.toBe('prior');
+    // Already empty stores are valid, but their emptiness still needs a read-back.
+    await clearIntegrationBucket(apps);
+    await clearIntegrationMailbox(fixture.compose);
+    expect(fixture.counts().listings).toBe(4);
+  } finally {
+    fixture.server.stop(true);
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  ['object-delete', 'RustFS reset failed (403)'],
+  ['object-partial', 'RustFS reset could not delete every object'],
+  ['object-retained', 'RustFS reset left objects'],
+  ['object-verify', 'RustFS reset failed (503)'],
+  ['object-malformed', 'RustFS reset response is malformed'],
+  ['object-versioned', 'RustFS reset cannot verify a versioned QA bucket'],
+  ['mail-delete', 'Mailpit reset failed (503)'],
+  ['mail-retained', 'Mailpit reset could not verify'],
+  ['mail-verify', 'Mailpit reset verification failed (503)'],
+  ['mail-malformed', 'Mailpit reset could not verify'],
+])('integration reset rejects an uncleared or unverifiable store: %s', async (failure, message) => {
+  const fixture = resetStoreFixture(failure);
+  const directory = mkdtempSync(join(scratch, 'integration-reset-failure-'));
+  const objects = join(directory, 'objects');
+  mkdirSync(objects);
+  writeFileSync(join(objects, 'prior-file'), 'prior');
+  try {
+    await expect(resetIntegrationState({ ...fixture.apps, MAIN_OBJECT_DIRECTORY: objects }, fixture.compose, {
+      owners: async () => {}, graph: async () => {}, objects: clearIntegrationBucket, mail: clearIntegrationMailbox,
+    })).rejects.toThrow(message);
+    expect(readFileSync(join(objects, 'prior-file'), 'utf8')).toBe('prior');
+  } finally {
+    fixture.server.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }
 });
