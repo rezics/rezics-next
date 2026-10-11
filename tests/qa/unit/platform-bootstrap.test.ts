@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appEnvironment, ensureSecrets, stackDirectory } from '../../../scripts/dev/config.ts';
-import { grantPlatformUse, platformUsePermission } from '../fixtures/platform-grant.ts';
+import { grantPlatformUse, grantRecordedPlatformUse, platformUsePermission } from '../fixtures/platform-grant.ts';
 
 const roots: string[] = [];
 mkdirSync('.temp', { recursive: true });
@@ -54,4 +54,14 @@ test('opening a closed group rejects a group id before any request', async () =>
   await expect(grantPlatformUse(session, session.principalId, 'Saved-Views')).rejects.toThrow('exposure group');
   await expect(grantPlatformUse(session, session.principalId, 'saved_views')).rejects.toThrow('exposure group');
   await expect(grantPlatformUse(session, 'not-a-principal', 'saved-views')).rejects.toThrow('principal id');
+});
+
+test('recorded platform use rejects a group and a principal before querying', async () => {
+  const db = { query: () => Promise.reject(new Error('queried')) };
+  const principal = '00000000-0000-4000-8000-0000000000aa';
+  await expect(grantRecordedPlatformUse(db, principal, [])).rejects.toThrow('exposure group');
+  await expect(grantRecordedPlatformUse(db, principal, ['Saved-Views'])).rejects.toThrow('exposure group');
+  await expect(grantRecordedPlatformUse(db, 'not-a-principal', ['saved-views'])).rejects.toThrow('principal id');
+  await expect(grantRecordedPlatformUse(db, principal, ['saved-views'], 'not-an-agent'))
+    .rejects.toThrow('agent');
 });
