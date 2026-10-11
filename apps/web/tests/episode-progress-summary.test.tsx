@@ -71,8 +71,8 @@ describe('episode progress summary', () => {
   });
 
   test('an episode labelled some is last watched, not the unnamed line', async () => {
-    const memory = labelled(['some', 'next']);
-    memory.progress.set(memory.mains[0]!.occurrence, { completed: true, position: 'episode:some', version: 1 });
+    const memory = labelled(['before', 'some', 'after']);
+    memory.progress.set(memory.mains[1]!.occurrence, { completed: true, position: 'episode:some', version: 1 });
     expect(await where(memory)).toBe('Last watched: some');
   });
 });
