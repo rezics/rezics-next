@@ -56,6 +56,21 @@ const overflows = (page: Page) => page.evaluate(() => document.documentElement.s
 const interactive = (page: Page) => page.locator('button[aria-label="Account menu"][data-hydrated="true"]').first()
   .waitFor({ timeout: 30_000 });
 
+async function chooseCurrentlyReading(page: Page): Promise<void> {
+  const moreShelves = page.getByRole('button', { name: 'More shelves' });
+  const currentShelf = page.getByRole('button', { name: /— Shelve/ });
+  const option = page.getByRole('menuitemradio', { name: 'Currently reading' });
+  await expect(async () => {
+    if (await option.isVisible()) return;
+    await (await moreShelves.count() ? moreShelves : currentShelf).click({ timeout: 2_000 });
+    await expect(option).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 30_000 });
+  await option.click();
+  const shelved = page.getByRole('button', { name: /^Currently reading — Shelve/ });
+  await expect(shelved).toBeVisible();
+  await expect(shelved).not.toHaveAttribute('aria-busy', 'true', { timeout: 20_000 });
+}
+
 async function localStamp(page: Page, instant: number): Promise<string> {
   return page.evaluate(value => {
     const date = new Date(value);
@@ -74,14 +89,7 @@ test('a reader owns a copy, lends it overdue, extends it and returns it', async 
   test.setTimeout(240_000);
   const workPath = localizedPath(resourceHref('/w/', seed.work.slice(-36)), 'en');
   await signInAtAccounts(page, workPath, member());
-  const moreShelves = page.getByRole('button', { name: 'More shelves' });
-  await (await moreShelves.count()
-    ? moreShelves
-    : page.getByRole('button', { name: /— Shelve/ })).click();
-  await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
-  const shelved = page.getByRole('button', { name: /^Currently reading — Shelve/ });
-  await expect(shelved).toBeVisible();
-  await expect(shelved).not.toHaveAttribute('aria-busy', 'true', { timeout: 20_000 });
+  await chooseCurrentlyReading(page);
   await expect(async () => {
     await page.goto('/en/library?shelf=reading');
     await expect(page.getByRole('heading', { level: 3, name: seed.title })).toBeVisible({ timeout: 4_000 });
@@ -165,11 +173,7 @@ test('a reader returns an overdue copy directly and it is available again', asyn
   test.setTimeout(240_000);
   const workPath = localizedPath(resourceHref('/w/', seed.work.slice(-36)), 'en');
   await signInAtAccounts(page, workPath, member());
-  await page.getByRole('button', { name: 'More shelves' }).click();
-  await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
-  const shelved = page.getByRole('button', { name: /^Currently reading — Shelve/ });
-  await expect(shelved).toBeVisible();
-  await expect(shelved).not.toHaveAttribute('aria-busy', 'true', { timeout: 20_000 });
+  await chooseCurrentlyReading(page);
   await expect(async () => {
     await page.goto('/en/library?shelf=reading');
     await expect(page.getByRole('heading', { level: 3, name: seed.title })).toBeVisible({ timeout: 4_000 });
