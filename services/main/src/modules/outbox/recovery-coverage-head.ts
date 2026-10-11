@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import type { Pool, PoolClient } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { assertRecoveryCoverage, type RecoveryCoverage } from '../work/restore-lineage.ts';
+import { assertErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
 
 export class RecoveryCoverageHeadConflict extends Error {}
 
@@ -35,9 +36,12 @@ export async function retainRecoveryCoverageHead(
   if (!coverage?.relay?.consumer || !coverage.priorDataEpoch || !coverage.priorSequence) {
     throw new RecoveryCoverageHeadConflict('recovery coverage identity is unavailable');
   }
-  assertRecoveryCoverage(coverage);
-  if (!coverage.erasureJournal) {
-    throw new RecoveryCoverageHeadConflict('recovery coverage lacks its signed erasure journal frontier');
+  if (coverage.nativeAccessErasure) {
+    try { assertRecoveryCoverage(coverage); }
+    catch { throw new RecoveryCoverageHeadConflict('native Access attachment coverage is invalid'); }
+  } else if (coverage.erasureJournal) {
+    try { assertErasureJournalCoreCoverage(coverage.erasureJournal); }
+    catch { throw new RecoveryCoverageHeadConflict('recovery erasure journal coverage is invalid'); }
   }
   if (coverage.nativeAccessErasure) {
     const reference = coverage.nativeAccessErasure;
@@ -79,9 +83,11 @@ export async function retainRecoveryCoverageHead(
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
     const liveEpoch = (await client.query<{ epoch: string | null }>(
       'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows[0]?.epoch ?? null;
-    if (liveEpoch !== coverage.erasureJournal.epoch) {
+    if (coverage.erasureJournal && liveEpoch !== coverage.erasureJournal.epoch) {
       throw new RecoveryCoverageHeadConflict('relay erasure journal moved after current coverage capture');
     }
+    // A legacy capture without journal coverage retains NULL so restore replays the full journal.
+    const capturedEpoch = coverage.erasureJournal?.epoch ?? null;
     const result = await client.query(
     `INSERT INTO relay.recovery_coverage_head (consumer, coverage_digest, erasure_epoch)
      VALUES ($1, $2, $3) ON CONFLICT (consumer) DO UPDATE SET
@@ -89,7 +95,7 @@ export async function retainRecoveryCoverageHead(
        coverage_digest = EXCLUDED.coverage_digest,
        generation = relay.recovery_coverage_head.generation + 1,
        captured_at = clock_timestamp()`,
-    [coverage.relay.consumer, digest(coverage), coverage.erasureJournal.epoch]);
+    [coverage.relay.consumer, digest(coverage), capturedEpoch]);
     if (result.rowCount !== 1) {
       throw new RecoveryCoverageHeadConflict('current recovery coverage was not retained');
     }

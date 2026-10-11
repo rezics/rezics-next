@@ -279,22 +279,28 @@ export interface EncryptedRecoveryAttachment<T> {
 
 export type RecoveryAttachmentProducer<T> = (write: (chunk: Uint8Array) => Promise<void>) => Promise<T>;
 
-/** Use the backup recipient policy: full public fingerprint and no local secret copy. */
-export function assertRecoveryRecipient(recipient: string, environment: NodeJS.ProcessEnv = process.env): void {
+/** One recipient policy for recovery-set backups and separately retained attachments. */
+export function assertRecoveryRecipient(
+  recipient: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  run?: (args: string[]) => string,
+): void {
   if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(recipient)) {
     throw new Error('Use the full off-host recipient fingerprint');
   }
-  const keys = spawnSync('gpg', ['--batch', '--with-colons', '--list-keys', recipient], {
-    env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
+  const execute = run ?? ((args: string[]) => {
+    const result = spawnSync('gpg', args, {
+      env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
+    });
+    if (result.error || result.status !== 0) throw new Error('Recovery recipient key check failed');
+    return result.stdout;
   });
-  if (keys.error || keys.status !== 0 || !keys.stdout.includes(`:${recipient.toUpperCase()}:`)) {
+  const keys = execute(['--batch', '--with-colons', '--list-keys', recipient]);
+  if (!keys.includes(`:${recipient.toUpperCase()}:`)) {
     throw new Error('Recovery attachment recipient public key is unavailable');
   }
-  const secrets = spawnSync('gpg', ['--batch', '--with-colons', '--list-secret-keys'], {
-    env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
-  });
-  if (secrets.error || secrets.status !== 0) throw new Error('Recovery attachment secret-key check failed');
-  if (secrets.stdout.includes(`:${recipient.toUpperCase()}:`)) {
+  const secrets = execute(['--batch', '--with-colons', '--list-secret-keys']);
+  if (secrets.includes(`:${recipient.toUpperCase()}:`)) {
     throw new Error('Recovery attachment recipient private key must live off-host');
   }
 }

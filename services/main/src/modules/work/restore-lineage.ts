@@ -367,6 +367,10 @@ function sameCoverage(left: RowCoverage, right: RowCoverage): boolean {
   return left.count === right.count && left.digest === right.digest;
 }
 
+function sameAccountRows(left: AccountRecoveryCoverage, right: AccountRecoveryCoverage): boolean {
+  return left.rowCount === right.rowCount && left.rowDigest === right.rowDigest;
+}
+
 function rowCoverage(count: string, digest: string): RowCoverage { return { count, digest }; }
 
 function sameCoreCoverage(left: ErasureJournalCoreCoverage, right: ErasureJournalCoreCoverage): boolean {
@@ -409,6 +413,10 @@ async function captureNativeAccessErasureReference(
   if (custody.baseCoverage.relay.consumer !== consumer || currentCoverage.relay.consumer !== consumer
     || custody.baseCoverage.priorDataEpoch !== currentCoverage.priorDataEpoch) {
     throw new RestoreLineageConflict('base and current signed coverage identify different graph or relay cuts');
+  }
+  if (!sameAccountRows(custody.baseCoverage.account, currentCoverage.account)) {
+    throw new RestoreLineageConflict(
+      'Account rows changed between signed C0 and current C1; native Access erasure attachment is not published');
   }
   const baseDigest = createHash('sha256').update(custody.baseCoverageEnvelope, 'utf8').digest('hex');
   const baseAccess = await custody.baseAccessPool.connect();
@@ -841,6 +849,7 @@ export function assertNativeAccessErasureBaseBinding(
     || reference.consumer !== base.relay.consumer || reference.sourceDataEpoch !== base.priorDataEpoch
     || reference.summary.baseFenceGeneration !== base.accessFenceGeneration
     || !sameCoreCoverage(reference.baseErasureJournal, base.erasureJournal)
+    || !sameAccountRows(current.account, base.account)
     || !sameCoverage(reference.summary.baseState, rowCoverage(base.accessStateCount, base.accessStateDigest))
     || !sameCoverage(reference.summary.baseOutbox, rowCoverage(base.accessOutboxCount, base.accessOutboxDigest))) {
     throw new RestoreLineageConflict('native Access erasure reference is not bound to signed C0');

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool, type PoolClient } from 'pg';
-import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
@@ -17,7 +17,8 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
 import { ensureModelGeneration } from '../../../services/main/src/modules/semantic/command.ts';
 import { hash, initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
-import { captureGraphRecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { captureGraphRecoveryCoverage, type RecoveryCoverage } from
+  '../../../services/main/src/modules/work/restore-lineage.ts';
 import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki } from '../fault-recovery/search-ops-support.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
@@ -38,8 +39,10 @@ class DirectoryObjects implements ImmutableObjects {
 }
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
+let custodyDatabases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
 let graph: Awaited<ReturnType<typeof standaloneFuseki>>;
 let access: Pool, relay: Pool, account: Pool, content: Pool, writer: Pool;
+let custodyAccess: Pool, custodyRelay: Pool;
 let accessObserver: Client, relayObserver: Client;
 let restored: RestoredOwners, consumer: string, generation: string;
 let objects: DirectoryObjects, fuseki: FusekiClient;
@@ -54,8 +57,10 @@ beforeAll(async () => {
   if (!runId) throw new Error('Run through the isolated QA integration tier');
   qa = qaStack(runId);
   databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
+  custodyDatabases = await cloneQaOwnerDatabases(runId, ['access', 'relay'], 'owner');
   const pool = (url: string) => new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 1500 });
   access = pool(databases.urls.access); relay = pool(databases.urls.relay);
+  custodyAccess = pool(custodyDatabases.urls.access); custodyRelay = pool(custodyDatabases.urls.relay);
   account = pool(databases.urls.account); content = pool(databases.urls.content);
   await migrateContent(content);
   writer = pool(databases.urls.relay);
@@ -71,11 +76,13 @@ beforeAll(async () => {
   await ensureModelGeneration({ fuseki, lineage, objectDirectory: objects.directory, workObjects: objects });
   consumer = `borrowed-restore:${randomUUID()}`;
   await initializeRelayCheckpoint(relay, consumer, lineage.dataEpoch);
+  await initializeRelayCheckpoint(custodyRelay, consumer, lineage.dataEpoch);
   for (let count = 0; count < 4; count++) {
     if (!await relayMainOutboxOnce(fuseki, relay, consumer)) break;
     if (count === 3) throw new Error('empty fixture relay drain exceeded its bound');
   }
   generation = await engageAccessRecoveryFence(access);
+  expect(await engageAccessRecoveryFence(custodyAccess)).toBe(generation);
   restored = { access, account, content,
     graph: { fuseki, lineage }, objects: { directory: objects.directory, workObjects: objects } };
   expect(Date.now() - started).toBeLessThan(600_000);
@@ -83,6 +90,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await Promise.allSettled([access?.end(), relay?.end(), account?.end(), content?.end(), writer?.end(),
+    custodyAccess?.end(), custodyRelay?.end(),
     accessObserver?.end(), relayObserver?.end()]);
   graph?.remove();
   if (qa) {
@@ -90,6 +98,7 @@ afterAll(async () => {
     spawnSync('docker', ['volume', 'rm', '-f', volume], { env: qa.dockerEnv, timeout: 60_000 });
   }
   await databases?.close();
+  await custodyDatabases?.close();
   rmSync(directory, { recursive: true, force: true });
 }, 120_000);
 
@@ -130,6 +139,36 @@ async function withClients<T>(work: (clients: BorrowedRestoreClients) => Promise
     accessClient.release(); relayClient.release();
   }
 }
+
+test('native Access attachment publication is refused after Account rows change from C0', async () => {
+  const baseAuthority = await capture();
+  const baseCoverage = openRecoveryPayload<RecoveryCoverage>(
+    baseAuthority.sealedCoverage, hmacKey, 'graph-recovery-coverage');
+  const before = (await relay.query<{ generation: string; coverage_digest: string }>(
+    'SELECT generation::text AS generation, coverage_digest FROM relay.recovery_coverage_head WHERE consumer = $1',
+    [consumer])).rows[0]!;
+  const changedAccountKey = `native-access-account-change:${randomUUID()}`;
+  await account.query('INSERT INTO public.rezics_account_rate_limit (key, count) VALUES ($1, 1)', [changedAccountKey]);
+  let encrypted = false;
+  try {
+    await expect(captureGraphRecoveryCoverage(fuseki, account, access, relay, consumer, content,
+      restored.objects, undefined, {
+        baseCoverage, baseCoverageEnvelope: baseAuthority.sealedCoverage, baseCoverageHmacKey: hmacKey,
+        baseAccessPool: custodyAccess, baseRelayPool: custodyRelay,
+        encryptAttachment: async () => {
+          encrypted = true;
+          throw new Error('Account mismatch reached attachment encryption');
+        },
+      })).rejects.toThrow('Account rows changed between signed C0 and current C1');
+    expect(encrypted).toBe(false);
+    const after = (await relay.query<{ generation: string; coverage_digest: string }>(
+      'SELECT generation::text AS generation, coverage_digest FROM relay.recovery_coverage_head WHERE consumer = $1',
+      [consumer])).rows[0]!;
+    expect(after).toEqual(before);
+  } finally {
+    await account.query('DELETE FROM public.rezics_account_rate_limit WHERE key = $1', [changedAccountKey]);
+  }
+});
 
 test('full borrowed max-one restore preserves caller transactions and allocator through callback interruption, retry and Access release', async () => {
   const authority = await capture(), operationId = randomUUID();

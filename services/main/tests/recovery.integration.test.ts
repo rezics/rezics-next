@@ -99,6 +99,7 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts
 import { retainRecoveryCoverageHead } from '../src/modules/outbox/recovery-coverage-head.ts';
 import { captureObjectRecoveryCoverage } from '../src/modules/owner/object-coverage.ts';
 import { reconcileRestoredErasures, releaseErasureRestoreHold } from '../src/modules/erasure/reconcile.ts';
+import { captureErasureJournalCoreCoverage } from '../src/modules/erasure/core-journal-coverage.ts';
 import { heldErasureMaintenanceClient } from '../src/modules/erasure/graph.ts';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 
@@ -1406,6 +1407,7 @@ recovery_target_action = 'promote'
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     expect(laterRelay.batchCount).toBe('40');
     expect(laterRelay.eventCount).toBe('39');
+    const laterErasureJournal = await captureErasureJournalCoreCoverage(journal.pool);
     laterObjects = await captureObjectRecoveryCoverage(fuseki, { directory: liveObjects });
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
@@ -1414,7 +1416,7 @@ recovery_target_action = 'promote'
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count,
-      accessStateDigest: laterAccessState.digest, relay: laterRelay,
+      accessStateDigest: laterAccessState.digest, erasureJournal: laterErasureJournal, relay: laterRelay,
       ...(currentCoverage.content ? { content: currentCoverage.content } : {}),
     }, recoveryKey, 'graph-recovery-coverage')), recoveryKey);
     expect((await journal.pool.query<{ generation: string }>(

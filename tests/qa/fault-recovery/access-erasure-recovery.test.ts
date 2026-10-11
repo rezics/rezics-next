@@ -212,24 +212,27 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
       expect(imported).toEqual({ imported: captured.summary.rowCount, alreadyPresent: '0' });
       expect(await scanAccessTables(importClient)).toEqual(sourceState);
       expect(await scanAccessOutbox(importClient)).toEqual(sourceOutbox);
-      await importClient.query('COMMIT');
     } finally {
-      try { await importClient.query('ROLLBACK'); } catch { /* already committed */ }
+      try { await importClient.query('ROLLBACK'); } catch { /* preserve successful import assertion */ }
       importClient.release();
     }
-    expect(await accessStateTables(base)).toEqual(sourceState);
-    expect(await accessOutboxCoverage(base)).toEqual(sourceOutbox);
 
-    for (const mutation of [
-      `UPDATE access.erasure_recovery_probe_${suffix} SET body = 'changed' WHERE id = '${probeId}'`,
-      `DELETE FROM access.erasure_recovery_probe_${suffix} WHERE id = '${probeId}'`,
+    for (const { mutation, refusal } of [
+      { mutation: `UPDATE access.erasure_recovery_probe_${suffix} SET body = 'changed' WHERE id = '${probeId}'`,
+        refusal: `base Access row changed: access.erasure_recovery_probe_${suffix}` },
+      { mutation: `DELETE FROM access.erasure_recovery_probe_${suffix} WHERE id = '${probeId}'`,
+        refusal: `base Access row was removed: access.erasure_recovery_probe_${suffix}` },
     ]) {
       const readBase = await base.connect(), changedSource = await source.connect();
       try {
         await beginSnapshot(readBase);
         await changedSource.query('BEGIN');
         await changedSource.query(mutation);
-        await expect(exportInSnapshots(readBase, changedSource)).rejects.toBeInstanceOf(AccessErasureRecoveryConflict);
+        let error: unknown;
+        try { await exportInSnapshots(readBase, changedSource); }
+        catch (caught) { error = caught; }
+        expect(error).toBeInstanceOf(AccessErasureRecoveryConflict);
+        expect((error as Error).message).toBe(refusal);
       } finally {
         try { await readBase.query('ROLLBACK'); } catch { /* connection cleanup */ }
         try { await changedSource.query('ROLLBACK'); } catch { /* connection cleanup */ }

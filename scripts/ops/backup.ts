@@ -36,6 +36,7 @@ import {
 import {
   administratorUrl,
   artifactNames,
+  assertRecoveryRecipient,
   assertRegularTree,
   assertSeparateCustody,
   captureDatabaseRows,
@@ -159,8 +160,8 @@ export async function backupRecoverySet(
   const budget = new RecoveryBudget();
   const out = resolve(options.out);
   const environment = { ...process.env, ...options.environment };
-  if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(options.recipient))
-    throw new Error('Use the full off-host recipient fingerprint');
+  assertRecoveryRecipient(options.recipient, environment,
+    args => command('gpg', args, budget, environment));
   if (!/^[0-9a-f]{64}$/i.test(options.key))
     throw new Error('RECOVERY_MANIFEST_HMAC_KEY must be 32 bytes in hex');
   assertSeparateCustody(out, options.frontier);
@@ -173,24 +174,6 @@ export async function backupRecoverySet(
     throw new Error('Recovery requires a persistent stack with raw updates disabled');
   }
   await assertServicesStopped(context.apps);
-  const keys = command(
-    'gpg',
-    ['--batch', '--with-colons', '--list-keys', options.recipient],
-    budget,
-    environment,
-  );
-  if (!keys.includes(`:${options.recipient.toUpperCase()}:`))
-    throw new Error('Recipient public key is unavailable');
-  // Encryption hosts must not retain the recovery private key.
-  if (
-    command(
-      'gpg',
-      ['--batch', '--with-colons', '--list-secret-keys'],
-      budget,
-      environment,
-    ).includes(`:${options.recipient.toUpperCase()}:`)
-  )
-    throw new Error('Recipient private key must live off-host');
   const staging = privateStaging();
   const pools = Object.fromEntries(
     ['account', 'access', 'content', 'relay'].map((database) => [
