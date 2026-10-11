@@ -1,8 +1,11 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
-import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
+import { foregroundCounted, meterPool, meterFuseki } from '../../../tests/qa/integration/support/query-cost-meter.ts';
+import { createAccountApp } from '../../account/src/app.ts';
+import { createAccountAuth } from '../../account/src/auth.ts';
+import { composeMain } from '../src/composition.ts';
+import { mainConfig } from '../src/config.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { RealmReplyDenied } from '../src/modules/realm-reply/content-store.ts';
 import { TargetUnavailable } from '../src/modules/target/resolve.ts';
@@ -10,90 +13,114 @@ import { WorkReadMissing } from '../src/modules/work/read-session.ts';
 import { growRealmThreads } from './g-1034-fixture.ts';
 import { realmVisibilityFixture } from './realm-visibility-fixture.ts';
 
-/** Query executions and Fuseki requests for one reply: draft, identity, review, placement.
- * The ceiling is the whole reply. Each bucket is exactly the same at both Realm sizes. */
+/** Deterministic counts per owner and command reject growth and omitted owner checks.
+ * SQL shares are Content persistence, Access authority/disclosure, and Account live verification.
+ * Production composition totals 63 Content + 520 Access + 198 Account = 781 SQL.
+ * Guard calls retain the legacy convention, including nested graph command wrappers. */
 export const REALM_REPLY_WRITE_COST = {
-  statements: 840,
-  fusekiRequests: 130,
+  draft: { content: 14, access: 114, account: 54, statements: 182, fusekiReads: 27, guardCalls: 27 },
+  identity: { content: 13, access: 127, account: 54, statements: 194, fusekiReads: 30, guardCalls: 32 },
+  review: { content: 12, access: 77, account: 18, statements: 107, fusekiReads: 3, guardCalls: 5 },
+  placement: { content: 24, access: 202, account: 72, statements: 298, fusekiReads: 10, guardCalls: 13 },
 } as const;
-
-/** True only while the measured request is the foreground caller. Background
- * schedulers, worker ticks and other work on these pools are not this request's cost. */
-const measuredRequest = new AsyncLocalStorage<true>();
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
-type Count = { statements: number; fusekiRequests: number; content: number; access: number; account: number };
-type ReplyCost = Count & { ms: number; commands: Record<string, Count & { ms: number }> };
-
-function tallyPool(pool: Pool) {
-  let count = 0;
-  const seen = new WeakSet<object>();
-  const connect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
-  const wrap = (client: PoolClient) => {
-    if (seen.has(client)) return;
-    seen.add(client);
-    const query = client.query.bind(client) as (...args: unknown[]) => unknown;
-    client.query = ((...args: unknown[]) => {
-      if (measuredRequest.getStore() === true && foregroundCounted()) count += 1;
-      return query(...args);
-    }) as PoolClient['query'];
-  };
-  pool.connect = ((...args: unknown[]) => {
-    if (typeof args[0] === 'function') {
-      const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
-      return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
-        if (client) wrap(client);
-        callback(error, client, done);
-      });
-    }
-    return Promise.resolve(connect()).then((client) => {
-      wrap(client as PoolClient);
-      return client;
-    });
-  }) as Pool['connect'];
-  return { get count() { return count }, reset() { count = 0 } };
-}
+type Command = keyof typeof REALM_REPLY_WRITE_COST;
+type Count = Record<keyof (typeof REALM_REPLY_WRITE_COST)['draft'], number>;
+type ReplyCost = Count & { ms: number; commands: Record<Command, Count & { ms: number }> };
 
 function tallyFuseki(fuseki: FusekiClient) {
   let count = 0;
   for (const method of ['query', 'update', 'command', 'commandWithReceipt', 'commandHealth'] as const) {
     const original = fuseki[method].bind(fuseki) as (...args: unknown[]) => unknown;
     (fuseki as unknown as Record<string, (...args: unknown[]) => unknown>)[method] = (...args: unknown[]) => {
-      if (measuredRequest.getStore() === true && foregroundCounted()) count += 1;
+      if (foregroundCounted()) count += 1;
       return original(...args);
     };
   }
   return { get count() { return count }, reset() { count = 0 } };
 }
 
+async function completeOwnerFixture() {
+  const fx = await realmVisibilityFixture();
+  let accountApp: ReturnType<typeof createAccountApp> | undefined;
+  let composition: Awaited<ReturnType<typeof composeMain>> | undefined;
+  try {
+    const contentPool = meterPool(fx.contentPool);
+    const accessPool = meterPool(fx.accessPool);
+    const accountPool = meterPool(fx.accountPool);
+    const guard = tallyFuseki(fx.fuseki);
+    const fuseki = meterFuseki(fx.fuseki);
+    // Rebuild Account over its metered pool before auth captures it in Kysely.
+    // The issuer, secret, owner database and saved session/token stay identical.
+    await fx.accountApp.stop();
+    const auth = createAccountAuth({ baseURL: fx.base, secret: Bun.env.ACCOUNT_SECRET!,
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: new Set() });
+    accountApp = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1',
+      port: Number(new URL(fx.base).port) });
+    composition = await composeMain({ config: mainConfig({ ...Bun.env,
+      MAIN_OBJECT_DIRECTORY: fx.env.objectDirectory,
+      ACCOUNT_ISSUER: `${fx.base}/api/auth`, ACCOUNT_JWKS_URL: `${fx.base}/api/auth/jwks`,
+      ACCOUNT_INTROSPECT_URL: `${fx.base}/api/auth/oauth2/introspect`,
+      ACCOUNT_MAIN_CLIENT_ID: fx.verifierClient.client_id,
+      ACCOUNT_MAIN_CLIENT_SECRET: fx.verifierClient.client_secret!,
+    }), fuseki, accessPool, contentPool });
+    const app = composition.app;
+    const call: typeof fx.call = async (method, path, body, actor = fx.actor, key = randomUUID()) => {
+      const url = new URL(`http://main.local${path}`);
+      if (method === 'GET' && actor) url.searchParams.set('actingSubject', actor);
+      const response = await app.handle(new Request(url, { method, headers: {
+        ...(actor ? { authorization: `Bearer ${fx.token}` } : {}),
+        'content-type': 'application/json', 'idempotency-key': key,
+      }, body: body ? JSON.stringify(body) : undefined }));
+      return { status: response.status, headers: response.headers,
+        body: await response.json() as Record<string, any> };
+    };
+    return { ...fx, app, call, env: composition.environment, access: composition.access,
+      content: composition.content, contentPool, accessPool, accountPool, guard, fuseki,
+      close: async () => {
+        try { await app.stop(); }
+        finally {
+          try { await accountApp!.stop(); }
+          finally { await fx.close(); }
+        }
+      } };
+  } catch (error) {
+    try { await composition?.app.stop(); }
+    finally {
+      try { await accountApp?.stop(); }
+      finally { await fx.close(); }
+    }
+    throw error;
+  }
+}
+
 // Scope: the Realm grows in Postgres only (the owner rows the projector writes); the graph holds no
 // filler threads, because the product assembler takes graph writes only through reply commands and
 // 900 of those do not fit a test. This proves the Postgres side of a reply stays flat as the Realm
 // grows. The graph side at size is proven on the Realm ranking corpus, built once through the product.
-test('one reply costs the same Postgres statements at 100 and 1,000 threads of owner rows', async () => {
-  const fx = await realmVisibilityFixture();
+test('one reply costs the same per command and owner at 100 and 1,000 threads of owner rows', async () => {
+  const fx = await completeOwnerFixture();
   try {
     await fx.grant(fx.actor, `review:decide:${fx.realm}`, 'review.decide');
     await fx.grant(fx.actor, `reply:place:${fx.realm}`, 'reply.place');
-    const statements = tallyPool(fx.contentPool);
-    const access = tallyPool(fx.accessPool);
-    const accounts = tallyPool(fx.accountPool);
-    const fuseki = tallyFuseki(fx.fuseki);
-    const read = (): Count & { content: number; access: number; account: number } => ({
-      statements: statements.count + access.count + accounts.count,
-      fusekiRequests: fuseki.count,
-      content: statements.count, access: access.count, account: accounts.count,
+    const read = (): Count => ({
+      statements: fx.contentPool.queries + fx.accessPool.queries + fx.accountPool.queries,
+      fusekiReads: fx.fuseki.queries, guardCalls: fx.guard.count,
+      content: fx.contentPool.queries, access: fx.accessPool.queries, account: fx.accountPool.queries,
     });
-    const reset = () => { statements.reset(); access.reset(); accounts.reset(); fuseki.reset(); };
+    const reset = () => {
+      fx.contentPool.reset(); fx.accessPool.reset(); fx.accountPool.reset(); fx.fuseki.reset(); fx.guard.reset();
+    };
     const postReply = async (): Promise<{ reply: string; cost: ReplyCost }> => {
       const input = fx.draftInput();
-      const commands: ReplyCost['commands'] = {};
+      const commands = {} as ReplyCost['commands'];
       const started = Date.now();
-      const step = async (name: string, path: string, body: object) => {
+      const step = async (name: Command, path: string, body: object) => {
         reset();
         const at = Date.now();
-        const response = await measuredRequest.run(true, () => fx.call('POST', path, body));
+        const response = await fx.call('POST', path, body);
         commands[name] = { ...read(), ms: Date.now() - at };
         expect(response.status, `${name} ${JSON.stringify(response.body)}`).toBe(201);
         return response.body;
@@ -117,7 +144,8 @@ test('one reply costs the same Postgres statements at 100 and 1,000 threads of o
       });
       const cost = {
         statements: Object.values(commands).reduce((sum, command) => sum + command.statements, 0),
-        fusekiRequests: Object.values(commands).reduce((sum, command) => sum + command.fusekiRequests, 0),
+        fusekiReads: Object.values(commands).reduce((sum, command) => sum + command.fusekiReads, 0),
+        guardCalls: Object.values(commands).reduce((sum, command) => sum + command.guardCalls, 0),
         content: Object.values(commands).reduce((sum, command) => sum + command.content, 0),
         access: Object.values(commands).reduce((sum, command) => sum + command.access, 0),
         account: Object.values(commands).reduce((sum, command) => sum + command.account, 0),
@@ -135,19 +163,22 @@ test('one reply costs the same Postgres statements at 100 and 1,000 threads of o
     const at1000 = (await postReply()).cost;
     console.log(JSON.stringify({ realmReplyWriteCost: { at100, at1000 } }));
     const counted = (cost: ReplyCost) => ({
-      statements: cost.statements, fusekiRequests: cost.fusekiRequests,
+      statements: cost.statements, fusekiReads: cost.fusekiReads, guardCalls: cost.guardCalls,
       content: cost.content, access: cost.access, account: cost.account,
       commands: Object.fromEntries(Object.entries(cost.commands).map(([name, command]) => [name, {
-        statements: command.statements, fusekiRequests: command.fusekiRequests,
+        statements: command.statements, fusekiReads: command.fusekiReads, guardCalls: command.guardCalls,
         content: command.content, access: command.access, account: command.account,
       }])),
     });
     expect(counted(at1000), JSON.stringify({ at100, at1000 })).toEqual(counted(at100));
     for (const cost of [at100, at1000]) {
-      expect(cost.statements).toBeGreaterThan(0);
-      expect(cost.fusekiRequests).toBeGreaterThan(0);
-      expect(cost.statements).toBeLessThanOrEqual(REALM_REPLY_WRITE_COST.statements);
-      expect(cost.fusekiRequests).toBeLessThanOrEqual(REALM_REPLY_WRITE_COST.fusekiRequests);
+      for (const name of Object.keys(REALM_REPLY_WRITE_COST) as Command[]) {
+        const command = cost.commands[name];
+        for (const metric of Object.keys(REALM_REPLY_WRITE_COST[name]) as (keyof Count)[]) {
+          expect(command[metric], `${name} ${metric}: ${JSON.stringify(command)}`)
+            .toBe(REALM_REPLY_WRITE_COST[name][metric]);
+        }
+      }
     }
 
     const original = fx.fuseki.commandWithReceipt.bind(fx.fuseki);
