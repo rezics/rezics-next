@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, waitFor, within } from 'storybook/test';
 import { copyOf } from './messages.ts';
 import { MaintainerPanel, type MaintainerNotice } from './panel.tsx';
 import { maintainerRows } from './rules.ts';
@@ -50,8 +50,11 @@ export const Confirm: Story = {
   async play() {
     const dialog = await within(document.body).findByRole('alertdialog');
     await expect(dialog).toHaveTextContent('Maren Osei will no longer be able to edit this Work');
-    await expect(within(dialog).getByRole('button', { name: 'Remove' })).toBeVisible();
-    await expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeVisible();
+    // The dialog is mounted before its opening animation makes the actions visible.
+    await waitFor(async () => {
+      await expect(within(dialog).getByRole('button', { name: 'Remove' })).toBeVisible();
+      await expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeVisible();
+    });
   },
 };
 
