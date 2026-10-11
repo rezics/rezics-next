@@ -82,9 +82,16 @@ export function recipeExportFilename(revision: string): string {
 }
 
 /** Offer the JSON response as a local download without keeping a copy in the page. */
-export function downloadRecipeExport(exported: RecipeExport): void {
+export function downloadRecipeExport(exported: RecipeExport, language?: string, name?: string): void {
+  // Main's export response is a revision envelope, while file import accepts a Recipe at the
+  // document root. Provenance pointers are useful in the API response but are not Schema.org fields
+  // and can contain URLs, so keep them out of a file that should be importable again.
+  const recipe = JSON.parse(JSON.stringify(exported.recipe,
+    (key: string, value: unknown) => key === 'sourceKey' ? undefined : value)) as Record<string, unknown>;
+  if (typeof recipe.name !== 'string' && name) recipe.name = name;
+  if (typeof recipe.inLanguage !== 'string' && language) recipe.inLanguage = language;
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }));
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/ld+json' }));
   link.download = recipeExportFilename(exported.revision);
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 10_000);

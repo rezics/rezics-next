@@ -112,6 +112,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <RecipeExchange structure={state.structure} revision={state.head} actingSubject={actingSubject} locale={locale}
             messages={catalog} disabled={saving || recipe.loading || accessRemoved} api={exportApi}
+            contentLanguage={language} recipeName={entry.title}
             onImportBusyChange={setImporting}
             onStaleRefresh={async () => await store.reload() ? store.snapshot().state.head : null}
             onImported={async () => store.reload()} />

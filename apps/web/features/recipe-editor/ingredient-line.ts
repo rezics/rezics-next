@@ -140,6 +140,9 @@ export function readingLine(qualifier: IngredientQualifier): string {
   const upper = qualifier.amountUpper ? formatQuantity(qualifier.amountUpper) : null;
   const shown = upper ? `${main}\u2013${upper}` : main;
   const lexical = qualifier.amountLexical?.trim();
+  // Direct file imports can use the whole written line as their amount lexeme. It is not a
+  // quantity prefix: formatting it as one would erase the ingredient name from the editor.
+  if (lexical && lexical === original) return original;
   if (lexical && original.toLowerCase().startsWith(lexical.toLowerCase())) return shown + original.slice(lexical.length);
   return composeLine({ ...partsOf(qualifier), quantity: shown });
 }

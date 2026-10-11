@@ -44,6 +44,13 @@ test('a stored line reads with the published quantity, whatever way it was typed
   expect(readingLine(qualifierOf(parseLine('¾ tsp salt'), 'en'))).toBe('¾ tsp salt');
 });
 
+test('an imported whole-line amount lexeme does not hide the ingredient text', () => {
+  const original = '1 1/2 tasse de crème épaisse';
+  const imported = { ...qualifierOf(parseLine(original), 'fr'),
+    originalText: { value: original, language: 'fr' }, amountLexical: original };
+  expect(readingLine(imported)).toBe(original);
+});
+
 test('empty and oversized lines are caught before they are sent', () => {
   expect(partsProblem(parseLine(''))).toBe('empty');
   expect(partsProblem({ quantity: '', unit: '', name: 'x'.repeat(1001), note: '' })).toBe('long');
