@@ -41,6 +41,26 @@ const digest = Type.String({ pattern: '^[0-9a-f]{64}$' });
 const decimal = Type.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const nonempty = Type.String({ minLength: 1 });
 const strict = { additionalProperties: false };
+
+export type RecoveryRefusalCode =
+  | 'invalid-target-project'
+  | 'original-project'
+  | 'occupied-target'
+  | 'target-identity-refused'
+  | 'source-volume-alias'
+  | 'source-bind-alias';
+
+export class RecoveryRefusal extends Error {
+  constructor(
+    readonly code: RecoveryRefusalCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'RecoveryRefusal';
+  }
+}
+
 const row = Type.Object({ count: decimal, digest }, strict);
 const pg = Type.Object(
   {
@@ -333,15 +353,13 @@ export function assertFreshTarget(
   manifest: Pick<RecoveryManifest, 'source'>,
   occupied: (name: string) => boolean,
 ): void {
-  if (
-    !/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(project) ||
-    project === manifest.source ||
-    occupied(project)
-  ) {
-    throw new Error(
-      'Restore target must be a new empty isolated QA project, distinct from the original',
-    );
-  }
+  const message = 'Restore target must be a new empty isolated QA project, distinct from the original';
+  if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(project))
+    throw new RecoveryRefusal('invalid-target-project', message);
+  if (project === manifest.source)
+    throw new RecoveryRefusal('original-project', message);
+  if (occupied(project))
+    throw new RecoveryRefusal('occupied-target', message);
 }
 export function targetOptions(project: string): StackOptions {
   if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(project))

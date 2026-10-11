@@ -7,12 +7,11 @@ import {
   disposeIndependentRestoreSource,
   inspectIndependentRestoreTarget,
   recordIndependentRestoreSourceInventory,
-  RecoveryRefusal,
   type IsolationContainer,
   type IsolationInspector,
   type IsolationNetwork,
 } from '../../../tests/qa/fault-recovery/independent-restore-support.ts';
-import { assertFreshTarget } from '../recovery-set.ts';
+import { assertFreshTarget, RecoveryRefusal } from '../recovery-set.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 
@@ -185,17 +184,28 @@ function installedTargetFixture() {
   return { fixture, target, containers, network: validNetwork };
 }
 
-function expectTargetRefusal(fixture: ReturnType<typeof sourceFixture>, target: string): RecoveryRefusal {
+function expectRecoveryRefusal(work: () => void, expectedCode: RecoveryRefusal['code']): RecoveryRefusal {
   let failure: unknown;
   try {
-    inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector);
+    work();
   } catch (error) {
     failure = error;
   }
   expect(failure).toBeInstanceOf(RecoveryRefusal);
   const refusal = failure as RecoveryRefusal;
-  expect(refusal.code).toBe('TARGET_IDENTITY_REFUSED');
+  expect(refusal.code).toBe(expectedCode);
   return refusal;
+}
+
+function expectTargetRefusal(
+  fixture: ReturnType<typeof sourceFixture>,
+  target: string,
+  expectedCode: RecoveryRefusal['code'] = 'target-identity-refused',
+): RecoveryRefusal {
+  return expectRecoveryRefusal(
+    () => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector),
+    expectedCode,
+  );
 }
 
 test('source inventory blocks both live and stopped sources while their volumes remain', () => {
@@ -336,9 +346,14 @@ test('source disposal refuses resources added after the recorded inventory', () 
 test('production restore guard refuses the original project and an occupied target', () => {
   const source = 'rezics-qa-src';
   expect(() => assertFreshTarget('rezics-qa-src-new', { source }, () => false)).not.toThrow();
-  expect(() => assertFreshTarget(source, { source }, () => false)).toThrow('new empty isolated');
-  expect(() => assertFreshTarget('rezics-qa-isolation-occupied', { source }, () => true))
-    .toThrow('new empty isolated');
+  expectRecoveryRefusal(
+    () => assertFreshTarget(source, { source }, () => false),
+    'original-project',
+  );
+  expectRecoveryRefusal(
+    () => assertFreshTarget('rezics-qa-isolation-occupied', { source }, () => true),
+    'occupied-target',
+  );
 });
 
 test('local target inspection compares project labels exactly when the target extends the source name', () => {
@@ -400,8 +415,8 @@ test('local target inspection refuses a bind mount of a source volume backing di
       }],
     };
     fixture.stateData.containers = [containers[0]!, polluted, containers[2]!];
-    expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
-      .toThrow('aliases recorded source volume backing path');
+    expect(expectTargetRefusal(fixture, target, 'source-volume-alias').message)
+      .toContain('aliases recorded source volume backing path');
   } finally {
     rmSync(fixture.stackDirectory, { recursive: true, force: true });
   }
@@ -421,6 +436,21 @@ test('local target inspection refuses an unapproved host path bind mount', () =>
     fixture.stateData.containers = [containers[0]!, polluted, containers[2]!];
     expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
       .toThrow('unapproved bind mount');
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection preserves the inspector problem as the refusal cause', () => {
+  const { fixture, target } = installedTargetFixture();
+  const ownerProblem = Object.assign(new Error('Volume inspection was denied'), {
+    code: 'owner-volume-inspection-denied',
+  });
+  try {
+    fixture.inspector.volumeSource = () => { throw ownerProblem; };
+    const refusal = expectTargetRefusal(fixture, target);
+    expect(refusal.cause).toBe(ownerProblem);
+    expect((refusal.cause as Error & { code: string }).code).toBe('owner-volume-inspection-denied');
   } finally {
     rmSync(fixture.stackDirectory, { recursive: true, force: true });
   }
@@ -466,7 +496,8 @@ test('local target inspection refuses a source-specific bootstrap bind at the sh
       ...network,
       containerIds: containers.map((container) => container.id),
     });
-    expect(expectTargetRefusal(fixture, target).message).toContain('aliases a source bind path');
+    expect(expectTargetRefusal(fixture, target, 'source-bind-alias').message)
+      .toContain('aliases a source bind path');
   } finally {
     rmSync(sourceSpecificBind, { force: true });
     rmSync(fixture.stackDirectory, { recursive: true, force: true });
@@ -499,8 +530,8 @@ test('local target inspection accepts new storage and rejects source aliases and
     };
     fixture.stateData.containers = fixture.stateData.containers.filter((container) => container.id !== containers[0]!.id);
     fixture.stateData.containers.push(aliasedVolume);
-    expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
-      .toThrow('aliases recorded source volume');
+    expect(expectTargetRefusal(fixture, target, 'source-volume-alias').message)
+      .toContain('aliases recorded source volume');
 
     const aliasedBind = {
       ...containers[1]!,
@@ -512,8 +543,8 @@ test('local target inspection accepts new storage and rejects source aliases and
     };
     fixture.stateData.containers = containers.filter((container) => container.id !== containers[1]!.id);
     fixture.stateData.containers.push(aliasedBind);
-    expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
-      .toThrow('aliases a source bind path');
+    expect(expectTargetRefusal(fixture, target, 'source-bind-alias').message)
+      .toContain('aliases a source bind path');
 
     fixture.stateData.containers = containers;
     const foreignPeer: IsolationContainer = {

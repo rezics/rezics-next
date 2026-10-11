@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { isAbsolute, join, relative, resolve, win32 } from 'node:path';
 import { Pool } from 'pg';
-import { artifactNames } from '../../../scripts/ops/recovery-set.ts';
+import { artifactNames, RecoveryRefusal } from '../../../scripts/ops/recovery-set.ts';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { startPostgresCluster } from '../support/postgres-cluster.ts';
 
@@ -590,22 +590,13 @@ export function createIsolationInspector(environment: NodeJS.ProcessEnv = proces
   return { projectContainers, projectLabeledVolumes, projectNetworks, volumeSource, containerPresent, volumePresent, networkPresent };
 }
 
-export class RecoveryRefusal extends Error {
-  readonly code = 'TARGET_IDENTITY_REFUSED' as const;
-
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'RecoveryRefusal';
-  }
-}
-
 function withTargetIdentityRefusal(work: () => void): void {
   try {
     work();
   } catch (error) {
     if (error instanceof RecoveryRefusal) throw error;
     const message = error instanceof Error ? error.message : 'Target identity inspection failed';
-    throw new RecoveryRefusal(message, { cause: error });
+    throw new RecoveryRefusal('target-identity-refused', message, { cause: error });
   }
 }
 
@@ -663,8 +654,17 @@ export function assertIndependentRestoreTargetIdentity(
   inspector: IsolationInspector,
 ): void {
   withTargetIdentityRefusal(() => {
-    if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(targetProject) || targetProject === source.project) {
-      throw new Error('Target inspection requires an isolated QA project distinct from the source');
+    if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(targetProject)) {
+      throw new RecoveryRefusal(
+        'invalid-target-project',
+        'Target inspection requires an isolated QA project distinct from the source',
+      );
+    }
+    if (targetProject === source.project) {
+      throw new RecoveryRefusal(
+        'original-project',
+        'Target inspection requires an isolated QA project distinct from the source',
+      );
     }
     if (source.containers.some((container) =>
       inspector.containerPresent(container.id) || inspector.containerPresent(container.name)) ||
@@ -705,18 +705,27 @@ export function assertIndependentRestoreTargetIdentity(
       }
       const expectedSource = resolve(expectedSourceValue);
       if (sourceVolumePaths.has(expectedSource)) {
-        throw new Error(`Target ${service} expected volume reuses a recorded source volume backing path`);
+        throw new RecoveryRefusal(
+          'source-volume-alias',
+          `Target ${service} expected volume reuses a recorded source volume backing path`,
+        );
       }
       let expectedVolumeMounts = 0;
       let expectedBootstrapMounts = 0;
       for (const mount of container.mounts) {
         const sourcePath = mount.source ? resolve(mount.source) : '';
         if (mount.type === 'volume' && mount.name && sourceVolumes.has(mount.name)) {
-          throw new Error(`Target ${service} aliases recorded source volume ${mount.name}`);
+          throw new RecoveryRefusal(
+            'source-volume-alias',
+            `Target ${service} aliases recorded source volume ${mount.name}`,
+          );
         }
         if (sourcePath && sourceVolumePaths.has(sourcePath)) {
           const sourceMount = source.volumeMounts.find((candidate) => resolve(candidate.source) === sourcePath);
-          throw new Error(`Target ${service} aliases recorded source volume backing path ${sourceMount?.name ?? sourcePath}`);
+          throw new RecoveryRefusal(
+            'source-volume-alias',
+            `Target ${service} aliases recorded source volume backing path ${sourceMount?.name ?? sourcePath}`,
+          );
         }
         if (mount.type === 'volume') {
           if (
@@ -731,7 +740,7 @@ export function assertIndependentRestoreTargetIdentity(
         }
         if (mount.type === 'bind') {
           if (pathContains(source.stackDirectory, mount.source)) {
-            throw new Error(`Target ${service} aliases a source bind path`);
+            throw new RecoveryRefusal('source-bind-alias', `Target ${service} aliases a source bind path`);
           }
           const aliasesRecordedBind = source.bindMounts.some((sourceBind) =>
             resolve(sourceBind.source) === sourcePath);
@@ -742,7 +751,7 @@ export function assertIndependentRestoreTargetIdentity(
               sourceBind.destination === mount.destination &&
               resolvesToSharedPostgresBootstrap(sourceBind.source));
           if (aliasesRecordedBind && !isSharedBootstrapBind) {
-            throw new Error(`Target ${service} aliases a source bind path`);
+            throw new RecoveryRefusal('source-bind-alias', `Target ${service} aliases a source bind path`);
           }
           if (!isSharedBootstrapBind) {
             throw new Error(`Target ${service} has an unapproved bind mount`);
@@ -806,7 +815,7 @@ export function inspectIndependentRestoreTarget(
 ): void {
   withTargetIdentityRefusal(() => {
     if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(targetProject)) {
-      throw new Error('Target inspection requires an isolated QA project');
+      throw new RecoveryRefusal('invalid-target-project', 'Target inspection requires an isolated QA project');
     }
     const containers = inspector.projectContainers(targetProject);
     const networks = inspector.projectNetworks(targetProject);

@@ -13,6 +13,7 @@ import {
   openIndex,
   openManifest,
   RecoveryBudget,
+  RecoveryRefusal,
   seal,
   verifyArtifacts,
   type RecoveryIndex,
@@ -71,6 +72,19 @@ const index: RecoveryIndex = {
   artifacts: artifactNames.map((file) => ({ file, sha256: sha, bytes: 1 })),
 };
 
+function expectRefusal(work: () => void, code: RecoveryRefusal['code']): RecoveryRefusal {
+  let failure: unknown;
+  try {
+    work();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(RecoveryRefusal);
+  const refusal = failure as RecoveryRefusal;
+  expect(refusal.code).toBe(code);
+  return refusal;
+}
+
 test('G-727: a missing owner, older manifest format and a tampered signature fail closed', () => {
   expect(openManifest(seal(manifest, key, 'ops-recovery-manifest'), key)).toEqual(manifest);
   const { content: _content, ...owners } = manifest.owners;
@@ -118,10 +132,10 @@ test('G-727: current independent custody rejects older or mixed cuts and duplica
 
 test('G-727: restore refuses the original, running/occupied projects and traversal before mutation', () => {
   expect(() => assertFreshTarget('rezics-qa-new', manifest, () => false)).not.toThrow();
-  for (const project of ['rezics-qa-original', 'rezics-dev', 'rezics-qa-../old']) {
-    expect(() => assertFreshTarget(project, manifest, () => false)).toThrow('new empty');
-  }
-  expect(() => assertFreshTarget('rezics-qa-new', manifest, () => true)).toThrow('new empty');
+  expectRefusal(() => assertFreshTarget(manifest.source, manifest, () => false), 'original-project');
+  expectRefusal(() => assertFreshTarget('rezics-dev', manifest, () => false), 'invalid-target-project');
+  expectRefusal(() => assertFreshTarget('rezics-qa-../old', manifest, () => false), 'invalid-target-project');
+  expectRefusal(() => assertFreshTarget('rezics-qa-new', manifest, () => true), 'occupied-target');
   expect(() => assertSeparateCustody('/tmp/set', '/tmp/set/frontier')).toThrow('outside');
   expect(() => assertSeparateCustody('/tmp/set', '/tmp/authority/frontier')).not.toThrow();
 });
