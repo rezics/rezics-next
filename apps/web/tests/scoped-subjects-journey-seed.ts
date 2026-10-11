@@ -8,6 +8,7 @@ import { SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import { loadScopedSubjects } from '../../../scripts/dev/seed/scoped-subjects.ts';
 import type { ScopedSubjectApi } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
 import { scopedSubjectsFixture } from '../../../tests/qa/integration/scoped-subjects-support.ts';
+import { openActorPlatformGroup } from './g-838-catalogue.ts';
 
 if (!process.env.REZICS_QA_RUN_ID || !process.env.REZICS_WEB_AUTH_PRIVATE_PATH)
   throw new Error('Use the browser QA stack');
@@ -39,6 +40,10 @@ const patient = (person: Parameters<typeof h.api>[0]): ScopedSubjectApi => {
   };
 };
 try {
+  // Event frames and reviewed lexicon labels support the public catalogue journey.
+  // Only the writer receives these grants; the signed-in reader keeps public access.
+  await openActorPlatformGroup(h.owner.principalId, 'events');
+  await openActorPlatformGroup(h.owner.principalId, 'platform-admin');
   const raters = [h.owner];
   for (let index = 1; index < 50; index++) raters.push(await h.person(`Map reader ${index + 1}`));
   const manifest = await loadScopedSubjects({

@@ -6,6 +6,7 @@ import { loadScopedSubjects, type ScopedSubjectManifest } from '../../../scripts
 import { scopedSubjectLocales, scopedSubjectQuestions } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
 import { entityPage, subjectStatementPage, resourceRelationPage } from '../../../services/main/src/modules/entity-page/contract.ts';
 import { scopedSubjectsFixture } from './scoped-subjects-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 const short = (ref: string) => ref.slice(-36);
 type Statements = Static<typeof subjectStatementPage>;
@@ -54,6 +55,8 @@ const projectAgain = (on: string, frames: string[]) => h.api(h.owner).post<{ pro
 
 beforeAll(async () => {
   h = await scopedSubjectsFixture();
+  await grantRecordedPlatformUse(h.stack.accessPool, h.owner.principalId,
+    ['events', 'platform-admin'], h.owner.actor);
   readers = [h.owner];
   for (let index = 1; index < 50; index++) readers.push(await h.person(`Map reader ${index + 1}`));
   data = await loadScopedSubjects({ api: h.api(h.owner), actor: h.owner.actor, namespace: `scoped-${randomUUID().slice(0, 8)}`,
@@ -71,6 +74,18 @@ beforeAll(async () => {
   }
 }, 600_000);
 afterAll(async () => { await h?.stop(); });
+
+test('the scoped-subject seed grants do not open Event creation to its readers', async () => {
+  const response = await h.call(readers[1]!, 'POST', '/v1/semantic/changes', {
+    profile: 'semantic-change-v1', expectedHead: null,
+    actingSubject: readers[1]!.actor,
+    state: { component: 'resource', types: ['https://schema.org/Event'],
+      properties: [{ predicate: 'https://schema.org/name',
+        value: { kind: 'language-string', lexical: 'Unadmitted event', language: 'en' } }] },
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+});
 
 test('Misaka keeps one Character across two Works; episode ratings and covered facts belong to the projection', async () => {
   for (const id of ['misaka-index', 'misaka-railgun']) {

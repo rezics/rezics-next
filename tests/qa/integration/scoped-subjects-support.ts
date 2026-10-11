@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
@@ -39,6 +40,7 @@ export async function scopedSubjectsFixture() {
     return { ...principal, currentAssertion: async () => principal };
   } };
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, account,
+    platformAccess: new AccessExposure(stack.accessPool),
     content: stack.content, contentAuthoring: stack.content, media: stack.media, mediaAccess: stack.mediaAccess,
     structureObjects, catalogueIntake: new CatalogueIntakeStore(stack.accessPool, stack.env),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),

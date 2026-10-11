@@ -12,6 +12,7 @@ import type { ScopedSubjectManifest } from '../../../scripts/dev/seed/scoped-sub
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { scopedSubjectsFixture } from '../../../tests/qa/integration/scoped-subjects-support.ts';
 import { manifest as zoneManifest, sourceDigest } from './g-849-records.ts';
+import { openActorPlatformGroup } from './g-838-catalogue.ts';
 import { createHash } from 'node:crypto';
 
 if (!process.env.REZICS_QA_RUN_ID || !process.env.REZICS_WEB_AUTH_PRIVATE_PATH)
@@ -188,6 +189,8 @@ try {
       [`theme:activate:${short(theme)}`, 'theme.activate']] as const) await h.authorize(scope, action);
     await grantTo(reviewer.principalId, reviewer.actor, `theme:review:${short(theme)}`, 'theme.review');
     // Theme approval needs the verified Account the fixture's own app presents, which the bare stack app does not.
+    await openActorPlatformGroup(holder.principalId, 'executable-themes');
+    await openActorPlatformGroup(reviewer.principalId, 'executable-themes');
     const command = async <T>(method: string, path: string, person: typeof holder, body: object, status: number): Promise<T> => settled(async () => {
       const key = randomUUID();
       const response = await h.call(person, method, path, { ...body, ...method === 'PUT' ? {} : { idempotencyKey: key } }, key);
