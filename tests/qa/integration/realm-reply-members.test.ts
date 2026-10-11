@@ -6,9 +6,16 @@ import { AccessRealmManagement } from '../../../services/main/src/modules/access
 import { realmReplyDigest } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { realmVisibilityFixture } from '../../../services/main/tests/realm-visibility-fixture.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 type VisibilityFixture = Awaited<ReturnType<typeof realmVisibilityFixture>>;
+
+async function fixtureAuthority(h: VisibilityFixture, actor: string, scope: string, action: string) {
+  return grantFixtureAuthority(h.accessPool, { scope, requireDispatch: false,
+    representations: [{ principalId: h.principalId, actor, action, lifetime: '8 hours' }],
+    grant: { actor, action, lifetime: '8 hours' } });
+}
 
 async function joinPen(h: VisibilityFixture) {
   const authority = await h.accessPool.query(`SELECT 1 FROM access.permission_grant
@@ -408,6 +415,77 @@ test('private open and trusted replies refuse outsiders and admit joined non-own
     const trustedReply = await h.reply(h.pen);
     const trustedPlaced = await h.call('POST', '/v1/realm-reply-placements', trustedReply.placement, h.pen);
     expect(trustedPlaced.status, JSON.stringify(trustedPlaced.body)).toBe(201);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('private-Realm membership cannot substitute for restricted reply-root readability', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('private', 'open');
+    const work = await h.post('/v1/works', { ...h.workBody, authoring: 'own-work',
+      title: `Restricted member reply root ${randomUUID()}` });
+    expect(work.status, JSON.stringify(work.body)).toBe(201);
+    const root = work.body as { work: string; workRevision: string };
+
+    await fixtureAuthority(h, h.pen, 'work:create:root', 'access.membership.consent');
+    await joinPrivatePen(h);
+    expect((await h.accessPool.query(`SELECT state FROM access.private_membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $2`, [h.realm, h.principalId])).rows[0].state)
+      .toBe('joined');
+    const principal = h.principal;
+    expect(await h.access.canReadWork(principal, h.pen, root.work)).toBe(false);
+
+    const input = { ...h.draftInput(h.pen, h.realm), rootTarget: root.work, rootRevision: root.workRevision };
+    const key = randomUUID();
+    const refused = await h.call('POST', '/v1/member-reply-drafts', input, h.pen, key);
+    expect(refused.status, JSON.stringify(refused.body)).toBe(404);
+    expect(refused.body.code).toBe('resource_unavailable');
+    expect((await h.contentPool.query('SELECT id FROM content.variant WHERE id = $1', [input.variantId])).rowCount).toBe(0);
+    expect((await h.contentPool.query('SELECT id FROM content.reply WHERE id = $1', [input.reply])).rowCount).toBe(0);
+    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('restricted-root readability cannot substitute for private-Realm participation', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('private', 'open');
+    const work = await h.post('/v1/works', { ...h.workBody, authoring: 'own-work',
+      title: `Restricted outsider reply root ${randomUUID()}` });
+    expect(work.status, JSON.stringify(work.body)).toBe(201);
+    const root = work.body as { work: string; workRevision: string };
+    await fixtureAuthority(h, h.pen, `work:read:${root.work}`, 'work.read');
+    const principal = h.principal;
+    expect(await h.access.canReadWork(principal, h.pen, root.work)).toBe(true);
+    expect((await h.accessPool.query(`SELECT id FROM access.private_membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $2 AND state = 'joined'`,
+    [h.realm, h.principalId])).rowCount).toBe(0);
+
+    const input = { ...h.draftInput(h.pen, null), rootTarget: root.work, rootRevision: root.workRevision };
+    const draft = await h.call('POST', '/v1/member-reply-drafts', input, h.pen);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const identity = { profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, author: h.pen, rootTarget: root.work,
+      rootRevision: root.workRevision, parentReply: null, parentRevision: null, contextRevision: null };
+    const created = await h.call('POST', '/v1/realm-replies', identity, h.pen);
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+
+    const placement = { profile: 'realm-reply-placement-v1', realm: h.realm, reply: input.reply,
+      revisionId: draft.body.revisionId, revisionDigest: draft.body.revisionDigest,
+      reviewDecisionId: null, expectedHead: null, actingSubject: h.pen };
+    const digest = realmReplyDigest(placement);
+    const key = randomUUID();
+    await expect(h.access.register({ principal, actingSubject: h.pen,
+      action: 'reply.place', scope: `reply:place:${h.realm}`, idempotencyKey: key, requestDigest: digest }))
+      .rejects.toThrow('Realm submission policy denies this request');
+
+    const before = await placementEffects(h, draft.body.revisionId, input.reply);
+    const refusedKey = randomUUID();
+    const refused = await h.call('POST', '/v1/realm-reply-placements', placement, h.pen, refusedKey);
+    expect(refused.status, JSON.stringify(refused.body)).toBe(403);
+    expect(refused.body.code).toBe('authority_denied');
+    expect(await placementEffects(h, draft.body.revisionId, input.reply)).toEqual(before);
+    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1', [refusedKey])).rowCount).toBe(0);
   } finally { await h.close(); }
 }, 180_000);
 

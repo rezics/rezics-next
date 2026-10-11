@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { memberFixture, nativeId } from '../../../services/main/tests/member-reply-fixture.ts';
 import { TARGET_RESOLVE_COST } from '../../../services/main/src/modules/target/resolve.ts';
+import { AccessInvitations } from '../../../services/main/src/modules/access/invitation.ts';
+import { AdmissionDenied, AdmissionExpired } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 
 test('G265: controlled Persons author exact contribution comments and replay without resurrection', async () => {
   const h = await memberFixture();
@@ -479,7 +484,176 @@ test('G265: a Content commit followed by lost Access settlement replays one auth
   } finally { h.access.recordGraphOutcome = settle; await h.close(); }
 }, 180_000);
 
-test('G265: reply admission rejects private/erased roots, unverified and suspended Accounts; competing edits have one winner', async () => {
+test('expired member-reply admissions stay fenced while a fresh key can claim', async () => {
+  const h = await memberFixture();
+  try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
+    const principal = await h.principal();
+    const principalId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0]!.id;
+    const reply = nativeId();
+    const digest = createHash('sha256').update(randomUUID()).digest('hex');
+    const request = { principal, actingSubject: h.pen, action: 'content.draft',
+      scope: `content:draft:${reply}`, requestDigest: digest,
+      baselineRelatedWork: h.work.work, baselineSourceRevision: h.first.draftRevision };
+    await grantFixtureAuthority(h.accessPool, { scope: request.scope, requireDispatch: false,
+      representations: [{ principalId, actor: h.pen, action: 'content.draft', lifetime: '8 hours' }],
+      grant: { actor: h.pen, action: 'content.draft', lifetime: '8 hours' } });
+
+    const key = randomUUID();
+    const registered = await h.access.register({ ...request, idempotencyKey: key });
+    expect(registered.dispatchEligible).toBe(true);
+    await h.accessPool.query(`UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second'
+      WHERE id = $1`, [registered.id]);
+
+    const replay = await h.access.register({ ...request, idempotencyKey: key });
+    expect(replay).toMatchObject({ id: registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(registered.id, digest, principal)).rejects.toBeInstanceOf(AdmissionExpired);
+    expect((await h.accessPool.query(`SELECT expires_at < clock_timestamp() AS expired FROM access.admission
+      WHERE id = $1`, [registered.id])).rows[0].expired).toBe(true);
+
+    const recovered = await h.access.register({ ...request, idempotencyKey: randomUUID() });
+    expect(recovered.dispatchEligible).toBe(true);
+    await h.access.claim(recovered.id, digest, principal);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('revoked Person control cannot be replaced for a saved proof; terminal draft receipt still replays', async () => {
+  const h = await memberFixture();
+  try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
+    const principal = await h.principal();
+    const principalId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0]!.id;
+
+    const controllerName = `Reply controller ${randomUUID()}`;
+    const controllerEmail = `reply-controller-${randomUUID()}@example.test`;
+    const controllerPassword = randomUUID().repeat(2);
+    const signup = await h.accountApp.handle(new Request(`${h.base}/api/auth/sign-up/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: h.base },
+      body: JSON.stringify({ ...signupPolicyFixture, name: controllerName,
+        email: controllerEmail, password: controllerPassword }),
+    }));
+    expect(signup.status).toBe(200);
+    const signupBody = await signup.json() as { user: { id: string } };
+    await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [signupBody.user.id]);
+    const controllerSignin = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
+      headers: { 'content-type': 'application/json', origin: h.base },
+      body: JSON.stringify({ email: controllerEmail, password: controllerPassword }),
+    });
+    expect(controllerSignin.status).toBe(200);
+    const controllerToken = (await signIn({ account: h.base, clientId: h.client.client_id,
+      redirectUri: h.redirectUri,
+      scope: 'openid agent:create work:create work:edit work:read comment:create space:create realm:profile realm:adopt',
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, }, controllerSignin.headers.get('set-cookie')!)).accessToken;
+    const controllerPrincipal = await h.verifier.verify(new Request('http://main.local', {
+      headers: { authorization: `Bearer ${controllerToken}` },
+    }), ['work:edit']);
+    const provisionApp = h.main();
+    const secondPersonResponse = await h.call(provisionApp, controllerToken, randomUUID(), {
+      profile: 'agent-provision-v1', kind: 'person', displayName: controllerName,
+    });
+    expect(secondPersonResponse.status).toBe(201);
+    const secondPerson = (await secondPersonResponse.json() as { agent: string }).agent;
+    const rootEpoch = (await h.accessPool.query<{ authority_epoch: string }>(`
+      SELECT authority_epoch::text FROM access.scope_gate WHERE id = 'work:create:root'`)).rows[0]!.authority_epoch;
+    const invitations = new AccessInvitations(h.accessPool);
+    const receipt = () => ({ idempotencyKey: randomUUID(),
+      requestDigest: createHash('sha256').update(randomUUID()).digest('hex') });
+    const invitationId = randomUUID();
+    const offered = await invitations.issue(principal, receipt(), {
+      invitationId, issuerSubject: h.pen, recipientSubject: secondPerson,
+      offer: 'control', issuerLifetime: 'institutional', expectedAuthorityEpoch: rootEpoch,
+    });
+    expect(offered).toMatchObject({ offer: 'control', status: 'pending' });
+    const accepted = await invitations.accept(controllerPrincipal, receipt(), {
+      invitationId,
+      representationId: randomUUID(),
+      expectedAuthorityEpoch: rootEpoch,
+    });
+    expect(accepted).toMatchObject({ offer: 'control', status: 'accepted' });
+    const secondPrincipalId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`,
+    [controllerPrincipal.issuer, controllerPrincipal.subject])).rows[0]!.id;
+
+    const staleReply = nativeId();
+    const digest = createHash('sha256').update(randomUUID()).digest('hex');
+    const staleRequest = { principal, actingSubject: h.pen, action: 'content.draft',
+      scope: `content:draft:${staleReply}`, requestDigest: digest,
+      baselineRelatedWork: h.work.work, baselineSourceRevision: h.first.draftRevision };
+    const staleKey = randomUUID();
+    const registered = await h.access.register({ ...staleRequest, idempotencyKey: staleKey });
+    expect(registered.dispatchEligible).toBe(true);
+    const savedProof = (await h.accessPool.query<{ representation_id: string; representation_generation: string }>(`
+      SELECT representation_id, representation_generation::text FROM access.baseline_admission
+      WHERE admission_id = $1`, [registered.id])).rows[0]!;
+
+    const input = { profile: 'member-reply-draft-v1', reply: nativeId(),
+      variantId: `urn:rezics:variant:${randomUUID()}`, rootTarget: h.work.work,
+      rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr' as const,
+      expectedHead: null, body: 'A committed reply receipt.', actingSubject: h.pen };
+    const key = randomUUID();
+    const committed = await h.post('/v1/member-reply-drafts', input, key);
+    expect(committed.status, JSON.stringify(committed.body)).toBe(201);
+    const provenance = (await h.contentPool.query<{ admissionId: string }>(
+      'SELECT provenance->>\'admissionId\' AS "admissionId" FROM content.revision WHERE id = $1',
+      [committed.body.revisionId])).rows[0]!;
+    const committedProof = (await h.accessPool.query<{ representation_id: string }>(`
+      SELECT representation_id FROM access.baseline_admission WHERE admission_id = $1`,
+    [provenance.admissionId])).rows[0]!;
+    expect(committedProof.representation_id).toBe(savedProof.representation_id);
+
+    await h.accessPool.query(`UPDATE access.representation SET active = false, generation = generation + 1
+      WHERE id = $1`, [savedProof.representation_id]);
+    await grantFixtureAuthority(h.accessPool, { scope: staleRequest.scope, requireDispatch: false,
+      representations: [{ principalId, actor: h.pen, action: 'content.draft', lifetime: '8 hours' }],
+      grant: { actor: h.pen, action: 'content.draft', lifetime: '8 hours' } });
+
+    const revokedReplay = await h.access.register({ ...staleRequest, idempotencyKey: staleKey });
+    expect(revokedReplay).toMatchObject({ id: registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(registered.id, digest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await h.accessPool.query(`SELECT id FROM access.permission_grant
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'content.draft'
+        AND active AND valid_until > clock_timestamp()`, [h.pen, staleRequest.scope])).rowCount).toBe(1);
+    expect((await h.contentPool.query('SELECT id FROM content.reply WHERE id = $1', [staleReply])).rowCount).toBe(0);
+    const revokedGeneration = (await h.accessPool.query<{ generation: string }>(`SELECT generation::text AS generation
+      FROM access.representation WHERE id = $1`, [savedProof.representation_id])).rows[0]!.generation;
+    expect(revokedGeneration).not.toBe(savedProof.representation_generation);
+
+    const replacementControl = (await h.accessPool.query<{ id: string }>(`SELECT id
+      FROM access.representation WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'
+        AND active AND valid_until > clock_timestamp()`, [secondPrincipalId, h.pen])).rows[0]!;
+    expect(replacementControl.id).not.toBe(savedProof.representation_id);
+    expect((await h.accessPool.query('SELECT access.agent_controller_count($1) AS n', [h.pen]))
+      .rows[0]!.n).toBe(1);
+    const replacementRequest = { ...staleRequest, principal: controllerPrincipal };
+    const freshAdmission = await h.access.register({ ...replacementRequest, idempotencyKey: randomUUID() });
+    expect(freshAdmission.dispatchEligible).toBe(true);
+    await h.access.claim(freshAdmission.id, digest, controllerPrincipal);
+
+    await grantFixtureAuthority(h.accessPool, { scope: `reply:create:${input.rootTarget}`, requireDispatch: false,
+      representations: [{ principalId, actor: h.pen, action: 'reply.create', lifetime: '8 hours' }],
+      grant: { actor: h.pen, action: 'reply.create', lifetime: '8 hours' } });
+    const identity = { profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: committed.body.revisionId, author: h.pen, rootTarget: input.rootTarget,
+      rootRevision: input.rootRevision, parentReply: null, parentRevision: null, contextRevision: null };
+    const identityKey = randomUUID();
+    const refusedIdentity = await h.post('/v1/realm-replies', identity, identityKey);
+    expect(refusedIdentity.status, JSON.stringify(refusedIdentity.body)).toBe(403);
+    expect(refusedIdentity.body.code).toBe('authority_denied');
+    expect((await h.contentPool.query('SELECT id FROM content.reply WHERE id = $1', [input.reply])).rowCount).toBe(0);
+    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [identityKey])).rowCount).toBe(0);
+
+    const replay = await h.post('/v1/member-reply-drafts', input, key);
+    expect(replay.status, JSON.stringify(replay.body)).toBe(200);
+    expect(replay.body).toMatchObject({ revisionId: committed.body.revisionId, replayed: true });
+    expect((await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
+      [input.variantId])).rowCount).toBe(1);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('G265: reply admission rejects private/erased roots and competing edits have one winner', async () => {
   const h = await memberFixture();
   try {
     expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
@@ -488,9 +662,6 @@ test('G265: reply admission rejects private/erased roots, unverified and suspend
       expectedHead: null, body: 'Another member comment.', actingSubject: h.actor };
     expect((await h.post('/v1/member-reply-drafts', { ...input, reply: nativeId(),
       variantId: `urn:rezics:variant:${randomUUID()}`, rootRevision: h.work.workRevision })).status).toBe(201);
-    await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
-    expect((await h.post('/v1/member-reply-drafts', input)).status).toBe(403);
-    await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [h.user.id]);
     const draft = await h.post('/v1/member-reply-drafts', input);
     expect(draft.status, JSON.stringify(draft.body)).toBe(201);
     expect((await h.post('/v1/realm-replies', { profile: 'realm-reply-identity-v1',
@@ -504,8 +675,49 @@ test('G265: reply admission rejects private/erased roots, unverified and suspend
       <${input.rootRevision}> a <https://rezics.com/vocab/ErasedRevision> } }`);
     expect((await h.get(`/v1/member-replies/${input.reply.split('/').at(-1)}`)).status).toBe(404);
     expect((await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edits.find(result => result.status === 201)!.body.revisionId })).status).toBe(403);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('unverified and suspended Accounts cannot use scoped action grants for member reply drafts', async () => {
+  const h = await memberFixture();
+  try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
+    const principal = await h.principal();
+    const principalId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0]!.id;
+    const rejected = (reply: string) => ({ profile: 'member-reply-draft-v1', reply,
+      variantId: `urn:rezics:variant:${randomUUID()}`, rootTarget: h.work.work,
+      rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr' as const,
+      expectedHead: null, body: 'A reply with a current Account assertion.', actingSubject: h.pen });
+    const installDraftGrant = async (input: ReturnType<typeof rejected>) => grantFixtureAuthority(h.accessPool, {
+      scope: `content:draft:${input.reply}`, requireDispatch: false,
+      representations: [{ principalId, actor: h.pen, action: 'content.draft', lifetime: '8 hours' }],
+      grant: { actor: h.pen, action: 'content.draft', lifetime: '8 hours' },
+    });
+
+    const unverified = rejected(nativeId());
+    await installDraftGrant(unverified);
+    await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
+    const unverifiedKey = randomUUID();
+    expect((await h.post('/v1/member-reply-drafts', unverified, unverifiedKey)).status).toBe(403);
+    expect((await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
+      [unverified.variantId])).rowCount).toBe(0);
+    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [unverifiedKey])).rowCount).toBe(0);
+    await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [h.user.id]);
+    const afterVerification = rejected(nativeId());
+    const recovered = await h.post('/v1/member-reply-drafts', afterVerification);
+    expect(recovered.status, JSON.stringify(recovered.body)).toBe(201);
+
+    const suspended = rejected(nativeId());
+    await installDraftGrant(suspended);
     await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [h.user.id]);
-    expect((await h.post('/v1/member-reply-drafts', input)).status).toBe(401);
+    const suspendedKey = randomUUID();
+    expect((await h.post('/v1/member-reply-drafts', suspended, suspendedKey)).status).toBe(401);
+    expect((await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
+      [suspended.variantId])).rowCount).toBe(0);
+    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [suspendedKey])).rowCount).toBe(0);
   } finally { await h.close(); }
 }, 180_000);
 
