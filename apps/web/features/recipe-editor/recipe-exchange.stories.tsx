@@ -43,6 +43,13 @@ function Page({ outcome, locale = 'en' }: { outcome: 'success' | 'too-large' | '
   </div>;
 }
 
+async function capture(name: string) {
+  if (import.meta.env.VITE_RECIPE_EXCHANGE_VISUAL !== '1') return;
+  const { page } = await import('vitest/browser');
+  await document.fonts.ready;
+  await page.screenshot({ path: `../../../../.temp/recipe-exchange/${name}.png` });
+}
+
 const meta = { title: 'Recipe editor/Exchange', component: Page, args: { outcome: 'success' },
   parameters: { route: { pathname: localizedPath(recipeEditHref(structure), 'en') } } } satisfies Meta<typeof Page>;
 export default meta;
@@ -55,6 +62,7 @@ export const SelectedRevision: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Downloaded revision 00000000-0000-4000-8000-000000000900.'));
+    await capture('selected-revision');
     await expect(current.request).toEqual({ structure, revision, actingSubject });
     await expect(current.saved).toEqual(exported);
   },
@@ -68,6 +76,7 @@ export const OverExportLimit: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
     await expect(canvas.getByRole('alert')).toHaveTextContent('Recipe export exceeds 4,096 occurrences');
+    await capture('over-export-limit');
   },
 };
 
@@ -79,5 +88,6 @@ export const ReadDenied: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
     await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').exportDenied);
+    await capture('read-denied');
   },
 };
