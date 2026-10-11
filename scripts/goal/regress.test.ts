@@ -1196,11 +1196,15 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       await r.run({ runId: 'rewind', at: passedAt, only: ['unit'] });
       r.commit();
       r.calls.length = 0;
+      const routed = inboxEntries(r.options.stateDir, 'owner').length;
+      expect(routed).toBeGreaterThan(0);
       const result = await r.run({ runId: 'current', only: ['unit'] });
       expect(result.diagnoses.find(item => item.file === failing)).toMatchObject({
         status: 'inherited', probes: [], earlierRunId: 'closer', goal: 'owner', taskIds: ['G-001', 'G-002'],
         earlierDiagnosis: { status: 'attributed', classification: prior!.classification, after: prior!.after, goal: 'owner' },
       });
+      // The owner has the failure from the run that first saw it.
+      expect(inboxEntries(r.options.stateDir, 'owner')).toHaveLength(routed);
       expect(r.calls.some(call => /\/probes\/|\/alone-|\/confirm/.test(call.directory))).toBe(false);
       expect(result.status).toBe('failed');
       expect(result.finishedAt).toBeDefined();

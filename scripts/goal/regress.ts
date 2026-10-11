@@ -1181,9 +1181,10 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       for (const file of failing) {
         if (runManifest.diagnoses.some(item => item.file === file)) continue;
         chargeDiagnosis();
-        // A failure already present in the baseline needs no confirmation, isolation or bisect.
+        // A failure already present in the baseline needs no confirmation, isolation or bisect,
+        // and no second inbox entry: its owner has it from the run that first saw it.
         if (earlierRun && earlierOutcomes?.failed.has(file) && failedNow(batch, file)) {
-          await routeFileFailure(file, initial, inheritedFailure(file, earlierRun, initial, pinned, [...initial.artifactPaths]));
+          runManifest.diagnoses.push(inheritedFailure(file, earlierRun, initial, pinned, [...new Set(initial.artifactPaths)])); save();
           continue;
         }
         if ((runManifest.diagnosisSpentMs ?? 0) >= diagnosisBudget) {
