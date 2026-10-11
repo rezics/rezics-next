@@ -16,21 +16,24 @@ import { startSearchFuseki } from '../../../scripts/operations/search-startup.ts
 const graphEpoch = '11111111-1111-4111-8111-111111111111';
 const sourceEpoch = '22222222-2222-4222-8222-222222222222';
 const generation = 'urn:rezics:text-index-generation:33333333-3333-4333-8333-333333333333';
+const XSD_INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
 const binding = (value: string, language?: string) => ({ type: language ? 'literal' : 'uri',
   value, ...(language ? { 'xml:lang': language } : {}) });
 const literal = (value: string) => ({ type: 'literal', value });
+const integer = (value: string) => ({ type: 'literal', value, datatype: XSD_INTEGER });
 
 type ProofField = readonly [string, string | undefined, 'uri' | 'literal'];
 
 function proofRow(idField: 'publication' | 'eligibility', id: string, receipt: string,
   fields: readonly ProofField[]) {
   const row: Record<string, { type: string; value: string }> = {
-    [idField]: binding(id), decisionTypeCount: literal('1'), anchorTypeCount: literal('1'),
-    receiptCount: literal('1'), receipt: binding(receipt), receiptTypeCount: literal('1'),
+    [idField]: binding(id), decisionTypeCount: integer('1'), anchorTypeCount: integer('1'),
+    receiptCount: integer('1'), receipt: binding(receipt), receiptTypeCount: integer('1'),
   };
   for (const [name, value, kind] of fields) {
-    row[`${name}Count`] = literal(value === undefined ? '0' : '1');
-    if (value !== undefined) row[name] = kind === 'uri' ? binding(value) : literal(value);
+    row[`${name}Count`] = integer(value === undefined ? '0' : '1');
+    if (value !== undefined) row[name] = kind === 'uri' ? binding(value)
+      : name === 'dSequence' || name === 'rSequence' ? integer(value) : literal(value);
   }
   return row;
 }
@@ -97,16 +100,16 @@ function verifyFixture(options: FixtureOptions = {}) {
     if (sparql.includes('ASK { GRAPH <urn:rezics:search:public>')) return { boolean: false };
     if (sparql.includes('ASK { GRAPH <urn:rezics:graph:receipts>')) return { boolean: true };
     if (sparql.includes('SELECT ?epoch ?routing')) return { results: { bindings: [{
-      epoch: binding(graphEpoch), routing: binding(graphEpoch), sequence: binding('3'),
+      epoch: binding(graphEpoch), routing: binding(graphEpoch), sequence: integer('3'),
       generation: binding(generation),
     }] } };
     if (sparql.includes('COUNT(DISTINCT ?resource) AS ?resourceCount')) {
       const rows = page(records, afterLiteral(sparql, 'variant'));
       return { results: { bindings: rows.map(row => {
         const hasEligibilityHead = row.id !== variantId(options.missingHead ?? -1);
-        return { variant: binding(row.variant), resourceCount: literal('1'), resource: binding(row.resource),
-          publicationCount: literal('1'), publication: binding(row.decision),
-          eligibilityCount: literal(hasEligibilityHead ? '1' : '0'),
+        return { variant: binding(row.variant), resourceCount: integer('1'), resource: binding(row.resource),
+          publicationCount: integer('1'), publication: binding(row.decision),
+          eligibilityCount: integer(hasEligibilityHead ? '1' : '0'),
           ...(hasEligibilityHead ? { eligibility: binding(row.eligibility) } : {}) };
       }) } };
     }

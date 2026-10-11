@@ -13,6 +13,7 @@ import type { ContentSearchEligibilityInput } from '../src/modules/content-publi
 const graphEpoch = '11111111-1111-4111-8111-111111111111';
 const sourceEpoch = '22222222-2222-4222-8222-222222222222';
 const generation = 'urn:rezics:text-index-generation:33333333-3333-4333-8333-333333333333';
+const XSD_INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
 const variant = 'urn:rezics:variant:44444444-4444-4444-8444-444444444444';
 const resource = 'https://rezics.com/id/55555555-5555-4555-8555-555555555555';
 const revisionId = '66666666-6666-4666-8666-666666666666';
@@ -32,17 +33,19 @@ const input: ContentSearchEligibilityInput = { resourceId: resource, variantId: 
   rightsBasis: 'original-contribution', disclosure: 'public' };
 const binding = (value: string, type = 'uri', language?: string) => ({ type, value,
   ...(language ? { 'xml:lang': language } : {}) });
-type Row = Record<string, { type: string; value: string; 'xml:lang'?: string }>;
+const integer = (value: string) => ({ type: 'literal', value, datatype: XSD_INTEGER });
+type Row = Record<string, { type: string; value: string; datatype?: string; 'xml:lang'?: string }>;
 
 function setField(row: Row, name: string, value: string | undefined, type = 'literal') {
-  row[`${name}Count`] = binding(value === undefined ? '0' : '1', 'literal');
-  if (value !== undefined) row[name] = binding(value, type);
+  row[`${name}Count`] = integer(value === undefined ? '0' : '1');
+  if (value !== undefined) row[name] = name === 'dSequence' || name === 'rSequence'
+    ? integer(value) : binding(value, type);
 }
 
 function publicationProofRow(): Row {
-  const row: Row = { publication: binding(decision), decisionTypeCount: binding('1', 'literal'),
-    anchorTypeCount: binding('1', 'literal'), receiptCount: binding('1', 'literal'),
-    receipt: binding(publicationReceipt), receiptTypeCount: binding('1', 'literal') };
+  const row: Row = { publication: binding(decision), decisionTypeCount: integer('1'),
+    anchorTypeCount: integer('1'), receiptCount: integer('1'),
+    receipt: binding(publicationReceipt), receiptTypeCount: integer('1') };
   const fields: Array<[string, string | undefined, string]> = [
     ['dComponent', variant, 'uri'], ['dResource', resource, 'uri'], ['dRevision', revision, 'uri'],
     ['dDigest', digest, 'literal'], ['dOwnerEpoch', sourceEpoch, 'literal'],
@@ -65,9 +68,9 @@ function publicationProofRow(): Row {
 }
 
 function eligibilityProofRow(): Row {
-  const row: Row = { eligibility: binding(eligibility), decisionTypeCount: binding('1', 'literal'),
-    anchorTypeCount: binding('1', 'literal'), receiptCount: binding('1', 'literal'),
-    receipt: binding(eligibilityReceipt), receiptTypeCount: binding('1', 'literal') };
+  const row: Row = { eligibility: binding(eligibility), decisionTypeCount: integer('1'),
+    anchorTypeCount: integer('1'), receiptCount: integer('1'),
+    receipt: binding(eligibilityReceipt), receiptTypeCount: integer('1') };
   const fields: Array<[string, string | undefined, string]> = [
     ['dComponent', variant, 'uri'], ['dVariant', variant, 'uri'], ['dResource', resource, 'uri'],
     ['dPublication', decision, 'uri'], ['dRightsBasis', `${RV}OriginalContribution`, 'uri'],
@@ -94,27 +97,27 @@ function verifyFixture(options: { missingEligibilityReceipt?: boolean; text?: st
   population?: string; eligibilityHead?: boolean; contentUnit?: boolean } = {}) {
   const { missingEligibilityReceipt = false, text = '... !!!', population = '1',
     eligibilityHead = true, contentUnit = true } = options;
-  const candidate: Row = { variant: binding(variant), resourceCount: binding('1', 'literal'),
-    resource: binding(resource), publicationCount: binding('1', 'literal'), publication: binding(decision),
-    eligibilityCount: binding(eligibilityHead ? '1' : '0', 'literal'),
+  const candidate: Row = { variant: binding(variant), resourceCount: integer('1'),
+    resource: binding(resource), publicationCount: integer('1'), publication: binding(decision),
+    eligibilityCount: integer(eligibilityHead ? '1' : '0'),
     ...(eligibilityHead ? { eligibility: binding(eligibility) } : {}) };
   const eligibilityRow = eligibilityProofRow();
   if (missingEligibilityReceipt) {
-    eligibilityRow.receiptCount = binding('0', 'literal');
-    eligibilityRow.receiptTypeCount = binding('0', 'literal');
+    eligibilityRow.receiptCount = integer('0');
+    eligibilityRow.receiptTypeCount = integer('0');
     delete eligibilityRow.receipt;
   }
   const fuseki = { async query(sparql: string): Promise<SparqlResult> {
     if (sparql.includes('ASK { GRAPH <urn:rezics:search:public>')) return { boolean: false };
     if (sparql.includes('ASK { GRAPH <urn:rezics:graph:receipts>')) return { boolean: true };
-    if (sparql.includes('publicTextInventory()')) return { results: { bindings: [{ population: binding(population, 'literal') }] } };
+    if (sparql.includes('publicTextInventory()')) return { results: { bindings: [{ population: integer(population) }] } };
     if (sparql.includes('ASK { GRAPH <urn:rezics:search:probe>')) return { boolean: true };
     if (sparql.includes('SELECT ?epoch ?routing ?sequence ?generation')) return { results: { bindings: [{
-      epoch: binding(graphEpoch), routing: binding(graphEpoch), sequence: binding('20', 'literal'),
+      epoch: binding(graphEpoch), routing: binding(graphEpoch), sequence: integer('20'),
       generation: binding(generation),
     }] } };
     if (sparql.includes('SELECT ?epoch ?routing ?sequence')) return { results: { bindings: [{
-      epoch: binding(graphEpoch), routing: binding(graphEpoch), sequence: binding('20', 'literal'),
+      epoch: binding(graphEpoch), routing: binding(graphEpoch), sequence: integer('20'),
     }] } };
     if (sparql.includes('SELECT ?variant')) return { results: { bindings: [candidate] } };
     if (sparql.includes('SELECT ?eligibility')) return { results: { bindings: [eligibilityRow] } };

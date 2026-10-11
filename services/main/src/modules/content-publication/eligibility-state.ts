@@ -282,7 +282,7 @@ function values(terms: readonly string[]): string {
 
 function controlPattern(snapshot: ContentEligibilitySnapshot): string {
   return `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(snapshot.dataEpoch)} ;
-    rv:routingEpoch ${lit(snapshot.routingEpoch)} ; rv:sequence ${lit(snapshot.sequence)} . }
+    rv:routingEpoch ${lit(snapshot.routingEpoch)} ; rv:sequence ${snapshot.sequence} . }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }`;
 }
 
@@ -331,7 +331,8 @@ function publicationProofQuery(ids: readonly string[]): string {
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?publication a rv:RevisionAnchor }
         BIND(1 AS ?anchorType) }
       ${optionalFields(GRAPHS.revisions, '?publication', publicationDecisionFields)}
-      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:publicationDecision ?publication } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} {
+        ?receipt rv:publicationDecision ?publication ; rv:contentPreparation ?rPreparation } }
       OPTIONAL { FILTER(BOUND(?receipt)) GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt }
         BIND(1 AS ?receiptType) }
       ${optionalFields(GRAPHS.receipts, '?receipt', publicationReceiptFields, 'receipt')}

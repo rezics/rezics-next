@@ -11,8 +11,10 @@ import { DATASET, RV } from '../src/modules/work/activate.ts';
 
 const contentEpoch = '11111111-1111-4111-8111-111111111111';
 const graphEpoch = '22222222-2222-4222-8222-222222222222';
+const XSD_INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
 const position = (sequence: string) => ({ owner: 'content' as const, dataEpoch: contentEpoch, sequence });
 const bound = (value: string) => ({ type: 'literal', value });
+const integer = (value: string) => ({ type: 'literal', value, datatype: XSD_INTEGER });
 const uri = (value: string) => ({ type: 'uri', value });
 
 function publicationInventoryProof(reference: ProjectionPublication['reference']) {
@@ -40,12 +42,13 @@ function publicationInventoryProof(reference: ProjectionPublication['reference']
     ['rSequence', '7', 'literal'], ['rDecision', decision, 'uri'],
   ];
   const row: Record<string, ReturnType<typeof bound>> = {
-    publication: uri(decision), decisionTypeCount: bound('1'), anchorTypeCount: bound('1'),
-    receiptCount: bound('1'), receipt: uri(receipt), receiptTypeCount: bound('1'),
+    publication: uri(decision), decisionTypeCount: integer('1'), anchorTypeCount: integer('1'),
+    receiptCount: integer('1'), receipt: uri(receipt), receiptTypeCount: integer('1'),
   };
   for (const [name, value, type] of fields) {
-    row[`${name}Count`] = bound(value === undefined ? '0' : '1');
-    if (value !== undefined) row[name] = type === 'uri' ? uri(value) : bound(value);
+    row[`${name}Count`] = integer(value === undefined ? '0' : '1');
+    if (value !== undefined) row[name] = type === 'uri' ? uri(value)
+      : name === 'dSequence' || name === 'rSequence' ? integer(value) : bound(value);
   }
   return { decision, row };
 }
@@ -75,26 +78,26 @@ test('G-087: media-set publication is proven and acknowledged without text proje
   const cursor = { read: async () => position('2'), readScan: async () => position('2'),
     retries: async () => [], hasPendingTarget: async () => false, acknowledge: async () => { acknowledgements++; } } as unknown as ContentProjectionCursor;
   const ownerProof = publicationInventoryProof(reference);
-  const row = { epoch: bound(graphEpoch), sequence: bound('7'), routing: bound('1'),
+  const row = { epoch: bound(graphEpoch), sequence: integer('7'), routing: bound('1'),
     outcome: bound('https://rezics.com/vocab/Succeeded'), receiptEpoch: bound(graphEpoch),
-    receiptSequence: bound('7'), decision: bound(ownerProof.decision),
+    receiptSequence: integer('7'), decision: bound(ownerProof.decision),
     head: bound(ownerProof.decision), revision: bound(`urn:rezics:content:revision:${reference.revisionId}`),
     digest: bound(reference.byteDigest), ownerEpoch: bound(contentEpoch), ownerSequence: bound('2'),
     resource: bound(reference.resourceId), variant: bound(reference.variantId),
     decisionRevision: bound(`urn:rezics:content:revision:${reference.revisionId}`),
     decisionDigest: bound(reference.byteDigest), decisionEpoch: bound(contentEpoch),
-    decisionSequence: bound('2'),
+    decisionSequence: integer('2'),
   };
   // The relay first asks whether public search is open (the anchor is present).
   const fuseki = { query: async (sparql: string) => {
       if (sparql.includes('SearchGraphAnchor')) return { boolean: true };
       if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
-        return { results: { bindings: [{ epoch: bound(graphEpoch), routing: bound('1'), sequence: bound('7') }] } };
+        return { results: { bindings: [{ epoch: bound(graphEpoch), routing: bound('1'), sequence: integer('7') }] } };
       }
       if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
-        return { results: { bindings: [{ variant: uri(reference.variantId), resourceCount: bound('1'),
-          resource: uri(reference.resourceId), publicationCount: bound('1'), publication: uri(ownerProof.decision),
-          eligibilityCount: bound('0') }] } };
+        return { results: { bindings: [{ variant: uri(reference.variantId), resourceCount: integer('1'),
+          resource: uri(reference.resourceId), publicationCount: integer('1'), publication: uri(ownerProof.decision),
+          eligibilityCount: integer('0') }] } };
       }
       if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
         return { results: { bindings: [ownerProof.row] } };

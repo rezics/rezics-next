@@ -14,9 +14,11 @@ import { DATASET, RV } from '../src/modules/work/activate.ts';
 const graphEpoch = 'graph-epoch';
 const contentEpoch = 'content-epoch';
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
+const XSD_INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
 const contentPosition = (sequence: string) => ({ owner: 'content' as const,
   dataEpoch: contentEpoch, sequence });
 const binding = (value: string) => ({ type: 'literal', value });
+const integer = (value: string) => ({ type: 'literal', value, datatype: XSD_INTEGER });
 const uri = (value: string) => ({ type: 'uri', value });
 const contentVariant = 'urn:rezics:variant:1';
 const contentResource = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
@@ -36,11 +38,12 @@ const eligibilityInput = { resourceId: contentResource, variantId: contentVarian
 function proofRow(key: string, id: string, receipt: string,
   fields: Array<[string, string | undefined, 'uri' | 'literal']>) {
   const row: Record<string, { type: string; value: string }> = { [key]: uri(id),
-    decisionTypeCount: binding('1'), anchorTypeCount: binding('1'), receiptCount: binding('1'),
-    receipt: uri(receipt), receiptTypeCount: binding('1') };
+    decisionTypeCount: integer('1'), anchorTypeCount: integer('1'), receiptCount: integer('1'),
+    receipt: uri(receipt), receiptTypeCount: integer('1') };
   for (const [name, value, type] of fields) {
-    row[`${name}Count`] = binding(value === undefined ? '0' : '1');
-    if (value !== undefined) row[name] = type === 'uri' ? uri(value) : binding(value);
+    row[`${name}Count`] = integer(value === undefined ? '0' : '1');
+    if (value !== undefined) row[name] = type === 'uri' ? uri(value)
+      : name === 'dSequence' || name === 'rSequence' ? integer(value) : binding(value);
   }
   return row;
 }
@@ -106,12 +109,12 @@ class SearchFuseki extends FusekiClient {
         ? [{ generation: binding('urn:rezics:generation:1') }] : [] } };
     }
     if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
-      return { results: { bindings: [{ epoch: binding(graphEpoch), routing: binding('1'), sequence: binding('7') }] } };
+      return { results: { bindings: [{ epoch: binding(graphEpoch), routing: binding('1'), sequence: integer('7') }] } };
     }
     if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
-      return { results: { bindings: [{ variant: uri(contentVariant), resourceCount: binding('1'),
-        resource: uri(contentResource), publicationCount: binding('1'), publication: uri(publication),
-        eligibilityCount: binding('1'), eligibility: uri(eligibility) }] } };
+      return { results: { bindings: [{ variant: uri(contentVariant), resourceCount: integer('1'),
+        resource: uri(contentResource), publicationCount: integer('1'), publication: uri(publication),
+        eligibilityCount: integer('1'), eligibility: uri(eligibility) }] } };
     }
     if (sparql.includes('SELECT ?eligibility') && sparql.includes('?decisionTypeCount')) {
       return { results: { bindings: [eligibilityOwnerRow] } };
@@ -120,7 +123,7 @@ class SearchFuseki extends FusekiClient {
       return { results: { bindings: [publicationOwnerRow] } };
     }
     if (sparql.includes('?probeScore')) {
-      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
+      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: integer('7'),
         generation: binding(generation), population: binding('1') }] } };
     }
     if (sparql.includes('rv:publicTextInventory()')) {
@@ -128,7 +131,7 @@ class SearchFuseki extends FusekiClient {
     }
     if (sparql.includes('SELECT ?epoch ?sequence ?generation ?declared')) {
       this.contentAudits++;
-      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
+      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: integer('7'),
         generation: binding(generation), declared: binding('1'), heads: binding('1'),
         missing: binding(this.missing ? '1' : '0'),
         eligible: binding(this.missing ? '0' : '1'),
@@ -137,7 +140,7 @@ class SearchFuseki extends FusekiClient {
     }
     if (sparql.includes('?candidateCount')) {
       const match = sparql.includes('needle');
-      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
+      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: integer('7'),
         generation: binding(generation), candidateCount: binding(match ? '1' : '0'),
         ...(match ? { unit: binding('urn:rezics:match:1'), score: binding('2.5'),
           resource: binding(contentResource), variant: binding(contentVariant), revision: binding(contentRevision),
