@@ -5,6 +5,11 @@ import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../wor
 import { replySlotIri } from '../realm-reply/graph.ts';
 import { activityTime } from '../feed/ranking.ts';
 import type { FeedCheckpoint } from '../feed/store.ts';
+import {
+  compareRelayPositions,
+  MAIN_RELAY_STREAM_SCOPE,
+  type RelayHandoffPosition,
+} from '../outbox/relay-position.ts';
 import { hash } from '../work/activate.ts';
 import { realmHistoryOriginCutFilter, type RealmHistoryFloor } from '../realm-admin/history.ts';
 import { retireRealmPopulation } from './retirement.ts';
@@ -54,6 +59,21 @@ async function contentPosition(session: WorkReadSession) {
   ).rows[0];
   if (!row) throw new WorkReadUnavailable('Realm ranking Content source is unavailable');
   return { dataEpoch: row.data_epoch, sequence: row.sequence };
+}
+
+async function mainStreamCoverage(session: WorkReadSession): Promise<RelayHandoffPosition> {
+  const coverage = await session.deps.relayPosition?.read();
+  if (!coverage) throw new WorkReadUnavailable('Realm ranking Main stream coverage is unavailable');
+  try {
+    compareRelayPositions(coverage, {
+      streamScope: MAIN_RELAY_STREAM_SCOPE,
+      dataEpoch: session.position.dataEpoch,
+      sequence: '0',
+    });
+  } catch {
+    throw new WorkReadUnavailable('Realm ranking Main stream coverage is unavailable');
+  }
+  return coverage;
 }
 
 /** Keyset order is identical to the B-tree, including tied scores/times. */
@@ -123,6 +143,7 @@ export async function realmRankPage(
         !/^\d+$/.test(after.revision)))
   )
     throw new WorkReadUnavailable('Invalid Realm rank seek');
+  const main = await mainStreamCoverage(session);
   const content = await contentPosition(session);
   const row = (
     await access.query<{
@@ -165,7 +186,7 @@ export async function realmRankPage(
         limit + 1,
         content.dataEpoch,
         content.sequence,
-        session.position.sequence,
+        main.sequence,
         ...(population ? [population] : []),
       ],
     )
@@ -188,6 +209,20 @@ export class RealmThreadRankingProjection {
   async tick(session: WorkReadSession, feed: FeedCheckpoint, through: string): Promise<boolean> {
     const content = session.deps.content;
     if (!content || !session.deps.realmReplyThreads) return false;
+    const mainThrough: RelayHandoffPosition = {
+      streamScope: MAIN_RELAY_STREAM_SCOPE,
+      dataEpoch: feed.data_epoch,
+      sequence: through,
+    };
+    try {
+      compareRelayPositions(mainThrough, {
+        streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: session.position.dataEpoch,
+        sequence: '0',
+      });
+    } catch {
+      throw new WorkReadUnavailable('Realm ranking Main stream coverage is unavailable');
+    }
     const epoch = feed.data_epoch,
       owner = await contentPosition(session);
     // Backfill admits CURRENT heads, so its initial source cut is the current
@@ -196,7 +231,7 @@ export class RealmThreadRankingProjection {
     await this.access.query(
       `INSERT INTO access.realm_thread_checkpoint(data_epoch,content_epoch,content_sequence,sequence,after_event)
       VALUES($1,$2,$3,$4,'￿') ON CONFLICT DO NOTHING`,
-      [epoch, owner.dataEpoch, owner.sequence, through],
+      [epoch, owner.dataEpoch, owner.sequence, mainThrough.sequence],
     );
     const position = (
       await this.access.query<Checkpoint>(
@@ -319,7 +354,7 @@ export class RealmThreadRankingProjection {
       });
       return true;
     }
-    if (position.sequence !== through || position.after_event !== '￿') {
+    if (position.sequence !== mainThrough.sequence || position.after_event !== '￿') {
       const events = (
         await this.relay.query<{
           sequence: string;
@@ -333,10 +368,11 @@ export class RealmThreadRankingProjection {
           COALESCE(envelope#>>'{data,receipt,work}',envelope#>>'{data,receipt,rootTarget}',
             envelope#>>'{data,payload,work}',envelope#>>'{data,work}') AS work,
           envelope#>>'{data,receipt,realm}' AS realm
-        FROM relay.delivered_event WHERE data_epoch=$1 AND sequence<=$2::numeric
-          AND (sequence>$3::numeric OR sequence=$3::numeric AND event_id>$4)
-        ORDER BY sequence,event_id LIMIT $5`,
-          [epoch, through, position.sequence, position.after_event, BATCH],
+        FROM relay.delivered_event WHERE stream_scope=$1 AND data_epoch=$2 AND sequence<=$3::numeric
+          AND (sequence>$4::numeric OR sequence=$4::numeric AND event_id>$5)
+        ORDER BY sequence,event_id LIMIT $6`,
+          [mainThrough.streamScope, mainThrough.dataEpoch, mainThrough.sequence,
+            position.sequence, position.after_event, BATCH],
         )
       ).rows;
       await controlTransaction(this.access, async (client) => {
@@ -351,7 +387,7 @@ export class RealmThreadRankingProjection {
           `UPDATE access.realm_thread_checkpoint SET sequence=$2,after_event=$3 WHERE data_epoch=$1`,
           [
             epoch,
-            events.length === BATCH ? last!.sequence : through,
+            events.length === BATCH ? last!.sequence : mainThrough.sequence,
             events.length === BATCH ? last!.event_id : '￿',
           ],
         );
