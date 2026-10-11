@@ -83,8 +83,8 @@ async function revisionIdentities(client: PoolClient, selection: MediaErasureSel
   budget: MediaErasureBudget): Promise<RevisionIdentity[]> {
   // The variant index bounds the retained history, including non-head and erased revisions.
   const limit = inventoryReadLimit(budget, MAX_CONTENT_ERASURE_TARGETS);
-  const rows = (await client.query<RevisionIdentity>(`SELECT id::text, model, byte_length, availability
-    FROM content.revision WHERE variant_id=$1 ORDER BY created_at DESC,id LIMIT $2`,
+  const rows = (await client.query<RevisionIdentity>(`SELECT r.id::text AS id, r.model, r.byte_length, r.availability
+    FROM content.revision r WHERE r.variant_id=$1 ORDER BY r.created_at DESC,r.id LIMIT $2`,
   [assetVariant(selection.asset), limit + 1])).rows;
   consumeEntries(budget, rows.length);
   if (rows.length > limit) {
@@ -125,13 +125,14 @@ function checkBudget(budget: MediaErasureBudget): void {
 
 async function indexedRows(client: PoolClient, asset: string, budget: MediaErasureBudget) {
   // Existing UNIQUE(asset_id,id) indexes support both bounded reads; no history scan or paging.
-  const representations = (await client.query<Representation>(`SELECT id::text,kind,upload_id::text,
-    source_id::text,byte_digest,byte_length,media_type,pixel_width,pixel_height
-    FROM media.representation WHERE asset_id=$1 ORDER BY id LIMIT $2`,
+  // Qualify UUID ordering: the projected text id would require sorting the whole history.
+  const representations = (await client.query<Representation>(`SELECT r.id::text AS id,r.kind,r.upload_id::text,
+    r.source_id::text,r.byte_digest,r.byte_length,r.media_type,r.pixel_width,r.pixel_height
+    FROM media.representation r WHERE r.asset_id=$1 ORDER BY r.id LIMIT $2`,
   [asset, inventoryReadLimit(budget, MAX_INDEXED_UNITS - budget.indexedUnits) + 1])).rows;
   consumeEntries(budget, representations.length, true);
-  const uploads = (await client.query<Upload>(`SELECT id::text,quarantine_key
-    FROM media.upload WHERE asset_id=$1 ORDER BY id LIMIT $2`,
+  const uploads = (await client.query<Upload>(`SELECT u.id::text AS id,u.quarantine_key
+    FROM media.upload u WHERE u.asset_id=$1 ORDER BY u.id LIMIT $2`,
   [asset, inventoryReadLimit(budget, MAX_INDEXED_UNITS - budget.indexedUnits) + 1])).rows;
   consumeEntries(budget, uploads.length, true);
   return { representations, uploads };

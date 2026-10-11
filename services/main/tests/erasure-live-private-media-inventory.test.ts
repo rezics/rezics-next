@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import sharp from 'sharp';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
@@ -368,6 +368,95 @@ test('P5 SQL inventory stops at one lookahead when another owner consumed the sh
     await assertUnchanged(f, before, keys);
   });
 });
+
+test('P5 history inventory plans use owner indexes without sorting and examine only one lookahead as history grows', async () => {
+  await fixture(async f => {
+    // Capture the SQL issued by the owner rather than prove a separately authored query.
+    const spies: { mock: { calls: unknown[][] }; mockRestore: () => void }[] = [];
+    const clients = new Set<PoolClient>();
+    const observe = (client: PoolClient) => {
+      if (clients.has(client)) return;
+      clients.add(client);
+      spies.push(spyOn(client, 'query'));
+    };
+    f.pool.on('acquire', observe);
+    let queries: { sql: string; values: unknown[] }[];
+    try {
+      await f.preflight(async inventory => inventory);
+      queries = spies.flatMap(spy => spy.mock.calls.flatMap(([sql, values]) =>
+        typeof sql === 'string' && Array.isArray(values) && sql.startsWith('SELECT')
+          && /FROM (content\.revision|media\.(representation|upload)) \w+ WHERE/.test(sql)
+          ? [{ sql, values: [...values] }] : []));
+    } finally {
+      f.pool.off('acquire', observe);
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(queries).toHaveLength(3);
+    const indexes = new Map([
+      ['content.revision', 'revision_variant_created_idx'],
+      ['media.representation', 'representation_asset_id_id_key'],
+      ['media.upload', 'upload_asset_id_id_key'],
+    ]);
+    type Plan = {
+      'Node Type': string;
+      'Index Name'?: string;
+      'Index Cond'?: string;
+      'Actual Rows'?: number;
+      'Actual Loops'?: number;
+      'Rows Removed by Filter'?: number;
+      'Rows Removed by Index Recheck'?: number;
+      Plans?: Plan[];
+    };
+    const nodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(nodes)];
+    const samples: number[][] = [];
+    // Another asset makes a primary-key scan with an asset filter measurably worse
+    // than the owner index. Seed both through owner commands, without planner overrides.
+    const other = await activate(f.store, f.memory, image, null);
+    let seeded = 1;
+    for (const size of [100, 1000]) {
+      for (; seeded < size; seeded++) {
+        await activate(f.store, f.memory, image, reservation.asset);
+        await activate(f.store, f.memory, image, other.reserved.asset);
+      }
+      await f.pool.query('ANALYZE content.revision; ANALYZE media.representation; ANALYZE media.upload');
+      const examined: number[] = [];
+      for (const { sql, values } of queries) {
+        const table = [...indexes.keys()].find(name => sql.includes(`FROM ${name} `))!;
+        const inventoryKey = table === 'content.revision' ? assetVariant(reservation.asset) : reservation.asset;
+        const keyColumn = table === 'content.revision' ? 'variant_id' : 'asset_id';
+        expect((await f.pool.query(`SELECT count(*)::int AS count FROM ${table} WHERE ${keyColumn}=$1`,
+          [inventoryKey])).rows).toEqual([{ count: size }]);
+        const explain = async (analyze: boolean) => (await f.pool.query<{ 'QUERY PLAN': { Plan: Plan }[] }>(
+          `EXPLAIN (${analyze ? 'ANALYZE, TIMING OFF, ' : ''}FORMAT JSON) ${sql}`, values)).rows[0]!['QUERY PLAN'][0]!.Plan;
+        // The planned shape is a Limit directly over the migration's owner index.
+        for (const plan of [await explain(false), await explain(true)]) {
+          expect(nodes(plan).filter(node => node['Node Type'].includes('Sort'))).toEqual([]);
+          expect(plan['Node Type']).toBe('Limit');
+          expect(plan.Plans).toHaveLength(1);
+          const child = plan.Plans![0]!;
+          expect(['Index Scan', 'Index Only Scan']).toContain(child['Node Type']);
+          expect(child['Index Name']).toBe(indexes.get(table));
+          expect(child['Index Cond']).toContain(keyColumn);
+          if (child['Actual Rows'] !== undefined) {
+            expect(child['Actual Loops']).toBe(1);
+            const read = child['Actual Rows'] + (child['Rows Removed by Filter'] ?? 0)
+              + (child['Rows Removed by Index Recheck'] ?? 0);
+            expect(read).toBe(values[1] as number);
+            expect(plan['Actual Rows']).toBe(values[1] as number);
+            examined.push(read);
+          }
+        }
+      }
+      samples.push(examined);
+      const before = await f.store.readAsset(reservation.asset), keys = [...f.memory.data.keys()];
+      const listings = f.memory.listings.length;
+      await expect(f.erase()).rejects.toBeInstanceOf(MediaErasureUnsupported);
+      expect(f.memory.listings).toHaveLength(listings);
+      await assertUnchanged(f, before, keys);
+    }
+    expect(samples).toEqual([[65, 65, 64], [65, 65, 64]]);
+  });
+}, 120_000);
 
 test('P3 incomplete, unsupported and unexpected-key listings refuse before mutation', async () => {
   for (const failure of ['incomplete', 'unsupported', 'unexpected'] as const) await fixture(async f => {
