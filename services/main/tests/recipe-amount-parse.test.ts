@@ -20,50 +20,51 @@ test('every Unicode vulgar fraction imports exactly alone, with a unit, and in m
       const parsed = parse(line);
       expect(parsed.amount).toEqual(amount(numerator, denominator));
       expect(parsed.amountUpper).toBeUndefined();
-      expect(parsed.amountLexical).toBe(line);
+      expect(parsed.amountLexical).toBe(glyph);
       expect(parsed.parseStatus).toBe('partial');
       expect(parsed.unitText).toBe(line === glyph ? undefined : 'cups');
     }
     for (const lexical of [`2${glyph}`, `2 ${glyph}`]) {
       const parsed = parse(`${lexical} cups flour`);
       expect(parsed.amount).toEqual(amount(2 * denominator + numerator, denominator));
+      expect(parsed.amountLexical).toBe(lexical);
       expect(parsed.unitText).toBe('cups');
     }
   }
 });
 
-test('fraction slash, ASCII fractions and mixed numbers reduce without changing source lexical text', () => {
-  for (const [line, numerator, denominator] of [
-    ['1⁄2 cup flour', 1, 2], ['2 1⁄2 cups flour', 5, 2],
-    ['2 2/4 cups flour', 5, 2], ['6⁄8 cup flour', 3, 4],
-    ['0½ cups flour', 1, 2], ['  1½\t cups flour  ', 3, 2],
+test('fraction slash, ASCII fractions and mixed numbers retain only the quantity lexical form', () => {
+  for (const [line, numerator, denominator, lexical] of [
+    ['1⁄2 cup flour', 1, 2, '1⁄2'], ['2 1⁄2 cups flour', 5, 2, '2 1⁄2'],
+    ['2 2/4 cups flour', 5, 2, '2 2/4'], ['6⁄8 cup flour', 3, 4, '6⁄8'],
+    ['0½ cups flour', 1, 2, '0½'], ['  1½\t cups flour  ', 3, 2, '1½'],
   ] as const) {
     const parsed = parse(line);
     expect(parsed.amount).toEqual(amount(numerator, denominator));
-    expect(parsed.amountLexical).toBe(line);
+    expect(parsed.amountLexical).toBe(lexical);
     expect(parsed.originalText.value).toBe(line.trim());
     expect(parsed.unitText).toBe(line.includes('cups') ? 'cups' : 'cup');
   }
 });
 
 test('ranges populate both exact endpoints and consume the entire quantity before the unit', () => {
-  for (const [line, lower, upper, unitText] of [
-    ['2 to 3 tablespoons butter', amount(2), amount(3), 'tablespoons'],
-    ['2-3 tablespoons butter', amount(2), amount(3), 'tablespoons'],
-    ['2–3 tablespoons butter', amount(2), amount(3), 'tablespoons'],
-    ['2 – 3 tablespoons butter', amount(2), amount(3), 'tablespoons'],
-    ['1½ to 2 cups flour', amount(3, 2), amount(2), 'cups'],
-    ['½–¾ cup butter', amount(1, 2), amount(3, 4), 'cup'],
-    ['1/2 to 2 2/4 cups flour', amount(1, 2), amount(5, 2), 'cups'],
-    ['1⁄2-2 1⁄2 cups flour', amount(1, 2), amount(5, 2), 'cups'],
-    ['4 or 5 sour apples', amount(4), amount(5), 'sour'],
-    ['2 to 2', amount(2), amount(2), undefined],
+  for (const [line, lower, upper, unitText, lexical] of [
+    ['2 to 3 tablespoons butter', amount(2), amount(3), 'tablespoons', '2 to 3'],
+    ['2-3 tablespoons butter', amount(2), amount(3), 'tablespoons', '2-3'],
+    ['2–3 tablespoons butter', amount(2), amount(3), 'tablespoons', '2–3'],
+    ['2 – 3 tablespoons butter', amount(2), amount(3), 'tablespoons', '2 – 3'],
+    ['1½ to 2 cups flour', amount(3, 2), amount(2), 'cups', '1½ to 2'],
+    ['½–¾ cup butter', amount(1, 2), amount(3, 4), 'cup', '½–¾'],
+    ['1/2 to 2 2/4 cups flour', amount(1, 2), amount(5, 2), 'cups', '1/2 to 2 2/4'],
+    ['1⁄2-2 1⁄2 cups flour', amount(1, 2), amount(5, 2), 'cups', '1⁄2-2 1⁄2'],
+    ['4 or 5 sour apples', amount(4), amount(5), 'sour', '4 or 5'],
+    ['2 to 2', amount(2), amount(2), undefined, '2 to 2'],
   ] as const) {
     const parsed = parse(line);
     expect(parsed.amount).toEqual(lower);
     expect(parsed.amountUpper).toEqual(upper);
     expect(parsed.unitText).toBe(unitText);
-    expect(parsed.amountLexical).toBe(line);
+    expect(parsed.amountLexical).toBe(lexical);
     expect(parsed.parseStatus).toBe('partial');
     expect(parsed.scaling).toBe('linear');
   }
@@ -90,23 +91,23 @@ test('bounds apply before reduction and reject a failed range rather than retain
     expect(parsed.amount).toBeUndefined();
     expect(parsed.amountUpper).toBeUndefined();
     expect(parsed.unitText).toBeUndefined();
-    expect(parsed.amountLexical).toBe(line);
+    expect(parsed.amountLexical).toBeUndefined();
     expect(parsed.parseStatus).toBe('unparsed');
   }
 });
 
 test('existing scalar ingredient outputs retain their amount, lexical text, unit and status', () => {
-  for (const [line, expected, unitText] of [
-    ['1', amount(1), undefined], ['1 egg', amount(1), 'egg'],
-    ['1/2 cup flour', amount(1, 2), 'cup'], ['1 1/2 cups flour', amount(3, 2), 'cups'],
-    ['2 1/2-inch pieces', amount(2), undefined], ['2-inch pieces', undefined, undefined],
-    ['Salt to taste', undefined, undefined], ['Grated rind ½ lemon', undefined, undefined],
+  for (const [line, expected, unitText, lexical] of [
+    ['1', amount(1), undefined, '1'], ['1 egg', amount(1), 'egg', '1'],
+    ['1/2 cup flour', amount(1, 2), 'cup', '1/2'], ['1 1/2 cups flour', amount(3, 2), 'cups', '1 1/2'],
+    ['2 1/2-inch pieces', amount(2), undefined, '2'], ['2-inch pieces', undefined, undefined, undefined],
+    ['Salt to taste', undefined, undefined, undefined], ['Grated rind ½ lemon', undefined, undefined, undefined],
   ] as const) {
     const parsed = parse(line);
     expect(parsed.amount).toEqual(expected);
     expect(parsed.amountUpper).toBeUndefined();
     expect(parsed.unitText).toBe(unitText);
-    expect(parsed.amountLexical).toBe(line);
+    expect(parsed.amountLexical).toBe(lexical);
     expect(parsed.parseStatus).toBe(expected ? 'partial' : 'unparsed');
   }
 });
@@ -147,10 +148,10 @@ test('Boston cookbook pin parses 46 leading fractions and both ranges; its embed
     const qualifier = imported.ingredients[index]!.qualifier;
     const tokens = line.trim().split(/\s+/u);
     const expected = expectedAmounts[tokens[0]!];
-    expect(qualifier.amountLexical).toBe(line);
+    const isRange = tokens[1] === 'to' || tokens[1] === 'or';
+    expect(qualifier.amountLexical).toBe(expected ? (isRange ? tokens.slice(0, 3).join(' ') : tokens[0]) : undefined);
     expect(qualifier.amount).toEqual(expected);
     expect(qualifier.parseStatus).toBe(expected ? 'partial' : 'unparsed');
-    const isRange = tokens[1] === 'to' || tokens[1] === 'or';
     expect(qualifier.amountUpper).toEqual(isRange ? amount(Number(tokens[2])) : undefined);
     expect(qualifier.unitText).toBe(expected ? tokens[isRange ? 3 : 1] : undefined);
     if (expected) parsedCount++;

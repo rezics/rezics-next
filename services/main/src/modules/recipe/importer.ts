@@ -40,7 +40,12 @@ const amountPrefix = new RegExp(String.raw`^\s*(${amountToken})(?:\s+|$)`, 'u');
 const rangePrefix = new RegExp(String.raw`^\s*(${amountToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${amountToken})(?:\s+|$)`, 'u');
 
 interface ExactAmount { numerator: number; denominator: number }
-interface ParsedAmount { amount: ExactAmount; amountUpper?: ExactAmount; remainder: string }
+interface ParsedAmount {
+  amount: ExactAmount;
+  amountUpper?: ExactAmount;
+  amountLexical: string;
+  remainder: string;
+}
 
 function exactAmount(lexical: string): ExactAmount | undefined {
   const match = /^(?:(\d+)\s+(\d+)[\/⁄](\d+)|(\d+)[\/⁄](\d+)|(\d+)?\s*([¼-¾⅐-⅞])|(\d+))$/u.exec(lexical);
@@ -72,7 +77,7 @@ function ingredientAmount(lexical: string): ParsedAmount | undefined {
     const amountUpper = exactAmount(range[2]!);
     if (!amount || !amountUpper || BigInt(amount.numerator) * BigInt(amountUpper.denominator)
       > BigInt(amountUpper.numerator) * BigInt(amount.denominator)) return undefined;
-    return { amount, amountUpper, remainder: lexical.slice(range[0].length) };
+    return { amount, amountUpper, amountLexical: range[0].trim(), remainder: lexical.slice(range[0].length) };
   }
   const match = amountPrefix.exec(lexical);
   if (!match) return undefined;
@@ -80,7 +85,7 @@ function ingredientAmount(lexical: string): ParsedAmount | undefined {
   const remainder = lexical.slice(match[0].length);
   if (/^(?:(?:to|or)\s+|[-–]\s*)[\d¼-¾⅐-⅞]/u.test(remainder)) return undefined;
   const amount = exactAmount(match[1]!);
-  return amount ? { amount, remainder } : undefined;
+  return amount ? { amount, amountLexical: match[1]!, remainder } : undefined;
 }
 
 function exactStructuredAmount(lexical: string): Omit<ParsedAmount, 'remainder'> | undefined {
@@ -88,14 +93,19 @@ function exactStructuredAmount(lexical: string): Omit<ParsedAmount, 'remainder'>
   if (!decimal) return ingredientAmount(lexical);
   const amount = exactAmount(`${BigInt(decimal[1]!) * 10n ** BigInt(decimal[2]!.length)
     + BigInt(decimal[2]!)} / ${10n ** BigInt(decimal[2]!.length)}`.replace(/\s/g, ''));
-  return amount ? { amount } : undefined;
+  return amount ? { amount, amountLexical: lexical } : undefined;
 }
 
-function ingredient(value: string, sourceKey: string, lexical: string): ImportedIngredient {
+/** Return the quantity prefix recognized by the same parser used for imports. */
+export function ingredientAmountLexical(value: string): string | undefined {
+  return ingredientAmount(value)?.amountLexical;
+}
+
+function ingredient(value: string, sourceKey: string): ImportedIngredient {
   const parsed = ingredientAmount(value);
   const unitText = parsed?.remainder.match(/^([\p{L}]+)\b/u)?.[1];
   return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value, language: 'en' },
-    amountLexical: lexical,
+    ...(parsed ? { amountLexical: parsed.amountLexical } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
     ...(unitText ? { unitText } : {}), optional: false,
     scaling: 'linear', substituteFor: [], parseStatus: parsed ? 'partial' : 'unparsed' } };
@@ -110,12 +120,11 @@ function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
     .filter(Boolean).join(' ');
   if (!original) return undefined;
   const parsed = rawValue ? exactStructuredAmount(rawValue) : undefined;
-  const amountLexical = typeof value.value === 'string' ? value.value : rawValue;
   const code = textOf(value.unitCode);
   const unit = code?.startsWith('https://') ? code : undefined;
   const unitText = textOf(value.unitText) ?? (unit ? undefined : code);
   return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value: original, language },
-    ...(rawValue ? { amountLexical } : {}),
+    ...(parsed ? { amountLexical: parsed.amountLexical } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
     ...(unit ? { unit } : {}), ...(unitText ? { unitText } : {}), optional: false,
     scaling: 'linear', substituteFor: [], parseStatus: parsed ? 'partial' : 'unparsed' } };
@@ -150,7 +159,7 @@ export function importRecipe(value: unknown, sourceKey: string): RecipeImport {
     const pointer = `${sourceKey}#/recipeIngredient/${index}`;
     const direct = textOf(item);
     if (direct) {
-      const imported = ingredient(direct, pointer, item as string);
+      const imported = ingredient(direct, pointer);
       imported.qualifier.originalText.language = language;
       return [imported];
     }

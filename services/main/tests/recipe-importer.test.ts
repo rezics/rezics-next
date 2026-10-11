@@ -21,7 +21,7 @@ test('structured ingredients retain exact decimal behavior alongside Unicode fra
     const [imported] = importRecipe({ recipeIngredient: [{ name: 'flour', value, unitText: 'cups' }] }, 'recipe').ingredients;
     expect(imported?.qualifier.amount).toEqual(expected);
     expect(imported?.qualifier.amountUpper).toEqual(upper);
-    expect(imported?.qualifier.amountLexical).toBe(String(value));
+    expect(imported?.qualifier.amountLexical).toBe(expected ? String(value).trim() : undefined);
     expect(imported?.qualifier.unitText).toBe('cups');
     expect(imported?.qualifier.parseStatus).toBe(expected ? 'partial' : 'unparsed');
   }

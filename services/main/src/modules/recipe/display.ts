@@ -5,6 +5,7 @@
 // of those cups (480 mL) and a pound is sixteen of those ounces (448 g).
 
 import { exactRational, type ExactRational } from './quantity.ts';
+import { ingredientAmountLexical } from './importer.ts';
 
 export interface IngredientPresentation {
   /** Full ingredient in the unit system the recipe was written in. */
@@ -111,7 +112,9 @@ export function judgmentOf(name: string): 'seasoning' | 'leavening' | undefined 
 /** The food named by a line, after its written amount and unit. */
 export function ingredientName(original: string, lexical: string | undefined, unitText: string | undefined): string {
   let rest = original.trim();
-  const lead = lexical?.trim();
+  const storedLead = lexical?.trim();
+  const lead = storedLead?.toLowerCase() === rest.toLowerCase()
+    ? ingredientAmountLexical(rest) : storedLead;
   if (lead && rest.toLowerCase().startsWith(lead.toLowerCase())) rest = rest.slice(lead.length).trim();
   const forms = new Set<string>();
   if (unitText?.trim()) forms.add(unitText.trim());
