@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { MediaImageProvider, ResolvedMediaImages, type MediaImageMetadata } from '@rezics/ui/media-image';
+import { mediaImageKey } from '@rezics/ui/media-image-key';
+import { imageReferenceFromUrl } from '../api/media-metadata.ts';
+import { knownCoverCredit, mixedScriptCoverCredit } from '../rights-mark/fixtures.ts';
 import { spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { presetTokens } from '../zones/presentation.ts';
@@ -23,6 +27,9 @@ function Preview({
   variant:
     | 'art'
     | 'cover'
+    | 'imported-cover'
+    | 'imported-cover-as-art'
+    | 'imported-cover-long'
     | 'landscape'
     | 'foreign-logo'
     | 'trailer'
@@ -35,6 +42,17 @@ function Preview({
 }) {
   const theme = zoneTheme(presetTokens.vibrant, { reader: 'dark', enabled: true });
   const slides = showcaseFixtures(language);
+  const importedCoverUrl = '/api/main/v1/media/avatars/01a0e3d1-0000-7000-8000-000000000002';
+  const imported = variant === 'imported-cover' || variant === 'imported-cover-as-art' || variant === 'imported-cover-long';
+  if (imported) {
+    const own = slides[1]!;
+    slides[0] = { ...own, id: 'lead-imported-cover', work: { ...own.work!,
+      cover: { url: importedCoverUrl, width: 750, height: 1000 } },
+      art: variant === 'imported-cover-as-art'
+        ? { landscape: { ...fixtureArt.landscape!, url: importedCoverUrl },
+          cutout: { ...fixtureArt.cutout!, url: importedCoverUrl },
+          logos: [{ ...fixtureArt.logos![0]!, url: importedCoverUrl }] } : null };
+  }
   if (variant === 'cover') slides[0] = { ...slides[1]!, id: 'lead-cover' };
   if (variant === 'landscape')
     slides[0] = { ...slides[0]!, art: { ...fixtureArt, portrait: null } };
@@ -86,7 +104,7 @@ function Preview({
         })),
       },
     };
-  return (
+  const preview = (
     <main
       className={`${theme.className} min-h-dvh bg-(--zone-page) py-6`}
       style={theme.style}
@@ -102,6 +120,18 @@ function Preview({
       />
     </main>
   );
+  if (!imported) return preview;
+  const reference = imageReferenceFromUrl(importedCoverUrl)!;
+  const key = mediaImageKey(reference);
+  const images: Record<string, MediaImageMetadata> = { [key]: { ...reference,
+    requestKey: key, src: fixtureArt.portrait!.url, nsfw: 'sfw',
+    ageRating: { status: 'unassessed' }, conceal: false,
+    coverCredit: variant === 'imported-cover-long' ? mixedScriptCoverCredit : knownCoverCredit } };
+  return <MediaImageProvider viewer={{ ready: true, signedIn: false, age: 'unknown', nsfwDisplay: 'mask',
+    optIns: { general: true, r15: false, sexual: false, grotesque: false } }}
+    referenceFromUrl={imageReferenceFromUrl} resolve={async () => []}>
+    <ResolvedMediaImages images={images}>{preview}</ResolvedMediaImages>
+  </MediaImageProvider>;
 }
 const meta = {
   title: 'Showcase/Stage',
@@ -191,6 +221,59 @@ export const WideDesktop: Story = { globals: { viewport: { value: 'desktopWide' 
 export const NoArt: Story = {
   args: { variant: 'cover', effect: 'gradient' },
   globals: { viewport: { value: 'phone' } },
+};
+export const ImportedCover: Story = {
+  args: { variant: 'imported-cover', effect: 'plain' },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const lead = canvasElement.querySelector('.showcase-slide')!;
+    const image = lead.querySelector<HTMLImageElement>('.showcase-cover img');
+    await waitFor(() => expect(image?.naturalWidth).toBeGreaterThan(0));
+    await expect(lead.querySelector('.showcase-cover-ambient, .showcase-generated-ambient, .showcase-background, source')).toBeNull();
+    await expect(lead.querySelector('.showcase-logo')).toBeNull();
+    await expect(canvasElement.querySelector('.showcase-cutout')).toBeNull();
+    const source = within(lead as HTMLElement).getByRole('link', { name: knownCoverCredit.source.name });
+    await expect(source).toBeVisible();
+    await expect(source).toHaveAttribute('href', knownCoverCredit.source.href);
+    await expect(source.closest('[aria-hidden="true"]')).toBeNull();
+    await expect(source.parentElement?.closest('a')).toBeNull();
+    source.focus();
+    await userEvent.tab({ shift: true });
+    await userEvent.tab();
+    await expect(source).toHaveFocus();
+  },
+};
+export const ImportedCoverRejectedAsArt: Story = {
+  ...ImportedCover,
+  args: { variant: 'imported-cover-as-art', effect: 'plain' },
+};
+export const ImportedCoverLongMixedScripts: Story = {
+  args: { variant: 'imported-cover-long', effect: 'plain' },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const lead = canvasElement.querySelector<HTMLElement>('.showcase-slide')!;
+    const image = lead.querySelector<HTMLImageElement>('.showcase-cover img');
+    await waitFor(() => expect(image?.naturalWidth).toBeGreaterThan(0));
+    const credit = lead.querySelector<HTMLElement>('[data-cover-credit]')!;
+    await expect(credit).toHaveTextContent(mixedScriptCoverCredit.text);
+    const source = within(lead).getByRole('link', { name: mixedScriptCoverCredit.source.name });
+    await expect(source).toHaveAttribute('href', mixedScriptCoverCredit.source.href);
+    await expect(source.closest('.showcase-copy')).not.toBeNull();
+    await expect(lead.scrollWidth).toBeLessThanOrEqual(lead.clientWidth + 1);
+    await expect(getComputedStyle(lead).overflowY).toBe('auto');
+    source.focus();
+    await userEvent.tab({ shift: true });
+    await userEvent.tab();
+    await expect(source).toHaveFocus();
+    // The complete mark remains reachable inside the fixed-height stage.
+    credit.scrollIntoView({ block: 'nearest' });
+    const frame = lead.getBoundingClientRect();
+    const notice = credit.getBoundingClientRect();
+    await expect(notice.top).toBeGreaterThanOrEqual(frame.top - 1);
+    await expect(notice.bottom).toBeLessThanOrEqual(frame.bottom + 1);
+    await expect(notice.left).toBeGreaterThanOrEqual(frame.left - 1);
+    await expect(notice.right).toBeLessThanOrEqual(frame.right + 1);
+  },
 };
 export const NoPortrait: Story = {
   args: { variant: 'landscape' },

@@ -26,6 +26,7 @@ type Descriptor = {
   representation: string; use?: string | null; url: string;
   nsfw: MediaImageMetadata['nsfw']; ageRating: MediaImageMetadata['ageRating'];
   conceal: boolean; canEdit?: boolean; canProtect?: boolean;
+  coverCredit?: MediaImageMetadata['coverCredit'];
   /** Main sends `null` for a control the image does not have, such as concealment without a Use. */
   controls?: { [Field in keyof NonNullable<MediaImageMetadata['controls']>]?: MediaImageControl | null };
 };
@@ -40,7 +41,7 @@ function normalize(value: Descriptor, reference: MediaImageReference, actor?: st
   return {
     representationId: value.representation, ...(value.use ? { mediaUseId: value.use } : {}),
     requestKey: mediaImageKey(reference), src: `${url.pathname}${url.search}`, nsfw: value.nsfw,
-    ageRating: value.ageRating, conceal: value.conceal, controls,
+    ageRating: value.ageRating, conceal: value.conceal, coverCredit: value.coverCredit ?? null, controls,
     revision: Object.entries(value.controls ?? {}).filter(present).map(([, control]) => control)
       .map(control => `${control.valueHead}:${control.basis.head}`).join('|'),
   };

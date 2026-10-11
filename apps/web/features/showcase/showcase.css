@@ -50,22 +50,10 @@
   overflow: hidden;
 }
 .showcase-background,
-.showcase-scrim,
-.showcase-cover-ambient {
+.showcase-scrim {
   position: absolute;
   inset: 0;
   z-index: 0;
-}
-.showcase-generated-ambient {
-  position: absolute;
-  inset: -15% 0;
-  z-index: 0;
-  opacity: 0.5;
-  filter: blur(30px);
-  pointer-events: none;
-}
-.showcase-generated-ambient [data-slot='work-cover'] {
-  width: 100%;
 }
 .showcase-background {
   --crop-ratio: var(--crop-ratio-landscape);
@@ -115,14 +103,6 @@
 .showcase-ambient .showcase-crop {
   width: max(100cqw, calc(100cqh * var(--crop-ratio)));
   height: max(100cqh, calc(100cqw / var(--crop-ratio)));
-}
-.showcase-cover-ambient {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(30px);
-  transform: scale(1.15);
-  opacity: 0.6;
 }
 .showcase-scrim {
   background:
@@ -248,17 +228,35 @@
   border: 1px solid #ffffff80;
 }
 .showcase-cover-slide {
-  align-items: center;
+  /* Provenance can outgrow the fixed stage; preserve its full text and keyboard access. */
+  align-items: start;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
 }
 .showcase-cover {
   position: relative;
   z-index: 2;
   width: 27%;
   margin-inline-start: 6%;
+  margin-block: auto;
   flex: none;
 }
 .showcase-cover-slide .showcase-copy {
   width: 63%;
+  flex: none;
+  margin-block: auto;
+}
+.showcase-cover-credit [data-cover-credit] {
+  color: #d8e2f0;
+}
+.showcase-cover-credit a {
+  color: #bde6ff;
+  text-decoration-color: #bde6ff80;
+}
+.showcase-cover-credit a:focus-visible {
+  outline: 2px solid #bde6ff;
+  outline-offset: 3px;
 }
 .showcase-cover a {
   display: block;

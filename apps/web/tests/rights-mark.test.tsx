@@ -6,9 +6,9 @@ import { copyOf } from '../features/entity-page/messages.ts';
 import { statements, predicateLabels } from '../features/entity-page/fixtures.ts';
 import { standaloneHrefFor } from '../features/entity-page/route.ts';
 import { StatementsView } from '../features/entity-page/views.tsx';
-import { attributed, ccBySa, creditedOnly, hostOnly, instrumentOnly, sourceUrl, unassessed } from '../features/rights-mark/fixtures.ts';
+import { attributed, ccBySa, creditedOnly, hostOnly, instrumentOnly, knownCoverCredit, mixedScriptCoverCredit, sourceUrl, unassessed, unknownCoverCredit } from '../features/rights-mark/fixtures.ts';
 import { messages } from '../features/rights-mark/messages.ts';
-import { licenceLabel, RightsMark, RightsRunRows, rightsRuns } from '../features/rights-mark/rights-mark.tsx';
+import { CoverCreditMark, licenceLabel, RightsMark, RightsRunRows, rightsRuns } from '../features/rights-mark/rights-mark.tsx';
 import { resourceHref } from '../features/address/path.ts';
 import { messages as workMessages } from '../features/work-page/messages.ts';
 import { work } from '../features/work-page/fixtures.ts';
@@ -16,6 +16,69 @@ import { WorkAbout } from '../features/work-page/work-header.tsx';
 
 const draw = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 const marks = (html: string) => html.match(/data-rights-mark/g)?.length ?? 0;
+
+describe('cover credit mark', () => {
+  test('server rendering preserves the evidenced credit and gives the source its own accessible link', () => {
+    const html = draw(createElement(CoverCreditMark, { credit: knownCoverCredit, locale: 'en' }));
+    expect(html).toContain('data-cover-credit');
+    expect(html).toContain(messages.en.coverCredit);
+    expect(html).toContain(`<bdi dir="auto">${knownCoverCredit.text}</bdi>`);
+    expect(html).toContain(`href="${knownCoverCredit.source.href}"`);
+    expect(html).toContain(`<bdi dir="auto">${knownCoverCredit.source.name}</bdi></a>`);
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(html).not.toContain('aria-hidden');
+    expect(html).not.toContain('data-rights-mark');
+    expect(html).not.toContain('creativecommons.org');
+    expect(html).not.toContain(messages.en.shareAlike);
+  });
+
+  test('an unknown holder preserves the recorded text without substituting the source as holder', () => {
+    const html = draw(createElement(CoverCreditMark, { credit: unknownCoverCredit }));
+    expect(html).toContain(`<bdi dir="auto">${unknownCoverCredit.text}</bdi>`);
+    expect(html).not.toContain('© Example archive');
+    expect(html).not.toContain('CC BY');
+    expect(html).not.toContain('public domain');
+    // The renderer does not derive a second notice from the holder field.
+    const recorded = { ...unknownCoverCredit, text: 'Recorded source notice' };
+    expect(draw(createElement(CoverCreditMark, { credit: recorded }))).toContain('Recorded source notice');
+  });
+
+  test('every interface locale labels the provided credit and source', () => {
+    for (const locale of uiLocales) {
+      const html = draw(createElement(CoverCreditMark, { credit: knownCoverCredit, locale }));
+      expect(html).toContain(messages[locale].coverCredit);
+      expect(html).toContain(messages[locale].source);
+      expect(html).toContain(knownCoverCredit.text);
+      expect(html).toContain(knownCoverCredit.source.name);
+    }
+  });
+
+  test('RTL and mixed scripts are isolated while long names can wrap', () => {
+    const html = draw(createElement(CoverCreditMark, {
+      credit: mixedScriptCoverCredit, locale: 'ja', className: 'max-w-32',
+    }));
+    expect(html).toContain('dir="ltr"');
+    expect(html.match(/<bdi dir="auto">/g)).toHaveLength(2);
+    expect(html).toContain(mixedScriptCoverCredit.text);
+    expect(html).toContain(mixedScriptCoverCredit.source.name);
+    expect(html).toContain('[overflow-wrap:anywhere]');
+    expect(html).toContain('max-w-32');
+    expect(html).not.toContain('truncate');
+  });
+
+  test('an unsafe source address remains text without an executable link', () => {
+    const credit = { ...knownCoverCredit, source: { name: 'Archive', href: 'javascript:alert(1)' } };
+    const html = draw(createElement(CoverCreditMark, { credit }));
+    expect(html).toContain('<bdi dir="auto">Archive</bdi>');
+    expect(html).not.toContain('<a ');
+    expect(html).not.toContain('javascript:');
+  });
+
+  test('absent credit on hidden or generated covers renders no mark', () => {
+    expect(draw(createElement(CoverCreditMark, { credit: null }))).toBe('');
+    expect(draw(createElement(CoverCreditMark, {}))).toBe('');
+  });
+});
 
 describe('rights mark', () => {
   test('an assessed credit names the source, links it, and keeps the licence and share-alike', () => {

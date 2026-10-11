@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { browserMainApi } from '../api/browser.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
 import { LinkMenu } from '../feed/controls.tsx';
@@ -104,8 +104,9 @@ function useReplyAnchor() {
 
 /** The Work a thread discusses, with its cover, as a link post names its source. */
 function AboutWork({ work }: { work: ThreadRead['work'] }) {
-  const { t, avatarQuery } = useFeed();
+  const { t, avatarQuery, locale } = useFeed();
   return (
+    <div className="grid max-w-md gap-1">
     <LocalizedLink
       href={resourceHref('/w/', work.id)}
       className="group/work flex max-w-md items-center gap-3
@@ -122,6 +123,7 @@ function AboutWork({ work }: { work: ThreadRead['work'] }) {
         }}
         avatarQuery={avatarQuery}
         size="xs"
+        showCredit={false}
       />
       <span className="grid min-w-0 gap-0.5">
         <span className="text-muted-foreground text-xs">{t.discussedWork}</span>
@@ -137,6 +139,9 @@ function AboutWork({ work }: { work: ThreadRead['work'] }) {
         className="ms-auto size-4 shrink-0 text-muted-foreground"
       />
     </LocalizedLink>
+    <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover,
+      kind: coverKindOf([]), authors: [] }} avatarQuery={avatarQuery} locale={locale} />
+    </div>
   );
 }
 

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { attributed, ccBySa, creditedOnly, instrumentOnly, sourceUrl, unassessed } from './fixtures.ts';
+import { attributed, ccBySa, creditedOnly, instrumentOnly, knownCoverCredit, mixedScriptCoverCredit, sourceUrl, unassessed, unknownCoverCredit } from './fixtures.ts';
 import { messages } from './messages.ts';
-import { RightsMark, RightsRunRows, type DisplayObligations } from './rights-mark.tsx';
+import { CoverCreditMark, RightsMark, RightsRunRows, type DisplayObligations } from './rights-mark.tsx';
 
 function Pad({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto max-w-3xl px-4 py-6">{children}</div>;
@@ -23,6 +23,82 @@ const noOverflow = async () => {
 const meta = { title: 'Rights mark/Mark', component: RightsMark } satisfies Meta<typeof RightsMark>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const CoverCredits: Story = {
+  args: { rights: unassessed },
+  render: () => <Pad><div className="grid max-w-sm gap-5">
+    <div><p className="font-medium text-sm">Known holder</p><CoverCreditMark credit={knownCoverCredit} /></div>
+    <div><p className="font-medium text-sm">Unknown holder</p><CoverCreditMark credit={unknownCoverCredit} /></div>
+    <div><p className="font-medium text-sm">Generated cover</p><CoverCreditMark credit={null} /></div>
+  </div></Pad>,
+  async play({ canvasElement }) {
+    await document.fonts.ready;
+    const canvas = within(canvasElement);
+    await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(2);
+    await expect(canvas.getByText(knownCoverCredit.text)).toBeVisible();
+    await expect(canvas.getByText(unknownCoverCredit.text)).toBeVisible();
+    const sources = canvas.getAllByRole('link', { name: knownCoverCredit.source.name });
+    await expect(sources).toHaveLength(2);
+    for (const source of sources) {
+      await expect(source).toBeVisible();
+      await expect(source).toHaveAttribute('href', knownCoverCredit.source.href);
+      await expect(source.closest('[aria-hidden="true"]')).toBeNull();
+    }
+    await expect(canvasElement.querySelector('[data-rights-mark]')).toBeNull();
+  },
+};
+
+export const CoverCreditLocales: Story = {
+  args: { rights: unassessed },
+  render: () => <Pad><div className="grid max-w-sm gap-5">
+    {uiLocales.map(locale => <div key={locale} className="min-w-0">
+      <p className="font-medium text-sm">{localeNames[locale]}</p>
+      <CoverCreditMark credit={knownCoverCredit} locale={locale} />
+    </div>)}
+  </div></Pad>,
+  async play({ canvasElement }) {
+    const credits = [...canvasElement.querySelectorAll('[data-cover-credit]')];
+    await expect(credits).toHaveLength(uiLocales.length);
+    for (const [index, locale] of uiLocales.entries()) {
+      await expect(credits[index]).toHaveTextContent(messages[locale].coverCredit.trim());
+      await expect(credits[index]).toHaveTextContent(messages[locale].source.trim());
+    }
+    for (const source of within(canvasElement).getAllByRole('link', { name: knownCoverCredit.source.name })) {
+      await expect(source).toBeVisible();
+    }
+    for (const text of canvasElement.querySelectorAll('[data-cover-credit] bdi, [data-cover-credit] a')) {
+      const bounds = text.getBoundingClientRect();
+      await expect(bounds.width).toBeGreaterThan(0);
+      await expect(bounds.height).toBeGreaterThan(0);
+    }
+    await document.fonts.ready;
+  },
+};
+
+export const CoverCreditLocalesPhone: Story = {
+  ...CoverCreditLocales,
+  globals: { viewport: { value: 'phone' } },
+  play: async context => {
+    await CoverCreditLocales.play!(context);
+    await noOverflow();
+  },
+};
+
+export const CoverCreditMixedScriptsPhone: Story = {
+  args: { rights: unassessed },
+  globals: { viewport: { value: 'phone' } },
+  render: () => <Pad><div dir="rtl" className="w-40">
+    <CoverCreditMark credit={mixedScriptCoverCredit} locale="fr" />
+  </div></Pad>,
+  async play({ canvasElement }) {
+    await document.fonts.ready;
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(mixedScriptCoverCredit.text)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: mixedScriptCoverCredit.source.name })).toHaveAttribute('href', mixedScriptCoverCredit.source.href);
+    for (const text of canvasElement.querySelectorAll('bdi')) await expect(text).toHaveAttribute('dir', 'auto');
+    await noOverflow();
+  },
+};
 
 export const AttributionAndShareAlike: Story = {
   args: { rights: attributed, locale: 'en' },

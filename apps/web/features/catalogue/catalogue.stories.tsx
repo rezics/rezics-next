@@ -2,6 +2,7 @@ import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
+import { MediaImageProvider, mediaImageKey, type MediaImageMetadata } from '@rezics/ui/media-image';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { PageContainer } from '../shell/page.tsx';
@@ -23,6 +24,9 @@ import {
 import { WorkRow } from './work-row.tsx';
 import { WorkGrid, WorkShelf } from './work-shelf.tsx';
 import { chooseMenuItem } from '../stories/choose-option.ts';
+import { CatalogueCover } from './cover.tsx';
+import { knownCoverCredit, mixedScriptCoverCredit, unknownCoverCredit } from '../rights-mark/fixtures.ts';
+import type { CatalogueWork } from './work.ts';
 
 type Args = ComponentProps<typeof WorkShelf> & { actions?: ReaderActions; signedIn?: boolean };
 
@@ -272,4 +276,55 @@ export const Phone: Story = {
     const overflow = canvasElement.ownerDocument.documentElement.scrollWidth > innerWidth;
     await expect(overflow).toBe(false);
   },
+};
+
+const coverReference = { representationId: '00000000-0000-4000-8000-000000001001' };
+const coverSrc = URL.createObjectURL(new Blob([
+  '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><rect width="300" height="450" fill="#234a62"/><text x="150" y="225" fill="#f4d997" text-anchor="middle" font-size="24">Example cover</text></svg>',
+], { type: 'image/svg+xml' }));
+const creditedWorks: CatalogueWork[] = [knownCoverCredit, unknownCoverCredit, mixedScriptCoverCredit].map((coverCredit, index) => ({
+  ...classics[index]!, cover: { kind: 'image', selection: coverReference.representationId,
+    url: `/v1/media/representations/${coverReference.representationId}/bytes`, mediaType: 'image/svg+xml',
+    width: 300, height: 450, crop: null, basis: { policy: 'story', context: 'story' },
+    nsfw: 'sfw', ageRating: { status: 'unassessed' }, coverCredit },
+}));
+
+function ImportedCovers({ locale }: { locale: UiLocale }) {
+  const metadata: MediaImageMetadata = { ...coverReference, src: coverSrc, nsfw: 'sfw',
+    ageRating: { status: 'unassessed' } };
+  // Distinct references keep each fixture's evidenced notice with its actual image.
+  const works = creditedWorks.map((work, index) => ({ ...work, cover: { ...work.cover as Extract<CatalogueWork['cover'], { kind: 'image' }>,
+    url: `/v1/media/representations/00000000-0000-4000-8000-${String(index + 1001).padStart(12, '0')}/bytes` } }));
+  const images = Object.fromEntries(works.map(work => {
+    const cover = work.cover;
+    const representationId = cover.url.split('/')[4]!;
+    return [mediaImageKey({ representationId }), { ...metadata, representationId, coverCredit: cover.coverCredit }];
+  }));
+  return <MediaImageProvider viewer={{ ready: true, signedIn: false, age: 'unknown',
+    optIns: { general: true, r15: false, sexual: false, grotesque: false } }} images={images}>
+    <ReaderActionsProvider signedIn={false} signInHref={signInHref}>
+      <div className="grid max-w-4xl gap-8 p-4">
+        <div className="w-40"><CatalogueCover work={works[0]!} locale={locale} /></div>
+        <WorkGrid works={works} locale={locale} />
+        <WorkRow work={works[2]!} locale={locale} shelf="none" />
+      </div>
+    </ReaderActionsProvider>
+  </MediaImageProvider>;
+}
+
+export const ImportedCoverCredits: Story = {
+  render: ({ locale }) => <ImportedCovers locale={locale} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('link', { name: knownCoverCredit.source.name }).length).toBeGreaterThan(0);
+    for (const link of canvas.getAllByRole('link', { name: knownCoverCredit.source.name })) {
+      await expect(link.closest('[aria-hidden="true"]')).toBeNull();
+      await expect(link.parentElement?.closest('a')).toBeNull();
+    }
+  },
+};
+
+export const ImportedCoverCreditsPhone: Story = {
+  ...ImportedCoverCredits, args: { locale: 'ja' },
+  globals: { viewport: { value: 'phone' }, locale: 'ja' },
 };

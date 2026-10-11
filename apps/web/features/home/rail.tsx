@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { resourceHref, spaceHref } from '../address/path.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import type { SuggestedFollow } from '../feed/types.ts';
 import type { FeedPage } from '../feed/types.ts';
@@ -81,7 +81,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
           className="group/trend relative grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)] items-center gap-3">
           <span className="text-center font-semibold text-muted-foreground text-sm tabular-nums">{index + 1}</span>
           <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors: [] }} avatarQuery={avatarQuery} size="xs" />
+            authors: [] }} avatarQuery={avatarQuery} size="xs" showCredit={false} />
           <span className="grid min-w-0 gap-0.5">
             <LocalizedLink href={resourceHref('/w/', item.work)} lang={item.title.language}
               className="line-clamp-2 font-medium font-work-title text-sm/snug outline-none after:absolute
@@ -89,6 +89,9 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
             {realm ? <span lang={realm.language} className="truncate text-muted-foreground text-xs">{realm.name}</span>
               : null}
           </span>
+          <CatalogueCoverCredit work={{ id: item.work, title: item.title, cover: item.cover,
+            kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} locale={locale}
+            className="relative z-10 col-span-2 col-start-2" />
         </li>)}
       </ol> : <p className="text-muted-foreground text-sm">{t.trendingEmpty}</p>}
     </Module>

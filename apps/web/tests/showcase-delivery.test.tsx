@@ -14,7 +14,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { imageReferenceFromUrl } from '../features/api/media-metadata.ts';
 import { campaignShowcaseArt, deliveredShowcaseImage, workShowcaseArt } from '../features/realm/adapt.ts';
 import { readHeroImages } from '../features/realm/modules.ts';
-import { Background, ShowcasePreload } from '../features/showcase/slide.tsx';
+import { Background, ShowcasePreload, ShowcaseSlide } from '../features/showcase/slide.tsx';
+import { messages } from '../features/zones/messages.ts';
 import type { PlacedModule } from '../features/zones/zone-home.tsx';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -125,6 +126,52 @@ test('each window\'s background passes the policy itself: a masked portrait is n
   expect(other).not.toContain(candidate(landscape));
 });
 
+test('imported cover never supplies showcase ambient art or background preload', () => {
+  const cover = { url: `/api/main/v1/media/avatars/${uuid(8)}`, width: 600, height: 900 };
+  const coverCredit: NonNullable<MediaImageMetadata['coverCredit']> = {
+    kind: 'copyright', text: '(c) An evidenced holder', holder: 'An evidenced holder',
+    source: { name: 'Source catalogue', href: 'https://example.com/cover-source' }, permittedRole: 'cover',
+  };
+  const coverSlide: ZoneShowcaseSlide = { ...slide, art: null, work: {
+    id: `https://rezics.com/id/${uuid(20)}`, href: '#first', title: slide.title, cover,
+    kind: 'book', author: null, tagline: null, status: null, chapters: null, words: null,
+    updatedAt: null, decision: null,
+  } };
+  const images = Object.fromEntries([resolved(cover.url, { coverCredit })]);
+  const html = render(<ShowcaseSlide slide={coverSlide} locale="en" messages={messages} first />, images);
+  expect(html).toContain('class="showcase-cover"');
+  expect(html).toContain(`src="${cover.url}"`);
+  expect(html).toContain(`href="${coverCredit.source.href}"`);
+  expect(html).toContain('showcase-cover-credit');
+  expect(html).not.toContain('showcase-cover-ambient');
+  expect(html).not.toContain('showcase-generated-ambient');
+  expect(html).not.toContain('<source');
+  expect(render(<ShowcasePreload slide={coverSlide} />, images)).toBe('');
+  // A decorative slot cannot evade the typed role by supplying a rendition ladder.
+  const importedArt = { ...landscape, url: cover.url };
+  expect(render(<Background art={{ landscape: importedArt }} first />, images)).toBe('');
+  expect(render(<ShowcasePreload slide={{ ...coverSlide, art: { landscape: importedArt } }} />, images)).toBe('');
+  const logo = render(<ShowcaseSlide slide={{ ...coverSlide, art: { logos: [{ ...importedArt,
+    tone: 'light', language: 'en', anchor: 'start-bottom' }] } }} locale="en" messages={messages} first />, images);
+  expect(logo).not.toContain('showcase-logo');
+  expect(logo).not.toContain(candidate(landscape));
+  // Independent art remains available beside the Work's identifying cover.
+  const independent = Object.fromEntries([...Object.entries(images), resolved(landscape.url), resolved(portrait.url)]);
+  const admitted = render(<ShowcaseSlide slide={{ ...coverSlide, art }} locale="en" messages={messages} first />, independent);
+  expect(admitted).toContain('class="showcase-art"');
+  expect(admitted).toContain(candidate(landscape));
+  expect(render(<ShowcasePreload slide={{ ...coverSlide, art }} />, independent)).toContain(candidate(landscape));
+  // Only the disallowed window disappears; another admitted window can fill the stage.
+  const mixed = render(<Background art={{ landscape: importedArt, portrait }} first />, independent);
+  expect(mixed).not.toContain(cover.url);
+  expect(mixed).not.toContain(candidate(landscape));
+  expect(mixed).toContain(candidate(portrait));
+  const hidden = render(<ShowcaseSlide slide={coverSlide} locale="en" messages={messages} first />,
+    Object.fromEntries([resolved(cover.url, { coverCredit, ageRating: { status: 'assessed', labels: ['r18'] } })]));
+  expect(hidden).not.toContain('<img');
+  expect(hidden).not.toContain(coverCredit.source.href);
+});
+
 test('showcase art URLs name no reader, so every reader shares one cached copy', () => {
   for (const url of [landscape.url, ...landscape.candidates!.map(item => item.url)]) {
     expect(url).toStartWith('/api/main/v1/media/representations/');
@@ -157,7 +204,8 @@ test('a Zone home reads the metadata of its heroes\' images in one batch, first 
   let requested: readonly string[] = [];
   const images = await readHeroImages([shelf, hero], 'en', async urls => { requested = urls; return {}; });
   expect(images).toEqual({});
-  expect(requested).toEqual([landscape.url, portrait.url, cutout.url, logo.url, cover.url]);
+  // Each slide carries its identifying cover; readShowcaseImages deduplicates canonical references.
+  expect(requested).toEqual([landscape.url, portrait.url, cutout.url, logo.url, cover.url, cover.url]);
 });
 
 test('the reads a server render runs take no values from client modules, which throw when called there', () => {

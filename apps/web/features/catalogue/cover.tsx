@@ -1,6 +1,33 @@
+'use client';
+
+import { useMediaImagePresentation } from '@rezics/ui/media-image';
 import { WorkCover, type WorkCoverProps } from '@rezics/ui/work-cover';
 import { cn } from '@rezics/ui/utils';
-import { type CoverWork, coverProps } from './work.ts';
+import type { UiLocale } from '../../i18n/define.ts';
+import { CoverCreditMark } from '../rights-mark/rights-mark.tsx';
+import { useOptionalShell } from '../shell/shell-provider.tsx';
+import { type CoverWork, coverImage, coverProps } from './work.ts';
+
+/** Keep this outside Work links and hidden image duplicates. */
+function useCoverCredit(work: CoverWork, avatarQuery?: string) {
+  const image = coverImage(work.cover, avatarQuery);
+  const { metadata, presentation } = useMediaImagePresentation(image?.src, image ?? undefined);
+  if (!image || presentation === 'unavailable' || presentation === 'rating-hidden') return null;
+  // SSR can name the selected cover before its display-preference metadata resolves.
+  return metadata === undefined ? image.coverCredit ?? null : metadata?.coverCredit ?? null;
+}
+
+export function CatalogueCoverCredit({ work, avatarQuery, locale, className }: {
+  work: CoverWork; avatarQuery?: string; locale?: UiLocale; className?: string;
+}) {
+  const shell = useOptionalShell();
+  const credit = useCoverCredit(work, avatarQuery);
+  if (!credit) return null;
+  return <div className={cn('relative z-10 min-w-0', className)} onClick={event => event.stopPropagation()}
+    onMouseDown={event => event.stopPropagation()}>
+    <CoverCreditMark credit={credit} locale={locale ?? shell?.locale ?? 'en'} />
+  </div>;
+}
 
 /**
  * A Work's one cover, as every surface draws it: home, Discover, search,
@@ -8,11 +35,18 @@ import { type CoverWork, coverProps } from './work.ts';
  * from any read that names the Work's id, types (`coverKindOf`), title and
  * credited authors; the same Work then looks the same everywhere.
  */
-export function CatalogueCover({ work, avatarQuery, className, ...props }: { work: CoverWork; avatarQuery?: string }
+export function CatalogueCover({ work, avatarQuery, className, showCredit = true, locale, ...props }: {
+  work: CoverWork; avatarQuery?: string; showCredit?: boolean; locale?: UiLocale;
+}
   & Pick<WorkCoverProps, 'size' | 'loading' | 'alt' | 'className' | 'style' | 'revealable'>) {
-  return <WorkCover {...coverProps(work, avatarQuery)} {...props} className={cn(
+  const credit = useCoverCredit(work, avatarQuery);
+  const cover = <WorkCover {...coverProps(work, avatarQuery)} {...props} className={cn(
     // Imported art fits the same kind-sized box as generated covers, without cropping its title.
     '[&_[data-slot=media-image]]:size-full [&_[data-slot=media-image]]:bg-muted [&_[data-slot=media-image]]:object-contain',
     className,
   )} />;
+  const widths = { xs: 'w-10', sm: 'w-16', md: 'w-28', lg: 'w-40', xl: 'w-56', fill: 'w-full' };
+  return showCredit && credit ? <div className={cn('grid min-w-0 content-start gap-1.5', widths[props.size ?? 'fill'], className)}>
+    {cover}<CatalogueCoverCredit work={work} avatarQuery={avatarQuery} locale={locale} />
+  </div> : cover;
 }

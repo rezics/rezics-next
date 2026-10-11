@@ -7,7 +7,7 @@ import { AuthorNames } from './author-names.tsx';
 import { messages } from './messages.ts';
 import { RatingInline } from './rating.tsx';
 import { ShelfMark } from './reader-actions.tsx';
-import { CatalogueCover } from './cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from './cover.tsx';
 import { type CatalogueWork, otherLanguageTitle, shortWorkId } from './work.ts';
 
 /** A Work's display title, or its short ID while Main cannot name it. */
@@ -19,18 +19,20 @@ export function workTitle(work: Pick<CatalogueWork, 'id' | 'title'>, locale: UiL
  * The cover as a link to the Work. It repeats the title link, so it is left
  * out of the tab order and the accessibility tree; the title is the one stop.
  */
-export function CoverLink({ work, avatarQuery, size, className, children }: {
+export function CoverLink({ work, avatarQuery, size, className, children, locale, showCredit = true }: {
   work: CatalogueWork; avatarQuery?: string; size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'fill'; className?: string;
   children?: ReactNode;
+  locale?: UiLocale; showCredit?: boolean;
 }) {
   return <div className={cn('relative', className)}>
     <Link href={work.href} tabIndex={-1} aria-hidden="true" className="block outline-none">
-      <CatalogueCover work={work} avatarQuery={avatarQuery} size={size}
+      <CatalogueCover work={work} avatarQuery={avatarQuery} size={size} showCredit={false}
         className="transition-[translate,box-shadow] duration-300 ease-out group-hover/tile:-translate-y-1
           group-hover/tile:shadow-[0_2px_4px_rgb(0_0_0/0.1),0_16px_32px_-12px_rgb(0_0_0/0.4)]
           motion-reduce:transition-none" />
     </Link>
     {children}
+    {showCredit ? <CatalogueCoverCredit work={work} avatarQuery={avatarQuery} locale={locale} className="mt-1.5" /> : null}
   </div>;
 }
 
@@ -63,10 +65,11 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
   // Relative, so screen-reader-only text stays inside a scrolling row rather than widening the page.
   return <article className={cn('group/tile relative flex min-w-0 flex-col', className)}>
     <div className="relative w-full" style={{ aspectRatio: String(slot) }}>
-      <CoverLink work={work} avatarQuery={avatarQuery} className="absolute inset-x-0 bottom-0 w-full">
+      <CoverLink work={work} avatarQuery={avatarQuery} showCredit={false} className="absolute inset-x-0 bottom-0 w-full">
         <ShelfMark work={work.id} title={title} locale={locale} />
       </CoverLink>
     </div>
+    <CatalogueCoverCredit work={work} avatarQuery={avatarQuery} locale={locale} className="mt-1.5" />
     <div className="mt-3 flex min-w-0 items-start gap-1.5">
       {titleStart}
       <Heading lang={work.title?.language} dir={work.title?.direction}

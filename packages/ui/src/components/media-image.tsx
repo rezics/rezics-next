@@ -16,6 +16,14 @@ export interface MediaImageViewer {
 }
 export type ImageAgeRating = { status: 'unassessed' } | { status: 'assessed'; labels: readonly ('r15' | 'r18' | 'r18g')[] };
 export interface MediaImageReference { representationId: string; mediaUseId?: string }
+/** An admitted imported cover's copyright evidence; this grants no artwork licence. */
+export interface CoverCredit {
+  kind: 'copyright';
+  text: string;
+  holder: string | null;
+  source: { name: string; href: string };
+  permittedRole: 'cover';
+}
 export type ImageMetadataResolver = (references: MediaImageReference[]) => Promise<MediaImageMetadata[]>;
 export interface MediaImageControl {
   locked: boolean;
@@ -31,6 +39,7 @@ export interface MediaImageMetadata extends MediaImageReference {
   nsfw: 'unknown' | 'sfw' | 'nsfw';
   ageRating: ImageAgeRating;
   conceal?: boolean;
+  coverCredit?: CoverCredit | null;
   revision?: string;
   controls?: { nsfw: MediaImageControl; ageRating: MediaImageControl; conceal?: MediaImageControl };
 }
@@ -203,9 +212,9 @@ function useImageDecision({ metadata: supplied, representationId, mediaUseId, co
 
 /** What a MediaImage with this `src` shows here and the URL it loads, so a consumer can leave out what it
  * would not show (a picture source, a preload). Requests metadata the same way. */
-export function useMediaImagePresentation(src: string | undefined) {
-  const { metadata, presentation } = useImageDecision({ src });
-  return { presentation, src: metadata?.src ?? src };
+export function useMediaImagePresentation(src: string | undefined, image?: Omit<ImageDecisionInput, 'src'>) {
+  const { metadata, presentation } = useImageDecision({ ...image, src });
+  return { presentation, src: metadata?.src ?? src, metadata };
 }
 
 /** A mask never mounts the original image; revealing is local and resets with labels or preference changes. */

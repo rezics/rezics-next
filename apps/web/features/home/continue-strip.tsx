@@ -6,7 +6,7 @@ import { Undo2Icon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { commandKey } from '../feed/api.ts';
 import { useFeed } from '../feed/feed-context.tsx';
@@ -55,7 +55,7 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
             className="grid gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="relative">
               <CatalogueCover work={{ id: item.work, title: { ...item.title, value: title }, cover: item.cover,
-                kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} size="fill" />
+                kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} size="fill" showCredit={false} />
               <span className="absolute start-1.5 bottom-1.5 z-20 rounded-full bg-primary px-2 py-0.5 font-semibold
                 text-[11px] text-primary-foreground shadow">{unread}</span>
             </span>
@@ -63,6 +63,8 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
             <span lang={item.title.language} className="line-clamp-1 text-muted-foreground text-xs">
               {item.nextUnread.title ? t.nextChapter({ chapter: item.nextUnread.title }) : t.nextUp}</span>
           </LocalizedLink>
+          <CatalogueCoverCredit work={{ id: item.work, title: item.title, cover: item.cover,
+            kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} locale={locale} className="mt-1" />
           {actingSubject ? <button type="button" aria-label={t.hideFromContinue({ title })}
             title={t.hideFromContinue({ title })} onClick={() => void hide(item, true)}
             className={cn('absolute end-1.5 top-1.5 z-30 grid size-7 place-items-center rounded-full bg-background/90',

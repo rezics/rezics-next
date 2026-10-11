@@ -8,7 +8,7 @@ import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import type { FollowKind, Loaded, OnboardingChoices, SuggestedFollow } from '../feed/types.ts';
 import { PICKER_COOKIE } from '../home/cookies.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
@@ -152,11 +152,11 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
           {group.topics.map(topic => {
             const on = topics.includes(topic.id);
             const broader = broaderName(groups, topic);
-            return <li key={topic.id}><button type="button" aria-pressed={on}
-              disabled={!on && topics.length >= MAX_TOPICS} className={cn(tile, 'h-full flex-col gap-3 p-3')}
+            return <li key={topic.id} className="flex min-w-0 flex-col gap-1"><button type="button" aria-pressed={on}
+              disabled={!on && topics.length >= MAX_TOPICS} className={cn(tile, 'flex-1 flex-col gap-3 p-3')}
               onClick={() => setTopics(current => toggled(current, topic.id))}>
               <span aria-hidden="true" className="flex h-20 items-end gap-1.5">
-                {topic.samples.map(sample => <CatalogueCover key={sample.id} avatarQuery={avatarQuery} size="xs"
+                {topic.samples.map(sample => <CatalogueCover key={sample.id} avatarQuery={avatarQuery} size="xs" showCredit={false}
                   work={{ id: sample.id, title: sample.title, cover: sample.cover, kind: group.cover, authors: [] }} />)}
               </span>
               <span className="flex w-full items-start gap-2">
@@ -167,7 +167,10 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
                 </span>
                 <Check on={on} />
               </span>
-            </button></li>;
+            </button>
+            {topic.samples.map(sample => <CatalogueCoverCredit key={sample.id} avatarQuery={avatarQuery} locale={locale}
+              work={{ id: sample.id, title: sample.title, cover: sample.cover, kind: group.cover, authors: [] }} />)}
+            </li>;
           })}
         </ul>
       </section>)}
@@ -179,8 +182,8 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
         : <ul aria-label={title} className="grid gap-3 sm:grid-cols-2">
           {suggested.data.map(item => {
             const on = communities.includes(item.id);
-            return <li key={item.id}><button type="button" aria-pressed={on}
-              className={cn(tile, 'h-full items-start gap-3 p-4')}
+            return <li key={item.id} className="flex min-w-0 flex-col gap-1"><button type="button" aria-pressed={on}
+              className={cn(tile, 'flex-1 items-start gap-3 p-4')}
               onClick={() => setCommunities(current => on ? current.filter(id => id !== item.id) : [...current, item.id])}>
               <CommunityIcon icon={item.icon} name={item.name.value} size="md" avatarQuery={avatarQuery} />
               <span className="grid min-w-0 flex-1 gap-1">
@@ -188,12 +191,15 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
                 <span className="text-muted-foreground text-xs">{[reason(item, t, names),
                   members(item, t)].filter(Boolean).join(' · ')}</span>
                 {item.sampleWorks.length ? <span aria-hidden="true" className="mt-1 flex gap-1.5">
-                  {item.sampleWorks.map(work => <CatalogueCover key={work.id} avatarQuery={avatarQuery} size="xs"
+                  {item.sampleWorks.map(work => <CatalogueCover key={work.id} avatarQuery={avatarQuery} size="xs" showCredit={false}
                     work={{ id: work.id, title: work.title, cover: work.cover, kind: 'book', authors: [] }} />)}
                 </span> : null}
               </span>
               <Check on={on} />
-            </button></li>;
+            </button>
+            {item.sampleWorks.map(work => <CatalogueCoverCredit key={work.id} avatarQuery={avatarQuery} locale={locale}
+              work={{ id: work.id, title: work.title, cover: work.cover, kind: 'book', authors: [] }} />)}
+            </li>;
           })}
         </ul> : null}
 

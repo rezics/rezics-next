@@ -1,7 +1,9 @@
 'use client';
 
 import { WorkCover } from '@rezics/ui/work-cover';
+import { cn } from '@rezics/ui/utils';
 import { useState } from 'react';
+import { CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverImage, coverKindOf } from '../catalogue/work.ts';
 import type { WorkCover as MainCover } from '../discover/types.ts';
 
@@ -19,7 +21,13 @@ export function StudioCover({ id, title, cover, types, authors, actingSubject, s
 }) {
   const image = coverImage(cover, `?actingSubject=${encodeURIComponent(actingSubject)}`);
   const [failed, setFailed] = useState<string | null>(null);
-  return <WorkCover title={title.value} lang={title.language} kind={coverKindOf(types)} id={id} authors={authors} size={size}
+  const selected = image && failed !== image.src ? cover : null;
+  return <div className={cn('grid min-w-0 gap-1.5', { xs: 'w-10', sm: 'w-16', md: 'w-28', lg: 'w-40' }[size], className)}>
+    <WorkCover title={title.value} lang={title.language} kind={coverKindOf(types)} id={id} authors={authors} size={size}
     image={image && failed !== image.src ? image : null} loading={loading} className={className}
-    revealable onImageError={() => { if (image) setFailed(image.src); }} />;
+    revealable onImageError={() => { if (image) setFailed(image.src); }} />
+    <CatalogueCoverCredit work={{ id, title: null, cover: selected,
+      kind: coverKindOf(types), authors: authors.map(name => ({ name, href: null })) }}
+      avatarQuery={`?actingSubject=${encodeURIComponent(actingSubject)}`} />
+  </div>;
 }

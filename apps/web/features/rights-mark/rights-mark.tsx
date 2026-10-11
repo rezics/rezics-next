@@ -1,4 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
+import type { MediaImageMetadata } from '@rezics/ui/media-image';
+import { cn } from '@rezics/ui/utils';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkHeader } from '../work-page/types.ts';
 import { messages, type RightsMarkCopy } from './messages.ts';
@@ -189,6 +191,27 @@ export function RightsMark({ rights, locale = 'en' }: { rights: DisplayObligatio
   return <p data-rights-mark dir="auto"
     className="min-w-0 max-w-3xl text-pretty text-muted-foreground text-xs/5 [overflow-wrap:anywhere]">
     {pieces.map((piece, index) => <Fragment key={index}>{index > 0 ? ' · ' : null}{piece}</Fragment>)}
+  </p>;
+}
+
+/** An identifying cover's recorded credit, separate from fact and text licences. */
+export function CoverCreditMark({ credit, locale = 'en', className }: {
+  credit?: MediaImageMetadata['coverCredit'];
+  locale?: UiLocale;
+  className?: string;
+}) {
+  if (!credit) return null;
+  const copy = messages[locale];
+  const sourceUrl = httpUrl(credit.source.href);
+  return <p data-cover-credit dir="ltr" className={cn(
+    'min-w-0 text-pretty text-muted-foreground text-xs/5 [overflow-wrap:anywhere]', className,
+  )}>
+    {copy.coverCredit}<bdi dir="auto">{credit.text}</bdi>{' · '}{copy.source}
+    {sourceUrl
+      ? <a href={credit.source.href} rel="noreferrer noopener" className={linkClass}>
+        <bdi dir="auto">{credit.source.name}</bdi>
+      </a>
+      : <bdi dir="auto">{credit.source.name}</bdi>}
   </p>;
 }
 

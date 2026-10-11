@@ -4,7 +4,7 @@ import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { cn } from '@rezics/ui/utils';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { authorHref } from '../author/route.ts';
 import { ReportAction } from '../safety/report-action.tsx';
@@ -125,19 +125,23 @@ export interface AttachedWork { id: string; address?: AddressTarget; title: Name
 
 /** The Work a post is about, on its own line as X attaches a link: its cover and one line of title and author. */
 export function WorkAttachment({ work }: { work: AttachedWork }) {
-  const { avatarQuery } = useFeed();
-  return <LocalizedLink href={resourceHref('/w/', work.address ?? work.id)} className="relative z-10 flex h-11 w-fit min-w-0 max-w-full
+  const { avatarQuery, locale } = useFeed();
+  return <div className="relative z-10 grid min-w-0 max-w-full gap-1 sm:max-w-md">
+  <LocalizedLink href={resourceHref('/w/', work.address ?? work.id)} className="relative z-10 flex h-11 w-fit min-w-0 max-w-full
     items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 py-1 ps-1 pe-3 text-sm outline-none
     transition-colors hover:border-border hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md">
     <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
       authors: [] }} avatarQuery={avatarQuery} size="xs" className="w-6 shrink-0 rounded-[0.1875rem]"
-    alt="" loading="lazy" />
+    alt="" loading="lazy" showCredit={false} />
     <span className="min-w-0 truncate">
       <span lang={work.title.language} dir={work.title.direction} className="font-medium text-foreground">
         {work.title.value}</span>
       {work.byline ? <span className="text-muted-foreground"> · {work.byline}</span> : null}
     </span>
-  </LocalizedLink>;
+  </LocalizedLink>
+  <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
+    authors: [] }} avatarQuery={avatarQuery} locale={locale} />
+  </div>;
 }
 
 /**
@@ -147,7 +151,7 @@ export function WorkAttachment({ work }: { work: AttachedWork }) {
  * of preview, the Work attached, then the bare action bar, spaced as
  * `postRhythm` measures X. There is one view: dense lists are for catalogues.
  */
-export function PostRow({ kind, href, report, reportKind = 'post', meta, title, titleLang, titleDir, titleClass, label, preview, thumbnail,
+export function PostRow({ kind, href, report, reportKind = 'post', meta, title, titleLang, titleDir, titleClass, label, preview, previewClamped = true, thumbnail, thumbnailCredit,
   attachment, vote, comments, actions, below, position, total }: {
   kind: string;
   /** The REZICS ID of what the post is about, which the Report action sends; a post with none cannot be reported here. */
@@ -160,8 +164,12 @@ export function PostRow({ kind, href, report, reportKind = 'post', meta, title, 
   /** The post's own title; a reply has none and is named by `label` for assistive technology. */
   title: ReactNode | null; titleLang?: string; titleDir?: 'ltr' | 'rtl'; titleClass?: string; label?: string;
   preview?: ReactNode;
+  /** Text excerpts are clamped; cover lists keep their source credits fully visible. */
+  previewClamped?: boolean;
   /** The post is a Work: its cover beside the title. */
   thumbnail?: ReactNode;
+  /** A thumbnail's source credit spans the row so compact cover widths never clip it. */
+  thumbnailCredit?: ReactNode;
   attachment?: ReactNode;
   vote: ReactNode; comments?: ReactNode; actions?: ReactNode;
   /** A note under the preview, such as the posts grouped into this one. */
@@ -183,11 +191,12 @@ export function PostRow({ kind, href, report, reportKind = 'post', meta, title, 
         <h3 id={titleId} lang={titleLang} dir={titleDir} className={cn(title === null && 'sr-only',
           'line-clamp-2 text-pretty [overflow-wrap:anywhere]', postRhythm.title, titleClass)}>
           {title === null ? heading : link(title)}</h3>
-        {preview ? <div className={cn('line-clamp-3 text-muted-foreground [overflow-wrap:anywhere]', postRhythm.preview,
+        {preview ? <div className={cn('text-muted-foreground [overflow-wrap:anywhere]', previewClamped && 'line-clamp-3', postRhythm.preview,
           readableText)}>{title === null ? link(preview) : preview}</div> : null}
         {below}
       </div>
       {thumbnail ? <div className="relative z-10 self-start">{thumbnail}</div> : null}
+      {thumbnailCredit ? <div className="col-span-full mt-1 min-w-0">{thumbnailCredit}</div> : null}
     </div>
     {attachment ? <div className={cn('flex min-w-0', postRhythm.section)}>{attachment}</div> : null}
     <div className={cn('-ms-2 flex items-center', postRhythm.section, postRhythm.bar)}>

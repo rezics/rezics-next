@@ -7,7 +7,7 @@ import { BookCheckIcon, BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, Li
   type LucideIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { StarMeter } from '../catalogue/rating.tsx';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { authorSeparator, type CoverWork, coverKindOf } from '../catalogue/work.ts';
 import { authorHref } from '../author/route.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -236,16 +236,19 @@ function Withheld({ title, body }: { title: string; body: string }) {
  * many the list holds, so a list reads as its contents rather than a title.
  */
 function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' }> }) {
-  const { t, avatarQuery } = useFeed();
+  const { t, avatarQuery, locale } = useFeed();
   if (!card.works.length) return null;
-  return <div className="mt-1 flex items-end gap-2">
-    <ul aria-label={t.listPreview} className="flex items-end gap-2">
-      {card.works.map(work => <li key={work.id}><LocalizedLink href={resourceHref('/w/', 'address' in work ? work.address as AddressTarget : work.id)}
+  return <div className="mt-1 flex flex-wrap items-end gap-2">
+    <ul aria-label={t.listPreview} className="flex min-w-0 flex-wrap items-end gap-2">
+      {card.works.map(work => <li key={work.id} className="grid w-20 min-w-0 gap-1"><LocalizedLink href={resourceHref('/w/', 'address' in work ? work.address as AddressTarget : work.id)}
         aria-label={work.title.value} className="relative z-10 block rounded-[0.1875rem] outline-none
           focus-visible:ring-2 focus-visible:ring-ring">
         <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
-          authors: [] }} avatarQuery={avatarQuery} size="xs" />
-      </LocalizedLink></li>)}
+          authors: [] }} avatarQuery={avatarQuery} size="xs" showCredit={false} />
+      </LocalizedLink>
+      <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
+        authors: [] }} avatarQuery={avatarQuery} locale={locale} className="relative z-10" />
+      </li>)}
     </ul>
     <span className="text-muted-foreground text-sm">{card.count.kind === 'exact' ? t.listWorks(card.count.value)
       : t.listWorksAtLeast(card.count.value)}</span>
@@ -354,11 +357,15 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
     </>} />}
     title={title} titleLang={titleLang} titleDir={item.target.title.direction} titleClass={titleClass}
     preview={preview}
+    previewClamped={card.kind !== 'list'}
     thumbnail={about || card.kind === 'list' || !href || item.target.work === null ? null
       : <LocalizedLink href={href} tabIndex={-1} aria-hidden="true" className="block">
         <CatalogueCover work={coverWork(item, workTitle, lang)} avatarQuery={avatarQuery} size="xs"
-          className="w-14 sm:w-16" />
+          className="w-14 sm:w-16" showCredit={false} />
       </LocalizedLink>}
+    thumbnailCredit={about || card.kind === 'list' || !href || item.target.work === null ? null
+      : <CatalogueCoverCredit work={coverWork(item, workTitle, lang)} avatarQuery={avatarQuery} locale={locale}
+        className="relative z-10" />}
     attachment={about ? <WorkAttachment work={about} /> : null}
     vote={<VoteControl target={{ id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision }} plain />}
     comments={comments ? <LocalizedLink href={comments} className={barAction}

@@ -7,6 +7,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
 import { AuthorNames } from '../catalogue/author-names.tsx';
 import { CoverLink } from '../catalogue/work-tile.tsx';
+import { CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { catalogueWork, WhyHere } from '../zones/card.tsx';
 import { PrimaryAction } from './work-action.tsx';
@@ -22,36 +23,30 @@ import { Trailer } from './trailer.tsx';
 function useShownBackgrounds(art: ZoneShowcaseArt) {
   const landscape = useMediaImagePresentation(art.landscape?.url);
   const portrait = useMediaImagePresentation(art.portrait?.url);
+  const eligible: ZoneShowcaseArt = {
+    ...art,
+    landscape: landscape.metadata?.coverCredit?.permittedRole === 'cover' ? null : art.landscape,
+    portrait: portrait.metadata?.coverCredit?.permittedRole === 'cover' ? null : art.portrait,
+  };
   const pending =
-    art.landscape && landscape.presentation === 'loading'
-      ? art.landscape
-      : art.portrait && portrait.presentation === 'loading'
-        ? art.portrait
+    eligible.landscape && landscape.presentation === 'loading'
+      ? eligible.landscape
+      : eligible.portrait && portrait.presentation === 'loading'
+        ? eligible.portrait
         : null;
   const shown: ZoneShowcaseArt = {
     ...art,
-    landscape: landscape.presentation === 'visible' ? art.landscape : null,
-    portrait: portrait.presentation === 'visible' ? art.portrait : null,
+    landscape: landscape.presentation === 'visible' ? eligible.landscape : null,
+    portrait: portrait.presentation === 'visible' ? eligible.portrait : null,
   };
-  return { pending, shown, landscapeSrc: landscape.src };
+  return { pending, shown, eligible };
 }
 
 /** Preloads the first slide's background only once the media policy shows it, so a mask never downloads its image. */
 export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
-  const ownArt = slideArt(slide);
-  const own = Boolean(ownArt?.landscape || ownArt?.portrait);
-  const cover = slide.work?.cover;
-  const { pending, shown, landscapeSrc } = useShownBackgrounds(
-    own ? ownArt! : { landscape: cover ? { ...cover, framed: false } : null },
-  );
-  // A cover loads from the URL its metadata resolves to; art keeps its own candidates.
-  const art = own
-    ? shown
-    : shown.landscape && landscapeSrc
-      ? { landscape: { ...shown.landscape, url: landscapeSrc } }
-      : null;
-  if (pending || !art) return null;
-  return pictureSources(art)
+  const { pending, shown } = useShownBackgrounds(slideArt(slide) ?? {});
+  if (pending) return null;
+  return pictureSources(shown)
     .filter((source, index, sources) => index === 0 || source.shape !== sources[index - 1]?.shape)
     .map((source) => (
       <link
@@ -68,9 +63,9 @@ export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
 }
 
 export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
-  const { pending, shown } = useShownBackgrounds(art);
+  const { pending, shown, eligible } = useShownBackgrounds(art);
   // A pending or hidden fallback renders MediaImage's own placeholder or mask.
-  const fallback = pending ?? shown.landscape ?? shown.portrait ?? art.landscape ?? art.portrait;
+  const fallback = pending ?? shown.landscape ?? shown.portrait ?? eligible.landscape ?? eligible.portrait;
   if (!fallback) return null;
   const sources = pending ? [] : pictureSources(shown);
   const geometry = Object.fromEntries(
@@ -158,10 +153,12 @@ export function ShowcaseSlide({
   effect?: ZoneTitleEffect;
   avatarQuery?: string;
 }) {
-  const art = slideArt(slide);
+  const { eligible: art } = useShownBackgrounds(slideArt(slide) ?? {});
   const background = art?.landscape || art?.portrait;
   // Main's selected title carries the content language, which can differ from interface copy.
-  const logo = logoFor(art, slide.title.lang || locale);
+  const authoredLogo = logoFor(art, slide.title.lang || locale);
+  const logoPresentation = useMediaImagePresentation(authoredLogo?.url);
+  const logo = logoPresentation.metadata?.coverCredit?.permittedRole === 'cover' ? null : authoredLogo;
   const title = slide.title.value || slide.work?.title?.value || messages.untitled;
   const tagline = slide.tagline ?? slide.work?.tagline;
   const work = slide.work;
@@ -191,24 +188,11 @@ export function ShowcaseSlide({
     >
       {background && art ? (
         <Background art={art} first={first} />
-      ) : work?.cover ? (
-        <WebMediaImage
-          revealable={false}
-          alt=""
-          aria-hidden="true"
-          src={work.cover.url}
-          loading={first ? 'eager' : 'lazy'}
-          className="showcase-cover-ambient"
-        />
-      ) : work ? (
-        <div aria-hidden="true" className="showcase-generated-ambient">
-          <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} />
-        </div>
       ) : null}
       <span aria-hidden="true" className="showcase-scrim" />
       {!background && work ? (
         <div className="showcase-cover">
-          <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} />
+          <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} locale={locale} showCredit={false} />
         </div>
       ) : null}
       {logo ? (
@@ -250,6 +234,10 @@ export function ShowcaseSlide({
           <p className="showcase-tagline" lang={tagline.lang} dir={tagline.dir}>
             {tagline.value}
           </p>
+        ) : null}
+        {!background && work ? (
+          <CatalogueCoverCredit work={catalogueWork(work)} avatarQuery={avatarQuery}
+            locale={locale} className="showcase-cover-credit" />
         ) : null}
         <div className="showcase-actions">
           {work ? (

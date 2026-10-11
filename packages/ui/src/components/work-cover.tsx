@@ -168,6 +168,7 @@ export interface WorkCoverImage {
   representationId?: string;
   mediaUseId?: string;
   metadata?: MediaImageMetadata;
+  coverCredit?: MediaImageMetadata['coverCredit'];
 }
 
 export interface WorkCoverProps extends VariantProps<typeof workCoverVariants> {

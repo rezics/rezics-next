@@ -10,7 +10,7 @@ import { type CompositionEvent, type FocusEvent, type InputEvent, type KeyboardE
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { readBrowserTypeahead } from './browser.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { typeLabel } from '../catalogue/types.ts';
 import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { normalizePhrase, PHRASE } from './state.ts';
@@ -165,6 +165,8 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
       }}
       onBlur={(event: FocusEvent<HTMLInputElement>) => {
         onBlur?.(event);
+        // A source link must stay mounted between receiving focus and its click.
+        if (event.relatedTarget && event.currentTarget.parentElement?.contains(event.relatedTarget)) return;
         setOpen(false);
       }} />
     {open ? <ul id={listId} role="listbox" aria-label={t.suggestions}
@@ -177,7 +179,8 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
         const credit = item.matchedField === 'credit' && !authors.includes(item.matchedText) ? item.matchedText : null;
         const byline = [...authors.slice(0, 2), ...credit ? [credit] : []];
         const also = item.matchedField === 'title' && item.matchedText !== item.title.value ? item.matchedText : null;
-        return <li key={`${item.work}-${item.matchedField}-${item.matchedText}`} id={`${listId}-${index}`} role="option"
+        return <li key={`${item.work}-${item.matchedField}-${item.matchedText}`} role="presentation">
+          <div id={`${listId}-${index}`} role="option"
           aria-selected={index === active}
           // Keep focus in the box, so the list stays open until the click chooses.
           onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}
@@ -185,7 +188,7 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
           className={cn('flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-start',
             'aria-selected:bg-accent aria-selected:text-accent-foreground')}>
           <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors: authors.map(name => ({ name, href: null })) }} size="xs" />
+            authors: authors.map(name => ({ name, href: null })) }} size="xs" showCredit={false} />
           <span className="grid min-w-0">
             <span lang={item.title.language} dir={item.title.direction}
               className="truncate font-medium font-work-title text-[0.9375rem]">
@@ -198,6 +201,9 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
             {also ? <span lang={item.matchedLanguage ?? undefined} className="truncate text-muted-foreground text-xs">
               <Highlighted text={t.alsoTitled({ title: also })} phrase={phrase} /></span> : null}
           </span>
+          </div>
+          <CatalogueCoverCredit work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
+            authors: authors.map(name => ({ name, href: null })) }} locale={locale} className="px-2 pb-1.5" />
         </li>;
       })}
     </ul> : null}

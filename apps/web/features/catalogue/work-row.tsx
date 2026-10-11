@@ -31,7 +31,7 @@ export function WorkRow({ work, headingLevel = 2, avatarQuery, locale, shelf = '
   const title = workTitle(work, locale);
   return <article className={cn('group/tile relative grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 sm:grid-cols-[5.5rem_minmax(0,1fr)_auto]',
     'sm:gap-x-6', className)}>
-    <CoverLink work={work} avatarQuery={avatarQuery} className="row-span-2 self-start sm:row-span-1" />
+    <CoverLink work={work} avatarQuery={avatarQuery} locale={locale} className="row-span-2 self-start sm:row-span-1" />
     <div className="grid min-w-0 content-start gap-1">
       <Heading lang={work.title?.language} dir={work.title?.direction}
         className="text-pretty font-medium font-work-title text-lg/snug [overflow-wrap:anywhere] sm:text-xl/snug">

@@ -43,9 +43,9 @@ export const stageWindowCss = stageWindows
   .showcase-copy { width: 100%; padding: 1.25rem; gap: .5rem; }
   .showcase-title { font-size: clamp(1.5rem, min(7cqw, 4.2svh), 2.5rem); }
   .showcase-cutout-layer { inset-block: -3% 45%; inset-inline: 45% 10%; }
-  .showcase-cover-slide { flex-direction: column; justify-content: end; }
-  .showcase-cover { width: 31%; max-height: 45%; margin: 1rem auto 0; }
-  .showcase-cover-slide .showcase-copy { width: 100%; }
+  .showcase-cover-slide { flex-direction: column; justify-content: start; }
+  .showcase-cover { width: 31%; margin: auto auto 0; padding-block-start: 1rem; }
+  .showcase-cover-slide .showcase-copy { width: 100%; margin-block: 0; }
   .showcase-logo { max-width: 58%; max-height: 20%; }
   .showcase-logo-bottom-start, .showcase-logo-bottom-end { bottom: 43%; }
   `
@@ -66,11 +66,11 @@ export function slideArt(slide: ZoneShowcaseSlide): ZoneShowcaseArt | null {
         : (campaign ?? own);
   return selected ?? null;
 }
-/** Every image URL a slide draws, as the stage and its thumbnail choose them: backgrounds or the cover standing in, cutout and logo. */
+/** Resolve the identifying cover too: rejected decorative art leaves its framed own-Work card. */
 export function slideImageUrls(slide: ZoneShowcaseSlide, locale: string): string[] {
   const art = slideArt(slide);
-  return [art?.landscape?.url, art?.portrait?.url, art?.landscape ? undefined : slide.work?.cover?.url,
-    art?.cutout?.url, logoFor(art, slide.title.lang || locale)?.url]
+  return [art?.landscape?.url, art?.portrait?.url, art?.cutout?.url,
+    logoFor(art, slide.title.lang || locale)?.url, slide.work?.cover?.url]
     .filter((url): url is string => Boolean(url));
 }
 

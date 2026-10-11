@@ -55,8 +55,9 @@ export const coverKindOf = coverOf;
  */
 export function coverImage(cover: MainCover | null, avatarQuery = ''): WorkCoverImage | null {
   if (cover?.kind !== 'image' || !cover.url.startsWith('/v1/media/')) return null;
+  const reference = imageReferenceFromUrl(cover.url);
   return { src: `${BFF_PREFIX}${cover.url}${avatarQuery}`, width: cover.width, height: cover.height,
-    ...imageReferenceFromUrl(cover.url) };
+    ...reference, coverCredit: cover.coverCredit };
 }
 
 /** What a Work's one cover is drawn from, wherever it appears. */

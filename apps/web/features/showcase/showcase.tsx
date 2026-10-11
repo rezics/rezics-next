@@ -14,35 +14,37 @@ import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from 'lucide-r
 import { materializeData } from 'native-i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { WorkCover } from '@rezics/ui/work-cover';
-import { workCoverProps } from '@rezics/zone-sdk';
+import { useMediaImagePresentation } from '@rezics/ui/media-image';
+import { CatalogueCover } from '../catalogue/cover.tsx';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
+import { catalogueWork } from '../zones/card.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { ShowcasePreload, ShowcaseSlide } from './slide.tsx';
 import { imageSet, rotationDelay, rotationWindow, slideArt, stageWindowCss } from './stage.ts';
 import './showcase.css';
 
 function SlideThumbnail({ slide }: { slide: ZoneShowcaseSlide }) {
-  const landscape = slideArt(slide)?.landscape;
-  const image = landscape ?? slide.work?.cover;
+  const authored = slideArt(slide)?.landscape;
+  const presentation = useMediaImagePresentation(authored?.url);
+  const landscape = presentation.metadata?.coverCredit?.permittedRole === 'cover' ? null : authored;
   return (
     <span
       className="showcase-thumbnail"
       data-cover={!landscape ? '' : undefined}
       aria-hidden="true"
     >
-      {image ? (
+      {landscape ? (
         <WebMediaImage
           revealable={false}
-          src={image.url}
+          src={landscape.url}
           alt=""
           loading="lazy"
           fetchPriority="low"
-          srcSet={imageSet(image)}
+          srcSet={imageSet(landscape)}
           sizes="80px"
         />
       ) : slide.work ? (
-        <WorkCover {...workCoverProps(slide.work)} size="fill" />
+        <CatalogueCover work={catalogueWork(slide.work)} size="fill" showCredit={false} />
       ) : null}
     </span>
   );
@@ -70,7 +72,9 @@ function StageContents({
   }, [api.isPlaying]);
   const stage = useRef<HTMLDivElement | null>(null);
   const current = slides[api.page] ?? slides[0];
-  const cutout = current && slideArt(current)?.cutout;
+  const authoredCutout = current && slideArt(current)?.cutout;
+  const cutoutPresentation = useMediaImagePresentation(authoredCutout?.url);
+  const cutout = cutoutPresentation.metadata?.coverCredit?.permittedRole === 'cover' ? null : authoredCutout;
   const t = materializeData(messages, { locale });
   const position = (index: number) =>
     t.slide({ index: String(index + 1), count: String(slides.length) });

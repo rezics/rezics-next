@@ -1,4 +1,23 @@
 import type { DisplayObligations } from './rights-mark.tsx';
+import type { MediaImageMetadata } from '@rezics/ui/media-image';
+
+/** Recorded cover provenance, without a text licence or an inferred holder. */
+export const knownCoverCredit: NonNullable<MediaImageMetadata['coverCredit']> = {
+  kind: 'copyright', text: '© 海辺書房', holder: '海辺書房',
+  source: { name: 'Example archive', href: 'https://example.test/records/cover' },
+  permittedRole: 'cover',
+};
+
+export const unknownCoverCredit: NonNullable<MediaImageMetadata['coverCredit']> = {
+  ...knownCoverCredit, text: '(c) rights holder via Example archive', holder: null,
+};
+
+export const mixedScriptCoverCredit: NonNullable<MediaImageMetadata['coverCredit']> = {
+  ...knownCoverCredit,
+  text: '© دار الكتب 海辺書房 — Éditions de la rivière',
+  holder: 'دار الكتب 海辺書房 — Éditions de la rivière',
+  source: { ...knownCoverCredit.source, name: 'مكتبة الأرشيف — 海辺書房 InternationalCoverArchive'.repeat(3) },
+};
 
 /** A Creative Commons deed, the shape a licence instrument has on the read. */
 export const ccBySa = 'https://creativecommons.org/licenses/by-sa/3.0/';
