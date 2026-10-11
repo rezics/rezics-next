@@ -137,6 +137,18 @@ try {
       [randomUUID(), subject, scope, action],
     );
   };
+  const grantRankingAuthority = async () => {
+    // A retained corpus stores facts, while each live test establishes current
+    // authority before measuring writes or publishing its header.
+    for (const [scope, action] of [
+      [`review:decide:${realm}`, 'review.decide'],
+      [`reply:place:${realm}`, 'reply.place'],
+      [`realm:profile:${realm}`, 'realm.profile.publish'],
+      [`governance:realm:${realm}`, 'governance.rule.publish'],
+    ] as const)
+      await grant(scope, action);
+  };
+  await grantRankingAuthority();
   const post = async (
     key: string,
     parent?: { reply: string; revision: string },
@@ -553,6 +565,7 @@ try {
       api = workProfileCorpusApi('http://main.local', home.author.token, {
         fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
       });
+      await grantRankingAuthority();
     }
     created = size - 2;
     evidence.push({
@@ -865,8 +878,9 @@ try {
     ).rows[0]!.replies,
     1,
   );
-  let parent = child;
-  for (let depth = 0; depth < 40; depth++) parent = await post(`g1034:deep:${depth}`, parent);
+  // The opening keeps exactly one live child; the retained second thread tests
+  // one new placement beyond the bounded ancestor walk at depth 41.
+  const parent = await post('g1034:deep:41', corpus.identity.deepChain.at(-1)!);
   await project();
   const deep = (
     await stack.accessPool.query<{ thread: string; active: boolean }>(
@@ -875,7 +889,7 @@ try {
       [epoch, realm, parent.reply],
     )
   ).rows[0]!;
-  assert.deepEqual(deep, { thread: opening.reply, active: true });
+  assert.deepEqual(deep, { thread: corpus.identity.second.reply, active: true });
   assert.equal(
     (await app.handle(new Request(`http://main.local${root}/threads?sort=best&limit=2`))).status,
     200,
