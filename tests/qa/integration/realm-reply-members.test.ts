@@ -196,7 +196,7 @@ test('mandatory review refuses member and owner direct placement without creatin
   } finally { await h.close(); }
 }, 180_000);
 
-test('legacy Realm members place reviewed replies; direct policy respects membership, moderator veto and policy races', async () => {
+test('Realm member direct policy respects membership and vetoes; policy changes serialize with placements', async () => {
   const h = await memberFixture();
   try {
     expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
@@ -303,15 +303,17 @@ test('legacy Realm members place reviewed replies; direct policy respects member
     const latest = await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edited.body.revisionId, body: 'Policy race.' });
     const latestDigest = latest.body.revisionDigest;
     const prepare = h.owner.preparePlacement.bind(h.owner);
+    let policyChange: Promise<void> | undefined;
     h.owner.preparePlacement = async (...args) => {
       const prepared = await prepare(...args);
-      await policy('mandatory');
+      policyChange = policy('mandatory');
       return prepared;
     };
     const raced = await h.post('/v1/realm-reply-placements', { ...direct,
       revisionId: latest.body.revisionId, revisionDigest: latestDigest, expectedHead: accepted.body.placement });
-    expect(raced.status, JSON.stringify(raced.body)).toBe(409);
+    expect(raced.status, JSON.stringify(raced.body)).toBe(201);
+    await policyChange;
     expect((await h.contentPool.query(`SELECT status FROM content.publication_preparation
-      WHERE revision_id=$1`, [latest.body.revisionId])).rows[0].status).toBe('rejected');
+      WHERE revision_id=$1`, [latest.body.revisionId])).rows[0].status).toBe('active');
   } finally { await h.close(); }
 }, 180_000);
