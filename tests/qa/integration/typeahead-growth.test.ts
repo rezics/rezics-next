@@ -15,6 +15,7 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { SEARCH_FIELD_COST } from '../../../services/main/src/modules/search/fields.ts';
 import { prefixWalkExaminedLimit } from '../../../services/main/src/modules/search/prefix-walk.ts';
+import { MAX_SEARCH_REQUEST_MS } from '../../../services/main/src/modules/work/search-readiness.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { commitMetadata } from '../../../services/main/src/modules/work/metadata-command.ts';
@@ -27,6 +28,57 @@ interface GrowthRead {
   fieldRows: number[];
   nativeExamined: number[];
   diagnostics?: FusekiReadDiagnosticSnapshot;
+}
+
+interface DeadlineFailure {
+  errorClass?: string;
+  errorCode?: string;
+  diagnostics?: FusekiReadDiagnosticSnapshot;
+}
+
+/** Capture only the route's bounded timeout evidence, preserving the QA log.
+ * The public 503 code covers several refusals; it cannot prove deadline exhaustion. */
+async function growthRequest(app: ReturnType<typeof createMainApp>, prefix: string) {
+  const failure: DeadlineFailure = {};
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    originalError(...args);
+    if (args.length !== 1 || typeof args[0] !== 'string') return;
+    let event: Record<string, unknown>;
+    try { event = JSON.parse(args[0]) as Record<string, unknown>; }
+    catch { return; }
+    if (!event || typeof event !== 'object' || Array.isArray(event)) return;
+    if (event.event === 'public-search-timeout' && event.route === 'typeahead') {
+      failure.diagnostics = event.diagnostics as FusekiReadDiagnosticSnapshot;
+    } else if (event.event === 'worker_fault' && event['rezics.worker.name'] === 'main.route.search_index_unavailable') {
+      failure.errorClass = event['error.class'] as string;
+      failure.errorCode = event['error.code'] as string;
+    }
+  };
+  const started = performance.now();
+  try {
+    const response = await app.handle(new Request(`http://main.local/v1/search/typeahead?prefix=${prefix}`));
+    return { response, text: await response.text(), failure, elapsedMs: Math.round(performance.now() - started) };
+  } finally { console.error = originalError; }
+}
+
+function assertBoundedDiagnostics(diagnostics: FusekiReadDiagnosticSnapshot | undefined) {
+  expect(diagnostics).toBeDefined();
+  expect(diagnostics!.history.length).toBeLessThanOrEqual(8);
+  expect(diagnostics!.active.length).toBeLessThanOrEqual(8);
+  expect(Number.isSafeInteger(diagnostics!.omitted)).toBe(true);
+  expect(diagnostics!.omitted).toBeGreaterThanOrEqual(0);
+  for (const call of [...diagnostics!.history, ...diagnostics!.active]) {
+    expect(['health', 'delta-proof', 'query', 'template-query']).toContain(call.family);
+    expect(['read', 'writer-wait']).toContain(call.phase);
+    expect(['complete', 'failed', 'aborted', 'active']).toContain(call.status);
+    expect(Number.isSafeInteger(call.attempt)).toBe(true);
+    expect(call.attempt).toBeGreaterThanOrEqual(1);
+    expect(Number.isFinite(call.durationMs)).toBe(true);
+    expect(call.durationMs).toBeGreaterThanOrEqual(0);
+    expect(Object.keys(call).every(key => ['family', 'durationMs', 'attempt', 'phase', 'status', 'examined'].includes(key))).toBe(true);
+  }
+  expect(Buffer.byteLength(JSON.stringify(diagnostics))).toBeLessThanOrEqual(4_096);
 }
 
 /** Observe the real native response, never the ten cards Main retains. Native
@@ -95,7 +147,8 @@ test('SEARCH21: public typeahead native work follows population before prefix cu
     access: new AccessAdmissionRegistry(accessPool) });
   const actor = ID + randomUUID();
   const works = new Set<string>();
-  const readings: Array<GrowthRead & { population: number; prefix: string; examined: number; responseStatus: number }> = [];
+  const readings: Array<GrowthRead & { population: number; prefix: string; examined: number;
+    rowsRead: number; responseStatus: number; failure: DeadlineFailure; elapsedMs: number }> = [];
 
   // As in public-search-scale, these are admitted product owner commands. No
   // graph fixture update can bypass publication, selection or name maintenance.
@@ -149,15 +202,16 @@ test('SEARCH21: public typeahead native work follows population before prefix cu
       while (works.size < population) await addWork(works.size);
       for (const prefix of ['b', 'bo']) {
         fuseki.startRead();
-        const response = await app.handle(new Request(`http://main.local/v1/search/typeahead?prefix=${prefix}`));
-        const text = await response.text();
+        const { response, text, failure, elapsedMs } = await growthRequest(app, prefix);
         const read = fuseki.read!;
         expect(read.diagnostics?.history.some(call => call.family === 'query' && call.status === 'complete')).toBe(true);
-        expect(read.diagnostics?.active).toEqual([]);
+        if (response.status === 200) expect(read.diagnostics?.active).toEqual([]);
         const examined = prefixWalkAvailable
           ? read.nativeExamined.reduce((total, count) => total + count, 0)
           : read.fieldRows.reduce((total, count) => total + count, 0);
-        readings.push({ ...read, population, prefix, examined, responseStatus: response.status });
+        readings.push({ ...read, population, prefix, examined,
+          rowsRead: read.fieldRows.reduce((total, count) => total + count, 0),
+          responseStatus: response.status, failure, elapsedMs });
         fuseki.read = undefined;
         if (prefixWalkAvailable) {
           // Absence of native visit evidence cannot turn a zero into a pass.
@@ -186,6 +240,12 @@ test('SEARCH21: public typeahead native work follows population before prefix cu
           // recorded, never substituted for bounded work or an empty page.
           expect(response.status, text).toBe(503);
           expect(JSON.parse(text).code).toBe('search_index_unavailable');
+          expect(population).toBe(256);
+          expect(failure.errorClass).toBe('SearchRequestTimedOut');
+          expect(failure.errorCode).toBe('public_search_request_exceeded_w');
+          expect(elapsedMs).toBeGreaterThanOrEqual(MAX_SEARCH_REQUEST_MS);
+          assertBoundedDiagnostics(failure.diagnostics);
+          expect(failure.diagnostics!.history.some(call => call.family === 'query' && call.status === 'complete')).toBe(true);
         }
       }
     }
