@@ -131,13 +131,13 @@ function requireTimestamp(values: Record<string, unknown>, column: string): void
 }
 
 function isNativeJsonValue(value: unknown): value is { $rezicsNativeJson: 'sql-null' } |
-  { $rezicsNativeJson: 'value'; $value: unknown } {
+  { $rezicsNativeJson: 'value'; $value: string } {
   if (!isObject(value)) return false;
   if (value.$rezicsNativeJson === 'sql-null') {
     return Object.keys(value).length === 1;
   }
   return value.$rezicsNativeJson === 'value' && Object.keys(value).length === 2
-    && Object.hasOwn(value, '$value');
+    && typeof value.$value === 'string';
 }
 
 function incomingRowsSql(table: OwnerTable, columns: readonly NativeColumn[]): string {
@@ -150,7 +150,7 @@ function incomingRowsSql(table: OwnerTable, columns: readonly NativeColumn[]): s
     if (column.type === 'text') return `native.${ident(column.name)}`;
     const jsonValue = `raw.wire->'${column.name.replaceAll("'", "''")}'`;
     return `CASE WHEN ${jsonValue}->>'$rezicsNativeJson' = 'sql-null' THEN NULL::${column.type}
-      ELSE (${jsonValue}->'$value')${column.type === 'json' ? '::json' : ''} END AS ${ident(column.name)}`;
+      ELSE (${jsonValue}->>'$value')::${column.type} END AS ${ident(column.name)}`;
   });
   return `WITH raw AS (SELECT value AS wire FROM jsonb_array_elements($1::jsonb)), incoming AS (
     SELECT ${projection.join(', ')} FROM raw CROSS JOIN LATERAL ${populate} AS native
@@ -187,11 +187,12 @@ async function* nativeRows(client: PoolClient, table: OwnerTable,
   const keyObject = `jsonb_build_object(${table.key.flatMap(key => [
     `'${key.replaceAll("'", "''")}'`, `t.${ident(key)}::text`,
   ]).join(', ')})`;
+  // Keep native JSON as database text so JavaScript never rounds PostgreSQL numeric values.
   const valuesObject = `jsonb_build_object(${columns.flatMap(column => [
     `'${column.name.replaceAll("'", "''")}'`, column.type === 'text'
       ? `CASE WHEN t.${ident(column.name)} IS NULL THEN NULL ELSE to_jsonb(t.${ident(column.name)}::text) END`
       : `CASE WHEN t.${ident(column.name)} IS NULL THEN jsonb_build_object('$rezicsNativeJson','sql-null')
-         ELSE jsonb_build_object('$rezicsNativeJson','value','$value',to_jsonb(t.${ident(column.name)})) END`,
+         ELSE jsonb_build_object('$rezicsNativeJson','value','$value',t.${ident(column.name)}::text) END`,
   ]).join(', ')})`;
   const select = `SELECT ${keyObject}::text AS key, ${valuesObject}::text AS values FROM ${tableRef} t`;
   const keyTerms = table.key.map((column, index) => `t.${ident(column)}`);

@@ -86,7 +86,7 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     await source.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [principalId, `https://qa-${suffix}.local`, `erasure-${suffix}`]);
     await source.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
-    await grantFixtureAuthority(source, {
+    const authority = await grantFixtureAuthority(source, {
       scope, requireDispatch: true,
       representations: [{ principalId, actor, action: 'erasure.request', lifetime: '8 hours' }],
       grant: { actor, action: 'erasure.request', lifetime: '8 hours' },
@@ -94,6 +94,9 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     await source.query(`CREATE TABLE access.erasure_recovery_probe_${suffix} (
       id uuid PRIMARY KEY, body text NOT NULL)`);
     await source.query(`INSERT INTO access.erasure_recovery_probe_${suffix} (id, body) VALUES ($1, 'base')`, [probeId]);
+    await source.query(`INSERT INTO access.realm_directory
+      (realm, space, profile, created, activity, search_text, count_kind, count_value)
+      VALUES ($1, $1, '{"number":9007199254740992}'::jsonb, 0, 0, '', 'unknown', -1)`, [resource]);
     const baseFenceGeneration = await engageAccessRecoveryFence(source);
     const baseUrl = await owners.snapshot('access', async () => close(source, pools));
     source = pool(owners.urls.access, pools);
@@ -119,6 +122,9 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
       FROM unnest($5::uuid[], $6::text[], $7::text[], $8::text[], $9::text[])
         AS item(id, idempotency_key, request_digest, graph_receipt, graph_sequence)`,
     [principalId, actor, scope, ERASURE_JOURNAL_EPOCH, admissionIds, idempotencyKeys, requestDigests, receipts, sequences]);
+    await source.query(`UPDATE access.admission SET authority_witness = jsonb_build_array(
+      jsonb_build_object('table', 'permission_grant', 'id', $2::text,
+        'number', 9007199254740993::numeric)) WHERE id = $1`, [admissionIds[0], authority.grantId]);
     await source.query(`INSERT INTO access.admission_receipt
         (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
       SELECT item.id, $1, 'erasure.request', item.idempotency_key, item.request_digest, 'registered'
@@ -156,8 +162,13 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     expect(rows.filter(row => row.table === 'access.outbox')).toHaveLength((ACCESS_ERASURE_RECOVERY_PAGE + 1) * 3);
     expect(rows.filter(row => row.table === 'access.discovery_source_change')).toHaveLength(2);
     expect(rows.filter(row => row.table === 'access.also_enjoyed_source_change')).toHaveLength(2);
-    expect((rows.find(row => row.table === 'access.admission')!.values.authority_witness as object))
+    expect((rows.find(row => row.table === 'access.admission' && row.key.id === admissionIds[1])!
+      .values.authority_witness as object))
       .toEqual({ $rezicsNativeJson: 'sql-null' });
+    const nativeWitness = (await source.query<{ witness: string }>(
+      'SELECT authority_witness::text AS witness FROM access.admission WHERE id = $1', [admissionIds[0]])).rows[0]!.witness;
+    expect(rows.find(row => row.table === 'access.admission' && row.key.id === admissionIds[0])!
+      .values.authority_witness).toEqual({ $rezicsNativeJson: 'value', $value: nativeWitness });
 
     const readBase = await base.connect(), readSource = await source.connect(), journal = await relay.connect();
     try {
@@ -295,12 +306,20 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
       expect(imported).toEqual({ imported: captured.summary.rowCount, alreadyPresent: '0' });
       expect(await scanAccessTables(importClient)).toEqual(sourceState);
       expect(await scanAccessOutbox(importClient)).toEqual(sourceOutbox);
+      const restored = (await importClient.query<{ witness: string; number: string; type: string }>(
+        `SELECT authority_witness::text AS witness, authority_witness->0->>'number' AS number,
+          jsonb_typeof(authority_witness->0->'number') AS type
+        FROM access.admission WHERE id = $1`, [admissionIds[0]])).rows[0]!;
+      expect(restored).toEqual({ witness: nativeWitness, number: '9007199254740993', type: 'number' });
     } finally {
       try { await importClient.query('ROLLBACK'); } catch { /* preserve successful import assertion */ }
       importClient.release();
     }
 
     for (const { mutation, refusal } of [
+      { mutation: `UPDATE access.realm_directory SET profile = '{"number":9007199254740993}'::jsonb
+          WHERE realm = '${resource}'`,
+        refusal: 'base Access row changed: access.realm_directory' },
       { mutation: `UPDATE access.erasure_recovery_probe_${suffix} SET body = 'changed' WHERE id = '${probeId}'`,
         refusal: `base Access row changed: access.erasure_recovery_probe_${suffix}` },
       { mutation: `DELETE FROM access.erasure_recovery_probe_${suffix} WHERE id = '${probeId}'`,

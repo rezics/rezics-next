@@ -536,4 +536,4 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       }
     } finally { rmSync(state, { recursive: true, force: true }); }
   }
-}, 300_000);
+}, 120_000);
