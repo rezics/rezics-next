@@ -36,44 +36,60 @@ test('profile contributions seek one bounded author page and disclose only curre
 });
 
 test('profile privacy changing during a contribution read fails closed', async () => {
+  const author = id(1), realm = id(2), reply = id(10);
+  let visible = true, hydration = 0;
   const session = { position: { datasetId: 'product', dataEpoch: 'epoch', sequence: '10' },
-    principal: null, options: {}, deps: { content: {}, realmReplyThreads: { authorPage: async () => [] },
-      realmReplies: { readPublic: async () => null },
-      personPreferences: { profileVisible: async () => false } },
+    principal: null, options: {}, deps: { content: {}, realmReplyThreads: { authorPage: async () => [{
+      reply, parent: null, author, origin: realm, rootTarget: id(3), rootRevision: id(4),
+      createdAt: new Date('2026-10-10'),
+    }] },
+      realmReplies: { readPublic: async () => {
+        hydration++;
+        visible = false;
+        return { reply, author, originRealm: realm, body: 'Previously public contribution' };
+      } },
+      personPreferences: { profileVisible: async () => visible } },
   } as unknown as WorkReadSession;
-  await expect(readProfileContributions(session, id(1), 'comments', undefined,
-    async () => ({} as never))).rejects.toBeInstanceOf(WorkReadMissing);
+  await expect(readProfileContributions(session, author, 'posts', undefined,
+    async () => { expect(visible).toBe(true); return {} as never; })).rejects.toBeInstanceOf(WorkReadMissing);
+  expect(hydration).toBe(1);
 });
 
 function parentWorld(parent: 'visible' | 'hidden' | 'absent', options: {
   revokeDuringProfileFence?: boolean; unavailable?: boolean; count?: number; distinct?: boolean;
+  privateDuringParentRead?: boolean; individualReads?: boolean;
 } = {}) {
   const author = id(1), realm = id(2), actor = id(5), principal = { issuer: 'issuer', subject: 'reader' };
   const nodes = Array.from({ length: options.count ?? 1 }, (_, index) => ({ reply: id(10 + index),
     parent: id(options.distinct ? 50 + index : 50), author, origin: realm,
     rootTarget: id(3), rootRevision: id(4), createdAt: new Date('2026-10-10') }));
   const requests: string[][] = [];
-  let revoked = false;
+  let revoked = false, privateProfile = false;
   const parentIds = new Set(nodes.map(node => node.parent));
+  const readPublicBatch = async (replies: string[], viewer: unknown, actingSubject: string) => {
+    requests.push(replies);
+    expect(viewer).toBe(principal);
+    expect(actingSubject).toBe(actor);
+    return replies.map(reply => {
+      if (parentIds.has(reply)) {
+        if (options.unavailable) throw new Error('Parent disclosure owner unavailable');
+        if (options.privateDuringParentRead) privateProfile = true;
+        // The hidden record exists, while the absent record never did. Both
+        // are suppressed by the existing owner, not a profile policy branch.
+        return parent === 'visible' && !revoked ? { reply, parentReply: id(99) } : null;
+      }
+      return { reply, author, originRealm: realm, body: 'Child heading\nUnchanged child text', spoiler: false };
+    });
+  };
   const session = { position: { datasetId: 'product', dataEpoch: 'epoch', sequence: '10' },
     principal, options: { actingSubject: actor }, deps: { content: {}, realmReplyThreads: {
       authorPage: async () => nodes,
-    }, realmReplies: { readPublicBatch: async (replies: string[], viewer: unknown, actingSubject: string) => {
-      requests.push(replies);
-      expect(viewer).toBe(principal);
-      expect(actingSubject).toBe(actor);
-      return replies.map(reply => {
-        if (parentIds.has(reply)) {
-          if (options.unavailable) throw new Error('Parent disclosure owner unavailable');
-          // The hidden record exists, while the absent record never did. Both
-          // are suppressed by the existing owner, not a profile policy branch.
-          return parent === 'visible' && !revoked ? { reply, parentReply: id(99) } : null;
-        }
-        return { reply, author, originRealm: realm, body: 'Child heading\nUnchanged child text', spoiler: false };
-      });
-    } }, personPreferences: { profileVisible: async () => {
+    }, realmReplies: options.individualReads ? {
+      readPublic: async (reply: string, viewer: unknown, actingSubject: string) =>
+        (await readPublicBatch([reply], viewer, actingSubject))[0],
+    } : { readPublicBatch }, personPreferences: { profileVisible: async () => {
       revoked = options.revokeDuringProfileFence === true;
-      return true;
+      return !privateProfile;
     } } },
   } as unknown as WorkReadSession;
   const read = () => readProfileContributions(session, author, 'comments', undefined, async () => ({} as never));
@@ -111,6 +127,16 @@ test('a parent revoked during the profile fence has no coordinates in Person con
   const revoked = await parentWorld('visible', { revokeDuringProfileFence: true }).read();
   expect(revoked).toEqual(await parentWorld('absent').read());
 });
+
+for (const individualReads of [false, true]) {
+  test(`profile privacy changing during ${individualReads ? 'individual' : 'batched'} parent hydration fails closed`, async () => {
+    const changed = parentWorld('visible', { privateDuringParentRead: true, individualReads });
+    await expect(changed.read()).rejects.toBeInstanceOf(WorkReadMissing);
+    // The parent owner returned a visible record after the profile changed;
+    // only the closing preferences-owner check can suppress the contribution.
+    expect(changed.requests).toEqual([[id(10)], [id(50)]]);
+  });
+}
 
 test('a parent disclosure outage fails the Person contribution read instead of pretending no parent', async () => {
   await expect(parentWorld('hidden', { unavailable: true }).read()).rejects.toThrow('Parent disclosure owner unavailable');

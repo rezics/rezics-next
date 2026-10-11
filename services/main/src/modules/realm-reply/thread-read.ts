@@ -686,7 +686,8 @@ export async function readProfileContributions(session: WorkReadSession, author:
     throw new WorkReadMissing('Agent unavailable');
   }
   // At most eight immediate parents, through the same owner authority. Run
-  // this after the profile fence so a revoked parent cannot survive that await.
+  // this after the intermediate profile check so a revoked parent cannot
+  // survive that await; close profile privacy after parent hydration too.
   const parentIds = [...new Set(page.flatMap(node => node.parent ? [node.parent] : []))];
   const parents = parentIds.length ? typeof replies.readPublicBatch === 'function'
     ? await replies.readPublicBatch(parentIds, session.principal ?? undefined, session.options.actingSubject)
@@ -708,6 +709,11 @@ export async function readProfileContributions(session: WorkReadSession, author:
   const last = page.at(-1);
   const next = nodes.length > PROFILE_CONTRIBUTION_COST.pageSize && last
     ? encodeReadCursor(binding, session.position, last.reply, last.createdAt.toISOString()) : null;
+  // Parent disclosure is an owner await too: a profile made private during
+  // that hydration must not return its contributions under the earlier check.
+  if (!(await session.deps.personPreferences?.profileVisible(author, session.principal))) {
+    throw new WorkReadMissing('Agent unavailable');
+  }
   return { profile: 'agent-realm-contributions-v1' as const, kind,
     ...pageResult(session, items, next) };
 }
