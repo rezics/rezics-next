@@ -18,6 +18,10 @@ Workers are Cursor only, at most 4 live. Cursor sessions drop their connection o
 - No command seals an idempotency key on a current-visibility outcome (G-1623): the audit table and a source-scan guard are in `services/main/tests/seal-on-visibility.test.ts`. Reference shape: visibility checked before the write answers 404 with nothing written; a target lost inside the write answers 503 unsealed. `TargetUnavailable` stays the hidden==absent 404.
 - Erasure of every revision kind, rights T1, conversions, discovery and meter work (see the git history).
 
+## Wave 1 (2026-10-11, analysis first)
+
+Live: G-1630 (Luna max, scan test and derived assembler set), G-1631 (Luna max, three 503-for-409), G-1632 (Sol, read-only: search cluster and idle timeouts), G-1637 (Sol, read-only: recipe refusal after earlier tests). Queued Sol read-only: G-1642 (local-consistency inventory with the size of converging before opening), G-1643 (provider identity in slices; G-1593 stays as input until it lands), G-1639 (graph, claim, model cluster), G-1640 (structure, discovery cluster), G-1641 (owner, relay, outbox cluster). Queued Luna: G-1638 (native tests to the image tier), G-1636 (migrate raw-update callers, after G-1630 and a Sol class table). Closed: G-1617, G-1330, G-1345 verified; G-1282, G-1300, G-1352, G-1379 cancelled; G-1397 and G-1290 were already verified. Width: 2 Sol and 3 Luna live. Three attempts, then stop and mail Program.
+
 ## Paused tasks
 
 No kernel worktree is dirty and no task is half-done. Next step for each, when quota returns:
