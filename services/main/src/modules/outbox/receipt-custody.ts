@@ -38,6 +38,12 @@ export interface PreparedCommand {
   routingEpoch: string; state: MetadataEditionState | MetadataEditionStateV2;
   receipt: Omit<CustodiedReceipt, 'sequence' | 'streamSequence'>;
 }
+export interface CustodyPayloadErasure {
+  revision: string;
+  payloadSha256: string;
+  erasureId: string;
+  erasureEpoch: string;
+}
 export interface CommittedCustodySource {
   prepared: PreparedCommand;
   terminal: CustodiedReceipt;
@@ -58,7 +64,8 @@ export interface HistoricalReceiptSource {
 export const CUSTODY_RECOVERY_COST = { commandBytes: 2_097_152, stateBytes: 65_536,
   shapeBytes: 4_194_304, selectedProfiles: 2 } as const;
 export interface CustodyRow {
-  receipt: string; requestDigest: string; payloadSha256: string; payload: Uint8Array;
+  receipt: string; requestDigest: string; payloadSha256: string; payload: Uint8Array | null;
+  payloadErasure?: Pick<CustodyPayloadErasure, 'erasureId' | 'erasureEpoch'> | null;
   revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
   reconciled: boolean; retired: boolean;
 }
@@ -69,6 +76,8 @@ export interface ReceiptCustodySession {
   prepare(row: CustodyRow): Promise<void>;
   reconcile(terminal: CustodiedReceipt, outbox: Record<string, unknown>): Promise<void>;
   retire(): Promise<void>;
+  /** Permanently clear only the exact payload bound to this receipt session. */
+  clearPayloadForErasure?(erasure: CustodyPayloadErasure): Promise<void>;
 }
 export interface ReceiptCustodyStore {
   receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null>;
@@ -76,6 +85,20 @@ export interface ReceiptCustodyStore {
    * Pass the caller's client when that caller already holds one from this database. */
   withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>,
     client?: PoolClient): Promise<T>;
+}
+
+export class ReceiptCustodyErasureConflict extends Error {
+  constructor() {
+    super('Receipt custody erasure identity differs');
+    this.name = 'ReceiptCustodyErasureConflict';
+  }
+}
+
+function custodyPayload(row: CustodyRow): Uint8Array {
+  if (row.payload === null || row.payloadErasure) {
+    throw new ObjectIntegrityError('Erased command custody cannot be used as a live command');
+  }
+  return row.payload;
 }
 
 const receiptSessions = new WeakMap<Pool, Pool>();
@@ -122,12 +145,13 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
     try {
       await held.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [`command-custody:${receipt}`]);
       locked = true;
-      const durable = async (write: () => Promise<void>) => {
+      const durable = async <T>(write: () => Promise<T>): Promise<T> => {
         await held.query('BEGIN');
         try {
           await held.query('SET LOCAL synchronous_commit = on');
-          await write();
+          const result = await write();
           await held.query('COMMIT');
+          return result;
         } catch (error) {
           try { await held.query('ROLLBACK'); } catch { /* Preserve the original failure. */ }
           throw error;
@@ -137,18 +161,29 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
         client: held,
         read: async () => {
           const row = (await held.query<{ receipt: string; request_digest: string; payload_sha256: string;
-            payload: Buffer; revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
+            payload: Buffer | null; payload_erasure_id: string | null; payload_erasure_epoch: string | null;
+            revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
             reconciled: boolean; retired: boolean }>(`SELECT receipt, request_digest, payload_sha256, payload,
-              revision, terminal, outbox, reconciled_at IS NOT NULL AS reconciled,
-              retired_at IS NOT NULL AS retired FROM access.command_custody WHERE receipt = $1`, [receipt])).rows[0];
-          return row ? { receipt: row.receipt, requestDigest: row.request_digest, payloadSha256: row.payload_sha256,
-            payload: row.payload, revision: row.revision, terminal: row.terminal, outbox: row.outbox,
-            reconciled: row.reconciled, retired: row.retired } : null;
+              payload_erasure_id, payload_erasure_epoch, revision, terminal, outbox,
+              reconciled_at IS NOT NULL AS reconciled, retired_at IS NOT NULL AS retired
+              FROM access.command_custody WHERE receipt = $1`, [receipt])).rows[0];
+          if (!row) return null;
+          if ((row.payload === null) !== (row.payload_erasure_id !== null)
+            || (row.payload_erasure_id === null) !== (row.payload_erasure_epoch === null)) {
+            throw new ObjectIntegrityError('Receipt custody payload erasure state is incomplete');
+          }
+          return { receipt: row.receipt, requestDigest: row.request_digest, payloadSha256: row.payload_sha256,
+            payload: row.payload, payloadErasure: row.payload_erasure_id === null ? null : {
+              erasureId: row.payload_erasure_id, erasureEpoch: row.payload_erasure_epoch! },
+            revision: row.revision, terminal: row.terminal, outbox: row.outbox,
+            reconciled: row.reconciled, retired: row.retired };
         },
         prepare: row => durable(async () => {
+          if (row.payload === null || row.payloadErasure) throw new ReceiptCustodyErasureConflict();
+          const payload = custodyPayload(row);
           await held.query(`INSERT INTO access.command_custody
             (receipt, request_digest, payload_sha256, payload, revision) VALUES ($1,$2,$3,$4,$5)`,
-          [receipt, row.requestDigest, row.payloadSha256, Buffer.from(row.payload), row.revision]);
+          [receipt, row.requestDigest, row.payloadSha256, Buffer.from(payload), row.revision]);
         }),
         reconcile: (terminal, outbox) => durable(async () => {
           const updated = await held.query(`UPDATE access.command_custody SET terminal = $2, outbox = $3,
@@ -159,9 +194,30 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
         }),
         retire: async () => {
           const updated = await held.query(`UPDATE access.command_custody SET retired_at = clock_timestamp()
-            WHERE receipt = $1 AND reconciled_at IS NOT NULL AND terminal IS NOT NULL AND outbox IS NOT NULL`, [receipt]);
+            WHERE receipt = $1 AND payload IS NOT NULL AND payload_erasure_id IS NULL
+              AND reconciled_at IS NOT NULL AND terminal IS NOT NULL AND outbox IS NOT NULL`, [receipt]);
           if (updated.rowCount !== 1) throw new Error('Receipt custody is not reconciled');
         },
+        clearPayloadForErasure: erasure => durable(async () => {
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(erasure.erasureId)
+            || !/^[1-9][0-9]*$/.test(erasure.erasureEpoch)
+            || !/^[0-9a-f]{64}$/.test(erasure.payloadSha256)) throw new ReceiptCustodyErasureConflict();
+          nativeIri(erasure.revision);
+          const updated = await held.query(`UPDATE access.command_custody SET payload = NULL,
+              payload_erasure_id = $4::uuid, payload_erasure_epoch = $5::bigint
+            WHERE receipt = $1 AND revision = $2 AND payload_sha256 = $3
+              AND payload IS NOT NULL AND payload_erasure_id IS NULL AND payload_erasure_epoch IS NULL`,
+          [receipt, erasure.revision, erasure.payloadSha256, erasure.erasureId, erasure.erasureEpoch]);
+          if (updated.rowCount === 1) return;
+          const existing = (await held.query<{ revision: string; payload_sha256: string; payload: Buffer | null;
+            payload_erasure_id: string | null; payload_erasure_epoch: string | null }>(`SELECT revision,
+              payload_sha256, payload, payload_erasure_id, payload_erasure_epoch
+              FROM access.command_custody WHERE receipt = $1`, [receipt])).rows[0];
+          if (existing?.revision === erasure.revision && existing.payload_sha256 === erasure.payloadSha256
+            && existing.payload === null && existing.payload_erasure_id === erasure.erasureId
+            && existing.payload_erasure_epoch === erasure.erasureEpoch) return;
+          throw new ReceiptCustodyErasureConflict();
+        }),
       });
     } finally {
       if (locked) {
@@ -221,17 +277,18 @@ function exactKeys(value: unknown, keys: readonly string[]): value is Record<str
     && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
 }
 function titleCustodyPayload(row: CustodyRow): PreparedTitleCandidate {
-  if (row.payload.byteLength > CUSTODY_RECOVERY_COST.stateBytes || sha256(row.payload) !== row.payloadSha256) {
+  const payload = custodyPayload(row);
+  if (payload.byteLength > CUSTODY_RECOVERY_COST.stateBytes || sha256(payload) !== row.payloadSha256) {
     throw new ObjectIntegrityError('Title custody bytes differ');
   }
   let value: unknown;
-  try { value = JSON.parse(Buffer.from(row.payload).toString('utf8')); }
+  try { value = JSON.parse(Buffer.from(payload).toString('utf8')); }
   catch { throw new ObjectIntegrityError('Title custody is not JSON'); }
   if (!exactKeys(value, ['format', 'frame']) || value.format !== 'rezics-human-title-candidate-custody-v1') {
     throw new ObjectIntegrityError('Title custody discriminant differs');
   }
   const frame = checkedTitleCandidateFrame(value.frame);
-  if (canonicalJson({ format: value.format, frame }) !== Buffer.from(row.payload).toString('utf8')
+  if (canonicalJson({ format: value.format, frame }) !== Buffer.from(payload).toString('utf8')
     || frame.receipt !== row.receipt || frame.digest !== row.requestDigest || frame.planned.revision !== row.revision
     || row.terminal !== null || row.outbox !== null || row.reconciled || row.retired) {
     throw new ObjectIntegrityError('Title custody binding differs');
@@ -276,9 +333,10 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   }
 
   private async exactTitleObject(row: CustodyRow): Promise<PreparedTitleCandidate> {
+    const payload = custodyPayload(row);
     const prepared = titleCustodyPayload(row), frame = prepared.frame;
     const bytes = await this.objects.get(row.payloadSha256, CUSTODY_RECOVERY_COST.stateBytes);
-    if (sha256(bytes) !== row.payloadSha256 || !Buffer.from(bytes).equals(Buffer.from(row.payload))) {
+    if (sha256(bytes) !== row.payloadSha256 || !Buffer.from(bytes).equals(Buffer.from(payload))) {
       throw new ObjectIntegrityError('Title custody immutable bytes differ');
     }
     const workProfile = 'https://rezics.com/definition/work-metadata-v1';
@@ -310,7 +368,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     const frameJson = canonicalTitleCandidateFrame(prepared.frame);
     const verified = freezeTitleValue({ frame: prepared.frame, frameJson,
       frameSha256: sha256(frameJson), custodySha256: row.payloadSha256 }) as VerifiedTitleCandidate;
-    verifiedTitleBindings.set(verified, { client: session.client, payload: Buffer.from(row.payload) });
+    verifiedTitleBindings.set(verified, { client: session.client, payload: Buffer.from(custodyPayload(row)) });
     try { return await operation(verified, session.client); }
     finally { verifiedTitleBindings.delete(verified); }
   }
@@ -349,8 +407,9 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   }
 
   private prepared(row: CustodyRow): PreparedCommand {
-    if (sha256(row.payload) !== row.payloadSha256) throw new ObjectIntegrityError('Prepared command digest differs');
-    const value = JSON.parse(Buffer.from(row.payload).toString('utf8')) as PreparedCommand;
+    const payload = custodyPayload(row);
+    if (sha256(payload) !== row.payloadSha256) throw new ObjectIntegrityError('Prepared command digest differs');
+    const value = JSON.parse(Buffer.from(payload).toString('utf8')) as PreparedCommand;
     if (value.format !== 'rezics-owner-command-v1' || value.envelope.receipt !== row.receipt
       || value.envelope.digest !== row.requestDigest || value.receipt.receipt !== row.receipt
       || value.receipt.requestDigest !== row.requestDigest || value.revision !== row.revision
@@ -362,9 +421,10 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   }
 
   private async exactObject(row: CustodyRow): Promise<PreparedCommand> {
+    const commandBytes = custodyPayload(row);
     const prepared = this.prepared(row);
     const bytes = await this.objects.get(row.payloadSha256);
-    if (sha256(bytes) !== row.payloadSha256 || !Buffer.from(bytes).equals(Buffer.from(row.payload))) {
+    if (sha256(bytes) !== row.payloadSha256 || !Buffer.from(bytes).equals(Buffer.from(commandBytes))) {
       throw new ObjectIntegrityError('Custodied command object differs');
     }
     // The command object also binds the exact component manifest and payload.
@@ -457,7 +517,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   private async reconcile(row: CustodyRow, session: ReceiptCustodySession): Promise<CustodiedReceipt | null> {
     // Private acceptance custody has no terminal/outbox proof to reconcile. Cancellation still holds this lock.
-    if (JSON.parse(Buffer.from(row.payload).toString('utf8')).format === 'rezics-human-title-candidate-custody-v1') {
+    if (JSON.parse(Buffer.from(custodyPayload(row)).toString('utf8')).format === 'rezics-human-title-candidate-custody-v1') {
       titleCustodyPayload(row);
       return null;
     }
@@ -498,7 +558,8 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     const { dataEpoch, streamSequence } = position;
     if (!dataEpoch || !/^[1-9][0-9]{0,99}$/.test(streamSequence)) throw new ObjectIntegrityError('Invalid historical custody position');
     const rows = (await accessClient.query<{ receipt: string; request_digest: string; payload_sha256: string;
-      payload: Buffer; revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
+      payload: Buffer | null;
+      revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
       reconciled: boolean; retired: boolean; data_epoch: string; stream_sequence: string }>(
       `SELECT receipt,request_digest,payload_sha256,payload,revision,terminal,outbox,
         reconciled_at IS NOT NULL AS reconciled,retired_at IS NOT NULL AS retired,
@@ -521,8 +582,9 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   private async verifyCommitted(row: CustodyRow): Promise<CommittedCustodySource> {
     nativeIri(row.receipt);
+    const payload = custodyPayload(row);
     if (!row.reconciled || !row.terminal || !row.outbox
-      || row.payload.byteLength > CUSTODY_RECOVERY_COST.commandBytes) {
+      || payload.byteLength > CUSTODY_RECOVERY_COST.commandBytes) {
       throw new ObjectIntegrityError('Retained command is not bounded committed custody');
     }
     const terminal = this.committedTerminal(row);
@@ -663,7 +725,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
           outbox: null, reconciled: false, retired: false };
         await session.prepare(row);
       }
-      const digest = await this.objects.put(row.payload);
+      const digest = await this.objects.put(custodyPayload(row));
       if (digest !== row.payloadSha256) throw new ObjectIntegrityError('Command storage returned a different digest');
       const prepared = await this.exactObject(row);
       const envelope: SlimEnvelope = { ...prepared.envelope, slim: {

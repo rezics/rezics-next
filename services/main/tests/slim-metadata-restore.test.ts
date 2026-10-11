@@ -54,6 +54,12 @@ class MemoryCustody implements ReceiptCustodyStore {
   }
 }
 
+function retainedPayload(row: CustodyRow | null): Uint8Array {
+  const payload = row?.payload;
+  if (!payload) throw new Error('Fixture requires retained command bytes');
+  return payload;
+}
+
 class RestoreNative extends FusekiClient {
   commands: CommandEnvelope[] = [];
   queries: string[] = [];
@@ -227,7 +233,7 @@ async function fixture(version: 1 | 2 = 1, status: 'active' | 'withdrawn' = 'act
     fence: (open: boolean | null) => { fenceRows = open === null ? [] : [{ open }]; },
     admissions: (values: typeof admission[]) => { admissions = values; },
     replaceCommand: async (change: (value: PreparedCommand) => void) => {
-      const value = JSON.parse(Buffer.from(store.row!.payload).toString('utf8')) as PreparedCommand;
+      const value = JSON.parse(Buffer.from(retainedPayload(store.row)).toString('utf8')) as PreparedCommand;
       change(value); const payload = Buffer.from(JSON.stringify(value)), payloadSha256 = await objects.put(payload);
       store.row = { ...store.row!, payload, payloadSha256 };
     },
@@ -359,7 +365,7 @@ for (const tag of ['en_US', 'zh--Hans', 'sr-Latn-']) {
       state: state => ({ ...state as MetadataEditionStateV2, contentLanguages: [tag] }) });
     try {
       const original = JSON.stringify(f.store.row), puts = f.objects.puts;
-      expect(hash(f.store.row!.payload)).toBe(f.payloadSha256);
+      expect(hash(retainedPayload(f.store.row))).toBe(f.payloadSha256);
       expect(hash(await f.objects.get(f.payloadSha256))).toBe(f.payloadSha256);
       await expect(f.custody.readCommitted(f.receipt)).rejects.toThrow();
       await expect(f.reconcile()).rejects.toThrow();
