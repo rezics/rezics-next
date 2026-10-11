@@ -244,23 +244,37 @@ export async function seedHome(home: HomeStack, works = 6) {
   for (const [scope, action] of [[`review:decide:${realm.realm}`, 'review.decide'],
     [`reply:place:${realm.realm}`, 'reply.place']] as const) await grant(scope, action);
   const reply = async (body: string, parent?: { reply: string; revisionId: string }) => {
+    const command = async <T>(stage: string, run: () => Promise<T>): Promise<T> => {
+      if (!body.startsWith('g1042:')) return run();
+      const started = performance.now();
+      const slow = setTimeout(() => console.log(JSON.stringify({
+        realmRankingFollowupCommandSlow: stage, body,
+        elapsedMs: Math.round(performance.now() - started),
+      })), 30_000);
+      try {
+        const result = await run();
+        console.log(JSON.stringify({ realmRankingFollowupCommandMs: Math.round(performance.now() - started),
+          stage, body }));
+        return result;
+      } finally { clearTimeout(slow); }
+    };
     const id = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = await json<{ revisionId: string; revisionDigest: string }>(await call('POST', '/v1/member-reply-drafts', {
+    const draft = await command('draft', async () => json<{ revisionId: string; revisionDigest: string }>(await call('POST', '/v1/member-reply-drafts', {
       profile: 'member-reply-draft-v1', reply: id, variantId, rootTarget: first.work, rootRevision,
-      language: 'en', direction: 'ltr', expectedHead: null, body, actingSubject: reader }, b.token), 201);
-    await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply: id, variantId,
+      language: 'en', direction: 'ltr', expectedHead: null, body, actingSubject: reader }, b.token), 201));
+    await command('identity', async () => json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply: id, variantId,
       revisionId: draft.revisionId, author: reader, rootTarget: first.work, rootRevision,
-      parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null }, b.token), 201);
+      parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null }, b.token), 201));
     const revisionDigest = draft.revisionDigest;
     const identity = { reply: id, revisionId: draft.revisionId, revisionDigest };
-    const approved = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', {
+    const approved = await command('review', async () => json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', {
       profile: 'realm-reply-review-v1', realm: realm.realm, ...identity, expectedGeneration: '0', supersedes: null,
       outcome: 'approved', method: 'human', methodRevision: 'home-budget-v1',
       dependencyDigest: createHash('sha256').update(first.work).digest('hex'), reasonReference: null,
-      actingSubject: author }, a.token), 201);
-    await json(await call('POST', '/v1/realm-reply-placements', { profile: 'realm-reply-placement-v1',
+      actingSubject: author }, a.token), 201));
+    await command('placement', async () => json(await call('POST', '/v1/realm-reply-placements', { profile: 'realm-reply-placement-v1',
       realm: realm.realm, ...identity, reviewDecisionId: approved.decisionId, expectedHead: null,
-      actingSubject: author }, a.token), 201);
+      actingSubject: author }, a.token), 201));
     return identity;
   };
   const discussion = await reply('A reviewed Home discussion');
