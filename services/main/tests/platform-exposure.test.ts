@@ -226,7 +226,11 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('postV1RecipesByIdFile-imports');
   expect(matrix.find(entry => entry.path === '/v1/recipes/{id}/file-imports' && entry.method === 'post'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true });
-  expect(publicOperations).toHaveLength(528);
+  // Structured Work publication requires Account work:edit and Access work:publish:<work> authority.
+  expect(publicOperations).toContain('postV1Work-publications');
+  expect(matrix.find(entry => entry.path === '/v1/work-publications' && entry.method === 'post'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
+  expect(publicOperations).toHaveLength(529);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
