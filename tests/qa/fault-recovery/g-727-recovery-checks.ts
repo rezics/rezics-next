@@ -53,6 +53,44 @@ export interface RetainedRecoveryChecks {
   erasures: Pick<NonNullable<RestoreResources['erasures']>, 'authority' | 'signingKey'>;
 }
 
+export interface RecoveryServingApp {
+  handle(request: Request): Promise<Response>;
+}
+
+export function assertRecoveryServingTarget(
+  context: RestoredContext,
+  reconciledTarget: RestoredContext | undefined,
+): void {
+  if (!reconciledTarget)
+    throw new Error('Owner reconciliation did not establish the restored target');
+  if (context !== reconciledTarget)
+    throw new Error('Serving verification received a different restored target');
+}
+
+/** Readiness and an ordinary public Work read must come from the same restored
+ * target that completed owner reconciliation. */
+export async function verifyRecoveryServing(
+  context: RestoredContext,
+  reconciledTarget: RestoredContext | undefined,
+  probes: Pick<Awaited<ReturnType<typeof captureRecoveryProbes>>, 'sample'>,
+  app: RecoveryServingApp,
+): Promise<void> {
+  assertRecoveryServingTarget(context, reconciledTarget);
+
+  const ready = await app.handle(new Request('http://localhost/health/ready'));
+  if (ready.status !== 200)
+    throw new Error(`Restored target readiness returned ${ready.status}`);
+
+  const id = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(probes.sample.work)?.[1];
+  if (!id) throw new Error('Recovery Work probe has an invalid target identity');
+  const response = await app.handle(new Request(`http://localhost/v1/works/${id}`));
+  if (response.status !== 200)
+    throw new Error(`Restored target Work read returned ${response.status}`);
+  const result = (await response.json()) as { id?: unknown };
+  if (result.id !== probes.sample.work)
+    throw new Error('Restored target Work read returned a different Work');
+}
+
 /** The signed owner capture the backup retained. Its head digest lives in the
  * source relay, which the release compares before any hold opens. */
 export async function retainedRecoveryAuthority(
@@ -265,7 +303,7 @@ export function recoveryChecks(
     );
   }
   let verifiedBeforeRelease = false;
-  let targetApp: ReturnType<typeof createMainApp> | undefined;
+  let reconciledTarget: RestoredContext | undefined;
   return {
     verify: async (context) => {
       expect(
@@ -373,7 +411,6 @@ export function recoveryChecks(
         content: new ContentCore(context.pools.content),
         ownerOperations: operations,
       });
-      targetApp = app;
       expect((await app.handle(new Request('http://localhost/health/ready'))).status).toBe(503);
       const request = (authorization: string) =>
         new Request('http://localhost/v1/owners/reconciliations', {
@@ -406,13 +443,31 @@ export function recoveryChecks(
           { mode: 0o600 },
         );
       if (reason) throw new Error(`Owner reconciliation remained held: ${reason}`);
+      reconciledTarget = context;
       return response;
     },
-    verifyServing: async () => {
-      if (!targetApp) throw new Error('Owner reconciliation did not establish the restored target');
-      const response = await targetApp.handle(new Request('http://localhost/health/ready'));
-      if (response.status !== 200)
-        throw new Error(`Restored target readiness returned ${response.status}`);
+    verifyServing: async (context) => {
+      assertRecoveryServingTarget(context, reconciledTarget);
+      const app = createMainApp(context.fuseki, {
+        environment: {
+          fuseki: context.fuseki,
+          lineage: {
+            dataEpoch: context.apps.MAIN_DATA_EPOCH!,
+            routingEpoch: context.apps.MAIN_ROUTING_EPOCH!,
+          },
+          objectDirectory: context.apps.MAIN_OBJECT_DIRECTORY!,
+        },
+        account: {
+          verify: async (request) => {
+            if (request.headers.get('authorization') !== 'Bearer qa-owner')
+              throw new AccountAssertionDenied('denied');
+            return probes.operator;
+          },
+        },
+        access: new AccessAdmissionRegistry(context.pools.access),
+        content: new ContentCore(context.pools.content),
+      });
+      await verifyRecoveryServing(context, reconciledTarget, probes, app);
     },
   };
 }

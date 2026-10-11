@@ -206,6 +206,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       environment: offhost,
     });
     expect(restored.state).toBe('verified');
+    expect(restored.servingVerified).toBe(true);
     expect(restored.elapsedMs).toBeLessThanOrEqual(600_000);
     writeFileSync(
       join(Bun.env.REZICS_QA_ARTIFACT_DIR!, 'g-727-launch-restore.json'),

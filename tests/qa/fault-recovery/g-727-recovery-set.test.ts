@@ -280,6 +280,7 @@ process.exit(result.exitCode);
       checks,
     });
     expect(restored.state).toBe('verified');
+    expect(restored.servingVerified).toBe(true);
     expect(restored.elapsedMs).toBeLessThanOrEqual(600_000);
     const targetApps = readEnv(
       join(
