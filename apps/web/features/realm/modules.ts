@@ -135,19 +135,28 @@ export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): Zone
   };
 }
 
-/** A feed's Works, each with the Decision behind it. */
-async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded<ZoneWork[]>> {
+type HomeWindow<T> = Loaded<T[]> & { nextCursor?: string | null };
+
+/** A bounded module may stop at its display limit, never at an unfinished shorter page. */
+function underfilled(read: { nextCursor?: string | null }, count: number, limit: number) {
+  return Boolean(read.nextCursor) && count < limit;
+}
+
+/** A feed's Works, each with the Decision behind it and its continuation. */
+export async function loadFeedWorks(feed: RealmFeed, context: AdaptContext,
+  read = { adoptions: readNewAdoptions, completed: readRecentlyCompleted, chapters: readLatestChapters, cards: realmCards },
+): Promise<HomeWindow<ZoneWork>> {
   const { realm, locale } = context;
   if (feed === 'new-adoptions') {
-    const page = await readNewAdoptions(realm, locale);
+    const page = await read.adoptions(realm, locale);
     return page.ok
-      ? { ok: true, data: page.data.items.map((item) => zoneWork(item, context, item.evidence)) }
+      ? { ok: true, data: page.data.items.map((item) => zoneWork(item, context, item.evidence)), nextCursor: page.data.nextCursor }
       : page;
   }
   if (feed === 'recently-completed') {
     const [page, cards] = await Promise.all([
-      readRecentlyCompleted(realm, locale),
-      realmCards(context),
+      read.completed(realm, locale),
+      read.cards(context),
     ]);
     return page.ok
       ? {
@@ -155,19 +164,21 @@ async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded
           data: page.data.items.map((item) =>
             withRealmCard(zoneWork(item, context, null), cards.get(item.id)),
           ),
+          nextCursor: page.data.nextCursor,
         }
       : page;
   }
   if (feed === 'latest-chapters') {
     const [page, cards] = await Promise.all([
-      readLatestChapters(realm, locale),
-      realmCards(context),
+      read.chapters(realm, locale),
+      read.cards(context),
     ]);
     if (!page.ok) return page;
     // One card per Work: the newest chapter stands for its Work.
     const seen = new Set<string>();
     return {
       ok: true,
+      nextCursor: page.data.nextCursor,
       data: page.data.items
         .filter((item) => !seen.has(item.work.id) && seen.add(item.work.id))
         .map((item) => ({
@@ -186,9 +197,10 @@ async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded
 export const showcaseContext = (context: AdaptContext) =>
   context.realm.startsWith('https://rezics.com/id/') ? context.realm : 'https://rezics.com/id/' + context.realm;
 
-async function hero(
+export async function loadHeroModule(
   module: PresentationModule, presentation: ZonePresentation, context: AdaptContext,
   slideMedia: ZonePresentationRead['slideMedia'],
+  read = loadFeedWorks,
 ): Promise<ModuleState<'hero-carousel'>> {
   const scheduled = liveSlides(presentation.slides, Date.now()).slice(0, 5);
   if (scheduled.length) {
@@ -214,10 +226,12 @@ async function hero(
   // Without a scheduled campaign the newest picks still have their own art and trailer.
   const feed = feedOf(module.source) ?? 'new-adoptions';
   if (feed === 'recent-decisions') return unsupported;
-  const works = await feedWorks(feed, context);
+  const works = await read(feed, context);
   if (!works.ok) return failed;
+  const limit = Math.min(5, module.options?.limit ?? 5);
   const picks = [...works.data].sort((a, b) => Number(Boolean(b.cover)) - Number(Boolean(a.cover)))
-    .slice(0, Math.min(5, module.options?.limit ?? 5));
+    .slice(0, limit);
+  if (underfilled(works, picks.length, limit)) return failed;
   return picks.length ? { state: 'ready', data: { slides: picks.map(work => ({ id: work.id,
     title: work.title ?? zoneContentText(''), href: work.href, tagline: work.tagline, work })) } } : empty;
 }
@@ -249,10 +263,10 @@ export async function enrichShowcaseModules(modules: PlacedModule[], context: Ad
 async function shelfWorks(
   source: ModuleSource,
   context: AdaptContext,
-): Promise<Loaded<ZoneWork[]>> {
+): Promise<HomeWindow<ZoneWork>> {
   if (source.kind !== 'collection') {
     const feed = feedOf(source);
-    return feed ? feedWorks(feed, context) : { ok: false, failure: 'invalid' };
+    return feed ? loadFeedWorks(feed, context) : { ok: false, failure: 'invalid' };
   }
   const mount = context.mounts?.get(source.collection);
   if (!context.zone || !mount) return { ok: false, failure: 'missing' };
@@ -269,9 +283,10 @@ async function shelfWorks(
   };
 }
 
-async function shelf(
+export async function loadShelfModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = shelfWorks,
 ): Promise<ModuleState<'shelf'>> {
   const sources = module.tabs ?? [{ id: module.id, label: module.title, source: module.source }];
   const supported = sources.filter((tab) => {
@@ -280,15 +295,17 @@ async function shelf(
   });
   if (!supported.length) return unsupported;
   const loaded = await Promise.all(
-    supported.map(async (tab) => ({ tab, works: await shelfWorks(tab.source, context) })),
+    supported.map(async (tab) => ({ tab, works: await read(tab.source, context) })),
   );
+  const limit = module.options?.limit ?? 14;
+  if (loaded.some(({ works }) => !works.ok || underfilled(works, works.data.length, limit))) return failed;
   const tabs: ZoneShelfTab[] = loaded.flatMap(({ tab, works }) =>
     works.ok && works.data.length
-      ? [{ id: tab.id, label: tab.label, items: works.data.slice(0, module.options?.limit ?? 14) }]
+      ? [{ id: tab.id, label: tab.label, items: works.data.slice(0, limit) }]
       : [],
   );
   if (tabs.length) return { state: 'ready', data: { tabs } };
-  return loaded.some(({ works }) => !works.ok) ? failed : empty;
+  return empty;
 }
 
 /**
@@ -302,16 +319,17 @@ export function chartMetric(metric: ChartMetric = 'reads'): ChartMetric & Rankin
 
 const intervals = ['day', 'week', 'month'] as const;
 
-async function rankings(
+export async function loadRankingsModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = { cards: realmCards, rankings: readRankings },
 ): Promise<ModuleState<'ranking'>> {
   const metric = chartMetric(module.options?.metric);
   const [cards, ...pages] = await Promise.all([
-    realmCards(context),
-    ...intervals.map((interval) => readRankings(context.realm, context.locale, interval, metric)),
+    read.cards(context),
+    ...intervals.map((interval) => read.rankings(context.realm, context.locale, interval, metric)),
   ]);
-  if (pages.every((page) => !page.ok)) return failed;
+  if (pages.some((page) => !page.ok || underfilled(page.data, page.data.items.length, 10))) return failed;
   const tabs = intervals.flatMap((interval, index) => {
     const page = pages[index]!;
     return page.ok && page.data.items.length
@@ -329,17 +347,20 @@ async function rankings(
   return tabs.length ? { state: 'ready', data: { metric, tabs } } : empty;
 }
 
-async function rising(
+export async function loadRisingModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = { rising: readRising, cards: realmCards },
 ): Promise<ModuleState<'rising'>> {
   const [page, cards] = await Promise.all([
-    readRising(context.realm, context.locale),
-    realmCards(context),
+    read.rising(context.realm, context.locale),
+    read.cards(context),
   ]);
   if (!page.ok) return failed;
+  const limit = module.options?.limit ?? 6;
+  if (underfilled(page.data, page.data.items.length, limit)) return failed;
   const items = page.data.items
-    .slice(0, module.options?.limit ?? 6)
+    .slice(0, limit)
     .map((item) => withRealmCard(zoneWork(item, context, null), cards.get(item.id)));
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
@@ -348,65 +369,74 @@ async function rising(
 async function creditedWorks(
   feed: RealmFeed,
   context: AdaptContext,
-): Promise<Loaded<{ title: MainName; primaryCredits: readonly ModuleCredit[] }[]>> {
+): Promise<HomeWindow<{ title: MainName; primaryCredits: readonly ModuleCredit[] }>> {
   const { realm, locale } = context;
   if (feed === 'new-adoptions' || feed === 'recently-completed') {
     const page = await (feed === 'new-adoptions' ? readNewAdoptions : readRecentlyCompleted)(
       realm,
       locale,
     );
-    return page.ok ? { ok: true, data: page.data.items } : page;
+    return page.ok ? { ok: true, data: page.data.items, nextCursor: page.data.nextCursor } : page;
   }
   if (feed === 'latest-chapters') {
     const page = await readLatestChapters(realm, locale);
-    return page.ok ? { ok: true, data: page.data.items.map((item) => item.work) } : page;
+    return page.ok ? { ok: true, data: page.data.items.map((item) => item.work), nextCursor: page.data.nextCursor } : page;
   }
   return { ok: false, failure: 'invalid' };
 }
 
 /** People to follow: the authors of the Works a feed brings to this Realm (Books' "Authors to follow"). */
-async function people(
+export async function loadPeopleModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = creditedWorks,
 ): Promise<ModuleState<'people'>> {
   const feed = feedOf(module.source);
   if (!feed || feed === 'recent-decisions') return unsupported;
-  const works = await creditedWorks(feed, context);
+  const works = await read(feed, context);
   if (!works.ok) return failed;
-  const items = zonePeople(works.data, module.options?.limit ?? 6);
+  const limit = module.options?.limit ?? 6;
+  const items = zonePeople(works.data, limit);
+  if (underfilled(works, items.length, limit)) return failed;
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
 
-async function decisions(
+export async function loadDecisionModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = { decisions: readRecentDecisions, works: readRealmWorks },
 ): Promise<ModuleState<'decision-log'>> {
   const [page, works] = await Promise.all([
-    readRecentDecisions(context.realm),
-    readRealmWorks(context.realm, context.locale),
+    read.decisions(context.realm),
+    read.works(context.realm, context.locale),
   ]);
   if (!page.ok) return failed;
+  const limit = module.options?.limit ?? 6;
+  if (underfilled(page.data, page.data.items.length, limit)) return failed;
   const titled = new Map(
     (works.ok ? works.data.items : []).map((item) => [item.id, zoneWork(item, context, null)]),
   );
   const items = page.data.items
-    .slice(0, module.options?.limit ?? 6)
+    .slice(0, limit)
     .map((item) => zoneDecision(item, context, titled));
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
 
-async function quotes(
+export async function loadQuoteModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = { quotes: readZoneQuotes, cards: realmCards },
 ): Promise<ModuleState<'quote-stream'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'reader-quotes')
     return unsupported;
   const [page, cards] = await Promise.all([
-    readZoneQuotes(context.realm, context.locale),
-    realmCards(context),
+    read.quotes(context.realm, context.locale),
+    read.cards(context),
   ]);
   if (!page.ok) return failed;
-  const items = page.data.items.slice(0, module.options?.limit ?? 6).map((item) => ({
+  const limit = module.options?.limit ?? 6;
+  if (underfilled(page.data, page.data.items.length, limit)) return failed;
+  const items = page.data.items.slice(0, limit).map((item) => ({
     id: item.id,
     body: zoneContentText(item.excerpt),
     reader: item.authorName,
@@ -416,18 +446,21 @@ async function quotes(
   return items.length ? { state: 'ready', data: { quotes: items } } : empty;
 }
 
-async function discussions(
+export async function loadDiscussionModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = { discussions: readZoneDiscussions, cards: realmCards },
 ): Promise<ModuleState<'discussion-list'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'discussions')
     return unsupported;
   const [page, cards] = await Promise.all([
-    readZoneDiscussions(context.realm, context.locale),
-    realmCards(context),
+    read.discussions(context.realm, context.locale),
+    read.cards(context),
   ]);
   if (!page.ok) return failed;
-  const items = page.data.items.slice(0, module.options?.limit ?? 8).map((item) => ({
+  const limit = module.options?.limit ?? 8;
+  if (underfilled(page.data, page.data.items.length, limit)) return failed;
+  const items = page.data.items.slice(0, limit).map((item) => ({
     id: item.id,
     title: zoneContentText(item.excerpt),
     href: replyHref(context, item.work),
@@ -470,15 +503,18 @@ async function editorLists(
   return lists.length ? { state: 'ready', data: { lists } } : empty;
 }
 
-async function genres(
+export async function loadGenreModule(
   module: PresentationModule,
   context: AdaptContext,
+  readPage = readZoneGenres,
 ): Promise<ModuleState<'chip-nav'>> {
   if (module.source.kind !== 'context') return unsupported;
   const contextId = idOf(module.source.context);
   if (!contextId) return unsupported;
-  const read = await readZoneGenres(context.realm, contextId, context.locale);
+  const read = await readPage(context.realm, contextId, context.locale);
   if (!read.ok) return failed;
+  const limit = module.options?.limit ?? 12;
+  if (underfilled(read.data, read.data.items.length, limit)) return failed;
   // Each chip opens the Zone's own browse page filtered by its Concept (the `concept` Facet).
   const chips = read.data.items
     .map((item) => ({
@@ -486,7 +522,7 @@ async function genres(
       label: zoneText(item.name),
       href: chipHref(realmHref(context.locale, context.ref, 'browse'), 'concept', item.concept),
     }))
-    .slice(0, module.options?.limit ?? 12);
+    .slice(0, limit);
   return chips.length ? { state: 'ready', data: { chips } } : empty;
 }
 
@@ -498,25 +534,25 @@ async function load(
 ): Promise<ModuleState> {
   switch (module.type) {
     case 'hero-carousel':
-      return hero(module, presentation, context, slideMedia);
+      return loadHeroModule(module, presentation, context, slideMedia);
     case 'shelf':
-      return shelf(module, context);
+      return loadShelfModule(module, context);
     case 'decision-log':
-      return decisions(module, context);
+      return loadDecisionModule(module, context);
     case 'quote-stream':
-      return quotes(module, context);
+      return loadQuoteModule(module, context);
     case 'discussion-list':
-      return discussions(module, context);
+      return loadDiscussionModule(module, context);
     case 'editorial-list':
       return editorLists(module, context);
     case 'chip-nav':
-      return genres(module, context);
+      return loadGenreModule(module, context);
     case 'ranking':
-      return rankings(module, context);
+      return loadRankingsModule(module, context);
     case 'rising':
-      return rising(module, context);
+      return loadRisingModule(module, context);
     case 'people':
-      return people(module, context);
+      return loadPeopleModule(module, context);
     case 'announcement':
       return {
         state: 'ready',

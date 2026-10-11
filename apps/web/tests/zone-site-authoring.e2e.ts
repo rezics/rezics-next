@@ -67,23 +67,24 @@ async function writeHome(page: Page, text: string) {
   await expect(editor).toContainText(text);
 }
 
-async function shoot(page: Page, name: string, info: TestInfo) {
+async function shoot(page: Page, name: string, info: TestInfo, focus: 'writing' | 'review' = 'writing') {
   for (const [label, viewport] of [['1280', desktop], ['390', phone]] as const) {
     await page.setViewportSize(viewport);
     await page.evaluate(() => window.scrollTo(0, 0));
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name} at ${label}px`).toBe(true);
     // The shell's search field is also a textbox. The writing area is the one in the page.
-    const writing = await page.evaluate(() => {
+    const focusedArea = await page.evaluate(focus => {
       const main = document.getElementById('main-content') ?? document.body;
       const boxes = [...main.querySelectorAll<HTMLElement>('[role="textbox"], textarea, input:not([type="hidden"])')];
       const home = boxes.find(element => element.getAttribute('aria-label') === 'Home page');
-      const box = home ?? boxes[0];
+      const box = focus === 'review' ? document.getElementById('zone-publish-review-title') : home ?? boxes[0];
+      if (focus === 'review' && !box) return false;
       if (!box) return true;
       const top = box.getBoundingClientRect().top;
       return top >= 0 && top < innerHeight;
-    });
-    expect(writing, `${name} writing area at ${label}px`).toBe(true);
+    }, focus);
+    expect(focusedArea, `${name} ${focus} area at ${label}px`).toBe(true);
     const path = info.outputPath(`${name}-${label}.png`);
     await page.screenshot({ path, fullPage: true });
     console.log(`[zone-site-authoring] ${label}px ${name}: ${path}`);
@@ -581,7 +582,7 @@ test('Zone publication: a new Zone reviews Main’s default presentation after a
   await expect(page.getByText('Shelf density: Comfortable · fewer items per row')).toBeVisible();
   await expect(page.getByText('Page surface: On the page')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Publish this selection' })).toBeEnabled();
-  await shoot(page, 'zone-default-presentation-stale-review', info);
+  await shoot(page, 'zone-default-presentation-stale-review', info, 'review');
   await page.getByRole('button', { name: 'Publish this selection' }).click();
   await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 30_000 });
   expect((await zoneConfiguration(page, site.zoneId, actor.actingSubject)).configuration.presentation).toBeUndefined();
