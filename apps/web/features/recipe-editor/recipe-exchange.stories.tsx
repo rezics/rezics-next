@@ -6,6 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { actingSubject, id, structure } from './fixtures.ts';
 import { RecipeExportError, type RecipeExport, type RecipeExportApi, type RecipeExportRequest } from './export-api.ts';
 import { copyOf, messages } from './messages.ts';
+import { recipeEditHref } from './route.ts';
 import { RecipeExchange } from './recipe-exchange.tsx';
 
 const revision = id(900);
@@ -26,7 +27,7 @@ function Page({ outcome, locale = 'en' }: { outcome: 'success' | 'too-large' | '
   return <div className="mx-auto grid max-w-[72rem] gap-6 px-4 py-6 sm:px-8">
     <header className="sticky top-0 z-20 -mx-4 grid gap-2 border-border/60 border-b bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-b-2xl sm:px-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <a href={localizedPath('/w/recipe/edit/recipe', locale)} className="text-sm">Back to the recipe</a>
+        <a href={localizedPath(recipeEditHref(structure), locale)} className="text-sm">Back to the recipe</a>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <RecipeExchange structure={structure} revision={revision} actingSubject={actingSubject} locale={locale}
             messages={messages[locale]} api={api} save={save} />
@@ -43,7 +44,7 @@ function Page({ outcome, locale = 'en' }: { outcome: 'success' | 'too-large' | '
 }
 
 const meta = { title: 'Recipe editor/Exchange', component: Page, args: { outcome: 'success' },
-  parameters: { route: { pathname: localizedPath('/w/recipe/edit/recipe', 'en') } } } satisfies Meta<typeof Page>;
+  parameters: { route: { pathname: localizedPath(recipeEditHref(structure), 'en') } } } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
