@@ -433,13 +433,13 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect((await json<WorkPage>(await call('GET', workPath))).cover.selection).toBe(editorUse.selection);
 
       const sameRecord = await importDataset(root, snapshot, importOptions);
-      expect(sameRecord.limitations.some(item => item.startsWith(`${record.key}: cover pending (`))).toBe(true);
+      expect(sameRecord.limitations.some(item => item.startsWith(`${record.key}: cover pending `))).toBe(true);
       expect((await json<WorkPage>(await call('GET', workPath))).title).toEqual(before.title);
 
       const sameBytesAnotherRecord = await frozenCover(root, bytes, `Second record ${randomUUID().replaceAll('-', '')}`);
       const otherRecord = sameBytesAnotherRecord.sources[0]!.records[0]!;
       const refusedOtherRecord = await importDataset(root, sameBytesAnotherRecord, importOptions);
-      expect(refusedOtherRecord.limitations.find(item => item.startsWith(`${otherRecord.key}: cover pending (`)))
+      expect(refusedOtherRecord.limitations.find(item => item.startsWith(`${otherRecord.key}: cover pending `)))
         .toBeDefined();
 
       // The subsequent stages exercise the same owner paths after the digest fence is admitted.
