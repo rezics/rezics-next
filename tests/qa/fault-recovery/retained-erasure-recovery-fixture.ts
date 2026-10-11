@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { isDeepStrictEqual } from 'node:util';
@@ -50,7 +50,42 @@ type RestoredOwnerPools = SourceOwners & { port: number };
 type RecoveryCandidate = RestoredOwnerPools & {
   graph: { url: string; fuseki: FusekiClient; lineage: { dataEpoch: string; routingEpoch: string } };
   objects: ObjectRecoveryStore;
+  dispose: () => Promise<void>;
 };
+
+export interface RetainedErasureCleanupAction {
+  resource: string;
+  run: () => void | Promise<void>;
+}
+
+export function createRetainedErasureCandidateDisposal(
+  actions: readonly RetainedErasureCleanupAction[],
+): () => Promise<void> {
+  const completed = new Set<RetainedErasureCleanupAction>();
+  let active: Promise<void> | undefined;
+  return () => {
+    if (active) return active;
+    const run = async () => {
+      const pending = actions.filter(action => !completed.has(action));
+      const failures: Array<{ action: RetainedErasureCleanupAction; error: unknown }> = [];
+      for (const action of pending) {
+        try {
+          await action.run();
+          completed.add(action);
+        } catch (error) {
+          failures.push({ action, error });
+        }
+      }
+      if (failures.length) {
+        throw new AggregateError(failures.map(({ action, error }) =>
+          new Error(`${action.resource} cleanup failed`, { cause: error })),
+        'retained erasure candidate cleanup failed');
+      }
+    };
+    active = run().finally(() => { active = undefined; });
+    return active;
+  };
+}
 
 export interface RetainedErasureRecoveryFixtureOptions {
   runId: string;
@@ -79,6 +114,7 @@ export interface RetainedErasureRecoveryCut {
     restored: RestoredOwnerPools;
     candidateGraph: RecoveryCandidate['graph'];
     candidateObjects: ObjectRecoveryStore;
+    dispose: () => Promise<void>;
   }>;
 }
 
@@ -155,6 +191,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
   const clusters: PostgresCluster[] = [];
   const containers: StandaloneFuseki[] = [];
   const volumes: string[] = [];
+  const candidateDirectories = new Set<string>();
   let disposed = false;
   const assertPreparationBudget = () => {
     expect(Date.now() - preparationStarted).toBeLessThan(600_000);
@@ -169,10 +206,53 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     }
     return result.stdout.trim();
   };
+  const removePool = async (pool: Pool): Promise<void> => {
+    if (!pools.has(pool)) return;
+    await pool.end();
+    pools.delete(pool);
+  };
+  const removeCluster = (cluster: PostgresCluster): void => {
+    if (!clusters.includes(cluster)) return;
+    cluster.remove();
+    const index = clusters.indexOf(cluster);
+    if (index >= 0) clusters.splice(index, 1);
+  };
+  const removeContainer = (container: StandaloneFuseki): void => {
+    if (!containers.includes(container)) return;
+    container.remove();
+    const index = containers.indexOf(container);
+    if (index >= 0) containers.splice(index, 1);
+  };
+  const removeVolume = (name: string): void => {
+    if (!volumes.includes(name)) return;
+    let removeFailure: unknown;
+    try { docker(['volume', 'rm', '-f', name], 30_000); }
+    catch (error) { removeFailure = error; }
+    let remaining: string[];
+    try {
+      remaining = docker(['volume', 'ls', '--quiet', '--filter', `name=${name}`], 30_000)
+        .split(/\s+/).filter(value => value === name);
+    } catch (error) {
+      throw removeFailure ?? error;
+    }
+    if (remaining.length) throw removeFailure ?? new Error(`Docker volume ${name} remains after removal`);
+    const index = volumes.indexOf(name);
+    if (index >= 0) volumes.splice(index, 1);
+  };
+  const removeCandidateDirectory = (path: string): void => {
+    if (!candidateDirectories.has(path)) return;
+    if (clusters.some(cluster => cluster.directory === path
+      || cluster.dataDirectory === path || cluster.directory.startsWith(`${path}/`))) {
+      throw new Error(`candidate PostgreSQL at ${path} is not safe to remove while running`);
+    }
+    rmSync(path, { recursive: true, force: true });
+    if (existsSync(path)) throw new Error(`candidate directory ${path} remains after removal`);
+    candidateDirectories.delete(path);
+  };
   const volume = (label: string): string => {
     const name = `rezics-erasure-restore-${suffix}-${label}`;
-    docker(['volume', 'create', name], 30_000);
     volumes.push(name);
+    docker(['volume', 'create', name], 30_000);
     return name;
   };
   const copyGraph = (from: string, to: string): void => {
@@ -187,19 +267,30 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     if (disposed) throw new Error('retained erasure recovery fixture is disposed');
     const { name, ordinal, backupPostgres, backupObjects, nativeVolume, coverage, sourceCut,
       fenceGeneration, objectFiles } = cut;
+    const candidatePools = new Set<Pool>();
+    const candidateContainers = new Set<StandaloneFuseki>();
+    const candidateVolumes = new Set<string>();
+    const ownedDirectories = new Set<string>();
+    let candidateCluster: PostgresCluster | undefined;
+    let candidateVolume: string | undefined;
     const ownerCopy = await phase('candidate.postgres-restore-startup', async () => {
-      const postgresDirectory = join(options.state, `candidate-${name}-${ordinal}`, 'postgres');
-      mkdirSync(join(options.state, `candidate-${name}-${ordinal}`), { recursive: true, mode: 0o700 });
+      const candidateDirectory = join(options.state, `candidate-${name}-${ordinal}`);
+      const postgresDirectory = join(candidateDirectory, 'postgres');
+      candidateDirectories.add(candidateDirectory);
+      ownedDirectories.add(candidateDirectory);
+      mkdirSync(candidateDirectory, { recursive: true, mode: 0o700 });
       copyRecoveryTree(backupPostgres, postgresDirectory);
       appendFileSync(join(postgresDirectory, 'postgresql.auto.conf'),
         "\narchive_mode = off\nrestore_command = 'false'\n");
       writeFileSync(join(postgresDirectory, 'recovery.signal'), '');
       const cluster = await startPreparedPostgresCluster(postgresDirectory, { role: 'postgres' });
       clusters.push(cluster);
+      candidateCluster = cluster;
       const pool = (database: string) => {
         const value = new Pool({ host: '127.0.0.1', port: cluster.port, database, user: 'postgres',
           password: qa.composeEnv.POSTGRES_PASSWORD!, max: 4, connectionTimeoutMillis: 2_000 });
         pools.add(value);
+        candidatePools.add(value);
         return value;
       };
       const account = pool('account');
@@ -218,14 +309,15 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     const { cluster, account, access, content, relay } = ownerCopy;
 
     const graphCopy = await phase('candidate.native-graph-copy-cutover', async () => {
-      const candidateVolume = volume(`candidate-${name}-${ordinal}`);
+      candidateVolume = volume(`candidate-${name}-${ordinal}`);
+      candidateVolumes.add(candidateVolume);
       copyGraph(nativeVolume, candidateVolume);
       const graph = await standaloneFuseki(qa.dockerEnv, {
         name: `rezics-erasure-restore-${suffix}-${name}-${ordinal}`,
         image,
         volume: candidateVolume,
         secrets: fusekiSecrets(qa.composeEnv),
-      }, { onAllocated: value => containers.push(value) });
+      }, { onAllocated: value => { containers.push(value); candidateContainers.add(value); } });
       const fuseki = new FusekiClient(graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!,
         qa.composeEnv.FUSEKI_COMMAND_TOKEN!);
       const next = { dataEpoch: randomUUID(), routingEpoch:
@@ -250,6 +342,8 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
 
     const candidateObjects = await phase('candidate.object-copy-verification', async () => {
       const candidateObjectsDirectory = join(options.state, `objects-${name}-${ordinal}`);
+      candidateDirectories.add(candidateObjectsDirectory);
+      ownedDirectories.add(candidateObjectsDirectory);
       cpSync(backupObjects, candidateObjectsDirectory, { recursive: true });
       const candidateObjects = new DirectoryObjects(candidateObjectsDirectory);
       expect(retainedObjectFiles(candidateObjectsDirectory)).toEqual(objectFiles);
@@ -262,9 +356,30 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     expect(cluster.port).not.toBe(Number(qa.composeEnv.POSTGRES_PORT));
     expect(await relayCoverage(relay, coverage.relay.consumer)).toEqual(coverage.relay);
     assertPreparationBudget();
+    const disposeCandidate = createRetainedErasureCandidateDisposal([
+      ...[...candidatePools].map((pool, index) => ({
+        resource: `candidate ${name} PostgreSQL pool ${index + 1}`,
+        run: () => removePool(pool),
+      })),
+      ...(candidateContainers.size ? [...candidateContainers].map((container, index) => ({
+        resource: `candidate ${name} graph ${index + 1}`,
+        run: () => removeContainer(container),
+      })) : []),
+      ...(candidateCluster ? [{ resource: `candidate ${name} PostgreSQL`,
+        run: () => removeCluster(candidateCluster!) }] : []),
+      ...[...candidateVolumes].map((candidateVolumeName, index) => ({
+        resource: `candidate ${name} graph volume ${index + 1}`,
+        run: () => removeVolume(candidateVolumeName),
+      })),
+      ...[...ownedDirectories].map((directory, index) => ({
+        resource: `candidate ${name} directory ${index + 1}`,
+        run: () => removeCandidateDirectory(directory),
+      })),
+    ]);
+    const dispose = () => phase('candidate.disposal', disposeCandidate, ordinal);
     return { account, access, content, relay, port: cluster.port,
       graph: graphCopy,
-      objects: candidateObjects };
+      objects: candidateObjects, dispose };
   };
 
   const captureAndRestore = async (name: string, input: {
@@ -373,8 +488,8 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       let candidateOrdinal = 0;
       const restore = async () => {
         const candidate = await createCandidate({ ...captured, ordinal: ++candidateOrdinal });
-        const { graph: candidateGraph, objects: candidateObjects, ...restored } = candidate;
-        return { restored, candidateGraph, candidateObjects };
+        const { graph: candidateGraph, objects: candidateObjects, dispose, ...restored } = candidate;
+        return { restored, candidateGraph, candidateObjects, dispose };
       };
       expect(await readGraphRecoverySource(options.fuseki)).toEqual(sourceCut);
       expect(retainedObjectFiles(options.objects.directory)).toEqual(objectFiles);
@@ -399,19 +514,24 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     disposed = true;
     const failures: unknown[] = [];
     try {
-      for (const pool of pools) {
-        try { await pool.end(); } catch (error) { failures.push(error); }
-      }
-      for (const cluster of [...clusters].reverse()) {
-        try { cluster.remove(); } catch (error) { failures.push(error); }
-      }
-      for (const container of [...containers].reverse()) {
-        try { container.remove(); } catch (error) { failures.push(error); }
-      }
-      for (const name of [...volumes].reverse()) {
-        try { docker(['volume', 'rm', '-f', name], 30_000); } catch (error) { failures.push(error); }
-      }
-      if (failures.length) throw new AggregateError(failures, 'retained erasure recovery cleanup failed');
+      await phase('fixture.final-disposal', async () => {
+        for (const pool of [...pools]) {
+          try { await removePool(pool); } catch (error) { failures.push(error); }
+        }
+        for (const cluster of [...clusters].reverse()) {
+          try { removeCluster(cluster); } catch (error) { failures.push(error); }
+        }
+        for (const container of [...containers].reverse()) {
+          try { removeContainer(container); } catch (error) { failures.push(error); }
+        }
+        for (const name of [...volumes].reverse()) {
+          try { removeVolume(name); } catch (error) { failures.push(error); }
+        }
+        for (const directory of [...candidateDirectories].reverse()) {
+          try { removeCandidateDirectory(directory); } catch (error) { failures.push(error); }
+        }
+        if (failures.length) throw new AggregateError(failures, 'retained erasure recovery cleanup failed');
+      });
     } finally {
       clearInterval(timingPulse);
       persistTimings();

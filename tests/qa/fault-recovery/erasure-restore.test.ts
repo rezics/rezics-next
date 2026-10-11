@@ -577,6 +577,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     await expect(releaseErasureRestoreHold(relay, secondRestored, staleAuthority.reconciliationId,
       second.restoredFence, second.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
     await expectBothHoldsClosed(secondCandidate);
+    await secondCandidate.dispose();
     expect((await thirdRestored.access.query<{ open: boolean }>(
       'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(false);
 
@@ -626,6 +627,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     await expectBothHoldsClosed(firstCandidate);
     expect((await readJournal(olderMain)).status).toBe(503);
     expect(await credentials(older.account, erased.id)).toMatchObject({ users: '1' });
+    await firstCandidate.dispose();
 
     // The final backup includes the API erasure and current Access authority;
     // the retained owner chain has since erased the pinned later target.
