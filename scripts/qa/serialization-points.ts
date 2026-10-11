@@ -320,6 +320,8 @@ export const serializationAllowlist: SerializationAllowance[] = [
       'Erasure journal allocation, retained coverage capture and publication, and offline restore release share this key so captured epochs stay stable through verification and release.',
     writers: [
       'services/main/migrations/relay/010_erasure_journal.sql',
+      // Recovery capture serializes with erasure epoch assignment so the coverage head cannot be signed across a moving epoch.
+      main + 'graph-recovery-coverage.ts',
       main + 'modules/erasure/reconcile.ts',
       main + 'modules/owner/operations.ts',
       main + 'modules/outbox/recovery-coverage-head.ts',
