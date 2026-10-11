@@ -44,6 +44,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
   ['tests/qa/integration/local-read-basis.test.ts', 'catalogue-disk'],
   ['tests/qa/integration/event-query-bounds.test.ts', 'temporal-tmpfs'],
   ...[
+    'recipe-export-limit',
     'g-1021-reading-cost',
     'g-1022-reading-cost',
     'g-1025-home-cost',
