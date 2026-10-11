@@ -9,7 +9,9 @@ import { startHomeStack } from './feed-read-support.ts';
 import { arrange, local, threeWriteDebits, type Page, type Posted } from './zone-realm-discussion-support.ts';
 
 test('a published Zone page opens one canonical discussion and preserves independent concurrent contributions', async () => {
-  const home = await startHomeStack('zone-realm-discussion', { projectionStart: 'current' });
+  // Thread reads exercise the real projector: replay acknowledged envelopes
+  // from zero rather than seeding a Main stream checkpoint with a graph cut.
+  const home = await startHomeStack('zone-realm-discussion');
   try {
     const a = await arrange(home);
     const page = await a.page('first');
