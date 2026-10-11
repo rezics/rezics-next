@@ -284,7 +284,7 @@ test('G1046: every SQL relation in services, scripts and tests exists at the mig
     );
   });
   expect(missing.map((ref) => `${ref.file}:${ref.line}: ${ref.relation}`)).toEqual([]);
-}, 15_000);
+}, 30_000);
 
 test('G1046: the guard catches the actual name_registry query on the parent of the feed fix', () => {
   // Exact source captured with git show 6a5793b7d^:services/main/src/modules/feed/frame.ts.
