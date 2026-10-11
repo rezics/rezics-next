@@ -53,8 +53,9 @@ test('VIEW07: private, revoked and erased content/media leak no preview, sitemap
   await owner.grant(`work:read:${hidden.work}`, 'work.read');
   const bytes = png(128, 128);
   const image = await owner.upload(bytes, 'public');
+  const privateImage = await owner.upload(png(128, 128), 'public');
   const shownSelection = await selectAvatar(owner, shown.work, image.asset, null);
-  const hiddenSelection = await selectAvatar(owner, hidden.work, image.asset, null);
+  const hiddenSelection = await selectAvatar(owner, hidden.work, privateImage.asset, null);
 
   // Anonymous: only the public Work previews; the private Work answers like an absent one.
   const preview = await call('GET', `/v1/public-previews/${local(shown.work)}`);
@@ -119,7 +120,8 @@ test('VIEW07: private, revoked and erased content/media leak no preview, sitemap
   const fallbackOf = async () => {
     const response = await call('GET', `/v1/public-previews/${local(shown.work)}`);
     const text = await response.text();
-    for (const secret of [replacement.asset, image.asset, newSelection, 'media/asset', 'erased', 'private']) {
+    for (const secret of [replacement.asset, image.asset, privateImage.asset, newSelection,
+      'media/asset', 'erased', 'private']) {
       expect(text).not.toContain(secret);
     }
     return (JSON.parse(text) as Summary).avatar;
