@@ -213,11 +213,9 @@ async function completeOwnerFixture() {
   }
 }
 
-// Scope: the Realm grows in Postgres only (the owner rows the projector writes); the graph holds no
-// filler threads, because the product assembler takes graph writes only through reply commands and
-// 900 of those do not fit a test. This proves the Postgres side of a reply stays flat as the Realm
-// grows. The graph side at size is proven on the Realm ranking corpus, built once through the product.
-test('one reply costs the same per command and owner at 100 and 1,000 threads of owner rows', async () => {
+// Seed through the same reply commands as the measured writes, so the graph and
+// owner stores retain the same Realm population.
+test('one reply costs the same per command and owner at 100 and 1,000 threads', async () => {
   if (!costProfileChild) return runCostProfileChild();
   const fx = await completeOwnerFixture();
   try {
@@ -248,7 +246,7 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads of
       fx.contentPool.reset(); fx.accessPool.reset(); fx.accountPool.reset(); fx.fuseki.reset(); fx.guard.reset();
       for (const audit of Object.values(fx.callbacks)) audit.reset();
     };
-    const postReply = async (measured = false): Promise<{ reply: string; cost: ReplyCost }> => {
+    const postReply = async (measured = false): Promise<{ reply: string; revision: string; cost: ReplyCost }> => {
       const input = fx.draftInput();
       const commands = {} as ReplyCost['commands'];
       const step = async (name: Command, path: string, body: object) => {
@@ -312,14 +310,14 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads of
         timings: { ...timingTotals, accountShare: timingTotals.accountMs / timingTotals.requestMs,
           accessShare: timingTotals.accessMs / timingTotals.requestMs },
       };
-      return { reply: identity.reply as string, cost };
+      return { reply: identity.reply as string, revision: draft.revisionId as string, cost };
     };
 
-    const source = await postReply();
-    await growRealmThreads(fx.contentPool, fx.accessPool, fx.env, fx.realm, source.reply, 0, 99, undefined, false);
+    await postReply();
+    await growRealmThreads(() => postReply(), 99, { keyPrefix: 'realm-reply-cost' });
     await postReply();
     const at100 = (await postReply(true)).cost;
-    await growRealmThreads(fx.contentPool, fx.accessPool, fx.env, fx.realm, source.reply, 99, 899, undefined, false);
+    await growRealmThreads(() => postReply(), 899, { keyPrefix: 'realm-reply-cost', startIndex: 99 });
     await postReply();
     const at1000 = (await postReply(true)).cost;
     console.log(JSON.stringify({ realmReplyWriteCost: { at100, at1000 } }));
