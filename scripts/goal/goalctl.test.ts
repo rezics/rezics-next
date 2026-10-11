@@ -42,8 +42,14 @@ function cliEnvironment(dir: string): NodeJS.ProcessEnv {
 
 test('a hung fixture child that ignores SIGTERM still fails with its command and deadline', () => {
   const hung = fixtureSpawns(100);
-  expect(() => hung(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
-    { encoding: 'utf8' })).toThrow(/did not exit after \d+ms \(deadline 100ms\): (?:SIGKILL|.*timed out)/);
+  const script = "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)";
+  let failure: unknown;
+  try { hung(process.execPath, ['-e', script], { encoding: 'utf8' }); } catch (error) { failure = error; }
+  expect(failure).toBeInstanceOf(Error);
+  const message = (failure as Error).message;
+  expect(message).toContain(`${process.execPath} -e ${script}`);
+  expect(message).toMatch(/did not exit after \d+ms \(deadline 100ms\)/);
+  expect(message).toContain('SIGKILL');
 });
 
 // A fake runner's schedule belongs to its fixture, not another worker's measured host history.

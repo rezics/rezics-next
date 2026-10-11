@@ -11,7 +11,8 @@ export function fixtureSpawns(deadlineMs: number, logFile?: string): typeof nati
       cwd: args[2]?.cwd, durationMs, status: result.status, signal: result.signal })}\n`);
     if (result.status === null) throw new Error(
       `${[args[0], ...args[1] ?? []].join(' ')} did not exit after ${Math.round(durationMs)}ms`
-      + ` (deadline ${deadlineMs}ms): ${result.error?.message ?? result.signal}\n${result.stdout}\n${result.stderr}`);
+      + ` (deadline ${deadlineMs}ms): ${result.error?.message ?? 'no exit status'}`
+      + `${result.signal ? ` (${result.signal})` : ''}\n${result.stdout}\n${result.stderr}`);
     return result;
   }) as typeof nativeSpawnSync;
 }
