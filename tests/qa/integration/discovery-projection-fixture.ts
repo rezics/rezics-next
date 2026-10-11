@@ -22,9 +22,8 @@ export async function isolateDiscoveryProbeGraph(environment: WorkActivationEnvi
   const graphs = [...Object.values(GRAPHS), PUBLIC_SEARCH_GRAPH];
   await fuseki.update(
     graphs
-      .map(
-        (graph, index) => `COPY SILENT GRAPH ${iri(graph)} TO GRAPH ${iri(`${prefix}:${index}`)}`,
-      )
+      .map((graph, index) => `INSERT { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }
+        WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`)
       .join(';\n'),
   );
   const restore = async () => {
@@ -33,7 +32,8 @@ export async function isolateDiscoveryProbeGraph(environment: WorkActivationEnvi
       graphs
         .flatMap((graph, index) => [
           `CLEAR SILENT GRAPH ${iri(graph)}`,
-          `ADD SILENT GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`,
+          `INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } }
+            WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`,
           `DROP SILENT GRAPH ${iri(`${prefix}:${index}`)}`,
         ])
         .join(';\n'),
@@ -41,7 +41,8 @@ export async function isolateDiscoveryProbeGraph(environment: WorkActivationEnvi
   };
   try {
     await fuseki.update(graphs.map((graph) => `CLEAR SILENT GRAPH ${iri(graph)}`).join(';\n'));
-    const lineage = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
+    // Resetting graph facts changes the data epoch, not the partition route used to admit writes.
+    const lineage = { dataEpoch: randomUUID(), routingEpoch: originalLineage.routingEpoch };
     // The command bootstrap correctly refuses the saved graphs. This is raw
     // fixture preparation; every operation under test still uses real APIs.
     await fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {

@@ -8,7 +8,7 @@ import type { DiscoveryBasis } from '../../../services/main/src/modules/discover
 import { MANAGE_ACTION, MANAGE_SCOPE, RecommendationRestart, RecommendationStale,
   RecommendationUnavailable } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
-import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 import { resolveClassification } from '../../../services/main/src/modules/classification/resolve.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -37,8 +37,61 @@ const uuid = () => `https://rezics.com/id/${randomUUID()}`;
 test('Discovery projection: native scoped reads, durable builds, disclosure, cursor and source fences', async () => {
   const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   const stack = await startMediaStack('discovery', { ownerUrls: owners.urls });
-  const restoreGraph = await isolateDiscoveryProbeGraph(stack.env);
+  const snapshotSubject = `urn:rezics:qa:g1064:snapshot:${randomUUID()}`;
+  const snapshotLiteralPredicate = `<${RV}qaSnapshotLiteral>`;
+  const snapshotBlankPredicate = `<${RV}qaSnapshotBlankNode>`;
+  const snapshotNestedPredicate = `<${RV}qaSnapshotNestedLiteral>`;
+  const originalLineage = { ...stack.env.lineage };
+  let restoreGraph: (() => Promise<void>) | undefined;
+  let mainProbeCompleted = false;
+  const snapshotFacts = async () => (await stack.fuseki.query(`SELECT ?literal ?blank ?nested WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(snapshotSubject)} ${snapshotLiteralPredicate} ?literal ; ${snapshotBlankPredicate} ?blank .
+      ?blank ${snapshotNestedPredicate} ?nested .
+    }
+  }`)).results!.bindings;
+  const snapshotLineageFacts = async () => (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?dataEpoch ?routingEpoch WHERE {
+    GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:dataEpoch ?dataEpoch ; rv:routingEpoch ?routingEpoch .
+    }
+  }`)).results!.bindings;
+  let originalSnapshotFacts: unknown;
+  let originalLineageFacts: unknown;
+  const assertSnapshotRestored = async () => {
+    expect(stack.env.lineage).toEqual(originalLineage);
+    expect(await snapshotLineageFacts()).toEqual(originalLineageFacts);
+    expect(await snapshotFacts()).toEqual(originalSnapshotFacts);
+    expect((await stack.fuseki.query(`ASK WHERE {
+      GRAPH ?backup { ?s ?p ?o }
+      FILTER(STRSTARTS(STR(?backup), "urn:rezics:qa:g1064:projection:"))
+    }`)).boolean).toBe(false);
+    expect((await stack.fuseki.query(`ASK WHERE {
+      GRAPH <urn:rezics:graph:template-index> {
+        <urn:rezics:membership-preparation> <${RV}membershipCompletedForm> ?proof
+      }
+    }`)).boolean).toBe(false);
+  };
   try {
+    await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(snapshotSubject)} ${snapshotLiteralPredicate} ${lit('retained literal')} ;
+        ${snapshotBlankPredicate} _:snapshotNode .
+      _:snapshotNode ${snapshotNestedPredicate} ${lit('retained blank-node value')} .
+    } }`);
+    originalSnapshotFacts = await snapshotFacts();
+    expect(originalSnapshotFacts).toHaveLength(1);
+    originalLineageFacts = await snapshotLineageFacts();
+
+    await expect((async () => {
+      const restoreAfterFailure = await isolateDiscoveryProbeGraph(stack.env);
+      try {
+        throw new Error('synthetic discovery probe failure');
+      } finally {
+        await restoreAfterFailure();
+      }
+    })()).rejects.toThrow('synthetic discovery probe failure');
+    await assertSnapshotRestored();
+
+    restoreGraph = await isolateDiscoveryProbeGraph(stack.env);
     const a = await stack.member('a'), b = await stack.member('b'), outsider = await stack.member('outsider');
     for (const member of [a,b]) {
       const grant = randomUUID();
@@ -403,5 +456,16 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     await stack.publicWork(a.actor, ['en'], 'Discovery changed');
     expect((await get({ cursor: page.nextCursor! })).status).toBe(200);
     expect((await call(`/v1/rating-contexts?cursor=${contexts.nextCursor}`)).status).toBe(409);
-  } finally { await restoreGraph(); await stack.stop(); await owners.close(); }
+    mainProbeCompleted = true;
+  } finally {
+    try {
+      if (restoreGraph) {
+        await restoreGraph();
+        if (mainProbeCompleted) await assertSnapshotRestored();
+      }
+    } finally {
+      await stack.stop();
+      await owners.close();
+    }
+  }
 }, 240_000);
