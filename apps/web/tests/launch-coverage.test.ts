@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { expect, test } from 'bun:test';
+import ts from 'typescript-6';
 import { launchCoverage, type JourneyProof, type Proof } from '../../../scripts/qa/cases/launch-coverage.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
@@ -45,7 +46,46 @@ function namedTestExists(source: string, title: string): boolean {
   const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
   // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon or space); the registry names the
   // exact source title after it, so no task identifier is copied into the registry.
-  return [...source.matchAll(declaration)].some((match) => match[2]!.replace(/^G-?\d+(?::\s*|\s+)/, '') === title);
+  const matches = (candidate: string) => candidate.replace(/^G-?\d+(?::\s*|\s+)/, '') === title;
+  if ([...source.matchAll(declaration)].some((match) => matches(match[2]!))) return true;
+
+  // A table title is evidence only when that table registers tests through its loop variable.
+  const parsed = ts.createSourceFile('proof.ts', source, ts.ScriptTarget.Latest, true);
+  const tables = new Map<string, ts.ArrayLiteralExpression>();
+  for (const statement of parsed.statements) {
+    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
+    for (const entry of statement.declarationList.declarations) {
+      if (ts.isIdentifier(entry.name) && entry.initializer && ts.isArrayLiteralExpression(entry.initializer)) {
+        tables.set(entry.name.text, entry.initializer);
+      }
+    }
+  }
+  for (const loop of parsed.statements) {
+    if (!ts.isForOfStatement(loop) || !ts.isIdentifier(loop.expression) ||
+      !ts.isVariableDeclarationList(loop.initializer) || !(loop.initializer.flags & ts.NodeFlags.Const) ||
+      loop.initializer.declarations.length !== 1) continue;
+    const binding = loop.initializer.declarations[0]!.name;
+    const body = ts.isBlock(loop.statement) && loop.statement.statements.length === 1
+      ? loop.statement.statements[0]! : loop.statement;
+    if (!ts.isIdentifier(binding) || !ts.isExpressionStatement(body) || !ts.isCallExpression(body.expression)) continue;
+    const call = body.expression;
+    const argument = call.arguments[0];
+    const callback = call.arguments[1];
+    if (!ts.isIdentifier(call.expression) || !['test', 'it'].includes(call.expression.text) ||
+      !argument || !ts.isPropertyAccessExpression(argument) || !ts.isIdentifier(argument.expression) ||
+      argument.expression.text !== binding.text || argument.name.text !== 'title' ||
+      !callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) continue;
+    for (const entry of tables.get(loop.expression.text)?.elements ?? []) {
+      if (!ts.isObjectLiteralExpression(entry) || entry.properties.some(property => ts.isSpreadAssignment(property) ||
+        (property.name && ts.isComputedPropertyName(property.name)))) continue;
+      const properties = entry.properties.filter(property => property.name &&
+        (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === 'title');
+      const property = properties[0];
+      if (properties.length === 1 && property && ts.isPropertyAssignment(property) && ts.isStringLiteralLike(property.initializer) &&
+        matches(property.initializer.text)) return true;
+    }
+  }
+  return false;
 }
 
 function proofMissing(proof: Proof): proof is Extract<Proof, { missing: string }> {
@@ -170,6 +210,30 @@ test('proof titles preserve the exact title after a leading task tag', () => {
     expect(namedTestExists(source, tag + '${viewport.width}: choose the last chapter')).toBe(false);
   }
   expect(namedTestExists("test('a reader saves a choice', () => {});", 'a reader saves a choice')).toBe(true);
+});
+
+test('proof titles in a table must be registered by that table’s test loop', () => {
+  const source = `
+    const unused = [{ title: 'an unused journey' }];
+    const journeys = [
+      { title: 'a reader chooses an edition', choices: [{ title: 'a nested choice' }] },
+      { title: 'a reader chooses a format', choices: [] },
+    ];
+    for (const journey of journeys) test(journey.title, async () => {});
+  `;
+  expect(namedTestExists(source, 'a reader chooses an edition')).toBe(true);
+  expect(namedTestExists(source, 'a reader chooses a format')).toBe(true);
+  expect(namedTestExists(source, 'an unused journey')).toBe(false);
+  expect(namedTestExists(source, 'a nested choice')).toBe(false);
+  expect(namedTestExists(source.replace('journey.title', 'journey.label'), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('const journey of', 'const other of'), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('of journeys', 'of unused'), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace(', async () => {}', ''), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('for (const journey', '// for (const journey'), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('choices: [{', "title: 'another title', choices: [{"), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('choices: [{', '...unused[0], choices: [{'), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('choices: [{', "['title']: 'another title', choices: [{"), 'a reader chooses an edition')).toBe(false);
+  expect(namedTestExists(source.replace('test(journey.title', 'it(journey.title'), 'a reader chooses a format')).toBe(true);
 });
 
 test('every launch kind and hard case has a coverage row', () => {
