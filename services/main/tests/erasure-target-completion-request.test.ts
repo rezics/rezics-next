@@ -32,11 +32,16 @@ function canonical(value: unknown): string {
   return JSON.stringify(value)!;
 }
 
-function completionEvidence(erasureId: string, erasureEpoch: string, target: TargetRow,
+function historicalCompletionEvidence(erasureId: string, erasureEpoch: string, target: TargetRow,
   graphProof: GraphProof): string {
   return sha256(canonical({ erasureId, erasureEpoch,
     target: { ordinal: target.ordinal, owner: target.owner, kind: target.target_kind, ref: target.target_ref },
     graphProof, ...(target.target_kind === 'content_revision' ? { contentState: 'erased' } : {}) }));
+}
+
+function completionEvidence(erasureId: string, erasureEpoch: string, target: TargetRow): string {
+  return sha256(canonical({ erasureId, erasureEpoch, ordinal: target.ordinal,
+    owner: target.owner, kind: target.target_kind, ref: target.target_ref, liveState: 'erased' }));
 }
 
 class RequestGraph extends FusekiClient {
@@ -186,7 +191,7 @@ test('request records exact target completion, fails closed on missing Content p
   const normalResult = await requestContentErasure(normal.service, normal.environment, account,
     admissionAccess(normalAdmission, normalPrincipal), new Request('http://main.local'), normalInput);
 
-  expect(normalResult.report.stage).toBe('inventory_complete');
+  expect(normalResult.report.stage).toBe('reconciling');
   expect(normalResult.report.targets).toHaveLength(normalIds.length);
   expect(normalResult.report.targets.every(target => target.completionState === 'completed'
     && target.completionEvidenceRef !== null && target.completedAt !== null)).toBe(true);
@@ -196,7 +201,7 @@ test('request records exact target completion, fails closed on missing Content p
   for (const target of normalResult.report.targets) {
     expect(target.completionEvidenceRef).toBe(completionEvidence(normalResult.report.erasureId,
       normalResult.report.erasureEpoch, { ordinal: target.ordinal, owner: target.owner,
-        target_kind: target.kind, target_ref: target.ref }, normalGraph.proof!));
+        target_kind: target.kind, target_ref: target.ref }));
   }
   const normalBeforeVerify = structuredClone(normalResult.report.targets);
   const normalVerification = await verifyErasure(pool!, { content: pool! }, normalResult.report.erasureId,
@@ -219,7 +224,8 @@ test('request records exact target completion, fails closed on missing Content p
   const unavailableId = (await pool!.query<{ id: string }>(
     'SELECT id FROM relay.erasure WHERE operation_id = $1', [`erasure:${unavailableAdmission}`])).rows[0]!.id;
   const unavailableReport = await readErasure(pool!, unavailableId);
-  expect(unavailableReport.stage).toBe('requested');
+  expect(unavailableReport.stage).toBe('fenced');
+  expect(unavailableReport.suppression).toBe('suppressed');
   expect(unavailableReport.verifiedAt).toBeNull();
   expect(unavailableReport.targets.map(target => target.completionState)).toEqual(['pending']);
   await expect(verifyErasure(pool!, { content: pool! }, unavailableId, `verify:${randomUUID()}`))
@@ -239,7 +245,7 @@ test('request records exact target completion, fails closed on missing Content p
   const retryGraph = new RequestGraph(pool!, lineage);
   const seededProof: GraphProof = { receipt: `urn:rezics:receipt:erasure-graph:${sha256(journaled.erasureId)}`,
     dataEpoch: lineage.dataEpoch, sequence };
-  const seededEvidence = completionEvidence(journaled.erasureId, journaled.erasureEpoch,
+  const seededEvidence = historicalCompletionEvidence(journaled.erasureId, journaled.erasureEpoch,
     { ordinal: partial.targets[0]!.ordinal, owner: partial.targets[0]!.owner,
       target_kind: partial.targets[0]!.kind, target_ref: partial.targets[0]!.ref }, seededProof);
   await completeErasureTarget(pool!, journaled.erasureId, partial.targets[0]!.ordinal, seededEvidence);
@@ -258,8 +264,7 @@ test('request records exact target completion, fails closed on missing Content p
   expect(retryResult.report.targets[1]!.completionEvidenceRef).toBe(completionEvidence(
     journaled.erasureId, journaled.erasureEpoch,
     { ordinal: retryResult.report.targets[1]!.ordinal, owner: retryResult.report.targets[1]!.owner,
-      target_kind: retryResult.report.targets[1]!.kind, target_ref: retryResult.report.targets[1]!.ref },
-    retryGraph.proof!));
+      target_kind: retryResult.report.targets[1]!.kind, target_ref: retryResult.report.targets[1]!.ref }));
   const retryVerification = await verifyErasure(pool!, { content: pool! }, journaled.erasureId,
     `verify:${randomUUID()}`);
   expect(retryVerification.state).toBe('reconciled');

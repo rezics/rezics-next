@@ -230,7 +230,9 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
         await failErasureTarget(service.relay, report.erasureId, target.ordinal, 'live_copy_unavailable');
       }
     } else {
-      await completeErasureTarget(service.relay, report.erasureId, target.ordinal, completionEvidence(report, target));
+      if (target.completionState !== 'completed') {
+        await completeErasureTarget(service.relay, report.erasureId, target.ordinal, completionEvidence(report, target));
+      }
     }
   }
   // Flags are progress, never absence evidence. A sealed replay must inspect completed keys too.
@@ -270,7 +272,10 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
   await readGraphErasureProof(graph.fuseki, graph.lineage, report.erasureId, report.erasureEpoch,
     graphRevisionIds(report.targets));
   signal.throwIfAborted();
-  for (const target of report.targets.filter(target => target.kind !== 'object')) {
+  // Earlier journal evidence is immutable even when the current proof format differs.
+  // Every owner above was re-probed; a completed marker never substitutes for absence.
+  for (const target of report.targets.filter(target => target.kind !== 'object'
+    && target.completionState !== 'completed')) {
     await completeErasureTarget(service.relay, report.erasureId, target.ordinal, completionEvidence(report, target));
   }
   const refreshed = await readErasure(service.relay, report.erasureId);
@@ -336,8 +341,6 @@ export async function requestContentErasure(service: ErasureService,
         throw new ContentErasureStale('Erasure revision is already erased');
       }
       const budget = createErasurePreflightBudget();
-      await preflightGraphErasure(graph.fuseki,
-        resolved.map(revision => revision.kind === 'content_revision' ? revision.ref : revision.graphIri), budget);
       const privatePayloads = await inventoryContributionPayloads(
         graph.fuseki, graph.objectDirectory, resolved, budget);
       const custody = await commandCustodyErasureTargets(service.preservationAccess,
@@ -374,6 +377,8 @@ export async function requestContentErasure(service: ErasureService,
           erasure_epoch: revision.content?.erasureEpoch ?? null,
         })), contentTargets.map(revision => revision.ref), input.resourceId, true);
       }
+      await preflightGraphErasure(graph.fuseki,
+        resolved.map(revision => revision.kind === 'content_revision' ? revision.ref : revision.graphIri), budget);
       const journal = async (completeTargets: readonly ErasureTargetInput[]) => {
         assertErasureJournalTargetBound(completeTargets);
         const journaled = await journalErasure(service.relay, { operationId, requestDigest,
