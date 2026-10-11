@@ -252,7 +252,7 @@ test('legacy Realm members place reviewed replies; direct policy respects member
       revisionId: draft.body.revisionId, revisionDigest: bytes, expectedGeneration: '0', supersedes: null,
       outcome: 'approved', method: 'human', methodRevision: 'moderator-v1', dependencyDigest: 'a'.repeat(64),
       reasonReference: null, actingSubject: h.actor };
-    expect((await h.post('/v1/realm-reply-reviews', review)).status).toBe(403);
+    expect((await h.post('/v1/realm-reply-reviews', { ...review, actingSubject: h.pen })).status).toBe(403);
     await grant(`review:decide:${realm}`, 'review.decide');
     const approved = await h.post('/v1/realm-reply-reviews', review);
     expect(approved.status, JSON.stringify(approved.body)).toBe(201);
