@@ -63,8 +63,8 @@ type ProcessReplayRow = {
   request_digest: string;
   statement: string | null;
   document_digest: string | null;
-  occurred_at: Date;
-  due_at: Date | null;
+  occurred_at: string;
+  due_at: string | null;
   content_language: string | null;
   declarations: Record<string, unknown> | null;
 };
@@ -75,28 +75,31 @@ type CounterNoticeReplayJob = {
   report_id: string;
   restriction_id: string;
   delivery_id: string;
-  occurred_at: Date;
-  received_at: Date;
-  delivered_at: Date | null;
-  not_before: Date;
-  expected_not_before: Date;
-  not_after: Date;
-  expected_not_after: Date;
+  occurred_at: string;
+  received_at: string;
+  delivered_at: string | null;
+  not_before: string;
+  expected_not_before: string;
+  not_after: string;
+  expected_not_after: string;
   phase: string;
 };
 
 async function processReplayRows(pool: Pool, caseId: string): Promise<ProcessReplayRow[]> {
   return (await pool.query<ProcessReplayRow>(`SELECT id::text,case_id::text,report_id::text,decision_id::text,
     process,step,principal_id::text,party_subject,party,idempotency_key,request_digest,statement,
-    document_digest,occurred_at,due_at,content_language,declarations
+    document_digest,occurred_at::text AS occurred_at,due_at::text AS due_at,content_language,declarations
     FROM access.governance_process_step WHERE case_id = $1 ORDER BY step,id`, [caseId])).rows;
 }
 
 async function counterNoticeReplayJob(pool: Pool, stepId: string): Promise<CounterNoticeReplayJob[]> {
   return (await pool.query<CounterNoticeReplayJob>(`SELECT j.step_id::text,j.case_id::text,j.report_id::text,
-    j.restriction_id::text,j.delivery_id::text,s.occurred_at,j.received_at,j.delivered_at,
-    j.not_before,access.counter_notice_business_day(j.received_at,10) AS expected_not_before,
-    j.not_after,access.counter_notice_business_day(j.received_at,14) AS expected_not_after,j.phase
+    j.restriction_id::text,j.delivery_id::text,s.occurred_at::text AS occurred_at,
+    j.received_at::text AS received_at,j.delivered_at::text AS delivered_at,
+    j.not_before::text AS not_before,
+    access.counter_notice_business_day(j.received_at,10)::text AS expected_not_before,
+    j.not_after::text AS not_after,
+    access.counter_notice_business_day(j.received_at,14)::text AS expected_not_after,j.phase
     FROM access.rights_counter_notice j
     JOIN access.governance_process_step s ON s.id = j.step_id
     WHERE j.step_id = $1`, [stepId])).rows;
@@ -224,12 +227,12 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     expect(obligationBeforeReplay).toHaveLength(1);
     expect(obligationBeforeReplay[0]).toMatchObject({ step_id: counter.stepId, case_id: report.caseId,
       report_id: report.reportId, restriction_id: restriction.decisionId,
-      occurred_at: expect.any(Date), received_at: expect.any(Date), delivered_at: null, phase: 'delivery',
-      not_before: expect.any(Date), expected_not_before: expect.any(Date),
-      not_after: expect.any(Date), expected_not_after: expect.any(Date) });
-    expect(obligationBeforeReplay[0]!.received_at).toEqual(obligationBeforeReplay[0]!.occurred_at);
-    expect(obligationBeforeReplay[0]!.not_before).toEqual(obligationBeforeReplay[0]!.expected_not_before);
-    expect(obligationBeforeReplay[0]!.not_after).toEqual(obligationBeforeReplay[0]!.expected_not_after);
+      occurred_at: expect.any(String), received_at: expect.any(String), delivered_at: null, phase: 'delivery',
+      not_before: expect.any(String), expected_not_before: expect.any(String),
+      not_after: expect.any(String), expected_not_after: expect.any(String) });
+    expect(obligationBeforeReplay[0]!.received_at).toBe(obligationBeforeReplay[0]!.occurred_at);
+    expect(obligationBeforeReplay[0]!.not_before).toBe(obligationBeforeReplay[0]!.expected_not_before);
+    expect(obligationBeforeReplay[0]!.not_after).toBe(obligationBeforeReplay[0]!.expected_not_after);
     const replayedCounter = await store.recordStep(principal, counterInput);
     expect(replayedCounter).toEqual({ stepId: counter.stepId, dueAt: null, replayed: true });
     expect(await store.readEnforcement(target)).toEqual(restrictedFence);
