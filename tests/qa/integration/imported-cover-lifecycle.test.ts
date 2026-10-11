@@ -357,7 +357,8 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         component: 'media_use', locator: importedUse.use, revision: importedUse.revision, state: 'available' })]);
 
       const decide = async (receipt: NoticeReceipt, target: Record<string, unknown>, outcome: string,
-        reversesDecisionId: string | null = null, expectedGeneration?: string) => {
+        reversesDecisionId: string | null = null, expectedGeneration?: string,
+        answersStepId: string | null = null) => {
         const claimKey = randomUUID();
         const claimed = await govern('POST', `/v1/safety-cases/${receipt.caseId}/claim`, {
           actingSubject: moderator.actor, idempotencyKey: claimKey,
@@ -371,7 +372,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         const idempotencyKey = randomUUID();
         const input = { caseId: receipt.caseId, expectedGeneration: expectedGeneration ?? view.generation,
           actingSubject: moderator.actor, outcome, targets: [target], rule,
-          evidenceDigest: view.reports[0]!.evidenceDigest, reversesDecisionId, answersStepId: null,
+          evidenceDigest: view.reports[0]!.evidenceDigest, reversesDecisionId, answersStepId,
           rationale: 'The exact retained notice evidence supports this restriction.', disclosure: 'parties',
           reasons: fixtureReasons, idempotencyKey };
         const accepted = await govern('POST', `/v1/safety-cases/${receipt.caseId}/decisions`, input,
@@ -442,9 +443,19 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect(anotherRecordImport.coverResults.map(result => result.status)).toEqual(['imported']);
 
       // The subsequent stages exercise the same owner paths after the digest fence is admitted.
-      const beforeRestore = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId, '0');
+      const restorationStepKey = randomUUID();
+      const restorationStep = await json<{ stepId: string }>(await govern('POST', '/v1/governance/process-steps', {
+        profile: 'governance-process-step-v1', caseId: publicReceipt.caseId,
+        decisionId: decisionReceipt.decisionId, actingSubject: moderator.actor, process: 'dmca_512',
+        step: 'restoration_window', partySubject: null, statement: 'Restoration window reviewed.',
+        documentDigest: null, occurredAt: new Date().toISOString(), dueAt: null,
+        idempotencyKey: restorationStepKey,
+      }, moderator.token, restorationStepKey), 201);
+      const beforeRestore = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId, '0',
+        restorationStep.stepId);
       expect(beforeRestore.accepted.status).toBe(409);
-      const restoreAttempt = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId);
+      const restoreAttempt = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId, undefined,
+        restorationStep.stepId);
       expect(restoreAttempt.accepted.status).toBe(202);
       const restored = await govern('POST', `/v1/safety-cases/${publicReceipt.caseId}/decisions`,
         restoreAttempt.input, moderator.token, restoreAttempt.input.idempotencyKey);
