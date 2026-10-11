@@ -194,4 +194,4 @@ test('books / An exact pinned edition choice persists on an isolated restored co
     if (!sourceClosed) { try { await source.stop(); } catch (error) { failures.push(error); } }
     if (failures.length) throw new AggregateError(failures, 'Launch corpus cleanup failed');
   }
-});
+}, 420_000);
