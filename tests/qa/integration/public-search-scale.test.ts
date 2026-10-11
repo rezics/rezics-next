@@ -11,8 +11,8 @@ import { AccessAdmissionRegistry, type RegisteredAdmission }
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { createClassificationContext, classificationContextDigest }
   from '../../../services/main/src/modules/classification/context.ts';
-import { setClassificationDecision, classificationDecisionDigest, classificationDecisionScope,
-  type ClassificationDecisionContext } from '../../../services/main/src/modules/classification/decision.ts';
+import type { ClassificationDecisionContext }
+  from '../../../services/main/src/modules/classification/decision.ts';
 import { createClassificationProposition, classificationPropositionDigest }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { resolveClassification } from '../../../services/main/src/modules/classification/resolve.ts';
@@ -34,6 +34,7 @@ import { queryPublicMainPhrase }
   from '../../../services/main/src/modules/work/search-public.ts';
 import type { SearchContinuation }
   from '../../../services/main/src/modules/work/search-continuation.ts';
+import { contextFixture } from './context-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -119,6 +120,9 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       return viewer;
     } },
     access: new AccessAdmissionRegistry(accessPool), accessPolicy: new AccessPolicyOwner(accessPool) });
+  const classificationFixture = await contextFixture(Bun.env as Record<string, string>);
+  const classificationObjectDirectory = classificationFixture.env.objectDirectory;
+  classificationFixture.env.objectDirectory = env.objectDirectory;
   function admission(scope: string, action: string, requestDigest: string,
     actingSubject = actor, principalId = randomUUID()): RegisteredAdmission {
     const id = randomUUID();
@@ -421,7 +425,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const proposition = await createClassificationProposition(env,
       admission('classification:define:global', 'classification.proposition.define',
         classificationPropositionDigest(senseInput)), senseInput);
-    if (proposition.outcome !== 'succeeded' || !proposition.definitions?.sense) {
+    if (proposition.outcome !== 'succeeded' || !proposition.definitions?.sense
+      || !proposition.revision) {
       throw new Error('scale classification proposition failed');
     }
     const sense = proposition.definitions.sense;
@@ -441,13 +446,15 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
         classification: { decision: string; source: string } }> }>;
     }
     async function decide(work: string, context: ClassificationDecisionContext,
-      outcome: 'accepted' | 'rejected') {
-      const input = { context, work, mainVersion: mainByWork.get(work)!, sense,
-        expectedDecisionHead: null, outcome, actingSubject: actor };
-      const result = await setClassificationDecision(env,
-        admission(classificationDecisionScope(context), 'classification.decision.set',
-          classificationDecisionDigest(input)), input);
-      if (result.outcome !== 'succeeded' || !result.decision) {
+      outcome: 'accepted' | 'rejected', expectedDecisionHead: string | null = null) {
+      const result = await classificationFixture.decideClassification({
+        mainVersion: mainByWork.get(work)!, sense, senseRevision: proposition.revision!,
+        concept: proposition.definitions!.concept,
+        acceptance: context.kind === 'global' ? { kind: 'global' }
+          : { kind: 'realm', realm: context.id },
+        expectedDecisionHead, outcome,
+      });
+      if (!result.decision) {
         throw new Error('scale classification decision failed');
       }
       return result.decision;
@@ -673,14 +680,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const narrowingPage = await beforeNarrowing.json() as typeof firstRated;
     expect(narrowingPage.next).not.toBeNull();
     const narrowingContext = { kind: 'realm-classification' as const, id: space.realm };
-    const narrowingInput = { context: narrowingContext, work: chineseB,
-      mainVersion: mainByWork.get(chineseB)!, sense,
-      expectedDecisionHead: chineseDecisionB, outcome: 'rejected' as const,
-      actingSubject: actor };
-    const narrowed = await setClassificationDecision(env,
-      admission(classificationDecisionScope(narrowingContext), 'classification.decision.set',
-        classificationDecisionDigest(narrowingInput)), narrowingInput);
-    expect(narrowed.outcome).toBe('succeeded');
+    const narrowed = await decide(chineseB, narrowingContext, 'rejected', chineseDecisionB);
+    expect(narrowed).toBeTruthy();
     const narrowedPage = await ratedPage(narrowingPage.next!);
     expect(narrowedPage.status).toBe(409);
     expect(await narrowedPage.json()).toMatchObject({ code: 'search_restart_required' });
@@ -688,6 +689,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(currentAfterNarrowing.results.map(row => row.work)).toEqual([chineseA]);
   } finally {
     await accessPool.end();
+    await classificationFixture.close();
     rmSync(state, { recursive: true, force: true });
+    rmSync(classificationObjectDirectory, { recursive: true, force: true });
   }
 }, 300_000);
