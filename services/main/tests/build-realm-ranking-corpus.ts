@@ -10,10 +10,11 @@ import {
   REALM_RANKING_CORPUS_VERSION,
   REALM_RANKING_FILLERS,
   REALM_RANKING_SCALES,
+  createRealmRankingCorpusDriver,
   readRealmRankingCorpus,
   readRealmRankingProgress,
+  realmRankingBackupPath,
   realmRankingCorpusRoot,
-  retainRealmRankingCut,
   writeRealmRankingManifest,
   writeRealmRankingProgress,
   type RealmRankingIdentity,
@@ -70,15 +71,32 @@ const { startHomeStack } = await import('../../../tests/qa/integration/feed-read
 const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
 const { workProfileCorpusApi } = await import('../../../scripts/load/work-profile-corpus.ts');
 
-const home = await startHomeStack(`realm-ranking-corpus-${randomUUID()}`, {
+const openHome = () => startHomeStack(`realm-ranking-corpus-${randomUUID()}`, {
   projectionStart: 'current',
   stableMembers: true,
 });
+let home = await openHome();
 console.log(JSON.stringify({ realmRankingCorpus: 'home', elapsedMs: Date.now() - startedAt }));
-const { stack } = home;
+let stack = home.stack;
 let actor = '';
-const api = workProfileCorpusApi('http://main.local', home.author.token, {
-  fetch: ((input, init) => home.app.handle(new Request(input, init))) as typeof fetch,
+const apiFor = (current: typeof home) => workProfileCorpusApi('http://main.local', current.author.token, {
+  fetch: ((input, init) => current.app.handle(new Request(input, init))) as typeof fetch,
+});
+let api = apiFor(home);
+const backupDriver = createRealmRankingCorpusDriver({
+  sourceRunId: REALM_RANKING_BUILD_RUN,
+  async quiesce(signal) {
+    signal.throwIfAborted();
+    await home.stop();
+    return async () => {
+      home = await openHome();
+      stack = home.stack;
+      api = apiFor(home);
+    };
+  },
+  async smokeRead() {
+    throw new Error('The corpus builder retains cuts and does not restore them');
+  },
 });
 
 const project = async () => {
@@ -278,15 +296,14 @@ try {
       await project();
     }
     const cutStarted = Date.now();
-    await retainRealmRankingCut(REALM_RANKING_BUILD_RUN, size);
+    await backupDriver.backup(String(size), AbortSignal.timeout(600_000));
     console.log(JSON.stringify({
       realmRankingCut: size, fillers, retainMs: Date.now() - cutStarted,
       elapsedMs: Date.now() - startedAt,
     }));
   };
   for (const size of REALM_RANKING_SCALES) {
-    if (existsSync(join(realmRankingCorpusRoot(), String(size), 'access.dump'))
-      && existsSync(join(realmRankingCorpusRoot(), String(size), 'fuseki'))) {
+    if (existsSync(realmRankingBackupPath(size))) {
       fillers = Math.max(fillers, size - 2);
       continue;
     }

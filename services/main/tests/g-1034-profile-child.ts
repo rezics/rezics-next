@@ -17,7 +17,6 @@ import { meterFuseki, meterPool } from '../../../tests/qa/integration/support/qu
 
 const sink = startWorkProfileSink({ settleMs: 25, maxSpans: 500_000 });
 startTelemetry('main', { ...process.env, ...sink.env });
-const { startHomeStack } = await import('../../../tests/qa/integration/feed-read-support.ts');
 const { createMainApp } = await import('../src/app.ts');
 const { GovernanceRules } = await import('../src/modules/governance/rules.ts');
 const { GovernanceStore } = await import('../src/modules/governance/store.ts');
@@ -34,21 +33,13 @@ const {
 
 const corpus = readRealmRankingCorpus();
 if (!corpus) throw new Error(explainUnavailableCorpus());
-const restored = await restoreRealmRankingCorpus().catch(async (error) => {
+const started = performance.now();
+let restored = await restoreRealmRankingCorpus(100).catch(async (error) => {
   await shutdownTelemetry();
   await sink.stop();
   throw error;
 });
-await restored.mount(100);
-let home = await startHomeStack(`g-1034-realm-rank-${randomUUID()}`, {
-  projectionStart: 'current',
-  stableMembers: true,
-}).catch(async (error) => {
-  await restored.close();
-  await shutdownTelemetry();
-  await sink.stop();
-  throw error;
-});
+let home = restored.home;
 const evidence: Record<string, unknown>[] = [];
 const ownerDatabases: Record<string, string> = {};
 const profiles: {
@@ -91,7 +82,6 @@ try {
   let api = workProfileCorpusApi('http://main.local', home.author.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });
-  const started = performance.now();
   const project = async () => {
     // The scale snapshot exceeds Home's small-fixture 400-tick helper bound.
     // Resume the same durable job rather than resetting/replaying any prefix.
@@ -513,14 +503,11 @@ try {
   let winner: string | undefined = corpus.identity.winner.reply;
   for (const size of REALM_RANKING_SCALES) {
     if (size !== 100) {
-      await home.stop();
-      const mounted = await restored.mount(size);
-      evidence.push({ restore: size, elapsedMs: restored.elapsedMs, database: mounted.urls.access });
-      home = await startHomeStack(`g-1034-realm-rank-${size}-${randomUUID()}`, {
-        projectionStart: 'current',
-        stableMembers: true,
-      });
+      await restored.close();
+      restored = await restoreRealmRankingCorpus(size);
+      home = restored.home;
       stack = home.stack;
+      evidence.push({ restore: size, elapsedMs: restored.elapsedMs });
       const nextRules = new GovernanceRules(stack.accessPool);
       app = createMainApp(stack.fuseki, {
         ...home.deps,
@@ -908,13 +895,9 @@ try {
     JSON.stringify({ evidence, profiles, replyWrites, ownerDatabases }, null, 2) + '\n',
   );
   try {
-    await home.stop();
+    await restored.close();
   } finally {
-    try {
-      await restored.close();
-    } finally {
-      await shutdownTelemetry();
-      await sink.stop();
-    }
+    await shutdownTelemetry();
+    await sink.stop();
   }
 }

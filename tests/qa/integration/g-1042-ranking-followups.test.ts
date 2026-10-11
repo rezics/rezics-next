@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { meterStatements, seedHome, startHomeStack } from './feed-read-support.ts';
+import { meterStatements, seedHome } from './feed-read-support.ts';
 import { growRealmThreads } from '../../../services/main/tests/g-1034-fixture.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
@@ -15,16 +15,11 @@ import { restoreRealmRankingCorpus } from '../../../services/main/tests/realm-ra
 
 test('G1042: depth, row and ancestor caps report partial results; retired cuts and deleted references drain through invalidation', async () => {
   const restoreStarted = performance.now();
-  const restored = await restoreRealmRankingCorpus();
-  let activeHome: Awaited<ReturnType<typeof startHomeStack>> | undefined;
+  const restored = await restoreRealmRankingCorpus(400);
+  const home = restored.home;
   try {
-    await restored.mount(400);
-    const home = activeHome = await startHomeStack('g-1042-ranking-followups', {
-      projectionStart: 'current',
-      stableMembers: true,
-    });
     const { stack } = home;
-    const restoreReadyMs = Math.round(performance.now() - restoreStarted);
+    const restoreReadyMs = Math.round(Math.max(restored.elapsedMs, performance.now() - restoreStarted));
     if (restoreReadyMs >= 600_000)
       throw new Error(`Realm ranking corpus restore, startup and readiness took ${restoreReadyMs} ms`);
     console.log(JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }));
@@ -298,13 +293,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     }
     expect(realmHistoryPopulation(floor)).toBe(population);
   } finally {
-    try {
-      if (activeHome) {
-        await activeHome.stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
-        await activeHome.stop();
-      }
-    } finally {
-      await restored.close();
-    }
+    try { await home.stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id'); }
+    finally { await restored.close(); }
   }
 }, 420_000);
