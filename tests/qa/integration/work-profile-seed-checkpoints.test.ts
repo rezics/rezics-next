@@ -126,6 +126,19 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
           await source.stop();
           sourceStopped = true;
           return async () => {
+            Object.assign(Bun.env, readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'apps.env')));
+            // A stopped server invalidates the client's pooled connection.
+            // Reuse the bucket owner's readiness operation and retry only the
+            // transport failure; permission/configuration errors still fail.
+            for (;;) {
+              signal.throwIfAborted();
+              try { await source.objects('media/').initialize(); break; }
+              catch (error) {
+                if (!(error instanceof Error) || error.message !== 'cannot reach immutable object bucket') throw error;
+                signal.throwIfAborted();
+                await Bun.sleep(100);
+              }
+            }
             source = await startMediaStack('seed-checkpoint-source', { library: true });
             sourceStopped = false;
             currentApi = apiFor(source, (await source.member(authorName, { stable: true, verified: true })).token);
