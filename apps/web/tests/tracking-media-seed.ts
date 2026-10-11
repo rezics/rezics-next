@@ -1,12 +1,14 @@
-// Seeds the manga, the omnibus, the game and the long series the tracking-media journey reads.
+// Seeds the manga, the omnibus, the game and the identified anime the tracking-media journey reads.
 // Every record goes in through Main's routes. Published works are readable without a grant, and
-// each episode names the series so a reader can see it. The journey's one progress write, marking
-// episode 1001, is the panel's own expected-version mark.
+// each episode names the series so a reader can see it.
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { discloseClassificationConcept, recordClassifiedStatement, shareClassificationContext,
+  statementDecisionBody, type ClassificationPost, type ClassificationResolution }
+  from '../../../scripts/dev/seed/classified-statement.ts';
 
 const short = (iri: string) => iri.slice(-36);
 const OPERATIONS = 16;
@@ -19,7 +21,7 @@ const SHOW = ['https://schema.org/TVSeries'];
 export interface MediaFixture {
   manga: { work: string; omnibus: string; title: string };
   game: { work: string; title: string; route: string };
-  episodes: { work: string; title: string };
+  episodes: { work: string; title: string; animeConcept: string };
 }
 
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -133,6 +135,34 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
   lap('game');
 
   const show = await work('Harbour Nights', SHOW);
+  for (const [scope, action] of [
+    ['classification:define:global', 'classification.proposition.define'],
+    ['classification:decide:global', 'statement.decide'],
+    ['context:create:root', 'context.create'],
+    [`statement:speak:${editor.actor}`, 'statement.record'],
+  ] as const) await editor.grant(scope, action);
+  const post: ClassificationPost = async <T>(path: string, body: unknown, _token: string, key: string) =>
+    json<T>(await settled(() => editor.send('POST', path, body, key)), 201);
+  const anime = await post<{ concept: string; sense: string; definitionRevision: string }>('/v1/classification-vocabulary', {
+    profile: 'classification-proposition-v2', scheme: null,
+    labels: [{ language: 'en', value: 'Anime' }], alternativeLabels: [], broader: [], narrower: [],
+    actingSubject: editor.actor,
+  }, editor.token, `tracking-anime:${show.work}:concept`);
+  const interpretation = await shareClassificationContext(post, editor.token, editor.actor, [anime],
+    `tracking-anime:${show.work}:context`);
+  await discloseClassificationConcept(post, editor.token, editor.actor, anime.concept,
+    `tracking-anime:${show.work}:hint`);
+  const statement = await recordClassifiedStatement(post, editor.token, editor.actor, show.mainVersion,
+    anime.concept, interpretation, `tracking-anime:${show.work}:statement`);
+  await post('/v1/statement-decisions', statementDecisionBody(editor.actor, statement,
+    { kind: 'global' }, 'accepted', null), editor.token, `tracking-anime:${show.work}:decision`);
+  const identified = await json<ClassificationResolution>(await settled(() => editor.send('POST', '/v1/classification-resolutions', {
+    profile: 'classification-resolution-v1', context: { kind: 'global' }, work: show.work,
+    mainVersion: show.mainVersion, sense: anime.sense,
+  })));
+  if (identified.state !== 'accepted' || identified.source !== 'global' || !identified.decision) {
+    throw new Error('Harbour Nights must have an accepted Anime classification');
+  }
   await grantEditor('work.edit', [`work:edit:${show.work}`]);
   await grantEditor('work.read', [`work:read:${show.work}`]);
   await editor.grant('semantic:create:root', 'semantic.change');
@@ -168,7 +198,7 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
   return {
     manga: { work: manga.work, omnibus: omnibus.work, title: 'Harbour Volumes' },
     game: { work: game.work, title: 'Harbour Route', route: 'True route' },
-    episodes: { work: show.work, title: 'Harbour Nights' },
+    episodes: { work: show.work, title: 'Harbour Nights', animeConcept: anime.concept },
   };
 }
 

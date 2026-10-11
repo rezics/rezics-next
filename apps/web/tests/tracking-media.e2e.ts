@@ -1,12 +1,13 @@
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { type Browser, expect as playwrightExpect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { MediaFixture } from './tracking-media-seed.ts';
 
-// A manga chapter, a game and an episode past a thousand, on the real stack. Two browser contexts
+// A manga chapter, a game and an identified anime episode past a thousand, on the real stack. Two browser contexts
 // are two devices of one reader. The records are written once through Main's routes
 // (`tracking-media-seed.ts`).
 
@@ -171,12 +172,16 @@ test('a game marked completed on one device is completed on the other', async ({
   await expect(desktopPlay.locator('[data-where]')).toHaveText('Not played yet');
 });
 
-test('episode 1001 of a real series is watched on another device, and episode 1002 is the next one', async ({ browser }, info) => {
+test('identified anime watched progress resumes across devices and rejects stale updates', async ({ browser }, info) => {
   test.setTimeout(300_000);
   const handset = await device(browser, info, phone, seeded.episodes.work);
   const phoneEpisodes = handset.locator('[data-episode-progress]');
   await loaded(handset, '[data-episode-progress]', 180_000);
-  // Nothing is watched yet. Episode 1001 is opened by its number, and marking it is the only progress write.
+  await handset.goto(home(seeded.episodes.work));
+  await expect(handset.getByRole('link', { name: 'Anime', exact: true })).toBeVisible();
+  await handset.goto(at(seeded.episodes.work));
+  await loaded(handset, '[data-episode-progress]', 180_000);
+  // An accepted Anime classification identifies this series before its progress is changed.
   await expect(phoneEpisodes.getByText('Continue from episode 1')).toBeVisible();
   await expect(phoneEpisodes.getByText('No episode watched yet')).toBeVisible();
   await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
@@ -186,7 +191,10 @@ test('episode 1001 of a real series is watched on another device, and episode 10
   const saved = handset.waitForResponse(response => response.request().method() === 'PUT'
     && response.url().includes('/progress') && response.ok());
   await phoneEpisodes.getByRole('button', { name: 'Mark watched', exact: true }).click();
-  await saved;
+  const watchedResponse = await saved;
+  const watched = await watchedResponse.json() as { version: number; completed: boolean };
+  expect(watched.completed).toBe(true);
+  const watchedRequest = watchedResponse.request().postDataJSON() as { actingSubject: string; position: string | null };
   await expect(phoneEpisodes.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
   await shot(handset, info, 'episode-1001-phone', phoneEpisodes);
 
@@ -198,6 +206,29 @@ test('episode 1001 of a real series is watched on another device, and episode 10
   await desktopEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1001', { timeout: 180_000 });
   await expect(desktopEpisodes.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
+  const undone = wide.waitForResponse(response => response.request().method() === 'PUT'
+    && response.url() === watchedResponse.url() && response.ok());
+  await desktopEpisodes.getByRole('button', { name: 'Mark not watched', exact: true }).click();
+  const undoResponse = await undone;
+  const current = await undoResponse.json() as { version: number; completed: boolean };
+  expect(current).toMatchObject({ version: watched.version + 1, completed: false });
+  await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Not watched');
+
+  // The first browser context still holds the watched version. Its delayed write must
+  // not undo the newer decision made on the second device.
+  const refused = await handset.request.put(watchedResponse.url(), {
+    headers: { 'idempotency-key': `anime-stale-${randomUUID()}` },
+    data: { ...watchedRequest, expectedVersion: watched.version, completed: true },
+  });
+  expect(refused.status()).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: 'stale_progress' });
+  await handset.reload();
+  await loaded(handset, '[data-episode-progress]', 180_000);
+  await expect(phoneEpisodes.getByText('Continue from episode 1001')).toBeVisible();
+  await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
+  await phoneEpisodes.getByRole('button', { name: 'Go' }).click();
+  await expect(phoneEpisodes.locator('[data-selected="main"]')).toContainText('Not watched', { timeout: 180_000 });
+  await shot(handset, info, 'anime-stale-refused', phoneEpisodes);
   await desktopEpisodes.getByLabel('Go to episode number').fill('1002');
   await desktopEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1002', { timeout: 180_000 });
