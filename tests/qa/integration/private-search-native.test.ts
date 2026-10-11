@@ -115,8 +115,9 @@ beforeAll(async () => {
   const apps = readEnv(join(stackDirectory(root, stackOptions), 'apps.env'));
   fuseki = new PrivateIndexFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
     apps.FUSEKI_COMMAND_TOKEN!);
-  env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
-    routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: join(state, 'objects') };
+  env = Object.assign({ fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
+    routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: join(state, 'objects') },
+  { accessAdmission: access });
   await initializeFreshGraph(fuseki, env.lineage);
   app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => principal }, access });
@@ -170,8 +171,22 @@ async function privateDraft(work: string, body: string) {
 
 async function editDraft(contribution: string, expectedHead: string, body: string) {
   const input = { contribution, expectedHead, body, actingSubject: actor };
-  return editTextContributionDraft(env, admission(`contribution:edit:${contribution}`,
-    'contribution.edit', textContributionEditDigest(input)), input);
+  const scope = `contribution:edit:${contribution}`;
+  const digest = textContributionEditDigest(input);
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+  await pool.query(`INSERT INTO access.representation
+    (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1, $2, $3, 'contribution.edit', now() + interval '1 hour')`,
+  [randomUUID(), principalId, actor]);
+  await pool.query(`INSERT INTO access.permission_grant
+    (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+    VALUES ($1, $2, $2, $3, 'contribution.edit', now() + interval '1 hour')`,
+  [randomUUID(), actor, scope]);
+  const registered = await access.register({ principal, actingSubject: actor, scope,
+    action: 'contribution.edit', idempotencyKey: `private-native-${randomUUID()}`,
+    requestDigest: digest });
+  const claimed = await access.claim(registered.id, digest, principal);
+  return editTextContributionDraft(env, claimed, input);
 }
 
 /** Opens the exact Contribution read scope and grants it to the acting Agent. */

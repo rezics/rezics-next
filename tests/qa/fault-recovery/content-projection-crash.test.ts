@@ -114,6 +114,8 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
       const restarted = await queryPublicContentPhrase(env, content, cursor, consumer, oldInput);
       expect(restarted).toMatchObject({ complete: true, total: 1,
         results: [{ matchUnit: before.results[0]!.matchUnit }] });
+      // Capture the qualified generation while the old body is still current.
+      const pinned = await assertPublicTextReady(fuseki, lineage);
 
       // An author-admitted replacement commits in PostgreSQL, then becomes the
       // graph publication and public eligibility head before projection.
@@ -165,9 +167,6 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
       await expect(queryPublicContentPhrase(env, content, cursor, consumer, oldInput))
         .rejects.toBeInstanceOf(ContentProjectionUnavailable);
 
-      // A reader pinned before the replacement MatchUnit literal changes cannot
-      // qualify the later graph and index state as its own complete result.
-      const pinned = await assertPublicTextReady(fuseki, lineage);
       const changedCut = await content.ownerPosition();
       expect((await relayTo(changedCut.sequence)).filter(value => value === 'projected')).toHaveLength(1);
       await expect(assertSameTextInstance(fuseki, pinned)).rejects.toBeInstanceOf(SearchSnapshotMoved);
