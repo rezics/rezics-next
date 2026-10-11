@@ -11,6 +11,7 @@ import {
 import { isAbsolute, join, relative, resolve, win32 } from 'node:path';
 import { Pool } from 'pg';
 import { artifactNames } from '../../../scripts/ops/recovery-set.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { startPostgresCluster } from '../support/postgres-cluster.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
@@ -425,7 +426,7 @@ function isolationDockerOutput(args: string[], environment: NodeJS.ProcessEnv): 
   try {
     return execFileSync('docker', args, {
       cwd: repositoryRoot,
-      env: environment,
+      env: preserveReapEnvironment(environment),
       encoding: 'utf8',
       timeout: 60_000,
       maxBuffer: 16 * 1024 * 1024,
