@@ -359,7 +359,9 @@ export function normalizeBangumiFixture(raw: unknown, id: string): BangumiFixtur
   }
   const platforms = fixture.pins.game.platforms;
   const platformTokens = bangumiPlatformTokens(fixture.pins.game.subject.infobox);
-  const knownPlatforms = new Set(gamePlatformConcepts.map((platform) => platform.token));
+  const knownPlatforms: ReadonlySet<string> = new Set(
+    gamePlatformConcepts.map((platform) => platform.token),
+  );
   if (
     !platforms || platforms.length < 3 || JSON.stringify(platforms) !== JSON.stringify(platformTokens) ||
     platforms.some((platform) => !knownPlatforms.has(platform))
@@ -370,7 +372,9 @@ export function normalizeBangumiFixture(raw: unknown, id: string): BangumiFixtur
 }
 
 async function extractPins(path: string): Promise<Pick<BangumiFixture, 'pins'>> {
-  const selectedIds = new Set(Object.values(bangumiPins).map((pin) => pin.id));
+  const selectedIds: ReadonlySet<number> = new Set(
+    Object.values(bangumiPins).map((pin) => pin.id),
+  );
   const subjects = new Map<number, Row>();
   const episodes: Row[] = [];
   const relations: Row[] = [];

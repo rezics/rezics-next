@@ -22,7 +22,7 @@ function platformTokens(record: BangumiFactSource): string[] {
 test('game platform concepts include the distinct tokens in real captured type-4 subjects', () => {
   const gameIds = ['2113', '636913'];
   const observed = [...new Set(gameIds.flatMap(id => platformTokens(subjects[id]!)))].sort();
-  const schemeTokens = new Set(gamePlatformConcepts.map(concept => concept.token));
+  const schemeTokens: ReadonlySet<string> = new Set(gamePlatformConcepts.map(concept => concept.token));
   expect(observed.every(token => schemeTokens.has(token))).toBe(true);
   for (const concept of gamePlatformConcepts) {
     expect(vocabularyDigest({ actingSubject: actor, scheme: null, labels: [...concept.labels],

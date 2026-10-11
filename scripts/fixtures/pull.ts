@@ -280,7 +280,7 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
           `No locked fixture ${adapter.name}/${request.id}; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} --update-lock`,
         );
       const fetcher = options.fetcher ?? fetch;
-      const payload = adapter.capture
+      const payload = 'capture' in adapter && adapter.capture
         ? canonical(adapter.normalize(await adapter.capture(root, request, fetcher), request.id))
         : await fetchNormalized(adapter, request, fetcher, clock);
       const sha256 = fileSha256(payload);
