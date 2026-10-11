@@ -277,34 +277,6 @@ try {
       writeRealmRankingProgress(progress!);
       await project();
     }
-    if (size === 10000) {
-      // One upvote is about seven hours of recency. The filler span is longer
-      // than that, so more members vote the same two threads. Equal scores
-      // still rank the newer winner first; both stay ahead of the unvoted tail.
-      for (let index = 0; index < 40; index++) {
-        const member = await home.stack.member(`rank-support-${index}`, { stable: true });
-        const client = workProfileCorpusApi('http://main.local', member.token, {
-          fetch: ((input, init) => home.app.handle(new Request(input, init))) as typeof fetch,
-        });
-        const agent = (await client.command<{ agent: string }>(`realm-rank:support:${index}`, {
-          method: 'POST', path: '/v1/agents',
-          body: { profile: 'agent-provision-v1', kind: 'person', displayName: `Supporter ${index}` },
-        })).agent;
-        for (const [name, placement] of [
-          ['winner', identity.winner.placement],
-          ['opening', identity.opening.placement],
-        ] as const) {
-          await client.command(`realm-rank:support:${index}:${name}`, {
-            method: 'POST', path: `/v1/feed/${placement.slice(-36)}/vote`,
-            body: {
-              profile: 'feed-vote-command-v1', actingSubject: agent, value: 1, expectedRevision: null,
-            },
-          });
-        }
-      }
-      await project();
-      console.log(JSON.stringify({ realmRankingSupport: 40, elapsedMs: Date.now() - startedAt }));
-    }
     const cutStarted = Date.now();
     await retainRealmRankingCut(REALM_RANKING_BUILD_RUN, size);
     console.log(JSON.stringify({

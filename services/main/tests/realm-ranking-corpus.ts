@@ -12,10 +12,10 @@ const root = resolve(import.meta.dir, '../../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
 
 /** Bump when the reply recipe or the retained cuts change, not for unrelated code edits. */
-export const REALM_RANKING_CORPUS_VERSION = 'realm-ranking-commands-v1';
-export const REALM_RANKING_SCALES = [100, 1000, 10000] as const;
+export const REALM_RANKING_CORPUS_VERSION = 'realm-ranking-commands-v2';
+export const REALM_RANKING_SCALES = [100, 400, 1600] as const;
 export type RealmRankingScale = (typeof REALM_RANKING_SCALES)[number];
-export const REALM_RANKING_FILLERS = 9_998;
+export const REALM_RANKING_FILLERS = 1_598;
 export const REALM_RANKING_BUILD_RUN = 'realmrankbuild';
 
 const owners = ['access', 'content', 'relay'] as const;
