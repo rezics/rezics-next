@@ -239,10 +239,6 @@ export class RealmAboutThreadStore {
       const saved = (await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
         SET phase = 'posted', placement_operation_id = $2, placement_receipt = $3 WHERE id = $1 RETURNING *`,
       [id, placementOperationId, placementReceipt])).rows[0]!;
-      if (row.reply === row.opener_reply) {
-        await client.query(`UPDATE content.realm_about_thread SET state = 'active', revision_id = $3
-          WHERE realm = $1 AND about = $2`, [row.realm, row.about, row.revision_id]);
-      }
       return operation(saved, false);
     });
   }

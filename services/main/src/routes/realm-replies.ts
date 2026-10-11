@@ -64,8 +64,7 @@ const aboutPostBody = authoredBodySchema({ profile: t.Literal('realm-about-post-
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]), spoiler: t.Optional(t.Boolean()),
 }, 8192, 1);
 const aboutPostResult = t.Object({ profile: t.Literal('realm-about-post-v1'), realm: native, about: native,
-  thread: t.Object({ reply: native, rootRevision: native }), reply: native, revisionId: uuid,
-  placement: native, opened: t.Boolean() }, { additionalProperties: false });
+  author: native, reply: native, revisionId: uuid, placement: native }, { additionalProperties: false });
 
 function replyError(error: unknown): Response {
   if (error instanceof RealmReplyInvalid) return problem(400, 'invalid_realm_reply', error.message);
@@ -98,11 +97,15 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
           + 'It selects the opener or retained-root child and composes admitted draft, identity and placement. '
           + 'The write family debits three units in the verified principal bucket before dispatch, including retries. '
           + 'Idempotency-Key is required, limited to 128 characters and scoped to the verified principal. '
-          + 'Changed input under a key returns 409. Successful retries return the exact same 201 body; '
+          + 'Changed input under a key returns 409. Successful retries return 200 with the same receipt body; '
           + 'pending retries resume the durable operation and 202 contains only operationId. '
-          + 'Keys remain retained with the durable discussion operation. Body content is limited to 8 KiB. '
+          + 'Replay window: an unsettled effect can dispatch only until its Access admission expires_at; '
+          + 'a settled effect replays from its immutable receipt while that receipt exists. '
+          + 'Hidden and absent openers have the same outcome; the receipt contains only the poster\'s own '
+          + 'Person, reply and placement, never canonical parent coordinates or an opener flag. '
+          + 'Body content is limited to 8 KiB. '
           + 'This new platform:realm-reply capability stays closed pending trust-ops review.' },
-      response: { 201: aboutPostResult, 202: t.Object({ operationId: uuid }, { additionalProperties: false }),
+      response: { 200: aboutPostResult, 201: aboutPostResult, 202: t.Object({ operationId: uuid }, { additionalProperties: false }),
         429: problemResult(429), ...writeProblems, ...workReadProblems },
     }, async ({ request, params, body }) => {
       try {

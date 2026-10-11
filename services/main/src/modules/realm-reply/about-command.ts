@@ -43,10 +43,6 @@ export class RealmAboutPostCommand {
     const resource = route.kind === 'home' ? route.page?.reference.resourceId
       : route.kind === 'document' || route.kind === 'detail' ? route.resource.id : undefined;
     const current = await readZoneConfiguration(this.work.environment, input.zone);
-    if (route.revision !== input.routeRevision || route.realm !== realm
-      || current.configuration.defaultRealm !== realm || resource !== input.about) {
-      throw new WorkReadMoved('Zone discussion basis changed');
-    }
     const policy = await workRead(this.work, request, { actingSubject: input.actingSubject }, async session => {
       const policy = await session.realm(realm);
       const [target] = await resolveTargets(session, [input.about], 'discussion');
@@ -60,6 +56,12 @@ export class RealmAboutPostCommand {
       }
       return policy;
     });
+    // Disclose identifiers before comparing route coordinates: an unavailable
+    // target is the same 404 whether it exists or not.
+    if (route.revision !== input.routeRevision || route.realm !== realm
+      || current.configuration.defaultRealm !== realm || resource !== input.about) {
+      throw new WorkReadMoved('Zone discussion basis changed');
+    }
     if (!this.work.access.withRealmPolicy) throw new RealmReplyUnavailable('Realm policy owner is unavailable');
     await this.work.access.withRealmPolicy(principal, input.actingSubject, realm, 'reply', async permit => {
       if (policy.visibility !== 'public' && !permit.member) throw new WorkReadMissing('Realm is unavailable');
@@ -80,14 +82,14 @@ export class RealmAboutPostCommand {
         return selected.parentReply === null ? null : { realm, about, reply: canonical.openerReply,
           rootRevision: canonical.rootRevision, originRealm: realm };
       },
-      visibleParent: async (realm, reply, principal, actor) => {
-        // Hidden-opener behavior needs trust-ops' decision before this gated
-        // command can ship. Do not replace the canonical key or synthesize a parent.
-        const visible = await this.work.realmReplies!.visible(realm, reply, principal, actor);
-        if (visible && visible.revisionId !== selected.parentRevision) {
-          throw new RealmReplyStale('Discussion parent revision changed');
+      visibleParent: async (realm, reply) => {
+        // This internal bridge consumes the canonical owner's immutable,
+        // posted selection, including a withheld opener. No parent coordinates
+        // enter the posting receipt; read disclosure never reallocates the key.
+        if (realm !== selected.realm || reply !== selected.parentReply || !selected.parentRevision) {
+          throw new RealmReplyStale('Discussion parent selection changed');
         }
-        return visible;
+        return { revisionId: selected.parentRevision };
       },
     };
   }
@@ -101,9 +103,7 @@ export class RealmAboutPostCommand {
       throw new RealmReplyUnavailable('Discussion placement receipt is unavailable');
     }
     return { profile: 'realm-about-post-v1' as const, realm: selected.realm, about: selected.about,
-      thread: { reply: selected.openerReply, rootRevision: selected.rootRevision },
-      reply: selected.reply, revisionId: selected.revisionId, placement: receipt.placement,
-      opened: selected.parentReply === null };
+      author: selected.actor, reply: selected.reply, revisionId: selected.revisionId, placement: receipt.placement };
   }
 
   async post(request: Request, principal: VerifiedPrincipal, realm: string, input: RealmAboutPostInput, key: string) {
@@ -111,7 +111,7 @@ export class RealmAboutPostCommand {
     const digest = realmReplyDigest({ realm, input });
     let selected = await this.store.readIntent(principalKey, key, digest);
     // Exact successful replay consumes receipts, never a newer route/target cut.
-    if (selected?.phase === 'posted') return { status: 201 as const, body: await this.posted(selected) };
+    if (selected?.phase === 'posted') return { status: 200 as const, body: await this.posted(selected) };
     try {
       const authored = authoredDocumentBody(input, 8192);
       if (authored.document ? !hasDocumentContent(authored.document) : !authored.body) {

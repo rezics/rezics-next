@@ -35,6 +35,19 @@ export const registeredHiddenIdReads = [
   'POST /v1/recipes/{id}/file-imports',
 ] as const;
 
+/** Writes have their own outcome proofs; they do not run in the read-only equality fixture.
+ * About-posts covers hidden/absent targets (404) and hidden/absent openers (ordinary posting). */
+export const registeredHiddenIdWrites = [
+  'POST /v1/realms/{realm}/about-posts',
+] as const;
+export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenIdWrites] as const;
+
+// The posting contract declares disclosure inputs, separately from its observed
+// revision and route coordinates. Do not invent scalar-id debt for unrelated writes.
+const writeDisclosureBodyIds: Readonly<Record<string, readonly string[]>> = {
+  'POST /v1/realms/{realm}/about-posts': ['about', 'actingSubject'],
+};
+
 const BODY_ID_ARRAYS = new Set(['ids', 'resources', 'targets']);
 const METHODS = ['get', 'post'] as const;
 
@@ -172,8 +185,15 @@ export function discoverHiddenIdReads(document: OpenApiDocument): HiddenIdOperat
       );
       const body = operation.requestBody?.content?.['application/json']?.schema;
       collectBodyIds(body, ids);
+      const name = `${method.toUpperCase()} ${path}`;
+      for (const field of writeDisclosureBodyIds[name] ?? []) {
+        if (!variants(body).some(shape => schemaNamesResource(shape.properties?.[field]))) {
+          throw new Error(`${name} declares body:${field} disclosure but its contract has no resource id there`);
+        }
+        ids.add(`body:${field}`);
+      }
       if (ids.size === 0) continue;
-      found.push({ operation: `${method.toUpperCase()} ${path}`, ids: [...ids].sort() });
+      found.push({ operation: name, ids: [...ids].sort() });
     }
   }
   return found.sort((left, right) => left.operation.localeCompare(right.operation));
@@ -189,7 +209,7 @@ export function exemptionReason(operation: HiddenIdOperation): string | undefine
 
 export function classifyHiddenIdReads(
   discovered: readonly HiddenIdOperation[],
-  registry: readonly string[] = registeredHiddenIdReads,
+  registry: readonly string[] = registeredHiddenIdOperations,
 ): HiddenIdClassification[] {
   const registered = new Set(registry);
   return discovered.map((operation) => {
@@ -216,7 +236,7 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
 export function hiddenIdInventoryErrors(
   discovered: readonly HiddenIdOperation[],
   committed: readonly HiddenIdClassification[],
-  registry: readonly string[] = registeredHiddenIdReads,
+  registry: readonly string[] = registeredHiddenIdOperations,
 ): string[] {
   const errors: string[] = [];
   const committedByOperation = new Map(committed.map((entry) => [entry.operation, entry]));

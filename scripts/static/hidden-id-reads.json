@@ -3272,6 +3272,15 @@
     "status": "unregistered"
   },
   {
+    "operation": "POST /v1/realms/{realm}/about-posts",
+    "ids": [
+      "body:about",
+      "body:actingSubject",
+      "path:realm"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "POST /v1/realms/{realm}/context-selections",
     "ids": [
       "path:realm"
