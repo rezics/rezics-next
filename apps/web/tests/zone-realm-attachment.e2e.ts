@@ -8,6 +8,7 @@ import { addressPath, spaceHref, threadHref, zoneMemberHref } from '../features/
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
+import { retainedAboutPost } from '../features/zones/about-discussion-intent.ts';
 import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 
 // An editor attaches a Realm from another Space and publishes a routable Work page.
@@ -350,11 +351,16 @@ test('two Persons recover concurrent Zone-page discussion posts, reopen the thre
       await expect(discussion(tab).getByRole('textbox', { name: 'Your message' })).toBeDisabled();
       expect((await retained(tab))[0]!.value).toMatchObject({ body, language, spoiler });
     }
+    for (const [saved, actor] of [[firstRetained[0]!, actingSubject], [secondRetained[0]!, secondPerson.agent]] as const) {
+      expect(retainedAboutPost(JSON.stringify(saved.value), actor, zoneSpace.zone!, livePath)).toEqual(saved.value);
+    }
     await shoot(page, 'zone-discussion-response-lost', info, true);
     await shoot(other, 'zone-discussion-pending', info, true);
     await Promise.all([page.reload(), other.reload()]);
-    await expect(discussion(page).getByRole('textbox', { name: 'Your message' })).toHaveValue(firstBody);
-    await expect(discussion(other).getByRole('textbox', { name: 'Your message' })).toHaveValue(secondBody);
+    // The server can already show the settled thread while the client boundary
+    // is still loading; its effect restores the device intent before replay.
+    await expect(discussion(page).getByRole('textbox', { name: 'Your message' })).toHaveValue(firstBody, { timeout: 30_000 });
+    await expect(discussion(other).getByRole('textbox', { name: 'Your message' })).toHaveValue(secondBody, { timeout: 30_000 });
     expect(await retained(page)).toEqual(firstRetained); expect(await retained(other)).toEqual(secondRetained);
     await Promise.all([recover(page, firstBody), recover(other, secondBody)]);
     for (const actor of [actingSubject, secondPerson.agent]) {
