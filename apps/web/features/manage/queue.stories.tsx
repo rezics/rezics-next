@@ -340,7 +340,7 @@ export const Chinese: Story = {
   parameters: { route: { pathname: `/zh-Hans/manage/r/${realm}` } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('navigation', { name: '领域管理' })).toBeInTheDocument();
+    await expect(canvas.getByRole('navigation', { name: '社区管理' })).toBeInTheDocument();
     await expect(canvas.getByRole('link', { name: '待办' })).toHaveAttribute('href', `/zh-Hans/manage/r/${realm}`);
     await expect(canvas.getByText(new RegExp(`${queue.length} 项待处理`))).toBeInTheDocument();
     await userEvent.click(within(canvas.getByRole('list', { name: '待办事项' })).getByRole('button', { name: /第一章 雨夜/ }));

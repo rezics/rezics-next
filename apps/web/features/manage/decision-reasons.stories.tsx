@@ -245,11 +245,11 @@ export const SimplifiedChinese: Story = {
   async play() {
     reset();
     await userEvent.keyboard('a');
-    const dialog = await dialogNamed('保留 1 条举报中的内容');
+    const dialog = await dialogNamed('保留1条举报所涉及的内容');
     await reasonsFocused(dialog);
-    await visible(() => dialog.getByText('我们审核了这条举报，认为该内容符合领域规则。'));
+    await visible(() => dialog.getByText('我们审核了这条举报，认为该内容符合社区规则。'));
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep',
-      reasons: expect.objectContaining({ contentLanguage: 'zh-Hans', facts: '我们审核了这条举报，认为该内容符合领域规则。' }) })]));
+      reasons: expect.objectContaining({ contentLanguage: 'zh-Hans', facts: '我们审核了这条举报，认为该内容符合社区规则。' }) })]));
   },
 };
