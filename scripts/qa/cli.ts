@@ -53,8 +53,8 @@ import {
   failedSelection,
   junitResults,
   parseJUnit,
+  selectedTestExecuted,
   testArgs,
-  UNEXECUTED_FILE_TEST,
   unitHarnessFiles,
 } from './acceptance.ts';
 import { selectBackendCases } from './backend-scope.ts';
@@ -1097,15 +1097,7 @@ try {
       || tier === 'model' || tier === 'fault/recovery' || tier === 'e2e' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {
-        if (
-          !tests.some(
-            (actual) =>
-              actual.tier === expected.tier && actual.file === expected.file &&
-              (expected.name === UNEXECUTED_FILE_TEST
-                ? actual.name !== UNEXECUTED_FILE_TEST && !actual.skipped
-                : actual.name === expected.name),
-          )
-        )
+        if (!selectedTestExecuted(expected, tests))
           errors.push(`Selected test was not executed: ${expected.file}: ${expected.name}`);
       }
     }

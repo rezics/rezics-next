@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, hungTestFile, parseJUnit, testArgs, titleIds, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
+import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, hungTestFile, parseJUnit, selectedTestExecuted, testArgs, titleIds, UNEXECUTED_FILE_TEST, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 import { inventoryFingerprint, selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
 import { integrationGateFiles } from '../../../scripts/qa/integration-gate-files.ts';
@@ -198,6 +198,38 @@ test('QA06: failed e2e names and registered files can be reselected', () => {
     .toEqual(['apps/web/tests/public-search.e2e.ts']);
   expect(() => e2eArgs(undefined, { files: ['apps/web/tests/../bad.e2e.ts'] }))
     .toThrow('not registered');
+});
+
+test('preparation failures rerun selected files in full while ordinary failures retain their title filter', () => {
+  const tests = parseJUnit(`<testsuite>
+    <testcase name="Scoped subjects preparation" file="apps/web/tests/scoped-subjects-journey.e2e.ts"><failure type="JourneyPreparationError" message="denied" /></testcase>
+    <testcase name="mobile search filters" file="apps/web/tests/public-search.e2e.ts"><failure message="overflow" /></testcase>
+  </testsuite>`, 'e2e');
+  const selection = { sourceRunId: 'prior', tiers: ['e2e' as const], tests };
+  expect(tests[0]?.preparationFailure).toBe(true);
+  expect(tests[1]?.preparationFailure).toBeUndefined();
+  expect(e2eArgs(selection)).toEqual(['apps/web/tests/public-search.e2e.ts', 'apps/web/tests/scoped-subjects-journey.e2e.ts']);
+  expect(e2eArgs(selection, { id: 'VIEW04' })).not.toContain('--grep');
+  expect(e2eArgs({ ...selection, tests: [tests[1]!] })).toEqual(['apps/web/tests/public-search.e2e.ts',
+    '--grep', '(?:^|\\s)(?:mobile search filters)$']);
+});
+
+test('selected preparation and incomplete-file results require executed file evidence instead of the synthetic title', () => {
+  const preparation = { name: 'Prepare journey', file: 'apps/web/tests/example.e2e.ts', tier: 'e2e' as const,
+    failed: true, skipped: false, preparationFailure: true };
+  const executed = { ...preparation, name: 'journey succeeds', failed: false, preparationFailure: undefined };
+  for (const expected of [preparation, { ...preparation, name: UNEXECUTED_FILE_TEST, preparationFailure: undefined }]) {
+    expect(selectedTestExecuted(expected, [executed])).toBe(true);
+    expect(selectedTestExecuted(expected, [{ ...executed, skipped: true }])).toBe(false);
+    expect(selectedTestExecuted(expected, [{ ...executed, name: UNEXECUTED_FILE_TEST, failed: true }])).toBe(false);
+    expect(selectedTestExecuted(expected, [{ ...executed, file: 'apps/web/tests/other.e2e.ts' }])).toBe(false);
+    expect(selectedTestExecuted(expected, [{ ...executed, tier: 'unit' }])).toBe(false);
+    expect(selectedTestExecuted(expected, [])).toBe(false);
+  }
+  expect(selectedTestExecuted(preparation, [preparation])).toBe(true);
+  const assertion = { ...preparation, preparationFailure: undefined };
+  expect(selectedTestExecuted(assertion, [executed])).toBe(false);
+  expect(selectedTestExecuted(assertion, [assertion])).toBe(true);
 });
 
 test('QA06: failed fault/recovery test is read from the flat artifact and reselected', () => {

@@ -18,6 +18,8 @@ export interface TestResult {
   detail?: string;
   /** The failure is a runner timeout, so a hanging file can be retried alone. */
   timeout?: boolean;
+  /** Preparation failed before this journey could run; retry the whole file. */
+  preparationFailure?: boolean;
 }
 
 export const UNEXECUTED_FILE_TEST = 'QA file did not complete';
@@ -58,13 +60,14 @@ function reportedFile(file: string, root: string | undefined): string {
 }
 
 /** The first failure or error element. A self-closing testcase has no body, so it cannot own a later case. */
-function caseFailure(body: string): { failed: boolean; detail?: string; timeout?: boolean } {
+function caseFailure(body: string): { failed: boolean; detail?: string; timeout?: boolean; preparationFailure?: boolean } {
   const tag = /<(?:failure|error)\b([^>]*?)(?:\/>|>)/.exec(body);
   if (!tag) return { failed: false };
   const type = attribute(tag[1] ?? '', 'type');
   const message = attribute(tag[1] ?? '', 'message');
   const timeout = type === 'TimeoutError' || (message !== undefined && /^test timed out\b/i.test(message));
-  return { failed: true, ...(message ? { detail: message } : {}), ...(timeout ? { timeout: true } : {}) };
+  return { failed: true, ...(message ? { detail: message } : {}), ...(timeout ? { timeout: true } : {}),
+    ...(type === 'JourneyPreparationError' ? { preparationFailure: true } : {}) };
 }
 
 export function parseJUnit(xml: string, tier: Tier, options?: JUnitDecodeOptions): TestResult[] {
@@ -84,6 +87,7 @@ export function parseJUnit(xml: string, tier: Tier, options?: JUnitDecodeOptions
       ...(Number.isFinite(seconds) && seconds >= 0 ? { durationMs: Math.round(seconds * 1000) } : {}),
       ...(failure.detail ? { detail: failure.detail } : {}),
       ...(failure.timeout ? { timeout: true } : {}),
+      ...(failure.preparationFailure ? { preparationFailure: true } : {}),
     });
   }
   return result;
@@ -318,9 +322,18 @@ export function e2eArgs(selection?: FailedSelection,
   if (files.some(file => !isQaE2ePath(file))) throw new Error('Selected e2e path is not registered');
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Playwright matches against the full title path, including the file name.
-  const grep = chosen?.id ? `(?:^|\\s)(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`
+  // A preparation step has no test title; the shared grep must allow its whole file.
+  const grep = selected.some(test => test.preparationFailure) ? undefined
+    : chosen?.id ? `(?:^|\\s)(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`
     : selected.length ? `(?:^|\\s)(?:${selected.map(test => escape(test.name)).join('|')})$` : undefined;
   return [...files, ...(grep ? ['--grep', grep] : [])];
+}
+
+export function selectedTestExecuted(expected: TestResult, tests: readonly TestResult[]): boolean {
+  return tests.some(actual => actual.tier === expected.tier && actual.file === expected.file &&
+    (expected.preparationFailure || expected.name === UNEXECUTED_FILE_TEST
+      ? actual.name !== UNEXECUTED_FILE_TEST && !actual.skipped
+      : actual.name === expected.name));
 }
 
 export function testArgs(

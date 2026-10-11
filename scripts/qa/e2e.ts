@@ -88,7 +88,7 @@ export async function runPreparedJourneys(preparations: readonly JourneyPreparat
         const file = escape(preparation.journey);
         const step = escape(preparation.step);
         const detail = escape(`${preparation.step}: ${error}; see logs/e2e-${preparation.slug}.log`);
-        suites.push(`<testsuite name="${file}" file="${file}" tests="1" failures="1"><testcase name="${step}" file="${file}" time="0"><failure message="${detail}" /></testcase></testsuite>`);
+        suites.push(`<testsuite name="${file}" file="${file}" tests="1" failures="1"><testcase name="${step}" file="${file}" time="0"><failure type="JourneyPreparationError" message="${detail}" /></testcase></testsuite>`);
       }
       writeFileSync(xmlPath, mergeJUnit(suites, Date.now() - started));
     }

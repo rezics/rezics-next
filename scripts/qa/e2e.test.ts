@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { parseJUnit } from './acceptance.ts';
+import { e2eArgs, failedSelection, parseJUnit, selectedTestExecuted } from './acceptance.ts';
 import { measuredBrowserStep, runPreparedJourneys, type BrowserStepResult } from './e2e.ts';
 import type { JourneyPreparation } from './e2e-preparation.ts';
 
@@ -47,7 +47,7 @@ describe('journey preparation isolation', () => {
         expect(steps.map(step => step.passed)).toEqual([false, true]);
         expect(f.results()).toEqual([
           expect.objectContaining({ file: second.journey, failed: false }),
-          expect.objectContaining({ file: first.journey, name: first.step, failed: true, skipped: false,
+          expect.objectContaining({ file: first.journey, name: first.step, failed: true, skipped: false, preparationFailure: true,
             detail: `${first.step}: ${error}; see logs/e2e-first.log` }),
         ]);
         // The tier uses this condition even when every launched test passed.
@@ -126,6 +126,40 @@ describe('journey preparation isolation', () => {
       })).toEqual([]);
       expect(launched).toEqual(args);
       expect(readFileSync(join(f.artifactDir, 'e2e.xml'), 'utf8')).toBe(xml);
+    } finally { f.cleanup(); }
+  });
+
+  test('a failed-only rerun recovers preparation by running the full journey without a step-name grep', async () => {
+    const f = fixture();
+    try {
+      const first = preparation('first');
+      await runPreparedJourneys([first], [first.journey], {
+        root: f.root, artifactDir: f.artifactDir,
+        prepare: async () => { throw new Error('denied'); },
+        playwright: async () => { throw new Error('a failed preparation must not start Playwright'); },
+      });
+      const prior = join(f.root, 'prior');
+      mkdirSync(prior);
+      writeFileSync(join(prior, 'e2e.xml'), readFileSync(join(f.artifactDir, 'e2e.xml')));
+      writeFileSync(join(prior, 'acceptance.json'), JSON.stringify({ tiers: [{ name: 'e2e', status: 'failed' }] }));
+      const selection = failedSelection(f.root, 'prior');
+      expect(selection.tests).toEqual([expect.objectContaining({ name: first.step, preparationFailure: true })]);
+      const args = e2eArgs(selection);
+      expect(args).toEqual([first.journey]);
+      let preparations = 0, launches = 0;
+      expect(await runPreparedJourneys([first], args, {
+        root: f.root, artifactDir: f.artifactDir,
+        prepare: async () => { preparations++; },
+        playwright: async remaining => {
+          launches++;
+          expect(remaining).toEqual([first.journey]);
+          writeFileSync(join(f.artifactDir, 'e2e.xml'), `<testsuites><testsuite><testcase name="first journey succeeds" classname="first.e2e.ts" /></testsuite></testsuites>`);
+        },
+      })).toEqual([]);
+      expect(preparations).toBe(1);
+      expect(launches).toBe(1);
+      expect(f.results()).toEqual([expect.objectContaining({ file: first.journey, failed: false })]);
+      expect(selectedTestExecuted(selection.tests[0]!, f.results())).toBe(true);
     } finally { f.cleanup(); }
   });
 });
