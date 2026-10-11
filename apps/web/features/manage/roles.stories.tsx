@@ -180,3 +180,8 @@ export const DarkPhone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+export const EditWithImpactPreviewPhone: Story = {
+  ...EditWithImpactPreview,
+  globals: { viewport: { value: 'phone' } },
+};
