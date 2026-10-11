@@ -3636,6 +3636,37 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('scope changed runs only the test files the branch touches and leaves the rest to the main-wide run', async () => {
+    const r = repo();
+    try {
+      const own = 'gate-scope-own.test.ts';
+      const other = 'gate-scope-other.test.ts';
+      const source = (fails: boolean) => `import { test, expect } from 'bun:test';\n`
+        + `test('stays valid', () => expect(${fails}).toBe(false));\n`;
+      // The other file fails on main already and the plan names both, but the branch touches only its own.
+      writeFileSync(join(r.dir, other), source(true));
+      expect(spawnSync('git', ['-C', r.dir, 'add', other]).status).toBe(0);
+      expect(spawnSync('git', ['-C', r.dir, 'commit', '-qm', 'Add another unit']).status).toBe(0);
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(own); r.save(ledger);
+      writeFileSync(join(task.worktree, own), source(false));
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', own]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add own unit']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, [own, other].map(file => `  unit: ${file}`).join('\n') + '\n');
+      const log = join(r.dir, '.temp/unit-log');
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SCOPE: 'changed' });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('1 more affected file(s) are left to the main-wide run');
+      const ran = readFileSync(log, 'utf8');
+      expect(ran).toContain(own);
+      expect(ran).not.toContain(other);
+    } finally { r.cleanup(); }
+  });
+
   test('eight affected files run as four shards and the union of their failures is reported', async () => {
     const r = repo();
     try {

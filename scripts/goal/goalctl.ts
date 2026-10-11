@@ -2737,6 +2737,14 @@ export function balanceUnitShards(files: readonly string[], shards: number): str
   return groups;
 }
 
+/** Which affected files a merge runs itself. Program chooses `changed` in `unit-gate-scope` in the orchestration
+ * state when landing is the limit and it runs the full affected set on main; `GOAL_UNIT_GATE_SCOPE` overrides it. */
+function unitGateScope(): 'affected' | 'changed' {
+  const file = join(stateDir, 'unit-gate-scope');
+  const value = process.env.GOAL_UNIT_GATE_SCOPE ?? (existsSync(file) ? readFileSync(file, 'utf8').trim() : '');
+  return value === 'changed' ? 'changed' : 'affected';
+}
+
 /** How many shards of one gate run at a time. Program sets it for every Goal in `unit-gate-shards` in the
  * orchestration state; `GOAL_UNIT_GATE_SHARDS` overrides it for one process. Each shard still passes memory admission. */
 function unitGateShards(): number {
@@ -4482,9 +4490,15 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
   const selection = await affectedSelection(worktree, currentMain, changed);
   const unit = selectedUnitFiles(worktree, selection);
   const owner = new Set(selectedOwnerFiles(worktree, selection).filter(file => !unit.includes(file)));
-  const files = [...unit, ...owner].sort();
+  const affected = [...unit, ...owner].sort();
+  // Scope `changed` runs the test files the branch itself touches and the repository guards; program runs the
+  // rest of the affected set on main for every merge together.
+  const ownFiles = new Set(changed);
+  const guards = new Set<string>(repositoryGuards.map(guard => guard.file));
+  const files = unitGateScope() === 'changed' ? affected.filter(file => ownFiles.has(file) || guards.has(file)) : affected;
   for (const file of files) gatedFiles.add(file);
-  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${currentMain.slice(0, 12)}`);
+  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${currentMain.slice(0, 12)}`
+    + (files.length === affected.length ? '' : `; ${affected.length - files.length} more affected file(s) are left to the main-wide run`));
   if (!files.length) return;
   const configured = gateTreeRefusal(worktree, mainRoot);
   if (configured) return configured;
