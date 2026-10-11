@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { advanceContentSequence } from '../content-sequence.ts';
-import { MediaInvalid, MediaMissing } from '../media/store.ts';
+import { MediaInvalid, MediaMissing, MediaStale, MediaUnavailable } from '../media/store.ts';
 import {
   checkSize,
   completeRenditionLadderSql,
@@ -100,7 +100,7 @@ export class MediaRenditionStore {
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
       client.release();
@@ -318,7 +318,7 @@ export class MediaRenditionStore {
   async settle(
     lease: RenditionLease,
     output: RenditionOutput,
-    persist: () => Promise<string>,
+    persist: (signal: AbortSignal) => Promise<string>,
   ): Promise<boolean> {
     checkSize(output);
     const profile = parseProfile(lease.profile);
@@ -349,7 +349,37 @@ export class MediaRenditionStore {
         )
       ).rows[0];
       if (!held) return false;
-      const digest = await persist();
+      // An idle transaction can lose its owner lock while object I/O is pending.
+      // Use the effective connection setting, leaving half the timeout for the
+      // abort and settlement queries; a pool with no idle bound cannot persist.
+      const bounds = (
+        await client.query<{ idle_ms: number; transaction_id: string }>(`
+          SELECT (extract(epoch FROM current_setting('idle_in_transaction_session_timeout')::interval)
+            * 1000)::float8 AS idle_ms, txid_current()::text AS transaction_id`)
+      ).rows[0];
+      if (!bounds || !Number.isFinite(bounds.idle_ms) || bounds.idle_ms <= 0)
+        throw new MediaUnavailable('rendition persistence requires a bounded transaction');
+      const controller = new AbortController();
+      const timer = setTimeout(
+        () => controller.abort(new MediaUnavailable('rendition persistence deadline elapsed')),
+        Math.max(1, Math.floor(Math.min(bounds.idle_ms / 2, 30_000))),
+      );
+      let digest: string;
+      try {
+        digest = await persist(controller.signal);
+        controller.signal.throwIfAborted();
+      } finally {
+        clearTimeout(timer);
+      }
+      // A successful query on a reconnected or rolled-back client does not
+      // prove the lock survived. Require the transaction that held the fence.
+      const alive = (
+        await client.query<{ transaction_id: string }>(
+          'SELECT txid_current()::text AS transaction_id',
+        )
+      ).rows[0];
+      if (alive?.transaction_id !== bounds.transaction_id)
+        throw new MediaStale('rendition persistence lost its owner transaction');
       if (digest !== sha(output.bytes)) throw new MediaInvalid('rendition object digest differs');
       // Object read-back can consume a lease. A late writer leaves no deliverable
       // representation; retry can reuse immutable bytes under the same asset.

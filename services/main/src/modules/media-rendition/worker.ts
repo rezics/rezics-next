@@ -61,8 +61,8 @@ export class MediaRenditionWorker {
       for (const [index, lease] of leases.entries()) {
         const rendition = output[index]!;
         settled =
-          (await this.store.settle(lease, rendition, () =>
-            this.objects(lease.namespace).put(rendition.bytes),
+          (await this.store.settle(lease, rendition, (signal) =>
+            this.objects(lease.namespace).put(rendition.bytes, signal),
           )) && settled;
       }
       recordWorkerOutcome({ outcome: settled ? 'worked' : 'retry', processed: 1, unit: 'item' });

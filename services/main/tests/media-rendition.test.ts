@@ -15,7 +15,7 @@ import {
   LocalImageTransformer,
   transformInProcess,
 } from '../src/modules/media-rendition/transform.ts';
-import { MediaRenditionStore } from '../src/modules/media-rendition/store.ts';
+import { MediaRenditionStore, type RenditionLease } from '../src/modules/media-rendition/store.ts';
 import { requestUseRenditions } from '../src/modules/media-rendition/request.ts';
 import { MediaRenditionWorker } from '../src/modules/media-rendition/worker.ts';
 import { MediaMissing } from '../src/modules/media/store.ts';
@@ -358,13 +358,14 @@ test('one worker tick fetches and transforms a crop once and persists all its le
     height: 1,
     type: parseProfile(lease.profile).type,
   }));
+  const persistenceSignal = new AbortController().signal;
   const worker = new MediaRenditionWorker(
     {
       leaseCrop: async () => leases,
-      settle: async (lease: unknown, output: unknown, persist: () => Promise<string>) => {
+      settle: async (lease: unknown, output: unknown, persist: (signal: AbortSignal) => Promise<string>) => {
         expect(lease).toBe(leases[settled]);
         expect(output).toBe(outputs[settled++]);
-        await persist();
+        await persist(persistenceSignal);
         return true;
       },
     } as unknown as MediaRenditionStore,
@@ -386,7 +387,8 @@ test('one worker tick fetches and transforms a crop once and persists all its le
         gets++;
         return bytes;
       },
-      put: async () => {
+      put: async (_bytes, signal) => {
+        expect(signal).toBe(persistenceSignal);
         puts++;
         return digest;
       },
@@ -394,4 +396,71 @@ test('one worker tick fetches and transforms a crop once and persists all its le
   );
   await worker.tick();
   expect({ gets, decodes, puts, settled }).toEqual({ gets: 1, decodes: 1, puts: 4, settled: 4 });
+});
+
+function renditionSettlementFixture(idleMs = 60_000) {
+  const statements: string[] = [];
+  const bytes = new Uint8Array([1]);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const lease: RenditionLease = {
+    job: randomUUID(), asset: randomUUID(), source: randomUUID(), digest,
+    namespace: 'media/', mediaType: 'image/png', crop: null, epoch: '0',
+    authorityEpoch: '1', profile: 'image-width-320-webp-v1', token: randomUUID(), attempt: 1,
+  };
+  const output = { bytes, width: 1, height: 1, type: 'image/webp' as const };
+  let transactionId = '101';
+  const client = {
+    query: async (sql: string) => {
+      statements.push(sql);
+      if (sql.includes("current_setting('idle_in_transaction_session_timeout')"))
+        return { rows: [{ idle_ms: idleMs, transaction_id: transactionId }], rowCount: 1 };
+      if (sql === 'SELECT txid_current()::text AS transaction_id')
+        return { rows: [{ transaction_id: transactionId }], rowCount: 1 };
+      return { rows: [{ id: lease.job }], rowCount: 1 };
+    },
+    release: () => undefined,
+  };
+  return { store: new MediaRenditionStore({ connect: async () => client } as unknown as Pool),
+    lease, output, digest, statements, loseTransaction: () => { transactionId = '102'; } };
+}
+
+test('rendition persistence aborts before its configured idle transaction bound and records nothing', async () => {
+  const fixture = renditionSettlementFixture(2_000);
+  let aborted = false;
+  await expect(fixture.store.settle(fixture.lease, fixture.output, signal => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => {
+      aborted = true;
+      reject(signal.reason);
+    }, { once: true });
+  }))).rejects.toThrow('rendition persistence deadline elapsed');
+  expect(aborted).toBe(true);
+  expect(fixture.statements.at(-1)).toBe('ROLLBACK');
+  expect(fixture.statements.some(sql => sql.includes('INSERT INTO media.representation'))).toBe(false);
+  expect(fixture.statements).not.toContain('COMMIT');
+});
+
+test('rendition persistence refuses an unbounded pool before writing and verifies the original transaction afterward', async () => {
+  const unbounded = renditionSettlementFixture(0);
+  let puts = 0;
+  await expect(unbounded.store.settle(unbounded.lease, unbounded.output, async () => {
+    puts++;
+    return unbounded.digest;
+  })).rejects.toThrow('rendition persistence requires a bounded transaction');
+  expect(puts).toBe(0);
+
+  const lost = renditionSettlementFixture();
+  await expect(lost.store.settle(lost.lease, lost.output, async () => {
+    lost.loseTransaction();
+    return lost.digest;
+  })).rejects.toThrow('rendition persistence lost its owner transaction');
+  expect(lost.statements.some(sql => sql.includes('INSERT INTO media.representation'))).toBe(false);
+  expect(lost.statements).not.toContain('COMMIT');
+
+  const retained = renditionSettlementFixture();
+  await expect(retained.store.settle(retained.lease, retained.output, async signal => {
+    signal.throwIfAborted();
+    return retained.digest;
+  })).resolves.toBe(true);
+  expect(retained.statements.some(sql => sql.includes('INSERT INTO media.representation'))).toBe(true);
+  expect(retained.statements.at(-1)).toBe('COMMIT');
 });
