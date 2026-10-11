@@ -41,7 +41,7 @@ const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unav
  * at most 39 disclosure facts per target (19 images, two facts each, and one
  * trailer), also batched by 64. The owner-specific counters remain internal;
  * child-population work is covered by growth checks rather than this meter. */
-const publicSummaryCost = (memberCount: number) => ({
+export const publicSummaryCost = (memberCount: number) => ({
   graphQueries: Math.min(memberCount, MAX_SUMMARY_BATCH) + 3,
   mediaQueries: 0,
   accessChecks: 0,
