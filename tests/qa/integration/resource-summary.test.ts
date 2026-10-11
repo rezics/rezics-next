@@ -16,6 +16,12 @@ const local = (iri: string) => iri.slice(ID.length);
 type Summary = { reference: string; status: string; type?: string; disclosure?: string;
   name?: { value: string; language: string; direction: string; basis: string };
   avatar?: { kind: string; url?: string; selection?: string; key?: string; basis?: { context: string } } };
+const requestCost = (memberCount: number) => ({
+  graphQueries: Math.min(memberCount, 64) + 3,
+  mediaQueries: 0,
+  accessChecks: 0,
+  accessQueries: 0,
+});
 
 /** Select an avatar through the product command, granting the target scope once. */
 async function selectAvatar(member: Awaited<ReturnType<MediaStack['member']>>, target: string,
@@ -297,6 +303,7 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
 
   const references = [works[0]!.work, works[1]!.work, works[2]!.work, works[0]!.mainVersion,
     restricted.work, unreadable.work, spaceIri, conceptIri, `${ID}${randomUUID()}`];
+  let lastPhysicalReads = { graphQueries: 0, accessQueries: 0 };
   const batch = async (resources: string[], extra: Record<string, unknown> = {}, as = reader) => {
     const graphBefore = fuseki.queries;
     const accessBefore = mediaAccess.batches;
@@ -306,10 +313,9 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     const body = await response.json() as { summaries: Summary[];
       cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
       generation: { graph: string; media: string } };
-    // The transport adds one recovery gate and two graph-position fences.
-    // Space batches also include both visibility reads and the canonical address read.
-    expect(fuseki.queries - graphBefore).toBe(body.cost.graphQueries + 3);
-    expect(mediaAccess.batches - accessBefore).toBe(body.cost.accessQueries);
+    lastPhysicalReads = { graphQueries: fuseki.queries - graphBefore,
+      accessQueries: mediaAccess.batches - accessBefore };
+    expect(body.cost).toEqual(requestCost(resources.length));
     return body;
   };
   const mixed = await batch(references);
@@ -317,7 +323,10 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     ['available', 'work'], ['available', 'work'], ['available', 'work'], ['available', 'main-version'],
     ['available', 'work'], ['unavailable', null], ['available', 'space'], ['available', 'concept'],
     ['unavailable', null]]);
-  expect(mixed.cost).toEqual({ graphQueries: 4, mediaQueries: 1, accessChecks: 2, accessQueries: 1 });
+  expect(mixed.cost).toEqual(requestCost(references.length));
+  expect(lastPhysicalReads).toEqual({ graphQueries: 14, accessQueries: 1 });
+  expect(mixed.cost.graphQueries).not.toBe(lastPhysicalReads.graphQueries);
+  expect(mixed.cost.accessQueries).not.toBe(lastPhysicalReads.accessQueries);
   expect(mixed.summaries[5]).toEqual({ reference: unreadable.work, status: 'unavailable' });
   for (const summary of mixed.summaries.filter(item => item.status === 'available')) {
     expect(summary.name!.value.length).toBeGreaterThan(0);
@@ -342,14 +351,13 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
   const filler = Array.from({ length: 64 }, (_, index) => references[index % 3]!);
   for (const size of [1, 16, 64]) {
     const sized = await batch(filler.slice(0, size), {}, owner);
-    expect(sized.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 0, accessQueries: 0 });
+    expect(sized.cost).toEqual(requestCost(size));
   }
   await contentPool.query(`INSERT INTO media.selection_slot (target, context, role, policy)
     SELECT 'https://rezics.com/id/' || gen_random_uuid(), 'urn:rezics:media:context:default', 'avatar',
       'avatar-selection-v1' FROM generate_series(1, 50000)`);
   await contentPool.query('ANALYZE media.selection_slot');
-  expect((await batch(filler, {}, owner)).cost).toEqual({ graphQueries: 1, mediaQueries: 1,
-    accessChecks: 0, accessQueries: 0 });
+  expect((await batch(filler, {}, owner)).cost).toEqual(requestCost(64));
   const plan = await contentPool.query<{ 'QUERY PLAN': unknown }>(`EXPLAIN (FORMAT JSON)
     SELECT s.head FROM unnest($1::text[]) AS t(target) JOIN media.selection_slot s
       ON s.target = t.target AND s.context = 'urn:rezics:media:context:default' AND s.role = 'avatar'`,
@@ -440,12 +448,12 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
     profile: 'resource-summary-batch-v1', resources: [shared, relation],
     context: namingContext, language: 'ja', actingSubject: owner.actor });
   expect(selected.status).toBe(200);
-  const selectedBody = await selected.json() as { summaries: Summary[]; cost: { graphQueries: number } };
+  const selectedBody = await selected.json() as { summaries: Summary[]; cost: ReturnType<typeof requestCost> };
   expect(selectedBody.summaries[0]).toMatchObject({ name: { value: '共有の文脈', language: 'ja',
     basis: 'requested', context: namingContext, preferenceRevision } });
   expect(selectedBody.summaries[1]).toMatchObject({ name: { value: '関係の定義', language: 'ja',
     basis: 'requested', context: namingContext, preferenceRevision } });
-  expect(selectedBody.cost.graphQueries).toBeLessThanOrEqual(5);
+  expect(selectedBody.cost).toEqual(requestCost(2));
   const unselected = await summaries(owner, 'ja');
   expect(unselected[2]!.name!.value).toContain('Relation definition');
   const image = await owner.upload(png(80, 80), 'public');
@@ -478,14 +486,13 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
     return (await response.json() as { cost: { graphQueries: number; mediaQueries: number;
       accessChecks: number; accessQueries: number } }).cost;
   };
-  expect(await costOf(Array.from({ length: 64 }, () => character)))
-    .toEqual(await costOf([character]));
-  expect(await costOf([character])).toEqual({ graphQueries: 3, mediaQueries: 1,
-    accessChecks: 1, accessQueries: 1 });
-  expect(await costOf([character, role, relation])).toEqual({ graphQueries: 4, mediaQueries: 1,
-    accessChecks: 3, accessQueries: 1 });
-  expect(await costOf([shared, hidden])).toEqual({ graphQueries: 2, mediaQueries: 1,
-    accessChecks: 1, accessQueries: 1 });
+  const sixtyFour = await costOf(Array.from({ length: 64 }, () => character));
+  const one = await costOf([character]);
+  expect(sixtyFour).toEqual(requestCost(64));
+  expect(one).toEqual(requestCost(1));
+  expect(sixtyFour).not.toEqual(one);
+  expect(await costOf([character, role, relation])).toEqual(requestCost(3));
+  expect(await costOf([shared, hidden])).toEqual(requestCost(2));
   const dual = await createSemantic({ component: 'resource', types: [
     'https://rezics.com/vocab/Role', 'https://rezics.com/vocab/Character'],
   properties: [{ predicate: 'https://schema.org/name', value: {

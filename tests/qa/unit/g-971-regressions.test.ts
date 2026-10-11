@@ -60,7 +60,7 @@ test('G-971/VIEW08: summary batches report page visibility and addresses while t
   };
   for (const size of [1, 16, 64]) {
     const body = await batch(Array.from({ length: size }, () => work));
-    expect(body.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 0, accessQueries: 0 });
+    expect(body.cost).toEqual({ graphQueries: size + 3, mediaQueries: 0, accessChecks: 0, accessQueries: 0 });
     expect(queries).toHaveLength(4);
     expect(mediaBatches).toEqual([[work]]);
     expect(names).toEqual([[work]]);
@@ -68,7 +68,8 @@ test('G-971/VIEW08: summary batches report page visibility and addresses while t
     expect(body.summaries.every((summary: { status: string }) => summary.status === 'available')).toBe(true);
   }
   const mixed = await batch([work, space, foreign, missing, work]);
-  expect(mixed.cost).toEqual({ graphQueries: 4, mediaQueries: 1, accessChecks: 0, accessQueries: 0 });
+  expect(mixed.cost).toEqual({ graphQueries: 8, mediaQueries: 0, accessChecks: 0, accessQueries: 0 });
+  expect(mixed.cost.graphQueries).not.toBe(queries.length);
   expect(queries).toHaveLength(7);
   expect(mediaBatches).toEqual([[work, space]]);
   expect(names).toEqual([[work, space]]);

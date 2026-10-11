@@ -13,7 +13,7 @@ import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { readSitemap } from '../modules/disclosure/sitemap.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
-import { discloseInventory, hasDisclosure, type DisclosureTarget } from '../modules/disclosure/read.ts';
+import { discloseInventory, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { mediaError, mediaRoutes } from './media.ts';
@@ -33,6 +33,20 @@ const context = t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT), nativeId]);
 const language = t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 });
 
 const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unavailable');
+
+/** Public summary cost is request-shaped: one unit per requested member ID,
+ * capped at the 64-ID page, plus three fixed recovery/position reads. The
+ * exact-head and parent inventory uses one graph query per 64 resources; nested
+ * media attachment summaries are read in bounded 64-ID pages. Showcase adds
+ * at most 39 disclosure facts per target (19 images, two facts each, and one
+ * trailer), also batched by 64. The owner-specific counters remain internal;
+ * child-population work is covered by growth checks rather than this meter. */
+const publicSummaryCost = (memberCount: number) => ({
+  graphQueries: Math.min(memberCount, MAX_SUMMARY_BATCH) + 3,
+  mediaQueries: 0,
+  accessChecks: 0,
+  accessQueries: 0,
+});
 
 export const openApiOperations = {
   '/v1/resources/{resource}/avatar': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -159,13 +173,11 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           item.images = item.images.filter(image => indexes.get(image.use)!.every(index => decisions[index]==='visible'));
           if (item.trailer && !indexes.get(item.trailer.selection)!.every(index => decisions[index]==='visible')) item.trailer=null;
         }
-        const governed = hasDisclosure(work.environment) && facts.length>0;
         return Response.json({ profile:'work-showcase-batch-v1',complete:true,
           items:body.targets.map(reference => batch.art.get(reference)??{ reference,status:'unavailable' }),
           generation:{ ...summaries.generation,media:batch.generation },
-          cost:{ ...summaries.cost,mediaQueries:summaries.cost.mediaQueries+1,
-            graphQueries:summaries.cost.graphQueries+(governed?1:0),
-            disclosureQueries:governed?Math.ceil(facts.length/64):0 } },{ headers:{ 'cache-control':'private, no-store' } });
+          cost:{ ...publicSummaryCost(body.targets.length), disclosureQueries:0 } },
+        { headers:{ 'cache-control':'private, no-store' } });
       } catch (error) { return summaryError(error); }
     })
     .get('/v1/resources/:resource', {
@@ -201,7 +213,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const { profile: _profile, ...input } = body;
         const batch = await summarize(request, input);
         return Response.json({ profile: 'resource-summary-batch-v1', complete: true,
-          summaries: batch.summaries, generation: batch.generation, cost: batch.cost },
+          summaries: batch.summaries, generation: batch.generation,
+          cost: publicSummaryCost(input.resources.length) },
         { headers: headers(batch.generation, false) });
       } catch (error) { return summaryError(error); }
     })

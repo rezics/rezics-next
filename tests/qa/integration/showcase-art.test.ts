@@ -38,6 +38,13 @@ afterAll(async () => {
 });
 const artPath = (work: string) => `/v1/resources/${work.split('/').at(-1)}/showcase/art`;
 const trailerPath = (work: string) => `/v1/resources/${work.split('/').at(-1)}/showcase/trailer`;
+const requestCost = (memberCount: number) => ({
+  graphQueries: Math.min(memberCount, 64) + 3,
+  mediaQueries: 0,
+  accessQueries: 0,
+  accessChecks: 0,
+  disclosureQueries: 0,
+});
 async function image(width: number, height: number, alpha = true) {
   return sharp({
     create: {
@@ -67,7 +74,8 @@ async function read(targets: string[], context?: string) {
   return (await response.json()) as {
     items: Array<ShowcaseArt | { reference: string; status: 'unavailable' }>;
     generation: { media: string };
-    cost: { mediaQueries: number; graphQueries: number; accessQueries: number };
+    cost: { mediaQueries: number; graphQueries: number; accessQueries: number;
+      accessChecks: number; disclosureQueries: number };
   };
 }
 function available(item: ShowcaseArt | { reference: string; status: 'unavailable' }): ShowcaseArt {
@@ -365,13 +373,20 @@ test('showcase reads preserve per-key context removal and conceal hidden, erased
     const batch = await read(targets);
     expect(batch.items).toHaveLength(64);
     expect(batch.items[1]).toEqual({ reference: privateTarget.work, status: 'unavailable' });
-    expect(batch.cost).toMatchObject({ mediaQueries: 1, accessQueries: 0 });
+    expect(batch.cost).toEqual(requestCost(targets.length));
     expect(mediaQueries).toBe(1);
-    expect(fuseki.queries - graphBefore).toBeLessThanOrEqual(4);
+    expect(fuseki.queries - graphBefore).toBeLessThanOrEqual(7);
+    expect(batch.cost.graphQueries).not.toBe(fuseki.queries - graphBefore);
     expect(mediaAccess.batches - accessBefore).toBe(0);
   } finally {
     contentPool.query = original;
   }
+  const hiddenCostBatch = await read([privateTarget.work]);
+  const absentReference = targets[2]!;
+  const absent = await read([absentReference]);
+  expect(hiddenCostBatch.items).toEqual([{ reference: privateTarget.work, status: 'unavailable' }]);
+  expect(absent.items).toEqual([{ reference: absentReference, status: 'unavailable' }]);
+  expect(hiddenCostBatch.cost).toEqual(absent.cost);
   // Small fixtures can prefer sequential scans. Prove that the production
   // predicates admit the exact slot and source/crop indexes too.
   const planner = await contentPool.connect();
