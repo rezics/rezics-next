@@ -292,12 +292,11 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   },
   {
     kind: 'books',
-    capability: 'Disambiguate imported editions',
+    capability: 'Choose among ambiguous editions of one Work',
     hardCase: 'ambiguous-editions',
-    api: api('tests/qa/integration/g-854-library-bundle.test.ts',
-      'API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
-    browser: browser('apps/web/tests/g-743-library.e2e.ts',
-      'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale'),
+    // Library import resolves ambiguity between Works, not between editions of one Work, so it is no proof here.
+    api: missing('gap'),
+    browser: missing('gap'),
   },
   {
     kind: 'books',
