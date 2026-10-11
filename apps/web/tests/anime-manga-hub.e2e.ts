@@ -102,9 +102,9 @@ async function openChoice(page: Page, control: Locator, found: Findings, label: 
   return list.getByRole('option');
 }
 
-async function closeChoice(page: Page): Promise<void> {
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('listbox')).toBeHidden();
+async function closeChoice(page: Page, control: Locator): Promise<void> {
+  await control.press('Escape');
+  await expect(page.getByRole('listbox')).toBeHidden({ timeout: 3_000 });
 }
 
 async function chooseOption(page: Page, options: Locator, name: string): Promise<void> {
@@ -121,7 +121,7 @@ async function chooseOption(page: Page, options: Locator, name: string): Promise
 async function optionNames(page: Page, control: Locator, found: Findings, label: string): Promise<string[]> {
   const options = await openChoice(page, control, found, label);
   const names = (await options.allTextContents()).map((text) => text.trim());
-  await closeChoice(page);
+  await closeChoice(page, control);
   return names;
 }
 
@@ -168,6 +168,9 @@ test('anime-manga-hub: an anime and a manga Work show their recorded and missing
     await expect(page.getByRole('heading', { level: 1, name: media.title, exact: true })).toBeVisible();
     const facts = await showFullFacts(page, found);
     await expect(facts.locator('[data-statement-group]').filter({ hasText: date })).toContainText(date);
+    await test.info().attach(`${media.handle}-publication-date`, {
+      body: await page.screenshot({ fullPage: true }), contentType: 'image/png',
+    });
 
     await page.goto(at(media.undatedWork));
     await expect(page.getByRole('heading', { level: 1, name: media.undatedTitle, exact: true })).toBeVisible();
@@ -212,6 +215,9 @@ test('anime-manga-hub: a reader chooses anime and manga editions by keyboard and
     await expect(reloadedAvailability.getByRole('combobox', { name: 'Edition', exact: true }))
       .toContainText(choice!);
     await expect(status).toContainText(`Your edition: ${choiceTitle}`);
+    await test.info().attach(`${media.handle}-saved-edition`, {
+      body: await page.screenshot({ fullPage: true }), contentType: 'image/png',
+    });
   }
 
   expect(found, 'keyboard focus while choosing and saving each edition').toEqual([]);

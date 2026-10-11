@@ -24,6 +24,9 @@ type Work = { work: string; mainVersion: string; title: string };
 type Realization = { realization: string; revision: string };
 type Release = { release: string; revision: string; title: string };
 
+const persistedPreference = ({ work, language, edition, version }: Preference): Preference =>
+  ({ work, language, edition, version });
+
 async function json<T>(response: Response, status = 200): Promise<T> {
   if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
   return response.json() as Promise<T>;
@@ -197,7 +200,8 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
       chosenAnime, chosenAnimeKey));
     expect(animeSaved).toMatchObject({ work: anime.work, version: 1, language: 'en', edition: chosenAnime.edition,
       replayed: false });
-    expect(await json<Preference>(await readPreference(anime, person, a.token))).toMatchObject(animeSaved);
+    expect(await json<Preference>(await readPreference(anime, person, a.token)))
+      .toMatchObject(persistedPreference(animeSaved));
     expect(await json(await call('PUT', preferencePath(anime), chosenAnime, chosenAnimeKey)))
       .toMatchObject({ ...animeSaved, replayed: true });
     const animeEditionPage = await json<{ items: Array<{ id: string; revision: string; language: string }> }>(
@@ -222,8 +226,9 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     expect(savedManga).toMatchObject({ work: manga.work, version: 1, language: 'ja',
       edition: winnerChoice.body.edition, replayed: false });
     const stale = await json<{ current: Preference }>(raced[1 - winnerIndex]!);
-    expect(stale.current).toMatchObject(savedManga);
-    expect(await json<Preference>(await readPreference(manga, person, a.token))).toMatchObject(savedManga);
+    expect(stale.current).toMatchObject(persistedPreference(savedManga));
+    expect(await json<Preference>(await readPreference(manga, person, a.token)))
+      .toMatchObject(persistedPreference(savedManga));
     expect(await json(await call('PUT', preferencePath(manga), winnerChoice.body, winnerChoice.key)))
       .toMatchObject({ ...savedManga, replayed: true });
     const mangaRelease = await json<{ id: string; revision: string; title: { value: string } }>(await mainCall('GET',
