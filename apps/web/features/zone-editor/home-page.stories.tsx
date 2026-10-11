@@ -1,7 +1,10 @@
 import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
+import { spaceHref } from '../address/path.ts';
+import { zoneContentText } from '../language/untagged.ts';
 import { PageContainer } from '../shell/page.tsx';
+import { localizedPath } from '../../i18n/locale.ts';
 import { fictionZone, zoneMessagesFor } from '../zones/fixtures.ts';
 import { presetTokens } from '../zones/presentation.ts';
 import { savedSiteCuts } from '../zones/site-cuts.ts';
@@ -29,17 +32,18 @@ const page: ZoneHomePage = { document: homeDocument, blocks: [{ id: 'showcase', 
 const modules: PlacedModule[] = [
   { module: { id: 'showcase', type: 'hero-carousel', title: 'Harbor showcase', rail: false,
     layout: 'covers', shuffle: false, more: null },
-  state: { state: 'ready', data: { slides: [{ id: 'harbor', title: { value: 'The harbor exhibition', lang: 'en', dir: 'ltr' },
+  state: { state: 'ready', data: { slides: [{ id: 'harbor', title: zoneContentText('The harbor exhibition', 'en'),
     href: '/harbor-exhibition', work: null }] } } },
   { module: { id: 'notice', type: 'announcement', title: 'The harbor is open', rail: false,
     layout: 'covers', shuffle: false, more: null },
-  state: { state: 'ready', data: { text: { value: 'The harbor is open', lang: 'en', dir: 'ltr' }, href: null } } },
+  state: { state: 'ready', data: { text: zoneContentText('The harbor is open', 'en'), href: null } } },
 ];
-const zone = { ...fictionZone('en'), name: { value: 'Harbor notes', lang: 'en', dir: 'ltr' as const },
+const zone = { ...fictionZone('en'), name: zoneContentText('Harbor notes', 'en'),
   description: null, icon: null, hero: null,
   tokens: { ...presetTokens.clean, density: 'compact' as const, pageSurface: 'cards' as const } };
 const cuts = savedSiteCuts({ tokens: zone.tokens, navigation: [{ label: 'Saved visitor guide', href: '/harbor-guide' }] },
-  [{ segment: 'charts', name: { value: 'Harbor charts', lang: 'en', dir: 'ltr' } }], 'harbor', 'en', 'Home');
+  [{ segment: 'charts', name: zoneContentText('Harbor charts', 'en') }], 'harbor', 'en', 'Home');
+const sitePath = spaceHref('harbor', 'site');
 
 function Home({ preview = false }: { preview?: boolean }) {
   const body = <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={null} locale="en"
@@ -49,11 +53,11 @@ function Home({ preview = false }: { preview?: boolean }) {
     masthead={<ZoneMasthead zone={zone} members={null} actions={null} />}
     site={{ label: zone.name.value, links: cuts.navigation }}>
     {preview ? <PageContainer><ZoneDraftPreview copy={messages.en} document={homeDocument} editorPath="/manage/z/harbor"
-      sitePath="/z/harbor" status="private">{body}</ZoneDraftPreview></PageContainer> : body}
+      sitePath={sitePath} status="private">{body}</ZoneDraftPreview></PageContainer> : body}
   </ZoneFrame>;
 }
 
-const meta = { title: 'Zone editor/Complete home', parameters: { route: { pathname: '/en/z/harbor' } } } satisfies Meta;
+const meta = { title: 'Zone editor/Complete home', parameters: { route: { pathname: localizedPath(sitePath, 'en') } } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

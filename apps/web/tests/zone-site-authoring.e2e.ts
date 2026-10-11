@@ -4,7 +4,7 @@ import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { Pool } from 'pg';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
-import { spaceHref } from '../features/address/path.ts';
+import { spaceHref, targetKey } from '../features/address/path.ts';
 import { defaultPresentation } from '../features/zones/presentation.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
@@ -203,7 +203,7 @@ async function createZoneFixture(page: Page, actor: AuthorFixture, name: string,
   const space = created.space!;
   const zone = created.zone!;
   const zoneId = uuidOf(zone);
-  const address = spaceHref(space, 'site').slice('/z/'.length);
+  const address = encodeURIComponent(targetKey(space));
   const editorPath = localizedPath('/manage/z/' + address, 'en');
   await grant('zone:edit:' + zone, 'zone.edit', actor.principalId, actor.actingSubject);
 
@@ -503,7 +503,7 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
     await page.waitForTimeout(500);
   }
   expect(space, 'the Zone space was created').toMatch(/^https:\/\/rezics\.com\/id\//);
-  const address = spaceHref(space, 'site').slice('/z/'.length);
+  const address = encodeURIComponent(targetKey(space));
   await grant(`zone:edit:${zone}`, 'zone.edit', principalId, actingSubject);
   await ensurePresentationBaseline(page, uuidOf(zone), actingSubject);
   const initialPresentation = await page.request.get('/api/main/v1/zones/' + uuidOf(zone) + '/presentation');
