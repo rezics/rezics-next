@@ -120,12 +120,6 @@ export const cases = defineCases('docs/testing/search.md', [
     requiredResult:
       'Regenerate approved MatchUnits from exact PostgreSQL revisions plus graph references, then rebuild Lucene. Missing bodies keep affected search unavailable; erased or draft text cannot reappear. Indexer success alone does not prove source completeness.',
   },
-  {
-    id: 'SEARCH21',
-    scenario: 'Ask public typeahead for b and bo at 16, 64 and 256 product-published Works with two matching title fields',
-    requiredResult:
-      'Before prefixWalkAvailable, characterize 32/128/512 native returned candidate rows and record unavailable outcomes without substituting them for bounded work. Successful pages contain ten distinct title suggestions. After cutover, every request succeeds and native examined evidence stays equal across populations and at most four entries per page item. Missing visit evidence cannot pass as zero work.',
-  },
 ]);
 
 // Prospective combinations do not inherit the qualified SEARCH01-20 results.

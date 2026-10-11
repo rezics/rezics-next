@@ -1,4 +1,5 @@
 import type { CaseDeclarations } from './declaration.ts';
+import { typeaheadGrowthTests } from './typeahead.ts';
 
 export const opsCapacityCases: CaseDeclarations = {
   OPS05: [{
@@ -34,5 +35,5 @@ export const opsCapacityCases: CaseDeclarations = {
     tier: 'load',
     file: 'tests/qa/load/search-phase-d.test.ts',
     name: 'SEARCH18: restored 10k public units meet cold, degree, language, byte, cursor and retry bounds',
-  }],
+  }, ...typeaheadGrowthTests.SEARCH18],
 };
