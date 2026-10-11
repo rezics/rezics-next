@@ -2,9 +2,11 @@ import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { documentSnapshotSchema } from '../../api-document.ts';
-import { ZonePresentation, DEFAULT_ZONE_PRESENTATION, checkZonePresentation } from '../zone/presentation-format.ts';
+import { ZonePresentation, DEFAULT_ZONE_PRESENTATION, checkZonePresentation, zoneRenderTokens } from '../zone/presentation-format.ts';
 import type { readZoneModuleData } from '../zone/publication.ts';
-import type { readZoneCampaignArt } from '../zone/campaign-art.ts';
+import { readZoneCampaignArt } from '../zone/campaign-art.ts';
+import type { ZoneConfiguration } from '../zone/config-format.ts';
+import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
 
 const closed = { additionalProperties: false };
@@ -136,7 +138,35 @@ export const ZonePageDocument = Type.Object({
 }, closed);
 export type ZonePageDocument = Static<typeof ZonePageDocument>;
 
-/** Resolve a retained exact document against its published, disclosure-filtered
+/** The saved authoring cut uses the same producers as publication, including
+ * document-local modules. It never selects or changes a public bundle. */
+export async function readZoneDraftDocument(work: MainWorkDependencies, configuration: ZoneConfiguration,
+  document: DocumentSnapshot | null, readModules: typeof readZoneModuleData) {
+  const shell = typeof configuration.presentation === 'object'
+    ? configuration.presentation : DEFAULT_ZONE_PRESENTATION;
+  const local = document && zoneDocumentShowcase(document);
+  const moduleData = await readModules(work.environment, configuration);
+  const slideMedia = await readZoneCampaignArt(work.media?.store, configuration.defaultRealm ?? null,
+    shell.slides, { environment: work.environment, zone: configuration.zone });
+  let localData: Parameters<typeof resolveZonePageDocument>[4];
+  if (local) {
+    const presentation = { ...shell, modules: local.payload['rv:module'], slides: local.payload['rv:slides'] };
+    const modules = await readModules(work.environment, { ...configuration, presentation });
+    localData = { sources: modules[0]?.sources ?? [], slides: presentation.slides,
+      slideMedia: await readZoneCampaignArt(work.media?.store, configuration.defaultRealm ?? null,
+        presentation.slides, { environment: work.environment, zone: configuration.zone }) };
+  }
+  const page = document ? resolveZonePageDocument(document, shell, moduleData, slideMedia, localData) : null;
+  const presentation = zonePagePresentation(page, shell);
+  const showcase = page?.showcases.find(item => item.slides !== undefined);
+  return { page, presentation,
+    moduleData: showcase?.module ? [{ id: showcase.module.id, sources: showcase.sources },
+      ...moduleData.filter(module => module.id !== showcase.module!.id)] : moduleData,
+    slideMedia: showcase?.slideMedia ?? slideMedia,
+    renderTokens: zoneRenderTokens(presentation.tokens) };
+}
+
+/** Resolve a retained exact document against its selected
  * presentation. The caller supplies the existing bounded public module/media
  * reads. Unknown definitions and versions stay opaque; no definition is loaded
  * or executed, and the original body survives unchanged for export. */

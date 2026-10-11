@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { readingPositionQuery } from './reading-positions.ts';
-import type { FusekiClient } from '../infrastructure/fuseki.ts';
+import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
+  type FusekiClient } from '../infrastructure/fuseki.ts';
 import { bootstrapAdmittedStructureOwner } from '../modules/structure/bootstrap.ts';
 import { changeAdmittedComposition } from '../modules/structure/change-admitted.ts';
 import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
@@ -10,7 +11,7 @@ import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
 import { resolveZoneRoute, readZonePresentation, zoneRouteViewer, ZoneRouteMissing, ZoneRouteRetired, ZONE_ROUTE_COST }
   from '../modules/zone/route.ts';
-import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit }
+import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit, encodeReadCursor, decodeReadCursor }
   from '../modules/work/read-session.ts';
 import { readName, workCard, readPosition } from '../modules/work/read-contract.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
@@ -24,7 +25,7 @@ import { InvalidZoneConfiguration, ZoneSitePublicationSelection, ZoneSitePublish
 import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
 import { listOfficialZones, readZoneModuleData,
-  readZoneCampaignArt, readZoneHomeDocument, readZonePublication, ZonePublicPage }
+  readZoneCampaignArt, readZoneHomeDocument, readZonePublication, ZonePublicPage, ZONE_PUBLICATION_COST }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
   from '../modules/theme/first-party-lifecycle.ts';
@@ -53,7 +54,8 @@ import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/vi
 import { ZONE_CAMPAIGN_ART_COST } from '../modules/zone/campaign-art.ts';
 import { EmptyContentPublicationBody } from '../modules/content-publication/publish.ts';
 import { readZoneThemeExecution } from '../modules/presentation/zone-theme.ts';
-import { zoneDocumentShowcase, zonePagePresentation, ZONE_SHOWCASE_BLOCK_DEFINITION } from '../modules/presentation/zone-document.ts';
+import { zoneDocumentShowcase, zonePagePresentation, readZoneDraftDocument, ZonePageDocument,
+  ZONE_DOCUMENT_COST, ZONE_SHOWCASE_BLOCK_DEFINITION } from '../modules/presentation/zone-document.ts';
 import { withZoneContentAuthority } from '../modules/content-publication/draft.ts';
 import { configureZoneShowcaseDisclosure } from '../modules/zone/showcase-disclosure.ts';
 import { withdrawZoneRealmAttachment } from '../modules/zone/realm-attachment-withdrawal.ts';
@@ -207,7 +209,16 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
     maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer(),
     maxNavigation: t.Integer(), maxNavigationGraphReads: t.Integer() }),
 });
-const showcaseEditorCost = { ...ZONE_CAMPAIGN_ART_COST, authorityProbes: 2 } as const;
+const showcaseEditorCost = { ...ZONE_CAMPAIGN_ART_COST, authorityProbes: 2,
+  maxCampaignUses: ZONE_CAMPAIGN_ART_COST.maxCampaignUses * 2,
+  maxCampaignMediaReads: ZONE_CAMPAIGN_ART_COST.maxCampaignMediaReads * 2,
+  maxModuleGraphReads: ZONE_PUBLICATION_COST.maxModuleGraphReads * 2,
+  maxResolvedBlocks: ZONE_PUBLICATION_COST.maxResolvedBlocks * 2,
+  maxResolvedCollections: ZONE_PUBLICATION_COST.maxResolvedCollections * 2,
+  maxNavigation: ZONE_ROUTE_COST.maxNavigation,
+  maxNavigationGraphReads: ZONE_ROUTE_COST.maxGraphReads,
+  maxNavigationGraphBytes: ZONE_ROUTE_COST.maxGraphBytes,
+  maxResponseBytes: ZONE_DOCUMENT_COST.maxResponseBytes } as const;
 const showcaseDraftRead = t.Object({ variantId: t.String(), revisionId: t.Nullable(t.String()),
   language: exactContentRevision.properties.reference.properties.language,
   direction: exactContentRevision.properties.reference.properties.direction,
@@ -217,6 +228,12 @@ const showcaseDraftRead = t.Object({ variantId: t.String(), revisionId: t.Nullab
   sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() }) });
 const showcaseEditorRead = t.Object({ ...configRead.properties,
   draft: showcaseDraftRead,
+  preview: t.Object({ page: t.Nullable(ZonePageDocument), presentation: ZonePresentation,
+    moduleData: publicationRead.properties.moduleData,
+    slideMedia: publicationRead.properties.slideMedia,
+    renderTokens: publicationRead.properties.renderTokens,
+    navigation: t.Object({ navigation: ref, revision: ref, mounts: read.properties.mounts,
+      next: read.properties.next, sourcePosition }) }),
   publishedPage: t.Nullable(t.Object({ page: ref, variantId: t.String(), revisionId: t.String(),
     language: t.Optional(t.String()) })),
   slideMedia: publicationRead.properties.slideMedia,
@@ -380,7 +397,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
     })
     .get('/v1/zones/:id/showcase-editor', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: showcaseEditorRead, ...authorizedReadProblems } },
     async ({ request, params, query }) => {
       try {
@@ -390,41 +407,80 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const content = work.contentAuthoring;
         if (!content) throw new ZonePublicationUnavailable('Content owner is unavailable');
         return await withZoneContentAuthority(work.environment, work.access, principal, query.actingSubject,
-          zone, 'content.draft', async () => {
-            const publication = await readZonePublication(work.environment, zone);
-            const publishedPage = publication.bundle?.pages.find(page => page.page === zone) ?? null;
-            const variant = publishedPage ? null : (await content.listVariantHeads(zone, '', 1)).items[0];
-            const hex = hash(`rezics:zone:showcase-variant:v1\0${zone}`).slice(0, 32);
-            const variantBits = ((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16);
-            const variantId = publishedPage?.variantId ?? variant?.id
-              ?? `urn:rezics:variant:${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variantBits}${hex.slice(17, 20)}-${hex.slice(20)}`;
-            const head = await content.readDraftHead(zone, variantId);
-            const viewer = disclosureViewer(principal, query.actingSubject);
-            const exact = head && (await discloseContent(work.environment,
-              await withDisclosureViewer(viewer, () => content.readExactBatch([head.revisionId],
-                async ids => new Set(ids))), viewer))[0];
-            if (head && (exact?.status !== 'available' || exact.reference.resourceId !== zone
-              || exact.reference.variantId !== variantId)) throw new ZoneUnavailable('Content draft is unavailable');
-            const reference = exact?.status === 'available' ? exact.reference : null;
-            const document = exact?.status === 'available' && exact.body.document !== undefined
-              ? parseDocument(exact.body.document) : null;
-            const shell = typeof state.configuration.presentation === 'object'
-              ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
-            const local = document && zoneDocumentShowcase(document);
-            let editable = !head || document?.profile === 'blocks';
-            if (document) {
-              const pending = [document.doc];
-              while (pending.length) {
-                const node = pending.pop()!;
-                if (node.type === 'extensionBlock' && node.attrs?.definition === ZONE_SHOWCASE_BLOCK_DEFINITION
-                  && node.attrs.version === '2' && String(node.attrs.id) !== local?.id) editable = false;
-                pending.push(...node.content ?? []);
+          zone, 'content.draft', () => {
+            const outer = fusekiReadBudget.getStore();
+            const deadline = AbortSignal.timeout(ZONE_ROUTE_COST.deadlineMs);
+            const signal = outer ? AbortSignal.any([outer.signal, deadline]) : deadline;
+            let calls: number = ZONE_ROUTE_COST.maxGraphReads, bytes: number = ZONE_ROUTE_COST.maxGraphBytes;
+            const budget = { signal,
+              get callsLeft() { return Math.min(calls, outer?.callsLeft ?? calls); },
+              set callsLeft(value: number) { const used = this.callsLeft - value; calls -= used; if (outer) outer.callsLeft -= used; },
+              get bytesLeft() { return Math.min(bytes, outer?.bytesLeft ?? bytes); },
+              set bytesLeft(value: number) { const used = this.bytesLeft - value; bytes -= used; if (outer) outer.bytesLeft -= used; },
+            };
+            return fusekiReadBudget.run(budget, async () => {
+              signal.throwIfAborted();
+              const publication = await readZonePublication(work.environment, zone);
+              const publishedPage = publication.bundle?.pages.find(page => page.page === zone) ?? null;
+              const variant = publishedPage ? null : (await content.listVariantHeads(zone, '', 1)).items[0];
+              const hex = hash(`rezics:zone:showcase-variant:v1\0${zone}`).slice(0, 32);
+              const variantBits = ((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16);
+              const variantId = publishedPage?.variantId ?? variant?.id
+                ?? `urn:rezics:variant:${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variantBits}${hex.slice(17, 20)}-${hex.slice(20)}`;
+              const head = await content.readDraftHead(zone, variantId);
+              const viewer = disclosureViewer(principal, query.actingSubject);
+              const exact = head && (await discloseContent(work.environment,
+                await withDisclosureViewer(viewer, () => content.readExactBatch([head.revisionId],
+                  async ids => new Set(ids))), viewer))[0];
+              if (head && (exact?.status !== 'available' || exact.reference.resourceId !== zone
+                || exact.reference.variantId !== variantId || exact.revisionId !== head.revisionId
+                || exact.reference.revisionId !== head.revisionId || exact.body.document === undefined)) {
+                throw new ZoneUnavailable('Content draft is unavailable');
               }
-            }
-            const slides = local ? local.payload['rv:slides'] : shell.slides;
-            const slideMedia = await withDisclosureViewer(viewer, () =>
-              readZoneCampaignArt(work.media?.store, state.configuration.defaultRealm ?? null,
-                slides, { environment: work.environment, zone }));
+              const reference = exact?.status === 'available' ? exact.reference : null;
+              let document = null;
+              if (exact?.status === 'available') {
+                try { document = parseDocument(exact.body.document); }
+                catch { throw new ZoneUnavailable('Content draft document is unavailable'); }
+                if (document.profile !== 'blocks') throw new ZoneUnavailable('Content draft is not a Blocks document');
+              }
+              const local = document && zoneDocumentShowcase(document);
+              let editable = !head || document?.profile === 'blocks';
+              if (document) {
+                const pending = [document.doc];
+                while (pending.length) {
+                  const node = pending.pop()!;
+                  if (node.type === 'extensionBlock' && node.attrs?.definition === ZONE_SHOWCASE_BLOCK_DEFINITION
+                    && node.attrs.version === '2' && String(node.attrs.id) !== local?.id) editable = false;
+                  pending.push(...node.content ?? []);
+                }
+              }
+              const preview = await withDisclosureViewer(viewer, async () => {
+                const resolved = await readZoneDraftDocument(work, state.configuration, document, readZoneModuleData);
+                const header = await readCompositionHeader(work.environment, state.configuration.navigation);
+                if (!header || header.profile !== 'zone-navigation' || header.owner !== zone) {
+                  throw new ZoneUnavailable('Zone draft navigation is unavailable');
+                }
+                const binding = ['zone-editor-navigation', zone, header.structure, principal.issuer, principal.subject, query.actingSubject];
+                const position = { dataEpoch: work.environment.lineage.dataEpoch, sequence: '0',
+                  dependencyToken: hash(JSON.stringify([state.revision, header.head, head?.revisionId ?? null])) };
+                const cursor = decodeReadCursor(query.after, binding, position);
+                const navigation = await readVisibleCompositionPage(work.environment, {
+                  structure: header.structure, header, revision: header.head,
+                  ...(cursor ? { after: cursor.after } : {}), limit: ZONE_ROUTE_COST.maxNavigation,
+                  visible: item => item.role === 'mount' && !!item.target
+                    && item.qualifier?.type === 'zone-mount' && item.qualifier.zone === zone,
+                  canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+                    environment: work.environment, access: work.access, principal,
+                    actingSubject: query.actingSubject, target }),
+                });
+                const current = await readCompositionHeader(work.environment, header.structure);
+                if (current?.head !== header.head) throw new WorkReadMoved('Zone draft navigation changed');
+                return { ...resolved, navigation: { navigation: header.structure, revision: navigation.revision,
+                  mounts: navigation.occurrences,
+                  next: navigation.next ? encodeReadCursor(binding, position, navigation.next) : null,
+                  sourcePosition: navigation.sourcePosition } };
+            });
             const language = reference?.language ?? (variant
               ? variant.languageKind === 'tag' ? { kind: 'tag' as const, tag: variant.languageTag!, originalTag: variant.originalLanguageTag! }
                 : { kind: variant.languageKind }
@@ -434,17 +490,46 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             if (exact && (await discloseContent(work.environment, [exact], viewer))[0]?.status !== 'available') {
               throw new ZoneUnavailable('Content draft is unavailable');
             }
-            return Response.json({ zone, revision: state.revision, configuration: state.configuration,
-              name: state.name, language: state.language, direction: state.direction, slideMedia,
+            const current = await readZoneConfiguration(work.environment, zone);
+            if (current.revision !== state.revision) throw new WorkReadMoved('Zone draft configuration changed');
+            const currentNavigation = await readCompositionHeader(work.environment, preview.navigation.navigation);
+            if (currentNavigation?.head !== preview.navigation.revision) throw new WorkReadMoved('Zone draft navigation changed');
+            for (const target of new Set(preview.navigation.mounts.map(item => item.target!))) {
+              if (!await canReadStructureTarget(structureProfileFor('zone-navigation'), {
+                environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject, target })) {
+                throw new WorkReadMoved('Zone draft navigation target changed');
+              }
+            }
+            const response = { zone, revision: state.revision, configuration: state.configuration,
+              name: state.name, language: state.language, direction: state.direction,
+              slideMedia: preview.slideMedia, preview,
               draft: { variantId, revisionId: head?.revisionId ?? null, language,
                 direction: reference?.direction ?? variant?.direction ?? state.direction,
                 document, byteDigest: reference?.byteDigest ?? null, editable,
                 ...(exact?.status === 'available' && Array.isArray(exact.body.embeds) ? { embeds: exact.body.embeds } : {}),
                 ...(exact?.status === 'available' && exact.body.notes !== undefined ? { notes: exact.body.notes } : {}),
                 sourcePosition: head?.position ?? await content.ownerPosition() }, publishedPage,
-              cost: { ...state.cost, ...showcaseEditorCost } }, { headers: { 'cache-control': 'no-store' } });
+              cost: { ...state.cost, ...showcaseEditorCost } };
+            const body = JSON.stringify(response);
+            if (Buffer.byteLength(body, 'utf8') > showcaseEditorCost.maxResponseBytes) {
+              throw new WorkReadLimit('Zone editor response exceeds its byte bound');
+            }
+            signal.throwIfAborted();
+            return new Response(body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+            }).catch(error => {
+              if (signal.aborted) throw new WorkReadUnavailable('Zone editor read deadline exceeded', { cause: error });
+              throw error;
+            });
           });
-      } catch (error) { return routeError(error); }
+      } catch (error) {
+        if (fusekiReadBudget.getStore()?.signal.aborted) {
+          return routeError(new WorkReadUnavailable('Zone editor read was cancelled', { cause: error }));
+        }
+        if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) {
+          return routeError(new WorkReadLimit('Zone editor read exceeds its graph budget'));
+        }
+        return routeError(error);
+      }
     })
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
       query: t.Object({ path: t.String({ maxLength: 1024 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
