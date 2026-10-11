@@ -468,8 +468,6 @@ export function assertWorkCostAtScales(
   for (const [counter, declaration] of Object.entries(growth)) {
     if (!declaration) continue;
     const field = counter as WorkCostField;
-    if (maxima[field] === undefined)
-      throw new Error(`Growth contract for ${field} requires an absolute maximum`);
     const scales = profiles.map((profile, index) => {
       const observed = profile[declaration.dimension];
       if (observed === null || !Number.isFinite(observed) || observed <= 0)

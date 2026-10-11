@@ -135,6 +135,18 @@ test('work cost contracts enforce declared counter growth and retain absolute-on
   ).toThrow('fusekiRequests: 65 > 64');
 });
 
+test('growth-only work cost contracts compare counters across the declared dimension', () => {
+  const growthOnly: WorkCostContract = {
+    growth: { fusekiRequests: { class: 'linear', dimension: 'mainCalls' } },
+  };
+  expect(() =>
+    assertWorkCostAtScales(costProfiles([4, 16, 64]), growthOnly, 'growth-only-pass'),
+  ).not.toThrow();
+  expect(() =>
+    assertWorkCostAtScales(costProfiles([4, 20, 64]), growthOnly, 'growth-only-fail'),
+  ).toThrow('Cost growth contract failed');
+});
+
 test('work cost growth breaches report and write their comparison facts', () => {
   const directory = mkdtempSync(join(process.cwd(), '.temp', 'work-cost-growth-'));
   const previousArtifactDir = process.env.REZICS_QA_ARTIFACT_DIR;
