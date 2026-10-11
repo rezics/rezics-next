@@ -5,13 +5,16 @@ import { expect, type Browser, type Page, test, type TestInfo } from '@playwrigh
 import { Pool } from 'pg';
 import { spaceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
+import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { newPostProgress, type PostProgress } from '../features/post-composer/api.ts';
 
 const reason = 'Repeated posts disrupted the community discussion.';
 const liftedReason = 'The member can take part again.';
 
 interface ModeratorFixture {
   member: { email: string; password: string };
+  operator: { email: string; password: string };
   principalId: string;
   actingSubject: string;
 }
@@ -57,75 +60,76 @@ async function grant(scope: string, action: string, principalId: string, actingS
   }
 }
 
-async function verificationLink(email: string): Promise<string> {
-  const mailpit = process.env.MAILPIT_URL ?? 'http://127.0.0.1:8025';
-  let link = '';
-  await expect.poll(async () => {
-    const response = await fetch(`${mailpit}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`);
-    const { messages } = await response.json() as { messages: { ID: string; Subject: string }[] };
-    const newest = messages.find(item => item.Subject === 'Verify your email address');
-    if (!newest) return false;
-    const { Text } = await (await fetch(`${mailpit}/api/v1/message/${newest.ID}`)).json() as { Text: string };
-    link = /https?:\/\/\S+/.exec(Text)?.[0] ?? '';
-    return Boolean(link);
-  }, { timeout: 30_000 }).toBe(true);
-  return link;
+async function principalFor(actingSubject: string): Promise<string> {
+  const url = process.env.ACCESS_DATABASE_URL;
+  if (!url) throw new Error('ACCESS_DATABASE_URL must name the isolated QA access database');
+  const pool = new Pool({ connectionString: url });
+  try {
+    const row = await pool.query<{ principal_id: string }>(`SELECT principal_id FROM access.representation
+      WHERE subject_id = $1 AND action = 'agent.control' AND active AND valid_until > now() LIMIT 1`, [actingSubject]);
+    const principalId = row.rows[0]?.principal_id;
+    if (!principalId) throw new Error('The member has no principal');
+    return principalId;
+  } finally {
+    await pool.end();
+  }
 }
 
 const interactive = (page: Page) => page.locator('button[aria-label="Account menu"][data-hydrated="true"]')
   .first().waitFor({ timeout: 30_000 });
 
-async function enrollMember(browser: Browser, info: TestInfo): Promise<{
-  page: Page; email: string; publicName: string; actingSubject: string; close: () => Promise<void>;
+async function enrollMember(browser: Browser, info: TestInfo, credentials: ModeratorFixture['operator'], suffix: string): Promise<{
+  page: Page; email: string; publicName: string; actingSubject: string; principalId: string; close: () => Promise<void>;
 }> {
-  const suffix = randomBytes(4).toString('hex');
-  const person = {
-    email: `realm-moderation-${suffix}@example.test`,
-    password: `pass phrase ${suffix}`,
-    publicName: `Moderation Reader ${suffix}`,
-    handle: `mod_reader_${suffix}`,
-  };
+  const publicName = `Moderation Reader ${suffix}`;
   const context = await browser.newContext({ baseURL: info.project.use.baseURL });
   const page = await context.newPage();
-  const accountsOrigin = process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004';
-  const signUpOrigin = process.env.REZICS_ACCOUNTS_SIGNUP_ORIGIN;
-  await page.goto('/auth/start?create=1&next=%2Fen');
-  await expect(page).toHaveURL(url => url.origin === new URL(accountsOrigin).origin);
-  if (signUpOrigin) {
-    const signUp = new URL(page.url());
-    await page.goto(`${signUpOrigin}${signUp.pathname}${signUp.search}`);
-  }
-  await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  await page.getByRole('textbox', { name: 'Display name' }).fill(`Account ${suffix}`);
-  await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
-  await page.getByLabel('Password', { exact: true }).fill(person.password);
-  await page.getByLabel('Confirm').fill(person.password);
-  await page.getByText('I meet the minimum age in the Terms and have read and accept:').click();
-  await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
-  const verify = new URL(await verificationLink(person.email));
-  if (signUpOrigin) await page.goto(`${signUpOrigin}${verify.pathname}${verify.search}`);
-  else await page.goto(verify.toString());
-  await expect(page).toHaveURL(/\/en\/onboarding/, { timeout: 60_000 });
-  const finished = await page.request.post('/en/onboarding/finish', {
-    maxRedirects: 0,
-    form: { displayName: person.publicName, handle: person.handle, next: '/en', key: randomUUID() },
+  await signInAtAccounts(page, '/en', credentials, true);
+  const key = (await context.cookies()).find(cookie => cookie.name === 'rezics_session_key')?.value;
+  expect(key).toBeTruthy();
+  await expect(page).toHaveURL(/\/en\/onboarding(?:\?|$)/);
+  const created = await page.request.post('/api/main/v1/me/onboarding', {
+    headers: { 'x-session-key': key!, 'idempotency-key': randomUUID() },
+    data: { profile: 'person-onboarding-v1', displayName: publicName },
   });
-  expect(finished.status(), await finished.text()).toBe(303);
-  const sessionKey = (await context.cookies()).find(cookie => cookie.name === 'rezics_session_key')?.value;
-  expect(sessionKey).toBeTruthy();
-  const session = await page.request.get('/api/main/v1/me/session-agent', {
-    headers: { 'x-session-key': sessionKey! },
-  });
+  const createdText = await created.text();
+  expect([200, 201], createdText).toContain(created.status());
+  const person = JSON.parse(createdText) as { agent: string };
+  expect(person.agent).toMatch(/^https:\/\/rezics\.com\/id\//);
+  const session = await page.request.get('/api/main/v1/me/session-agent', { headers: { 'x-session-key': key! } });
   expect(session.status()).toBe(200);
-  const state = await session.json() as { sessionAgent: { actingSubject?: string; eligible?: boolean } };
-  expect(state.sessionAgent.eligible).toBe(true);
-  const actingSubject = state.sessionAgent.actingSubject ?? '';
+  const state = await session.json() as { sessionAgent: { actingSubject?: string | null; eligible?: boolean; revision?: string | null } };
+  const selected = await page.request.post('/identity/select', {
+    maxRedirects: 0,
+    form: { agent: person.agent, next: '/en', locale: 'en', sessionRevision: state.sessionAgent.revision ?? '' },
+  });
+  expect(selected.status(), await selected.text()).toBe(303);
+  await page.goto('/en');
+  const selectedState = await page.request.get('/api/main/v1/me/session-agent', { headers: { 'x-session-key': key! } });
+  expect(selectedState.status()).toBe(200);
+  const selectedAgent = (await selectedState.json() as { sessionAgent: { actingSubject?: string | null; eligible?: boolean } }).sessionAgent;
+  expect(selectedAgent.eligible).toBe(true);
+  const actingSubject = selectedAgent.actingSubject ?? '';
   expect(actingSubject).toMatch(/^https:\/\/rezics\.com\/id\//);
-  return { page, email: person.email, publicName: person.publicName, actingSubject, close: () => context.close() };
+  expect(actingSubject).toBe(person.agent);
+  return { page, email: credentials.email, publicName, actingSubject,
+    principalId: await principalFor(actingSubject), close: () => context.close() };
 }
 
-function seedPostableWork(title: string): void {
+async function prepareComposerProgress(page: Page, actingSubject: string, progress: PostProgress): Promise<void> {
+  const key = `rezics:post-draft:${actingSubject}`;
+  await page.evaluate(({ draftKey, nextProgress }) => {
+    const saved = localStorage.getItem(draftKey);
+    if (!saved) throw new Error('The composer draft is not saved');
+    const draft = JSON.parse(saved) as { progress?: unknown };
+    draft.progress = nextProgress;
+    localStorage.setItem(draftKey, JSON.stringify(draft));
+  }, { draftKey: key, nextProgress: progress });
+  await page.reload();
+  await interactive(page);
+}
+
+function seedPostableWork(title: string): string {
   const result = spawnSync('bun', ['apps/web/tests/library-import-seed.ts', JSON.stringify([[title, 'Moderation Test Author']])], {
     cwd: process.cwd(), env: process.env, encoding: 'utf8', timeout: 120_000,
   });
@@ -135,6 +139,7 @@ function seedPostableWork(title: string): void {
   const seeded = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as { works?: string[] };
   const work = seeded.works?.[0];
   if (!work) throw new Error('The public API seed did not return a postable Work');
+  return work;
 }
 
 test('a moderator bans a member through Manage and restores their posting access', async ({ page, browser }, info) => {
@@ -142,8 +147,10 @@ test('a moderator bans a member through Manage and restores their posting access
   const suffix = randomBytes(4).toString('hex');
   const community = `Moderation Harbor ${suffix}`;
   const workTitle = `Moderation Topic ${suffix}`;
-  seedPostableWork(workTitle);
+  const work = seedPostableWork(workTitle);
   const moderator = fixture<ModeratorFixture>('REZICS_WEB_AUTH_PRIVATE_PATH');
+  const administrator = await platformAdministratorSession();
+  await grantPlatformUse(administrator, moderator.principalId, 'realm-appeals');
   await signInAtAccounts(page, '/en/manage', moderator.member);
   await grant('space:create:root', 'space.create', moderator.principalId, moderator.actingSubject);
 
@@ -169,16 +176,51 @@ test('a moderator bans a member through Manage and restores their posting access
   await grant(`governance:realm:${realm}`, 'realm.members.manage', moderator.principalId, moderator.actingSubject);
   await grant(`governance:realm:${realm}`, 'governance.moderate', moderator.principalId, moderator.actingSubject);
 
-  const member = await enrollMember(browser, info);
+  const member = await enrollMember(browser, info, moderator.operator, suffix);
+  const composerResponses: string[] = [];
+  member.page.on('response', response => {
+    const path = new URL(response.url()).pathname;
+    if (!/^\/api\/main\/v1\/(main-versions|member-reply-drafts|realm-replies|member-replies|realm-reply-placements)/.test(path)) return;
+    void response.text().then(body => composerResponses.push(`${response.status()} ${path}: ${body.slice(0, 500)}`))
+      .catch(error => composerResponses.push(`${response.status()} ${path}: ${String(error)}`));
+  });
+  await grantPlatformUse(administrator, member.principalId, 'realm-appeals');
+  await grant(`work:read:${work}`, 'work.read', member.principalId, member.actingSubject);
+  await grant(`reply:create:${work}`, 'reply.create', member.principalId, member.actingSubject);
+  await grant(`reply:place:${realm}`, 'reply.place', member.principalId, member.actingSubject);
+  const bannedPostProgress = newPostProgress();
+  const restoredPostProgress = newPostProgress();
+  await grant(`content:draft:${bannedPostProgress.reply}`, 'content.draft', member.principalId, member.actingSubject);
+  await grant(`content:draft:${restoredPostProgress.reply}`, 'content.draft', member.principalId, member.actingSubject);
   try {
     const home = localizedPath(spaceHref(realmId, 'community'), 'en');
     await member.page.goto(home);
     await expect(member.page.getByRole('heading', { level: 1, name: community })).toBeVisible();
-    await member.page.getByRole('button', { name: 'Join', exact: true }).click();
+    await interactive(member.page);
+    const joiningPolicy = await member.page.request.get(`/api/main/v1/realms/${realmId}/joining?actingSubject=${encodeURIComponent(member.actingSubject)}`);
+    expect(joiningPolicy.status()).toBe(200);
+    expect(await joiningPolicy.json()).toMatchObject({ open: true, selfJoin: true });
+    const joinButton = member.page.getByRole('button', { name: /^Join\b/ }).first();
+    await expect(joinButton).toBeVisible({ timeout: 30_000 });
+    await joinButton.click();
     const joining = member.page.getByRole('dialog', { name: `Join ${community}` });
     await joining.getByRole('checkbox', { name: 'Show me on the public member list' }).check();
     await joining.getByRole('button', { name: 'Join', exact: true }).click();
-    await expect(member.page.getByRole('button', { name: 'Joined', exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(member.page.getByRole('button', { name: /^Joined\b/ })).toBeVisible({ timeout: 30_000 });
+
+    const submit = localizedPath(spaceHref(realmId, 'community', ['submit']), 'en');
+    const postTitle = `A member’s first moderation-safe post ${suffix}`;
+    await member.page.goto(submit);
+    const workSearch = member.page.getByRole('searchbox', { name: 'Search for a Work' });
+    await workSearch.fill(workTitle);
+    const workOption = member.page.getByRole('button', { name: workTitle, exact: true });
+    await expect(workOption).toBeVisible({ timeout: 60_000 });
+    await workOption.click();
+    await member.page.getByRole('textbox', { name: 'Title' }).fill(postTitle);
+    await member.page.getByRole('textbox', { name: 'Your post' }).fill('A post made while the sanction is active.');
+    await prepareComposerProgress(member.page, member.actingSubject, bannedPostProgress);
+    const post = member.page.getByRole('button', { name: 'Post', exact: true });
+    await expect(post).toBeEnabled({ timeout: 30_000 });
 
     await page.goto('/en/manage');
     const realmCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: community, exact: true }) });
@@ -186,7 +228,7 @@ test('a moderator bans a member through Manage and restores their posting access
     await realmCard.getByRole('link').click();
     await page.getByRole('link', { name: 'Members', exact: true }).click();
     const search = page.getByRole('search', { name: 'Search members' });
-    await search.getByRole('textbox').fill(member.publicName);
+    await search.getByRole('searchbox', { name: 'Search members' }).fill(member.publicName);
     await search.getByRole('button', { name: 'Search', exact: true }).click();
     const row = page.getByRole('list', { name: 'Members' }).getByRole('listitem').filter({ hasText: member.publicName });
     await expect(row).toBeVisible({ timeout: 30_000 });
@@ -200,26 +242,20 @@ test('a moderator bans a member through Manage and restores their posting access
     await expect(page.getByRole('status').filter({ hasText: `${member.publicName} is banned.` })).toBeVisible();
     await expect(row).toContainText('Banned until');
 
-    await member.page.goto(home);
-    const notice = member.page.getByRole('region', { name: 'Your ban' });
+    const noticePage = await member.page.context().newPage();
+    await noticePage.goto(home);
+    const notice = noticePage.getByRole('region', { name: 'Your ban' });
     await expect(notice.getByRole('heading', { name: 'You are banned from this community' })).toBeVisible();
     await expect(notice.getByText(reason, { exact: true })).toBeVisible();
     await expect(notice.getByText(/This ban ends on/)).toBeVisible();
 
-    const submit = localizedPath(spaceHref(realmId, 'community', ['submit']), 'en');
-    const postTitle = `A member’s first moderation-safe post ${suffix}`;
-    await member.page.goto(submit);
-    const workSearch = member.page.getByRole('searchbox', { name: 'Search for a Work' });
-    await workSearch.fill(workTitle);
-    const workOption = member.page.getByRole('button', { name: workTitle, exact: true });
-    await expect(workOption).toBeVisible({ timeout: 60_000 });
-    await workOption.click();
-    await member.page.getByRole('textbox', { name: 'Title' }).fill(postTitle);
-    await member.page.getByRole('textbox', { name: 'Your post' }).fill('A post made while the sanction is active.');
-    const post = member.page.getByRole('button', { name: 'Post', exact: true });
-    await expect(post).toBeEnabled({ timeout: 30_000 });
+    composerResponses.length = 0;
     await post.click();
-    await expect(member.page.getByRole('alert')).toContainText('did not accept the post', { timeout: 60_000 });
+    const postAlert = member.page.getByRole('alert');
+    await expect(postAlert).toBeVisible({ timeout: 60_000 });
+    await expect.poll(() => composerResponses.some(response =>
+      response.startsWith('403 /api/main/v1/member-reply-drafts:')), { timeout: 10_000 }).toBe(true);
+    await expect(member.page).toHaveURL(url => url.pathname.startsWith('/en/r/') && url.pathname.endsWith('/submit'));
 
     await row.getByRole('button', { name: `Actions for ${member.publicName}` }).click();
     await page.getByRole('menuitem', { name: 'Unban…' }).click();
@@ -231,9 +267,16 @@ test('a moderator bans a member through Manage and restores their posting access
 
     await member.page.reload();
     await interactive(member.page);
+    await prepareComposerProgress(member.page, member.actingSubject, restoredPostProgress);
     await expect(member.page.getByRole('button', { name: 'Post', exact: true })).toBeEnabled({ timeout: 30_000 });
+    composerResponses.length = 0;
     await member.page.getByRole('button', { name: 'Post', exact: true }).click();
-    await expect(member.page).toHaveURL(/\/discussions\//, { timeout: 60_000 });
+    try {
+      await expect(member.page).toHaveURL(/\/discussions\//, { timeout: 60_000 });
+    } catch (error) {
+      await member.page.waitForTimeout(100);
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\nComposer API responses:\n${composerResponses.join('\n')}`);
+    }
     await expect(member.page.getByRole('heading', { name: postTitle, exact: true })).toBeVisible({ timeout: 60_000 });
   } finally {
     await member.close();
