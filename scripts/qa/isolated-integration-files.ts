@@ -24,6 +24,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/profile-corpus-restore.test.ts',
   // Seed checkpoints retain one API-built population and restore independent owner stores.
   'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
+  // Ranked search compares independently restored public-command populations.
+  'tests/qa/integration/search-ranked-growth.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
   // restores the launch recipes corpus
@@ -219,6 +221,7 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/fault-recovery/work-profile-seed-build.test.ts',
   // Library growth checkpoints retain and restore an API-built Work profile corpus.
   'tests/qa/integration/library-growth.test.ts',
+  'tests/qa/integration/search-ranked-growth.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
   // API-built Gutenberg recipe corpus uses the product assembler and independent persistent restores.

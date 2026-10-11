@@ -4,6 +4,14 @@ import { MAX_PHRASE_CANDIDATES } from './search-readiness.ts';
 export const MAX_SEARCH_PAGE_SIZE = 64;
 export const SEARCH_PAGE_TTL_MS = 5 * 60_000;
 
+/** A fixed ranked page should depend on its page/context, not matching Works.
+ * Both the first page and its continuation have this contract. The current
+ * complete-relation reader below still needs qualification against it. */
+export const PUBLIC_SEARCH_PAGE_COST = {
+  class: 'constant',
+  dimension: 'matchingWorks',
+} as const;
+
 export class InvalidSearchContinuation extends Error {}
 export class SearchContinuationRestart extends Error {}
 
