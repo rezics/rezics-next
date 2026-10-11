@@ -8,12 +8,27 @@ import {
   isQaLoadPath,
   isQaModelPath,
   isQaOwnerPath,
+  erasureCampaignNativeTest,
+  heldReplayNativeTest,
+  inputSelectedNativeTests,
   legacyHostJenaGateFiles,
+  nativeIntegerPreservationTest,
+  nativeUnionTest,
   testArgs,
   testExclusions,
   unitHarnessFiles,
+  workNameScopeBasisTest,
 } from './acceptance.ts';
 import { expandTestPaths } from './core.ts';
+
+export {
+  erasureCampaignNativeTest,
+  heldReplayNativeTest,
+  inputSelectedNativeTests,
+  nativeIntegerPreservationTest,
+  nativeUnionTest,
+  workNameScopeBasisTest,
+};
 
 // Affected-test selection for routine batches. It narrows what an agent runs;
 // final acceptance still runs the complete backend suite through `task qa -- --backend`.
@@ -74,16 +89,6 @@ const jenaCheckInput = /^infra\/jena\/|^(?:model\/definitions|generated\/model\/
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
 // Docker/Maven proofs selected from the module-stage COPY set. Shell and HTTP
 // checks under infra/jena/tests stay on the ordinary unit tier.
-export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
-export const erasureCampaignNativeTest = 'infra/jena/tests/erasure-campaign-native.test.ts';
-export const nativeIntegerPreservationTest = 'infra/jena/tests/native-integer-preservation.test.ts';
-export const workNameScopeBasisTest = 'infra/jena/tests/work-name-scope-basis.test.ts';
-export const inputSelectedNativeTests = [
-  nativeUnionTest,
-  erasureCampaignNativeTest,
-  nativeIntegerPreservationTest,
-  workNameScopeBasisTest,
-] as const;
 export const nativeModuleDockerfile = 'infra/jena/Dockerfile';
 /** Shown on the affected plan so a gate can see why native proof files were or were not selected. */
 export const nativeModuleCopyInputs = 'native module COPY inputs';
@@ -134,10 +139,18 @@ export function affectedUnitTierEntries(): string[] {
 export function affectedUnitTierFiles(root: string): string[] {
   return expandTestPaths(root, affectedUnitTierEntries());
 }
+/** Registered owner files in a widened affected plan, excluding native proofs selected by their image inputs. */
+export function affectedOwnerTierEntries(): string[] {
+  return testArgs('owner').filter((file) => !inputSelectedNative.has(file));
+}
+
 // The registered unit tier: `tests/qa/unit` plus its gate files.
 const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
 const inRegisteredUnit = (path: string) =>
   registeredUnit.some((entry) => path === entry || path.startsWith(`${entry}/`));
+const registeredOwner = testArgs('owner');
+const inRegisteredOwner = (path: string) =>
+  registeredOwner.some((entry) => path === entry || path.startsWith(`${entry}/`));
 
 type Rule = { match: RegExp; reason: string } & (
   | { effect: 'ignore' }
@@ -419,11 +432,10 @@ export function planAffected(input: {
       ? 'unsupported COPY syntax, selected'
       : [...matchedNative].some((file) => input.exists(file)) ? 'selected' : 'not selected';
   }
-  // A widened tier runs its registered default selection, which for unit is
-  // `tests/qa/unit` plus gate files. Registry files are not part of that default;
-  // they stay listed when their own COPY rule matched. Other affected unit tests
-  // outside the registered tier still run.
+  // Widened unit and owner tiers use their filtered registry lists. Image proofs
+  // stay listed individually when their own COPY rule matched.
   const unitWidened = plan.widened.some((item) => item.tier === 'unit');
+  const ownerWidened = plan.widened.some((item) => item.tier === 'owner');
   for (const path of [...affected]
     .filter((path) => testFile.test(path) && input.exists(path))
     .sort()) {
@@ -434,7 +446,9 @@ export function planAffected(input: {
     else if (
       route.tier === 'unit'
         ? !(unitWidened && inRegisteredUnit(path) && !inputSelectedNative.has(path))
-        : !plan.widened.some((item) => item.tier === route.tier)
+        : route.tier === 'owner'
+          ? !(ownerWidened && inRegisteredOwner(path) && !inputSelectedNative.has(path))
+          : !plan.widened.some((item) => item.tier === route.tier)
     ) {
       plan.tests[route.tier].push(path);
     }
@@ -628,12 +642,12 @@ export function formatPlan(plan: AffectedPlan): string {
   for (const { task, because } of plan.tasks) lines.push(`  task ${task} (${because})`);
   if (plan.nativeModuleCopySelection) lines.push(`  ${nativeModuleCopyInputs}: ${plan.nativeModuleCopySelection}`);
   for (const { tier, because } of plan.widened) {
-    // The merge gate expands `unit: whole tier` through every registered unit file.
-    // Listing the tier's files here keeps that expansion from picking up registry
-    // files whose COPY inputs did not change. An explicit full unit tier still uses testArgs.
-    if (tier === 'unit') {
-      lines.push(`  unit tier (${because})`);
-      for (const file of affectedUnitTierEntries()) lines.push(`  unit: ${file}`);
+    // Whole-tier affected commands list their registry files explicitly so image
+    // proofs stay out unless one of their own files or COPY inputs changed.
+    if (tier === 'unit' || tier === 'owner') {
+      lines.push(`  ${tier} tier (${because})`);
+      const entries = tier === 'unit' ? affectedUnitTierEntries() : affectedOwnerTierEntries();
+      for (const file of entries) lines.push(`  ${tier}: ${file}`);
     } else lines.push(`  ${tier}: whole tier (${because})`);
   }
   for (const tier of affectedTiers) {

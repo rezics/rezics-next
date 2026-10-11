@@ -166,6 +166,8 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
     }
     if (widened) {
       commands.push({ label: `${tier} (whole tier)`, command: ['bun', ['scripts/qa/cli.ts', '--tier', tier]] });
+      if (files.length) commands.push({ label: `${tier} (${files.length} files)`,
+        command: ['bun', ['scripts/qa/cli.ts', '--tier', tier, ...files.flatMap(file => ['--file', file])]] });
     } else if (files.length) {
       commands.push({ label: `${tier} (${files.length} files)`,
         command: ['bun', ['scripts/qa/cli.ts', '--tier', tier, ...files.flatMap(file => ['--file', file])]] });

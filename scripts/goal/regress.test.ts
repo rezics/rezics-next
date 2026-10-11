@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { artifactRoots, parseArgs } from '../qa/core.ts';
-import { parseJUnit, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
+import { inputSelectedNativeTests, parseJUnit, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
@@ -99,6 +99,27 @@ describe('pinned main-wide regression', () => {
         expect(r.calls.filter(call => call.batch.tier === 'jena:check')).toHaveLength(1);
         expect(result.files).toContainEqual({ file: 'scripts/qa/jena-cli.ts', tier: 'jena:check', outcome: 'passed' });
       }
+    } finally { r.cleanup(); }
+  });
+
+  test('native Jena proofs run in singleton image batches with each file deadline', async () => {
+    const r = repo();
+    const nativeFiles = new Set<string>(inputSelectedNativeTests);
+    const longProof = inputSelectedNativeTests[0];
+    try {
+      for (const file of inputSelectedNativeTests) {
+        r.files.push({ file, tier: 'jena:check', outcome: 'pending' });
+        r.write(file, file === longProof ? "test('native proof', () => {}, 900_000);\n" : 'pass\n');
+      }
+      r.commit();
+      const result = await r.run({ runId: 'native-jena-deadlines' });
+      const batches = result.batches.filter(batch => batch.tier === 'jena:check'
+        && inputSelectedNativeTests.some(file => batch.files.includes(file)));
+      expect(batches.map(batch => batch.files)).toEqual(inputSelectedNativeTests.map(file => [file]));
+      expect(batches.every(batch => batch.budgetMs !== undefined)).toBe(true);
+      expect(batches.find(batch => batch.files[0] === longProof)?.budgetMs).toBe(960_000);
+      expect(result.files.filter(file => nativeFiles.has(file.file))
+        .every(file => file.tier === 'jena:check' && file.outcome === 'passed')).toBe(true);
     } finally { r.cleanup(); }
   });
 
@@ -249,7 +270,7 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       expect(result.batches.filter(batch => batch.tier === 'owner')).toEqual([
         expect.objectContaining({ files: [file, ordinary], budgetMs: 600_000 }),
       ]);
-      expect(log).toHaveBeenCalledWith(`Regression: ${file} declared a timeout that could not be parsed; using the default owner deadline`);
+      expect(log).toHaveBeenCalledWith(`Regression: ${file} declared a timeout that could not be parsed; using the default per-file deadline`);
     } finally { log.mockRestore(); r.cleanup(); }
   });
 

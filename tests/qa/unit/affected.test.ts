@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { testArgs } from '../../../scripts/qa/acceptance.ts';
-import { classify, erasureCampaignNativeTest, formatPlan, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
+import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
+import { regressionBatchCommand, regressionRegistry } from '../../../scripts/goal/regress.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -26,8 +27,8 @@ const sources = new Map<string, string>([
   ['tests/qa/unit/rebuild.test.ts', "Bun.spawn(['bun', 'scripts/operations/rebuild.ts'])"],
 ]);
 const files = new Set([...graph.map(module => module.source), 'scripts/operations/rebuild.ts']);
-const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, nativeUnionTest, workNameScopeBasisTest];
-const heldReplayNativeTest = 'services/main/tests/erasure-held-replay-native.test.ts';
+const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, nativeUnionTest,
+  workNameScopeBasisTest, heldReplayNativeTest];
 const plan = (changed: string[], extra: Partial<Parameters<typeof planAffected>[0]> = {}) =>
   planAffected({ base: 'abc', changed, graph, sources, exists: path => files.has(path), ...extra });
 
@@ -365,9 +366,9 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
     .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'model']]);
   expect(dockerfile.tests.unit).toEqual([]);
   expect(dockerfile.tests.owner).toEqual(nativeProofs);
-  expect(affectedCommands(dockerfile).find(item => item.label === 'owner (4 files)')!.command[1])
+  expect(affectedCommands(dockerfile).find(item => item.label === `owner (${nativeProofs.length} files)`)!.command[1])
     .toEqual(['scripts/qa/cli.ts', '--tier', 'owner', ...nativeProofs.flatMap(file => ['--file', file])]);
-  expect(testArgs('owner')).toEqual(expect.arrayContaining(nativeProofs));
+  for (const file of inputSelectedNativeTests) expect(testArgs('owner')).not.toContain(file);
   expect(dockerfile.tasks[0]!.task).toBe('jena:check');
 });
 
@@ -399,6 +400,7 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
   expect(lockCommand.slice(0, 3)).toEqual(['scripts/qa/cli.ts', '--tier', 'unit']);
   expect(lockCommand).not.toContain(nativeUnionTest);
   expect(lockCommand).not.toContain(erasureCampaignNativeTest);
+  expect(lockCommand).not.toContain(heldReplayNativeTest);
   expect(lockCommand).not.toContain(nativeIntegerPreservationTest);
   expect(lockCommand).not.toContain(workNameScopeBasisTest);
   const directory = mkdtempSync(join(tmpdir(), 'unit-native-omit-'));
@@ -422,6 +424,7 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
     expect(unitFilesFromPlan(directory, lock)).toEqual(selected);
     expect(selected).not.toContain(nativeUnionTest);
     expect(selected).not.toContain(erasureCampaignNativeTest);
+    expect(selected).not.toContain(heldReplayNativeTest);
     expect(selected).not.toContain(nativeIntegerPreservationTest);
     expect(selected).not.toContain(workNameScopeBasisTest);
     expect(selected).toContain('tests/qa/unit/nested/behavior.test.ts');
@@ -446,22 +449,40 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
   }
   const widenedImage = plan(['yarn.lock', 'infra/jena/Dockerfile'], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(widenedImage.tests.unit).toEqual([]);
-  expect(widenedImage.tests.owner).toEqual([]);
+  expect(widenedImage.tests.owner).toEqual(nativeProofs);
   expect(formatPlan(widenedImage)).not.toContain(`unit: ${erasureCampaignNativeTest}`);
   const widenedCommands = affectedCommands(widenedImage);
   const widenedCommand = widenedCommands.find(item => item.label === 'unit (whole tier)')!.command[1];
   expect(widenedCommand).not.toContain(nativeUnionTest);
   expect(widenedCommand).not.toContain(erasureCampaignNativeTest);
+  expect(widenedCommand).not.toContain(heldReplayNativeTest);
   expect(widenedCommand).not.toContain(nativeIntegerPreservationTest);
   expect(widenedCommand).not.toContain(workNameScopeBasisTest);
   expect(widenedCommands.some(item => item.label === 'model (whole tier)')).toBe(true);
   expect(widenedCommands.some(item => item.label === 'owner (whole tier)')).toBe(true);
+  const broadOwnerCommand = widenedCommands.find(item => item.label === 'owner (whole tier)')!.command[1];
+  for (const file of inputSelectedNativeTests) expect(broadOwnerCommand).not.toContain(file);
+  expect(widenedCommands.find(item => item.label === `owner (${nativeProofs.length} files)` )!.command[1])
+    .toEqual(['scripts/qa/cli.ts', '--tier', 'owner', ...nativeProofs.flatMap(file => ['--file', file])]);
   expect(widenedCommands.some(item => item.label === 'unit (1 files)'
     && item.command[1].includes(`./${erasureCampaignNativeTest}`))).toBe(false);
   expect(testArgs('unit')).not.toContain(erasureCampaignNativeTest);
   for (const file of [nativeIntegerPreservationTest, nativeUnionTest, workNameScopeBasisTest])
     expect(testArgs('unit')).not.toContain(file);
-  expect(testArgs('owner')).toEqual(expect.arrayContaining([...nativeProofs, heldReplayNativeTest]));
+  for (const file of inputSelectedNativeTests) expect(testArgs('owner')).not.toContain(file);
+  expect(ownerFilesFromPlan('.', widenedImage)).toEqual(expect.arrayContaining(nativeProofs));
+});
+
+test('main-wide regression stages module-input native proofs with the Jena image checks', async () => {
+  const registry = await regressionRegistry(resolve(import.meta.dir, '../../..'));
+  for (const file of inputSelectedNativeTests) {
+    expect(registry.filter(item => item.file === file)).toEqual([
+      { file, tier: 'jena:check', outcome: 'pending' },
+    ]);
+    expect(registry.some(item => item.file === file && (item.tier === 'unit' || item.tier === 'owner'))).toBe(false);
+    expect(regressionBatchCommand({ id: 'jena-check-2', tier: 'jena:check', files: [file],
+      state: 'pending', attempts: [] }, '', '')).toEqual(['bun', 'test', file]);
+  }
 });
 
 test('affected selection defers the explicitly excluded live browser fixture', () => {

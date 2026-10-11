@@ -115,13 +115,16 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'model/tests/reasoning-profile.test.ts',
       'model/tests/event-time.test.ts',
       'packages/model/tests/generated.test.ts']);
-    expect(testArgs('owner')).toEqual(expect.arrayContaining([
+    for (const file of [
       'infra/jena/tests/erasure-campaign-native.test.ts',
       'infra/jena/tests/native-integer-preservation.test.ts',
       'infra/jena/tests/semantic-source-readiness-union.test.ts',
       'infra/jena/tests/work-name-scope-basis.test.ts',
       'services/main/tests/erasure-held-replay-native.test.ts',
-    ]));
+    ]) {
+      expect(testArgs('owner')).not.toContain(file);
+      expect(testArgs('owner', undefined, { files: [file] })).toEqual([file]);
+    }
     expect(testArgs('unit')).not.toContain('infra/jena/tests/erasure-campaign-native.test.ts');
     expect(testArgs('unit')).not.toContain('services/main/tests/erasure-held-replay-native.test.ts');
     expect(testArgs('fault/recovery')).toEqual(['tests/qa/fault-recovery',

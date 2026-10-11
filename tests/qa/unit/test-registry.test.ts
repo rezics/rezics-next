@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { legacyHostJenaGateFiles, ownerGateFiles, testArgs, testExclusions, unitHarnessFiles, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
+import { inputSelectedNativeTests, legacyHostJenaGateFiles, ownerGateFiles, testArgs, testExclusions, unitHarnessFiles, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
 import { expandTestPaths, isolatedIntegrationFiles, planStackProjects, selfManagedFaultFiles, splitTestArgs } from '../../../scripts/qa/core.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -47,11 +47,11 @@ test('migrated Main runtime fixtures stay registered in the integration tier and
   }
 });
 
-test('every tracked Bun test belongs to a full QA tier or a reasoned exclusion', () => {
+test('every tracked Bun test belongs to a QA tier, native image stage or reasoned exclusion', () => {
   const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
   expect(tracked.status).toBe(0);
   const files = tracked.stdout.split('\0').filter(file => /\.test\.tsx?$/.test(file));
-  const registered = new Set(unitHarnessFiles);
+  const registered = new Set([...unitHarnessFiles, ...inputSelectedNativeTests]);
   for (const tier of ['unit', 'owner', 'integration', 'model', 'fault/recovery', 'load'] as const) {
     const paths = splitTestArgs(testArgs(tier)).paths;
     expect(paths, `Duplicate test arguments in ${tier}`).toEqual([...new Set(paths)]);
@@ -65,7 +65,7 @@ test('every tracked Bun test belongs to a full QA tier or a reasoned exclusion',
     expect(registered.has(file), `Excluded test also registered: ${file}`).toBe(false);
   }
   const missing = files.filter(file => !registered.has(file) && !exclusions.has(file));
-  expect(missing, `Tests absent from every full QA tier:\n${missing.join('\n')}`).toEqual([]);
+  expect(missing, `Tests absent from every QA stage:\n${missing.join('\n')}`).toEqual([]);
 });
 
 test('owner discovery registers nested Bun TSX tests without admitting an unregistered stack test', () => {

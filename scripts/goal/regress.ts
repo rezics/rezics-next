@@ -6,7 +6,7 @@ import * as filesystem from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { hungTestFile, parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
+import { hungTestFile, inputSelectedNativeTests, parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
 import { directoryLeaseHeld, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
@@ -29,7 +29,7 @@ export interface Execution {
 }
 export interface Batch {
   id: string; tier: RegressionTier; files: string[]; state: 'pending' | 'running' | 'done'; attempts: Execution[];
-  /** Owner harness deadline, including the gate's margin for declared test timeouts. */
+  /** Per-file deadline, including the gate's margin for declared test timeouts. */
   budgetMs?: number;
 }
 /** The diagnosis fields worth carrying from an earlier run, without its probe log. */
@@ -138,7 +138,10 @@ const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
 const batchSize = (tier: RegressionTier, files: number): number =>
-  tier === 'integration' || tier === 'e2e' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15 : files;
+  tier === 'integration' || tier === 'e2e' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15
+    : tier === 'jena:check' ? 1 : files;
+const nativeImageProofs = new Set<string>(inputSelectedNativeTests);
+const jenaCheckDefaultBudgetMs = 75_000;
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 function atomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -458,14 +461,18 @@ export function formatPruneReport(report: PruneCheckoutsReport): string {
 export async function regressionRegistry(checkout: string): Promise<ExpectedFile[]> {
   const registry = await import(pathToFileURL(join(checkout, 'scripts/qa/acceptance.ts')).href) as typeof import('../qa/acceptance.ts');
   const core = await import(pathToFileURL(join(checkout, 'scripts/qa/core.ts')).href) as typeof import('../qa/core.ts');
+  const nativeFiles = new Set<string>(registry.inputSelectedNativeTests ?? []);
   const files: ExpectedFile[] = [];
   files.push({ file: 'scripts/qa/jena-cli.ts', tier: 'jena:check', outcome: 'pending' });
   for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'] as const) {
-    const paths = core.splitTestArgs(registry.testArgs(tier)).paths;
+    const discovered = core.splitTestArgs(registry.testArgs(tier)).paths;
+    const paths = tier === 'unit' || tier === 'owner'
+      ? discovered.filter(file => !nativeFiles.has(file)) : discovered;
     if (tier === 'unit') paths.push(...registry.unitHarnessFiles);
     for (const file of core.expandTestPaths(checkout, paths)) files.push({ file, tier,
       outcome: tier === 'load' ? 'excluded' : 'pending', ...(tier === 'load' ? { reason: 'Opt-in load qualification' } : {}) });
   }
+  files.push(...[...nativeFiles].map(file => ({ file, tier: 'jena:check' as const, outcome: 'pending' as const })));
   const scan = (pattern: string, cwd = checkout) => [...new Bun.Glob(pattern).scanSync({ cwd })].sort();
   files.push(...scan('apps/web/tests/*.e2e.ts').map(file => ({ file, tier: 'e2e' as const, outcome: 'pending' as const })));
   for (const workspace of ['apps/web', 'apps/accounts']) {
@@ -501,7 +508,7 @@ async function ownerFileBudgets(checkout: string, files: readonly string[], defa
     } catch { timeout = { unparseable: true }; }
     // Singleton planning reuses the gate's deadline decision without changing ordinary regression batch sizes.
     const planned = planUnitGateShards([{ file, timeout }], 1, defaultBudgetMs);
-    if (planned.unparseable.length) console.log(`Regression: ${file} declared a timeout that could not be parsed; using the default owner deadline`);
+    if (planned.unparseable.length) console.log(`Regression: ${file} declared a timeout that could not be parsed; using the default per-file deadline`);
     return [file, planned.shards[0]!.budgetMs];
   }));
 }
@@ -523,16 +530,28 @@ async function batchesFor(checkout: string, files: ExpectedFile[], options: Regr
     const defaultBudgetMs = tier === 'owner' && run ? ownerTierBudgetMs() : undefined;
     const budgets = defaultBudgetMs === undefined ? new Map<string, number>()
       : await ownerFileBudgets(checkout, expected.map(file => file.file), defaultBudgetMs);
+    const nativeBudgets = tier === 'jena:check' && run
+      ? await ownerFileBudgets(checkout, expected.filter(file => nativeImageProofs.has(file.file)).map(file => file.file), ownerTierBudgetMs())
+      : new Map<string, number>();
     const long = expected.filter(file => (budgets.get(file.file) ?? 0) > (defaultBudgetMs ?? Infinity));
     const rest = expected.filter(file => (budgets.get(file.file) ?? 0) <= (defaultBudgetMs ?? Infinity));
-    const groups = long.map(file => [file]);
-    for (let index = 0; index < rest.length; index += size) groups.push(rest.slice(index, index + size));
+    const groups = tier === 'jena:check' ? expected.map(file => [file]) : long.map(file => [file]);
+    if (tier !== 'jena:check')
+      for (let index = 0; index < rest.length; index += size) groups.push(rest.slice(index, index + size));
     for (const [index, group] of groups.entries()) {
-      if (!run || (tier === 'integration' && options.integrationBatches !== undefined && index >= options.integrationBatches)) {
+      const deferredNativeProof = tier === 'jena:check' && group.some(file => nativeImageProofs.has(file.file))
+        && options.only !== undefined && !options.only.includes('jena:check');
+      if (!run || deferredNativeProof
+        || (tier === 'integration' && options.integrationBatches !== undefined && index >= options.integrationBatches)) {
         for (const file of group) { file.outcome = 'deferred'; file.reason = 'Restricted regression selection'; }
-      } else batches.push({ id: `${tier.replaceAll(/[:/]/g, '-')}-${index + 1}`, tier,
-        files: group.map(file => file.file), state: 'pending', attempts: [],
-        ...(defaultBudgetMs === undefined ? {} : { budgetMs: Math.max(defaultBudgetMs, ...group.map(file => budgets.get(file.file) ?? defaultBudgetMs)) }) });
+      } else {
+        const budgetMs = tier === 'owner' && defaultBudgetMs !== undefined
+          ? Math.max(defaultBudgetMs, ...group.map(file => budgets.get(file.file) ?? defaultBudgetMs))
+          : group.length === 1 ? nativeBudgets.get(group[0]!.file) : undefined;
+        batches.push({ id: `${tier.replaceAll(/[:/]/g, '-')}-${index + 1}`, tier,
+          files: group.map(file => file.file), state: 'pending', attempts: [],
+          ...(budgetMs === undefined ? {} : { budgetMs }) });
+      }
     }
   }
   return batches;
@@ -682,7 +701,8 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
 }
 
 export function regressionBatchCommand(batch: Batch, report: string, storyXmlPath: string): string[] {
-  if (batch.tier === 'jena:check') return ['task', 'jena:check'];
+  if (batch.tier === 'jena:check') return batch.files.some(file => nativeImageProofs.has(file))
+    ? ['bun', 'test', ...batch.files] : ['task', 'jena:check'];
   const standaloneStories = batch.files.every(file => file.includes('.stories.'));
   const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
     : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file]),
@@ -733,9 +753,12 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   const started = Date.now();
   // Older resumed manifests have no budget; derive it from their pinned files while preserving their plan.
   const budgetMs = batch.tier === 'owner' ? batch.budgetMs
-    ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values()) : undefined;
+    ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values())
+    : batch.tier === 'jena:check' && batch.files.some(file => nativeImageProofs.has(file)) ? batch.budgetMs
+      ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values())
+      : undefined;
   const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
-    batch.tier === 'jena:check' ? 75_000 : Math.max(7 * 3_600_000, budgetMs ?? 0),
+    batch.tier === 'jena:check' ? Math.max(jenaCheckDefaultBudgetMs, budgetMs ?? 0) : Math.max(7 * 3_600_000, budgetMs ?? 0),
     regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);

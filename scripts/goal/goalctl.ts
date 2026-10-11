@@ -7,8 +7,8 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decodeXml, ownerGateFiles, parseJUnit, testArgs, unitHarnessFiles, type TestResult } from '../qa/acceptance.ts';
-import { affectedPlanForChanges, affectedUnitTierEntries, typecheckWorkspaces, TYPECHECK_WORKSPACES, type AffectedPlan } from '../qa/affected.ts';
+import { decodeXml, parseJUnit, testArgs, unitHarnessFiles, type TestResult } from '../qa/acceptance.ts';
+import { affectedOwnerTierEntries, affectedPlanForChanges, affectedUnitTierEntries, typecheckWorkspaces, TYPECHECK_WORKSPACES, type AffectedPlan } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease,
@@ -2536,7 +2536,7 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
 export function mergeOwnerFiles(worktree: string, plan: string): string[] {
   if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
   const entries = [...plan.matchAll(/^  owner: (.+)$/gm)].map(match => match[1]!);
-  const whole = entries.some(entry => entry.startsWith('whole tier (')) ? ownerGateFiles(worktree) : [];
+  const whole = entries.some(entry => entry.startsWith('whole tier (')) ? affectedOwnerTierEntries() : [];
   return existingTestFiles(worktree, entries, whole).sort();
 }
 
@@ -2552,8 +2552,8 @@ export function unitFilesFromPlan(worktree: string, plan: AffectedPlan): string[
 /** Owner files from the typed plan. Whole-tier widening uses the worktree's owner registry. */
 export function ownerFilesFromPlan(worktree: string, plan: AffectedPlan): string[] {
   const widened = plan.widened.some(item => item.tier === 'owner');
-  const entries = [...(widened ? ['whole tier (owner)'] : []), ...plan.tests.owner];
-  return existingTestFiles(worktree, entries, widened ? ownerGateFiles(worktree) : []).sort();
+  const entries = [...(widened ? affectedOwnerTierEntries() : []), ...plan.tests.owner];
+  return existingTestFiles(worktree, entries, []).sort();
 }
 
 /** Separates the console transcript from the JUnit report appended for attribution. */

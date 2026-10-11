@@ -238,12 +238,20 @@ const retainedUnitOwners = new Set([
   'services/main/tests/vote-schema-commands.test.ts',
   'services/main/tests/work-command.test.ts',
 ]);
-export const nativeProofOwnerFiles = [
-  'infra/jena/tests/erasure-campaign-native.test.ts',
-  'infra/jena/tests/native-integer-preservation.test.ts',
-  'infra/jena/tests/semantic-source-readiness-union.test.ts',
-  'infra/jena/tests/work-name-scope-basis.test.ts',
+export const erasureCampaignNativeTest = 'infra/jena/tests/erasure-campaign-native.test.ts';
+export const nativeIntegerPreservationTest = 'infra/jena/tests/native-integer-preservation.test.ts';
+export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
+export const workNameScopeBasisTest = 'infra/jena/tests/work-name-scope-basis.test.ts';
+export const heldReplayNativeTest = 'services/main/tests/erasure-held-replay-native.test.ts';
+/** Native proofs built from the module-stage Docker COPY set. */
+export const inputSelectedNativeTests = [
+  nativeUnionTest,
+  erasureCampaignNativeTest,
+  nativeIntegerPreservationTest,
+  workNameScopeBasisTest,
+  heldReplayNativeTest,
 ] as const;
+export const nativeProofOwnerFiles = inputSelectedNativeTests;
 const nativeProofOwnerFileSet: ReadonlySet<string> = new Set(nativeProofOwnerFiles);
 export function isQaOwnerPath(path: string): boolean {
   return /\.test\.tsx?$/.test(path) && !retainedUnitOwners.has(path) && !modelGateFiles.some(file => file === path)
@@ -348,7 +356,9 @@ export function testArgs(
     : tier === 'model' ? [...modelGateFiles]
     : tier === 'fault/recovery' ? [...faultGateFiles]
     : tier === 'load' ? [] : tier === 'owner' ? ownerGateFiles() : unitOwnerFiles();
-  const defaults = [...(base ? [base] : []), ...extraGates];
+  // The Jena image regression owns these Docker/Maven proofs; direct --file selections remain supported below.
+  const tierFiles = tier === 'owner' ? extraGates.filter(file => !nativeProofOwnerFileSet.has(file)) : extraGates;
+  const defaults = [...(base ? [base] : []), ...tierFiles];
   const supportedGates = tier === 'unit' ? [...extraGates, ...unitHarnessFiles] : extraGates;
   if (chosen) {
     const files = chosen.files?.length ? chosen.files : defaults;
