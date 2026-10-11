@@ -762,15 +762,17 @@ try {
     new Request(`http://main.local${root}/threads?sort=top&window=all&limit=1`),
   );
   const cursor = ((await firstPage.json()) as { nextCursor: string }).nextCursor;
-  const voter = workProfileCorpusApi('http://main.local', home.reader.token, {
+  const voterMember = await home.member(`g1034-voter-${size}`);
+  const voterSubject = await home.provision(`G-1034 voter ${size}`, voterMember.token);
+  const voter = workProfileCorpusApi('http://main.local', voterMember.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });
-  const voted = await voter.command<{ score: number }>('g1034:vote', {
+  const voted = await voter.command<{ score: number; replayed: boolean }>(`g1034:vote:${size}:${randomUUID()}`, {
     method: 'POST',
     path: `/v1/feed/${opening.placement.slice(-36)}/vote`,
     body: {
       profile: 'feed-vote-command-v1',
-      actingSubject: reader,
+      actingSubject: voterSubject,
       value: 1,
       expectedRevision: null,
     },
@@ -799,6 +801,7 @@ try {
       `http://main.local${root}/threads?sort=top&window=all&limit=1&cursor=${encodeURIComponent(cursor)}`,
     ),
   );
+  assert.equal(voted.replayed, false);
   assert.equal(changed.status, 200, await changed.clone().text());
   assert.equal(
     (

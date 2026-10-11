@@ -144,6 +144,11 @@ export async function startHomeStack(label: string, options: {
   const author = await stack.member('author', memberOptions), reader = await stack.member('reader', memberOptions);
   const principals = new Map<string, { issuer: string; subject: string; emailVerified: boolean }>(
     [author, reader].map(member => [member.token, { ...member.principal, emailVerified: true }]));
+  const member = async (name: string) => {
+    const created = await stack.member(name);
+    principals.set(created.token, { ...created.principal, emailVerified: true });
+    return created;
+  };
   const account = { verify: async (request: Request) => {
     const principal = principals.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
     if (!principal) throw new AccountAssertionDenied('Authentication required');
@@ -206,7 +211,7 @@ export async function startHomeStack(label: string, options: {
     throw new Error('Home projection exceeded its fixture budget');
   };
   const stop = async () => { await relay.end(); await stack.stop(); };
-  return { stack, relay, deps, app, call, json, provision, project, projectRelay, author, reader, stop };
+  return { stack, relay, deps, app, call, json, provision, member, project, projectRelay, author, reader, stop };
 }
 
 export type HomeStack = Awaited<ReturnType<typeof startHomeStack>>;
