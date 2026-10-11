@@ -9,6 +9,7 @@ import { attributeDirectoryRefreshQueries, CountingFuseki } from './support/coun
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { createClassificationContext, classificationContextDigest }
   from '../../../services/main/src/modules/classification/context.ts';
 import type { ClassificationDecisionContext }
@@ -119,7 +120,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
       }
       return viewer;
     } },
-    access: new AccessAdmissionRegistry(accessPool), accessPolicy: new AccessPolicyOwner(accessPool) });
+    access: new AccessAdmissionRegistry(accessPool), accessPolicy: new AccessPolicyOwner(accessPool),
+    judgments: new AccessJudgments(accessPool) });
   const classificationFixture = await contextFixture(Bun.env as Record<string, string>);
   const classificationObjectDirectory = classificationFixture.env.objectDirectory;
   classificationFixture.env.objectDirectory = env.objectDirectory;
