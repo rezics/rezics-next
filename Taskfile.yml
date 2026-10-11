@@ -30,6 +30,14 @@ tasks:
     cmds:
       - corepack yarn install --immutable
 
+  toolchain:bun-check:
+    desc: Refuse a Bun older than 1.4.3, which has no built-in type checker.
+    internal: true
+    silent: true
+    cmds:
+      - |
+        bun -e 'const [a, b, c] = Bun.version.split(".").map(Number); if (a < 1 || (a === 1 && (b < 4 || (b === 4 && c < 3)))) { console.error(`bun check needs Bun 1.4.3 or newer; this is ${Bun.version}`); process.exit(1); }'
+
   toolchain:install:
     desc: From a clean clone, install dependencies, check runtimes, pull images, build Fuseki and install Chromium.
     cmds:
@@ -90,17 +98,20 @@ tasks:
     cmds:
       - bun scripts/dev/seed/cli.ts {{.CLI_ARGS}}
 
-  # *:typecheck --gib values are measured tsc resident peaks plus 0.25 GiB, rounded up to 0.5 GiB.
+  # *:typecheck runs `bun check` (Bun 1.4.3 or newer; the same errors as tsc 7, in seconds).
+  # --gib values are its measured resident peaks plus 0.25 GiB, rounded up to 0.5 GiB; eight threads keep a
+  # gate's checks from taking every core.
   scripts:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check every script except the dataset tools.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 3.5 -- bun node_modules/typescript/bin/tsc --project scripts/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 1.5 -- bun check -p scripts/tsconfig.json --no-pretty --threads 8
 
   apphost:typecheck:
+    deps: [toolchain:bun-check, aspire:restore]
     desc: Type-check the AppHost and its configuration imports with Node types.
-    deps: [aspire:restore]
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project apphost/tsconfig.apphost.json
+      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun check -p apphost/tsconfig.apphost.json --no-pretty --threads 8
 
   aspire:
     desc: Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...).
@@ -174,10 +185,11 @@ tasks:
       - node_modules/.bin/playwright test --config apps/web/playwright.config.ts {{.CLI_ARGS}}
 
   web:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check the web workspace.
     dir: apps/web
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 7 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 5.5 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   storybook:
     desc: Run Storybook on port 6006 with its MCP endpoint at /mcp.
@@ -219,10 +231,11 @@ tasks:
       - ../../node_modules/.bin/vinext build {{.CLI_ARGS}}
 
   accounts:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check the Accounts workspace.
     dir: apps/accounts
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 2 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   accounts:storybook:
     desc: Run the Accounts Storybook on port 6007.
@@ -279,16 +292,18 @@ tasks:
       - node_modules/.bin/playwright test --config apps/about/playwright.config.ts {{.CLI_ARGS}}
 
   ui:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check Rezics UI.
     dir: packages/ui
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 1.5 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   document:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check the independent document protocol.
     dir: packages/document
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 0.5 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 0.5 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   document:gen:
     desc: Generate the standalone Document Core, Text and Blocks JSON Schemas.
@@ -315,9 +330,10 @@ tasks:
   # Checks and tests
 
   observability:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check the shared telemetry runtime.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun check -p packages/observability/tsconfig.json --no-pretty --threads 8
 
   observability:aspire-smoke:
     desc: Verify real server spans, structured logs and OTLP authentication against the running backend AppHost.
@@ -437,9 +453,10 @@ tasks:
       - bun scripts/datasets/cli.ts test {{.CLI_ARGS}}
 
   dataset:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check the independent local dataset tools.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 2 -- node_modules/.bin/tsc --noEmit -p scripts/datasets/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 1 -- bun check -p scripts/datasets/tsconfig.json --no-pretty --threads 8
 
   dataset:check:
     desc: Check the dataset tools types, lint and formatting without capturing or importing data.
@@ -603,10 +620,11 @@ tasks:
       - bun test services/account/tests {{.CLI_ARGS}}
 
   account:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check Account.
     dir: services/account
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 2.5 -- ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   account:mail-report:
     desc: Report uncertain Account mail and optional-mail suppression counts; never resend.
@@ -614,10 +632,11 @@ tasks:
       - bun scripts/operations/account-mail-report.ts
 
   content:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check Content.
     dir: services/content
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 2 -- ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   content:test:
     desc: Run Content unit tests.
@@ -641,10 +660,11 @@ tasks:
       - bun services/main/src/relay-init.ts {{.CLI_ARGS}}
 
   main:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check Main.
     dir: services/main
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 4.5 -- ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 2 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   main:test:
     desc: Run Main unit tests.
@@ -652,10 +672,11 @@ tasks:
       - bun test services/main/tests {{.CLI_ARGS}}
 
   model:typecheck:
+    deps: [toolchain:bun-check]
     desc: Type-check the model package.
     dir: packages/model
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 1 -- ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 0.5 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   model:test:
     desc: Run model package tests.

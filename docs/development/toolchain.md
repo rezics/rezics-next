@@ -24,8 +24,13 @@ use exact direct pins; Compose and Dockerfiles pin external images by digest.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
-Release application containers use Bun 1.4.2 from
-`oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895`.
+Type checks run `bun check`, Bun's built-in checker (the same errors as `tsc` from
+TypeScript 7, in seconds instead of minutes), so the host needs Bun 1.4.3 or newer and
+`task <workspace>:typecheck` refuses an older one. `tsc` stays installed for the Eden gate
+and for emit.
+
+Release application containers use Bun 1.4.3 from
+`oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598`.
 The index digest was inspected with `task release:images -- --inspect-base`;
 `scripts/dev/release-manifest.ts` owns this pin. The build uses the installed
 Yarn 4.18.0 CLI to focus production dependencies in its builder stage.
@@ -222,7 +227,7 @@ the runner reports its absence rather than treating that comparison as a pass.
 
 | Tool | Pin | Source |
 | --- | --- | --- |
-| Bun | 1.4.2 | scripts/dev/release-manifest.ts |
+| Bun | 1.4.3 | scripts/dev/release-manifest.ts |
 | Node.js | 26.8.2 | .nvmrc |
 | Yarn | yarn@4.18.0 | package.json |
 | Task | 3.53.1 | scripts/dev/cli.ts |
@@ -387,7 +392,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |
 | Fuseki build | maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 |
 | Fuseki build | eclipse-temurin:21.0.12_8-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f |
-| Observability | oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 |
+| Observability | oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 |
 | Observability | greptime/greptimedb:v1.2.1@sha256:9982e36cf3ddb6f2bc813f93ec164509dce59e8c0667c6c38b826f293ec09477 |
 | Observability | otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1 |
 | Observability | persesdev/perses:v0.54.0@sha256:a0e34ddaf9d7599d96036611af205b948c1179646844202d869f3bcf3d5d9e9c |
@@ -430,6 +435,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task statement:convert` | Convert retained classifications and rebuild Statement seek coverage on a fenced populated stack. |
 | `task default` | List the available commands. |
 | `task install` | Install the pinned workspace dependencies from the lockfile. |
+| `task toolchain:bun-check` | Refuse a Bun older than 1.4.3, which has no built-in type checker. |
 | `task toolchain:install` | From a clean clone, install dependencies, check runtimes, pull images, build Fuseki and install Chromium. |
 | `task dev` | Start the dev environment under Aspire. Main checkout: shared backend and frontend on ports 3002 (Account), 3001 (Main), 3004 (Accounts app), 3000 (web), 6006 (Storybook). Worktree: Accounts app, web and Storybook on random ports against it, or -- --backend for its own isolated stack. |
 | `task dev:stop` | Stop this checkout's AppHost; a worktree backend also removes its isolated stack. |

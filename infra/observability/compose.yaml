@@ -2,7 +2,7 @@
 # is started here. Checked by `task observability:check` and isolated smoke tests.
 services:
   data-permissions:
-    image: oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895
+    image: oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598
     user: "0:0"
     command: [bun, -e, "const fs = require('node:fs'); for (const [path, uid] of [['/data/collector', 10001], ['/data/greptime', 10001], ['/data/perses', 65532]]) fs.chownSync(path, uid, uid);"]
     volumes:

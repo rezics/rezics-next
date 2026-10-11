@@ -38,8 +38,8 @@ test('both static modes run the Node-typed AppHost task, including SDK restorati
   expect(gate.slice(0, gate.indexOf('...(!backend'))).toContain("['task', 'apphost:typecheck']");
   const tasks = readFileSync(join(root, 'Taskfile.yml'), 'utf8');
   const task = /\n  apphost:typecheck:\n([\s\S]*?)(?=\n  \S)/.exec(tasks)?.[1];
-  expect(task).toContain('deps: [aspire:restore]');
-  expect(task).toContain('tsc --project apphost/tsconfig.apphost.json');
+  expect(task).toContain('deps: [toolchain:bun-check, aspire:restore]');
+  expect(task).toContain('bun check -p apphost/tsconfig.apphost.json');
 });
 
 test('the merge Task command executes mixed unit and owner files and retains guard failure attribution', () => {

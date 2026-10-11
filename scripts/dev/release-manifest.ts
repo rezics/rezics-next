@@ -9,8 +9,8 @@ const root = resolve(import.meta.dir, '../..');
 export const releaseManifest = {
   schema: 'rezics-local-release-v1',
   formatVersion: 1,
-  runtimes: { bun: '1.4.2', node: 'v26.8.2', yarn: '4.18.0' },
-  applicationBase: 'oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895',
+  runtimes: { bun: '1.4.3', node: 'v26.8.2', yarn: '4.18.0' },
+  applicationBase: 'oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598',
   images: {
     postgres: 'postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722',
     fuseki: 'rezics/fuseki:6.2.0-cmd0.5.39-ce9c77bee5cd',
