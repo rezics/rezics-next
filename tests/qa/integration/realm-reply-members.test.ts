@@ -52,6 +52,109 @@ async function leavePen(h: VisibilityFixture) {
   expect(removed.status, JSON.stringify(removed.body)).toBe(201);
 }
 
+function placementIntent(h: VisibilityFixture, actor: string, reply: Awaited<ReturnType<VisibilityFixture['reply']>>,
+  key = randomUUID()) {
+  const digest = realmReplyDigest(reply.placement);
+  const request = { principal: h.principal, actingSubject: actor, action: 'reply.place',
+    scope: `reply:place:${h.realm}`, idempotencyKey: key, requestDigest: digest };
+  return { key, digest, request };
+}
+
+async function joinPrivatePen(h: VisibilityFixture) {
+  const current = (await h.accessPool.query<{ id: string; generation: string; state: string }>(`SELECT
+    id, generation::text, state FROM access.private_membership
+    WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $2`,
+  [h.realm, h.principalId])).rows[0];
+  expect(current?.state).not.toBe('joined');
+  const policy = (await h.accessPool.query<{ revision: string; terms_revision: string }>(`SELECT
+    revision::text, terms_revision FROM access.membership_policy WHERE kind = 'realm' AND owner_subject = $1`,
+  [h.realm])).rows[0]!;
+  const expectedGeneration = current?.generation ?? '0';
+  const generation = (BigInt(expectedGeneration) + 1n).toString();
+  const consent = randomUUID();
+  await h.accessPool.query(`INSERT INTO access.private_membership_consent
+    (id, principal_id, principal_epoch, kind, owner_subject, policy_revision, terms_revision, next_generation, expires_at)
+    SELECT $1, id, enforcement_epoch, 'realm', $3, $4, $5, $6, now() + interval '5 minutes'
+    FROM access.principal WHERE id = $2`,
+  [consent, h.principalId, h.realm, policy.revision, policy.terms_revision, generation]);
+  const membershipId = current?.id ?? randomUUID();
+  if (current) {
+    await h.accessPool.query(`UPDATE access.private_membership SET state = 'joined', generation = $2,
+      policy_revision = $3, terms_revision = $4, consent_reference = $5 WHERE id = $1`,
+    [membershipId, generation, policy.revision, policy.terms_revision, consent]);
+  } else {
+    await h.accessPool.query(`INSERT INTO access.private_membership
+      (id, kind, owner_subject, principal_id, state, generation, policy_revision, terms_revision, consent_reference)
+      VALUES ($1, 'realm', $2, $3, 'joined', $4, $5, $6, $7)`,
+    [membershipId, h.realm, h.principalId, generation, policy.revision, policy.terms_revision, consent]);
+  }
+  await h.accessPool.query(`INSERT INTO access.private_membership_history
+    (membership_id, generation, state, policy_revision, terms_revision, consent_reference, changed_by_principal)
+    VALUES ($1, $2, 'joined', $3, $4, $5, $6)`,
+  [membershipId, generation, policy.revision, policy.terms_revision, consent, h.principalId]);
+  await h.accessPool.query(`INSERT INTO access.private_membership_consent_use
+    (consent_id, membership_id, generation) VALUES ($1, $2, $3)`, [consent, membershipId, generation]);
+  return { membershipId, generation, state: 'joined' as const };
+}
+
+async function leavePrivatePen(h: VisibilityFixture) {
+  const current = (await h.accessPool.query<{ id: string; generation: string; state: string }>(`SELECT
+    id, generation::text, state FROM access.private_membership
+    WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $2`, [h.realm, h.principalId])).rows[0]!;
+  expect(current.state).toBe('joined');
+  const policy = (await h.accessPool.query<{ revision: string }>(`SELECT revision::text
+    FROM access.membership_policy WHERE kind = 'realm' AND owner_subject = $1`, [h.realm])).rows[0]!;
+  const generation = (BigInt(current.generation) + 1n).toString();
+  await h.accessPool.query(`UPDATE access.private_membership SET state = 'left', generation = $2,
+    policy_revision = $3, terms_revision = NULL, consent_reference = NULL WHERE id = $1`,
+  [current.id, generation, policy.revision]);
+  await h.accessPool.query(`INSERT INTO access.private_membership_history
+    (membership_id, generation, state, policy_revision, terms_revision, consent_reference, changed_by_principal)
+    VALUES ($1, $2, 'left', $3, NULL, NULL, $4)`,
+  [current.id, generation, policy.revision, h.principalId]);
+  return { membershipId: current.id, generation, state: 'left' as const };
+}
+
+async function registerPlacement(h: VisibilityFixture, actor: string,
+  reply: Awaited<ReturnType<VisibilityFixture['reply']>>, key = randomUUID()) {
+  const intent = placementIntent(h, actor, reply, key);
+  const registered = await h.access.register(intent.request);
+  return { ...intent, registered };
+}
+
+async function insertPublicBan(h: VisibilityFixture, actor: string, expiresAt: 'never' | 'past' = 'never') {
+  await h.accessPool.query(`INSERT INTO access.membership_ban
+    (kind, owner_subject, member_subject, active, reason_ref, expires_at)
+    VALUES ('realm', $1, $2, true, 'reply-lifecycle-ban',
+      CASE WHEN $3 = 'past' THEN clock_timestamp() - interval '1 second' ELSE NULL END)
+    ON CONFLICT (kind, owner_subject, member_subject) DO UPDATE
+      SET active = true, reason_ref = EXCLUDED.reason_ref, expires_at = EXCLUDED.expires_at`,
+  [h.realm, actor, expiresAt]);
+}
+
+async function insertPrivateBan(h: VisibilityFixture) {
+  await h.accessPool.query(`INSERT INTO access.private_membership_ban
+    (kind, owner_subject, principal_id, active, reason_ref)
+    VALUES ('realm', $1, $2, true, 'reply-lifecycle-ban')
+    ON CONFLICT (kind, owner_subject, principal_id) DO UPDATE SET active = true,
+      reason_ref = EXCLUDED.reason_ref`, [h.realm, h.principalId]);
+}
+
+async function currentOwnerGrant(h: VisibilityFixture) {
+  return (await h.accessPool.query<{ id: string; generation: string }>(`SELECT id, generation::text
+    FROM access.permission_grant WHERE scope_id = $1 AND recipient_subject = $2
+      AND action = 'realm.owner' AND membership_id IS NULL AND active
+      AND valid_until > clock_timestamp() ORDER BY id LIMIT 1`, [`governance:realm:${h.realm}`, h.actor])).rows[0]!;
+}
+
+async function replaceOwnerGrant(h: VisibilityFixture) {
+  await h.accessPool.query(`INSERT INTO access.permission_grant
+    (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+    VALUES ($1, $2, $2, $3, 'realm.owner', clock_timestamp() + interval '1 hour')`,
+  [randomUUID(), h.actor, `governance:realm:${h.realm}`]);
+  return currentOwnerGrant(h);
+}
+
 async function placementEffects(h: VisibilityFixture, revisionId: string, reply: string) {
   const counts = (await h.contentPool.query<{ reviews: string; preparations: string; placementPreparations: string;
     revisionReviews: string; revisionPreparations: string; revisionPlacementPreparations: string }>(`SELECT
@@ -91,6 +194,138 @@ async function waitForBlockedRealmPolicyWrite(h: VisibilityFixture) {
   }
   throw new Error('Realm policy write did not wait behind the in-flight placement');
 }
+
+test('active public and private bans block fresh replies, including an owner mandate', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'open');
+    const publicReply = await h.reply(h.pen);
+    await insertPublicBan(h, h.pen);
+    const publicRefusal = await h.call('POST', '/v1/realm-reply-placements', publicReply.placement, h.pen);
+    expect(publicRefusal.status, JSON.stringify(publicRefusal.body)).toBe(403);
+    await h.accessPool.query(`UPDATE access.membership_ban SET active = false
+      WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`, [h.realm, h.pen]);
+
+    await h.policy('private', 'open');
+    await joinPen(h);
+    const privateReply = await h.reply(h.pen);
+    await insertPrivateBan(h);
+    const privateRefusal = await h.call('POST', '/v1/realm-reply-placements', privateReply.placement, h.pen);
+    expect(privateRefusal.status, JSON.stringify(privateRefusal.body)).toBe(403);
+    await h.accessPool.query(`UPDATE access.private_membership_ban SET active = false
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $2`, [h.realm, h.principalId]);
+
+    await h.policy('public', 'trusted-members');
+    const ownerSuccess = await h.reply(h.actor);
+    expect((await h.call('POST', '/v1/realm-reply-placements', ownerSuccess.placement, h.actor)).status).toBe(201);
+    const ownerReply = await h.reply(h.actor);
+    await insertPublicBan(h, h.actor);
+    const ownerRefusal = await h.call('POST', '/v1/realm-reply-placements', ownerReply.placement, h.actor);
+    expect(ownerRefusal.status, JSON.stringify(ownerRefusal.body)).toBe(403);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('a ban fences a registered placement; an expired public ban permits a fresh intent', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'open');
+    const beforeBan = await h.reply(h.pen);
+    const intent = await registerPlacement(h, h.pen, beforeBan);
+    expect(intent.registered.dispatchEligible).toBe(true);
+    await insertPublicBan(h, h.pen);
+    const replay = await h.access.register(intent.request);
+    expect(replay).toMatchObject({ id: intent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(intent.registered.id, intent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+
+    await h.accessPool.query(`UPDATE access.membership_ban SET expires_at = clock_timestamp() - interval '1 second'
+      WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`, [h.realm, h.pen]);
+    const afterExpiry = await h.reply(h.pen);
+    const placed = await h.call('POST', '/v1/realm-reply-placements', afterExpiry.placement, h.pen);
+    expect(placed.status, JSON.stringify(placed.body)).toBe(201);
+    expect(placed.body.reply).toBe(afterExpiry.input.reply);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('public membership generations fence old placements across leave and rejoin', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'open');
+    await joinPen(h);
+    const beforeLeave = await h.reply(h.pen);
+    const intent = await registerPlacement(h, h.pen, beforeLeave);
+    expect(intent.registered.dispatchEligible).toBe(true);
+
+    await leavePen(h);
+    await joinPen(h);
+    const replay = await h.access.register(intent.request);
+    expect(replay).toMatchObject({ id: intent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(intent.registered.id, intent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+
+    const afterRejoin = await h.reply(h.pen);
+    const placed = await h.call('POST', '/v1/realm-reply-placements', afterRejoin.placement, h.pen);
+    expect(placed.status, JSON.stringify(placed.body)).toBe(201);
+    expect(placed.body.reply).toBe(afterRejoin.input.reply);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('private membership generations fence old placements across leave and rejoin', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('private', 'open');
+    await joinPrivatePen(h);
+    const beforeLeave = await h.reply(h.pen);
+    const intent = await registerPlacement(h, h.pen, beforeLeave);
+    expect(intent.registered.dispatchEligible).toBe(true);
+
+    await leavePrivatePen(h);
+    await joinPrivatePen(h);
+    const replay = await h.access.register(intent.request);
+    expect(replay).toMatchObject({ id: intent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(intent.registered.id, intent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+
+    const afterRejoin = await h.reply(h.pen);
+    const placed = await h.call('POST', '/v1/realm-reply-placements', afterRejoin.placement, h.pen);
+    expect(placed.status, JSON.stringify(placed.body)).toBe(201);
+    expect(placed.body.reply).toBe(afterRejoin.input.reply);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('expired and revoked owner grants fence registered private trusted placements', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('private', 'trusted-members');
+
+    const beforeExpiry = await h.reply(h.actor);
+    const firstIntent = await registerPlacement(h, h.actor, beforeExpiry);
+    expect(firstIntent.registered.dispatchEligible).toBe(true);
+    const originalGrant = await currentOwnerGrant(h);
+    await h.accessPool.query(`UPDATE access.permission_grant
+      SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1`, [originalGrant.id]);
+    await replaceOwnerGrant(h);
+    const firstReplay = await h.access.register(firstIntent.request);
+    expect(firstReplay).toMatchObject({ id: firstIntent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(firstIntent.registered.id, firstIntent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+
+    const beforeRevocation = await h.reply(h.actor);
+    const secondIntent = await registerPlacement(h, h.actor, beforeRevocation);
+    expect(secondIntent.registered.dispatchEligible).toBe(true);
+    const currentGrant = await currentOwnerGrant(h);
+    await h.accessPool.query(`UPDATE access.permission_grant SET active = false WHERE id = $1`, [currentGrant.id]);
+    await replaceOwnerGrant(h);
+    const secondReplay = await h.access.register(secondIntent.request);
+    expect(secondReplay).toMatchObject({ id: secondIntent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(secondIntent.registered.id, secondIntent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+
+    const afterReplacement = await h.reply(h.actor);
+    const freshPlacement = await h.call('POST', '/v1/realm-reply-placements', afterReplacement.placement, h.actor);
+    expect(freshPlacement.status, JSON.stringify(freshPlacement.body)).toBe(201);
+  } finally { await h.close(); }
+}, 180_000);
 
 test('public open replies allow an unjoined Person; trusted replies require a joined Person', async () => {
   const h = await realmVisibilityFixture();
