@@ -87,7 +87,7 @@ export function PostComposer({
   const [headerState, setHeaderState] = useState<'idle' | 'loading' | 'failed'>('idle');
   const [joined, setJoined] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<'failed' | 'refused' | null>(null);
+  const [error, setError] = useState<'failed' | 'refused' | 'banned' | null>(null);
   const locked = Boolean(draft.progress);
   const reading = useReadingLanguages(actingSubject);
   const language = writingLanguage({ chosen: draft.language, reading });
@@ -303,7 +303,7 @@ export function PostComposer({
       setError('refused');
     } else {
       saveProgress(result.progress);
-      setError('failed');
+      setError(result.kind);
     }
   }
 

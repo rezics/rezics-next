@@ -18,17 +18,22 @@ type Post = Parameters<typeof submitPost>[3];
 function recordingMain() {
   const drafts: Draft[] = [];
   const selections: unknown[] = [];
+  const publicReads: string[] = [];
   const main = { v1: {
     'main-versions': () => ({ selection: { get: async (input: unknown) => {
       selections.push(input);
       return { data: { work: 'work', selectedDraft: 'draft' } };
     } } }),
-    'member-reply-drafts': { post: async (body: Draft) => { drafts.push(body); return { data: { revisionId: 'revision' } }; } },
+    'member-reply-drafts': { post: async (body: Draft) => { drafts.push(body); return { data: { revisionId: 'revision', revisionDigest: 'digest' } }; } },
     'realm-replies': { post: async () => ({ data: { reply: 'reply' } }) },
-    'member-replies': () => ({ get: async () => ({ data: { revisionDigest: 'digest' } }) }),
+    // Nested thread replies still use this read; the root composer must not.
+    'member-replies': ({ reply }: { reply: string }) => ({ get: async () => {
+      publicReads.push(reply);
+      return { data: { revisionDigest: 'digest' } };
+    } }),
     'realm-reply-placements': { post: async (body: { reply: string }) => ({ data: { reply: body.reply, placement: 'p' } }) },
   } };
-  return { drafts, selections, main };
+  return { drafts, selections, publicReads, main };
 }
 
 const intent = (language: string, body = 'Hello') => ({ realm: 'realm', work: 'work', mainVersion: 'main-version',
@@ -63,12 +68,13 @@ describe('the language a writing surface starts in', () => {
 describe('a post is sent in the language its writer chose', () => {
   test.each([['ko', 'ltr', '안녕하세요'], ['ar', 'rtl', 'مرحبا'], ['ja', 'ltr', 'こんにちは'], ['pt-BR', 'ltr', 'Olá']])(
     '%s', async (language, direction, body) => {
-      const { drafts, selections, main } = recordingMain();
+      const { drafts, selections, publicReads, main } = recordingMain();
       const outcome = await submitPost(intent(language, body), newPostProgress(), () => undefined, main as unknown as Post);
       expect(outcome.kind).toBe('posted');
       expect(drafts[0]).toMatchObject({ language, direction });
       // The Work's default revision is the root whatever language the post is in.
       expect(selections[0]).toEqual({ query: {} });
+      expect(publicReads).toEqual([]);
     });
 
   test('an unspecified language is sent as und, with the direction of the words', async () => {

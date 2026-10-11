@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: '이 커뮤니티에서 차단되어 게시할 수 없습니다. 초안은 그대로 남아 있습니다.',
   title: '게시글 작성', intro: '커뮤니티에서 대화를 시작하세요.', community: '커뮤니티',
   communitySearch: '커뮤니티 찾기', communityChange: '커뮤니티 변경', work: '작품',
   workSearch: '작품 검색', workChange: '작품 변경', titleLabel: '제목', body: '게시글 내용',

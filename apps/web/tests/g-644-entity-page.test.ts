@@ -226,7 +226,7 @@ describe('G-644 the discussion composer takes any target', () => {
           post: (body: { rootTarget: string; rootRevision: string }) => {
             expect(body.rootTarget).toBe(iri(id));
             expect(body.rootRevision).toBe(revision);
-            return reply('draft', { revisionId: 'rev-1' });
+            return reply('draft', { revisionId: 'rev-1', revisionDigest: 'digest-1' });
           },
         },
         'realm-replies': {
@@ -235,7 +235,6 @@ describe('G-644 the discussion composer takes any target', () => {
             return reply('identity', {});
           },
         },
-        'member-replies': () => ({ get: () => reply('digest', { revisionDigest: 'digest-1' }) }),
         'realm-reply-placements': {
           post: () => reply('place', { reply: iri('d0e1f2a3-b4c5-4d6e-8f7a-000000000001') }),
         },
@@ -258,7 +257,7 @@ describe('G-644 the discussion composer takes any target', () => {
       main as never,
     );
     expect(outcome.kind).toBe('posted');
-    expect(calls).toEqual(['draft', 'identity', 'digest', 'place']);
+    expect(calls).toEqual(['draft', 'identity', 'place']);
   });
 
   test('a post with neither a revision nor a Main Version fails instead of guessing a root', async () => {

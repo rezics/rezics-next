@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: 'Du bist aus dieser Community ausgeschlossen und kannst nicht posten. Dein Entwurf ist noch hier.',
   title: 'Beitrag erstellen',
   intro: 'Starte ein Gespräch in einer Community.',
   community: 'Community',

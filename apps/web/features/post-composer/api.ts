@@ -10,6 +10,7 @@ import {
   type DocumentSnapshot,
 } from '@rezics/document';
 import { browserMainApi } from '../api/browser.ts';
+import { banSchedule } from '../realm-appeal/view.ts';
 
 /** `work` is the resource the post is about: a Work (named with its `mainVersion`, whose selected draft roots the
  *  post) or any other target (named with the `revision` its page gave, which roots the post itself). */
@@ -37,6 +38,7 @@ export interface PostProgress {
 export type PostOutcome =
   | { kind: 'posted'; reply: string }
   | { kind: 'refused' }
+  | { kind: 'banned'; progress: PostProgress }
   | { kind: 'failed'; progress: PostProgress };
 
 export function newPostProgress(): PostProgress {
@@ -91,6 +93,20 @@ export async function submitPost(
 ): Promise<PostOutcome> {
   const step = { ...original };
   const keyed = (suffix: string) => ({ headers: { 'idempotency-key': `${step.key}:${suffix}` } });
+  const banned = async (status: number | undefined): Promise<boolean> => {
+    if (status !== 403) return false;
+    // A generic denial does not identify its cause. Only the member's own ban read can.
+    try {
+      const { data } = await main.v1.realms({ realm: intent.realm.slice(-36) })['member-ban'].get({
+        query: { actingSubject: intent.actingSubject },
+      });
+      return !!data && data.realm === intent.realm
+        && !(data.appeal.state === 'decided' && data.appeal.outcome === 'reversed')
+        && banSchedule(data, Date.now()) !== 'ended';
+    } catch {
+      return false;
+    }
+  };
   try {
     const document = postDocument(intent, step);
     const text = documentText(document);
@@ -124,14 +140,18 @@ export async function submitPost(
         },
         keyed(suffix),
       );
-    if (!step.revisionId) {
-      const { data } = await draft(false, null, 'draft');
-      if (!data) return { kind: 'failed', progress: step };
+    if (!step.revisionId || !step.digest) {
+      // Replay also recovers older saved progress that retained the revision without its digest.
+      const { data, error } = await draft(false, null, 'draft');
+      if (!data) return { kind: await banned(error?.status) ? 'banned' : 'failed', progress: step };
+      if (step.revisionId && step.revisionId !== data.revisionId)
+        return { kind: 'failed', progress: step };
       step.revisionId = data.revisionId;
+      step.digest = data.revisionDigest;
       onProgress({ ...step });
     }
     if (!step.identified) {
-      const { data } = await main.v1['realm-replies'].post(
+      const { data, error } = await main.v1['realm-replies'].post(
         {
           profile: 'realm-reply-identity-v1',
           reply: step.reply,
@@ -147,16 +167,8 @@ export async function submitPost(
         },
         keyed('identity'),
       );
-      if (!data) return { kind: 'failed', progress: step };
+      if (!data) return { kind: await banned(error?.status) ? 'banned' : 'failed', progress: step };
       step.identified = true;
-      onProgress({ ...step });
-    }
-    if (!step.digest) {
-      const { data } = await main.v1['member-replies']({ reply: step.reply.slice(-36) }).get({
-        query: { actingSubject: intent.actingSubject },
-      });
-      if (!data) return { kind: 'failed', progress: step };
-      step.digest = data.revisionDigest;
       onProgress({ ...step });
     }
     const { data, error } = await main.v1['realm-reply-placements'].post(
@@ -173,6 +185,7 @@ export async function submitPost(
       keyed('place'),
     );
     if (data) return { kind: 'posted', reply: data.reply };
+    if (await banned(error?.status)) return { kind: 'banned', progress: step };
     if (error?.status !== 403) return { kind: 'failed', progress: step };
     // A refused root must not linger as a published reply to its Work.
     await draft(true, step.revisionId, 'withdraw').catch(() => undefined);

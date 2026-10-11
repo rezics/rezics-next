@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: 'Estás baneado de esta comunidad y no puedes publicar. Tu borrador sigue aquí.',
   title: 'Crear una publicación',
   intro: 'Empieza una conversación en una comunidad.',
   community: 'Comunidad',

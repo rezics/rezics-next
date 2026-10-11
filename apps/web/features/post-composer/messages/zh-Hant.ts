@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: '你已被這個社群封禁，無法發布貼文。草稿仍保留在此。',
   title: '建立貼文', intro: '在社群中開啟一場對話。', community: '社群',
   communitySearch: '尋找社群', communityChange: '更換社群', work: '作品',
   workSearch: '搜尋作品', workChange: '更換作品', titleLabel: '標題', body: '你的貼文',

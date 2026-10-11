@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: '你已被这个社区封禁，无法发布帖子。草稿仍在这里。',
   title: '发布帖子',
   intro: '在社区里发起讨论。',
   community: '社区',

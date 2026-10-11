@@ -34,6 +34,7 @@ const en = {
   posting: 'Posting…',
   draftSaved: 'Draft saved on this device',
   failed: 'Could not publish. Your draft is still here; try again.',
+  banned: 'You are banned from this community and cannot post. Your draft is still here.',
   refused: 'This community did not accept the post. Check its rules and settings.',
   unavailable: 'Could not load this community. Try again.',
   noCommunity: 'No matching communities',

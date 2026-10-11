@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: 'このコミュニティからBANされているため、投稿できません。下書きは残っています。',
   title: '投稿を作成', intro: 'コミュニティで会話を始めましょう。', community: 'コミュニティ',
   communitySearch: 'コミュニティを探す', communityChange: 'コミュニティを変更', work: '作品',
   workSearch: '作品を検索', workChange: '作品を変更', titleLabel: 'タイトル', body: '投稿内容',

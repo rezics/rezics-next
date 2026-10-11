@@ -1,6 +1,7 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  banned: 'Vous êtes banni·e de cette communauté et ne pouvez pas publier. Votre brouillon est toujours là.',
   title: 'Créer une publication',
   intro: 'Lancez une conversation dans une communauté.',
   community: 'Communauté',
