@@ -158,8 +158,8 @@ try {
     { key: 'omnibus', title: 'Long Manga omnibus', platform: 'ebook', year: 1995 },
   ]);
   if (workHubOnly) {
-    await waitForPublicationRead(request, longTv.work, '1980-01-01');
-    await waitForPublicationRead(request, longManga.work, '1995-01-01');
+    await waitForPublicationRead(request, editor.actor, longTv.work, '1980-01-01');
+    await waitForPublicationRead(request, editor.actor, longManga.work, '1995-01-01');
   } else {
     await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
     const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
@@ -308,8 +308,9 @@ async function waitForCatalogueRead(origin: string, work: string, lexical: strin
   throw new Error(`Catalogue facts for ${work} stayed unreadable: ${detail}`);
 }
 
-async function waitForPublicationRead(request: SeedPort['request'], work: string, lexical: string): Promise<void> {
-  const path = `/v1/resources/${work.slice(-36)}/statements`;
+async function waitForPublicationRead(request: SeedPort['request'], actor: string, work: string,
+  lexical: string): Promise<void> {
+  const path = `/v1/resources/${work.slice(-36)}/statements?actingSubject=${encodeURIComponent(actor)}`;
   let detail = '';
   for (let attempt = 0; attempt < 45; attempt++) {
     while (await stack.statementSeek.projectOnce()) { /* index accepted publication dates for the Work page */ }

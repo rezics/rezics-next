@@ -1,14 +1,11 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
-import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
 import { seedFirstPublicationDate } from '../../../scripts/dev/seed/relation-lexicon.ts';
-import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
-import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { startMediaStack } from './media-support.ts';
 
@@ -35,13 +32,13 @@ async function write<T>(call: (method: string, path: string, body?: object, key?
   token?: string) => Promise<Response>, path: string, body: object, key = randomUUID()): Promise<T> {
   const response = await call('POST', path, body, key);
   if (response.status !== 200 && response.status !== 201) {
-    throw new Error(`${response.status}: ${await response.text()}`);
+    throw new Error(`${path} ${response.status}: ${await response.text()}`);
   }
   return response.json() as Promise<T>;
 }
 
 test('anime and manga hubs show recorded publication dates and keep edition choices per reader', async () => {
-  const stack = await startMediaStack('anime-manga-hub');
+  const stack = await startMediaStack('anime-manga-hub', { profileCredits: true });
   try {
     const a = await stack.member('anime-manga-reader');
     const b = await stack.member('anime-manga-other-reader');
@@ -58,7 +55,6 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
       structureObjects,
       media: stack.media,
       mediaAccess: stack.mediaAccess,
-      agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       account: { verify: async request => {
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
         const member = [a, b].find(candidate => candidate.token === token);
@@ -71,6 +67,8 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         ...(token ? { authorization: `Bearer ${token}` } : {}), 'idempotency-key': key,
         ...(body ? { 'content-type': 'application/json' } : {}),
       }, ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const mainCall = (method: string, path: string, body?: object, key = randomUUID()) =>
+      a.send(method, path, body, key);
     const grant = async (scope: string, action: string, actor: string, principalId = a.principalId) => {
       const client = await stack.accessPool.connect();
       try {
@@ -84,12 +82,8 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         throw error;
       } finally { client.release(); }
     };
-    const person = (await json<{ agent: string }>(await call('POST', '/v1/agents', {
-      profile: 'agent-provision-v1', kind: 'person', displayName: 'Anime and manga reader',
-    }), 201)).agent;
-    const other = (await json<{ agent: string }>(await call('POST', '/v1/agents', {
-      profile: 'agent-provision-v1', kind: 'person', displayName: 'Second catalogue reader',
-    }, randomUUID(), b.token), 201)).agent;
+    const person = a.actor;
+    const other = b.actor;
 
     await grant('work:create:root', 'work.create', person);
     await grant('semantic:create:root', 'semantic.change', person);
@@ -97,7 +91,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     await grant('classification:decide:global', 'statement.decide', person);
     const seedClient = {
       post: async <T>(path: string, body: object, key: string): Promise<T> => {
-        const response = await call('POST', path, body, key);
+        const response = await mainCall('POST', path, body, key);
         if (response.status !== 200 && response.status !== 201) {
           throw new Error(`${response.status}: ${await response.text()}`);
         }
@@ -107,7 +101,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         await grant(`semantic:read:${definition.component}`, 'semantic.read', person);
       },
       currentDefinition: async (key: string) => {
-        const response = await call('GET', `/v1/lexicon/definitions/${key}?actingSubject=${encodeURIComponent(person)}`);
+        const response = await mainCall('GET', `/v1/lexicon/definitions/${key}?actingSubject=${encodeURIComponent(person)}`);
         if (response.status === 404) return null;
         const current = await json<{ kind: string; definition: string; revision: string; lifecycle: string;
           roles: unknown[] }>(response);
@@ -119,44 +113,36 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     };
     const firstPublication = await seedFirstPublicationDate(seedClient, person);
 
-    const createWork = async (title: string, semanticType: 'https://schema.org/TVSeries' | 'https://schema.org/Book'): Promise<Work> => {
-      const semanticTypes = [semanticType];
-      const created = await activateMetadataWork(stack.env, { title, semanticTypes,
-        admission: stack.admission(person, 'work:create:root', 'work.create',
-          metadataWorkRequestDigest(title, semanticTypes)) });
-      const text = await stack.contribution(created.work, person, 'ja', `${title} Japanese text`);
-      const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
-        work: created.work, contribution: text.contribution, publicationDecision: text.decision,
-        expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: person };
-      await selectMainDefault(stack.env, stack.admission(person, `publication:select:${created.mainVersion}`,
-        'publication.select', mainSelectionDigest(selection)), selection);
+    const createWork = async (title: string): Promise<Work> => {
+      const created = await stack.publicWork(person, ['ja'], title);
       await grant(`work:edit:${created.work}`, 'work.edit', person);
       await grant(`work:read:${created.work}`, 'work.read', person);
+      await grant(`work:read:${created.work}`, 'work.read', other, b.principalId);
       return { work: created.work, mainVersion: created.mainVersion, title };
     };
-    const anime = await createWork('Sky Lantern anime', 'https://schema.org/TVSeries');
-    const animeWithoutDate = await createWork('Untitled anime record', 'https://schema.org/TVSeries');
-    const manga = await createWork('River of Ink manga', 'https://schema.org/Book');
-    const mangaWithoutDate = await createWork('Untitled manga record', 'https://schema.org/Book');
+    const anime = await createWork('Sky Lantern anime');
+    const animeWithoutDate = await createWork('Untitled anime record');
+    const manga = await createWork('River of Ink manga');
+    const mangaWithoutDate = await createWork('Untitled manga record');
 
     const recordDate = async (work: Work, lexical: string) => {
-      const statement = await write<{ statement: string }>(call, '/v1/statements', {
+      const statement = await write<{ statement: string }>(mainCall, '/v1/statements', {
         profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work,
         predicate: firstPublication.component, relationDefinition: firstPublication.revision,
         value: { kind: 'literal', lexical, datatype: `${XSD}date`, language: null },
         applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: person,
       });
-      await write(call, '/v1/statement-decisions', {
+      await write(mainCall, '/v1/statement-decisions', {
         profile: 'statement-decision-v1', target: { kind: 'statement', statement: statement.statement },
         acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject: person,
       });
     };
     await recordDate(anime, '1980-04-01');
     await recordDate(manga, '1995-07-12');
-    await stack.statementSeek.projectOnce();
+    while (await stack.statementSeek.projectOnce()) { /* catch up both date and decision writes */ }
 
     const publicationDates = async (work: Work) => {
-      const page = await json<StatementPage>(await call('GET', `/v1/resources/${short(work.work)}/statements`));
+      const page = await json<StatementPage>(await a.read(`/v1/resources/${short(work.work)}/statements`));
       return page.groups.flatMap(group => group.predicate === DATE_PUBLISHED ? group.items : [])
         .filter(item => item.kind === 'statement' && item.value?.kind === 'literal')
         .map(item => item.value!.lexical);
@@ -168,7 +154,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
 
     const realize = async (work: Work, language: string): Promise<Realization> => {
       const realization = id();
-      const saved = await json<{ revision: string }>(await call('PUT',
+      const saved = await json<{ revision: string }>(await mainCall('PUT',
         `/v1/works/${short(work.work)}/realizations/${short(realization)}`, {
           profile: 'realization-v1', id: realization, expectedHead: null, actingSubject: person,
           language, kind: 'translation', translators: [person], publishers: [],
@@ -181,7 +167,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     const mangaText = await realize(manga, 'ja');
     const release = async (title: string, publicationYear: number): Promise<Release> => {
       const releaseId = id();
-      const saved = await json<{ revision: string }>(await call('PUT',
+      const saved = await json<{ revision: string }>(await mainCall('PUT',
         `/v1/works/${short(manga.work)}/releases/${short(releaseId)}`, {
           profile: 'release-v2', id: releaseId, expectedHead: null, actingSubject: person,
           kind: 'formal', status: 'official', titleLanguage: 'ja', tracklistLanguage: null,
@@ -210,7 +196,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     expect(await json(await call('PUT', preferencePath(anime), chosenAnime, chosenAnimeKey)))
       .toMatchObject({ ...animeSaved, replayed: true });
     const animeEditionPage = await json<{ items: Array<{ id: string; revision: string; language: string }> }>(
-      await call('GET', `/v1/works/${short(anime.work)}/realizations`));
+      await mainCall('GET', `/v1/works/${short(anime.work)}/realizations`));
     expect(animeEditionPage.items).toContainEqual(expect.objectContaining({
       id: chosenAnime.edition.resource, revision: chosenAnime.edition.revision, language: 'en',
     }));
@@ -235,7 +221,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     expect(await json<Preference>(await readPreference(manga, person, a.token))).toMatchObject(savedManga);
     expect(await json(await call('PUT', preferencePath(manga), winnerChoice.body, winnerChoice.key)))
       .toMatchObject({ ...savedManga, replayed: true });
-    const mangaRelease = await json<{ id: string; revision: string; title: { value: string } }>(await call('GET',
+    const mangaRelease = await json<{ id: string; revision: string; title: { value: string } }>(await mainCall('GET',
       `/v1/works/${short(manga.work)}/releases/${short(winnerChoice.item.release)}`));
     expect(mangaRelease).toMatchObject({ id: winnerChoice.item.release, revision: winnerChoice.item.revision,
       title: { value: winnerChoice.item.title } });
