@@ -1,0 +1,7 @@
+const direct = `INSERT INTO access.permission_grant (id) VALUES ($1)`;
+const templated = `UPDATE access.${table} SET active = false WHERE id = $1`;
+const deleted = 'DELETE FROM "ACCESS"."REPRESENTATION" WHERE id = $1';
+const truncated = `TRUNCATE TABLE access.scope_gate`;
+const copied = `COPY access.permission_grant (id) FROM STDIN`;
+const copiedOut = `COPY access.scope_gate TO STDOUT`;
+const selected = `SELECT * FROM access.permission_grant`;

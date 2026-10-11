@@ -116,6 +116,10 @@ export const repositoryGuards = [
     reason: 'Every QA docker spawn must keep the reap owner, and the frozen exceptions stay exact.',
   },
   {
+    file: 'scripts/static/access-fixture-writes.test.ts',
+    reason: 'Every direct write to access fixture tables stays on the frozen debt list.',
+  },
+  {
     file: 'scripts/qa/hidden-id-equality.test.ts',
     reason:
       'Every id-accepting GET or POST must be registered, exempted, or kept on the frozen hidden-id debt list.',

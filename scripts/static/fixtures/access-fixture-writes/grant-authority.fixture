@@ -1,0 +1,5 @@
+import { grantFixtureAuthority } from 'services/main/src/modules/access/fixture-authority.ts';
+
+await grantFixtureAuthority({
+  grant: { action: 'work.edit', scopeId: 'work:edit:example' },
+});

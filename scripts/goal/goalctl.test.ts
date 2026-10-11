@@ -2452,6 +2452,7 @@ describe('pre-merge unit selection', () => {
     const dir = mkdtempSync(join(tmpdir(), 'repository-guards-'));
     try {
       const guards = repositoryGuards.map(guard => guard.file);
+      expect(guards).toContain('scripts/static/access-fixture-writes.test.ts');
       for (const file of [...guards, 'operation.test.ts']) {
         mkdirSync(join(dir, file, '..'), { recursive: true });
         writeFileSync(join(dir, file), '');

@@ -57,6 +57,8 @@ makes, stop and report that instead of building it.
 
 ## Tests and checks
 
+Fixtures grant access through `grantFixtureAuthority`; the guard refuses a new direct write.
+
 Write tests with the code; backend tests cover the denied, stale, concurrent,
 partial and recovery outcomes the behaviour has. Prove your own work, nothing
 wider:
