@@ -55,7 +55,7 @@ export const cases = defineCases('docs/testing/native-work.md', [
     scenario:
       'Prepare Content, activate graph publication, then interrupt outcome delivery or run GC',
     requiredResult:
-      'An exact pinned revision survives ambiguous Content or selected-Structure publication; duplicate reconciliation is idempotent. Structured withdrawal and strong revocation remain absent after outbox replay or restore hold. Rejected publication preserves the saved revision; pins release only after terminal proof. Erasure fences stale activation.',
+      'An exact pinned revision survives ambiguous publication; duplicate reconciliation is idempotent. Rejected publication preserves the saved revision; pins release only after terminal proof. Erasure fences stale activation.',
   },
 ]);
 
