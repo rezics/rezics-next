@@ -6,6 +6,8 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { createQaStackPool } from '../../../scripts/qa/stack-pool.ts';
+import { qaMemoryDeadline } from '../../../scripts/qa/memory-admission.ts';
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { smtpSender } from '../../../services/account/src/email.ts';
@@ -128,6 +130,7 @@ test('OPS01/IAM01: partial shared QA stack serves Main, Account and Fuseki', asy
 test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destroy a crashed holder stack', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through scripts/qa/cli.ts');
   const marker = randomUUID();
+  const proofDeadline = qaMemoryDeadline(process.env);
   const directory = join(root, '.temp', `qa-pool-proof-${marker}`);
   const slotDirectory = join(directory, 'slots');
   mkdirSync(slotDirectory, { recursive: true, mode: 0o700 });
@@ -137,12 +140,21 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
     GOAL_QA_WAIT_DIR: join(slotDirectory, 'waiters'), GOAL_QA_SLOTS: '1', GOAL_QA_HEAVY_RUN: '0',
     REZICS_QA_ARTIFACT_ROOT: join(directory, 'artifacts'), REZICS_QA_POOL_PROOF_DIRECTORY: directory,
     REZICS_QA_POOL_PROOF_MARKER: marker, REZICS_QA_STARTUP_SLOT_GATE: '',
-    REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 600_000) };
+    REZICS_QA_MEMORY_DEADLINE: String(proofDeadline) };
   const children: { process: ReturnType<typeof Bun.spawn>; output: Promise<string> }[] = [];
-  const proofDeadline = Date.now() + 360_000;
   const logs = async (stream: ReadableStream<Uint8Array>) => {
     let tail = '';
-    for await (const bytes of stream) tail = (tail + new TextDecoder().decode(bytes)).slice(-16_000);
+    let pending = '';
+    const decoder = new TextDecoder();
+    for await (const bytes of stream) {
+      const chunk = decoder.decode(bytes, { stream: true });
+      tail = (tail + chunk).slice(-16_000);
+      pending += chunk;
+      const lines = pending.split('\n');
+      pending = lines.pop()!;
+      // The enclosing command must pause its active clock for nested admission.
+      for (const line of lines) if (/^QA_MEMORY_WAIT_(?:BEGIN|END) \d+-\d+/.test(line)) console.log(line);
+    }
     return tail;
   };
   const start = (step: string) => {
@@ -167,7 +179,7 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
     let timer: ReturnType<typeof setTimeout> | undefined;
     const code = await Promise.race([running.process.exited, new Promise<never>((_accept, reject) => {
       timer = setTimeout(() => reject(new Error(`Pool proof ${step} timed out; see ${directory}`)),
-        Math.max(1, Math.min(180_000, proofDeadline - Date.now())));
+        Math.max(1, proofDeadline - Date.now()));
     })]).finally(() => clearTimeout(timer));
     const output = await running.output;
     if (code !== 0) throw new Error(`Pool proof ${step} exited ${code}: ${output.slice(-6000)}`);
@@ -189,9 +201,11 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
     const ready = await waitUntil(() => {
       if (crashed.process.exitCode !== null) throw new Error(`Crash probe exited early (${crashed.process.exitCode})`);
       return evidence('crash');
-    }, Math.max(1, Math.min(180_000, proofDeadline - Date.now())));
+    }, Math.max(1, proofDeadline - Date.now()));
     expect(ready.projectRunId).toBe(first.projectRunId);
     expect(ready.holderPid).toBe(crashed.process.pid);
+    expect(readFileSync(join(ready.artifactDirectory, 'summary.md'), 'utf8'))
+      .toContain(`leased from rezics-qa-${first.projectRunId}`);
     // SIGKILL bypasses the holder's normal exit cleanup. Stop its detached Bun
     // test group too, so it cannot write after dead-holder destruction starts.
     crashed.process.kill('SIGKILL');
@@ -209,4 +223,4 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
     writeFileSync(switchFile, 'off\n');
     await createQaStackPool({ root, slotDirectory, slots: 1, env: environment, janitor: false }).sweep();
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

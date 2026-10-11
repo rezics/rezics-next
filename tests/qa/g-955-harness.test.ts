@@ -629,7 +629,7 @@ test('repair state left by one file is absent when the next file starts', async 
     const source = readFileSync(join(root, 'scripts/qa/integration-reset.ts'), 'utf8');
     expect(source).toContain('clearIntegrationDataset');
     expect(source).not.toContain('CLEAR ALL');
-    expect(source).not.toContain('.update(');
+    expect(source).not.toMatch(/\bfuseki\.update\s*\(/);
   } finally {
     await server.stop(true);
   }

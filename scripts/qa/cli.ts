@@ -449,7 +449,10 @@ async function runShardWork(
     if (lease) {
       leased = true;
       projectRunId = lease.entry.projectRunId;
-      stackLeaseNotes.push(`- Integration shard ${shardProjectRunId} leased from rezics-qa-${projectRunId}, parked for ${lease.parkedMs} ms.`);
+      const note = `- Integration shard ${shardProjectRunId} leased from rezics-qa-${projectRunId}, parked for ${lease.parkedMs} ms.`;
+      stackLeaseNotes.push(note);
+      // A deadline or SIGKILL can prevent the final summary from being written.
+      appendFileSync(join(directory, 'summary.md'), `${note}\n`);
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       mkdirSync(stackDir, { recursive: true, mode: 0o700 });
       replacePrivate(join(stackDir, 'apps.env'), { ...lease.entry.apps,
