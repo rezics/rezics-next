@@ -104,9 +104,13 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
       intent.current = null;
       try { if (storageKey) localStorage.removeItem(storageKey); } catch { /* The receipt remains replayable. */ }
       setBody(''); setSpoiler(false); setOpened(false); router.refresh();
+    } else if (result.kind === 'refused' || result.kind === 'stale') {
+      // A confirmed refusal ends this attempt. Preserve the editable words;
+      // the next Post takes the current read's basis and a fresh operation key.
+      intent.current = null;
+      try { if (storageKey) localStorage.removeItem(storageKey); } catch { /* Keep the editable words in this page. */ }
     }
-    // A refusal can precede receipt lookup (expired auth or changed scope). Only
-    // a receipt confirms settlement; never manufacture a fresh key after one.
+    // Lost or pending responses retain their exact intent until a known outcome.
   };
   const realmPath = spaceHref(basis.realm.slice(-36), 'community');
   const threadPath = threadHref(realmPath, thread?.thread ?? '');

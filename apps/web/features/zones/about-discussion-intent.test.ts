@@ -61,6 +61,15 @@ test('retained content is bounded by UTF-8 bytes, including multibyte content at
   expect(load(tooLarge)).toBeNull();
 });
 
+test('retained language tags use the shared RFC 5646 parser within the operation length bound', () => {
+  for (const language of ['x-personal', 'i-klingon', 'en-GB-oed', 'zh-cmn-Hans-CN', 'abcdefgh']) {
+    expect(load({ ...intent, language })).toEqual({ ...intent, language });
+  }
+  for (const language of ['ja-x-' + 'abcdefgh-'.repeat(4) + 'a', 'en-a-abc-a-def', 'sl-rozaj-rozaj', 'ja-JP-日', ' ja']) {
+    expect(load({ ...intent, language })).toBeNull();
+  }
+});
+
 test('site home, Work and entity addresses select live route paths without reading coordinates', () => {
   for (const [href, expectedPath] of [
     // ast-grep-ignore: web-links-use-address -- Raw address inputs are the route extraction oracle.

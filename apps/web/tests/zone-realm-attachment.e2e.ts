@@ -31,9 +31,12 @@ async function grant(scope: string, action: string, principalId: string, actingS
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await grantFixtureAuthority(client, { scope, requireDispatch: true,
+    await grantFixtureAuthority(client, {
+      scope,
+      requireDispatch: true,
       representations: [{ principalId, actor: actingSubject, action, lifetime: '8 hours' }],
-      grant: { actor: actingSubject, action, lifetime: '8 hours' } });
+      grant: { actor: actingSubject, action, lifetime: '8 hours' },
+    });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

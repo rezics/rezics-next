@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fromMarkdown } from '@rezics/document';
 import { direction } from '@rezics/main/language';
@@ -55,6 +56,15 @@ async function assertLocked(canvas: Canvas, text = message) {
   await expect(body).toHaveValue(text);
   await expect(canvas.getByRole('button', { name: /^Content language:/ })).toBeDisabled();
   await expect(canvas.getByRole('checkbox', { name: t.spoiler })).toBeDisabled();
+}
+
+async function assertEditable(canvas: Canvas, text = message) {
+  await expect(canvas.getByRole('textbox', { name: t.body })).toBeEnabled();
+  await expect(canvas.getByRole('textbox', { name: t.body })).toHaveValue(text);
+  await expect(canvas.getByRole('button', { name: /^Content language:/ })).toBeEnabled();
+  await expect(canvas.getByRole('checkbox', { name: t.spoiler })).toBeEnabled();
+  await expect(canvas.getByRole('button', { name: t.send })).toBeEnabled();
+  await expect(canvas.queryByRole('button', { name: t.retry })).toBeNull();
 }
 
 export const NoAttachedRealm: Story = {
@@ -246,7 +256,7 @@ export const RefusedKeepsText: Story = {
     await userEvent.click(canvas.getByRole('button', { name: t.send }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(t.refused);
     await expect(canvas.getByRole('textbox', { name: t.body })).toHaveValue(message);
-    await assertLocked(canvas);
+    await assertEditable(canvas);
     await expect(args.api!.post).toHaveBeenCalledTimes(1);
   },
 };
@@ -281,7 +291,7 @@ export const Stale409: Story = {
     await userEvent.click(canvas.getByRole('button', { name: t.send }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(t.reload);
     await expect(canvas.getByRole('button', { name: t.refresh })).toBeVisible();
-    await expect(canvas.getByRole('textbox', { name: t.body })).toHaveValue(message);
+    await assertEditable(canvas);
     await expect(args.api!.post).toHaveBeenCalledTimes(1);
   },
 };
@@ -319,8 +329,7 @@ export const RecoveryFindsReceipt: Story = {
   },
 };
 
-/** A 401-like refusal is not proof that the first attempt had no effect. */
-export const RefusalRetryFindsReceipt: Story = {
+export const TerminalRefusalStartsFreshIntent: Story = {
   args: { api: memoryApi({ kind: 'refused' }, posted) },
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
@@ -328,16 +337,54 @@ export const RefusalRetryFindsReceipt: Story = {
     await write(canvas);
     await userEvent.click(canvas.getByRole('button', { name: t.send }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(t.refused);
-    await assertLocked(canvas);
-    const first = api.post.mock.calls[0]![0];
-    const frozen = structuredClone(first);
-    await expect(api.post).toHaveBeenCalledTimes(1);
-    await userEvent.click(canvas.getByRole('button', { name: t.retry }));
+    await assertEditable(canvas);
+    const first = structuredClone(api.post.mock.calls[0]![0]);
+    const corrected = `${message} I can now take part.`;
+    await userEvent.type(canvas.getByRole('textbox', { name: t.body }), ' I can now take part.');
+    await userEvent.click(canvas.getByRole('button', { name: t.send }));
     await expect(await canvas.findByText(t.posted)).toBeVisible();
     await expect(api.post).toHaveBeenCalledTimes(2);
-    await expect(api.post.mock.calls[1]![0]).toBe(first);
-    await expect(api.post.mock.calls[1]![0]).toEqual(frozen);
+    await expect(api.post.mock.calls[1]![0].key).not.toBe(first.key);
+    await expect(api.post.mock.calls[1]![0]).toMatchObject({ basis, body: corrected,
+      actingSubject: first.actingSubject, language: first.language, spoiler: first.spoiler });
     await expect(canvas.queryByRole('textbox')).toBeNull();
+  },
+};
+
+const correctedBasis = { ...basis, targetRevision: id(901), routeRevision: id(902) };
+/** A refreshed read changes the basis without discarding the editable words. */
+function CorrectedBasisComposer(args: React.ComponentProps<typeof AboutDiscussion>) {
+  const [read, setRead] = useState<AboutDiscussionRead>(ready);
+  const api: AboutDiscussionApi = { async post(intent) {
+    const result = await args.api!.post(intent);
+    if (result.kind === 'stale') setRead({ ...ready, basis: correctedBasis });
+    return result;
+  } };
+  return <div className="mx-auto w-full max-w-[640px] px-5 py-6"><AboutDiscussion {...args} read={read} api={api} /></div>;
+}
+
+export const StaleBasisCorrectedPost: Story = {
+  args: { api: memoryApi({ kind: 'stale' }, posted) },
+  render: args => <CorrectedBasisComposer {...args} />,
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const api = args.api as MemoryApi;
+    await write(canvas);
+    await userEvent.click(canvas.getByRole('checkbox', { name: t.spoiler }));
+    await userEvent.click(canvas.getByRole('button', { name: t.send }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(t.reload);
+    await assertEditable(canvas);
+    await expect(canvas.getByRole('checkbox', { name: t.spoiler })).toBeChecked();
+    const first = structuredClone(api.post.mock.calls[0]![0]);
+    await expect(first.basis).toEqual(basis);
+    await userEvent.type(canvas.getByRole('textbox', { name: t.body }), ' The revised edition too.');
+    await userEvent.click(canvas.getByRole('button', { name: t.send }));
+    await expect(await canvas.findByText(t.posted)).toBeVisible();
+    await expect(api.post).toHaveBeenCalledTimes(2);
+    await expect(api.post.mock.calls[1]![0].key).not.toBe(first.key);
+    await expect(api.post.mock.calls[1]![0]).toMatchObject({ basis: correctedBasis,
+      body: `${message} The revised edition too.`, actingSubject: first.actingSubject,
+      language: first.language, spoiler: true });
   },
 };
 
@@ -372,6 +419,25 @@ export const ReloadRecoveryKeepsOriginalBasis: Story = {
     await expect(reloadApi.post).toHaveBeenCalledTimes(1);
     await expect(reloadApi.post.mock.calls[0]![0]).toEqual(reload.saved);
     await expect(localStorage.getItem(reload.key)).toBeNull();
+  },
+};
+
+const refused = retainedFixture('/__storybook__/about-discussion/refused');
+const refusedApi = memoryApi({ kind: 'refused' });
+export const TerminalRefusalClearsDeviceIntent: Story = {
+  args: { retain: true, api: refusedApi, read: { ...ready, basis: refused.saved.basis } },
+  beforeEach: () => refused.prepare(refusedApi),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.recovery);
+    await assertLocked(canvas, refused.saved.body);
+    await userEvent.click(canvas.getByRole('button', { name: t.retry }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(t.refused);
+    await assertEditable(canvas, refused.saved.body);
+    await expect(canvas.getByRole('textbox', { name: t.body })).toHaveAttribute('lang', 'ar');
+    await expect(canvas.getByRole('checkbox', { name: t.spoiler })).toBeChecked();
+    await expect(localStorage.getItem(refused.key)).toBeNull();
+    await expect(refusedApi.post.mock.calls[0]![0]).toEqual(refused.saved);
   },
 };
 

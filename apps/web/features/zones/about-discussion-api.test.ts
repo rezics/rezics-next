@@ -56,7 +56,7 @@ test('a lost first-post response retries exactly one command with the same compl
 
 test('pending is not posted and every response keeps one posting request per attempt', async () => {
   const statuses = [202, 409, 403, 401, 404, 503, 429, 201];
-  const kinds = ['pending', 'stale', 'refused', 'refused', 'refused', 'recovery', 'recovery', 'posted'] as const;
+  const kinds = ['pending', 'stale', 'refused', 'recovery', 'refused', 'recovery', 'recovery', 'posted'] as const;
   const transport = client(() => {
     const status = statuses[transport.calls.length - 1]!;
     return status === 202 ? Response.json({ operationId: local(reference(10)) }, { status })

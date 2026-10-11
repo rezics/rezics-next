@@ -1,4 +1,5 @@
 import type { AboutPostIntent } from './about-discussion-api.ts';
+import { parseLanguage } from '@rezics/main/language';
 
 /** Device state belongs to one author and route. Never substitute today's basis during replay. */
 export function retainedAboutPost(raw: string, actor: string, zone: string, path: string): AboutPostIntent | null {
@@ -11,7 +12,7 @@ export function retainedAboutPost(raw: string, actor: string, zone: string, path
       || typeof saved.key !== 'string' || !/^[A-Za-z0-9:_./-]{1,128}$/.test(saved.key)
       || typeof saved.body !== 'string' || !saved.body.trim() || new TextEncoder().encode(saved.body).length > 8192
       || typeof saved.language !== 'string' || saved.language.length > 35
-      || !/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(saved.language) || typeof saved.spoiler !== 'boolean'
+      || !parseLanguage(saved.language) || typeof saved.spoiler !== 'boolean'
       || !['realm', 'about', 'targetRevision', 'zone', 'routeRevision'].every(key =>
         /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(basis[key as keyof typeof basis]))) return null;
     return { key: saved.key, basis: { ...basis }, actingSubject: actor,

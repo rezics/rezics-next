@@ -11,7 +11,7 @@ import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { authoredBodySchema } from '../api-document.ts';
 import { problemResult } from '../api-contract.ts';
-import { readLanguage, readUuid } from '../modules/work/read-contract.ts';
+import { readUuid } from '../modules/work/read-contract.ts';
 import { verifyMemberReplyDraftPrincipal } from '../modules/content-publication/reply-draft.ts';
 import { RealmAboutPostCommand } from '../modules/realm-reply/about-command.ts';
 
@@ -60,7 +60,8 @@ const countResult = t.Object({ profile: t.Literal('realm-reply-root-count-v1'),
 const noStore = { headers: { 'cache-control': 'no-store' } };
 const aboutPostBody = authoredBodySchema({ profile: t.Literal('realm-about-post-v1'),
   about: native, targetRevision: native, zone: native, path: t.String({ minLength: 1, maxLength: 1024 }),
-  routeRevision: native, actingSubject: native, language: readLanguage,
+  routeRevision: native, actingSubject: native,
+  language: t.String({ minLength: 1, maxLength: 35, description: 'RFC 5646 language tag; validated by the shared language parser.' }),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]), spoiler: t.Optional(t.Boolean()),
 }, 8192, 1);
 const aboutPostResult = t.Object({ profile: t.Literal('realm-about-post-v1'), realm: native, about: native,

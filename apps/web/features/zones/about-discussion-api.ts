@@ -44,7 +44,9 @@ export function mainAboutDiscussionApi(main: () => MainClient = browserMainApi):
       if (answer.response.status === 202) return { kind: 'pending' };
       if (answer.error) {
         if (answer.error.status === 409) return { kind: 'stale' };
-        if ([400, 401, 403, 404, 410, 422].includes(answer.error.status)) return { kind: 'refused' };
+        // Expired authentication does not establish the previous attempt's
+        // outcome. Keep its key for recovery after signing in again.
+        if ([400, 403, 404, 410, 422].includes(answer.error.status)) return { kind: 'refused' };
         return { kind: 'recovery' };
       }
       return answer.data && 'reply' in answer.data
