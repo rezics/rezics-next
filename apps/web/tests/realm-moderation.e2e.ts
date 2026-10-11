@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { expect, type Browser, type Page, test, type TestInfo } from '@playwright/test';
 import { Pool } from 'pg';
-import { spaceHref } from '../features/address/path.ts';
+import { documentText, type DocumentSnapshot } from '@rezics/document';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { bodyText } from '../features/document-editor/body.ts';
+import { spaceHref, threadHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import {
   grantPlatformUse,
@@ -35,43 +38,12 @@ async function grant(scope: string, action: string, principalId: string, actingS
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [
+    await grantFixtureAuthority(client, {
       scope,
-    ]);
-    const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
-      'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1',
-      [scope],
-    );
-    if (gate.rows[0]?.open !== true || gate.rows[0]?.dispatch_open !== true)
-      throw new Error(`${scope} is closed`);
-    await client.query(
-      "INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent') ON CONFLICT DO NOTHING",
-      [actingSubject],
-    );
-    const represented = await client.query(
-      `SELECT id FROM access.representation
-      WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active AND valid_until > now()`,
-      [principalId, actingSubject, action],
-    );
-    if (!represented.rowCount)
-      await client.query(
-        `INSERT INTO access.representation
-      (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1, $2, $3, $4, now() + interval '8 hours')`,
-        [randomUUID(), principalId, actingSubject, action],
-      );
-    const allowed = await client.query(
-      `SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > now()`,
-      [actingSubject, scope, action],
-    );
-    if (!allowed.rowCount)
-      await client.query(
-        `INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, $4, now() + interval '8 hours')`,
-        [randomUUID(), actingSubject, scope, action],
-      );
+      requireDispatch: true,
+      representations: [{ principalId, actor: actingSubject, action, lifetime: '8 hours' }],
+      grant: { actor: actingSubject, action, lifetime: '8 hours' },
+    });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -197,6 +169,21 @@ async function prepareComposerProgress(
   await interactive(page);
 }
 
+async function savedComposerDraft(
+  page: Page,
+  actingSubject: string,
+): Promise<{
+  title: string;
+  body: string;
+  progress: PostProgress;
+}> {
+  return page.evaluate((key) => {
+    const saved = localStorage.getItem(key);
+    if (!saved) throw new Error('The composer draft is not saved');
+    return JSON.parse(saved);
+  }, `rezics:post-draft:${actingSubject}`);
+}
+
 function seedPostableWork(title: string): string {
   const result = spawnSync(
     'bun',
@@ -280,6 +267,27 @@ test('a moderator bans a member through Manage and restores their posting access
 
   const member = await enrollMember(browser, info, moderator.operator, suffix);
   const composerResponses: string[] = [];
+  const draftRequests: Array<{
+    key: string;
+    reply: string;
+    variantId: string;
+    rootRevision: string;
+    document: DocumentSnapshot;
+  }> = [];
+  member.page.on('request', (request) => {
+    if (
+      request.method() !== 'POST' ||
+      new URL(request.url()).pathname !== '/api/main/v1/member-reply-drafts'
+    )
+      return;
+    const body = request.postDataJSON() as {
+      reply: string;
+      variantId: string;
+      rootRevision: string;
+      document: DocumentSnapshot;
+    };
+    draftRequests.push({ key: request.headers()['idempotency-key'] ?? '', ...body });
+  });
   member.page.on('response', (response) => {
     const path = new URL(response.url()).pathname;
     if (
@@ -298,15 +306,8 @@ test('a moderator bans a member through Manage and restores their posting access
   await grant(`reply:create:${work}`, 'reply.create', member.principalId, member.actingSubject);
   await grant(`reply:place:${realm}`, 'reply.place', member.principalId, member.actingSubject);
   const bannedPostProgress = newPostProgress();
-  const restoredPostProgress = newPostProgress();
   await grant(
     `content:draft:${bannedPostProgress.reply}`,
-    'content.draft',
-    member.principalId,
-    member.actingSubject,
-  );
-  await grant(
-    `content:draft:${restoredPostProgress.reply}`,
     'content.draft',
     member.principalId,
     member.actingSubject,
@@ -333,6 +334,7 @@ test('a moderator bans a member through Manage and restores their posting access
 
     const submit = localizedPath(spaceHref(realmId, 'community', ['submit']), 'en');
     const postTitle = `A member’s first moderation-safe post ${suffix}`;
+    const postBody = 'A post made while the sanction is active.';
     await member.page.goto(submit);
     await interactive(member.page);
     await expect(
@@ -345,9 +347,8 @@ test('a moderator bans a member through Manage and restores their posting access
     await expect(workOption).toBeVisible({ timeout: 60_000 });
     await workOption.click();
     await member.page.getByRole('textbox', { name: 'Title' }).fill(postTitle);
-    await member.page
-      .getByRole('textbox', { name: 'Your post' })
-      .fill('A post made while the sanction is active.');
+    await member.page.getByRole('textbox', { name: 'Your post' }).fill(postBody);
+    // Only the initial identity is fixed, so its resource-scoped fixture grant can be prepared.
     await prepareComposerProgress(member.page, member.actingSubject, bannedPostProgress);
     const post = member.page.getByRole('button', { name: 'Post', exact: true });
     await expect(post).toBeEnabled({ timeout: 30_000 });
@@ -409,6 +410,24 @@ test('a moderator bans a member through Manage and restores their posting access
       )
       .toBe(true);
     await expect(member.page).toHaveURL(composerUrl);
+    expect(draftRequests).toHaveLength(1);
+    expect(draftRequests[0]).toMatchObject({
+      key: `${bannedPostProgress.key}:draft`,
+      reply: bannedPostProgress.reply,
+      variantId: bannedPostProgress.variantId,
+    });
+    const bannedDraft = await savedComposerDraft(member.page, member.actingSubject);
+    expect(bannedDraft.title).toBe(postTitle);
+    expect(bodyText(bannedDraft.body)).toBe(postBody);
+    expect(bannedDraft.progress).toMatchObject({
+      key: bannedPostProgress.key,
+      reply: bannedPostProgress.reply,
+      variantId: bannedPostProgress.variantId,
+      restartRequired: true,
+    });
+    expect(bannedDraft.progress.rootRevision).toBeTruthy();
+    expect(bannedDraft.progress.revisionId).toBeUndefined();
+    expect(bannedDraft.progress.digest).toBeUndefined();
 
     await row.getByRole('button', { name: `Actions for ${member.publicName}` }).click();
     await page.getByRole('menuitem', { name: 'Unban…' }).click();
@@ -422,20 +441,37 @@ test('a moderator bans a member through Manage and restores their posting access
 
     await member.page.reload();
     await interactive(member.page);
-    await prepareComposerProgress(member.page, member.actingSubject, restoredPostProgress);
+    await expect(member.page.getByRole('textbox', { name: 'Title' })).toHaveValue(postTitle);
+    await expect(member.page.getByRole('textbox', { name: 'Your post' })).toHaveText(postBody);
+    const restoredDraft = await savedComposerDraft(member.page, member.actingSubject);
+    expect(restoredDraft.progress).toEqual(bannedDraft.progress);
+    expect(restoredDraft.title).toBe(postTitle);
+    expect(bodyText(restoredDraft.body)).toBe(postBody);
     await expect(member.page.getByRole('button', { name: 'Post', exact: true })).toBeEnabled({
       timeout: 30_000,
     });
     composerResponses.length = 0;
     await member.page.getByRole('button', { name: 'Post', exact: true }).click();
     try {
-      await expect(member.page).toHaveURL(/\/discussions\//, { timeout: 60_000 });
+      await expect(member.page).toHaveURL(
+        (url) => url.pathname.endsWith(threadHref('', bannedPostProgress.reply)),
+        { timeout: 60_000 },
+      );
     } catch (error) {
       await member.page.waitForTimeout(100);
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}\nComposer API responses:\n${composerResponses.join('\n')}`,
       );
     }
+    expect(draftRequests).toHaveLength(2);
+    expect(draftRequests[1]!.key).not.toBe(draftRequests[0]!.key);
+    expect(draftRequests[1]!.key).toMatch(/^[0-9a-f-]{36}:draft$/);
+    expect(draftRequests[1]).toMatchObject({
+      reply: bannedPostProgress.reply,
+      variantId: bannedPostProgress.variantId,
+      rootRevision: bannedDraft.progress.rootRevision,
+    });
+    expect(documentText(draftRequests[1]!.document)).toBe(`${postTitle}\n${postBody}`);
     const postedTitle = member.page.getByRole('heading', { name: postTitle, exact: true });
     // Placement is durable before the discussion projection catches up. Exercise its offered recovery.
     await expect
@@ -451,6 +487,7 @@ test('a moderator bans a member through Manage and restores their posting access
         { timeout: 60_000, intervals: [1000, 2000, 5000] },
       )
       .toBe(true);
+    await expect(member.page.getByText(postBody, { exact: true })).toBeVisible();
     const restoredScreenshot = info.outputPath('restored-post.png');
     await member.page.screenshot({ path: restoredScreenshot, fullPage: true });
     await info.attach('restored-post', { path: restoredScreenshot, contentType: 'image/png' });
