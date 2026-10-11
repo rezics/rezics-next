@@ -160,7 +160,10 @@ checksum, slice checksum, licence, dated rights evidence and attribution. The
 VNDB slice excludes descriptions, images, votes and other unadmitted fields.
 Wikidata and Open Library are declared but disabled until pinned slices, source
 mappings and stewards are supplied. Do not substitute live API requests or enable
-Bangumi, RanobeDB, AniList or non-commercial sources through this plan.
+RanobeDB, AniList or non-commercial sources through this plan. Bangumi is admitted
+under [decision 55](../product/decisions.md#decision-55) (metadata CC BY-SA 3.0, covers
+credited to their rights holder and removed on complaint) and is enabled only like any
+other source: with a named steward and backup, a pinned dump, its licence and dated rights evidence.
 
 The Zone manifests create empty official LN/VN catalogue Collections and a
 franchise wiki with mounted Characters, Places, Events and Chapters Collections.
