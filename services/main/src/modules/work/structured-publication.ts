@@ -474,9 +474,12 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
       requestDigest: admission.requestDigest },
   }, WORK_STRUCTURE_PUBLICATION_PROFILE);
   const validations = await profileValidations(env.fuseki, 'work-structure-publication-v1' as ProfileId, [
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/work-shape`, focus: [input.work], graphs: [GRAPHS.current] },
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/decision-shape`, focus: [decision], graphs: [GRAPHS.revisions] },
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/source-shape`, focus: [source], graphs: [GRAPHS.revisions] },
+    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/work-shape`, focus: [input.work],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
+    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/decision-shape`, focus: [decision],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
+    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/source-shape`, focus: [source],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(receipt)}`;
@@ -592,8 +595,10 @@ async function withdraw(env: WorkActivationEnvironment, admission: RegisteredAdm
       requestDigest: admission.requestDigest },
   }, WORK_STRUCTURE_PUBLICATION_PROFILE);
   const validations = await profileValidations(env.fuseki, 'work-structure-publication-v1' as ProfileId, [
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/work-shape`, focus: [input.work], graphs: [GRAPHS.current] },
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/decision-shape`, focus: [decision], graphs: [GRAPHS.revisions] },
+    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/work-shape`, focus: [input.work],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
+    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/decision-shape`, focus: [decision],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(receipt)}`;

@@ -22,7 +22,8 @@ function workPublicationEvent(action: WorkStructurePublicationAction, kind: stri
         || batch.eventIds.length !== 1 || ordinal !== 0 || batch.eventIds[0] !== eventId) {
         throw new Error('Work publication event identity differs from its batch');
       }
-      const admissionRows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?admission WHERE {
+      const admissionRows = (await fuseki.query(`PREFIX rv: <${RV}>
+        SELECT ?admission ?eventDecision ?eventPredecessor WHERE {
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(id)} rv:commandFamily ${lit(action === 'work.publish'
           ? 'work-structure-publication-v1' : 'work-structure-withdrawal-v1')} ;
           rv:action ${lit(action)} ; rv:admissionId ?admission ; rv:dataEpoch ${lit(batch.dataEpoch)} ;
@@ -53,10 +54,17 @@ function workPublicationEvent(action: WorkStructurePublicationAction, kind: stri
           throw new Error('Cancelled Work publication event carries a public decision');
         }
       } else {
-        if (!receipt.publicationDecision || !publicationNativeId.test(receipt.publicationDecision)
-          || decision !== receipt.publicationDecision || eventDecision !== receipt.publicationDecision
-          || (eventPredecessor ?? null) !== receipt.predecessor) {
-          throw new Error('Work publication event differs from its decision');
+        if (!receipt.publicationDecision || !publicationNativeId.test(receipt.publicationDecision)) {
+          throw new Error('Work publication receipt has no native decision');
+        }
+        if (decision !== receipt.publicationDecision) {
+          throw new Error('Work publication payload decision differs from its receipt');
+        }
+        if (eventDecision !== receipt.publicationDecision) {
+          throw new Error('Work publication event decision differs from its receipt');
+        }
+        if ((eventPredecessor ?? null) !== receipt.predecessor) {
+          throw new Error('Work publication event predecessor differs from its terminal receipt');
         }
         const decisionProof = action === 'work.publish'
           ? `GRAPH ${iri(GRAPHS.revisions)} {

@@ -11,6 +11,7 @@ const structure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
 const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
 const decision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000005';
 const generation = 'https://rezics.com/id/00000000-0000-4000-8000-000000000006';
+const parent = 'https://rezics.com/id/00000000-0000-4000-8000-000000000007';
 const root = `urn:rezics:sha256:${'a'.repeat(64)}`;
 
 const source: PublishedStructuredWorkSource = { work, mainVersion: main, structure,
@@ -50,9 +51,13 @@ test('unpublished and withdrawn selections resolve as absent; duplicate roots fa
 
 test('public candidate admission requires the selected Structure disclosure at the same cut', async () => {
   let hiddenStructure = false;
+  let hiddenParent = false;
   const environment = env(async text => {
     if (text.includes('SELECT ?work ?main ?structuredDecision')) {
       return { results: { bindings: [sourceRow(true)] } };
+    }
+    if (text.includes('SELECT ?work ?parent')) {
+      return { results: { bindings: [{ work: term(work), parent: term(parent) }] } };
     }
     if (text.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
       return { results: { bindings: [{ work: term(work), head: term('https://rezics.com/id/00000000-0000-4000-8000-000000000007') }] } };
@@ -60,25 +65,32 @@ test('public candidate admission requires the selected Structure disclosure at t
     throw new Error(`Unexpected disclosure query: ${text}`);
   });
   const reader: DisclosureReader = { read: async targets => targets.map(target =>
-    target.component === 'structure' && hiddenStructure ? 'hidden' : 'visible') };
+    target.component === 'structure' && hiddenStructure
+      || target.component === 'publication' && hiddenParent ? 'hidden' : 'visible') };
   configureDisclosure(environment, reader);
 
   expect(await admittedPublicWorks(environment, [work])).toEqual(new Set([work]));
   hiddenStructure = true;
+  expect(await admittedPublicWorks(environment, [work])).toEqual(new Set());
+  hiddenStructure = false;
+  hiddenParent = true;
   expect(await admittedPublicWorks(environment, [work])).toEqual(new Set());
 });
 
 test('Structure disclosure is fenced on the exact admitted revision and owning Work', async () => {
   let visible = true;
   let seen: unknown;
-  const session = { disclosure: async (targets: readonly unknown[]) => {
-    seen = targets[0];
-    return [visible ? 'visible' : 'hidden'];
+  const session = { deps: { environment: undefined }, disclosure: async (targets: readonly unknown[]) => {
+    seen = targets;
+    return targets.map(target => JSON.stringify(target).includes(structure)
+      ? visible ? 'visible' : 'hidden' : 'visible');
   } };
   const target = { work, workRevision: main, structure, revision };
   expect(await structureRevisionDisclosureVisible(session as never, target)).toBe(true);
-  expect(seen).toEqual({ owner: 'graph', resource: structure, component: 'structure',
-    revision, work, workRevision: main });
+  expect(seen).toEqual([
+    { owner: 'graph', resource: work, component: 'name', work, workRevision: main },
+    { owner: 'graph', resource: structure, component: 'structure', revision, work, workRevision: main },
+  ]);
   visible = false;
   expect(await structureRevisionDisclosureVisible(session as never, target)).toBe(false);
 });

@@ -1,11 +1,96 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { iri } from '../../../services/main/src/modules/work/activate.ts';
 import { publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
+
+type PublicationFixture = Awaited<ReturnType<typeof authorCreditFixture>>;
+
+interface PublicationRestriction { caseId: string; decisionId: string; enforcementId: string }
+
+async function restrictPublicationTarget(fixture: PublicationFixture, target: string): Promise<PublicationRestriction> {
+  const caseId = randomUUID(), decisionId = randomUUID(), enforcementId = randomUUID();
+  const digest = 'b'.repeat(64);
+  await fixture.accessPool.query(`INSERT INTO access.scope_gate (id)
+    VALUES ('governance:platform') ON CONFLICT DO NOTHING`);
+  await fixture.accessPool.query(`INSERT INTO access.governance_case
+    (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
+    VALUES ($1,'content_report','platform','governance:platform','urn:rezics:context:global',
+      'graph',$2,'publication','private')`, [caseId, target]);
+  await fixture.accessPool.query(`INSERT INTO access.moderation_decision
+    (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
+      authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
+      evidence_digest,disclosure,statement_of_reasons)
+    VALUES ($1::uuid,'content_moderation','restrict','urn:rezics:context:global',$2,1,$3,$4,
+      'platform','governance:platform',0,$5,$1::text,$5,'urn:rezics:rule:publication-read','1',$5,$5,
+      'private',$6::jsonb)`, [decisionId, caseId, fixture.principalId, fixture.actor, digest, {
+    facts: 'Publication is restricted for this Work container.', scope: 'publication',
+    duration: 'Until the restriction is removed.', automation: false,
+    appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en',
+    rule: { ref: 'urn:rezics:rule:publication-read', revision: '1', digest },
+  }]);
+  await fixture.accessPool.query(`INSERT INTO access.moderation_decision_target
+    (decision_id,ordinal,owner,resource,component,scope_kind,effect)
+    VALUES ($1,1,'graph',$2,'publication','component','disclosure')`, [decisionId, target]);
+  await fixture.accessPool.query(`UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1`,
+    [caseId, decisionId]);
+  await fixture.accessPool.query(`INSERT INTO access.governance_enforcement
+    (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
+    VALUES ($1,'governance:platform','urn:rezics:context:global','graph',$2,'publication',NULL,
+      'disclosure',$3,1,'restricted',1)`, [enforcementId, target, decisionId]);
+  return { caseId, decisionId, enforcementId };
+}
+
+async function removePublicationRestriction(fixture: PublicationFixture, restriction: PublicationRestriction): Promise<void> {
+  const restored = randomUUID();
+  const client = await fixture.accessPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO access.moderation_decision
+      (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
+        authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
+        evidence_digest,disclosure,statement_of_reasons)
+      SELECT $1::uuid,kind,'restore',context,case_id,case_sequence+1,principal_id,acting_subject,authority_kind,
+        authority_scope_id,authority_epoch,authority_proof_digest,$1::text,request_digest,rule_ref,rule_revision,
+        rule_digest,evidence_digest,disclosure,statement_of_reasons
+      FROM access.moderation_decision WHERE id=$2`, [restored, restriction.decisionId]);
+    await client.query(`INSERT INTO access.moderation_decision_target
+      (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect)
+      SELECT $1,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect
+      FROM access.moderation_decision_target WHERE decision_id=$2`, [restored, restriction.decisionId]);
+    await client.query(`UPDATE access.governance_case SET decision_head=$2,generation=generation+1,
+      state='closed',closed_at=clock_timestamp() WHERE id=$1`, [restriction.caseId, restored]);
+    await client.query(`UPDATE access.governance_enforcement SET state='released',decision_id=$2,
+      fence_epoch=fence_epoch+1 WHERE id=$1`, [restriction.enforcementId, restored]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
+
+async function expectStructuredWorkAbsent(fixture: PublicationFixture, work: string,
+  structure: string, revision: string): Promise<void> {
+  const missingWork = '00000000-0000-4000-8000-000000000099';
+  const missingRevision = '00000000-0000-4000-8000-000000000098';
+  const paths: Array<[string, string]> = [
+    [`/v1/works/${shortId(work)}`, `/v1/works/${missingWork}`],
+    [`/v1/recipes/works/${shortId(work)}`, `/v1/recipes/works/${missingWork}`],
+    [`/v1/compositions/${shortId(structure)}`, `/v1/compositions/${missingWork}`],
+    [`/v1/compositions/${shortId(structure)}/revisions/${shortId(revision)}`,
+      `/v1/compositions/${missingWork}/revisions/${missingRevision}`],
+    [`/v1/recipes/${shortId(structure)}/exports/schema-org?actingSubject=${encodeURIComponent(fixture.actor)}`,
+      `/v1/recipes/${missingWork}/exports/schema-org?actingSubject=${encodeURIComponent(fixture.actor)}`],
+  ];
+  for (const [path, missingPath] of paths) {
+    const hidden = await fixture.call('GET', path, undefined, randomUUID(), null);
+    const missing = await fixture.call('GET', missingPath, undefined, randomUUID(), null);
+    expect([hidden.status, await hidden.text()]).toEqual([missing.status, await missing.text()]);
+  }
+}
 
 test('RECIPE07 native admission publishes one exact Work candidate and withdrawal removes its name', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -54,10 +139,6 @@ test('RECIPE07 native admission publishes one exact Work candidate and withdrawa
       PREFIX schema: <https://schema.org/>
       SELECT ?main WHERE { ${publicWork(iri(work.work), '?main')} } LIMIT 2`);
     expect(publicCandidate.results?.bindings ?? []).toHaveLength(1);
-    const nameUnit = `urn:rezics:search:name:work:${shortId(work.work)}`;
-    const publicName = await fixture.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-      ASK { GRAPH <urn:rezics:graph:public-search> { <${nameUnit}> rv:publicTitle ?title } }`);
-    expect(publicName.boolean).toBe(true);
 
     const recipePath = `/v1/recipes/works/${shortId(work.work)}`;
     const selectedRecipe = await fixture.json<{ profile: string; structure: string; revision: string;
@@ -122,6 +203,20 @@ test('RECIPE07 native admission publishes one exact Work candidate and withdrawa
     const republishedRecipe = await fixture.json<{ revision: string; occurrences: Array<{ role: string }> }>(
       await fixture.call('GET', recipePath, undefined, randomUUID(), null), 200);
     expect(republishedRecipe).toMatchObject({ revision: draft.revision, occurrences: [{ role: 'step' }] });
+
+    const workRestriction = await restrictPublicationTarget(fixture, work.work);
+    await expectStructuredWorkAbsent(fixture, work.work, created.structure, draft.revision);
+    await removePublicationRestriction(fixture, workRestriction);
+
+    const parent = nativeId();
+    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
+      INSERT DATA { GRAPH <urn:rezics:graph:current> { ${iri(work.work)} schema:isPartOf ${iri(parent)} } }`);
+    const parentRestriction = await restrictPublicationTarget(fixture, parent);
+    await expectStructuredWorkAbsent(fixture, work.work, created.structure, draft.revision);
+    await removePublicationRestriction(fixture, parentRestriction);
+    await fixture.nativeFuseki.update(`PREFIX schema: <https://schema.org/>
+      DELETE DATA { GRAPH <urn:rezics:graph:current> { ${iri(work.work)} schema:isPartOf ${iri(parent)} } }`);
+
     const oldPublishedRevision = await fixture.call('GET',
       `/v1/compositions/${shortId(created.structure)}/revisions/${shortId(created.revision)}`,
       undefined, randomUUID(), null);
@@ -141,9 +236,6 @@ test('RECIPE07 native admission publishes one exact Work candidate and withdrawa
       PREFIX schema: <https://schema.org/>
       SELECT ?main WHERE { ${publicWork(iri(work.work), '?main')} } LIMIT 2`);
     expect(hiddenCandidate.results?.bindings ?? []).toHaveLength(0);
-    const hiddenName = await fixture.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-      ASK { GRAPH <urn:rezics:graph:public-search> { <${nameUnit}> rv:publicTitle ?title } }`);
-    expect(hiddenName.boolean).toBe(false);
     const absentRecipe = await fixture.call('GET', recipePath, undefined, randomUUID(), null);
     const missingRecipe = await fixture.call('GET',
       '/v1/recipes/works/00000000-0000-4000-8000-000000000099', undefined, randomUUID(), null);

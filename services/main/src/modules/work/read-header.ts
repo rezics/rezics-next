@@ -7,7 +7,8 @@ import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard, workHeader } from './read-contract.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, publicWork, unerased, readRowsToken, readDependencyToken,
   type WorkReadSession } from './read-session.ts';
-import { readPublishedStructuredWorkSource, type PublishedStructuredWorkSource } from './public-patterns.ts';
+import { readPublishedStructuredWorkSource, readWorkPublicationParents,
+  type PublishedStructuredWorkSource } from './public-patterns.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
 
 export type WorkCard = Static<typeof workCard>;
@@ -16,6 +17,7 @@ export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLangu
   metadataRevision: string | null; metadata: Awaited<ReturnType<typeof readMetadataHeader>>;
   disclosure: 'public' | 'restricted'; publicationState: 'published' | 'unpublished';
   structuredPublication: PublishedStructuredWorkSource | null;
+  structuredPublicationCandidate: boolean;
   fieldProvenance?: Static<typeof workHeader>['fieldProvenance'] }
 
 /** Structure visibility is exact to the admitted revision and its Work. Work
@@ -24,16 +26,51 @@ export async function structureRevisionDisclosureVisible(session: WorkReadSessio
   work: string; workRevision?: string; structure: string; revision: string;
 }): Promise<boolean> {
   try {
-    const decisions = await session.disclosure([{ owner: 'graph', resource: input.structure,
-      component: 'structure', revision: input.revision, work: input.work,
-      ...(input.workRevision ? { workRevision: input.workRevision } : {}) }]);
-    if (decisions.length !== 1) throw new WorkReadUnavailable('Structure disclosure result is incomplete');
-    return decisions[0] === 'visible';
+    const environment = session.deps?.environment;
+    const parents = environment
+      ? await readWorkPublicationParents(environment, [input.work]) : new Map<string, string>();
+    const parent = parents.get(input.work);
+    const decisions = await session.disclosure([
+      { owner: 'graph', resource: input.work, component: 'name', work: input.work,
+        ...(input.workRevision ? { workRevision: input.workRevision } : {}) },
+      { owner: 'graph', resource: input.structure, component: 'structure', revision: input.revision,
+        work: input.work, ...(input.workRevision ? { workRevision: input.workRevision } : {}) },
+      ...(parent ? [{ owner: 'graph' as const, resource: parent, component: 'publication' as const, work: parent }] : []),
+    ]);
+    if (decisions.length !== (parent ? 3 : 2)) {
+      throw new WorkReadUnavailable('Structure disclosure result is incomplete');
+    }
+    return decisions.every(decision => decision === 'visible');
   } catch (error) {
     if (error instanceof DisclosureUnavailable) {
       throw new WorkReadUnavailable('Structure disclosure is unavailable', { cause: error });
     }
+    if (!(error instanceof WorkReadUnavailable)) {
+      throw new WorkReadUnavailable('Structure disclosure is unavailable', { cause: error });
+    }
     throw error;
+  }
+}
+
+async function workPublicationContainerDisclosureVisible(session: WorkReadSession, work: string): Promise<boolean> {
+  const environment = session.deps?.environment;
+  if (!environment) return true;
+  try {
+    const parent = (await readWorkPublicationParents(environment, [work])).get(work);
+    const decisions = await session.disclosure([
+      { owner: 'graph', resource: work, component: 'name', work },
+      ...(parent ? [{ owner: 'graph' as const, resource: parent, component: 'publication' as const, work: parent }] : []),
+    ]);
+    if (decisions.length !== (parent ? 2 : 1)) {
+      throw new WorkReadUnavailable('Work disclosure result is incomplete');
+    }
+    return decisions.every(decision => decision === 'visible');
+  } catch (error) {
+    if (error instanceof DisclosureUnavailable) {
+      throw new WorkReadUnavailable('Work disclosure is unavailable', { cause: error });
+    }
+    if (error instanceof WorkReadUnavailable) throw error;
+    throw new WorkReadUnavailable('Work disclosure is unavailable', { cause: error });
   }
 }
 
@@ -70,10 +107,14 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   let source: PublishedStructuredWorkSource | null;
   try { source = await readPublication(); }
   catch (error) { throw new WorkReadUnavailable('Work publication state is unavailable', { cause: error }); }
+  const structuredPublicationCandidate = source !== null;
   if (session.options.localBasis) {
     session.observeDependency(`structured-work-publication:${work}`, source, readPublication);
   }
   if (source) {
+    if (!await workPublicationContainerDisclosureVisible(session, work)) {
+      throw new WorkReadMissing('Work is unavailable');
+    }
     try {
       workPublicationProfileFor(structureProfileForGraph(source.structureProfile));
     } catch (error) {
@@ -114,6 +155,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted',
   publicationState: source ? 'published' : 'unpublished', structuredPublication: source,
+  structuredPublicationCandidate,
   ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}) };
 }
 
@@ -122,6 +164,10 @@ export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis)
   if (basis.disclosure === 'restricted' && (!session.principal || !session.options.actingSubject
     || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, basis.card.id))) {
     throw new WorkReadMissing('Work is unavailable');
+  }
+  if (basis.structuredPublicationCandidate
+    && !await workPublicationContainerDisclosureVisible(session, basis.card.id)) {
+    throw new WorkReadMoved('Published Work disclosure changed');
   }
   if (basis.structuredPublication && !await structureRevisionDisclosureVisible(session, {
     work: basis.card.id, workRevision: basis.card.revision,

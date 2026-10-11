@@ -8,6 +8,7 @@ import { type WorkStructurePublicationInput,
   verifyOriginalWorkStructureContribution, workStructurePublicationDigest, workStructurePublicationReceiptIri }
   from '../src/modules/work/structured-publication.ts';
 import { RV, hash } from '../src/modules/work/activate.ts';
+import { strongRevokeWorkPrincipal } from '../src/modules/work/strong-revoke.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -240,6 +241,58 @@ test('RECIPE07: stale terminal cancellation reports stale while a revocation can
     requestDigest: workStructurePublicationDigest(republish), predecessor: null };
   expect(() => checkedWorkStructurePublicationReceipt(revoked, admission(republish), republish,
     workStructurePublicationDigest(republish))).toThrow(AdmissionDenied);
+});
+
+test('RECIPE07/WORK10: strong principal revocation settles an in-flight publication without a source', async () => {
+  const registered = admission(publishInput, {
+    state: 'claimed', dispatchEligible: false, replayed: false,
+  });
+  const cancelled: WorkStructurePublicationReceipt = {
+    action: 'work.publish', outcome: 'cancelled',
+    receipt: workStructurePublicationReceiptIri(admissionId, 'work.publish'),
+    admissionId, requestDigest: registered.requestDigest, authorityEpoch, scope, dataEpoch,
+    sequence: '31', work, attestedBy: actor,
+  };
+  let graphCommitted = false;
+  let sealed = false;
+  let commands = 0;
+  const env = environment(async query => {
+    if (query.includes('SELECT ?outcome')) {
+      return { results: { bindings: graphCommitted ? [graphRow(cancelled)] : [] } };
+    }
+    throw new Error(`Unexpected publication revocation query: ${query}`);
+  }, async envelope => {
+    commands++;
+    expect(envelope.update).toContain('rv:Cancelled');
+    expect(envelope.update).not.toContain('WorkStructurePublicSource');
+    graphCommitted = true;
+    return { status: 'committed' };
+  });
+  const steps: string[] = [];
+  const access = {
+    strongDeactivatePrincipal: async (id: string, epoch: string) => {
+      steps.push(`fence:${id}:${epoch}`);
+      return { principalId: id, enforcementEpoch: '13', pending: sealed ? 0 : 1 };
+    },
+    listUnsealedPrincipal: async (id: string) => {
+      steps.push(`pending:${id}`);
+      return sealed ? [] : [registered];
+    },
+    recordGraphOutcome: async (id: string, receipt: WorkStructurePublicationReceipt) => {
+      steps.push(`seal:${id}:${receipt.outcome}`);
+      expect(receipt).toMatchObject({ outcome: 'cancelled', receipt: cancelled.receipt,
+        requestDigest: registered.requestDigest, dataEpoch, sequence: '31' });
+      sealed = true;
+    },
+  };
+
+  const result = await strongRevokeWorkPrincipal(env as never, access as never, actor, '12');
+
+  expect(result).toMatchObject({ status: 'complete', pending: 0, principalId: actor,
+    enforcementEpoch: '13' });
+  expect(commands).toBe(1);
+  expect(steps).toEqual([`fence:${actor}:12`, `pending:${actor}`,
+    `seal:${admissionId}:cancelled`, `fence:${actor}:13`]);
 });
 
 test('RECIPE07: original-contribution proof rejects imports, references, media and another editor', async () => {

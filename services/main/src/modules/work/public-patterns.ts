@@ -10,20 +10,29 @@ export async function admittedPublicWorks(environment: WorkActivationEnvironment
   const unique = [...new Set(works)];
   if (!environment) return new Set(unique); // Graph-only legacy owner fixtures.
   const visible = new Set<string>();
-  const worksPerBatch = Math.floor(DISCLOSURE_COST.batch / 2);
+  const worksPerBatch = Math.floor(DISCLOSURE_COST.batch / 3);
   for (let offset = 0; offset < unique.length; offset += worksPerBatch) {
     const batch = unique.slice(offset, offset + worksPerBatch);
     const sources = await readPublishedStructuredWorkSources(environment, batch);
     const sourceWorks = [...sources.keys()];
+    const parents = await readWorkPublicationParents(environment, sourceWorks);
+    const parentWorks = sourceWorks.filter(work => parents.has(work));
     const targets = [
       ...batch.map(resource => ({ owner: 'graph' as const, resource, component: 'name' as const, work: resource })),
       ...[...sources.values()].map(source => ({ owner: 'graph' as const, resource: source.structure,
         component: 'structure' as const, revision: source.structureRevision, work: source.work })),
+      ...parentWorks.map(work => ({ owner: 'graph' as const, resource: parents.get(work)!,
+        component: 'publication' as const, work: parents.get(work)! })),
     ];
     const decisions = await discloseInventory(environment, targets, viewer, 'read');
     batch.forEach((work, index) => {
+      const sourceIndex = sourceWorks.indexOf(work);
+      const parentIndex = parentWorks.indexOf(work);
       if (decisions[index] === 'visible'
-        && (!sources.has(work) || decisions[batch.length + sourceWorks.indexOf(work)] === 'visible')) visible.add(work);
+        && (!sources.has(work) || decisions[batch.length + sourceIndex] === 'visible')
+        && (parentIndex < 0 || decisions[batch.length + sourceWorks.length + parentIndex] === 'visible')) {
+        visible.add(work);
+      }
     });
   }
   return visible;
@@ -55,7 +64,9 @@ export const publishedWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS
 export const publishedStructuredWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.current)} {
   ${work} a schema:CreativeWork ; rv:mainVersion ${main} ;
     rv:workStructurePublicationHead ?structuredDecision .
-  ${main} a rv:MainVersion ; rv:work ${work} . }
+  ${main} a rv:MainVersion ; rv:work ${work} .
+  ?structuredStructure a rv:Structure ; rv:structureOf ${main} ; rv:structureProfile ?structuredProfile .
+  ?structuredGeneration a rv:StructureGeneration ; rv:structure ?structuredStructure . }
   GRAPH ${iri(GRAPHS.revisions)} {
     ?structuredDecision a rv:WorkStructurePublicationDecision ; rv:component ${work} ;
       rv:publicationOutcome rv:Published ; rv:publicSource ?structuredSource ;
@@ -63,8 +74,6 @@ export const publishedStructuredWork = (work: string, main: string) => `GRAPH ${
     ?structuredSource a rv:WorkStructurePublicSource ; rv:work ${work} ; rv:component ${main} ;
       rv:structureProfile ?structuredProfile ; rv:structure ?structuredStructure ; rv:structureRevision ?structuredRevision ;
       rv:selectedGeneration ?structuredGeneration ; rv:sourceRoot ?structuredRoot .
-    ?structuredStructure a rv:Structure ; rv:structureOf ${main} ; rv:structureProfile ?structuredProfile .
-    ?structuredGeneration a rv:StructureGeneration ; rv:structure ?structuredStructure .
     ?structuredRevision a rv:StructureRevision ; rv:component ?structuredStructure ;
       rv:generation ?structuredGeneration ; rv:manifest ?structuredRoot .
     FILTER(REGEX(STR(?structuredRoot), "^urn:rezics:sha256:[0-9a-f]{64}$"))
@@ -84,6 +93,37 @@ export interface PublishedStructuredWorkSource {
 
 const nativeWorkId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const structuredRoot = /^urn:rezics:sha256:[0-9a-f]{64}$/;
+
+/** Resolve the one immediate parent used by publication governance. Ambiguous
+ * ancestry fails closed instead of checking only one arbitrary container. */
+export async function readWorkPublicationParents(environment: WorkActivationEnvironment,
+  works: readonly string[]): Promise<ReadonlyMap<string, string>> {
+  const unique = [...new Set(works)];
+  if (!unique.length) return new Map();
+  if (unique.length > 64 || unique.some(work => !nativeWorkId.test(work))) {
+    throw new Error('Publication parent batch is invalid');
+  }
+  const rows = (await environment.fuseki.query(`PREFIX schema: <https://schema.org/>
+    SELECT ?work ?parent WHERE {
+      VALUES ?work { ${unique.map(iri).join(' ')} }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?parent } }
+    } LIMIT ${unique.length + 1}`, 32 * 1024)).results?.bindings ?? [];
+  if (rows.length !== unique.length) throw new Error('Publication parent batch is ambiguous');
+  const seen = new Set<string>();
+  const parents = new Map<string, string>();
+  for (const row of rows) {
+    const work = row.work?.value;
+    const parent = row.parent?.value;
+    if (!work || !unique.includes(work) || seen.has(work)
+      || parent !== undefined && (!nativeWorkId.test(parent) || parent === work)) {
+      throw new Error('Publication parent batch is incomplete');
+    }
+    seen.add(work);
+    if (parent) parents.set(work, parent);
+  }
+  if (seen.size !== unique.length) throw new Error('Publication parent batch is incomplete');
+  return parents;
+}
 
 function sourceFromRow(row: NonNullable<import('../../infrastructure/fuseki.ts').SparqlResult['results']>['bindings'][number],
   work: string, mainVersion: string): PublishedStructuredWorkSource {
