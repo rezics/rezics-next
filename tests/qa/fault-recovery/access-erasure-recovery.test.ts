@@ -4,6 +4,7 @@ import { expect, test } from 'bun:test';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { ERASURE_JOURNAL_EPOCH } from '../../../services/main/src/modules/erasure/journal.ts';
 import { contentErasureDigest, erasureReceiptIri } from
   '../../../services/main/src/modules/erasure/request.ts';
@@ -85,7 +86,11 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     await source.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [principalId, `https://qa-${suffix}.local`, `erasure-${suffix}`]);
     await source.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
-    await source.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    await grantFixtureAuthority(source, {
+      scope, requireDispatch: true,
+      representations: [{ principalId, actor, action: 'erasure.request', lifetime: '8 hours' }],
+      grant: { actor, action: 'erasure.request', lifetime: '8 hours' },
+    });
     await source.query(`CREATE TABLE access.erasure_recovery_probe_${suffix} (
       id uuid PRIMARY KEY, body text NOT NULL)`);
     await source.query(`INSERT INTO access.erasure_recovery_probe_${suffix} (id, body) VALUES ($1, 'base')`, [probeId]);
@@ -269,8 +274,9 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     const duplicated = resign([signedRows[0]!, duplicateRow, duplicateRow, ...signedRows.slice(2)], captured.summary);
     await rejectImport(duplicated.bytes, duplicated.expected, 'native Access attachment keys are duplicated or out of order');
 
+    // Principals exist at the migration head but cannot be imported through erasure custody.
     const unknownTableRows = signedRows.map(record => record.kind === 'row'
-      ? { ...record, table: 'access.erasure_recovery_unknown' } : record);
+      ? { ...record, table: 'access.principal' } : record);
     const unknownTable = resign(unknownTableRows, captured.summary);
     await rejectImport(unknownTable.bytes, unknownTable.expected, 'unknown native Access attachment schema or row');
 
