@@ -47,8 +47,8 @@ type's alternatives can exceed what one operation allows.
 Use concrete producer-to-consumer examples to examine the contract. In design-only
 work, state unresolved choices and validation criteria. In implementation work,
 update the affected contracts and authorized consumers together, use owning
-generators. During the current program, the [execution workflow](../../../docs/plan/execution-workflow.md)
-owns test/check timing; the plan owns dependency gates.
+generators. In a Goal task, the worker protocol's [tests and checks](../../../docs/goals/worker.md#tests-and-checks)
+own test/check timing; the brief owns dependencies.
 
 ## Completion
 

@@ -9,8 +9,8 @@ The goal is to find problems in the current UI. Screenshot counts and pixel
 similarity are not acceptance criteria. Follow the browser authorization boundary
 in [AGENTS.md](../../../AGENTS.md) and the runtime instructions in the
 [Storybook workflow](../../../docs/development/storybook.md).
-During the current program, [execution timing](../../../docs/plan/execution-workflow.md)
-applies to story/test authoring and this rendered review.
+In a Goal task, the worker protocol's [tests and checks](../../../docs/goals/worker.md#tests-and-checks)
+apply to story/test authoring and this rendered review.
 
 ## Select meaningful evidence
 

@@ -6,8 +6,8 @@ description: Research and evaluate substantive designs, technical proposals and 
 # Research and validation
 
 For substantive decisions, proactively read applicable primary research, standards
-and engineering implementations. Follow [task scope](../../../AGENTS.md#task-scope-and-evidence)
-and the current program's [execution timing](../../../docs/plan/execution-workflow.md),
+and engineering implementations. Follow [AGENTS.md](../../../AGENTS.md)
+and, in a Goal task, the worker protocol's [tests and checks](../../../docs/goals/worker.md#tests-and-checks),
 including for experiments and instruction evaluations.
 
 ## Frame the decision
