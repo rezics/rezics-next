@@ -279,9 +279,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
       'complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history',
       'Reads Realm Best and Top through Main at 100, 1000 and 10000 real threads and checks ordering, disclosure and bounded hydration.'),
-    browser: browser('apps/web/tests/realm-community.e2e.ts',
-      'Best, Top and New reorder every Realm discussion after a reader votes',
-      'Seeds three threads through Main, votes in the product, and checks complete Best, New and Top orders.'),
+    browser: missing('gap'),
   },
   {
     kind: 'realm',
