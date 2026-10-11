@@ -44,8 +44,13 @@ function exact(triples: RecoveryTriple[], graph: string, subject: string,
     throw new RetainedEffectConflict(`retained Work protection ${predicate} differs`);
   }
 }
+// The native command module stamps these fields for the replay command itself.
+const SERVER_OWNED_OUTBOX_PREDICATES = new Set([
+  `${RV}streamScope`, `${RV}streamSequence`, `${RV}legacyThroughSequence`,
+]);
 function subjectTriples(triples: RecoveryTriple[], graph: string): string {
-  return triples.filter(row => row.graph === graph)
+  return triples.filter(row => row.graph === graph
+    && !(graph === GRAPHS.outbox && SERVER_OWNED_OUTBOX_PREDICATES.has(row.predicate)))
     .map(row => `${safeIri(row.subject)} ${safeIri(row.predicate)} ${term(row.object)} .`).join('\n');
 }
 type Intent = WorkEditorialBasis & {

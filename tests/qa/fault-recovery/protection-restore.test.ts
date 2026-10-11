@@ -15,18 +15,22 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence }
+import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
 import { ProtectionAdmissionSigner } from '../../../services/main/src/modules/access/protection-admission.ts';
+import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
+import { retainErasureCoverage } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/schema.ts';
 import { reconcileRetainedWorkProtection }
   from '../../../services/main/src/modules/protection/reconcile-restored.ts';
+import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { retainRecoveryCoverageHead }
   from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
 import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage,
-  releaseRestoredGraphHold } from '../../../services/main/src/modules/work/restore-lineage.ts';
+  readRestoredGraphReleaseExpectation, readRestoredGraphReleaseProof }
+  from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
@@ -240,24 +244,10 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(coverage, recoveryKey,
       'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
-    stopGraph(sourceId); copyVolume(cutVolume, sourceVolume, true);
-    await stack('stack:up', sourceId);
-    const graphOldReceipt = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
-      GRAPH <urn:rezics:graph:receipts> { <${approved.receipt}> a rv:OperationReceipt } }`);
-    expect(graphOldReceipt.boolean).toBe(false);
-    const next = { dataEpoch: randomUUID(), routingEpoch: '2' };
-    await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: created.sourcePosition.sequence }, next });
-    const restored = { ...environment, lineage: next,
-      titleAdmissionKey: apps.FUSEKI_TITLE_ADMISSION_KEY! };
-    const restoredApp = createMainApp(fuseki, { environment: restored,
-      account: account.verifier, access, protectionSigner: signer });
-    expect((await call(restoredApp, 'POST', reviewPath, reviewRequest, reviewKey, 1)).status).toBe(503);
-    const admissionBefore = (await accessPool.query<{ count: string }>(
-      'SELECT count(*)::text AS count FROM access.admission')).rows[0]!.count;
-    const evidence = { sealedCoverage, hmacKey: recoveryKey, accountPool: accountOwner,
-      contentPool, objectStore: { directory: environment.objectDirectory } };
-    await expect(releaseRestoredGraphHold(fuseki, accessPool, relayPool, next, evidence))
-      .rejects.toThrow('Account WAL differs from recovery coverage');
+    const retainedErasureEpoch = await retainErasureCoverage(relayPool, consumer);
+    expect((await relayPool.query<{ erasure_epoch: string | null }>(
+      `SELECT erasure_epoch::text AS erasure_epoch FROM relay.recovery_coverage_head
+        WHERE consumer = $1`, [consumer])).rows).toEqual([{ erasure_epoch: retainedErasureEpoch }]);
     const baseBackup = backup(sourceId, recoveryDir);
     execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup],
       { cwd: recoveryDir, timeout: 15_000 });
@@ -284,9 +274,48 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       if (recovering) await Bun.sleep(100);
     }
     expect(recovering).toBe(false);
-    const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
-      accountPool: restoredAccount, contentPool: restoredContent,
-      objectStore: { directory: environment.objectDirectory } };
+    stopGraph(sourceId); copyVolume(cutVolume, sourceVolume, true);
+    await stack('stack:up', sourceId);
+    const graphOldReceipt = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH <urn:rezics:graph:receipts> { <${approved.receipt}> a rv:OperationReceipt } }`);
+    expect(graphOldReceipt.boolean).toBe(false);
+    const next = { dataEpoch: randomUUID(), routingEpoch: '2' };
+    await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: created.sourcePosition.sequence }, next });
+    const restored = { ...environment, lineage: next,
+      titleAdmissionKey: apps.FUSEKI_TITLE_ADMISSION_KEY! };
+    const restoredApp = createMainApp(fuseki, { environment: restored,
+      account: account.verifier, access, protectionSigner: signer });
+    expect((await call(restoredApp, 'POST', reviewPath, reviewRequest, reviewKey, 1)).status).toBe(503);
+    const admissionBefore = (await accessPool.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM access.admission')).rows[0]!.count;
+    const maintenance = heldErasureMaintenanceClient(apps.FUSEKI_URL!,
+      apps.FUSEKI_MAINTENANCE_TOKEN!);
+    const restoreOperations = (owners: { accountPool: Pool; accessPool: Pool; contentPool: Pool }) =>
+      new OwnerOperations(relayPool, restored, { ...owners, hmacKey: recoveryKey,
+        objectStore: { directory: environment.objectDirectory }, restoredRelayPool: restoredRelay,
+        erasures: { authority: { sealedCoverage, hmacKey: recoveryKey },
+          signingKey: apps.FUSEKI_TITLE_ADMISSION_KEY!, maintenance,
+          originalSource: 'retained-native-event' } });
+    const restoreInput = { sealedCoverage, sealedDeletionSets: [] };
+    const assertHeldRestore = async (key: string, reason: string, owner: string) => {
+      const rows = (await relayPool.query<{ id: string; state: string; hold_reason: string | null }>(
+        `SELECT id, state, hold_reason FROM relay.owner_reconciliation
+          WHERE operation_id = $1`, [`owner:reconcile:${key}`])).rows;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ state: 'held', hold_reason: reason });
+      const findings = await relayPool.query<{ owner: string; item_kind: string;
+        item_ref: string; disposition: string }>(
+        `SELECT owner, item_kind, item_ref, disposition FROM relay.owner_reconciliation_item
+          WHERE reconciliation_id = $1 ORDER BY ordinal`, [rows[0]!.id]);
+      expect(findings.rows).toEqual([{ owner, item_kind: 'receipt',
+        item_ref: 'urn:rezics:dataset:product', disposition: 'conflict' }]);
+    };
+    const liveRestoreKey = `sys13-live-wal-${nonce}`;
+    const liveRestore = await restoreOperations({ accountPool: accountOwner,
+      accessPool, contentPool }).reconcileRestore(restoreInput, liveRestoreKey);
+    expect(liveRestore).toMatchObject({ kind: 'restore', scope: 'product',
+      state: 'held', disposition: 'conflict' });
+    await assertHeldRestore(liveRestoreKey, 'Account WAL differs from recovery coverage', 'account');
     const restoredAccessRegistry = new AccessAdmissionRegistry(restoredAccess,
       apps.FUSEKI_TITLE_ADMISSION_KEY);
     const restoredSigner = new ProtectionAdmissionSigner(restoredAccess,
@@ -295,8 +324,18 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       account: account.verifier, access: restoredAccessRegistry,
       protectionSigner: restoredSigner });
     expect((await call(restoredAppFromOwners, 'POST', reviewPath, reviewRequest, reviewKey, 1)).status).toBe(503);
-    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay, next,
-      restoredEvidence)).rejects.toThrow(/graph (cut differs|or immutable objects differ) from recovery coverage/);
+    const restoredOperations = restoreOperations({ accountPool: restoredAccount,
+      accessPool: restoredAccess, contentPool: restoredContent });
+    const graphRestoreKey = `sys13-restored-graph-${nonce}`;
+    const graphRestore = await restoredOperations.reconcileRestore(restoreInput, graphRestoreKey);
+    expect(graphRestore).toMatchObject({ kind: 'restore', scope: 'product',
+      state: 'held', disposition: 'conflict' });
+    const graphHold = (await relayPool.query<{ hold_reason: string }>(
+      `SELECT hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1`,
+      [`owner:reconcile:${graphRestoreKey}`])).rows[0]?.hold_reason;
+    expect(graphHold).toBe('graph or immutable objects differ from recovery coverage (mismatch)');
+    await assertHeldRestore(graphRestoreKey,
+      'graph or immutable objects differ from recovery coverage (mismatch)', 'object');
     await expect(reconcileRetainedWorkProtection(restored, restoredAccess,
       restoredRelay, coverage.relay, approved.sourcePosition.sequence))
       .rejects.toThrow('retained proposer admission is absent');
@@ -317,8 +356,19 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       expect((await reconcileRetainedWorkProtection(restored, restoredAccess,
         restoredRelay, coverage.relay, String(position))).replayed).toBe(true);
     }
-    await releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay, next, restoredEvidence);
-    await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);
+    const finalRestoreKey = `sys13-restored-release-${nonce}`;
+    const finalRestore = await restoredOperations.reconcileRestore(restoreInput, finalRestoreKey);
+    expect(finalRestore).toMatchObject({ kind: 'restore', scope: 'product',
+      state: 'reconciled', disposition: 'matched' });
+    const openedFence = (await restoredAccess.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
+    expect(openedFence).toEqual({ open: true,
+      generation: (BigInt(fenceGeneration) + 1n).toString() });
+    const releaseExpectation = await readRestoredGraphReleaseExpectation(fuseki, next, coverage);
+    const releaseProof = await readRestoredGraphReleaseProof(fuseki, releaseExpectation);
+    expect(releaseProof).toMatchObject({ expectation: releaseExpectation,
+      receipt: { dataEpoch: next.dataEpoch, sequence: '0' } });
+    expect(releaseProof?.receipt.id).toMatch(/^urn:rezics:receipt:restore-release:/);
     expect((await call(app, 'POST', reviewPath, reviewRequest, reviewKey, 1)).status).toBe(503);
     const retries = await Promise.all([call(restoredAppFromOwners,
       'POST', reviewPath, reviewRequest, reviewKey, 1), call(restoredAppFromOwners,
