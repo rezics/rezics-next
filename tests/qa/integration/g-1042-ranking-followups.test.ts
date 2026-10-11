@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { meterStatements, seedHome } from './feed-read-support.ts';
-import { growRealmThreads } from '../../../services/main/tests/g-1034-fixture.ts';
+import { meterStatements } from './feed-read-support.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import {
@@ -11,8 +10,6 @@ import {
 import { realmHistoryPopulation } from '../../../services/main/src/modules/rankings/realm-threads.ts';
 import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
-import { BACKPRESSURE_PROFILE_V1 } from '../../../services/main/src/operations/backpressure.ts';
-import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import {
   restoreRealmRankingCorpus,
   timeRealmRankingStage,
@@ -34,38 +31,16 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     console.log(
       JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }),
     );
-    // The retained reply commands leave Content projection events in this stopped
-    // copy. Advance Content directly so the composed poll does not tick an absent
-    // Event Projection owner on every step.
+    const followups = restored.manifest.identity.followups;
+    if (!followups) throw new Error('Retained Realm ranking corpus has no followup topology');
+    const { realm, clean, chainRoot, chain, wideRoot } = followups;
+    expect(chain).toHaveLength(34);
+    expect(followups.wide).toHaveLength(193);
     const projection = stack.composition;
-    const contentHead = BigInt((await stack.content.ownerPosition()).sequence);
-    const maxBacklog = BigInt(BACKPRESSURE_PROFILE_V1.worker.maxBacklog);
-    const targetBacklog = maxBacklog - 100n;
-    const projectionStarted = performance.now();
-    let checkpoint = await projection.cursor.read(projection.consumer);
-    let projectedEvents = 0;
-    while (contentHead - BigInt(checkpoint.sequence) >= targetBacklog) {
-      if (projectedEvents >= 10_000)
-        throw new Error(`Content projection backlog did not fall below ${targetBacklog}`);
-      const event = await relayContentProjectionOnce(
-        stack.env,
-        projection.content,
-        projection.cursor,
-        projection.consumer,
-      );
-      if (!event)
-        throw new Error('Content projection stopped before its checkpoint reached the source');
-      projectedEvents++;
-      checkpoint = await projection.cursor.read(projection.consumer);
-    }
-    console.log(
-      JSON.stringify({
-        realmRankingContentProjectionCatchUpMs: Math.round(performance.now() - projectionStarted),
-        projectedEvents,
-        remainingBacklog: (contentHead - BigInt(checkpoint.sequence)).toString(),
-      }),
-    );
-    const seed = await timeRealmRankingStage('followup-setup', () => seedHome(home, 3));
+    const head = await stack.content.ownerPosition();
+    const checkpoint = await projection.cursor.read(projection.consumer);
+    expect(checkpoint.dataEpoch).toBe(head.dataEpoch);
+    expect(BigInt(checkpoint.sequence)).toBe(BigInt(head.sequence));
     // A few hundred product replies exceed one 400-batch relay pass. Resume the
     // same checkpoint instead of treating that bound as a failed population.
     const catchUp = async () =>
@@ -84,8 +59,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
         }
         throw new Error('Realm thread projection exceeded its resumable waves');
       });
-    const realm = seed.realm.realm,
-      epoch = stack.env.lineage.dataEpoch;
+    const epoch = stack.env.lineage.dataEpoch;
     const threads = home.deps.realmReplyThreads;
     const root = `/v1/realms/${realm.slice(-36)}`;
     const readThread = async (reply: string) =>
@@ -97,72 +71,45 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
           ),
         { reply },
       );
-    expect((await readThread(seed.discussion.reply)).complete).toBe(true);
-    let replyCommands = 0;
-    const postReply = async (key: string, parent?: { reply: string; revision: string }) => {
-      const started = performance.now();
-      const created = await timeRealmRankingStage(
-        'followup-reply',
-        () => seed.post(key, parent && { reply: parent.reply, revisionId: parent.revision }),
-        { key },
+    expect((await readThread(clean.reply)).complete).toBe(true);
+    await timeRealmRankingStage('followup-boundaries', async () => {
+      // The bounded Content walk has far fewer than 192 rows but crosses depth 32.
+      const subtree = await threads.subtree(chainRoot.reply);
+      expect(subtree.length).toBeLessThan(REALM_THREAD_COST.replies);
+      expect(subtree.some((node) => node.truncated)).toBe(true);
+      expect((await threads.counts(realm, [chainRoot.reply])).complete).toBe(false);
+      expect((await readThread(chainRoot.reply)).complete).toBe(false);
+      const deep = await readThread(chain.at(-1)!.reply);
+      expect(deep.ancestors).toHaveLength(REALM_THREAD_COST.ancestors);
+      expect(deep.complete).toBe(false);
+      // Exactly 32 descendants with no child past the boundary is still complete.
+      expect((await readThread(chain[1]!.reply)).complete).toBe(true);
+      const page = await home.json<{
+        items: { reply: string; replies: { kind: string; value: number } }[];
+      }>(await home.call('GET', `${root}/threads?sort=new&limit=20`));
+      expect(page.items.find((item) => item.reply === chainRoot.reply)?.replies.kind).toBe(
+        'lower-bound',
       );
-      replyCommands++;
-      if (replyCommands % 10 === 0 || replyCommands === 1) {
-        console.log(
-          JSON.stringify({
-            realmRankingFollowupReplyCommands: replyCommands,
-            lastCommandMs: Math.round(performance.now() - started),
-          }),
-        );
-      }
-      return { reply: created.reply, revision: created.revisionId };
-    };
-    const chain = await growRealmThreads(postReply, 34, {
-      parent: { reply: seed.discussion.reply, revision: seed.discussion.revisionId, chain: true },
-      keyPrefix: 'g1042:chain',
-    });
-    await catchUp();
-    // The bounded Content walk has far fewer than 192 rows but crosses depth 32.
-    const subtree = await threads.subtree(seed.discussion.reply);
-    expect(subtree.length).toBeLessThan(REALM_THREAD_COST.replies);
-    expect(subtree.some((node) => node.truncated)).toBe(true);
-    expect((await threads.counts(realm, [seed.discussion.reply])).complete).toBe(false);
-    expect((await readThread(seed.discussion.reply)).complete).toBe(false);
-    const deep = await readThread(chain.at(-1)!.reply);
-    expect(deep.ancestors).toHaveLength(REALM_THREAD_COST.ancestors);
-    expect(deep.complete).toBe(false);
-    // Exactly 32 descendants with no child past the boundary is still complete.
-    expect((await readThread(chain[1]!.reply)).complete).toBe(true);
-    const page = await home.json<{
-      items: { reply: string; replies: { kind: string; value: number } }[];
-    }>(await home.call('GET', `${root}/threads?sort=new&limit=20`));
-    expect(page.items.find((item) => item.reply === seed.discussion.reply)?.replies.kind).toBe(
-      'lower-bound',
-    );
 
-    // A broad thread hits the total-row cap independently of the depth cap.
-    await growRealmThreads(postReply, 193, {
-      parent: { reply: seed.response.reply, revision: seed.response.revisionId, chain: false },
-      keyPrefix: 'g1042:wide',
-    });
-    await catchUp();
-    const wide = await threads.subtree(seed.response.reply);
-    expect(wide).toHaveLength(REALM_THREAD_COST.replies + 2);
-    expect(wide.some((node) => node.truncated)).toBe(false);
-    expect((await threads.counts(realm, [seed.response.reply])).complete).toBe(false);
-    expect((await readThread(seed.response.reply)).complete).toBe(false);
-    await stack.accessPool.query(
-      `UPDATE access.feed_item SET realm_thread_indexed=false
+      // A broad thread hits the total-row cap independently of the depth cap.
+      const wide = await threads.subtree(wideRoot.reply);
+      expect(wide).toHaveLength(REALM_THREAD_COST.replies + 2);
+      expect(wide.some((node) => node.truncated)).toBe(false);
+      expect((await threads.counts(realm, [wideRoot.reply])).complete).toBe(false);
+      expect((await readThread(wideRoot.reply)).complete).toBe(false);
+      await stack.accessPool.query(
+        `UPDATE access.feed_item SET realm_thread_indexed=false
       WHERE data_epoch=$1 AND realm=$2`,
-      [epoch, realm],
-    );
-    await catchUp();
+        [epoch, realm],
+      );
+      await catchUp();
+    });
 
     const floor = { dataEpoch: epoch, sequence: '0' };
     await new AccessRealmManagement(stack.accessPool).initialize(
       { ...home.author.principal, emailVerified: true },
       realm,
-      seed.author,
+      restored.manifest.identity.author,
       stack.env,
     );
     const membership = randomUUID(),
@@ -182,7 +129,13 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     await stack.accessPool.query(
       `INSERT INTO access.membership(id,kind,owner_subject,member_subject,state,generation,
       policy_revision,terms_revision,consent_reference) VALUES($1,'realm',$2,$3,'joined',1,$4::bigint,$5,'g1042')`,
-      [membership, realm, seed.reader, policy.revision, policy.terms_revision],
+      [
+        membership,
+        realm,
+        restored.manifest.identity.reader,
+        policy.revision,
+        policy.terms_revision,
+      ],
     );
     await stack.accessPool.query(
       `INSERT INTO access.private_membership_consent(id,principal_id,principal_epoch,kind,
@@ -212,7 +165,9 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
         [kind, id, epoch],
       );
     }
-    const population = await threads.historyPopulation(epoch, realm, floor);
+    const population = await timeRealmRankingStage('followup-history', () =>
+      threads.historyPopulation(epoch, realm, floor),
+    );
     await catchUp();
     const count = async (table: string, suffix = '') =>
       Number(
@@ -247,7 +202,9 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     const meter = meterStatements(),
       queries = stack.fuseki.queries;
     try {
-      await retireRealmPopulation(stack.accessPool, session, epoch, realm, '');
+      await timeRealmRankingStage('followup-retirement', () =>
+        retireRealmPopulation(stack.accessPool, session, epoch, realm, ''),
+      );
       expect(meter.count()).toBeLessThanOrEqual(REALM_RETIREMENT_COST.postgresStatements);
       expect(stack.fuseki.queries - queries).toBeLessThanOrEqual(REALM_RETIREMENT_COST.graphReads);
     } finally {
@@ -299,22 +256,31 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     );
     await stack.accessPool.query(
       `INSERT INTO access.realm_thread_population_job VALUES($1,$2,$3,$4)`,
-      [epoch, realm, population, seed.discussion.reply],
+      [epoch, realm, population, chainRoot.reply],
     );
     await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?slot rv:reply ${iri(seed.discussion.reply)} ; rv:replyPlacementHead ?head } }`);
+      GRAPH ${iri(GRAPHS.current)} { ?slot rv:reply ${iri(chainRoot.reply)} ; rv:replyPlacementHead ?head } }`);
     await stack.accessPool.query(
       `INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource) VALUES($1,'reply',$2)
       ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=''`,
-      [epoch, seed.discussion.reply],
+      [epoch, chainRoot.reply],
     );
     await catchUp();
-    expect(await count('realm_thread_reference', `AND reply='${seed.discussion.reply}'`)).toBe(0);
-    expect(await count('realm_thread_population_job', `AND reply='${seed.discussion.reply}'`)).toBe(
-      0,
-    );
+    expect(await count('realm_thread_reference', `AND reply='${chainRoot.reply}'`)).toBe(0);
+    expect(await count('realm_thread_population_job', `AND reply='${chainRoot.reply}'`)).toBe(0);
     expect(
-      await count('realm_thread_reference', `AND parent='${seed.discussion.reply}' AND active`),
+      await count('realm_thread_reference', `AND parent='${chainRoot.reply}' AND active`),
+    ).toBe(0);
+    expect(
+      Number(
+        (
+          await stack.accessPool.query<{ count: string }>(
+            `SELECT count(*)::text FROM access.realm_thread_reference
+       WHERE data_epoch=$1 AND realm=$2 AND reply=ANY($3::text[]) AND active`,
+            [epoch, realm, chain.map((reply) => reply.reply)],
+          )
+        ).rows[0]!.count,
+      ),
     ).toBe(0);
     // A retired Realm (and one whose graph identity was deleted) retires all its indexes.
     for (const state of ['Retired', 'deleted']) {
