@@ -626025,6 +626025,15 @@
               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -626044,11 +626053,39 @@
                           "type": "integer"
                         },
                         "maxCampaignMediaReads": {
-                          "const": 2,
+                          "const": 4,
                           "type": "number"
                         },
                         "maxCampaignUses": {
-                          "const": 64,
+                          "const": 128,
+                          "type": "number"
+                        },
+                        "maxModuleGraphReads": {
+                          "const": 128,
+                          "type": "number"
+                        },
+                        "maxNavigation": {
+                          "const": 50,
+                          "type": "number"
+                        },
+                        "maxNavigationGraphBytes": {
+                          "const": 8388608,
+                          "type": "number"
+                        },
+                        "maxNavigationGraphReads": {
+                          "const": 2048,
+                          "type": "number"
+                        },
+                        "maxResolvedBlocks": {
+                          "const": 8,
+                          "type": "number"
+                        },
+                        "maxResolvedCollections": {
+                          "const": 4,
+                          "type": "number"
+                        },
+                        "maxResponseBytes": {
+                          "const": 4194304,
                           "type": "number"
                         },
                         "maxSlides": {
@@ -626065,7 +626102,14 @@
                         "maxSlides",
                         "maxCampaignUses",
                         "maxCampaignMediaReads",
-                        "authorityProbes"
+                        "authorityProbes",
+                        "maxModuleGraphReads",
+                        "maxResolvedBlocks",
+                        "maxResolvedCollections",
+                        "maxNavigation",
+                        "maxNavigationGraphReads",
+                        "maxNavigationGraphBytes",
+                        "maxResponseBytes"
                       ],
                       "type": "object"
                     },
@@ -626234,6 +626278,3173 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "preview": {
+                      "properties": {
+                        "moduleData": {
+                          "items": {},
+                          "type": "array"
+                        },
+                        "navigation": {
+                          "properties": {
+                            "mounts": {
+                              "items": {},
+                              "type": "array"
+                            },
+                            "navigation": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "next": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "sourcePosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "datasetId": {
+                                  "const": "product",
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "datasetId",
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "navigation",
+                            "revision",
+                            "mounts",
+                            "next",
+                            "sourcePosition"
+                          ],
+                          "type": "object"
+                        },
+                        "page": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "blocks": {
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "definition": {
+                                        "type": "string"
+                                      },
+                                      "fallback": {
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "showcase",
+                                        "type": "string"
+                                      },
+                                      "showcase": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "const": "resolved",
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "definition",
+                                      "version",
+                                      "fallback",
+                                      "status",
+                                      "kind",
+                                      "showcase"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "definition": {
+                                        "type": "string"
+                                      },
+                                      "fallback": {
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "enum": [
+                                          "unknown_definition",
+                                          "unsupported_version",
+                                          "invalid_payload",
+                                          "missing_module"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "const": "placeholder",
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "definition",
+                                      "version",
+                                      "fallback",
+                                      "status",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "maxItems": 100000,
+                              "type": "array"
+                            },
+                            "cost": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "definitionExecutions": {
+                                  "const": 0,
+                                  "type": "number"
+                                },
+                                "extensions": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "graphReads": {
+                                  "const": 0,
+                                  "type": "number"
+                                },
+                                "nodesVisited": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "responseBytes": {
+                                  "maximum": 4194304,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "showcases": {
+                                  "maximum": 25,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "nodesVisited",
+                                "extensions",
+                                "showcases",
+                                "responseBytes",
+                                "graphReads",
+                                "definitionExecutions"
+                              ],
+                              "type": "object"
+                            },
+                            "definitions": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "definition": {
+                                    "const": "https://rezics.com/definition/showcase-block-v1",
+                                    "type": "string"
+                                  },
+                                  "payloadSchema": {},
+                                  "version": {
+                                    "enum": [
+                                      "1",
+                                      "2"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "definition",
+                                  "version",
+                                  "payloadSchema"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 2,
+                              "type": "array"
+                            },
+                            "document": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "doc": {
+                                  "patternProperties": {
+                                    "^.*$": {}
+                                  },
+                                  "type": "object"
+                                },
+                                "profile": {
+                                  "enum": [
+                                    "text",
+                                    "blocks"
+                                  ],
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "const": "rezics-document-v1",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "profile",
+                                "doc"
+                              ],
+                              "type": "object"
+                            },
+                            "showcaseData": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "slideMedia": {
+                                  "items": {},
+                                  "maxItems": 6,
+                                  "type": "array"
+                                },
+                                "slides": {
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "art": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "cutout": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "alt": {
+                                                    "maxLength": 180,
+                                                    "type": "string"
+                                                  },
+                                                  "focalArea": {
+                                                    "maxLength": 80,
+                                                    "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                    "type": "string"
+                                                  },
+                                                  "use": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "use"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "landscape": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "alt": {
+                                                    "maxLength": 180,
+                                                    "type": "string"
+                                                  },
+                                                  "focalArea": {
+                                                    "maxLength": 80,
+                                                    "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                    "type": "string"
+                                                  },
+                                                  "use": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "use"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "logos": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "anchor": {
+                                                      "enum": [
+                                                        "start-bottom",
+                                                        "center-top",
+                                                        "center-middle",
+                                                        "center-bottom"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "language": {
+                                                      "maxLength": 64,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    },
+                                                    "tone": {
+                                                      "enum": [
+                                                        "dark",
+                                                        "light"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use",
+                                                    "language",
+                                                    "tone",
+                                                    "anchor"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 32,
+                                                "type": "array"
+                                              },
+                                              "portrait": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "alt": {
+                                                    "maxLength": 180,
+                                                    "type": "string"
+                                                  },
+                                                  "focalArea": {
+                                                    "maxLength": 80,
+                                                    "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                    "type": "string"
+                                                  },
+                                                  "use": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "use"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "endsAt": {
+                                            "format": "date-time",
+                                            "type": "string"
+                                          },
+                                          "id": {
+                                            "maxLength": 64,
+                                            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                            "type": "string"
+                                          },
+                                          "kicker": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "kickers": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "de": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "en": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "es": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "fr": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ja": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ko": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hans": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hant": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "startsAt": {
+                                            "format": "date-time",
+                                            "type": "string"
+                                          },
+                                          "title": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "titles": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "de": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "en": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "es": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "fr": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ja": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ko": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hans": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hant": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "work": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "work"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "art": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "cutout": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "alt": {
+                                                    "maxLength": 180,
+                                                    "type": "string"
+                                                  },
+                                                  "focalArea": {
+                                                    "maxLength": 80,
+                                                    "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                    "type": "string"
+                                                  },
+                                                  "use": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "use"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "landscape": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "alt": {
+                                                    "maxLength": 180,
+                                                    "type": "string"
+                                                  },
+                                                  "focalArea": {
+                                                    "maxLength": 80,
+                                                    "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                    "type": "string"
+                                                  },
+                                                  "use": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "use"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "logos": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "anchor": {
+                                                      "enum": [
+                                                        "start-bottom",
+                                                        "center-top",
+                                                        "center-middle",
+                                                        "center-bottom"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "language": {
+                                                      "maxLength": 64,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    },
+                                                    "tone": {
+                                                      "enum": [
+                                                        "dark",
+                                                        "light"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use",
+                                                    "language",
+                                                    "tone",
+                                                    "anchor"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 32,
+                                                "type": "array"
+                                              },
+                                              "portrait": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "alt": {
+                                                    "maxLength": 180,
+                                                    "type": "string"
+                                                  },
+                                                  "focalArea": {
+                                                    "maxLength": 80,
+                                                    "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                    "type": "string"
+                                                  },
+                                                  "use": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "use"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "endsAt": {
+                                            "format": "date-time",
+                                            "type": "string"
+                                          },
+                                          "href": {
+                                            "pattern": "^/(?!/)[^\\s]{0,255}$",
+                                            "type": "string"
+                                          },
+                                          "id": {
+                                            "maxLength": 64,
+                                            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                            "type": "string"
+                                          },
+                                          "kicker": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "kickers": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "de": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "en": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "es": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "fr": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ja": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ko": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hans": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hant": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "startsAt": {
+                                            "format": "date-time",
+                                            "type": "string"
+                                          },
+                                          "title": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "titles": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "de": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "en": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "es": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "fr": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ja": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "ko": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hans": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "zh-Hant": {
+                                                "maxLength": 120,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "href"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "maxItems": 6,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "slides",
+                                "slideMedia"
+                              ],
+                              "type": "object"
+                            },
+                            "showcases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "module": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      },
+                                      "options": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "interval": {
+                                            "enum": [
+                                              "day",
+                                              "week",
+                                              "month"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "layout": {
+                                            "enum": [
+                                              "covers",
+                                              "rows"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "limit": {
+                                            "maximum": 24,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "metric": {
+                                            "enum": [
+                                              "reads",
+                                              "finished-chapters"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "rail": {
+                                            "type": "boolean"
+                                          },
+                                          "shuffle": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "source": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "block": {
+                                                "maxLength": 64,
+                                                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                                "type": "string"
+                                              },
+                                              "kind": {
+                                                "const": "query-block",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "block"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "collection": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                "type": "string"
+                                              },
+                                              "kind": {
+                                                "const": "collection",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "collection"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "context": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                "type": "string"
+                                              },
+                                              "kind": {
+                                                "const": "context",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "context"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "tabs": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "maxLength": 64,
+                                              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                              "type": "string"
+                                            },
+                                            "label": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "labels": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "de": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "en": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "es": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "fr": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ja": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ko": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hans": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hant": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            },
+                                            "source": {
+                                              "anyOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "block": {
+                                                      "maxLength": 64,
+                                                      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                                      "type": "string"
+                                                    },
+                                                    "kind": {
+                                                      "const": "query-block",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "kind",
+                                                    "block"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "collection": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                      "type": "string"
+                                                    },
+                                                    "kind": {
+                                                      "const": "collection",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "kind",
+                                                    "collection"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "context": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                      "type": "string"
+                                                    },
+                                                    "kind": {
+                                                      "const": "context",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "kind",
+                                                    "context"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "label",
+                                            "source"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 8,
+                                        "type": "array"
+                                      },
+                                      "title": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "titles": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "de": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "en": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "es": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "fr": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ja": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ko": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hans": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hant": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "type": {
+                                        "enum": [
+                                          "hero-carousel",
+                                          "chip-nav",
+                                          "announcement",
+                                          "shelf",
+                                          "ranking",
+                                          "editorial-list",
+                                          "quote-stream",
+                                          "people",
+                                          "rising",
+                                          "decision-log",
+                                          "discussion-list"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "type",
+                                      "title",
+                                      "source"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "slideMedia": {
+                                    "items": {},
+                                    "maxItems": 6,
+                                    "type": "array"
+                                  },
+                                  "slides": {
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "art": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "cutout": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "landscape": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "logos": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "alt": {
+                                                        "maxLength": 180,
+                                                        "type": "string"
+                                                      },
+                                                      "anchor": {
+                                                        "enum": [
+                                                          "start-bottom",
+                                                          "center-top",
+                                                          "center-middle",
+                                                          "center-bottom"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "focalArea": {
+                                                        "maxLength": 80,
+                                                        "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                        "type": "string"
+                                                      },
+                                                      "language": {
+                                                        "maxLength": 64,
+                                                        "minLength": 1,
+                                                        "type": "string"
+                                                      },
+                                                      "tone": {
+                                                        "enum": [
+                                                          "dark",
+                                                          "light"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "use": {
+                                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "use",
+                                                      "language",
+                                                      "tone",
+                                                      "anchor"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 32,
+                                                  "type": "array"
+                                                },
+                                                "portrait": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "type": "object"
+                                            },
+                                            "endsAt": {
+                                              "format": "date-time",
+                                              "type": "string"
+                                            },
+                                            "id": {
+                                              "maxLength": 64,
+                                              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                              "type": "string"
+                                            },
+                                            "kicker": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kickers": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "de": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "en": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "es": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "fr": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ja": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ko": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hans": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hant": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            },
+                                            "startsAt": {
+                                              "format": "date-time",
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "titles": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "de": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "en": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "es": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "fr": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ja": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ko": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hans": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hant": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            },
+                                            "work": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "work"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "art": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "cutout": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "landscape": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "logos": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "alt": {
+                                                        "maxLength": 180,
+                                                        "type": "string"
+                                                      },
+                                                      "anchor": {
+                                                        "enum": [
+                                                          "start-bottom",
+                                                          "center-top",
+                                                          "center-middle",
+                                                          "center-bottom"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "focalArea": {
+                                                        "maxLength": 80,
+                                                        "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                        "type": "string"
+                                                      },
+                                                      "language": {
+                                                        "maxLength": 64,
+                                                        "minLength": 1,
+                                                        "type": "string"
+                                                      },
+                                                      "tone": {
+                                                        "enum": [
+                                                          "dark",
+                                                          "light"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "use": {
+                                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "use",
+                                                      "language",
+                                                      "tone",
+                                                      "anchor"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 32,
+                                                  "type": "array"
+                                                },
+                                                "portrait": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "alt": {
+                                                      "maxLength": 180,
+                                                      "type": "string"
+                                                    },
+                                                    "focalArea": {
+                                                      "maxLength": 80,
+                                                      "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                      "type": "string"
+                                                    },
+                                                    "use": {
+                                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "use"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "type": "object"
+                                            },
+                                            "endsAt": {
+                                              "format": "date-time",
+                                              "type": "string"
+                                            },
+                                            "href": {
+                                              "pattern": "^/(?!/)[^\\s]{0,255}$",
+                                              "type": "string"
+                                            },
+                                            "id": {
+                                              "maxLength": 64,
+                                              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                              "type": "string"
+                                            },
+                                            "kicker": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "kickers": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "de": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "en": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "es": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "fr": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ja": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ko": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hans": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hant": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            },
+                                            "startsAt": {
+                                              "format": "date-time",
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "titles": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "de": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "en": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "es": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "fr": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ja": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "ko": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hans": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "zh-Hant": {
+                                                  "maxLength": 120,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "href"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "maxItems": 6,
+                                    "type": "array"
+                                  },
+                                  "sources": {
+                                    "items": {},
+                                    "maxItems": 9,
+                                    "type": "array"
+                                  },
+                                  "titleEffect": {
+                                    "enum": [
+                                      "plain",
+                                      "outline",
+                                      "gradient",
+                                      "glow"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "module",
+                                  "sources"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 25,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "document",
+                            "definitions",
+                            "blocks",
+                            "showcases",
+                            "showcaseData",
+                            "cost"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "presentation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "modules": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "maxLength": 64,
+                                    "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                    "type": "string"
+                                  },
+                                  "options": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "interval": {
+                                        "enum": [
+                                          "day",
+                                          "week",
+                                          "month"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "layout": {
+                                        "enum": [
+                                          "covers",
+                                          "rows"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "limit": {
+                                        "maximum": 24,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "metric": {
+                                        "enum": [
+                                          "reads",
+                                          "finished-chapters"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "rail": {
+                                        "type": "boolean"
+                                      },
+                                      "shuffle": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "source": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "block": {
+                                            "maxLength": 64,
+                                            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "query-block",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "block"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "collection": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "collection",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "collection"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "context": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "context",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "context"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "tabs": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "maxLength": 64,
+                                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "labels": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "de": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "en": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "es": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "fr": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "ja": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "ko": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "zh-Hans": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "zh-Hant": {
+                                              "maxLength": 120,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "type": "object"
+                                        },
+                                        "source": {
+                                          "anyOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "block": {
+                                                  "maxLength": 64,
+                                                  "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "const": "query-block",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "block"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "collection": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "const": "collection",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "collection"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "context": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "const": "context",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "context"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "label",
+                                        "source"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 8,
+                                    "type": "array"
+                                  },
+                                  "title": {
+                                    "maxLength": 120,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "titles": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "de": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "en": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "es": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "fr": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ja": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ko": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hans": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hant": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": {
+                                    "enum": [
+                                      "hero-carousel",
+                                      "chip-nav",
+                                      "announcement",
+                                      "shelf",
+                                      "ranking",
+                                      "editorial-list",
+                                      "quote-stream",
+                                      "people",
+                                      "rising",
+                                      "decision-log",
+                                      "discussion-list"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "title",
+                                  "source"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 24,
+                              "type": "array"
+                            },
+                            "navigation": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "href": {
+                                    "pattern": "^/(?!/)[^\\s]{0,255}$",
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "maxLength": 120,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "href"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 12,
+                              "type": "array"
+                            },
+                            "official": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "theme": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "preset": {
+                              "enum": [
+                                "clean",
+                                "editorial",
+                                "vibrant",
+                                "serial"
+                              ],
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "zone-presentation-v2",
+                              "type": "string"
+                            },
+                            "slides": {
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "art": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "cutout": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "alt": {
+                                                "maxLength": 180,
+                                                "type": "string"
+                                              },
+                                              "focalArea": {
+                                                "maxLength": 80,
+                                                "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "use"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "landscape": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "alt": {
+                                                "maxLength": 180,
+                                                "type": "string"
+                                              },
+                                              "focalArea": {
+                                                "maxLength": 80,
+                                                "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "use"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "logos": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "alt": {
+                                                  "maxLength": 180,
+                                                  "type": "string"
+                                                },
+                                                "anchor": {
+                                                  "enum": [
+                                                    "start-bottom",
+                                                    "center-top",
+                                                    "center-middle",
+                                                    "center-bottom"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "focalArea": {
+                                                  "maxLength": 80,
+                                                  "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 64,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "tone": {
+                                                  "enum": [
+                                                    "dark",
+                                                    "light"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "use": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "use",
+                                                "language",
+                                                "tone",
+                                                "anchor"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 32,
+                                            "type": "array"
+                                          },
+                                          "portrait": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "alt": {
+                                                "maxLength": 180,
+                                                "type": "string"
+                                              },
+                                              "focalArea": {
+                                                "maxLength": 80,
+                                                "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "use"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "endsAt": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      },
+                                      "kicker": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "kickers": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "de": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "en": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "es": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "fr": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ja": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ko": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hans": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hant": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "startsAt": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "titles": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "de": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "en": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "es": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "fr": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ja": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ko": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hans": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hant": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "work": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "work"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "art": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "cutout": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "alt": {
+                                                "maxLength": 180,
+                                                "type": "string"
+                                              },
+                                              "focalArea": {
+                                                "maxLength": 80,
+                                                "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "use"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "landscape": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "alt": {
+                                                "maxLength": 180,
+                                                "type": "string"
+                                              },
+                                              "focalArea": {
+                                                "maxLength": 80,
+                                                "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "use"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "logos": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "alt": {
+                                                  "maxLength": 180,
+                                                  "type": "string"
+                                                },
+                                                "anchor": {
+                                                  "enum": [
+                                                    "start-bottom",
+                                                    "center-top",
+                                                    "center-middle",
+                                                    "center-bottom"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "focalArea": {
+                                                  "maxLength": 80,
+                                                  "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 64,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "tone": {
+                                                  "enum": [
+                                                    "dark",
+                                                    "light"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "use": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "use",
+                                                "language",
+                                                "tone",
+                                                "anchor"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 32,
+                                            "type": "array"
+                                          },
+                                          "portrait": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "alt": {
+                                                "maxLength": 180,
+                                                "type": "string"
+                                              },
+                                              "focalArea": {
+                                                "maxLength": 80,
+                                                "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "use"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "endsAt": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "href": {
+                                        "pattern": "^/(?!/)[^\\s]{0,255}$",
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      },
+                                      "kicker": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "kickers": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "de": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "en": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "es": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "fr": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ja": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ko": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hans": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hant": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "startsAt": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "titles": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "de": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "en": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "es": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "fr": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ja": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "ko": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hans": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "zh-Hant": {
+                                            "maxLength": 120,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "href"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "maxItems": 6,
+                              "type": "array"
+                            },
+                            "tokens": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "accent": {
+                                  "pattern": "^#[0-9a-fA-F]{6}$",
+                                  "type": "string"
+                                },
+                                "cardRadius": {
+                                  "enum": [
+                                    "sm",
+                                    "md",
+                                    "lg"
+                                  ],
+                                  "type": "string"
+                                },
+                                "colorScheme": {
+                                  "enum": [
+                                    "system",
+                                    "light",
+                                    "dark"
+                                  ],
+                                  "type": "string"
+                                },
+                                "coverStyle": {
+                                  "enum": [
+                                    "portrait",
+                                    "square",
+                                    "landscape"
+                                  ],
+                                  "type": "string"
+                                },
+                                "density": {
+                                  "enum": [
+                                    "compact",
+                                    "comfortable"
+                                  ],
+                                  "type": "string"
+                                },
+                                "fontPairing": {
+                                  "enum": [
+                                    "sans",
+                                    "serif",
+                                    "rounded"
+                                  ],
+                                  "type": "string"
+                                },
+                                "headingFontScale": {
+                                  "enum": [
+                                    "md",
+                                    "lg"
+                                  ],
+                                  "type": "string"
+                                },
+                                "pageSurface": {
+                                  "enum": [
+                                    "flat",
+                                    "cards"
+                                  ],
+                                  "type": "string"
+                                },
+                                "surfaceTint": {
+                                  "enum": [
+                                    "none",
+                                    "subtle",
+                                    "accent"
+                                  ],
+                                  "type": "string"
+                                },
+                                "titleEffect": {
+                                  "enum": [
+                                    "plain",
+                                    "outline",
+                                    "gradient",
+                                    "glow"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "colorScheme",
+                                "accent",
+                                "density",
+                                "cardRadius",
+                                "headingFontScale",
+                                "surfaceTint",
+                                "fontPairing",
+                                "pageSurface",
+                                "coverStyle",
+                                "titleEffect"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "preset",
+                            "tokens",
+                            "navigation",
+                            "modules",
+                            "slides"
+                          ],
+                          "type": "object"
+                        },
+                        "renderTokens": {
+                          "properties": {
+                            "accent": {
+                              "pattern": "^#[0-9a-fA-F]{6}$",
+                              "type": "string"
+                            },
+                            "cardRadius": {
+                              "enum": [
+                                "sm",
+                                "md",
+                                "lg"
+                              ],
+                              "type": "string"
+                            },
+                            "colorScheme": {
+                              "enum": [
+                                "system",
+                                "light",
+                                "dark"
+                              ],
+                              "type": "string"
+                            },
+                            "coverStyle": {
+                              "enum": [
+                                "portrait",
+                                "square",
+                                "landscape"
+                              ],
+                              "type": "string"
+                            },
+                            "density": {
+                              "enum": [
+                                "compact",
+                                "comfortable"
+                              ],
+                              "type": "string"
+                            },
+                            "fontPairing": {
+                              "enum": [
+                                "sans",
+                                "serif",
+                                "rounded"
+                              ],
+                              "type": "string"
+                            },
+                            "headingFontScale": {
+                              "enum": [
+                                "md",
+                                "lg"
+                              ],
+                              "type": "string"
+                            },
+                            "pageSurface": {
+                              "enum": [
+                                "flat",
+                                "cards"
+                              ],
+                              "type": "string"
+                            },
+                            "surfaceTint": {
+                              "enum": [
+                                "none",
+                                "subtle",
+                                "accent"
+                              ],
+                              "type": "string"
+                            },
+                            "textOnAccent": {
+                              "pattern": "^#[0-9a-f]{6}$",
+                              "type": "string"
+                            },
+                            "titleEffect": {
+                              "enum": [
+                                "plain",
+                                "outline",
+                                "gradient",
+                                "glow"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "colorScheme",
+                            "accent",
+                            "density",
+                            "cardRadius",
+                            "headingFontScale",
+                            "surfaceTint",
+                            "fontPairing",
+                            "pageSurface",
+                            "coverStyle",
+                            "titleEffect",
+                            "textOnAccent"
+                          ],
+                          "type": "object"
+                        },
+                        "slideMedia": {
+                          "items": {
+                            "properties": {
+                              "art": {
+                                "properties": {
+                                  "cutout": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "alt": {
+                                        "maxLength": 180,
+                                        "type": "string"
+                                      },
+                                      "crop": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "cropHeight": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "cropWidth": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "focalArea": {
+                                        "maxLength": 80,
+                                        "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                        "type": "string"
+                                      },
+                                      "height": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "mediaType": {
+                                        "type": "string"
+                                      },
+                                      "srcset": {
+                                        "items": {
+                                          "properties": {
+                                            "height": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "type": {
+                                              "enum": [
+                                                "image/avif",
+                                                "image/webp"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "url": {
+                                              "type": "string"
+                                            },
+                                            "width": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "url",
+                                            "width",
+                                            "height",
+                                            "type"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 12,
+                                        "type": "array"
+                                      },
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "use",
+                                      "crop",
+                                      "cropWidth",
+                                      "cropHeight",
+                                      "url",
+                                      "width",
+                                      "height",
+                                      "mediaType",
+                                      "srcset"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "landscape": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "alt": {
+                                        "maxLength": 180,
+                                        "type": "string"
+                                      },
+                                      "crop": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "cropHeight": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "cropWidth": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "focalArea": {
+                                        "maxLength": 80,
+                                        "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                        "type": "string"
+                                      },
+                                      "height": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "mediaType": {
+                                        "type": "string"
+                                      },
+                                      "srcset": {
+                                        "items": {
+                                          "properties": {
+                                            "height": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "type": {
+                                              "enum": [
+                                                "image/avif",
+                                                "image/webp"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "url": {
+                                              "type": "string"
+                                            },
+                                            "width": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "url",
+                                            "width",
+                                            "height",
+                                            "type"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 12,
+                                        "type": "array"
+                                      },
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "use",
+                                      "crop",
+                                      "cropWidth",
+                                      "cropHeight",
+                                      "url",
+                                      "width",
+                                      "height",
+                                      "mediaType",
+                                      "srcset"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "logos": {
+                                    "items": {
+                                      "properties": {
+                                        "alt": {
+                                          "maxLength": 180,
+                                          "type": "string"
+                                        },
+                                        "anchor": {
+                                          "enum": [
+                                            "start-bottom",
+                                            "center-top",
+                                            "center-middle",
+                                            "center-bottom"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "crop": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "cropHeight": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "cropWidth": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "focalArea": {
+                                          "maxLength": 80,
+                                          "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                          "type": "string"
+                                        },
+                                        "height": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "mediaType": {
+                                          "type": "string"
+                                        },
+                                        "srcset": {
+                                          "items": {
+                                            "properties": {
+                                              "height": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "type": {
+                                                "enum": [
+                                                  "image/avif",
+                                                  "image/webp"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "url": {
+                                                "type": "string"
+                                              },
+                                              "width": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "url",
+                                              "width",
+                                              "height",
+                                              "type"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "maxItems": 12,
+                                          "type": "array"
+                                        },
+                                        "tone": {
+                                          "enum": [
+                                            "dark",
+                                            "light"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        },
+                                        "use": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "width": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "use",
+                                        "crop",
+                                        "cropWidth",
+                                        "cropHeight",
+                                        "url",
+                                        "width",
+                                        "height",
+                                        "mediaType",
+                                        "srcset",
+                                        "language",
+                                        "tone",
+                                        "anchor"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "portrait": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "alt": {
+                                        "maxLength": 180,
+                                        "type": "string"
+                                      },
+                                      "crop": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "cropHeight": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "cropWidth": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "focalArea": {
+                                        "maxLength": 80,
+                                        "pattern": "^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$",
+                                        "type": "string"
+                                      },
+                                      "height": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "mediaType": {
+                                        "type": "string"
+                                      },
+                                      "srcset": {
+                                        "items": {
+                                          "properties": {
+                                            "height": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "type": {
+                                              "enum": [
+                                                "image/avif",
+                                                "image/webp"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "url": {
+                                              "type": "string"
+                                            },
+                                            "width": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "url",
+                                            "width",
+                                            "height",
+                                            "type"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 12,
+                                        "type": "array"
+                                      },
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "use",
+                                      "crop",
+                                      "cropWidth",
+                                      "cropHeight",
+                                      "url",
+                                      "width",
+                                      "height",
+                                      "mediaType",
+                                      "srcset"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "landscape",
+                                  "portrait",
+                                  "cutout",
+                                  "logos"
+                                ],
+                                "type": "object"
+                              },
+                              "id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "art"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 6,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "presentation",
+                        "moduleData",
+                        "slideMedia",
+                        "renderTokens",
+                        "navigation"
+                      ],
+                      "type": "object"
                     },
                     "publishedPage": {
                       "~elyTyp": 7,
@@ -626717,6 +629928,7 @@
                     "direction",
                     "cost",
                     "draft",
+                    "preview",
                     "publishedPage",
                     "slideMedia"
                   ],
