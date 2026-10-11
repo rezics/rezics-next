@@ -119,7 +119,7 @@ const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
 const batchSize = (tier: RegressionTier, files: number): number =>
-  tier === 'integration' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15 : files;
+  tier === 'integration' || tier === 'e2e' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15 : files;
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 function atomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });

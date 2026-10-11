@@ -458,6 +458,67 @@ describe('pinned main-wide regression', () => {
     } finally { status.mockRestore(); r.cleanup(); }
   });
 
+  test('browser batches reuse the integration width and keep mixed, journey-only and standalone Storybook commands', async () => {
+    const r = repo();
+    try {
+      const extra = [
+        ...Array.from({ length: 8 }, (_, index) => `apps/web/tests/extra-${index}.e2e.ts`),
+        'apps/web/features/extra.stories.tsx', 'packages/ui/src/extra.stories.tsx',
+      ];
+      for (const file of extra) { r.files.push({ file, tier: 'e2e', outcome: 'pending' }); r.write(file, 'pass\n'); }
+      r.commit();
+      const result = await r.run({ runId: 'browser-batches', only: ['e2e'], integrationBatches: 0 });
+      const batches = result.batches.filter(batch => batch.tier === 'e2e');
+      expect(batches.map(batch => batch.files.length)).toEqual([5, 5, 2]);
+      expect(batches.flatMap(batch => batch.files)).toEqual(r.files.filter(file => file.tier === 'e2e').map(file => file.file));
+      expect(result.files.filter(file => file.tier === 'e2e').every(file => file.outcome === 'passed')).toBe(true);
+      const commands = batches.map(batch => regressionBatchCommand(batch, '/disk/report.json', '/disk/stories.xml'));
+      expect(commands[0]).toContain('--storybook');
+      expect(commands[0]).not.toContain('apps/web/features/example.stories.tsx');
+      expect(commands[1]).not.toContain('--storybook');
+      expect(commands[2]).toContain('--reporter=junit');
+      expect(commands[2]).not.toContain('--tier');
+      for (const file of batches[2]!.files) expect(commands[2]).toContain(file);
+      r.calls.length = 0;
+      await r.run({ resume: 'browser-batches' });
+      expect(r.calls).toHaveLength(0);
+    } finally { r.cleanup(); }
+  });
+
+  for (const classification of ['deadline', 'infrastructure'] as const) {
+    test(`a browser startup ${classification} affects only its batch and later files still run`, async () => {
+      const r = repo();
+      try {
+        for (let index = 0; index < 10; index++) {
+          const file = `apps/web/tests/extra-${index}.e2e.ts`;
+          r.files.push({ file, tier: 'e2e', outcome: 'pending' }); r.write(file, 'pass\n');
+        }
+        r.commit();
+        const cause = classification === 'deadline' ? 'Browser startup timed out before any file ran'
+          : 'Cannot connect to the Docker daemon';
+        const result = await r.run({ runId: `browser-startup-${classification}`, only: ['e2e'], runner: async (...args) => {
+          const produced = await r.runner(...args);
+          return args[1].id === 'e2e-1' ? { ...produced, code: 1, outcomes: {}, classification, evidence: cause } : produced;
+        } });
+        const batches = result.batches.filter(batch => batch.tier === 'e2e');
+        expect(batches.map(batch => batch.files.length)).toEqual([5, 5, 2]);
+        expect(batches[0]!.attempts).toHaveLength(classification === 'infrastructure' ? 2 : 1);
+        for (const file of batches[0]!.files) {
+          expect(result.files.find(entry => entry.file === file)!.outcome).toBe(classification === 'infrastructure' ? 'void' : 'missing');
+        }
+        for (const batch of batches.slice(1)) {
+          expect(batch.state).toBe('done');
+          expect(batch.attempts).toHaveLength(1);
+          for (const file of batch.files) expect(result.files.find(entry => entry.file === file)!.outcome).toBe('passed');
+        }
+        expect(result.status).toBe('incomplete');
+        expect(inboxEntries(r.options.stateDir, 'program')).toEqual([expect.objectContaining({
+          classification, runEvent: { batchId: 'e2e-1', tier: 'e2e', fileCount: 5, cause },
+        })]);
+      } finally { r.cleanup(); }
+    });
+  }
+
   test('routine selection excludes browser tiers with a resumable reason; explicit full selection runs them', async () => {
     const r = repo();
     try {
