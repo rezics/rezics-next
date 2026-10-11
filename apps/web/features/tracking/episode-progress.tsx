@@ -16,21 +16,23 @@ const nameOf = (episode: Episode, t: Copy) =>
 
 type Selected = { episode: Episode; mark: Mark | 'loading' | 'failed' };
 
+type LastWatched = { kind: 'named'; label: string } | { kind: 'unnamed' };
+
 /**
  * The furthest watched main part when there is no unbroken run: resume's part (same source as
  * continue), else the ordered episode immediately before `next`. Episode numbers are labels, so this
  * never subtracts from `next.number`.
  */
-function lastWatchedPlace(read: Standing, t: Copy): string | 'some' | null {
+function lastWatchedPlace(read: Standing, t: Copy): LastWatched | null {
   if (read.furthest) {
     const held = read.mains.items.find(item => item.occurrence === read.furthest!.occurrence);
-    if (held) return nameOf(held, t);
-    if (read.furthest.label) return read.furthest.label;
-    return 'some';
+    if (held) return { kind: 'named', label: nameOf(held, t) };
+    if (read.furthest.label) return { kind: 'named', label: read.furthest.label };
+    return { kind: 'unnamed' };
   }
   if (!read.next) return null;
   const index = read.mains.items.findIndex(item => item.occurrence === read.next!.occurrence);
-  return index > 0 ? nameOf(read.mains.items[index - 1]!, t) : null;
+  return index > 0 ? { kind: 'named', label: nameOf(read.mains.items[index - 1]!, t) } : null;
 }
 
 /**
@@ -44,8 +46,8 @@ export function episodeProgressWhere(read: Standing, total: number | null, t: Co
       : t.watchedThrough({ number: String(read.through.number) });
   }
   const place = lastWatchedPlace(read, t);
-  if (place === 'some') return t.someWatched;
-  return place === null ? t.noneWatched : t.lastWatched({ place });
+  if (place === null) return t.noneWatched;
+  return place.kind === 'unnamed' ? t.someWatched : t.lastWatched({ place: place.label });
 }
 
 /**
