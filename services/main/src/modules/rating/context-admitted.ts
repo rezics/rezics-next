@@ -1,5 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -52,7 +52,7 @@ export async function createAdmittedRatingContext(
     }
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof CancelledActivation
       || error instanceof RatingRealmUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-context');
   }

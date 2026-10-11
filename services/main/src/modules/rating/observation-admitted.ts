@@ -1,5 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
@@ -49,7 +49,7 @@ export async function setAdmittedStandingRating(
     return { ...await checkedRatingReceipt(env, terminal, registered, input, digest, daily),
       replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
+    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof RatingObservationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-observation');
   }

@@ -1,7 +1,7 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { requireSelectedPlatformCapability, type AccessExposure, type Exposure } from '../access/exposure.ts';
 import { resolvedSemanticCapabilities } from './selected-capability.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry,
   type VerifiedPrincipal } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -102,7 +102,8 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
         if (error instanceof SemanticChangeRejected && await call.readTerminal(registered.id)) {
           // Dispatch sealed a typed refusal; record it in Access before reporting it.
         } else if (error instanceof IdempotencyConflict || error instanceof SemanticChangeRejected
-          || error instanceof CommandRejected || error instanceof SemanticTargetUnavailable) throw error;
+          || error instanceof AdmissionLockBusy || error instanceof CommandRejected
+          || error instanceof SemanticTargetUnavailable) throw error;
       }
     }
     let terminal = await call.readTerminal(registered.id);
@@ -122,7 +123,7 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
     if (call.action === 'relation.change' && error instanceof SemanticChangeRejected && error.code === 'reserved-owner') {
       throw new ProjectionParticipantRefused();
     }
-    if (error instanceof IdempotencyConflict || error instanceof StaleSemanticHead
+    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleSemanticHead
       || error instanceof SemanticChangeRejected || error instanceof CommandRejected
       || error instanceof SemanticTargetUnavailable || error instanceof CancelledActivation
       || error instanceof ModelGenerationChanged) throw error;

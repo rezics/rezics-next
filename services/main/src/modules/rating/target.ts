@@ -3,7 +3,7 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type RegisteredAdmission }
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry, type RegisteredAdmission }
   from '../access/admission.ts';
 import { resolveTargets, type TargetReadSession } from '../target/resolve.ts';
 import type { Base, ResolvedTarget } from '../target/contract.ts';
@@ -213,7 +213,7 @@ function checked<T extends RatingContextReceipt | TargetRatingReceipt>(receipt: 
 export class RatingWriteBusy extends Error {}
 
 function lockFailure(error: unknown): boolean {
-  return !!error && typeof error === 'object' && 'code' in error
+  return error instanceof AdmissionLockBusy || !!error && typeof error === 'object' && 'code' in error
     && ['40001', '40P01', '55P03', '57014'].includes(String(error.code));
 }
 

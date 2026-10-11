@@ -1,5 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
@@ -50,7 +50,7 @@ export async function setAdmittedRatingDefaultPolicy(
     if (terminal.outcome === 'cancelled') throw new AdmissionDenied('Rating policy admission was cancelled');
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof StaleRatingPolicy
+    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingPolicy
       || error instanceof AdmissionDenied) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-policy');
   }

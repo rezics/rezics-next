@@ -1,5 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -47,7 +47,8 @@ export async function createAdmittedGlobalRatingContext(env: WorkActivationEnvir
     await access.recordGraphOutcome(registered.id, terminal);
     return { ...checkedGlobalContextReceipt(terminal, registered, digest), replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict
+      || error instanceof CancelledActivation) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-context');
   }
 }
@@ -76,7 +77,7 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
     await access.recordGraphOutcome(registered.id, terminal);
     return { ...checkedGlobalRatingReceipt(terminal, registered, input, digest), replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
+    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof RatingObservationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-observation');
   }

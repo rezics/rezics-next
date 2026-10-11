@@ -2,6 +2,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import {
   AdmissionDenied,
   AdmissionExpired,
+  AdmissionLockBusy,
   type AccessAdmissionRegistry,
 } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -102,6 +103,7 @@ export async function admittedQuestionPresentationChange(
     };
   } catch (error) {
     if (
+      error instanceof AdmissionLockBusy ||
       error instanceof IdempotencyConflict ||
       error instanceof CancelledActivation ||
       error instanceof SemanticChangeRejected ||

@@ -162,6 +162,8 @@ export interface GraphTerminalProof {
 export class AdmissionDenied extends Error {}
 export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
+/** A command transaction timed out waiting for a row lock; retry the same key. */
+export class AdmissionLockBusy extends Error {}
 /** A removal that would leave a resource with no controller. Distinct from an idempotency clash. */
 export class AdmissionControllerContinuity extends Error {}
 export class AdmissionExpired extends Error {}
@@ -265,6 +267,9 @@ async function rollback(client: PoolClient): Promise<void> {
 function admissionError(error: unknown): unknown {
   if (error instanceof GroupUnavailable || error instanceof PolicyUnavailable) {
     return new AdmissionUnavailable(error.message);
+  }
+  if (error && typeof error === 'object' && 'code' in error && String(error.code) === '55P03') {
+    return new AdmissionLockBusy('Access admission lock timed out');
   }
   // A failed indexed authority read, including a PostgreSQL timeout or a
   // connection failure, cannot become evidence that authority is absent.

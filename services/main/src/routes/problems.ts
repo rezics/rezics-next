@@ -9,7 +9,7 @@ import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing
   from '../../../content/src/comments.ts';
 import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from '../infrastructure/fuseki.ts';
-import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionUnavailable }
+import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionLockBusy, AdmissionUnavailable }
   from '../modules/access/admission.ts';
 import {
   ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
@@ -390,6 +390,9 @@ export function typedRefusal(error: unknown): Response | undefined {
   }
   if (error instanceof AdmissionControllerContinuity) {
     return problem(409, 'controller_continuity', 'This change would leave a resource without a controller');
+  }
+  if (error instanceof AdmissionLockBusy) {
+    return problem(409, 'admission_busy', 'Access admission is busy; retry the same request', { 'retry-after': '1' });
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
     return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');
