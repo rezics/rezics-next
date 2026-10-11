@@ -11,6 +11,8 @@ import { accountCredentialsPresent } from '../../../services/main/src/modules/er
 import { ensureRetentionDomain, readErasure, retireRetentionDomain } from '../../../services/main/src/modules/erasure/journal.ts';
 import { readRestoredGraphReleaseExpectation, readRestoredGraphReleaseProof } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { withRetainedErasureRestoreScenario } from './retained-erasure-recovery-fixture.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { publishedWork, unerased } from '../../../services/main/src/modules/work/public-patterns.ts';
 
 test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens protected reads and preserves sanitized archive custody', async () => {
   await withRetainedErasureRestoreScenario(async scenario => {
@@ -18,6 +20,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
       runId, state, compose, recoveryKey, relay, erased, operator, actor, work,
       laterAuthorityScope, first, second, third, payload, unrelated, later, staleTarget,
       laterPreparation, contentErasure, accountErasureId, pinnedErasure, ownerErasure,
+      surviving,
       credentials, exact, bindCandidate, ownerOperationFor, interruptBeforeOwnerRelease,
       offline, readJournal, refreshOperatorToken, pools, replayClusters,
     } = scenario;
@@ -79,11 +82,43 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
     const reopened = await readJournal(successfulMain);
     expect(reopened.status).toBe(200);
     expect(await reopened.json()).toMatchObject({ erasureId: contentErasure.erasureId, stage: 'verified' });
-    const protectedWorkRead = await successfulMain.handle(new Request(
+    // Inspect the restored graph itself: the original Work still exists, but
+    // its current Content pin is erased. Release must not disclose that closure.
+    const restoredGraph = successfulCandidate.candidateGraph.fuseki;
+    const erasedBasis = await restoredGraph.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/>
+      SELECT ?head ?publication ?revision WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork ; rv:head ?head .
+          ?variant rv:resource ${iri(work)} ; rv:contentPublicationHead ?publication }
+        GRAPH ${iri(GRAPHS.revisions)} { ?publication rv:contentRevision ?revision .
+          ?revision a rv:ErasedRevision }
+      }`);
+    expect(erasedBasis.results?.bindings).toEqual([expect.objectContaining({
+      head: expect.objectContaining({ type: 'uri' }),
+      revision: expect.objectContaining({ value: `urn:rezics:content:revision:${later}` }),
+    })]);
+    const erasedWorkRead = await successfulMain.handle(new Request(
       `http://main.local/v1/works/${work.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`,
       { headers: { authorization: `Bearer ${await refreshOperatorToken()}` } }));
+    expect(erasedWorkRead.status).toBe(404);
+    const survivingBasis = await restoredGraph.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/>
+      SELECT ?main ?publicSelection ?publicContribution ?publicDecision ?publicDraft WHERE {
+        ${publishedWork(iri(surviving.work), '?main')}
+        ${unerased(iri(surviving.work))}
+      }`);
+    expect(survivingBasis.results?.bindings).toEqual([{
+      main: { type: 'uri', value: surviving.mainVersion },
+      publicSelection: { type: 'uri', value: surviving.selection },
+      publicContribution: { type: 'uri', value: surviving.contribution },
+      publicDecision: { type: 'uri', value: surviving.publicationDecision },
+      publicDraft: { type: 'uri', value: surviving.draftRevision },
+    }]);
+    const protectedWorkRead = await successfulMain.handle(new Request(
+      `http://main.local/v1/works/${surviving.work.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${await refreshOperatorToken()}` } }));
     expect(protectedWorkRead.status).toBe(200);
-    expect(await protectedWorkRead.json()).toMatchObject({ id: work });
+    expect(await protectedWorkRead.json()).toMatchObject({ id: surviving.work });
 
     // IAM11: build a fresh logical archive only from the reconciled cut. This
     // local, separate cluster represents off-host custody; no pre-erasure
@@ -179,12 +214,18 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
     expect(await readErasure(offRelay, accountErasureId)).toMatchObject({ suppression: 'suppressed' });
     for (const [entry, revisionId] of [[pinnedErasure, later], [staleErasure, staleTarget]] as const) {
       const archivedErasure = await readErasure(offRelay, entry.erasureId);
+      const retainedErasure = await readErasure(relay, entry.erasureId);
+      // Archive hosts can use a different database collation. Custody preserves
+      // every disposition field, not the locale's ordering of domain labels.
+      const byDomain = (left: { domain: string }, right: { domain: string }) =>
+        left.domain < right.domain ? -1 : left.domain > right.domain ? 1 : 0;
+      expect({ ...archivedErasure, dispositions: [...archivedErasure.dispositions].sort(byDomain) })
+        .toEqual({ ...retainedErasure, dispositions: [...retainedErasure.dispositions].sort(byDomain) });
       expect(archivedErasure).toMatchObject({ erasureId: entry.erasureId,
         erasureEpoch: entry.erasureEpoch, stage: 'inventory_complete',
         suppression: 'suppressed', destruction: 'retained',
         targets: [expect.objectContaining({ ordinal: 1, owner: 'content',
           kind: 'content_revision', ref: revisionId })] });
-      expect(archivedErasure).toEqual(await readErasure(relay, entry.erasureId));
     }
 
     // Retire the three historical physical backup directories only after the

@@ -34,6 +34,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import * as admission from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { publishAdmittedContent } from '../../../services/main/src/modules/content-publication/publish-admitted.ts';
+import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
+import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
+import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
 import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
 import { settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
 import { readGraphErasureProof, suppressGraphContentRevisions, heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
@@ -1080,6 +1083,46 @@ export async function createRetainedErasureRestoreScenario() {
       graph_receipt: laterNativeReceipt, graph_data_epoch: laterPublication.graphDataEpoch,
       graph_sequence: laterNativeSequence });
     expect((await exact(contentPool, staleTarget)).status).toBe('available');
+
+    // The erased publication makes its own Work unavailable even to an authorized
+    // reader. A separate, genuinely reviewed publication proves surviving reads.
+    const survivingWork = await createAdmittedMetadataWork(workEnvironment, verifier, registry, request, {
+      title: 'Unrelated publication survives retained erasure', language: 'en', actingSubject: actor,
+      idempotencyKey: `erasure-surviving-work-${randomUUID()}` });
+    await grant(`contribution:create:${survivingWork.work}`, 'contribution.create');
+    const survivingDraft = await createAdmittedTextContribution(workEnvironment, verifier, registry, request, {
+      work: survivingWork.work, body: 'unrelated public text', language: 'en', actingSubject: actor,
+      idempotencyKey: `erasure-surviving-draft-${randomUUID()}` });
+    if (!survivingDraft.contribution || !survivingDraft.draftRevision) {
+      throw new Error('surviving Contribution draft did not activate');
+    }
+    await grant(`contribution:read:${survivingDraft.contribution}`, 'contribution.read');
+    await grant(`contribution:publish:${survivingDraft.contribution}`, 'contribution.publish');
+    const survivingPublication = await publishAdmittedTextContribution(workEnvironment,
+      verifier, registry, request, {
+        contribution: survivingDraft.contribution, expectedDraftHead: survivingDraft.draftRevision,
+        expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
+        actingSubject: actor, idempotencyKey: `erasure-surviving-publication-${randomUUID()}` });
+    if (survivingPublication.outcome !== 'succeeded' || !survivingPublication.publicationDecision) {
+      throw new Error('surviving Contribution public eligibility did not activate');
+    }
+    await grant(`publication:select:${survivingWork.mainVersion}`, 'publication.select');
+    const survivingSelection = await selectAdmittedMainDefault(workEnvironment, verifier, registry, request, {
+      context: { kind: 'main-version-default', id: survivingWork.mainVersion }, work: survivingWork.work,
+      contribution: survivingDraft.contribution, publicationDecision: survivingPublication.publicationDecision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor,
+      idempotencyKey: `erasure-surviving-selection-${randomUUID()}` });
+    if (survivingSelection.outcome !== 'succeeded' || !survivingSelection.selection) {
+      throw new Error('surviving Main publication selection did not activate');
+    }
+    const surviving = { work: survivingWork.work, mainVersion: survivingWork.mainVersion,
+      contribution: survivingDraft.contribution, draftRevision: survivingDraft.draftRevision,
+      publicationDecision: survivingPublication.publicationDecision, selection: survivingSelection.selection };
+    const survivingRead = await main.handle(new Request(
+      `http://main.local/v1/works/${survivingWork.work.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${await refreshOperatorToken()}` } }));
+    expect(survivingRead.status).toBe(200);
+    expect(await survivingRead.json()).toMatchObject({ id: survivingWork.work });
     const finalSourceCut = await readSourceAfterDrain(second.consumer);
     expect(BigInt(finalSourceCut.sequence)).toBeGreaterThan(BigInt(apiErasureCut.sequence));
     const third = await captureAndBackup('after-authority');
@@ -1179,6 +1222,7 @@ export async function createRetainedErasureRestoreScenario() {
       runId, state, compose, recoveryKey, account, access, contentPool, relay,
       issuer, erased, operator, actor, work, laterAuthorityScope, first, second, third,
       payload, payloadBody, unrelated, later, staleTarget, laterPreparation, originalPayload,
+      surviving,
       contentErasure, accountErasureId, pinnedErasure, ownerErasure, credentials, exact, bindCandidate,
       readFindings, expectFinding, expectFindingPrefix, expectCustodyFindings, expectBothHoldsClosed,
       ownerOperationFor, interruptBeforeOwnerRelease, offline, readJournal, refreshOperatorToken,
