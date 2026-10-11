@@ -184,19 +184,22 @@ function sqlWord(sql: string, start: number, word: string): number | undefined {
   return match ? cursor + match[0].length : undefined;
 }
 
-function qualifiedTarget(sql: string, start: number): { table: AccessFixtureWriteTable; end: number } | undefined {
-  const schema = sqlIdentifier(sql, start);
-  if (!schema || schema.value.toLowerCase() !== 'access') return undefined;
-  let cursor = skipSqlTrivia(sql, schema.end);
-  if (sql[cursor] !== '.') return undefined;
-  cursor = skipSqlTrivia(sql, cursor + 1);
-  const name = sqlIdentifier(sql, cursor);
-  if (!name) return undefined;
-  const normalized = name.value.toLowerCase();
+function sqlTableReference(sql: string, start: number): { schema?: string; name: string; end: number } | undefined {
+  const first = sqlIdentifier(sql, start);
+  if (!first) return undefined;
+  const separator = skipSqlTrivia(sql, first.end);
+  if (sql[separator] !== '.') return { name: first.value, end: first.end };
+  const name = sqlIdentifier(sql, skipSqlTrivia(sql, separator + 1));
+  return name ? { schema: first.value, name: name.value, end: name.end } : undefined;
+}
+
+function accessFixtureTable(reference: { schema?: string; name: string }): AccessFixtureWriteTable | undefined {
+  if (reference.schema?.toLowerCase() !== 'access') return undefined;
+  const normalized = reference.name.toLowerCase();
   if (tableNameSet.has(normalized)) {
-    return { table: `access.${normalized as (typeof tableNames)[number]}`, end: name.end };
+    return `access.${normalized as (typeof tableNames)[number]}`;
   }
-  if (name.value === templateTable) return { table: 'access.<template table>', end: name.end };
+  if (reference.name === templateTable) return 'access.<template table>';
   return undefined;
 }
 
@@ -225,9 +228,11 @@ function writesInLiteral(sql: string): AccessFixtureWriteTable[] {
     }
     cursor = skipSqlTrivia(sql, cursor);
     while (true) {
-      const target = qualifiedTarget(sql, cursor);
-      if (target && (kind !== 'copy' || copyHasFrom(sql, target.end))) writes.push(target.table);
-      if (kind !== 'truncate' || !target) break;
+      const target = sqlTableReference(sql, cursor);
+      if (!target) break;
+      const table = accessFixtureTable(target);
+      if (table && (kind !== 'copy' || copyHasFrom(sql, target.end))) writes.push(table);
+      if (kind !== 'truncate') break;
       cursor = skipSqlTrivia(sql, target.end);
       if (sql[cursor] !== ',') break;
       cursor = skipSqlTrivia(sql, cursor + 1);
@@ -246,9 +251,7 @@ export function scanAccessFixtureWriteText(source: string, file = '<source>'): A
 
 function isExcluded(file: string): boolean {
   const normalized = file.split(sep).join('/');
-  if (normalized.startsWith('services/main/src/modules/access/')) return true;
-  if (/(^|\/)migrations?(\/|$)/i.test(normalized)) return true;
-  return false;
+  return normalized.startsWith('services/main/src/modules/access/');
 }
 
 function sourceFiles(root: string): string[] {

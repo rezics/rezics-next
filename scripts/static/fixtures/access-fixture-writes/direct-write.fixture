@@ -5,3 +5,4 @@ const truncated = `TRUNCATE TABLE access.scope_gate`;
 const copied = `COPY access.permission_grant (id) FROM STDIN`;
 const copiedOut = `COPY access.scope_gate TO STDOUT`;
 const selected = `SELECT * FROM access.permission_grant`;
+const truncatedMany = `TRUNCATE content.work, access.permission_grant CASCADE`;

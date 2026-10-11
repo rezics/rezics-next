@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import {
   accessFixtureWriteDebtFiles, scanAccessFixtureWriteText, scanAccessFixtureWrites,
   staleAccessFixtureWriteDebt,
@@ -23,7 +23,33 @@ test('finds direct access writes, including an inline-schema template, and allow
   ]);
   expect(scanAccessFixtureWriteText(lines[5]!, 'copy-to.fixture')).toEqual([]);
   expect(scanAccessFixtureWriteText(lines[6]!, 'read-only.fixture')).toEqual([]);
+  expect(scanAccessFixtureWriteText(lines[7]!, 'truncate-list.fixture')).toEqual([
+    { file: 'truncate-list.fixture', table: 'access.permission_grant' },
+  ]);
   expect(scanAccessFixtureWriteText(readFixture('grant-authority.fixture'), 'grant-authority.fixture')).toEqual([]);
+});
+
+test('scans TypeScript below directories named migrations and excludes only the access module', () => {
+  const temporaryBase = resolve(import.meta.dir, '../../.temp');
+  mkdirSync(temporaryBase, { recursive: true });
+  const root = mkdtempSync(join(temporaryBase, 'access-fixture-write-scan-'));
+  try {
+    const source = readFixture('direct-write.fixture');
+    const migrationFile = join(root, 'scripts/migrations/direct-write.ts');
+    const singularMigrationFile = join(root, 'services/migration/direct-write.ts');
+    const accessFile = join(root, 'services/main/src/modules/access/direct-write.ts');
+    mkdirSync(dirname(migrationFile), { recursive: true });
+    mkdirSync(dirname(singularMigrationFile), { recursive: true });
+    mkdirSync(dirname(accessFile), { recursive: true });
+    writeFileSync(migrationFile, source);
+    writeFileSync(singularMigrationFile, source);
+    writeFileSync(accessFile, source);
+    expect(accessFixtureWriteDebtFiles(scanAccessFixtureWrites(root))).toEqual([
+      'scripts/migrations/direct-write.ts', 'services/migration/direct-write.ts',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('tracked direct access writes only shrink', () => {
