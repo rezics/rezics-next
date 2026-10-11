@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.ts';
+import { restoreCatalogueBackup, retainStoppedOwnerBackup } from '../../../scripts/load/catalogue-backup.ts';
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
 
-async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'timing' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
+async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 'budget' | 'success' | 'timing' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
   const directory = mkdtempSync(join(root, '.temp/catalogue-restore-'));
   const runId = directory.split('/').at(-1)!.toLowerCase();
   const project = `rezics-qa-${runId}`;
@@ -41,9 +41,18 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ti
           return volumes.has(name) ? name : '';
         }
         if (args[0] === 'volume' && args[1] === 'rm') volumes.delete(args[2]!);
+        if (args[0] === 'volume' && args[1] === 'create') {
+          volumes.add(args.at(-1)!);
+          if (mode === 'volume-create-failure') throw failure;
+        }
         return '';
       },
       copyVolume: async (_source, destination) => {
+        const kind = destination.slice(project.length + 1);
+        expect(volumes.has(destination)).toBe(true);
+        expect(commands.at(-1)).toEqual(['volume', 'create',
+          '--label', `com.docker.compose.project=${project}`,
+          '--label', `com.docker.compose.volume=${kind}`, destination]);
         if (mode === 'timing') elapsed += 20;
         volumes.add(destination);
         if (mode === 'copy-failure') throw failure;
@@ -89,7 +98,7 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ti
       await restored.stop();
     } else {
       await expect(operation.catch(error => {
-        if (mode === 'copy-failure') expect(error).toBe(failure);
+        if (mode === 'copy-failure' || mode === 'volume-create-failure') expect(error).toBe(failure);
         if (mode === 'cleanup-failure') {
           expect(error).toBeInstanceOf(AggregateError);
           expect(error.cause).toBe(failure);
@@ -119,6 +128,26 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ti
 
 test('catalogue restore: a volume copy failure removes its partially copied volumes and target', async () => {
   await restoreScenario('copy-failure');
+});
+test('catalogue restore: a volume creation failure removes its partially created storage', async () => {
+  await restoreScenario('volume-create-failure');
+});
+test('catalogue backup: disposable source stores are rejected before creating a backup', async () => {
+  const directory = mkdtempSync(join(root, '.temp/catalogue-source-'));
+  const runId = directory.split('/').at(-1)!.toLowerCase();
+  const source = join(root, '.temp/stack', `rezics-qa-${runId}`);
+  const backup = join(directory, 'backup');
+  try {
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'compose.env'), 'REZICS_STACK_STORAGE=tmpfs\n');
+    await expect(retainStoppedOwnerBackup(runId, 'cut', backup, Date.now()))
+      .rejects.toThrow('require a persistent catalogue-disk QA source');
+    expect(existsSync(backup)).toBe(false);
+    expect(readFileSync(join(source, 'compose.env'), 'utf8')).toBe('REZICS_STACK_STORAGE=tmpfs\n');
+  } finally {
+    rmSync(source, { recursive: true, force: true });
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 test('catalogue restore: exceeding the budget after startup removes the stack, volumes and target', async () => {
   await restoreScenario('budget');

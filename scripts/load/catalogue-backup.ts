@@ -106,10 +106,14 @@ export async function retainStoppedOwnerBackup(
       throw new Error('Incompatible or incomplete stopped owner backup');
     return manifest;
   }
-  mkdirSync(target, { recursive: true, mode: 0o700 });
   const compose = readEnv(join(sourceDirectory, 'compose.env'));
+  // Named-volume copies cannot retain a disposable stack's tmpfs stores. Reject
+  // that source before stopping it or creating misleading backup artifacts.
+  if (compose.REZICS_STACK_STORAGE !== 'persistent')
+    throw new Error('Stopped owner backups require a persistent catalogue-disk QA source');
   const apps = readEnv(join(sourceDirectory, 'apps.env'));
   const docker = dockerEnvironment();
+  mkdirSync(target, { recursive: true, mode: 0o700 });
   let downAttempted = false;
   let published = false;
   let result: string | undefined;
@@ -283,6 +287,13 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     for (const [index, kind] of VOLUME_KINDS.entries()) {
       checkSignal();
       copied.push(destinations[index]!);
+      // The copy helper creates an unlabelled volume by default. This fresh
+      // destination belongs to Compose; label it before copying so startup and
+      // reset agree on ownership. cp -a retains the source store's UID/GID.
+      run('docker', ['volume', 'create',
+        '--label', `com.docker.compose.project=${project}`,
+        '--label', `com.docker.compose.volume=${kind}`,
+        destinations[index]!], docker);
       await copyVolume(`${backup.project}_${kind}`, destinations[index]!, docker, signal);
       checkSignal();
     }
