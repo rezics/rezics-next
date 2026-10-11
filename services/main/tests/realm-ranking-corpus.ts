@@ -236,6 +236,17 @@ export async function restoreRealmRankingCorpus(): Promise<RealmRankingRestore> 
   const started = Date.now();
   const manifest = readRealmRankingCorpus();
   if (!manifest) throw new Error(explainUnavailableCorpus());
+  const previousEnvironment = new Map<string, string | undefined>([
+    'REZICS_QA_RUN_ID',
+    'REZICS_FUSEKI_MEMORY_LIMIT',
+    'REZICS_POSTGRES_MEMORY_LIMIT',
+    'FUSEKI_URL',
+    'MAIN_DATA_EPOCH',
+    'MAIN_ROUTING_EPOCH',
+    'ACCESS_DATABASE_URL',
+    'CONTENT_DATABASE_URL',
+    'ACCOUNT_RELAY_DATABASE_URL',
+  ].map(name => [name, process.env[name]] as const));
   const harness = process.env.REZICS_QA_RUN_ID;
   if (harness && /^[a-z0-9][a-z0-9-]{0,30}$/.test(harness)) {
     const container = docker(['ps', '-q', '--filter', `label=com.docker.compose.project=rezics-qa-${harness}`,
@@ -245,23 +256,22 @@ export async function restoreRealmRankingCorpus(): Promise<RealmRankingRestore> 
   const runId = `rr${createHash('sha256').update(`${Date.now()}`).digest('hex').slice(0, 8)}`;
   process.env.REZICS_FUSEKI_MEMORY_LIMIT ??= '4g';
   process.env.REZICS_POSTGRES_MEMORY_LIMIT ??= '2g';
-  const up = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], {
-    cwd: root, encoding: 'utf8', timeout: 300_000, env: process.env,
-  });
-  if (up.status !== 0) throw new Error(`Realm ranking restore stack failed: ${(up.stderr || up.stdout || '').slice(-2000)}`);
-  const { stageQaBootstrap } = await import('../../../scripts/qa/bootstrap.ts');
-  const staged = stageQaBootstrap(stackDirectory(root, stackOptions(runId)));
-  const boot = spawnSync('bun', staged.args, {
-    cwd: root, encoding: 'utf8', timeout: 300_000, env: { ...process.env, ...staged.apps },
-  });
-  if (boot.status !== 0) {
-    throw new Error(`Realm ranking restore bootstrap failed: ${(boot.stderr || boot.stdout || '').slice(-2000)}`);
-  }
-  const previousRun = process.env.REZICS_QA_RUN_ID;
-  process.env.REZICS_QA_RUN_ID = runId;
   const clones: Partial<Record<RealmRankingScale, QaOwnerClones>> = {};
   const urls: Partial<Record<RealmRankingScale, { access: string; content: string; relay: string }>> = {};
   try {
+    const up = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], {
+      cwd: root, encoding: 'utf8', timeout: 300_000, env: process.env,
+    });
+    if (up.status !== 0) throw new Error(`Realm ranking restore stack failed: ${(up.stderr || up.stdout || '').slice(-2000)}`);
+    const { stageQaBootstrap } = await import('../../../scripts/qa/bootstrap.ts');
+    const staged = stageQaBootstrap(stackDirectory(root, stackOptions(runId)));
+    const boot = spawnSync('bun', staged.args, {
+      cwd: root, encoding: 'utf8', timeout: 300_000, env: { ...process.env, ...staged.apps },
+    });
+    if (boot.status !== 0) {
+      throw new Error(`Realm ranking restore bootstrap failed: ${(boot.stderr || boot.stdout || '').slice(-2000)}`);
+    }
+    process.env.REZICS_QA_RUN_ID = runId;
     for (const size of REALM_RANKING_SCALES) {
       const clone = await cloneQaOwnerDatabases(runId, [...owners], 'privileged');
       clones[size] = clone;
@@ -282,8 +292,20 @@ export async function restoreRealmRankingCorpus(): Promise<RealmRankingRestore> 
       urls[size] = { access: clone.urls.access, content: clone.urls.content, relay: clone.urls.relay };
     }
   } catch (error) {
-    await Promise.all(Object.values(clones).map(clone => clone?.close().catch(() => undefined)));
-    process.env.REZICS_QA_RUN_ID = previousRun;
+    const cleanupErrors: unknown[] = [];
+    for (const clone of Object.values(clones)) {
+      try { await clone?.close(); } catch (cleanupError) { cleanupErrors.push(cleanupError); }
+    }
+    const reset = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', runId, '--persistent'], {
+      cwd: root, encoding: 'utf8', timeout: 300_000, env: process.env,
+    });
+    if (reset.status !== 0) cleanupErrors.push(new Error((reset.stderr || reset.stdout || 'stack reset failed').slice(-1000)));
+    rmSync(join(root, '.temp', 'realm-ranking-restore', runId), { recursive: true, force: true });
+    for (const [name, value] of previousEnvironment) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], 'Realm ranking restore setup failed and cleanup was incomplete');
     throw error;
   }
   let mounted: RealmRankingScale | undefined;
@@ -326,7 +348,10 @@ export async function restoreRealmRankingCorpus(): Promise<RealmRankingRestore> 
       });
       if (reset.status !== 0) errors.push(new Error((reset.stderr || reset.stdout || 'stack reset failed').slice(-1000)));
       rmSync(join(root, '.temp', 'realm-ranking-restore', runId), { recursive: true, force: true });
-      if (previousRun) process.env.REZICS_QA_RUN_ID = previousRun;
+      for (const [name, value] of previousEnvironment) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
       if (mounted && errors.length) throw new AggregateError(errors, 'Realm ranking restore cleanup failed');
       if (errors.length) throw new AggregateError(errors, 'Realm ranking restore cleanup failed');
     },
