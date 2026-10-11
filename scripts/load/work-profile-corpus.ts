@@ -118,7 +118,10 @@ export function workProfileCorpusApi(
         redirect: 'error',
       });
       requestSignal?.throwIfAborted();
-      if (!response.ok) throw new Error(`Corpus verification returned HTTP ${response.status}`);
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Corpus verification returned HTTP ${response.status}: ${detail}`);
+      }
       return (await response.json()) as T;
     },
   };

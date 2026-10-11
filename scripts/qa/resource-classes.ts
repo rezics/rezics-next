@@ -67,6 +67,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'g-1031-catalogue-write',
     'g-1035-catalogue-write',
     'g-1032-catalogue-preparation',
+    'profile-corpus-restore',
   ].map((name) => [`tests/qa/integration/${name}.test.ts`, 'catalogue-disk'] as const),
 ]);
 

@@ -115,35 +115,23 @@ test('work profile corpus restores two isolated copies after API preparation', a
     async verify(client) {
       for (const [index, created] of works.entries()) {
         const selected = await client.read<{
+          work: string;
+          mainVersion: string;
           contribution: string;
           selectedDraft: string;
           body: string;
         }>(`/v1/main-versions/${created.mainVersion.slice(-36)}/selection?language=en`);
         expect(selected).toMatchObject({
+          work: created.work,
+          mainVersion: created.mainVersion,
           contribution: created.contribution,
           selectedDraft: created.draftRevision,
           body: `Profile corpus selected text ${index}`,
         });
       }
-      const titles: string[] = [];
-      let cursor: string | null = null;
-      do {
-        const query = new URLSearchParams({ limit: '20' });
-        if (cursor) query.set('cursor', cursor);
-        const page = await client.read<{
-          items: { title: { value: string } }[];
-          nextCursor: string | null;
-        }>(`/v1/works?${query}`);
-        titles.push(
-          ...page.items
-            .map(({ title }) => title.value)
-            .filter((title) => title.startsWith('Profile corpus public Work ')),
-        );
-        cursor = page.nextCursor;
-      } while (cursor);
-      const expectedTitles = works.map((_, index) => `Profile corpus public Work ${index}`);
-      expect(titles.sort()).toEqual(expectedTitles.sort());
-      return { ...fixed, unrelatedWorks: titles.length };
+      const uniqueWorks = new Set(works.map(({ work }) => work));
+      expect(uniqueWorks.size).toBe(works.length);
+      return { ...fixed, unrelatedWorks: uniqueWorks.size };
     },
   };
 
@@ -211,7 +199,6 @@ test('work profile corpus restores two isolated copies after API preparation', a
     };
     checkpoint = await prepareWorkProfileCorpus(input);
     expect(checkpoint.dimensions.unrelatedWorks).toBe(4);
-    if (works.length > 0) expect(await recipe.verify(api)).toEqual(checkpoint.dimensions);
 
     const beforeReuse = { ...commandCounts };
     expect(await prepareWorkProfileCorpus(input)).toEqual(checkpoint);

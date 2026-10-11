@@ -1,5 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
+import { Pool } from 'pg';
+import { DATASET } from '../../services/main/src/modules/work/activate.ts';
 import {
   run,
   stream,
@@ -189,7 +191,25 @@ export async function retainCatalogueBackup(
   return retainStoppedOwnerBackup(runId, String(works), directory, startedAt, { purpose: 'g1038' });
 }
 
-const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts, now: Date.now };
+async function retargetRestoredGraphRoute(apps: Record<string, string>): Promise<void> {
+  const pool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 1, connectionTimeoutMillis: 5_000 });
+  try {
+    // A copied route points at the source stack's Fuseki port. Bind this isolated
+    // Access copy to its fresh endpoint before any Main process takes the route lease.
+    const changed = await pool.query(`UPDATE access.owner_partition_route
+      SET location = $1,
+        lease_epoch = lease_epoch + CASE WHEN location <> $1 THEN 1 ELSE 0 END,
+        updated_at = CASE WHEN location <> $1 THEN clock_timestamp() ELSE updated_at END
+      WHERE owner = 'graph' AND dataset_id = $2 AND routing_epoch = $3
+      RETURNING location`, [apps.FUSEKI_URL, DATASET, apps.MAIN_ROUTING_EPOCH]);
+    if (changed.rowCount !== 1) throw new Error('Restored graph route does not match the copied lineage');
+  } finally {
+    await pool.end();
+  }
+}
+
+const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts,
+  retargetGraphRoute: retargetRestoredGraphRoute, now: Date.now };
 
 /** Restore into a distinct project under the QA slot; the caller closes it in
  * finally. The containing .temp directory may move with preserved worker
@@ -198,7 +218,8 @@ const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironmen
 export async function restoreCatalogueBackup(path: string, runId: string,
   dependencies: Partial<typeof restoreRuntime> & { signal?: AbortSignal } = {}) {
   const { signal, ...runtimeDependencies } = dependencies;
-  const { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts, now } = { ...restoreRuntime, ...runtimeDependencies };
+  const { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts,
+    retargetGraphRoute, now } = { ...restoreRuntime, ...runtimeDependencies };
   const checkSignal = () => signal?.throwIfAborted();
   const startedAt = now(),
     directory = privateDirectory(resolve(path, '..'));
@@ -260,6 +281,8 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
     stackAttempted = true;
     const startup = await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+    checkSignal();
+    await retargetGraphRoute(apps);
     checkSignal();
     const admissionWaitMs = admissionWaitDuration(startup);
     if (now() - startedAt - admissionWaitMs > 600_000) throw new Error('Catalogue restore exceeded 600 seconds');

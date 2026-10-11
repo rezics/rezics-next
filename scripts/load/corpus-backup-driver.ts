@@ -43,8 +43,8 @@ async function migrateRestoredCopy(runId: string, signal: AbortSignal): Promise<
   signal.throwIfAborted();
   const appsFile = join(root, '.temp/stack', `rezics-qa-${runId}`, 'apps.env');
   await stream(
-    'task',
-    ['dev:prepare', '--', '--existing-env', relative(root, appsFile)],
+    'bun',
+    ['scripts/load/work-profile-restore-migrations.ts', relative(root, appsFile)],
     dockerEnvironment(),
     undefined,
     300_000,

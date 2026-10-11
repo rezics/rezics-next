@@ -14,13 +14,14 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ad
   let running = false;
   let elapsed = 0;
   const commands: string[][] = [];
+  const retargeted: Record<string, string>[] = [];
   const failure = new Error('injected volume copy failure');
   try {
     writeFileSync(join(directory, 'backup.json'), JSON.stringify({
       format: 'command-catalogue-backup-v1', project: 'rezics-catalogue-g1038-source',
       runId: 'source', compatibility: loadCompatibility(root),
     }));
-    writeFileSync(join(directory, 'compose.env'), 'ACCOUNT_PORT=3002\n');
+    writeFileSync(join(directory, 'compose.env'), 'ACCOUNT_PORT=3002\nFUSEKI_PORT=3030\n');
     mkdirSync(join(directory, 'objects'));
     writeFileSync(join(directory, 'objects/retained'), 'immutable object');
     if (mode === 'existing-volume') volumes.add(`${project}_${VOLUME_KINDS[1]}`);
@@ -32,6 +33,7 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ad
       now: () => elapsed,
       dockerEnvironment: () => ({}), projectRunning: () => false,
       freshPorts: async () => ({}),
+      retargetGraphRoute: async apps => { retargeted.push(apps); },
       run: (_program, args) => {
         commands.push(args);
         if (args[0] === 'volume' && args[1] === 'ls') {
@@ -73,6 +75,8 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ad
       }
       expect(running).toBe(true);
       expect(volumes.size).toBe(VOLUME_KINDS.length);
+      expect(retargeted).toHaveLength(1);
+      expect(retargeted[0]?.FUSEKI_URL).toBe('http://127.0.0.1:3030/rezics/');
       expect(readFileSync(join(target, 'objects/retained'), 'utf8')).toBe('immutable object');
       await restored.stop();
     } else {
