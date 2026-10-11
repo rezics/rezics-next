@@ -1033,8 +1033,26 @@ test('lost publish acknowledgement replays one receipt and original page, route,
 test('configuration, retirement and recovery retain the bundle; revoked publication and stale cuts do not switch it', async () => {
   const f = await fixture();
   try {
+    const collection = nativeId();
+    await f.grant(`collection:edit:${collection}`, 'collection.edit');
+    await f.grant(`semantic:read:${collection}`, 'semantic.read');
+    await f.json(await f.call('POST', '/v1/collections', {
+      collection, name: 'Site library', disclosure: 'public', actingSubject: f.actor,
+    }), 201);
+    const mount = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST', `${f.path}/mounts`, {
+      expectedHead: f.selection.navigationRevision, target: collection, routeSegment: 'library',
+      disclosure: 'public', actingSubject: f.actor,
+    }), 200);
+    f.selection.routesRevision = mount.revision;
+    f.selection.navigationRevision = mount.revision;
     const first = await f.json<ZoneSitePublicationReceipt>(await f.publish(), 201);
     const { page, revisionId } = f.selection.pages[0]!;
+    expect((await readZoneSitePublicationReceipt(f.env, first.receipt))?.navigationRevision).toBe(mount.revision);
+    const navigationBefore = await f.json<{ navigation: string; revision: string;
+      mounts: Array<{ occurrence: string; target: string }> }>(await f.call('GET',
+      `${f.path}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(navigationBefore.revision).toBe(mount.revision);
+    expect(navigationBefore.mounts.map(item => item.target)).toEqual([collection]);
     const change = async (operation: 'retirements' | 'recoveries') =>
       f.json(await f.call('POST', `${f.path}/${operation}`, {
         expectedHead: (await readZoneConfiguration(f.env, f.zone)).revision, actingSubject: f.actor,
@@ -1045,6 +1063,8 @@ test('configuration, retirement and recovery retain the bundle; revoked publicat
     expect((await readZonePublication(f.env, f.zone)).publicationRevision).toBe(first.revision);
     expect(await isZonePublishedPageRevision(f.env, f.zone, page, revisionId)).toBe(true);
     expect((await f.home()).page?.reference.revisionId).toBe(revisionId);
+    const editorDraft = await f.save(fromPlainText('Revoked editor draft', 'blocks'), revisionId,
+      f.selection.pages[0]!.variantId);
     await change('retirements');
     expect((await readZoneConfiguration(f.env, f.zone)).publicationRevision).toBe(first.revision);
     expect(await isZonePublishedPageRevision(f.env, f.zone, page, revisionId)).toBe(false);
@@ -1054,11 +1074,17 @@ test('configuration, retirement and recovery retain the bundle; revoked publicat
     await change('recoveries');
     expect((await readZonePublication(f.env, f.zone)).publicationRevision).toBe(first.revision);
     expect(await isZonePublishedPageRevision(f.env, f.zone, page, revisionId)).toBe(true);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, page, editorDraft.revisionId)).toBe(false);
     expect((await f.home()).page?.reference.revisionId).toBe(revisionId);
+    const navigationAfter = await f.json<{ navigation: string; revision: string;
+      mounts: Array<{ occurrence: string; target: string }> }>(await f.call('GET',
+      `${f.path}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(navigationAfter.navigation).toBe(navigationBefore.navigation);
+    expect(navigationAfter.revision).toBe(navigationBefore.revision);
+    expect(navigationAfter.mounts).toEqual(navigationBefore.mounts);
     expect((await f.publish(f.selection.pages, randomUUID(), first.revision)).status).toBe(409);
     expect((await f.publish(f.selection.pages, randomUUID(), undefined, nativeId())).status).toBe(409);
-    const editorDraft = await f.save(fromPlainText('Revoked editor draft', 'blocks'), revisionId,
-      f.selection.pages[0]!.variantId);
+    expect((await f.exact(editorDraft.revisionId)).status).toBe(404);
     await f.revokeEditor();
     expect((await f.publish([editorDraft])).status).toBe(403);
     expect((await f.exact(editorDraft.revisionId, true)).status).toBe(404);

@@ -47,8 +47,9 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
     }), 201);
     const zoneIds = [nativeId(), nativeId()];
     const created: Array<{ zone: string; navigation: string; revision: string }> = [];
+    const zoneEditGrants: string[] = [];
     for (const [index, zone] of zoneIds.entries()) {
-      await f.grant(`zone:edit:${zone}`, 'zone.edit');
+      zoneEditGrants[index] = await f.grant(`zone:edit:${zone}`, 'zone.edit');
       await f.grant(`semantic:read:${zone}`, 'semantic.read');
       const result = await f.json<{ zone: string; navigation: string; revision: string }>(
         await f.call('POST', '/v1/zones', { zone, space: index === 0 ? space.space : secondSpace.space,
@@ -151,8 +152,8 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
     const second = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST',
       `/v1/zones/${shortId(created[1]!.zone)}/mounts`, mountBody(created[1]!, 'https://rezics.com/definition/presentation-b')), 200);
     expect(first.occurrences[0]).not.toBe(second.occurrences[0]);
-    const readZone = async (zone: string) => f.json<{ mounts: Array<{ target: string;
-      qualifier: { presentation: string } }> }>(await f.call('GET',
+    const readZone = async (zone: string) => f.json<{ navigation: string; revision: string;
+      mounts: Array<{ occurrence: string; target: string; qualifier: { presentation: string } }> }>(await f.call('GET',
       `/v1/zones/${shortId(zone)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect((await readZone(created[0]!.zone)).mounts[0]).toMatchObject({ target: collection,
       qualifier: { presentation: 'https://rezics.com/definition/presentation-a' } });
@@ -163,12 +164,39 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
     expect(sharedRead.occurrences.map(item => item.target)).toEqual([sharedWork.work]);
     const activeZoneHead = (await readZoneConfiguration(f.env, created[0]!.zone)).revision;
     expect((await f.call('POST', `/v1/zones/${shortId(created[0]!.zone)}/retirements`,
-      { expectedHead: activeZoneHead, actingSubject: f.actor })).status).toBe(400);
-    const removed = await f.json<{ revision: string }>(await f.call('DELETE',
-      `/v1/zones/${shortId(created[0]!.zone)}/mounts/${shortId(first.occurrences[0]!)}`,
-      { expectedHead: first.revision, actingSubject: f.actor }), 200);
-    expect(removed.revision).not.toBe(first.revision);
-    expect((await readZone(created[0]!.zone)).mounts).toEqual([]);
+      { expectedHead: created[0]!.revision, actingSubject: f.actor })).status).toBe(409);
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1',
+      [zoneEditGrants[0]]);
+    expect((await f.call('POST', `/v1/zones/${shortId(created[0]!.zone)}/retirements`,
+      { expectedHead: activeZoneHead, actingSubject: f.actor })).status).toBe(403);
+    await f.grant(`zone:edit:${created[0]!.zone}`, 'zone.edit');
+    const [retirementResponse, navigationResponse] = await Promise.all([
+      f.call('POST', `/v1/zones/${shortId(created[0]!.zone)}/retirements`,
+        { expectedHead: activeZoneHead, actingSubject: f.actor }),
+      f.call('POST', `/v1/zones/${shortId(created[0]!.zone)}/mounts`, {
+        expectedHead: first.revision, collection, routeSegment: 'archive', disclosure: 'public',
+        presentation: 'https://rezics.com/definition/presentation-b', actingSubject: f.actor,
+      }),
+    ]);
+    expect(retirementResponse.status).toBe(200);
+    expect([200, 404]).toContain(navigationResponse.status);
+    const retiredWithMounts = await retirementResponse.json() as { revision: string };
+    const racedMount = navigationResponse.status === 200
+      ? await navigationResponse.json() as { revision: string; occurrences: string[] }
+      : undefined;
+    if (racedMount) expect(racedMount.occurrences).toHaveLength(1);
+    expect((await f.call('GET', `/v1/zones/${shortId(created[0]!.zone)}`
+      + `?actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(404);
+    expect((await f.call('GET', `/v1/collections/${shortId(collection)}`
+      + `?actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(200);
+    const recoveredAfterRace = await f.json<{ revision: string }>(await f.call('POST',
+      `/v1/zones/${shortId(created[0]!.zone)}/recoveries`,
+      { expectedHead: retiredWithMounts.revision, actingSubject: f.actor }), 200);
+    expect(recoveredAfterRace.revision).not.toBe(retiredWithMounts.revision);
+    const restored = await readZone(created[0]!.zone);
+    const expectedMountTargets = racedMount ? [collection, collection] : [collection];
+    expect(restored.revision).toBe(racedMount?.revision ?? first.revision);
+    expect(restored.mounts.map(item => item.target)).toEqual(expectedMountTargets);
     expect((await readZone(created[1]!.zone)).mounts).toHaveLength(1);
     const configurationPath = `/v1/zones/${shortId(created[0]!.zone)}/configuration`;
     const configurationQuery = `actingSubject=${encodeURIComponent(f.actor)}`;
@@ -233,11 +261,12 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
       `/v1/zones/${shortId(created[0]!.zone)}/recoveries`,
       { expectedHead: retired.revision, actingSubject: f.actor }), 200);
     expect(recovered.revision).not.toBe(retired.revision);
-    expect((await readZone(created[0]!.zone)).mounts).toEqual([]);
+    expect((await readZone(created[0]!.zone)).mounts.map(item => item.target)).toEqual(expectedMountTargets);
     // Revoking Collection read authority suppresses its route in both Zones.
     await f.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'semantic.read'`,
     [f.actor, `semantic:read:${collection}`]);
+    expect((await readZone(created[0]!.zone)).mounts).toEqual([]);
     expect((await readZone(created[1]!.zone)).mounts).toEqual([]);
     expect((await f.call('GET', `/v1/zones/${shortId(created[1]!.zone)}`
       + `?actingSubject=${encodeURIComponent(f.actor)}`, undefined, randomUUID(), f.account.tokenB)).status)

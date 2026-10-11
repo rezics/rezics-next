@@ -497,12 +497,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           ? prepared.reference.language.tag : prepared.reference.language.kind === 'missing' ? 'und' : prepared.reference.language.kind);
       }
     }
-    if (input.operation === 'retire') {
-      const dependents = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(head.navigation)} rv:selectedGeneration ?generation .
-        ?generation rv:placementCount ?count . FILTER(?count > 0) } }`);
-      if (dependents.boolean === true) return invalid(new InvalidZoneConfiguration('Zone still has mounts'));
-    }
     const prior = head.configuration;
     const patch = input.patch;
     let name;
@@ -701,9 +695,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
             ${iri(head.navigation)} a rv:Structure ; rv:structureOf ${iri(input.zone)} ;
               rv:structureHead ${iri(publication.navigationRevision)} .` : ''}
           ${promotePublicName ? `OPTIONAL { ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName }` : ''} }
-        ${input.operation === 'retire' ? `GRAPH ${iri(GRAPHS.current)} {
-          ${iri(head.navigation)} rv:selectedGeneration ?generation .
-          ?generation rv:placementCount 0 . }` : ''}
         ${contentGuards.join('\n')}
         ${linkGuard}
         ${publication ? 'FILTER(?oldState = rv:Active)' : ''}
