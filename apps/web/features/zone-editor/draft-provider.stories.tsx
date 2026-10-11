@@ -107,10 +107,10 @@ const verifiesDraftContinuity: NonNullable<Story['play']> = async ({ canvasEleme
   await userEvent.clear(page);
   await userEvent.type(page, 'An unsaved home page body');
   await expect(canvas.getByRole('status')).toHaveTextContent('Unsaved sections: home, navigation');
-  await userEvent.click(canvas.getByRole('button', { name: 'Theme', exact: true }));
+  await userEvent.click(canvas.getByRole('button', { name: 'Theme' }));
   await expect(canvas.queryByRole('textbox', { name: 'Site title' })).not.toBeInTheDocument();
   await expect(canvas.queryByRole('textbox', { name: 'Home page' })).not.toBeInTheDocument();
-  await userEvent.click(canvas.getByRole('button', { name: 'Home', exact: true }));
+  await userEvent.click(canvas.getByRole('button', { name: 'Home' }));
   await expect(canvas.getByRole('textbox', { name: 'Site title' })).toHaveValue('Unsaved harbor title');
   await expect(canvas.getByRole('textbox', { name: 'Home page' })).toHaveValue('An unsaved home page body');
 
