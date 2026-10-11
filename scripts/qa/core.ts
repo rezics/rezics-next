@@ -897,6 +897,7 @@ export const isolatedIntegrationFiles: ReadonlySet<string> = new Set(isolatedInt
 export const isolatedFaultFiles = new Set([
   'tests/qa/fault-recovery/erasure-restore.test.ts',
   'tests/qa/fault-recovery/erasure-restore-release.test.ts',
+  'tests/qa/fault-recovery/erasure-restore-corruption.test.ts',
   'tests/qa/fault-recovery/owner-restore-erasure-authority.test.ts',
   'tests/qa/fault-recovery/owner-restore-erasure-closure.test.ts',
   'tests/qa/fault-recovery/owner-restore-erasure-completion.test.ts',
@@ -930,6 +931,7 @@ export const selfManagedFaultAdmission = new Map<string, 'host' | 'startup'>([
   ['tests/qa/fault-recovery/erasure-graph-purge.test.ts', 'startup'],
   ['tests/qa/fault-recovery/erasure-restore.test.ts', 'startup'],
   ['tests/qa/fault-recovery/erasure-restore-release.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/erasure-restore-corruption.test.ts', 'startup'],
   ['tests/qa/fault-recovery/erasure-search-command.test.ts', 'startup'],
   ['tests/qa/fault-recovery/erasure-search-rebuild.test.ts', 'startup'],
   ['tests/qa/fault-recovery/fixed-release-recovery.test.ts', 'startup'],
