@@ -13,7 +13,11 @@ import {
   type WorkProfile,
 } from '../../../tests/qa/support/work-profile.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
-import { meterFuseki, meterPool } from '../../../tests/qa/integration/support/query-cost-meter.ts';
+import {
+  foregroundCounted,
+  meterFuseki,
+  meterPool,
+} from '../../../tests/qa/integration/support/query-cost-meter.ts';
 
 const sink = startWorkProfileSink({ settleMs: 25, maxSpans: 500_000 });
 startTelemetry('main', { ...process.env, ...sink.env });
@@ -23,6 +27,7 @@ const { GovernanceStore } = await import('../src/modules/governance/store.ts');
 const { AccessRealmManagement } = await import('../src/modules/access/realm-management.ts');
 const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
+const { GRAPHS, iri } = await import('../src/modules/work/activate.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
 const {
   explainUnavailableCorpus,
@@ -50,7 +55,12 @@ const profiles: {
   temperature: string;
   profile: Awaited<ReturnType<typeof profileRequest>>['profile'];
 }[] = [];
-const replyWrites: { size: number; profile: WorkProfile; fusekiQueryCalls: number }[] = [];
+const replyWrites: {
+  size: number;
+  populatedSlots: number;
+  profile: WorkProfile;
+  fusekiQueryCalls: number;
+}[] = [];
 try {
   let { stack } = home;
   for (const [owner, pool] of [
@@ -691,6 +701,16 @@ try {
         evidence.push({ size, sort, after, plan });
       }
     }
+    const slots = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT (COUNT(DISTINCT ?slot) AS ?count) WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:realm ${iri(realm)} ; rv:replyPlacementHead ?head }
+      }`);
+    const populatedSlots = Number(slots.results?.bindings?.[0]?.count?.value);
+    assert.equal(
+      populatedSlots,
+      size + (size === 1600 ? corpus.identity.deepChain.length : 0),
+      'The write cost must be measured against the populated Realm graph',
+    );
     const poolMeters = [...new Set([stack.accessPool, stack.contentPool, home.relay])].map(
       (pool) => {
         const meter = meterPool(pool);
@@ -708,7 +728,7 @@ try {
         if (traceparent) headers.set('traceparent', traceparent);
         return app.handle(new Request(input, { ...init, headers }));
       };
-      if (!replyCommandProfiles) return invoke();
+      if (!replyCommandProfiles || !foregroundCounted()) return invoke();
       const measured = await profileRequest(
         sink,
         async (headers) => {
@@ -743,8 +763,13 @@ try {
       ? commandProfiles.reduce((sum, profile) => sum + profile.fusekiRequests!, 0)
       : null;
     const unobserved = [...new Set(commandProfiles.flatMap((profile) => profile.unobserved))];
+    assert(
+      statements > 0 && fusekiRequests !== null && fusekiRequests > 0 && fusekiMeter.queries > 0,
+      'Foreground write meters must observe both owner and graph work',
+    );
     replyWrites.push({
       size,
+      populatedSlots,
       profile: {
         ...commandProfiles.at(-1)!,
         postgresStatements: statements,
@@ -759,6 +784,7 @@ try {
     });
     evidence.push({
       replyWrite: size,
+      populatedSlots,
       postgresStatements: statements,
       fusekiRequests,
       fusekiQueryCalls: fusekiMeter.queries,

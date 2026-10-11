@@ -28,7 +28,12 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real 
       temperature: string;
       profile: WorkProfile;
     }[];
-    replyWrites: { size: number; profile: WorkProfile; fusekiQueryCalls: number }[];
+    replyWrites: {
+      size: number;
+      populatedSlots: number;
+      profile: WorkProfile;
+      fusekiQueryCalls: number;
+    }[];
   };
   // The immutable administrator and recovery fence must never use shard owners.
   for (const [owner, url] of [
@@ -53,19 +58,23 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real 
               row.temperature === temperature,
           )
           .map((row) => ({ ...row.profile, dimensions: { threads: row.size } }));
-        assertWorkCostAtScales(profiles, {
-          fusekiRequests: 16,
-          fusekiReceivedBytes: 16_000,
-          postgresStatements: viewer === 'anonymous' ? 44 : 49,
-          accountCalls: 0,
-          mainCalls: 0,
-          otherFetches: 0,
-          growth: {
-            postgresStatements: { class: 'constant', dimension: 'threads' },
-            fusekiRequests: { class: 'constant', dimension: 'threads' },
-            fusekiReceivedBytes: { class: 'logarithmic', dimension: 'threads' },
+        assertWorkCostAtScales(
+          profiles,
+          {
+            fusekiRequests: 16,
+            fusekiReceivedBytes: 16_000,
+            postgresStatements: viewer === 'anonymous' ? 44 : 49,
+            accountCalls: 0,
+            mainCalls: 0,
+            otherFetches: 0,
+            growth: {
+              postgresStatements: { class: 'constant', dimension: 'threads' },
+              fusekiRequests: { class: 'constant', dimension: 'threads' },
+              fusekiReceivedBytes: { class: 'logarithmic', dimension: 'threads' },
+            },
           },
-        }, `g1034-${operation}-${viewer}-${temperature}`);
+          `g1034-${operation}-${viewer}-${temperature}`,
+        );
         expect(new Set(profiles.map((profile) => profile.postgresStatements)).size).toBe(1);
         // Hydrated page contents stay identical while complete populations grow 16×.
         expect(
@@ -74,19 +83,34 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real 
         ).toBeLessThan(1024);
       }
   expect(measured.replyWrites).toHaveLength(3);
+  expect(measured.replyWrites.map((row) => [row.size, row.populatedSlots])).toEqual([
+    [100, 100],
+    [400, 400],
+    [1600, 1640],
+  ]);
   const replyProfiles = measured.replyWrites.map(({ size, profile }) => ({
     ...profile,
     dimensions: { threads: size },
   }));
-  assertWorkCostAtScales(replyProfiles, {
-    postgresStatements: 840,
-    fusekiRequests: 130,
-    growth: {
-      postgresStatements: { class: 'constant', dimension: 'threads' },
-      fusekiRequests: { class: 'constant', dimension: 'threads' },
+  assertWorkCostAtScales(
+    replyProfiles,
+    {
+      postgresStatements: 840,
+      fusekiRequests: 130,
+      growth: {
+        postgresStatements: { class: 'constant', dimension: 'threads' },
+        fusekiRequests: { class: 'constant', dimension: 'threads' },
+      },
     },
-  }, 'g1034-reply-write');
+    'g1034-reply-write',
+  );
   expect(new Set(replyProfiles.map((profile) => profile.postgresStatements)).size).toBe(1);
   expect(new Set(replyProfiles.map((profile) => profile.fusekiRequests)).size).toBe(1);
   expect(new Set(measured.replyWrites.map((row) => row.fusekiQueryCalls)).size).toBe(1);
+  expect(
+    replyProfiles.every(
+      (profile) => profile.postgresStatements! > 0 && profile.fusekiRequests! > 0,
+    ),
+  ).toBe(true);
+  expect(measured.replyWrites.every((row) => row.fusekiQueryCalls > 0)).toBe(true);
 }, 600_000);
