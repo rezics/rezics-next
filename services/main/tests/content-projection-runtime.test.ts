@@ -5,7 +5,11 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { ContentProjectionWorker } from '../src/content-projection-worker.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { RV } from '../src/modules/work/activate.ts';
+import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
+  contentSearchEligibilityReceiptIri } from '../src/modules/content-publication/eligibility.ts';
+import { contentPublicationDecisionIri, contentPublicationReceiptIri }
+  from '../src/modules/content-publication/publish.ts';
+import { DATASET, RV } from '../src/modules/work/activate.ts';
 
 const graphEpoch = 'graph-epoch';
 const contentEpoch = 'content-epoch';
@@ -13,6 +17,72 @@ const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111
 const contentPosition = (sequence: string) => ({ owner: 'content' as const,
   dataEpoch: contentEpoch, sequence });
 const binding = (value: string) => ({ type: 'literal', value });
+const uri = (value: string) => ({ type: 'uri', value });
+const contentVariant = 'urn:rezics:variant:1';
+const contentResource = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
+const contentRevision = 'urn:rezics:content:revision:11111111-1111-4111-8111-111111111111';
+const publicationAdmission = '22222222-2222-4222-8222-222222222222';
+const eligibilityAdmission = '33333333-3333-4333-8333-333333333333';
+const publication = contentPublicationDecisionIri(publicationAdmission);
+const publicationReceipt = contentPublicationReceiptIri(publicationAdmission);
+const eligibility = contentSearchEligibilityDecisionIri(eligibilityAdmission);
+const eligibilityReceipt = contentSearchEligibilityReceiptIri(eligibilityAdmission);
+const actor = 'urn:rezics:actor:content-search-reviewer';
+const preparation = '44444444-4444-4444-8444-444444444444';
+const eligibilityInput = { resourceId: contentResource, variantId: contentVariant,
+  publicationDecision: publication, expectedEligibilityHead: null, actingSubject: actor,
+  rightsBasis: 'original-contribution' as const, disclosure: 'public' as const };
+
+function proofRow(key: string, id: string, receipt: string,
+  fields: Array<[string, string | undefined, 'uri' | 'literal']>) {
+  const row: Record<string, { type: string; value: string }> = { [key]: uri(id),
+    decisionTypeCount: binding('1'), anchorTypeCount: binding('1'), receiptCount: binding('1'),
+    receipt: uri(receipt), receiptTypeCount: binding('1') };
+  for (const [name, value, type] of fields) {
+    row[`${name}Count`] = binding(value === undefined ? '0' : '1');
+    if (value !== undefined) row[name] = type === 'uri' ? uri(value) : binding(value);
+  }
+  return row;
+}
+
+const publicationOwnerRow = proofRow('publication', publication, publicationReceipt, [
+  ['dComponent', contentVariant, 'uri'], ['dResource', contentResource, 'uri'],
+  ['dRevision', contentRevision, 'uri'], ['dDigest', 'a'.repeat(64), 'literal'],
+  ['dOwnerEpoch', contentEpoch, 'literal'], ['dOwnerSequence', '2', 'literal'],
+  ['dDataEpoch', graphEpoch, 'literal'], ['dSequence', '6', 'literal'],
+  ['dModel', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+  ['dShape', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+  ['dDataset', DATASET, 'uri'], ['dPreparation', preparation, 'literal'],
+  ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'],
+  ['rRequestDigest', 'b'.repeat(64), 'literal'], ['rAdmissionId', publicationAdmission, 'literal'],
+  ['rAuthorityEpoch', '2', 'literal'], ['rScope', `content:publish:${contentVariant}`, 'literal'],
+  ['rPreparation', preparation, 'literal'], ['rRevision', contentRevision, 'uri'],
+  ['rVariant', contentVariant, 'uri'], ['rResource', contentResource, 'uri'],
+  ['rByteDigest', 'a'.repeat(64), 'literal'], ['rOwnerEpoch', contentEpoch, 'literal'],
+  ['rOwnerSequence', '2', 'literal'], ['rExpectedHead', 'urn:rezics:none', 'uri'],
+  ['rDataset', DATASET, 'uri'], ['rDataEpoch', graphEpoch, 'literal'],
+  ['rSequence', '6', 'literal'], ['rDecision', publication, 'uri'],
+]);
+
+const eligibilityOwnerRow = proofRow('eligibility', eligibility, eligibilityReceipt, [
+  ['dComponent', contentVariant, 'uri'], ['dVariant', contentVariant, 'uri'],
+  ['dResource', contentResource, 'uri'], ['dPublication', publication, 'uri'],
+  ['dRightsBasis', `${RV}OriginalContribution`, 'uri'], ['dAssessment', undefined, 'uri'],
+  ['dDisclosure', `${RV}Public`, 'uri'], ['dAdmissionId', eligibilityAdmission, 'literal'],
+  ['dAuthorityEpoch', '2', 'literal'], ['dScope', `content:search-eligibility:${contentVariant}`, 'literal'],
+  ['dActor', actor, 'uri'], ['dModel', 'https://rezics.com/definition/content-search-eligibility-v1', 'uri'],
+  ['dShape', 'https://rezics.com/definition/content-search-eligibility-v1', 'uri'],
+  ['dDataset', DATASET, 'uri'], ['dDataEpoch', graphEpoch, 'literal'], ['dSequence', '7', 'literal'],
+  ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'],
+  ['rRequestDigest', contentSearchEligibilityDigest(eligibilityInput), 'literal'],
+  ['rAdmissionId', eligibilityAdmission, 'literal'], ['rAuthorityEpoch', '2', 'literal'],
+  ['rScope', `content:search-eligibility:${contentVariant}`, 'literal'], ['rActor', actor, 'uri'],
+  ['rResource', contentResource, 'uri'], ['rVariant', contentVariant, 'uri'],
+  ['rPublication', publication, 'uri'], ['rExpectedHead', 'urn:rezics:none', 'uri'],
+  ['rRightsBasis', `${RV}OriginalContribution`, 'uri'], ['rAssessment', undefined, 'uri'],
+  ['rDisclosure', `${RV}Public`, 'uri'], ['rDataset', DATASET, 'uri'],
+  ['rDataEpoch', graphEpoch, 'literal'], ['rSequence', '7', 'literal'], ['rEligibility', eligibility, 'uri'],
+]);
 
 class SearchFuseki extends FusekiClient {
   available = true;
@@ -35,6 +105,20 @@ class SearchFuseki extends FusekiClient {
       return { results: { bindings: this.occurrenceLabelsPending
         ? [{ generation: binding('urn:rezics:generation:1') }] : [] } };
     }
+    if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
+      return { results: { bindings: [{ epoch: binding(graphEpoch), routing: binding('1'), sequence: binding('7') }] } };
+    }
+    if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
+      return { results: { bindings: [{ variant: uri(contentVariant), resourceCount: binding('1'),
+        resource: uri(contentResource), publicationCount: binding('1'), publication: uri(publication),
+        eligibilityCount: binding('1'), eligibility: uri(eligibility) }] } };
+    }
+    if (sparql.includes('SELECT ?eligibility') && sparql.includes('?decisionTypeCount')) {
+      return { results: { bindings: [eligibilityOwnerRow] } };
+    }
+    if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
+      return { results: { bindings: [publicationOwnerRow] } };
+    }
     if (sparql.includes('?probeScore')) {
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), population: binding('1') }] } };
@@ -46,7 +130,9 @@ class SearchFuseki extends FusekiClient {
       this.contentAudits++;
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), declared: binding('1'), heads: binding('1'),
-        missing: binding(this.missing ? '1' : '0'), eligible: binding('1'), contentUnits: binding('1'),
+        missing: binding(this.missing ? '1' : '0'),
+        eligible: binding(this.missing ? '0' : '1'),
+        contentUnits: binding(this.missing ? '0' : '1'),
       }] } };
     }
     if (sparql.includes('?candidateCount')) {
@@ -54,10 +140,9 @@ class SearchFuseki extends FusekiClient {
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), candidateCount: binding(match ? '1' : '0'),
         ...(match ? { unit: binding('urn:rezics:match:1'), score: binding('2.5'),
-          resource: binding('https://rezics.com/id/11111111-1111-4111-8111-111111111111'),
-          variant: binding('urn:rezics:variant:1'), revision: binding('urn:rezics:content:revision:1'),
-          decision: binding('urn:rezics:decision:1'), language: binding('en'),
-          eligibility: binding('urn:rezics:content:eligibility:1'),
+          resource: binding(contentResource), variant: binding(contentVariant), revision: binding(contentRevision),
+          decision: binding(publication), language: binding('en'),
+          eligibility: binding(eligibility),
           rightsBasis: binding(`${RV}OriginalContribution`) } : {}) }] } };
     }
     throw new Error(`unexpected query: ${sparql.slice(0, 80)}`);
