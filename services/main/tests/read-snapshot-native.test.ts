@@ -7,30 +7,28 @@ import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 /** Native Jena tests run with the repository's pinned Maven/JDK, through the
  * ordinary goalctl QA slot. The optional corpus probe never starts a service,
  * mounts the stopped backup read-only, and opens only its own /tmp copy. */
-test('G336 native retained-read counterexamples and optional qualified-corpus cost probe', async () => {
+test('native retained-read counterexamples and optional qualified-corpus cost probe', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const artifacts = join(root, '.temp', `read-snapshot-${randomUUID()}`);
   const context = join(artifacts, 'build');
-  mkdirSync(context, { recursive: true });
+  mkdirSync(join(context, 'tmp'), { recursive: true });
   const module = join(root, 'infra/jena/command-module');
   cpSync(join(module, 'pom.xml'), join(context, 'pom.xml'));
-  cpSync(join(module, 'src'), join(context, 'src'), { recursive: true });
-  cpSync(join(root, 'generated/model'), join(context, 'profiles'), { recursive: true });
-  const base = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8').split('\n')[0]!
-    .replace(/ AS module$/, '');
-  writeFileSync(join(context, 'Dockerfile'), `${base}
-WORKDIR /build
-COPY pom.xml .
-RUN mvn -B -ntp dependency:go-offline
-COPY src src
-COPY profiles profiles
-RUN mvn -B -ntp package
-RUN mvn -B -ntp dependency:build-classpath -Dmdep.outputFile=/build/classpath
-`);
+  cpSync(join(module, 'src/main'), join(context, 'src/main'), { recursive: true });
+  const tests = 'src/test/java/com/rezics/jena';
+  mkdirSync(join(context, tests), { recursive: true });
+  for (const name of ['ReadSnapshotTest', 'ReadSnapshotProbe']) {
+    cpSync(join(module, tests, `${name}.java`), join(context, tests, `${name}.java`));
+  }
+  const image = /^FROM (\S+) AS module$/m.exec(
+    readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8'),
+  )?.[1];
+  if (!image) throw new Error('missing pinned native builder');
+  const cache = join(root, '.temp/read-snapshot-maven-cache');
+  mkdirSync(cache, { recursive: true });
   const env = loadDockerEnvironment();
-  const image = `rezics/read-snapshot-probe:${randomUUID()}`;
   const activeContainers = new Set<string>();
-  async function run(args: string[], label: string, timeoutMs = 600_000) {
+  async function run(args: string[], label: string, timeoutMs = 165_000) {
     const child = Bun.spawn(['docker', ...args], { cwd: root, env,
       stdout: 'pipe', stderr: 'pipe', timeout: timeoutMs });
     const [stdout, stderr, code] = await Promise.all([
@@ -39,8 +37,26 @@ RUN mvn -B -ntp dependency:build-classpath -Dmdep.outputFile=/build/classpath
     expect(code, `${label}: ${join(artifacts, `${label}.log`)}`).toBe(0);
     return stdout;
   }
+  async function container(args: string[], label: string, timeoutMs?: number) {
+    const name = `read-snapshot-${randomUUID()}`;
+    activeContainers.add(name);
+    const output = await run(['run', '--rm', '--name', name, ...args], label, timeoutMs);
+    activeContainers.delete(name);
+    return output;
+  }
   try {
-    await run(['build', '--tag', image, context], 'module-tests');
+    // A full package runs unrelated owner suites and exceeds the model tier.
+    // Keep these two counterexamples in a fresh JVM with TDB2 on writable disk.
+    const output = await container(['--user', `${process.getuid!()}:${process.getgid!()}`,
+      '--memory', '1g', '--cpus', '2', '--volume', `${context}:/build`,
+      '--volume', `${cache}:/maven-cache`, '--env', 'MAVEN_CONFIG=/maven-cache',
+      '--env', 'MAVEN_OPTS=-Xmx128m',
+      '--env', 'JAVA_TOOL_OPTIONS=-XX:+UseSerialGC -XX:ActiveProcessorCount=2 -Djava.io.tmpdir=/build/tmp',
+      '--workdir', '/build', image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
+      '-DargLine=-Xmx384m', '-Dtest=ReadSnapshotTest', 'test',
+      ...(process.env.REZICS_READ_SNAPSHOT_PROBE === '1'
+        ? ['dependency:build-classpath', '-Dmdep.outputFile=/build/classpath'] : [])], 'module-tests');
+    expect(output).toContain('Tests run: 2, Failures: 0, Errors: 0, Skipped: 0');
     if (process.env.REZICS_READ_SNAPSHOT_PROBE === '1') {
       const volume = 'rezics-fixture-fx-medium-c9f6e4fdcb52_fuseki_data';
       // Fail before opening even the copy if a writer has the fixture mounted.
@@ -51,15 +67,13 @@ RUN mvn -B -ntp dependency:build-classpath -Dmdep.outputFile=/build/classpath
       const modes = process.env.REZICS_READ_SNAPSHOT_MODES?.split(',') ?? ['0', '1', '8', '32', '300', 'memory', 'named'];
       expect(modes.every(mode => ['0', '1', '8', '32', '300', 'memory', 'named'].includes(mode))).toBe(true);
       for (const mode of modes) {
-        const name = `read-snapshot-${randomUUID()}`;
-        activeContainers.add(name);
-        const output = await run(['run', '--rm', '--name', name, '--network', 'none',
+        const output = await container(['--network', 'none', '--volume', `${context}:/build`,
+          '--volume', `${cache}:/maven-cache:ro`, '--workdir', '/build',
           '--memory', '4g', '--cpus', '2', '--mount', `type=volume,src=${volume},dst=/fixture,readonly`,
           image, 'sh', '-c',
           'exec java -Xms256m -Xmx2g -cp "target/test-classes:target/classes:$(cat classpath)" '
             + 'com.rezics.jena.ReadSnapshotProbe /fixture/rezics/tdb2 /tmp/probe "$1"',
-          'probe', mode], `probe-${mode}`);
-        activeContainers.delete(name);
+          'probe', mode], `probe-${mode}`, 600_000);
         const records = output.split('\n').filter(line => line.startsWith('READ_SNAPSHOT_PROBE '))
           .map(line => JSON.parse(line.slice('READ_SNAPSHOT_PROBE '.length)) as Record<string, unknown>);
         expect(records).toHaveLength(2);
@@ -69,9 +83,8 @@ RUN mvn -B -ntp dependency:build-classpath -Dmdep.outputFile=/build/classpath
     }
   } finally {
     for (const name of activeContainers) {
-      await Bun.spawn(['docker', 'rm', '-f', name], { env, stdout: 'ignore', stderr: 'ignore' }).exited;
+      await Bun.spawn(['docker', 'rm', '-f', name], { env, stdout: 'ignore', stderr: 'ignore', timeout: 10_000 }).exited;
     }
-    await Bun.spawn(['docker', 'image', 'rm', image], { env, stdout: 'ignore', stderr: 'ignore' }).exited;
-    console.log(`G336 native evidence: ${artifacts}`);
+    console.log(`Native retained-read evidence: ${artifacts}`);
   }
-}, 1_200_000);
+}, process.env.REZICS_READ_SNAPSHOT_PROBE === '1' ? 1_200_000 : 175_000);
