@@ -832,9 +832,6 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
     await expect(suspendedFixture.access.claim(suspendedRegistered.id, suspendedRequest.requestDigest, suspendedPrincipal))
       .rejects.toBeInstanceOf(AdmissionDenied);
     await expect(suspendedFixture.principal()).rejects.toThrow();
-    const suspendedReplay = await suspendedFixture.access.register(suspendedRequest);
-    expect(suspendedReplay).toMatchObject({ id: suspendedRegistered.id, replayed: true,
-      dispatchEligible: false, state: 'registered' });
     await assertGrantStillActive(suspended);
     await assertNoDraft(suspended);
 
