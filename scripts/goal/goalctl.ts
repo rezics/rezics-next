@@ -1254,7 +1254,7 @@ function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) {
   const live = tasks.filter(running).length;
   const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
   if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
-  const memory = memoryFloorRefusal(readFileSync('/proc/meminfo', 'utf8'), Number(process.env.GOAL_MEMORY_FLOOR_GIB ?? 12));
+  const memory = memoryFloorRefusal(readFileSync(process.env.GOAL_MEMINFO_FILE ?? '/proc/meminfo', 'utf8'), Number(process.env.GOAL_MEMORY_FLOOR_GIB ?? 12));
   if (memory) throw new Error(memory);
   const usage = currentUsage();
   const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
@@ -1274,7 +1274,7 @@ function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) {
 export function managerWakeGates(engine: Engine): { live: number; limit: number; claude: UsageLevel } {
   const live = Object.values(readLedger().tasks).filter(running).length;
   const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
-  const memory = memoryFloorRefusal(readFileSync('/proc/meminfo', 'utf8'), Number(process.env.GOAL_MEMORY_FLOOR_GIB ?? 12));
+  const memory = memoryFloorRefusal(readFileSync(process.env.GOAL_MEMINFO_FILE ?? '/proc/meminfo', 'utf8'), Number(process.env.GOAL_MEMORY_FLOOR_GIB ?? 12));
   if (memory) throw new Error(memory);
   const claude = currentUsage().level;
   const account = codexAccounts().find(candidate => candidate.engines.includes(engine));

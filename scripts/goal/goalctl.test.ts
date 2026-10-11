@@ -1,9 +1,9 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
 import { tierTestTimeoutArg } from '../qa/core.ts';
@@ -22,6 +22,29 @@ import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, 
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
 import { reviewPrompt } from './land.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
+import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
+
+// These fixtures exercise multiple CLI processes per case. Neither startup nor a whole case
+// has a latency contract; keep the test watchdog beyond the child's hang deadline.
+const CLI_SPAWN_DEADLINE_MS = 5 * 60_000;
+setDefaultTimeout(CLI_SPAWN_DEADLINE_MS * 4);
+const spawnSync = fixtureSpawns(CLI_SPAWN_DEADLINE_MS, process.env.GOAL_TEST_SPAWN_LOG);
+
+function cliEnvironment(dir: string): NodeJS.ProcessEnv {
+  const local = join(dir, '.temp');
+  mkdirSync(local, { recursive: true });
+  const meminfo = join(local, 'meminfo');
+  writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
+  return { PATH: process.env.PATH, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
+    GOAL_MEMINFO_FILE: meminfo, GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1'),
+    GOAL_USAGE_FILE: join(local, 'usage.json') };
+}
+
+test('a hung fixture child that ignores SIGTERM still fails with its command and deadline', () => {
+  const hung = fixtureSpawns(100);
+  expect(() => hung(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+    { encoding: 'utf8' })).toThrow(/did not exit after \d+ms \(deadline 100ms\): (?:SIGKILL|.*timed out)/);
+});
 
 // A fake runner's schedule belongs to its fixture, not another worker's measured host history.
 function runUnitGate(...[cwd, files, shards, runShard, options]: Parameters<typeof measuredUnitGate>): ReturnType<typeof measuredUnitGate> {
@@ -2218,11 +2241,7 @@ describe('goalctl reclaim', () => {
   }
 
   function run(dir: string, args: string[]) {
-    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha' };
-    delete env.GIT_DIR;
-    delete env.GIT_WORK_TREE;
-    delete env.GIT_COMMON_DIR;
-    delete env.GIT_INDEX_FILE;
+    const env = cliEnvironment(dir);
     const result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env });
     if (result.status === null) throw new Error(`${args.join(' ')} did not exit: ${result.error?.message ?? result.signal}\n${result.stdout}\n${result.stderr}`);
     return result;
@@ -2283,8 +2302,7 @@ describe('goalctl reclaim', () => {
 
   test('dispatch and reclaim refuse a file an exited task committed outside its claim until that task is verified', () => {
     const dir = mkdtempSync(join(tmpdir(), 'goalctl-unlanded-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MEMORY_FLOOR_GIB: '0', GOAL_MAX_WORKERS: '25' };
-    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[key];
+    const env = cliEnvironment(dir);
     const git = (...args: string[]) => {
       const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env });
       if (result.status !== 0) throw new Error(result.stderr || result.stdout);
@@ -2402,9 +2420,13 @@ describe('goalctl reclaim', () => {
   });
 
   test('lists --allow-area beside reclaim in the usage text', () => {
-    const result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts')], {
-      cwd: join(import.meta.dir, '../..'), encoding: 'utf8',
-    });
+    const dir = repo();
+    let result;
+    try {
+      result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts')], {
+        cwd: dir, encoding: 'utf8', env: cliEnvironment(dir),
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
     expect(result.stderr).toContain('dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]');
@@ -2488,11 +2510,13 @@ describe('goalctl shared lifecycle and launch gates', () => {
     git('commit', '-qm', 'start');
     mkdirSync(join(dir, '.temp/bin'), { recursive: true });
     const fixture = join(import.meta.dir, 'fixtures/sleep-worker.ts');
-    for (const binary of ['grok', 'claude', 'codex', 'codex-1']) {
+    for (const binary of ['grok', 'claude', 'codex', 'codex-1', 'cursor-agent']) {
       writeFileSync(join(dir, '.temp/bin', binary), `#!/usr/bin/env bun\nimport ${JSON.stringify(fixture)};\n`);
       chmodSync(join(dir, '.temp/bin', binary), 0o755);
     }
     writeFileSync(join(dir, '.temp/bin/corepack'), '#!/bin/sh\nexit 0\n');
+    writeFileSync(join(dir, '.temp/bin/docker'), '#!/bin/sh\nexit 0\n');
+    chmodSync(join(dir, '.temp/bin/docker'), 0o755);
     for (const binary of ['grok', 'corepack']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
     writeFileSync(join(dir, '.temp/bin/task'), `#!/usr/bin/env bun
 import { spawn } from 'node:child_process';
@@ -2521,20 +2545,16 @@ child.on('close', code => process.exit(code ?? 1));
     chmodSync(join(dir, '.temp/bin/task'), 0o755);
     const ready = join(dir, '.temp/ready');
     mkdirSync(ready);
-    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
-      GOAL_CODEX_HOME: join(dir, '.temp/codex'), GOAL_CODEX_1_HOME: join(dir, '.temp/codex-1'),
-      GOAL_USAGE_FILE: join(dir, '.temp/usage.json'), GOAL_SLEEP_READY_DIR: ready,
+    const env: NodeJS.ProcessEnv = { ...cliEnvironment(dir), GOAL_SLEEP_READY_DIR: ready,
       PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}` };
-    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[key];
     const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
     const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
     const save = (value: Ledger) => writeFileSync(ledgerPath, JSON.stringify(value));
-    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}, timeout = 45_000) => {
+    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}) => {
       const command = args[0] === 'wait'
         ? [join(import.meta.dir, 'fixtures/wait-cli.ts'), ...args.slice(1)]
         : [join(import.meta.dir, 'goalctl.ts'), ...args];
-      const result = spawnSync('bun', command, { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides }, timeout });
-      if (result.status === null) throw new Error(`${args.join(' ')} did not exit: ${result.error?.message ?? result.signal}\n${result.stdout}\n${result.stderr}`);
+      const result = spawnSync('bun', command, { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides } });
       return result;
     };
     for (const goal of ['alpha', 'beta']) {
@@ -2626,7 +2646,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(r.alive(server.pid!)).toBe(false);
       expect(readFileSync(dockerLog, 'utf8')).toContain(`compose -p rezics-qa-wt-${second.worktree.split('/').at(-1)} down -v`);
     } finally { server?.kill('SIGKILL'); r.cleanup(); }
-  }, 30_000);
+  });
 
   test('merges the shared branch once, accepts both claims and records all open sharers', async () => {
     const r = repo();
@@ -2658,7 +2678,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(r.ledger().tasks[second.id]!.mergedCommit).toBe(tasks[first.id]!.mergedCommit);
       expect(events()).toHaveLength(1);
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   test('wait continues once after a transport drop, names dirty files, and finishes on the next result', async () => {
     const r = repo();
@@ -2722,7 +2742,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout)
         .toContain(dirty);
     } finally { r.cleanup(); }
-  }, 60_000);
+  });
 
   test('wait stops after two transport continuations and status names the repeated drop', async () => {
     const r = repo();
@@ -2737,7 +2757,7 @@ child.on('close', code => process.exit(code ?? 1));
       const dispatched = r.run(['dispatch', r.brief('G-001')], { GOAL_WORKER_SCRIPT: script });
       expect(dispatched.stderr).toBe('');
       expect(dispatched.status).toBe(0);
-      const waited = r.run(['wait', 'G-001'], { GOAL_WORKER_SCRIPT: script }, 60_000);
+      const waited = r.run(['wait', 'G-001'], { GOAL_WORKER_SCRIPT: script });
       expect(waited.status).toBe(0);
       expect(waited.stdout).toContain('continued by itself after a transport error');
       expect(waited.stdout).toContain('stopped after repeated transport errors');
@@ -2749,7 +2769,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(status.status).toBe(0);
       expect(status.stdout).toContain('stopped after repeated transport errors');
     } finally { r.cleanup(); }
-  }, 60_000);
+  });
 
   test('a transport drop that a launch gate refuses to continue is still recorded as ended', async () => {
     const r = repo();
@@ -2759,7 +2779,7 @@ child.on('close', code => process.exit(code ?? 1));
       const dispatched = r.run(['dispatch', r.brief('G-001')], { GOAL_WORKER_SCRIPT: script });
       expect(dispatched.stderr).toBe('');
       expect(dispatched.status).toBe(0);
-      const waited = r.run(['wait', 'G-001'], { GOAL_WORKER_SCRIPT: script, GOAL_MEMORY_FLOOR_GIB: '1000000000' }, 60_000);
+      const waited = r.run(['wait', 'G-001'], { GOAL_WORKER_SCRIPT: script, GOAL_MEMORY_FLOOR_GIB: '1000000000' });
       expect(waited.status).toBe(0);
       expect(waited.stdout).toContain('G-001 attempt 1 ended');
       expect(waited.stdout).toContain('G-001 not continued after a transport error: ');
@@ -2769,7 +2789,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(task.attempts).toHaveLength(1);
       expect(task.attempts[0]!.endedAt).toBeDefined();
     } finally { r.cleanup(); }
-  }, 60_000);
+  });
 
   test('quota and ordinary failures do not start a transport continuation', async () => {
     const r = repo();
@@ -2783,7 +2803,7 @@ child.on('close', code => process.exit(code ?? 1));
         const dispatched = r.run(['dispatch', r.brief(id)], { GOAL_WORKER_SCRIPT: script });
         expect(dispatched.stderr).toBe('');
         expect(dispatched.status).toBe(0);
-        const waited = r.run(['wait', id], { GOAL_WORKER_SCRIPT: script }, 60_000);
+        const waited = r.run(['wait', id], { GOAL_WORKER_SCRIPT: script });
         expect(waited.status).toBe(0);
         expect(waited.stdout).not.toContain('continued by itself after a transport error');
         const task = r.ledger().tasks[id]!;
@@ -2792,7 +2812,7 @@ child.on('close', code => process.exit(code ?? 1));
         expect(task.attempts[0]!.continuedFor).toBeUndefined();
       }
     } finally { r.cleanup(); }
-  }, 60_000);
+  });
 
   test('changing the affected text format does not change the selected files', () => {
     const dir = mkdtempSync(join(tmpdir(), 'typed-affected-plan-'));
@@ -2891,7 +2911,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(result.status).toBe(0);
       expect(r.ledger().tasks[task.id]!.state).toBe('merged');
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   for (const scenario of ['references', 'ordered', 'unrelated-data', 'outside-comment', 'outside-filename', 'outside-reference', 'outside-symlink', 'unsafe-self-reference', 'unsafe-named-reference', 'unsafe-fraction-reference', 'above-head', 'padded', 'multiple-directories', 'ambiguous-directories', 'foreign-directory'] as const) {
     test(`migration normalization handles ${scenario} before the unit gate and fast-forward`, async () => {
@@ -2990,7 +3010,7 @@ child.on('close', code => process.exit(code ?? 1));
           if (scenario !== 'above-head') expect(r.git('log', '-1', '--format=%s')).toBe('Normalize migration numbers after rebase (goalctl)');
         }
       } finally { r.cleanup(); }
-    }, 30_000);
+    });
   }
 
   test('a failed normalized merge can retry exact migration claims above a newly moved head', async () => {
@@ -3030,7 +3050,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(existsSync(join(r.dir, directory, '1007_retry.sql'))).toBe(true);
       expect(readFileSync(join(r.dir, file), 'utf8')).toContain('1007_retry.sql');
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   for (const boundary of ['main-unrelated', 'main-changed-file', 'main-gated-file', 'main-renamed-gated-file', 'main-overlap-twice', 'task', 'sharer'] as const) {
     test(`merge handles ${boundary} moving while the normalized branch is tested`, async () => {
@@ -3111,7 +3131,7 @@ ${edit}
           expect(event.after).toBe(r.git('rev-parse', 'main'));
         }
       } finally { r.cleanup(); }
-    }, 30_000);
+    });
   }
 
   test('a later merge inherits a guard failure current main already has', async () => {
@@ -3141,7 +3161,7 @@ ${edit}
       expect(r.ledger().tasks[task.id]!.state).toBe('merged');
       expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   test('a stream classifies inherited failures against the current main commit', () => {
     const event = (before: string, after: string, taskIds: string[]) =>
@@ -3303,7 +3323,7 @@ process.exit(0);
     expect(failed.result.done).toBe(true);
     expect(failed.result.budgetExpired).toBeUndefined();
     expect(failed.result.failing).toEqual(['slow.test.ts']);
-  }, 20_000);
+  });
 
   test('the unit gate passes the owner timeout', async () => {
     const owner = await withOwnerStub('fail', 30_000);
@@ -3335,7 +3355,7 @@ process.exit(0);
       delete process.env.GOAL_STUB_LOG;
       rmSync(directory, { recursive: true, force: true });
     }
-  }, 20_000);
+  });
 
   test('an outer kill names the owner file that was running', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'goalctl-owner-progress-'));
@@ -3372,7 +3392,7 @@ process.exit(0);
     expect(killed.result.budgetExpired).toBe(true);
     expect(killed.result.timedOut).toEqual(['slow.test.ts']);
     expect(killed.result.files).toEqual(['slow.test.ts', 'later.test.ts']);
-  }, 20_000);
+  });
 
   for (const outcome of ['introduced', 'inherited'] as const) {
     test(`a guard absent from the affected plan has its ${outcome} failure compared with committed main`, async () => {
@@ -3419,7 +3439,7 @@ process.exit(0);
         expect(runs.every(run => run.args.includes(`./${guard}`))).toBe(true);
         expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
       } finally { r.cleanup(); }
-    }, 30_000);
+    });
   }
 
   for (const outcome of ['branch-adds-finding', 'identical-findings'] as const) {
@@ -3480,7 +3500,7 @@ process.exit(0);
         }
         expect(runs.every(run => run.args.includes(`./${guard}`))).toBe(true);
       } finally { r.cleanup(); }
-    }, 30_000);
+    });
   }
 
   for (const outcome of ['introduced', 'inherited', 'skipped', 'dirty-main', 'new-file'] as const) {
@@ -3556,7 +3576,7 @@ process.exit(0);
           expect(r.ledger().tasks[task.id]!.state).toBe('merged');
         }
       } finally { r.cleanup(); }
-    }, 30_000);
+    });
   }
 
   test('an unattributed task runner failure blocks with its diagnostic', async () => {
@@ -3589,7 +3609,7 @@ process.exit(0);
       expect(runs[0].args).toContain(`./${file}`);
       expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   test('eight affected files run as four shards and the union of their failures is reported', async () => {
     const r = repo();
@@ -3633,7 +3653,7 @@ process.exit(0);
       expect(groups.flat().sort()).toEqual(files.map(file => `./${file}`).sort());
       expect(new Set(groups.flat()).size).toBe(files.length);
     } finally { r.cleanup(); }
-  }, 45_000);
+  });
 
   test('a failure that disappears when the failing files run together is order-dependent and not blocking', async () => {
     const r = repo();
@@ -3677,7 +3697,7 @@ process.exit(0);
       expect(confirmation[0]!.cwd).toBe(task.worktree);
       expect(runs.filter(run => filesOf(run).includes(`./${mate}`))).toHaveLength(1);
     } finally { r.cleanup(); }
-  }, 45_000);
+  });
 
   test('a failure that passes when its file runs alone is order or load dependent and not blocking', async () => {
     const r = repo();
@@ -3715,7 +3735,7 @@ process.exit(0);
       expect(runs.filter(run => filesOf(run).join() === `./${dependent}` && run.cwd === task.worktree)).toHaveLength(1);
       expect(runs.filter(run => filesOf(run).join() === `./${keeper}` && run.cwd === task.worktree)).toHaveLength(1);
     } finally { r.cleanup(); }
-  }, 45_000);
+  });
 
   test('a unit gate timeout that remains inconclusive after an isolated retry blocks the merge', async () => {
     const r = repo();
@@ -3740,7 +3760,7 @@ process.exit(0);
       const result = r.run(['merge', task.id], {
         GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '2', GOAL_UNIT_GATE_BUDGET_MS: '1000',
         GOAL_UNIT_GATE_CEILING_MS: '60000',
-      }, 40_000);
+      });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain('slowest budget 1000ms');
       expect(result.stdout).toContain('inconclusive');
@@ -3764,7 +3784,7 @@ process.exit(0);
       });
       expect(hanging).toBe(false);
     } finally { r.cleanup(); }
-  }, 60_000);
+  });
 
   test('files a timed-out shard never started run again and the merge lands', async () => {
     const r = repo();
@@ -3793,7 +3813,7 @@ process.exit(0);
       const result = r.run(['merge', task.id], {
         GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1', GOAL_UNIT_GATE_BUDGET_MS: '1000',
         GOAL_UNIT_GATE_CEILING_MS: '60000',
-      }, 40_000);
+      });
       expect(result.stderr).not.toContain('inconclusive');
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('were not reached; continuing');
@@ -3803,7 +3823,7 @@ process.exit(0);
       // Bun names no file before the budget stops it, so the rerun may include the slow one; the rest must be there.
       expect(runs[1]).toEqual(expect.arrayContaining(later.map(file => `./${file}`)));
     } finally { r.cleanup(); }
-  }, 60_000);
+  });
 
   test('a manually landed cherry-pick records its boundary and preserves intervening maintainer commits', async () => {
     const r = repo();
@@ -3821,7 +3841,7 @@ process.exit(0);
       expect(r.run(['merge', task.id, '--landed']).status).toBe(0);
       expect(readFileSync(path, 'utf8').trim().split('\n')).toHaveLength(1);
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   test('inbox lists, acknowledges a displayed line and status prints the unacknowledged count', () => {
     const r = repo();
@@ -3995,7 +4015,7 @@ process.exit(0);
     return spawnSync(process.execPath, ['-e',
       `import { managerWakeGates } from ${JSON.stringify(join(import.meta.dir, 'goalctl.ts'))};\n`
       + `console.log(JSON.stringify(managerWakeGates(${JSON.stringify(engine)})));\n`],
-      { cwd: dir, encoding: 'utf8', env, timeout: 30_000 });
+      { cwd: dir, encoding: 'utf8', env });
   }
 
   test('a Claude manager wake is admitted at restricted and critical usage while workers are at the cap', async () => {
@@ -4395,7 +4415,7 @@ process.exit(0);
       expect(r.ledger().tasks[task.id]!.refusal).toBe('earlier refusal');
       expect(existsSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'))).toBe(false);
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   test('gate refuses a running worker before it touches the worktree', async () => {
     const r = repo();
@@ -4678,12 +4698,14 @@ describe('gate lanes', () => {
     const entered: string[] = [];
     const release = new Map<string, () => void>();
     const pending: Promise<unknown>[] = [];
+    let cleaningUp = false;
     let releasePrimary: (() => void) | undefined;
     let releaseNext: (() => void) | undefined;
     const hold = (name: string, announce?: (message: string) => void) => {
       const run = withGateLane(() => new Promise<void>(done => {
         entered.push(name);
         release.set(name, done);
+        if (cleaningUp) done();
       }), {
         directory, command: `merge ${name}`, goal: 'program', pollMs: 5,
         ...(announce ? { announce } : {}),
@@ -4759,6 +4781,7 @@ describe('gate lanes', () => {
       releaseNext!();
       await next;
     } finally {
+      cleaningUp = true;
       for (const done of release.values()) done();
       releasePrimary?.();
       releaseNext?.();
@@ -4812,7 +4835,7 @@ describe('gate lanes', () => {
       rmSync(root, { recursive: true, force: true });
       rmSync(work, { recursive: true, force: true });
     }
-  }, 20_000);
+  });
 
   test('a killed holder frees its lane', async () => {
     const root = mkdtempSync(join(tmpdir(), 'gate-kill-'));
@@ -4866,7 +4889,7 @@ await withGateLane(async () => {
       await exited.catch(() => undefined);
       rmSync(root, { recursive: true, force: true });
     }
-  }, 15_000);
+  });
 });
 
 describe('heavy QA lock', () => {
@@ -5431,7 +5454,7 @@ describe('heavy QA lock', () => {
           }
         });
       `);
-      const result = spawnSync('bun', ['test', script], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000,
+      const result = spawnSync('bun', ['test', script], { cwd: process.cwd(), encoding: 'utf8',
         maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GOAL_QA_HEAVY_RUN: '1', GOAL_QA_SLOTS: '3',
           GOAL_QA_SLOT_DIRECTORY: slots, QA_CLI_STARTUP_MARKER: marker,
           REZICS_QA_HOST_MEMORY_GIB: '0.001', REZICS_QA_HOST_RESERVE_GIB: '0' } });
@@ -5443,7 +5466,7 @@ describe('heavy QA lock', () => {
       for (const holder of holders) holder.kill('SIGTERM');
       rmSync(root, { recursive: true, force: true });
     }
-  }, 35_000);
+  });
 
   for (const args of [
     ['scripts/qa/cli.ts', '--tier', 'model', '--file', 'model/tests/native-equivalence.test.ts'],
@@ -5618,7 +5641,7 @@ await acquireHeavy(['blocked'], { lockDir: ${JSON.stringify(lockDir)}, pollMs: 3
         rmSync(root, { recursive: true, force: true });
       }
     }
-  }, 30_000);
+  });
 });
 
 function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => string): Promise<void> {
