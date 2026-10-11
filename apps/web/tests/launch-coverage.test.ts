@@ -35,7 +35,9 @@ function escaped(value: string): string {
 function namedTestExists(source: string, title: string): boolean {
   const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
   for (const match of source.matchAll(declaration)) {
-    const rawTitle = match[2]!;
+    // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon); the registry names
+    // the title after it, so no task identifier is copied into the registry.
+    const rawTitle = match[2]!.replace(/^G-?\d+: /, '');
     const pattern = rawTitle
       .split(/(\$\{[^}]+\})/g)
       .map((part) => (part.startsWith('${') ? '.*' : escaped(part)))
