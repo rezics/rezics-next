@@ -21,6 +21,10 @@ import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.
 import { saveAdmittedContentDraft } from '../src/modules/content-publication/draft.ts';
 import { publishAdmittedContent } from '../src/modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch } from '../src/modules/content-publication/eligibility-admitted.ts';
+import { contentSearchEligibilityDigest } from '../src/modules/content-publication/eligibility.ts';
+import { readRetainedContentEligibilitySource } from '../src/modules/content-publication/eligibility-state.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
+import type { DeliveredMainEvent } from '../src/modules/outbox/relay.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, quarantinePublicContentSearch,
   replayQuarantinedContentCut, verifyQuarantinedContentIndex } from '../src/modules/content-publication/rebuild.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
@@ -154,6 +158,11 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
     headers: { authorization: 'Bearer verified-content-fixture' } });
   const frame = (...values: string[]) => values.map(value => `${value.length}:${value}`).join('');
   const sha = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
+  const stable = (value: unknown): string => Array.isArray(value) ? `[${value.map(stable).join(',')}]`
+    : value && typeof value === 'object' ? `{${Object.entries(value).filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`
+      : JSON.stringify(value) ?? 'null';
   const publicGraph = 'urn:rezics:search:public';
   const body = '中文检索投影 café 😀 逐字交付';
   const language = 'zh';
@@ -205,16 +214,48 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
       expectedPublicationHead: null, actingSubject: actor, idempotencyKey: randomUUID() });
     expect(publication.status).toBe('active');
     if (!publication.decision) throw new Error('terminal graph publication decision absent');
+    const deliverApproval = async (approval: Awaited<ReturnType<typeof selectAdmittedPublicContentSearch>>,
+      expectedEligibilityHead: string | null) => {
+      if (!approval.decision) throw new Error('Public eligibility decision absent');
+      const input = { resourceId: work.work, variantId: variant.id, publicationDecision: publication.decision!,
+        expectedEligibilityHead, actingSubject: actor, rightsBasis: 'original-contribution' as const,
+        disclosure: 'public' as const };
+      const requestDigest = contentSearchEligibilityDigest(input);
+      const expected = await content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, env.lineage.dataEpoch);
+      const exact = await readRetainedContentEligibilitySource(env, await content.ownerPosition(), {
+        eligibilityDecision: approval.decision, publicationDecision: publication.decision!,
+        variant: variant.id, resource: work.work, receiptId: approval.receipt,
+        requestDigest, graphDataEpoch: approval.graphDataEpoch, graphSequence: approval.graphSequence,
+      });
+      const sequence = (BigInt(expected.sequence) + 1n).toString();
+      const batchId = `urn:rezics:outbox:${sha(`${approval.receipt}\0eligibility`)}`;
+      const envelope = { specversion: '1.0', id: `urn:rezics:event:${sha(`${approval.receipt}\0eligibility`)}`,
+        source: 'https://rezics.com/services/main', type: 'com.rezics.content.search-eligible.v1',
+        datacontenttype: 'application/json', data: { batchId,
+          sourcePosition: { datasetId: 'product', dataEpoch: approval.graphDataEpoch,
+            sequence: approval.graphSequence }, routingEpoch: MAIN_ROUTING_EPOCH, ordinal: 0,
+          relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: approval.graphDataEpoch, sequence },
+          receipt: { id: approval.receipt, action: 'content.search-eligibility', outcome: 'succeeded',
+            requestDigest, resource: work.work, variant: variant.id,
+            publicationDecision: publication.decision!, eligibilityDecision: approval.decision, disclosure: 'public' } } } as const satisfies DeliveredMainEvent;
+      const digest = sha(stable({ streamScope: MAIN_RELAY_STREAM_SCOPE, sequence, batchId,
+        routingEpoch: MAIN_ROUTING_EPOCH, events: [envelope] }));
+      return content.ingestEligibilityDeliveryPage({ expected, batches: [{ sequence, id: batchId, digest,
+        events: [{ id: envelope.id, type: envelope.type, ordinal: 0,
+          sourcePosition: envelope.data.sourcePosition, receipt: envelope.data.receipt,
+          publication: { preparationId: exact.publication.preparationId, revisionId: exact.revisionId } }] }] });
+    };
     const eligibility = await selectAdmittedPublicContentSearch(env, content, account, access, request, {
       resourceId: work.work, variantId: variant.id, publicationDecision: publication.decision,
       expectedEligibilityHead: null, actingSubject: actor, rightsBasis: 'original-contribution',
       disclosure: 'public', idempotencyKey: randomUUID() });
     expect(eligibility.outcome).toBe('succeeded');
+    await deliverApproval(eligibility, null);
     const preparation = await content.readPublicationPreparation(preparationId);
     if (!preparation) throw new Error('Content preparation absent');
     const source = frame(revision, saved.byteDigest, publication.decision,
       preparation.position.dataEpoch, 'content-match-unit-v1');
-    const owner = await content.ownerPosition();
+    const firstOwner = await content.ownerPosition();
     let lost = false;
     for (let n = 0; n < 8; n++) {
       const next = await relayContentProjectionOnce(env, content, cursor, consumer);
@@ -223,17 +264,30 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
     expect(lost).toBe(true);
     expect(fuseki.deliveries).toHaveLength(1);
     const first = fuseki.deliveries[0]!;
-    expect((await cursor.read(consumer)).sequence).not.toBe(owner.sequence);
+    expect((await cursor.read(consumer)).sequence).not.toBe(firstOwner.sequence);
+
+    // E2 commits while E1's native write is committed but its Content cursor
+    // acknowledgement is lost. E1 must yield only to the exact durable E2 row.
+    const nextEligibility = await selectAdmittedPublicContentSearch(env, content, account, access, request, {
+      resourceId: work.work, variantId: variant.id, publicationDecision: publication.decision!,
+      expectedEligibilityHead: eligibility.decision, actingSubject: actor,
+      rightsBasis: 'original-contribution', disclosure: 'public', idempotencyKey: randomUUID() });
+    expect(nextEligibility.outcome).toBe('succeeded');
+    await deliverApproval(nextEligibility, eligibility.decision);
+    // The same relay tick resolves the pending E1 retry as superseded, then
+    // projects the retained E2 delivery at the source checkpoint.
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
+    const owner = await content.ownerPosition();
     expect(fuseki.deliveries).toHaveLength(2);
-    expect(fuseki.deliveries[1]).toEqual(first);
+    const current = fuseki.deliveries[1]!;
+    expect(current.envelope.receipt).not.toBe(first.envelope.receipt);
     expect((await cursor.read(consumer)).sequence).toBe(owner.sequence);
     const receiptBody = async (receipt: string) => {
       const rows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?unit ?projection ?source ?identity
         ?body ?language (DATATYPE(?body) AS ?datatype) (DATATYPE(?source) AS ?sourceDatatype) WHERE {
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
           rv:contentRevision ${iri(revision)} ; rv:publicationDecision ${iri(publication.decision!)} ;
-          rv:eligibility ${iri(eligibility.decision!)} ; rv:matchUnit ?unit ; rv:projection ?projection ;
+          rv:eligibility ${iri(nextEligibility.decision!)} ; rv:matchUnit ?unit ; rv:projection ?projection ;
           rv:searchDeltaContentSource ?source ; rv:searchDeltaContentBodyDigest ?identity . }
         GRAPH ${iri(publicGraph)} { ?unit rv:projection ?projection ; rv:searchBody ?body ; rv:language ?language }
       } LIMIT 2`)).results?.bindings ?? [];
@@ -248,15 +302,16 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
       expect(row.identity?.value).toBe(sha(frame(row.unit!.value, publicGraph, 'body', frame(body, language, datatype))));
       return row;
     };
-    const original = await receiptBody(first.envelope.receipt);
+    const original = await receiptBody(current.envelope.receipt);
     const query = await queryPublicContentPhrase(env, content, cursor, consumer, { phrase: '中文检索', language });
     expect(query.complete).toBe(true);
     expect(query.results.map(row => row.matchUnit)).toContain(original.unit!.value);
-    expect(await native.command(first.envelope)).toMatchObject({ status: 'committed', position: first.position });
+    expect(await native.command(current.envelope)).toMatchObject({ status: 'committed', position: current.position });
+    await expect(native.command(first.envelope)).rejects.toThrow('Fuseki command returned 500');
 
     // The allocated QA project must use a named state volume before stopping:
     // ordinary tmpfs would lose the original TDB2 evidence along with Lucene.
-    const stack = qaStack(REZICS_QA_RUN_ID);
+    const stack = qaStack(REZICS_QA_RUN_ID, { rawUpdate: true });
     expect(stack.apps.FUSEKI_URL).toBe(FUSEKI_URL);
     expect(stack.composeEnv.REZICS_STACK_STORAGE).toBe('persistent');
     expect(stack.project).toBe(`rezics-qa-${REZICS_QA_RUN_ID}`);
@@ -267,12 +322,13 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
       SELECT ?graph ?subject ?predicate ?object WHERE {
         VALUES ?graph { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} ${iri(GRAPHS.receipts)} }
         VALUES ?subject { ${[variant.id, publication.decision!, publication.receipt,
-          eligibility.decision!, eligibility.receipt, first.envelope.receipt].map(iri).join(' ')} }
+          eligibility.decision!, eligibility.receipt, nextEligibility.decision!, nextEligibility.receipt,
+          first.envelope.receipt, current.envelope.receipt].map(iri).join(' ')} }
         GRAPH ?graph { ?subject ?predicate ?object }
-      } ORDER BY ?graph ?subject ?predicate ?object LIMIT 128`)).results?.bindings ?? [];
+      } ORDER BY ?graph ?subject ?predicate ?object LIMIT 256`)).results?.bindings ?? [];
     const originalEvidence = await sourceEvidence();
     expect(originalEvidence.length).toBeGreaterThan(0);
-    expect(originalEvidence.length).toBeLessThan(128);
+    expect(originalEvidence.length).toBeLessThan(256);
     const originalPublicationField = (field: string) => {
       const rows = originalEvidence.filter(row => row.subject?.value === publication.receipt
         && row.predicate?.value === `${RV}${field}`);
@@ -304,7 +360,7 @@ test -z "$(ls -A /fuseki/databases/rezics/lucene)"`);
     expect(await inspectFusekiState(stack.runner, stack.dockerEnv, fuseki)).toEqual(allocatedPins);
     expect((await fuseki.commandHealth()).instanceId).not.toBe(beforeStop.instanceId);
     expect(await sourceEvidence()).toEqual(originalEvidence);
-    expect(await receiptBody(first.envelope.receipt)).toEqual(original);
+    expect(await receiptBody(current.envelope.receipt)).toEqual(original);
     expect(await physicalBody(original.unit!.value)).toEqual([]);
     await expect(queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: '中文检索', language })).rejects.toThrow();
@@ -317,12 +373,12 @@ test -z "$(ls -A /fuseki/databases/rezics/lucene)"`);
     };
     // A missing or corrupt original descriptor cannot be inferred from the
     // still intact body RDF, current publication pins or PostgreSQL bytes.
-    await receiptField(first.envelope.receipt, 'searchDeltaContentSource', null);
-    try { await expect(native.command(first.envelope)).rejects.toThrow('Fuseki command returned 500'); }
-    finally { await receiptField(first.envelope.receipt, 'searchDeltaContentSource', original.source!.value); }
-    await receiptField(first.envelope.receipt, 'searchDeltaContentBodyDigest', '0'.repeat(64));
-    try { await expect(native.command(first.envelope)).rejects.toThrow('Fuseki command returned 500'); }
-    finally { await receiptField(first.envelope.receipt, 'searchDeltaContentBodyDigest', original.identity!.value); }
+    await receiptField(current.envelope.receipt, 'searchDeltaContentSource', null);
+    try { await expect(native.command(current.envelope)).rejects.toThrow('Fuseki command returned 500'); }
+    finally { await receiptField(current.envelope.receipt, 'searchDeltaContentSource', original.source!.value); }
+    await receiptField(current.envelope.receipt, 'searchDeltaContentBodyDigest', '0'.repeat(64));
+    try { await expect(native.command(current.envelope)).rejects.toThrow('Fuseki command returned 500'); }
+    finally { await receiptField(current.envelope.receipt, 'searchDeltaContentBodyDigest', original.identity!.value); }
     expect(await physicalBody(original.unit!.value)).toEqual([]);
     expect(await sourceEvidence()).toEqual(originalEvidence);
 
@@ -464,7 +520,8 @@ sync`); }
     finally { await stack.runner.start(); }
     const productionId = randomUUID();
     const production = await rebuild(productionId);
-    expect(production).toMatchObject({ job: productionId, removed: 1, replayed: 3, pins: allocatedPins });
+    // The replay now includes both retained eligibility handoffs in Content's sequence.
+    expect(production).toMatchObject({ job: productionId, removed: 1, replayed: 5, pins: allocatedPins });
     expect(offlinePasses).toBe(1);
     expect((await cursor.read(consumer)).sequence).toBe(owner.sequence);
     const productionDelivery = fuseki.deliveries.at(-1)!;
@@ -577,4 +634,4 @@ sync`); }
     await Promise.all([accessPool.end(), contentPool.end()]);
     rmSync(state, { recursive: true, force: true });
   }
-}, 300_000);
+}, 420_000);

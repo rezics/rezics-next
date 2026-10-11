@@ -11,6 +11,7 @@ import { readZoneSitePublicationReceipt } from '../zone/configuration.ts';
 import { zonePublishedPageBinding } from '../zone/config-format.ts';
 import { compositionReceiptIri, readCompositionReceipt } from '../structure/change.ts';
 import { readContentEligibilityStatesForVariants } from './eligibility-state.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 export { ContentProjectionUnavailable } from './projection-recipes.ts';
 
 const PROFILE_ID = 'content-match-unit-v1';
@@ -23,6 +24,29 @@ const ELIGIBILITY_PROFILES = [
 ] as const;
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
 const decimal = /^(0|[1-9][0-9]*)$/;
+const ELIGIBILITY_DELIVERY_EVENT = 'content.publication.eligibility-delivered';
+
+interface DeliveredEligibilitySource {
+  sourcePosition: { dataEpoch: string; sequence: string };
+  sourceReceipt: {
+    resource: string;
+    variant: string;
+    publicationDecision: string;
+    eligibilityDecision: string;
+  };
+}
+
+function deliveredEligibilitySource(event: ContentOutboxEvent): DeliveredEligibilitySource | undefined {
+  if (event.eventType !== ELIGIBILITY_DELIVERY_EVENT) return undefined;
+  const sourcePosition = event.payload.sourcePosition as DeliveredEligibilitySource['sourcePosition'] | undefined;
+  const sourceReceipt = event.payload.sourceReceipt as DeliveredEligibilitySource['sourceReceipt'] | undefined;
+  if (!sourcePosition || !sourceReceipt || !sourcePosition.dataEpoch || !decimal.test(sourcePosition.sequence)
+    || !sourceReceipt.resource || !sourceReceipt.variant || !sourceReceipt.publicationDecision
+    || !sourceReceipt.eligibilityDecision) {
+    throw new ContentProjectionGap('Content eligibility delivery identity is incomplete');
+  }
+  return { sourcePosition, sourceReceipt };
+}
 
 export class ContentProjectionGap extends Error {}
 export class ContentProjectionProfileUnavailable extends Error {}
@@ -279,7 +303,7 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
 async function terminalPublication(content: ContentCore, event: ContentOutboxEvent) {
   if (!event.recipe) throw new ContentProjectionGap('Content outbox event is incomplete');
   if (event.recipe !== 'content-body-v1') return undefined;
-  if (['content.publication.active', 'content.publication.rejected'].includes(event.eventType)) {
+  if (['content.publication.active', 'content.publication.rejected', ELIGIBILITY_DELIVERY_EVENT].includes(event.eventType)) {
     return content.readProjectionPublication(event, true);
   }
   if (!['content.revision.saved', 'content.draft.stale', 'content.publication.prepared',
@@ -296,7 +320,8 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
   // outbox; search projects only content-body-v1 events and acknowledges the rest in order.
   if (event.recipe !== 'content-body-v1') {
     // Acknowledged below without projection.
-  } else if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
+  } else if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected'
+    || event.eventType === ELIGIBILITY_DELIVERY_EVENT) {
     // Resolve the published revision's model from Content's settled pin first.
     // Non-text revisions need no body-byte read or text-profile check.
     if (!publication) throw new ContentProjectionGap('terminal publication source missing');
@@ -317,6 +342,81 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
     if (publication.status === 'rejected') return 'ignored';
     if (graph.head !== graph.decision) {
       if (!graph.head) throw new ContentProjectionUnavailable('active publication head is absent');
+      return 'superseded';
+    }
+    const source = deliveredEligibilitySource(event);
+    if (event.eventType === 'content.publication.active' && graph.eligibilityState?.kind === 'public-current') {
+      if (!graph.eligibility || !graph.decision || graph.eligibleDecision !== graph.decision) {
+        throw new ContentProjectionUnavailable('current Public approval does not bind the active publication');
+      }
+      const delivery = await content.readEligibilityDeliveryForPublication(event, {
+        streamScope: MAIN_RELAY_STREAM_SCOPE,
+        graphDataEpoch: env.lineage.dataEpoch,
+        resourceId: publication.reference.resourceId,
+        variantId: publication.reference.variantId,
+        publicationDecision: graph.decision,
+        eligibilityDecision: graph.eligibility,
+        preparationId: publication.preparationId,
+        revisionId: publication.reference.revisionId,
+      });
+      if (!delivery) {
+        throw new ContentProjectionUnavailable('current Public approval has no durable Content delivery');
+      }
+      const delivered = deliveredEligibilitySource(delivery.event);
+      if (!delivered || !decimal.test(delivery.sourceSequence)
+        || delivered.sourcePosition.dataEpoch !== env.lineage.dataEpoch
+        || delivered.sourcePosition.sequence !== delivery.sourceSequence
+        || delivered.sourceReceipt.resource !== publication.reference.resourceId
+        || delivered.sourceReceipt.variant !== publication.reference.variantId
+        || delivered.sourceReceipt.publicationDecision !== graph.decision
+        || delivered.sourceReceipt.eligibilityDecision !== graph.eligibility) {
+        throw new ContentProjectionUnavailable('durable Public approval delivery differs from current eligibility');
+      }
+      const deliveredPublication = await content.readProjectionPublication(delivery.event, true);
+      if (deliveredPublication.preparationId !== publication.preparationId
+        || deliveredPublication.reference.revisionId !== publication.reference.revisionId
+        || deliveredPublication.reference.resourceId !== publication.reference.resourceId
+        || deliveredPublication.reference.variantId !== publication.reference.variantId) {
+        throw new ContentProjectionUnavailable('durable Public approval delivery names another Content pin');
+      }
+      return 'superseded';
+    }
+    if (source && (source.sourceReceipt.resource !== publication.reference.resourceId
+      || source.sourceReceipt.variant !== publication.reference.variantId
+      || source.sourceReceipt.publicationDecision !== graph.decision)) {
+      throw new ContentProjectionUnavailable('delivered eligibility differs from its settled publication');
+    }
+    if (source && source.sourceReceipt.eligibilityDecision !== graph.eligibility) {
+      if (graph.eligibilityState?.kind !== 'public-current' || !graph.eligibility || !graph.decision) {
+        throw new ContentProjectionUnavailable('newer eligibility source is not an exact current Public approval');
+      }
+      const successor = await content.readEligibilityDeliverySuccessor(event, {
+        streamScope: MAIN_RELAY_STREAM_SCOPE,
+        graphDataEpoch: env.lineage.dataEpoch,
+        sourceSequence: source.sourcePosition.sequence,
+        resourceId: publication.reference.resourceId,
+        variantId: publication.reference.variantId,
+        publicationDecision: graph.decision,
+        eligibilityDecision: graph.eligibility,
+      });
+      if (!successor || !decimal.test(successor.sourceSequence)
+        || BigInt(successor.sourceSequence) <= BigInt(source.sourcePosition.sequence)) {
+        throw new ContentProjectionUnavailable('newer Public approval delivery is not durably retained in Content');
+      }
+      const nextSource = deliveredEligibilitySource(successor.event);
+      if (!nextSource || nextSource.sourcePosition.dataEpoch !== env.lineage.dataEpoch
+        || BigInt(nextSource.sourcePosition.sequence) !== BigInt(successor.sourceSequence)
+        || nextSource.sourceReceipt.eligibilityDecision !== graph.eligibility
+        || nextSource.sourceReceipt.publicationDecision !== graph.decision) {
+        throw new ContentProjectionUnavailable('newer Public approval successor differs from current eligibility');
+      }
+      const nextPublication = await content.readProjectionPublication(successor.event, true);
+      if (nextPublication.preparationId !== publication.preparationId
+        || nextPublication.reference.revisionId !== publication.reference.revisionId
+        || nextPublication.reference.resourceId !== publication.reference.resourceId
+        || nextPublication.reference.variantId !== publication.reference.variantId) {
+        throw new ContentProjectionUnavailable('newer Public approval successor names another Content pin');
+      }
       return 'superseded';
     }
     const recipe = projectionRecipeFor(publication.reference.model);

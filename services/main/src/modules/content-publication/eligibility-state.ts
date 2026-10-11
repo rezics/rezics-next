@@ -43,6 +43,7 @@ export interface ContentEligibilityPublicationProof {
   resource: string;
   revision: string;
   digest: string;
+  preparationId?: string;
   ownerDataEpoch: string;
   ownerSequence: string;
   graphSequence: string;
@@ -55,6 +56,14 @@ export interface ContentEligibilityDecisionProof {
   publicationDecision: string;
   graphSequence: string;
   rightsBasis: string;
+  sourceReceiptId?: string;
+  requestDigest?: string;
+}
+
+export interface RetainedContentEligibilitySource {
+  eligibility: ContentEligibilityDecisionProof & { sourceReceiptId: string; requestDigest: string };
+  publication: ContentEligibilityPublicationProof & { preparationId: string };
+  revisionId: string;
 }
 
 export type ContentEligibilityState =
@@ -331,8 +340,18 @@ function publicationProofQuery(ids: readonly string[]): string {
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?publication a rv:RevisionAnchor }
         BIND(1 AS ?anchorType) }
       ${optionalFields(GRAPHS.revisions, '?publication', publicationDecisionFields)}
-      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} {
-        ?receipt rv:publicationDecision ?publication ; rv:contentPreparation ?rPreparation } }
+      # The eligibility receipt also names this publication. Bind only its
+      # complete succeeded publication receipt before aggregating proof fields.
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ;
+        rv:outcome rv:Succeeded ; rv:publicationDecision ?publication ;
+        rv:requestDigest ?publicationRequestDigest ; rv:admissionId ?publicationAdmissionId ;
+        rv:authorityEpoch ?publicationAuthorityEpoch ; rv:admittedScope ?publicationScope ;
+        rv:contentPreparation ?publicationPreparation ; rv:contentRevision ?publicationRevision ;
+        rv:variant ?publicationVariant ; rv:resource ?publicationResource ;
+        rv:byteDigest ?publicationDigest ; rv:ownerDataEpoch ?publicationOwnerEpoch ;
+        rv:ownerSequence ?publicationOwnerSequence ; rv:expectedHead ?publicationExpectedHead ;
+        rv:datasetId ?publicationDataset ; rv:dataEpoch ?publicationGraphEpoch ;
+        rv:sequence ?publicationGraphSequence . } }
       OPTIONAL { FILTER(BOUND(?receipt)) GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt }
         BIND(1 AS ?receiptType) }
       ${optionalFields(GRAPHS.receipts, '?receipt', publicationReceiptFields, 'receipt')}
@@ -377,10 +396,15 @@ function exactRowId(row: Row, field: string): string | undefined {
 }
 
 function parsePublicationProof(row: Row | undefined, id: string, snapshot: ContentEligibilitySnapshot,
-  owner: ContentEligibilityOwnerPosition, variant: string, resource: string): ContentEligibilityPublicationProof | undefined {
-  if (!row || exactRowId(row, 'publication') !== id
-    || count(row, 'decisionType') !== 1 || count(row, 'anchorType') !== 1
-    || count(row, 'receipt') !== 1 || count(row, 'receiptType') !== 1) return undefined;
+  owner: ContentEligibilityOwnerPosition, variant: string, resource: string,
+  issues?: string[]): ContentEligibilityPublicationProof | undefined {
+  if (!row) { issues?.push('row'); return undefined; }
+  const invalid: string[] = [];
+  if (exactRowId(row, 'publication') !== id) invalid.push('identity');
+  if (count(row, 'decisionType') !== 1) invalid.push('decision-type');
+  if (count(row, 'anchorType') !== 1) invalid.push('anchor-type');
+  if (count(row, 'receipt') !== 1) invalid.push('receipt');
+  if (count(row, 'receiptType') !== 1) invalid.push('receipt-type');
   const dComponent = exact(row, 'dComponent', 'uri');
   const dResource = exact(row, 'dResource', 'uri');
   const revision = exact(row, 'dRevision', 'uri');
@@ -413,24 +437,43 @@ function parsePublicationProof(row: Row | undefined, id: string, snapshot: Conte
   const rSequence = exact(row, 'rSequence', 'literal');
   const rDecision = exact(row, 'rDecision', 'uri');
   const expectedRevision = revision && new RegExp(`^${REVISION_PREFIX}([0-9a-f-]{36})$`, 'i').test(revision);
-  if (!dComponent || dComponent !== variant || dResource !== resource || !revision || !expectedRevision
-    || !digest || !SHA256.test(digest) || !ownerDataEpoch || ownerDataEpoch !== owner.dataEpoch
-    || !ownerSequence || !DECIMAL.test(ownerSequence) || BigInt(ownerSequence) > BigInt(owner.sequence)
-    || dDataEpoch !== snapshot.dataEpoch || !dSequence || !DECIMAL.test(dSequence)
-    || BigInt(dSequence) === 0n || BigInt(dSequence) > BigInt(snapshot.sequence)
-    || dModel !== 'https://rezics.com/definition/content-publication-v1'
-    || dShape !== dModel || dDataset !== DATASET || !dPreparation
-    || !receipt || !rOutcome || rOutcome !== `${RV}Succeeded` || rReason !== null
-    || !requestDigest || !SHA256.test(requestDigest) || !admissionId || !UUID.test(admissionId)
-    || !authorityEpoch || !DECIMAL.test(authorityEpoch) || !scope
-    || scope !== `content:publish:${variant}` && scope !== `content:publish:${resource}`
-    || rPreparation !== dPreparation || rRevision !== revision || rVariant !== variant
-    || rResource !== resource || rDigest !== digest || rOwnerEpoch !== ownerDataEpoch
-    || rOwnerSequence !== ownerSequence || !expectedHead || !isIri(expectedHead)
-    || rDataset !== DATASET || rDataEpoch !== snapshot.dataEpoch || rSequence !== dSequence
-    || rDecision !== id || publicationDecisionIri(admissionId) !== id
-    || publicationReceiptIri(admissionId) !== receipt) return undefined;
-  return { id, variant, resource, revision, digest, ownerDataEpoch, ownerSequence, graphSequence: dSequence };
+  if (!dComponent || dComponent !== variant) invalid.push('component');
+  if (dResource !== resource) invalid.push('resource');
+  if (!revision || !expectedRevision) invalid.push('revision');
+  if (!digest || !SHA256.test(digest)) invalid.push('digest');
+  if (!ownerDataEpoch || ownerDataEpoch !== owner.dataEpoch) invalid.push('owner-epoch');
+  if (!ownerSequence || !DECIMAL.test(ownerSequence)
+    || DECIMAL.test(ownerSequence) && BigInt(ownerSequence) > BigInt(owner.sequence)) invalid.push('owner-sequence');
+  if (dDataEpoch !== snapshot.dataEpoch) invalid.push('graph-epoch');
+  if (!dSequence || !DECIMAL.test(dSequence) || DECIMAL.test(dSequence)
+    && (BigInt(dSequence) === 0n || BigInt(dSequence) > BigInt(snapshot.sequence))) invalid.push('graph-sequence');
+  if (dModel !== 'https://rezics.com/definition/content-publication-v1') invalid.push('model');
+  if (dShape !== dModel) invalid.push('shape');
+  if (dDataset !== DATASET) invalid.push('dataset');
+  if (!dPreparation) invalid.push('preparation');
+  if (!receipt) invalid.push('receipt-identity');
+  if (rOutcome !== `${RV}Succeeded` || rReason !== null) invalid.push('receipt-outcome');
+  if (!requestDigest || !SHA256.test(requestDigest)) invalid.push('request-digest');
+  if (!admissionId || !UUID.test(admissionId)) invalid.push('admission');
+  if (!authorityEpoch || !DECIMAL.test(authorityEpoch)) invalid.push('authority-epoch');
+  if (!scope || scope !== `content:publish:${variant}` && scope !== `content:publish:${resource}`) invalid.push('scope');
+  if (rPreparation !== dPreparation) invalid.push('receipt-preparation');
+  if (rRevision !== revision) invalid.push('receipt-revision');
+  if (rVariant !== variant) invalid.push('receipt-variant');
+  if (rResource !== resource) invalid.push('receipt-resource');
+  if (rDigest !== digest) invalid.push('receipt-digest');
+  if (rOwnerEpoch !== ownerDataEpoch) invalid.push('receipt-owner-epoch');
+  if (rOwnerSequence !== ownerSequence) invalid.push('receipt-owner-sequence');
+  if (!expectedHead || !isIri(expectedHead)) invalid.push('expected-head');
+  if (rDataset !== DATASET) invalid.push('receipt-dataset');
+  if (rDataEpoch !== snapshot.dataEpoch) invalid.push('receipt-graph-epoch');
+  if (rSequence !== dSequence) invalid.push('receipt-graph-sequence');
+  if (rDecision !== id) invalid.push('receipt-decision');
+  if (!admissionId || publicationDecisionIri(admissionId) !== id) invalid.push('decision-derivation');
+  if (!receipt || !admissionId || publicationReceiptIri(admissionId) !== receipt) invalid.push('receipt-derivation');
+  if (invalid.length) { issues?.push(...invalid); return undefined; }
+  return { id, variant, resource, revision: revision!, digest: digest!, preparationId: dPreparation!,
+    ownerDataEpoch: ownerDataEpoch!, ownerSequence: ownerSequence!, graphSequence: dSequence! };
 }
 
 function profileForRights(rightsBasis: string): { id: string; shape: string } | undefined {
@@ -531,7 +574,54 @@ function parseEligibilityProof(row: Row | undefined, id: string, snapshot: Conte
     return undefined;
   }
   return { id, variant, resource, publicationDecision, graphSequence: sequence,
-    rightsBasis: rightsBasis === 'public-domain' ? `${RV}PublicDomain` : `${RV}OriginalContribution` };
+    rightsBasis: rightsBasis === 'public-domain' ? `${RV}PublicDomain` : `${RV}OriginalContribution`,
+    sourceReceiptId: receipt, requestDigest: digest };
+}
+
+/** Resolve one retained Public approval to its immutable Content publication pin. */
+export async function readRetainedContentEligibilitySource(env: WorkActivationEnvironment,
+  owner: ContentEligibilityOwnerPosition, source: {
+    eligibilityDecision: string;
+    publicationDecision: string;
+    variant: string;
+    resource: string;
+    receiptId: string;
+    requestDigest: string;
+    graphDataEpoch: string;
+    graphSequence: string;
+  }): Promise<RetainedContentEligibilitySource> {
+  if (source.graphDataEpoch !== env.lineage.dataEpoch || !DECIMAL.test(source.graphSequence)
+    || BigInt(source.graphSequence) === 0n) {
+    throw new ContentEligibilityStateUnavailable('retained eligibility source epoch or position is invalid');
+  }
+  const snapshotRows = (await env.fuseki.query(snapshotQuery(), 1_048_576)).results?.bindings ?? [];
+  const snapshot = readSnapshot(env, snapshotRows.length === 1 ? snapshotRows[0] : undefined);
+  const eligibilityRows = (await env.fuseki.query(eligibilityProofQuery([source.eligibilityDecision]),
+    1_048_576)).results?.bindings ?? [];
+  const eligibility = parseEligibilityProof(eligibilityRows.length === 1 ? eligibilityRows[0] : undefined,
+    source.eligibilityDecision, snapshot, source.variant, source.resource);
+  if (!eligibility || !eligibility.sourceReceiptId || !eligibility.requestDigest
+    || eligibility.publicationDecision !== source.publicationDecision
+    || eligibility.sourceReceiptId !== source.receiptId || eligibility.requestDigest !== source.requestDigest
+    || eligibility.graphSequence !== source.graphSequence) {
+    throw new ContentEligibilityStateUnavailable('retained eligibility event differs from its exact Main owner proof');
+  }
+  const publicationRows = (await env.fuseki.query(publicationProofQuery([source.publicationDecision]),
+    1_048_576)).results?.bindings ?? [];
+  const publicationIssues: string[] = [];
+  const publication = parsePublicationProof(publicationRows.length === 1 ? publicationRows[0] : undefined,
+    source.publicationDecision, snapshot, owner, source.variant, source.resource, publicationIssues);
+  const revision = publication?.revision && /^urn:rezics:content:revision:([0-9a-f-]{36})$/i.exec(publication.revision);
+  if (!publication) throw new ContentEligibilityStateUnavailable(
+    `retained eligibility publication owner proof is unavailable (${publicationIssues.join(',') || 'cardinality'})`);
+  if (!publication.preparationId) throw new ContentEligibilityStateUnavailable('retained eligibility publication has no preparation pin');
+  if (!revision) throw new ContentEligibilityStateUnavailable('retained eligibility publication revision is malformed');
+  if (!eligibility || BigInt(eligibility.graphSequence) <= BigInt(publication.graphSequence)) {
+    throw new ContentEligibilityStateUnavailable('retained eligibility approval does not follow its publication');
+  }
+  return { eligibility: { ...eligibility, sourceReceiptId: eligibility.sourceReceiptId,
+    requestDigest: eligibility.requestDigest },
+  publication: { ...publication, preparationId: publication.preparationId }, revisionId: revision[1]! };
 }
 
 function stateCandidate(row: Row): {

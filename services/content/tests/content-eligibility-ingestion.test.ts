@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
-import { ContentConflict, ContentCore, sequenceContentEvents,
+import { ContentConflict, ContentCore, ContentUnavailable, sequenceContentEvents,
   type EligibilityDeliveryPage, type EligibilityDeliveryProgress,
   type EligibilityDeliverySourceEvent } from '../src/core.ts';
 import { migrateContent } from '../src/migrate.ts';
@@ -163,6 +163,40 @@ test('Content appends bounded eligibility batches once and advances only contigu
     expect((await pool.query(`SELECT count(*)::int AS count FROM content.eligibility_delivery_source
       WHERE content_data_epoch = $1 AND source_event_id = $2`,
     [concurrentPin.contentDataEpoch, concurrentEvent.id])).rows[0]?.count).toBe(1);
+  } finally { await stop(); }
+}, 60_000);
+
+test('Content delivery resolves its exact preparation and rejects a changed retained batch digest', async () => {
+  const { pool, core, stop } = await fixture();
+  try {
+    const pin = await settledPin(core);
+    const exact = (await core.readExactBatch([pin.revisionId], async ids => new Set(ids)))[0];
+    if (exact?.status !== 'available') throw new Error('Content draft bytes are unavailable');
+    const otherPreparation = opaque('eligibility-repeat-preparation');
+    await core.preparePublication(otherPreparation, pin.revisionId, exact.reference.byteDigest);
+    await core.settlePublication(opaque('eligibility-repeat-settlement'), otherPreparation, {
+      outcome: 'active', revisionId: pin.revisionId, receipt: opaque('urn:main:publication-receipt'),
+      dataEpoch: pin.graphDataEpoch, sequence: '32',
+    }, pin.contentDataEpoch);
+    const expected = progress(pin);
+    const event = sourceEvent(pin);
+    await core.ingestEligibilityDeliveryPage(page(expected, batch('1', [event])));
+    const delivered = (await core.readOutbox(pin.contentDataEpoch, '0', 100)).find(candidate =>
+      candidate.payload.sourceEventId === event.id);
+    if (!delivered) throw new Error('Content eligibility delivery event is absent');
+    expect(await core.readProjectionPublication(delivered)).toMatchObject({
+      preparationId: pin.preparationId, reference: { revisionId: pin.revisionId } });
+
+    // Simulate restored storage corruption past the normal immutable-write guard.
+    await pool.query('ALTER TABLE content.eligibility_delivery_batch DISABLE TRIGGER eligibility_delivery_batch_immutable');
+    try {
+      await pool.query(`UPDATE content.eligibility_delivery_batch SET source_digest = $4
+        WHERE stream_scope = $1 AND graph_data_epoch = $2 AND content_data_epoch = $3`,
+      [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch, digest('damaged retained batch')]);
+      await expect(core.readProjectionPublication(delivered)).rejects.toBeInstanceOf(ContentUnavailable);
+    } finally {
+      await pool.query('ALTER TABLE content.eligibility_delivery_batch ENABLE TRIGGER eligibility_delivery_batch_immutable');
+    }
   } finally { await stop(); }
 }, 60_000);
 

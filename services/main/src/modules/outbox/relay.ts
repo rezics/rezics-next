@@ -201,17 +201,21 @@ export interface RetainedRelayBatch {
   sequence: string;
   batchId: string;
   routingEpoch: string;
-  events: MainCloudEvent[];
+  events: DeliveredMainEvent[];
 }
 
 function retainedEnvelopePosition(event: MainCloudEvent, streamScope: string, dataEpoch: string,
-  sequence: string): MainCloudEvent {
+  sequence: string): MainCloudEvent;
+function retainedEnvelopePosition(event: DeliveredMainEvent, streamScope: string, dataEpoch: string,
+  sequence: string): DeliveredMainEvent;
+function retainedEnvelopePosition(event: MainCloudEvent | DeliveredMainEvent, streamScope: string,
+  dataEpoch: string, sequence: string): MainCloudEvent | DeliveredMainEvent {
   const position = event.data.relayPosition ?? { streamScope, dataEpoch: event.data.sourcePosition.dataEpoch,
     sequence: event.data.sourcePosition.sequence };
   if (position.streamScope !== streamScope || position.dataEpoch !== dataEpoch || position.sequence !== sequence) {
     throw new RelayCheckpointConflict('retained envelope stream position differs from its row');
   }
-  return { ...event, data: { ...event.data, relayPosition: position } };
+  return { ...event, data: { ...event.data, relayPosition: position } } as MainCloudEvent | DeliveredMainEvent;
 }
 
 /**
@@ -244,7 +248,7 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
       if (BigInt(row.sequence) !== next++) {
         throw new RelayCheckpointConflict('retained relay batch range is not contiguous');
       }
-      const events = await held.query<{ envelope: MainCloudEvent }>(
+      const events = await held.query<{ envelope: DeliveredMainEvent }>(
         `SELECT envelope FROM relay.delivered_event
          WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence = $2 ORDER BY event_id`,
         [coverage.dataEpoch, row.sequence]);

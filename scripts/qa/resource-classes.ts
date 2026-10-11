@@ -42,6 +42,8 @@ export function qaResourceHeapBytes(name: QaResourceClass): number {
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
   // Container restart must retain legacy RDF, and the terminal gap needs its own project.
   ['tests/qa/integration/local-read-basis.test.ts', 'catalogue-disk'],
+  // Native projection restart evidence and its Lucene state must survive a container restart.
+  ['services/main/tests/content-projection.integration.test.ts', 'catalogue-disk'],
   ['tests/qa/integration/event-query-bounds.test.ts', 'temporal-tmpfs'],
   ...[
     'recipe-export-limit',

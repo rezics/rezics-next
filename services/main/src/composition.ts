@@ -147,6 +147,7 @@ import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
+import { deliverRetainedContentEligibilityOnce } from './modules/content-publication/eligibility-delivery.ts';
 import { OwnerPartitionRoutes } from './modules/partition/route.ts';
 import { DATASET } from './modules/work/activate.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
@@ -622,6 +623,7 @@ export async function composeMain(input: ComposeMainInput) {
   const worker = new ContentProjectionWorker(
     async () => {
       await eventProjection?.tick().catch(error => logWorkerFault('main.event.projection', error));
+      if (relayPool) await deliverRetainedContentEligibilityOnce(environment, content, relayPool, relayConsumer!);
       return relayContentProjectionOnce(environment, content, cursor, consumer);
     },
     config.CONTENT_PROJECTION_INTERVAL_MS);

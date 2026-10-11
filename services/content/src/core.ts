@@ -1243,9 +1243,174 @@ export class ContentCore {
       events: result.events.map(event => ({ ...event, position: byOperation.get(event.operationId) ?? null })) };
   }
 
+  /** Find a later durable Main approval delivery for the same current publication. */
+  async readEligibilityDeliverySuccessor(event: ContentOutboxEvent, expected: {
+    streamScope: string;
+    graphDataEpoch: string;
+    sourceSequence: string;
+    resourceId: string;
+    variantId: string;
+    publicationDecision: string;
+    eligibilityDecision: string;
+  }): Promise<{ event: ContentOutboxEvent; sourceSequence: string } | null> {
+    if (event.eventType !== ELIGIBILITY_DELIVERY_EVENT || event.recipe !== RECIPE
+      || event.position.owner !== 'content' || !/^[0-9a-f-]{36}$/i.test(event.position.dataEpoch)
+      || !/^(0|[1-9][0-9]*)$/.test(event.position.sequence)
+      || !/^(0|[1-9][0-9]*)$/.test(expected.sourceSequence)) {
+      throw new ContentConflict('eligibility successor lookup requires an exact delivered event');
+    }
+    const result = await this.pool.query(`SELECT event.id, event.data_epoch,
+      event.sequence::text AS sequence, event.operation_id, event.event_type,
+      event.recipe, event.revision_id, event.payload, source.source_sequence
+      FROM content.eligibility_delivery_source source
+      JOIN content.outbox event ON event.operation_id = source.operation_id
+      WHERE source.content_data_epoch = $1::uuid AND source.stream_scope = $2
+        AND source.graph_data_epoch = $3::uuid AND source.source_sequence <> $4
+        AND source.resource_id = $5 AND source.variant_id = $6
+        AND source.publication_decision = $7 AND source.eligibility_decision = $8
+        AND event.data_epoch = $1::uuid AND event.sequence > $9::bigint
+        AND event.event_type = $10 AND event.recipe = $11
+      ORDER BY event.sequence LIMIT 2`,
+    [event.position.dataEpoch, expected.streamScope, expected.graphDataEpoch, expected.sourceSequence,
+      expected.resourceId, expected.variantId, expected.publicationDecision,
+      expected.eligibilityDecision, event.position.sequence, ELIGIBILITY_DELIVERY_EVENT, RECIPE]);
+    if (result.rowCount === 0) return null;
+    if (result.rowCount !== 1) throw new ContentUnavailable('eligibility successor delivery is ambiguous');
+    const row = result.rows[0];
+    return { event: { id: row.id, position: position(row), operationId: row.operation_id,
+      eventType: row.event_type, recipe: row.recipe, revisionId: row.revision_id, payload: row.payload },
+    sourceSequence: row.source_sequence };
+  }
+
+  /** Find the durable approval event that takes over an active publication event. */
+  async readEligibilityDeliveryForPublication(event: ContentOutboxEvent, expected: {
+    streamScope: string;
+    graphDataEpoch: string;
+    resourceId: string;
+    variantId: string;
+    publicationDecision: string;
+    eligibilityDecision: string;
+    preparationId: string;
+    revisionId: string;
+  }): Promise<{ event: ContentOutboxEvent; sourceSequence: string } | null> {
+    if (event.eventType !== 'content.publication.active' || event.recipe !== RECIPE || !event.revisionId
+      || event.position.owner !== 'content' || !/^[0-9a-f-]{36}$/i.test(event.position.dataEpoch)
+      || !/^(0|[1-9][0-9]*)$/.test(event.position.sequence)) {
+      throw new ContentConflict('eligibility delivery lookup requires an exact active publication event');
+    }
+    const result = await this.pool.query(`SELECT event.id, event.data_epoch,
+      event.sequence::text AS sequence, event.operation_id, event.event_type,
+      event.recipe, event.revision_id, event.payload, source.source_sequence
+      FROM content.eligibility_delivery_source source
+      JOIN content.outbox event ON event.operation_id = source.operation_id
+      WHERE source.content_data_epoch = $1::uuid AND source.stream_scope = $2
+        AND source.graph_data_epoch = $3::uuid AND source.resource_id = $4
+        AND source.variant_id = $5 AND source.publication_decision = $6
+        AND source.eligibility_decision = $7 AND source.preparation_id = $8
+        AND source.revision_id = $9::uuid
+        AND event.data_epoch = $1::uuid AND event.sequence > $10::bigint
+        AND event.event_type = $11 AND event.recipe = $12
+      ORDER BY event.sequence LIMIT 2`,
+    [event.position.dataEpoch, expected.streamScope, expected.graphDataEpoch, expected.resourceId,
+      expected.variantId, expected.publicationDecision, expected.eligibilityDecision,
+      expected.preparationId, expected.revisionId, event.position.sequence, ELIGIBILITY_DELIVERY_EVENT, RECIPE]);
+    if (result.rowCount === 0) return null;
+    if (result.rowCount !== 1) throw new ContentUnavailable('current eligibility delivery is ambiguous');
+    const row = result.rows[0];
+    return { event: { id: row.id, position: position(row), operationId: row.operation_id,
+      eventType: row.event_type, recipe: row.recipe, revisionId: row.revision_id, payload: row.payload },
+    sourceSequence: row.source_sequence };
+  }
+
   /** Resolve a terminal event against its settled pin; rebuild may read historical metadata. */
   async readProjectionPublication(event: ContentOutboxEvent,
     allowUnavailableActiveReference = false): Promise<ProjectionPublication> {
+    if (event.eventType === ELIGIBILITY_DELIVERY_EVENT) {
+      if (event.recipe !== RECIPE || !event.revisionId) {
+        throw new ContentConflict('eligibility delivery event recipe is incomplete');
+      }
+      const delivery = await this.pool.query(`SELECT event.data_epoch, event.sequence::text AS sequence,
+        event.operation_id, event.event_type, event.recipe, event.revision_id, event.payload,
+        receipt.action, receipt.request_digest, receipt.outcome, receipt.variant_id, receipt.revision_id AS receipt_revision,
+        source.content_data_epoch, source.stream_scope, source.graph_data_epoch,
+        source.source_event_id, source.source_receipt_id, source.source_sequence,
+        source.source_digest, source.source_batch_sequence::text AS source_batch_sequence,
+        source.source_batch_id, source.source_batch_digest, source.source_ordinal,
+        source.preparation_id, source.resource_id, source.variant_id AS source_variant,
+        source.publication_decision, source.eligibility_decision, source.request_digest AS source_request_digest,
+        batch.batch_id, batch.source_digest AS batch_source_digest
+        FROM content.outbox event
+        JOIN content.receipt receipt ON receipt.operation_id = event.operation_id
+        JOIN content.eligibility_delivery_source source ON source.operation_id = event.operation_id
+        JOIN content.eligibility_delivery_batch batch ON batch.stream_scope = source.stream_scope
+          AND batch.graph_data_epoch = source.graph_data_epoch
+          AND batch.content_data_epoch = source.content_data_epoch
+          AND batch.sequence = source.source_batch_sequence
+        WHERE event.id = $1 AND event.data_epoch = $2::uuid AND event.sequence = $3::bigint
+          AND event.operation_id = $4`,
+      [event.id, event.position.dataEpoch, event.position.sequence, event.operationId]);
+      const row = delivery.rows[0];
+      const payload = row?.payload;
+      const sourceReceipt = payload?.sourceReceipt;
+      const sourcePosition = payload?.sourcePosition;
+      const sourcePublication = payload?.publication;
+      const deliveryBatch = payload?.deliveryBatch;
+      if (delivery.rowCount !== 1 || row.event_type !== ELIGIBILITY_DELIVERY_EVENT || row.recipe !== RECIPE
+        || row.data_epoch !== event.position.dataEpoch || row.sequence !== event.position.sequence
+        || row.operation_id !== event.operationId
+        || row.revision_id !== event.revisionId || row.receipt_revision !== event.revisionId
+        || row.action !== ELIGIBILITY_DELIVERY_ACTION || row.outcome !== 'succeeded'
+        || row.request_digest !== row.source_request_digest || row.variant_id !== row.source_variant
+        || row.content_data_epoch !== event.position.dataEpoch
+        || payload?.kind !== 'main-content-search-eligibility-delivery-v1'
+        || payload?.contentDataEpoch !== row.content_data_epoch || payload?.streamScope !== row.stream_scope
+        || payload?.graphDataEpoch !== row.graph_data_epoch
+        || payload?.sourceEventId !== row.source_event_id
+        || payload?.sourceEventType !== 'com.rezics.content.search-eligible.v1'
+        || payload?.sourceOrdinal !== row.source_ordinal
+        || sourcePosition?.dataEpoch !== row.graph_data_epoch
+        || sourcePosition?.sequence !== row.source_sequence
+        || sourceReceipt?.id !== row.source_receipt_id
+        || sourceReceipt?.action !== 'content.search-eligibility'
+        || sourceReceipt?.outcome !== 'succeeded'
+        || sourceReceipt?.requestDigest !== row.source_digest
+        || sourceReceipt?.resource !== row.resource_id || sourceReceipt?.variant !== row.source_variant
+        || sourceReceipt?.publicationDecision !== row.publication_decision
+        || sourceReceipt?.eligibilityDecision !== row.eligibility_decision
+        || sourceReceipt?.disclosure !== 'public'
+        || sourcePublication?.preparationId !== row.preparation_id
+        || sourcePublication?.revisionId !== event.revisionId
+        || deliveryBatch?.sequence !== row.source_batch_sequence
+        || deliveryBatch?.id !== row.source_batch_id
+        || deliveryBatch?.digest !== row.source_batch_digest
+        || row.batch_id !== row.source_batch_id
+        || row.batch_source_digest !== row.source_batch_digest
+        || stable(payload) !== stable(event.payload)) {
+        throw new ContentUnavailable('Content eligibility delivery differs from its immutable Main source');
+      }
+      const terminal = await this.pool.query(`SELECT event.id, event.data_epoch,
+        event.sequence::text AS sequence, event.operation_id, event.event_type,
+        event.recipe, event.revision_id, event.payload
+        FROM content.publication_preparation preparation
+        JOIN content.receipt settlement ON settlement.action = 'publication.settle'
+          AND settlement.revision_id = preparation.revision_id
+        JOIN content.outbox event ON event.operation_id = settlement.operation_id
+        WHERE preparation.operation_id = $1 AND preparation.revision_id = $2::uuid
+          AND event.payload->>'preparationId' = preparation.operation_id
+          AND event.event_type = 'content.publication.active'`, [row.preparation_id, event.revisionId]);
+      if (terminal.rowCount !== 1) throw new ContentUnavailable('eligibility source settled Content pin is unavailable');
+      const source = terminal.rows[0];
+      const publication = await this.readProjectionPublication({ id: source.id,
+        position: position(source), operationId: source.operation_id, eventType: source.event_type,
+        recipe: source.recipe, revisionId: source.revision_id, payload: source.payload }, allowUnavailableActiveReference);
+      if (publication.status !== 'active' || publication.preparationId !== row.preparation_id
+        || publication.reference.resourceId !== row.resource_id
+        || publication.reference.variantId !== row.source_variant
+        || publication.reference.revisionId !== event.revisionId) {
+        throw new ContentUnavailable('Content eligibility delivery does not resolve to its exact settled pin');
+      }
+      return publication;
+    }
     if (!['content.publication.active', 'content.publication.rejected'].includes(event.eventType)
       || event.recipe !== RECIPE || !event.revisionId) {
       throw new ContentConflict('terminal publication event required');

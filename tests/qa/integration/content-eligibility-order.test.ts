@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -18,6 +18,8 @@ import { contentSearchEligibilityDigest, selectPublicContentSearch,
   from '../../../services/main/src/modules/content-publication/eligibility.ts';
 import { contentPublicationDigest, publishPinnedContent, type PublishPinnedContentInput }
   from '../../../services/main/src/modules/content-publication/publish.ts';
+import { readRetainedContentEligibilitySource }
+  from '../../../services/main/src/modules/content-publication/eligibility-state.ts';
 import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase }
@@ -25,6 +27,7 @@ import { queryPublicContentPhrase }
 import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -110,6 +113,42 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
       if (!result.decision) throw new Error('Content publication decision is absent');
       return { input, admission, decision: result.decision };
     }
+    const sha = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
+    const stable = (value: unknown): string => Array.isArray(value) ? `[${value.map(stable).join(',')}]`
+      : value && typeof value === 'object' ? `{${Object.entries(value).filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+        .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`
+        : JSON.stringify(value) ?? 'null';
+    async function deliverEligibility(approval: Awaited<ReturnType<typeof selectPublicContentSearch>>,
+      input: ContentSearchEligibilityInput) {
+      if (!approval.decision) throw new Error('Content eligibility decision absent');
+      const requestDigest = contentSearchEligibilityDigest(input);
+      const expected = await content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, env.lineage.dataEpoch);
+      const exact = await readRetainedContentEligibilitySource(env, await content.ownerPosition(), {
+        eligibilityDecision: approval.decision, publicationDecision: input.publicationDecision,
+        variant: input.variantId, resource: input.resourceId, receiptId: approval.receipt,
+        requestDigest, graphDataEpoch: approval.graphDataEpoch,
+        graphSequence: approval.graphSequence,
+      });
+      const sequence = (BigInt(expected.sequence) + 1n).toString();
+      const batchId = `urn:rezics:outbox:${sha(`${approval.receipt}\0eligibility`)}`;
+      const envelope = { specversion: '1.0', id: `urn:rezics:event:${sha(`${approval.receipt}\0eligibility`)}`,
+        source: 'https://rezics.com/services/main', type: 'com.rezics.content.search-eligible.v1',
+        datacontenttype: 'application/json', data: { batchId,
+          sourcePosition: { datasetId: 'product', dataEpoch: approval.graphDataEpoch,
+            sequence: approval.graphSequence }, routingEpoch: env.lineage.routingEpoch, ordinal: 0,
+          relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: approval.graphDataEpoch, sequence },
+          receipt: { id: approval.receipt, action: 'content.search-eligibility', outcome: 'succeeded',
+            requestDigest, resource: input.resourceId, variant: input.variantId,
+            publicationDecision: input.publicationDecision, eligibilityDecision: approval.decision,
+            disclosure: 'public' } } };
+      const digest = sha(stable({ streamScope: MAIN_RELAY_STREAM_SCOPE, sequence, batchId,
+        routingEpoch: env.lineage.routingEpoch, events: [envelope] }));
+      await content.ingestEligibilityDeliveryPage({ expected, batches: [{ sequence, id: batchId, digest,
+        events: [{ id: envelope.id, type: envelope.type, ordinal: 0,
+          sourcePosition: envelope.data.sourcePosition, receipt: envelope.data.receipt,
+          publication: { preparationId: exact.publication.preparationId, revisionId: exact.revisionId } }] }] });
+    }
     async function eligible(publicationDecision: string, expectedEligibilityHead: string | null) {
       const input: ContentSearchEligibilityInput = { resourceId: work.work, variantId,
         publicationDecision, expectedEligibilityHead, actingSubject: actor,
@@ -122,6 +161,7 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
       const result = await selectPublicContentSearch(env, content, registry, claimed, input);
       expect(result.outcome).toBe('succeeded');
       if (!result.decision) throw new Error('Content eligibility decision is absent');
+      await deliverEligibility(result, input);
       return { input, claimed, decision: result.decision };
     }
     const cursor = new ContentProjectionCursor(pool);
@@ -134,6 +174,7 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
         const result = await relayContentProjectionOnce(relayEnv, content, cursor, reader);
         if (!result) throw new Error('Content projection stopped before owner high water');
         dispositions.push(result.disposition);
+        if (result.disposition === 'deferred') break;
       }
       return dispositions;
     }
@@ -167,6 +208,8 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
     const v1 = await draft('one', null);
     const p1 = await publish(v1, null);
     const e1 = await eligible(p1.decision, null);
+    // This test exercises approval delivery and stale-worker ordering against
+    // an open search index; rebuild tests cover the closed-index lifecycle.
     expect((await relayTo(consumer)).filter(value => value === 'projected')).toHaveLength(1);
     const first = await publicQuery(v1.phrase);
     expect(first.status).toBe(200);
@@ -178,13 +221,13 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
     const v2 = await draft('two', v1.revision);
     await expectUnavailable([v1.phrase, v2.phrase]);
     const p2 = await publish(v2, p1.decision);
-    await expect(relayTo(consumer)).rejects.toThrow('public Content search eligibility is unproven');
+    expect(await relayTo(consumer)).toContain('deferred');
     const blockedAt = (await cursor.read(consumer)).sequence;
-    await expect(relayContentProjectionOnce(env, content, cursor, consumer))
-      .rejects.toBeInstanceOf(ContentProjectionUnavailable);
+    expect(await relayContentProjectionOnce(env, content, cursor, consumer)).toBeNull();
     expect((await cursor.read(consumer)).sequence).toBe(blockedAt);
     await expectUnavailable([v1.phrase, v2.phrase]);
-    expect(await units()).toEqual([[expect.any(String), `urn:rezics:content:revision:${v1.revision}`]]);
+    // Main adoption removes the superseded body MatchUnit before new eligibility arrives.
+    expect(await units()).toEqual([]);
 
     // The eligibility graph event lands after the Content event it names. A
     // stale worker then pauses before its guarded write while v3 becomes the
@@ -193,19 +236,20 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
     const stale = `order-stale-${randomUUID()}`;
     await cursor.initialize(stale);
     const events = await content.readOutbox(v1.epoch, '0', 32);
-    const v2Active = events.find(event => event.eventType === 'content.publication.active'
-      && event.revisionId === v2.revision);
-    if (!v2Active) throw new Error('v2 active Content event is absent');
-    while (BigInt((await cursor.read(stale)).sequence) + 1n < BigInt(v2Active.position.sequence)) {
+    const e2Delivery = events.find(event => event.eventType === 'content.publication.eligibility-delivered'
+      && event.payload.sourceReceipt?.eligibilityDecision === e2.decision);
+    if (!e2Delivery) throw new Error('v2 eligibility delivery event is absent');
+    while (BigInt((await cursor.read(stale)).sequence) + 1n < BigInt(e2Delivery.position.sequence)) {
       if (!await relayContentProjectionOnce(env, content, cursor, stale)) {
         throw new Error('stale worker stopped before v2');
       }
     }
     let v3: Awaited<ReturnType<typeof draft>> | undefined;
     let interleaved = false;
+    let staleCommandStatus: string | undefined;
     const staleFuseki = new Proxy(fuseki, { get(target, property) {
-      if (property === 'commandWithReceipt') {
-        return async (envelope: Parameters<FusekiClient['commandWithReceipt']>[0]) => {
+      if (property === 'command') {
+        return async (envelope: Parameters<FusekiClient['command']>[0]) => {
           if (!interleaved) {
             interleaved = true;
             v3 = await draft('three', v2.revision);
@@ -213,15 +257,18 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
             await eligible(p3.decision, e2.decision);
             expect(await relayTo(consumer)).toEqual(expect.arrayContaining(['superseded', 'projected']));
           }
-          return target.commandWithReceipt(envelope);
+          const result = await target.commandWithReceipt(envelope);
+          staleCommandStatus = result.status;
+          return result;
         };
       }
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     } });
     const staleAt = (await cursor.read(stale)).sequence;
-    await expect(relayContentProjectionOnce({ ...env, fuseki: staleFuseki }, content, cursor, stale))
-      .rejects.toThrow('Content projection command guard-unmatched');
+    expect((await relayContentProjectionOnce({ ...env, fuseki: staleFuseki }, content, cursor, stale))?.disposition)
+      .toBe('deferred');
+    expect(staleCommandStatus).toBe('guard-unmatched');
     expect(interleaved).toBe(true);
     if (!v3) throw new Error('v3 was not interleaved');
     expect((await cursor.read(stale)).sequence).toBe(staleAt);
@@ -238,7 +285,9 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
 
     // The stale worker's retry and duplicate replay acknowledge without a write.
     const sequenceBeforeReplay = await graphSequence();
-    expect((await relayContentProjectionOnce(env, content, cursor, stale))?.disposition).toBe('superseded');
+    expect(await cursor.retries(stale)).toHaveLength(1);
+    expect(await relayContentProjectionOnce(env, content, cursor, stale)).not.toBeNull();
+    expect(await cursor.retries(stale)).toHaveLength(0);
     expect(await relayTo(stale)).toContain('projected');
     expect(await graphSequence()).toBe(sequenceBeforeReplay);
     expect(await units()).toEqual(current);

@@ -95,22 +95,35 @@ function redactCommandSecrets(text: string): string {
   return redactCommandOutput(text);
 }
 
-export function qaStack(runId: string): QaStack {
-  const options: StackOptions = { profile: 'qa', runId, persistent: true };
-  const args = ['--profile', 'qa', '--run-id', runId, '--persistent'];
+export function qaStack(runId: string, stackOptions: { rawUpdate?: boolean } = {}): QaStack {
+  const rawUpdate = stackOptions.rawUpdate ?? false;
+  const options: StackOptions = { profile: 'qa', runId, persistent: true, ...(rawUpdate ? { rawUpdate: true } : {}) };
+  const args = ['--profile', 'qa', '--run-id', runId, '--persistent', ...(rawUpdate ? ['--raw-update'] : [])];
   const directory = stackDirectory(root, options);
   const dockerEnv = loadDockerEnvironment();
   const project = projectName(options);
   const compose = (commandArgs: string[], timeout = 180_000, privateInput?: string) => {
     const saved = readEnv(join(directory, 'compose.env'));
+    const composeFiles = ['-f', join(root, 'infra/dev/compose.yaml'),
+      ...(rawUpdate ? ['-f', join(root, 'infra/dev/compose.qa-raw-update.yaml')] : [])];
     const result = spawnSync('docker', ['compose', '--env-file', join(directory, 'compose.env'),
-      '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', project, ...commandArgs],
+      ...composeFiles, '--project-name', project, ...commandArgs],
     { cwd: root, env: composeProcessEnvironment(dockerEnv, saved), encoding: 'utf8', timeout,
       maxBuffer: 10_000_000, ...(privateInput !== undefined ? { input: privateInput } : {}) });
     return { status: result.status, signal: result.signal,
       error: result.error as NodeJS.ErrnoException | undefined,
       output: redactCommandOutput(`${result.stdout ?? ''}${result.stderr ?? ''}`) };
   };
+  const docker = (commandArgs: string[], timeout = 30_000) => {
+    const saved = readEnv(join(directory, 'compose.env'));
+    const result = spawnSync('docker', commandArgs,
+      { cwd: root, env: composeProcessEnvironment(dockerEnv, saved), encoding: 'utf8', timeout,
+        maxBuffer: 10_000_000 });
+    return { status: result.status, signal: result.signal,
+      error: result.error as NodeJS.ErrnoException | undefined,
+      output: redactCommandOutput(`${result.stdout ?? ''}${result.stderr ?? ''}`) };
+  };
+  let stoppedFusekiContainer: string | null = null;
   const ok = (commandArgs: string[], timeout?: number, privateInput?: string) => {
     const result = compose(commandArgs, timeout, privateInput);
     if (result.error || result.status !== 0) {
@@ -128,11 +141,48 @@ export function qaStack(runId: string): QaStack {
       exec: script => ok(['exec', '-T', 'fuseki', 'sh', '-ec', script]),
       // -i is only for private stdin. One argv above 131072 bytes is E2BIG
       // before Compose creates a container, with empty stdout and stderr.
-      offline: (script: string, privateInput?: string) => ok(['run', '--rm', '--no-deps',
-        ...(privateInput !== undefined ? ['-i'] : []),
-        '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script], 300_000, privateInput),
-      stop: () => { ok(['stop', 'fuseki']); },
-      start: () => { ok(['up', '-d', '--wait', 'fuseki']); },
+      offline: (script: string, privateInput?: string) => {
+        const saved = readEnv(join(directory, 'compose.env'));
+        const volume = spawnSync('docker', ['volume', 'inspect', '--format', '{{.Name}}', stack.stateVolume],
+          { cwd: root, env: composeProcessEnvironment(dockerEnv, saved), encoding: 'utf8', timeout: 10_000 });
+        if (volume.error || volume.status !== 0 || volume.stdout.trim() !== stack.stateVolume) {
+          throw new Error('Offline Fuseki state volume is unavailable');
+        }
+        const result = spawnSync('docker', ['run', '--rm', ...(privateInput !== undefined ? ['-i'] : []),
+          '--env-file', join(directory, 'compose.env'), '--volume', `${stack.stateVolume}:/fuseki/databases`,
+          '--entrypoint', 'sh', pinnedImage(), '-ec', script],
+        { cwd: root, env: composeProcessEnvironment(dockerEnv, saved), encoding: 'utf8', timeout: 300_000,
+          maxBuffer: 10_000_000, ...(privateInput !== undefined ? { input: privateInput } : {}) });
+        if (result.error || result.status !== 0) {
+          throw new Error(`docker run failed: status=${result.status ?? 'null'} signal=${result.signal ?? 'null'} `
+            + `${(result.error as NodeJS.ErrnoException | undefined)?.code ?? 'null'} ${redactCommandSecrets(`${result.stdout ?? ''}${result.stderr ?? ''}`).slice(-2000)}`);
+        }
+        return `${result.stdout}${result.stderr}`;
+      },
+      stop: () => {
+        const id = ok(['ps', '-q', '--no-trunc', 'fuseki']).trim();
+        if (!id) throw new Error('Fuseki container is unavailable before stop');
+        stoppedFusekiContainer = id;
+        const result = docker(['stop', '--time', '10', id]);
+        if (result.error || result.status !== 0) {
+          throw new Error(`docker stop failed: status=${result.status ?? 'null'} signal=${result.signal ?? 'null'} `
+            + `${result.error?.code ?? 'null'} ${result.output.slice(-2000)}`);
+        }
+      },
+      start: async () => {
+        // Restart the stopped container without making Compose reconcile its retained volume.
+        const id = stoppedFusekiContainer ?? ok(['ps', '-q', '--no-trunc', 'fuseki']).trim();
+        if (!id) throw new Error('Fuseki container is unavailable before start');
+        const result = docker(['start', id]);
+        if (result.error || result.status !== 0) {
+          throw new Error(`docker start failed: status=${result.status ?? 'null'} signal=${result.signal ?? 'null'} `
+            + `${result.error?.code ?? 'null'} ${result.output.slice(-2000)}`);
+        }
+        const url = readEnv(join(directory, 'apps.env')).FUSEKI_URL;
+        if (!url) throw new Error('Fuseki URL is unavailable after restart');
+        await waitForFuseki(url);
+        stoppedFusekiContainer = null;
+      },
       container: () => ok(['ps', '-q', '--no-trunc', 'fuseki']).trim(),
     } } as Omit<QaStack, 'apps' | 'composeEnv' | 'fuseki'>;
   return Object.defineProperties(stack, {
