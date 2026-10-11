@@ -43,7 +43,9 @@ function escaped(value: string): string {
 
 function namedTestExists(source: string, title: string): boolean {
   const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
-  return [...source.matchAll(declaration)].some((match) => match[2] === title);
+  // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon); the registry names the
+  // exact source title after it, so no task identifier is copied into the registry.
+  return [...source.matchAll(declaration)].some((match) => match[2]!.replace(/^G-?\d+: /, '') === title);
 }
 
 function proofMissing(proof: Proof): proof is Extract<Proof, { missing: string }> {
