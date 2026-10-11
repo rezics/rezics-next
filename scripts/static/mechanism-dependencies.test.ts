@@ -190,6 +190,7 @@ test("the mechanism map's import surface is its entry-point files and named adap
       'services/main/src/modules/access/authority-read.ts',
       'services/main/src/modules/access/baseline.ts',
       'services/main/src/modules/access/composition.ts',
+      'services/main/src/modules/access/erasure-recovery.ts',
       'services/main/src/modules/access/exposure.ts',
       'services/main/src/modules/access/fixture-authority.ts',
       'services/main/src/modules/access/grants.ts',

@@ -225,10 +225,11 @@ export const serializationAllowlist: SerializationAllowance[] = [
     relation: 'access.recovery_fence',
     class: 'recovery fence',
     reason:
-      'Recovery and initial administrator bootstrap pin the owner; offline restore release holds its captured fence through current journal verification. Ordinary admission only shares this row.',
+      'Native Access row recovery, initial administrator bootstrap, and offline restore release hold the owner while verifying and restoring retained evidence. Ordinary admission only shares this row.',
     writers: [
       access + '003_recovery_fence.sql',
       main + 'modules/access/admission.ts',
+      main + 'modules/access/erasure-recovery.ts',
       main + 'modules/access/platform-administrator.ts',
       main + 'modules/work/restore-lineage.ts',
       main + 'modules/erasure/reconcile.ts',
@@ -316,11 +317,12 @@ export const serializationAllowlist: SerializationAllowance[] = [
     key: 'rezics-relay-erasure-epoch',
     class: 'recovery fence',
     reason:
-      'Offline restore release pins the deletion journal allocator through retained evidence verification and graph/Access release while ordinary admission remains fenced.',
+      'Erasure journal allocation, retained coverage capture and publication, and offline restore release share this key so captured epochs stay stable through verification and release.',
     writers: [
       'services/main/migrations/relay/010_erasure_journal.sql',
       main + 'modules/erasure/reconcile.ts',
       main + 'modules/owner/operations.ts',
+      main + 'modules/outbox/recovery-coverage-head.ts',
       main + 'modules/work/restore-lineage.ts',
     ],
   },
