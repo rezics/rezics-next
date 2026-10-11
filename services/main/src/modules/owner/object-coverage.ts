@@ -46,6 +46,12 @@ export interface ObjectRecoveryStore {
   directory: string;
   workObjects?: ImmutableObjects;
   structureObjects?: ImmutableObjects;
+  /** Exact Media object namespaces used by a journaled erasure target. IDs are
+   * validated before these factories are called; callers cannot supply paths. */
+  mediaObjects?: {
+    asset(assetId: string): ImmutableObjects | undefined;
+    quarantine(uploadId: string): ImmutableObjects | undefined;
+  };
   /** Supplemental custody includes incomplete preparation roots, too. */
   structureGroupRoots?: Pick<StructureGroupRootStore, 'retainedRoots'>;
   structureQualifierRoots?: Pick<StructureQualifierRootStore, 'retainedRoots'>;
@@ -61,6 +67,14 @@ export interface ObjectRecoveryStore {
     /** Structure immutable bytes and Fuseki responses, including the original cut. */
     maxBytes: number;
   };
+}
+
+/** Bounded reverse references read during one live erasure preflight.
+ * Offline recovery coverage is deliberately a different input and is never
+ * constructed by a live object applier. */
+export interface LiveBoundedObjectProtection {
+  kind: 'live-bounded';
+  references: ReadonlySet<string>;
 }
 
 /** A graph reference, including retained anchors and mutable context dependencies. */
