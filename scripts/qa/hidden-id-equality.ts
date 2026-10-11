@@ -12,8 +12,12 @@ const openApiPath = 'generated/openapi/main/public.json';
 export const registeredHiddenIdReads = [
   'GET /v1/concepts/{id}',
   'GET /v1/exports/{export}',
+  'GET /v1/reading-positions/{work}',
   'GET /v1/realms/{realm}/members',
   'GET /v1/realms/{realm}/roles',
+  'GET /v1/resources/{resource}/page',
+  'GET /v1/resources/{resource}/relations',
+  'GET /v1/resources/{resource}/statements',
   'GET /v1/statements/{id}',
   'GET /v1/works/{id}',
   'GET /v1/works/{id}/classifications',

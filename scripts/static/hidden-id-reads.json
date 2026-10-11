@@ -1561,7 +1561,7 @@
       "query:firstSeen",
       "query:position"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/realms",
@@ -2019,7 +2019,7 @@
       "query:actingSubject",
       "query:position"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/resources/{resource}/parts",
@@ -2056,7 +2056,7 @@
       "query:actingSubject",
       "query:position"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/resources/{resource}/reviews",
@@ -2075,7 +2075,7 @@
       "query:context",
       "query:position"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/resources/{resource}/wholes",

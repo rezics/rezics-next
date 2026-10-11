@@ -212,6 +212,29 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       hidden: workId, absent,
       call: (id) => http('GET', `/v1/works/${id}/maintainers`),
     });
+    for (const operation of [
+      'GET /v1/reading-positions/{work}',
+      'GET /v1/resources/{resource}/page',
+      'GET /v1/resources/{resource}/relations',
+      'GET /v1/resources/{resource}/statements',
+    ]) {
+      calls.set(operation, {
+        hidden: workId, absent,
+        call: async id => {
+          const before = await readCounters();
+          const path = operation.slice('GET '.length).replace('{work}', id).replace('{resource}', id);
+          const response = await http('GET', path);
+          const after = await readCounters();
+          console.log(`${operation} ${id === workId ? 'hidden' : 'absent'} ${JSON.stringify({
+            graphCalls: after.graphCalls - before.graphCalls,
+            sqlStatements: after.sqlStatements - before.sqlStatements,
+            bytes: after.bytes - before.bytes,
+          })}`);
+          expect(response.status).toBe(404);
+          return response;
+        },
+      });
+    }
     const ownedClaim = await http('GET',
       `/v1/claims/${claimId}?actingSubject=${encodeURIComponent(owner.actor)}`, undefined, owner.token);
     expect(ownedClaim.status).toBe(200);
@@ -231,11 +254,17 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     expect((await http('GET', outsiderQuery(`/v1/content-revisions/${revisionId}/comments`),
       undefined, outsider.token)).status).toBe(404);
     expect([...calls.keys()].sort()).toEqual([...registeredHiddenIdReads]);
+    const failures: unknown[] = [];
     for (const operation of registeredHiddenIdReads) {
       const spec = calls.get(operation)!;
-      await assertHiddenIdEquality({ operation, hiddenId: spec.hidden, absentId: spec.absent,
-        call: spec.call, readCounters });
+      try {
+        await assertHiddenIdEquality({ operation, hiddenId: spec.hidden, absentId: spec.absent,
+          call: spec.call, readCounters });
+      } catch (error) {
+        failures.push(error);
+      }
     }
+    if (failures.length) throw new AggregateError(failures, 'Registered hidden-id reads differ');
   } finally {
     prototype.query = originalQuery;
     await stack.stop();
