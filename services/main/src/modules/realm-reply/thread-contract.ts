@@ -14,6 +14,14 @@ import { documentSnapshotSchema } from '../../api-document.ts';
 export const REALM_THREAD_COST = { pageSize: 20, cohort: 256, replies: 191, depth: 32, ancestors: 32,
   countPerThread: 64, excerptChars: 400, bodyChars: 20_000, contentBatch: 64, responseBytes: 4 * 1024 * 1024 } as const;
 
+/** A singular indexed lookup; it never hydrates bodies or enumerates a Realm. */
+export const REALM_ABOUT_THREAD_COST = { responseBytes: 64 * 1024 } as const;
+export const realmAboutThreadQuery = t.Object({ about: readId, actingSubject: t.Optional(readId) },
+  { additionalProperties: false });
+export const realmAboutThread = t.Object({ realm: readId, about: readId,
+  /** Hidden, absent and not-yet-posted openers have the same result. */
+  thread: t.Nullable(t.Object({ reply: readId, rootRevision: readId })) }, { additionalProperties: false });
+
 export const threadSort = t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]);
 export const threadWindow = t.Union([t.Literal('week'), t.Literal('month'), t.Literal('all')]);
 

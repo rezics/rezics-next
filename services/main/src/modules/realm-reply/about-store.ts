@@ -141,13 +141,25 @@ export class RealmAboutThreadStore {
    * to the later lookup command, and must not delete or reallocate this key. */
   async readThread(realm: string, about: string): Promise<AboutThread | null> {
     if (![realm, about].every(value => native.test(value))) throw new RealmReplyInvalid('invalid discussion key');
-    return this.transaction(async client => {
-      const row = (await client.query<{ realm: string; about: string; opener_reply: string;
-        root_revision: string; revision_id: string | null; state: AboutThread['state'] }>(
-        'SELECT * FROM content.realm_about_thread WHERE realm = $1 AND about = $2', [realm, about])).rows[0];
-      return row ? { realm: row.realm, about: row.about, openerReply: row.opener_reply,
-        rootRevision: row.root_revision, revisionId: row.revision_id, state: row.state } : null;
-    });
+    const rows = (await this.pool.query<{ realm: string | null; about: string | null; opener_reply: string | null;
+      root_revision: string | null; revision_id: string | null; state: AboutThread['state'] | null }>(
+      `SELECT t.realm,t.about,t.opener_reply,t.root_revision,t.revision_id,t.state
+      FROM (VALUES (1)) AS probe(n) LEFT JOIN content.realm_about_thread t
+        ON t.realm = $1 AND t.about = $2 LIMIT 2`, [realm, about])).rows;
+    // The unique key owns selection. An absent key still returns one probe row;
+    // neither corruption nor an unavailable owner may become an empty result.
+    if (rows.length !== 1) throw new RealmReplyUnavailable('canonical discussion key is ambiguous');
+    const row = rows[0]!;
+    if (row.realm === null && row.about === null && row.opener_reply === null
+      && row.root_revision === null && row.revision_id === null && row.state === null) return null;
+    if (row.realm !== realm || row.about !== about || !row.opener_reply || !native.test(row.opener_reply)
+      || !row.root_revision || row.root_revision.length > 300 || row.root_revision.includes('\0')
+      || !row.state || !['reserved', 'active'].includes(row.state)
+      || (row.state === 'active' ? !row.revision_id || !uuid.test(row.revision_id) : row.revision_id !== null)) {
+      throw new RealmReplyUnavailable('canonical discussion key is malformed');
+    }
+    return { realm, about, openerReply: row.opener_reply,
+      rootRevision: row.root_revision, revisionId: row.revision_id, state: row.state };
   }
 
   async recordDraft(id: string, draftOperationId: string): Promise<AboutPostOperation> {

@@ -1,8 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
-import { realmThread, realmThreadQuery, realmThreadsPage, realmThreadsQuery } from '../modules/realm-reply/thread-contract.ts';
-import { PROFILE_CONTRIBUTION_COST, readProfileContributions, readRealmThread, readRealmThreads }
+import { realmAboutThread, realmAboutThreadQuery, realmThread, realmThreadQuery, realmThreadsPage, realmThreadsQuery } from '../modules/realm-reply/thread-contract.ts';
+import { PROFILE_CONTRIBUTION_COST, readProfileContributions, readRealmAboutThread, readRealmThread, readRealmThreads }
   from '../modules/realm-reply/thread-read.ts';
 import { RealmReplyInvalid } from '../modules/realm-reply/content-store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -15,6 +15,7 @@ const headers = { 'cache-control': 'no-store' };
 // Public reads: a private Realm answers only its members, who send a bearer
 // token and the Agent they read as; the reader's own votes come back with it.
 export const openApiOperations = {
+  '/v1/realms/{realm}/about-thread': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/realms/{realm}/threads': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/realms/{realm}/threads/{reply}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/agents/{id}/realm-contributions': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
@@ -27,6 +28,19 @@ function threadError(error: unknown): Response {
 
 export function realmReplyThreadRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/realms/:realm/about-thread', { params: t.Object({ realm: readUuid }), query: realmAboutThreadQuery,
+      detail: { security: [{}, { bearerAuth: [] }],
+        summary: 'Find the canonical discussion about a resource in a Realm',
+        description: 'Returns the opener identity and retained root revision, or thread: null when no discussion is visible. '
+          + 'Load content through the existing thread reads. This lookup creates nothing, returns no collection or cursor, '
+          + 'and has a 64 KiB response ceiling. Hidden and absent resources return the same 404; unavailable owners return 503.' },
+      response: { 200: realmAboutThread, ...workReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        return Response.json(await workRead(work, request, query,
+          session => readRealmAboutThread(session, id(params.realm), query.about)), { headers });
+      } catch (error) { return threadError(error); }
+    })
     .get('/v1/agents/:id/realm-contributions', { params: t.Object({ id: readUuid }),
       query: t.Object({ kind: t.Union([t.Literal('posts'), t.Literal('comments')]),
         cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),

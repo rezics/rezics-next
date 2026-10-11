@@ -8,10 +8,10 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkRe
   WorkReadMoved, WorkReadExpired, WorkReadUnavailable, WorkReadLimit, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { clip, discussionParts } from './discussion-text.ts';
 import { replySlotIri } from './graph.ts';
-import { REALM_THREAD_COST, type realmThread, type realmThreadContinuation, type realmThreadReply, type realmThreadSummary,
+import { REALM_ABOUT_THREAD_COST, REALM_THREAD_COST, type realmAboutThread, type realmThread, type realmThreadContinuation, type realmThreadReply, type realmThreadSummary,
   type threadSort, type threadWindow } from './thread-contract.ts';
 import type { PlacedHead, RealmReplyThreadStore, ThreadSiblingKey, ThreadVote } from './thread-store.ts';
-import { resolveTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
+import { resolveTargets, resolveVisibleTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
@@ -29,6 +29,96 @@ const revisionPrefix = 'urn:rezics:content:revision:';
 const reviewPrefix = 'urn:rezics:realm-review:';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const closed: ThreadVote = { score: 0, value: 0, revision: null, open: false };
+
+/** Find the owner's one discussion without enumerating threads or reading bodies.
+ * The nullable placement and approval probes run even for an absent/reserved
+ * key. Closing owner probes suppress stale approval, history and disclosure. */
+export async function readRealmAboutThread(session: WorkReadSession, realm: string, about: string):
+  Promise<Static<typeof realmAboutThread>> {
+  const basis = await readRealmBasis(session, realm);
+  const threads = store(session);
+  const ownerRead = async <T>(read: () => Promise<T>): Promise<T> => {
+    try { return await read(); }
+    catch (error) { throw new WorkReadUnavailable('About thread owner is unavailable', { cause: error }); }
+  };
+  const canonical = await ownerRead(() => threads.aboutThread(realm, about));
+  const history = async () => basis.visibility === 'private' && basis.history === 'from-admission'
+    ? realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
+  const openingHistory = await history();
+  // A non-resource sentinel cannot collide with an existing reply. The same
+  // exact slot-shaped query returns a neutral row when no opener is placed.
+  const reply = canonical?.openerReply ?? 'urn:rezics:realm-about-thread:absent';
+  const rows = await session.query(`SELECT ?id ?reply ?slotRealm ?slotWork ?slotReply ?work ?author ?revision
+    ?review ?preparation ?rootRevision ?sequence ?parent ?eligible WHERE {
+    VALUES ?slot { ${iri(replySlotIri(realm, reply))} }
+    OPTIONAL {
+      GRAPH ${iri(GRAPHS.current)} { ?slot rv:replyPlacementHead ?id .
+        OPTIONAL { ?slot rv:realm ?slotRealm }
+        OPTIONAL { ?slot rv:reply ?slotReply }
+        OPTIONAL { ?slot rv:rootTarget ?slotWork }
+      }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+        ?id a rv:RealmReplyPlacement ; rv:realm ${iri(realm)} ; rv:reply ?reply ; rv:rootTarget ?work ;
+          rv:rootRevision ?rootRevision ; rv:author ?author ; rv:contentRevision ?revision ;
+          rv:reviewDecision ?review ; rv:contentPreparation ?preparation ; rv:sequence ?sequence .
+      } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?id rv:parentReply ?parent } }
+      BIND(EXISTS { ${headPattern(realm)} ${openingHistory} } AS ?eligible)
+    }
+  } LIMIT 2`, 2);
+  if (rows.length !== 1) throw new WorkReadUnavailable('About reply slot has ambiguous cardinality');
+  const row = rows[0]!;
+  const raw = row.id ? head(row) : null;
+  if (!raw && ['work', 'author', 'revision', 'review', 'preparation', 'rootRevision', 'sequence', 'parent']
+    .some(key => row[key])) throw new WorkReadUnavailable('About reply placement is malformed');
+  if (raw && (!canonical || raw.reply !== canonical.openerReply || raw.work !== about
+    || raw.rootRevision !== canonical.rootRevision || raw.parent !== null
+    || row.slotRealm?.value !== realm || row.slotWork?.value !== about || row.slotReply?.value !== reply
+    || !['true', 'false'].includes(row.eligible?.value ?? ''))) {
+    throw new WorkReadUnavailable('About reply placement disagrees with the canonical key');
+  }
+  const placed = row.eligible?.value === 'true' ? raw : null;
+  const identity = await ownerRead(() => threads.aboutPlacement(realm, placed));
+  const targets = await resolveVisibleTargets(session, [about], 'discussion');
+  const disclosure = () => discloseInventory(session.deps.environment, [
+    { owner: 'content', resource: reply, component: 'body', revision: placed?.revisionId ?? null,
+      work: about, context: realm },
+    { owner: 'graph', resource: realm, component: 'record', context: realm },
+  ], disclosureViewer(session.principal), 'thread');
+  const visible = (decisions: Awaited<ReturnType<typeof disclosure>>) => {
+    if (decisions.length !== 2 || decisions.some(value => !['visible', 'hidden', 'tombstone'].includes(value))) {
+      throw new WorkReadUnavailable('About thread disclosure is malformed');
+    }
+    return { thread: decisions[0] === 'visible', realm: decisions[1] === 'visible' };
+  };
+  const openingVisible = visible(await disclosure());
+  const currentIdentity = await ownerRead(() => threads.aboutPlacement(realm, placed));
+  const currentTargets = await resolveVisibleTargets(session, [about], 'discussion');
+  const closingVisible = visible(await disclosure());
+  const closingHistory = await history();
+  if (openingHistory !== closingHistory) throw new WorkReadMoved('Realm history changed during the about lookup');
+  // Hidden and absent targets use the same complete probe schedule and 404.
+  if (!targets.length || !currentTargets.length || !openingVisible.realm || !closingVisible.realm) {
+    throw new WorkReadMissing('Resource is unavailable');
+  }
+  if (targets[0]!.revision !== currentTargets[0]!.revision) {
+    throw new WorkReadMoved('Discussion target changed during the about lookup');
+  }
+  for (const node of [identity, currentIdentity]) {
+    if (node && (!placed || node.reply !== placed.reply || node.parent !== null || node.rootTarget !== about
+      || node.rootRevision !== placed.rootRevision || node.author !== placed.author)) {
+      throw new WorkReadUnavailable('About opener identity disagrees with its placement');
+    }
+  }
+  const response: Static<typeof realmAboutThread> = { realm, about,
+    thread: canonical?.state === 'active' && identity && currentIdentity
+      && openingVisible.thread && closingVisible.thread
+      ? { reply: canonical.openerReply, rootRevision: canonical.rootRevision } : null };
+  if (Buffer.byteLength(JSON.stringify(response), 'utf8') > REALM_ABOUT_THREAD_COST.responseBytes) {
+    throw new WorkReadLimit('About thread exceeds the response budget');
+  }
+  return response;
+}
 
 /** A Realm placement head as the graph states it. */
 interface Head extends PlacedHead { placement: string; work: string; author: string; rootRevision: string;

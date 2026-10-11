@@ -14,6 +14,7 @@ import {
 import type { RealmHistoryFloor } from '../realm-admin/history.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
+import { RealmAboutThreadStore } from './about-store.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -63,6 +64,39 @@ const approved = (realm: string, reply: string, revision: string, review: string
  */
 export class RealmReplyThreadStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
+
+  aboutThread(realm: string, about: string) {
+    return new RealmAboutThreadStore(this.content).readThread(realm, about);
+  }
+
+  /** One exact approval/identity probe, including an absent placement. Repeated
+   * at the end of a lookup because graph fences do not fence Content decisions. */
+  async aboutPlacement(realm: string, head: PlacedHead | null): Promise<ThreadNode | null> {
+    if (!native.test(realm) || head && (!native.test(head.reply) || !uuid.test(head.revisionId)
+      || !uuid.test(head.reviewDecisionId) || !head.preparationId || head.preparationId.length > 300)) {
+      throw new RealmReplyInvalid('invalid about placement');
+    }
+    const rows = (await this.content.query<{ reply: string | null; parent: string | null; author: string;
+      origin: string | null; root_target: string; root_revision: string; created_at: Date; approved: boolean }>(`
+      SELECT c.id AS reply,c.parent_reply AS parent,c.author,c.origin_realm AS origin,c.root_target,
+        c.root_revision,c.created_at,${approved('$1', 'x.reply', 'x.revision', 'x.review', 'x.preparation')} AS approved
+      FROM (VALUES ($2::text,$3::uuid,$4::uuid,$5::text)) AS x(reply,revision,review,preparation)
+      LEFT JOIN content.reply c ON c.id = x.reply LIMIT 2`,
+    [realm, head?.reply ?? null, head?.revisionId ?? null, head?.reviewDecisionId ?? null,
+      head?.preparationId ?? null])).rows;
+    if (rows.length !== 1 || typeof rows[0]!.approved !== 'boolean') {
+      throw new WorkReadUnavailable('About placement admission is malformed');
+    }
+    const row = rows[0]!;
+    if (!row.approved) return null;
+    if (!head || row.reply !== head.reply || !native.test(row.reply) || !native.test(row.author)
+      || !native.test(row.root_target) || !native.test(row.root_revision) || row.parent !== null
+      || row.origin !== null && row.origin !== realm || !(row.created_at instanceof Date)
+      || Number.isNaN(row.created_at.getTime())) {
+      throw new WorkReadUnavailable('About opener identity is malformed');
+    }
+    return node({ ...row, reply: row.reply });
+  }
 
   /** Content source inventory for the existing bounded background projector. */
   get rankingContent() {
