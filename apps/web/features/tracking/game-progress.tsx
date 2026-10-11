@@ -3,7 +3,7 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { ProgressConflict } from './conflict-panel.tsx';
 import type { EpisodeProgress, ProgressStale } from './episode-api.ts';
 import { GAME_PART_PAGE_LIMIT, type MediaApi } from './media-api.ts';
@@ -20,11 +20,23 @@ const word = (progress: EpisodeProgress, t: Copy) =>
 const rowOf = (route: RouteRef, progress: EpisodeProgress): Row => ({ ...route,
   completed: progress.completed, started: progress.completed || progress.position !== null });
 
-/** A completion summary omits unfinished play, so every displayed part needs its own progress. */
-async function pageOf(api: MediaApi, work: string, after?: string) {
-  const found = await api.routes(work, after);
+type Scope = { work: string; api: MediaApi; busy: boolean; selection: number };
+type State = {
+  scope: Scope | null; routes: Row[] | null; more: string | null; failedLoad: boolean;
+  selected: string | null; read: Read | null; saving: boolean; failed: boolean; conflict: Conflict | null;
+};
+const initial: State = { scope: null, routes: null, more: null, failedLoad: false,
+  selected: null, read: null, saving: false, failed: false, conflict: null };
+
+/** Retired inventory reads must not start progress reads for the old Work. */
+async function pageOf(scope: Scope, current: (scope: Scope) => boolean, after?: string) {
+  if (!current(scope)) return null;
+  const found = await scope.api.routes(scope.work, after);
+  if (!current(scope)) return null;
   if (!found.ok) return found;
-  const progress = await Promise.all(found.data.items.map(route => api.progress(route)));
+  // A completion summary omits unfinished play, so each displayed part needs its own progress.
+  const progress = await Promise.all(found.data.items.map(route => scope.api.progress(route)));
+  if (!current(scope)) return null;
   const failed = progress.find(read => !read.ok);
   if (failed && !failed.ok) return failed;
   return { ok: true as const, data: { next: found.data.next, items: found.data.items.map((route, index) => {
@@ -37,115 +49,131 @@ async function pageOf(api: MediaApi, work: string, after?: string) {
 /** Whole-game writes first establish the complete set of required parts. */
 export function GameProgress({ work, api, t, className }: { work: string; api: MediaApi; t: Copy; className?: string }) {
   const headingId = useId();
-  const [routes, setRoutes] = useState<Row[] | null>(null);
-  const [more, setMore] = useState<string | null>(null);
-  const [failedLoad, setFailedLoad] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [read, setRead] = useState<Read | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [conflict, setConflict] = useState<Conflict | null>(null);
-  const busy = useRef(false);
-  const selection = useRef(0);
+  const [state, setState] = useState(initial);
+  const active = useRef<Scope | null>(null);
+  const current = (scope: Scope) => active.current === scope;
 
-  useEffect(() => {
-    let current = true;
+  // Check again when React applies an update: a queued result can outlive its Work/API instance.
+  function change(scope: Scope, patch: Partial<State> | ((previous: State) => Partial<State>)) {
+    if (!current(scope)) return;
+    setState(previous => current(scope) ? { ...previous,
+      ...(typeof patch === 'function' ? patch(previous) : patch) } : previous);
+  }
+
+  // Retire the old scope during commit, before the new Work can paint or accept an action.
+  useLayoutEffect(() => {
+    const scope: Scope = { work, api, busy: false, selection: 0 };
+    active.current = scope;
+    change(scope, { ...initial, scope });
     void (async () => {
-      setRoutes(null);
-      setSelected(null);
-      setRead(null);
-      setConflict(null);
-      setFailed(false);
-      setFailedLoad(false);
-      const found = await pageOf(api, work);
-      if (!found.ok) { if (current) setFailedLoad(true); return; }
-      if (!current) return;
-      setFailedLoad(false);
-      setRoutes(found.data.items);
-      setMore(found.data.next);
+      try {
+        const found = await pageOf(scope, current);
+        if (!found) return;
+        if (!found.ok) { change(scope, { failedLoad: true }); return; }
+        change(scope, { routes: found.data.items, more: found.data.next });
+      } catch { change(scope, { failedLoad: true }); }
     })();
-    return () => { current = false; ++selection.current; };
+    return () => { if (current(scope)) active.current = null; };
   }, [api, work]);
 
+  const { routes, more, failedLoad, selected, read, saving, failed, conflict } = state;
+  function scopeOfAction() {
+    const scope = active.current;
+    return scope && scope === state.scope && scope.work === work && scope.api === api ? scope : null;
+  }
+
   async function further() {
-    if (!more || !routes || busy.current) return;
-    busy.current = true;
-    setSaving(true);
-    setFailed(false);
+    const scope = scopeOfAction();
+    if (!scope || !more || !routes || scope.busy) return;
+    scope.busy = true;
+    change(scope, { saving: true, failed: false });
     try {
-      const found = await pageOf(api, work, more);
-      if (!found.ok) { setFailed(true); return; }
-      setRoutes(current => [...(current ?? []), ...found.data.items]);
-      setMore(found.data.next);
-    } finally { busy.current = false; setSaving(false); }
+      const found = await pageOf(scope, current, more);
+      if (!found) return;
+      if (!found.ok) { change(scope, { failed: true }); return; }
+      change(scope, previous => ({ routes: [...(previous.routes ?? []), ...found.data.items], more: found.data.next }));
+    } catch { change(scope, { failed: true }); }
+    finally { if (current(scope)) { scope.busy = false; change(scope, { saving: false }); } }
   }
 
   async function choose(route: RouteRef) {
-    const request = ++selection.current;
-    setSelected(route.occurrence);
-    setConflict(null);
-    setFailed(false);
-    setRead({ status: 'loading' });
-    const progress = await api.progress(route);
-    if (request !== selection.current) return;
-    setRead(progress.ok ? { status: 'ready', progress: progress.data } : { status: 'failed' });
-    if (progress.ok) update(route, progress.data);
-  }
-
-  function update(route: RouteRef, progress: EpisodeProgress) {
-    setRoutes(current => current?.map(row => row.occurrence === route.occurrence ? rowOf(row, progress) : row) ?? null);
-    if (selected === route.occurrence) setRead({ status: 'ready', progress });
-  }
-
-  async function write(route: RouteRef, completed: boolean, position: string | null) {
-    const written = await api.mark(route, { completed, position });
-    if (!written.ok && written.failure === 'stale') {
-      update(route, written.current);
-      setConflict({ route, current: written.current, submitted: written.submitted }); return false;
+    const scope = scopeOfAction();
+    if (!scope || scope.busy) return;
+    const request = ++scope.selection;
+    change(scope, { selected: route.occurrence, conflict: null, failed: false, read: { status: 'loading' } });
+    try {
+      const progress = await scope.api.progress(route);
+      if (!current(scope) || request !== scope.selection) return;
+      change(scope, { read: progress.ok ? { status: 'ready', progress: progress.data } : { status: 'failed' } });
+      if (progress.ok) update(scope, route, progress.data);
+    } catch {
+      if (current(scope) && request === scope.selection) change(scope, { read: { status: 'failed' } });
     }
-    if (!written.ok) { setFailed(true); return false; }
-    setConflict(null);
-    update(route, written.data);
+  }
+
+  function update(scope: Scope, route: RouteRef, progress: EpisodeProgress) {
+    change(scope, previous => ({
+      routes: previous.routes?.map(row => row.occurrence === route.occurrence ? rowOf(row, progress) : row) ?? null,
+      ...(previous.selected === route.occurrence ? { read: { status: 'ready', progress } as Read } : {}),
+    }));
+  }
+
+  async function write(scope: Scope, route: RouteRef, completed: boolean, position: string | null) {
+    if (!current(scope)) return false;
+    const written = await scope.api.mark(route, { completed, position });
+    if (!current(scope)) return false;
+    if (!written.ok && written.failure === 'stale') {
+      update(scope, route, written.current);
+      change(scope, { conflict: { route, current: written.current, submitted: written.submitted } }); return false;
+    }
+    if (!written.ok) { change(scope, { failed: true }); return false; }
+    change(scope, { conflict: null });
+    update(scope, route, written.data);
     return true;
   }
 
-  async function save(action: () => Promise<unknown>) {
-    if (busy.current) return;
-    busy.current = true;
-    ++selection.current;
-    setSaving(true);
-    setFailed(false);
-    try { await action(); } finally { busy.current = false; setSaving(false); }
+  async function save(action: (scope: Scope) => Promise<unknown>) {
+    const scope = scopeOfAction();
+    if (!scope || scope.busy) return;
+    scope.busy = true;
+    ++scope.selection;
+    change(scope, { saving: true, failed: false });
+    try { await action(scope); }
+    catch { change(scope, { failed: true }); }
+    finally { if (current(scope)) { scope.busy = false; change(scope, { saving: false }); } }
   }
 
   async function writeGame(mode: 'played' | 'completed' | 'undo') {
     if (!routes) return;
-    await save(async () => {
+    await save(async scope => {
       let all = routes;
       let cursor = more;
       const seen = new Set<string>();
       // No marks are sent until every page is available, including a required part after optional ones.
       while (cursor) {
-        if (seen.size >= GAME_PART_PAGE_LIMIT || seen.has(cursor)) { setFailed(true); return; }
+        if (!current(scope)) return;
+        if (seen.size >= GAME_PART_PAGE_LIMIT || seen.has(cursor)) { change(scope, { failed: true }); return; }
         seen.add(cursor);
-        const found = await pageOf(api, work, cursor);
-        if (!found.ok) { setFailed(true); return; }
+        const found = await pageOf(scope, current, cursor);
+        if (!found) return;
+        if (!found.ok) { change(scope, { failed: true }); return; }
         all = [...all, ...found.data.items];
         cursor = found.data.next;
-        setRoutes(all);
-        setMore(cursor);
+        change(scope, { routes: all, more: cursor });
       }
       const gate = all.some(route => route.required) ? all.filter(route => route.required) : all;
       if (mode === 'played' && gate.some(route => route.started)) return;
       for (const route of gate) {
+        if (!current(scope)) return;
         if (mode === 'completed' && route.completed) continue;
         if (mode === 'undo' && !route.completed) continue;
-        const ok = await write(route, mode === 'completed', mode === 'completed' ? 'completed' : mode === 'played' ? 'played' : null);
+        const ok = await write(scope, route, mode === 'completed', mode === 'completed' ? 'completed' : mode === 'played' ? 'played' : null);
         if (!ok || mode === 'played') return;
       }
     });
   }
 
+  if (state.scope?.work !== work || state.scope.api !== api) return null;
   if (failedLoad) {
     return <section aria-labelledby={headingId} className={className}>
       <h2 id={headingId} className="sr-only">{t.playHeading}</h2>
@@ -199,12 +227,12 @@ export function GameProgress({ work, api, t, className }: { work: string; api: M
           {ready ? <span className="text-muted-foreground">{' · '}{word(ready, t)}</span> : null}
           {read?.status === 'loading' ? <span className="text-muted-foreground">{' · '}{t.episodeSaving}</span> : null}</p>
         {ready?.completed ? <div><Button type="button" size="sm" variant="ghost" className="min-h-11 sm:min-h-8" disabled={saving}
-          onClick={() => void save(() => write(chosen, false, null))}>{t.markNotCompleted}</Button></div>
+          onClick={() => void save(scope => write(scope, chosen, false, null))}>{t.markNotCompleted}</Button></div>
           : ready ? <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" className="min-h-11 sm:min-h-8" disabled={saving}
-              onClick={() => void save(() => write(chosen, false, 'played'))}>{t.markPlayed}</Button>
+              onClick={() => void save(scope => write(scope, chosen, false, 'played'))}>{t.markPlayed}</Button>
             <Button type="button" size="sm" className="min-h-11 sm:min-h-8" disabled={saving}
-              onClick={() => void save(() => write(chosen, true, 'completed'))}>{t.markCompleted}</Button>
+              onClick={() => void save(scope => write(scope, chosen, true, 'completed'))}>{t.markCompleted}</Button>
           </div> : null}
     </div> : null}
 
@@ -212,8 +240,8 @@ export function GameProgress({ work, api, t, className }: { work: string; api: M
       mine={conflict.submitted.completed ? t.gameCompleted : conflict.submitted.position ? t.gamePlayed : t.notPlayed}
       theirs={conflict.current.completed ? t.gameCompleted : conflict.current.position ? t.gamePlayed : t.notPlayed}
       t={t} busy={saving} failed={failed}
-      onKeep={() => void save(() => write(conflict.route, conflict.submitted.completed, conflict.submitted.position))}
-      onUse={() => setConflict(null)} /> : null}
+      onKeep={() => void save(scope => write(scope, conflict.route, conflict.submitted.completed, conflict.submitted.position))}
+      onUse={() => { const scope = scopeOfAction(); if (scope) change(scope, { conflict: null }); }} /> : null}
     <p role="status" className="text-destructive-foreground text-xs">{failed || read?.status === 'failed' ? t.saveFailed : null}</p>
   </section>;
 }

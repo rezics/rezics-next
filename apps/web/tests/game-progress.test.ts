@@ -35,8 +35,13 @@ interface Fixture {
   failParent?: string;
 }
 interface TestWindow {
-  renderGame(api: MediaApi, key: number): void;
+  renderGame(api: MediaApi, key: number, work?: string): void;
   inventoryApi(client: MainClient): MediaApi;
+  lifecycle: {
+    started: boolean; bStarted: boolean;
+    calls: { kind: 'routes' | 'progress' | 'mark'; owner: 'A' | 'B'; id: string }[];
+    switch(): void; release(): Promise<void>; releaseB(): Promise<void>;
+  };
   game: {
     api: MediaApi;
     rows: Map<string, EpisodeProgress>;
@@ -63,7 +68,7 @@ import { copyOf } from ${JSON.stringify(resolve('apps/web/features/tracking/mess
 import { mainTrackingApi } from ${JSON.stringify(resolve('apps/web/features/tracking/api.ts'))};
 const root = createRoot(document.getElementById('root'));
 window.inventoryApi = client => mainTrackingApi('reader', () => client).media;
-window.renderGame = (api, key) => root.render(<GameProgress key={key} work=${JSON.stringify(work)} api={api} t={copyOf('en')} />);
+window.renderGame = (api, key, work = ${JSON.stringify(work)}) => root.render(<GameProgress key={key} work={work} api={api} t={copyOf('en')} />);
 `);
     const built = await Bun.build({ entrypoints: [entry], target: 'browser', define: { 'process.env.NODE_ENV': '"development"' } });
     if (!built.success) throw new Error(built.logs.join('\n'));
@@ -153,6 +158,169 @@ window.renderGame = (api, key) => root.render(<GameProgress key={key} work=${JSO
     await browserExpect(page.locator('[data-selected]')).toHaveCount(0);
     await browserExpect(state()).toBeVisible();
   };
+
+  async function pendingSwitch(options: {
+    phase: 'initial' | 'page' | 'page-progress' | 'selected' | 'write';
+    boundary?: 'work' | 'api'; outcome?: 'success' | 'failure' | 'stale' | 'throw'; holdB?: boolean;
+  }) {
+    const a = parts(22), b = [part(51), part(52)].map(route => ({ ...route, structure: part(9003).occurrence }));
+    await page.evaluate(({ options, a, b, work }) => {
+      const target = window as unknown as TestWindow;
+      const otherWork = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
+      let resolveA!: () => void, resolveB!: () => void;
+      const gateA = new Promise<void>(done => { resolveA = done; });
+      const gateB = new Promise<void>(done => { resolveB = done; });
+      const rows = new Map<string, EpisodeProgress>([[b[1]!.occurrence,
+        { completed: false, position: 'checkpoint', version: 7 }]]);
+      const counts = new Map<string, number>();
+      const lifecycle: TestWindow['lifecycle'] = {
+        started: false, bStarted: false, calls: [], switch: () => {},
+        release: async () => { resolveA(); await frames(); },
+        releaseB: async () => { resolveB(); await frames(); },
+      };
+      async function frames() {
+        // Let the retired promise and React's resulting work settle without timing-based sleeps.
+        await new Promise<void>(done => requestAnimationFrame(() => done()));
+        await new Promise<void>(done => requestAnimationFrame(() => done()));
+      }
+      async function hold() { lifecycle.started = true; await gateA; }
+      function result(id: string) { return rows.get(id) ?? { completed: false, position: null, version: 0 }; }
+      function client(replacement = false): MediaApi {
+        return {
+          routes: async (requestedWork, after) => {
+            const owner = replacement || requestedWork === otherWork ? 'B' : 'A';
+            lifecycle.calls.push({ kind: 'routes', owner, id: after ?? 'root' });
+            if (owner === 'A' && (options.phase === 'initial' || options.phase === 'page' && after)) {
+              await hold();
+              if (options.outcome === 'failure') return { ok: false, failure: 'sign-in' };
+            }
+            const all = owner === 'A' ? a : b, start = Number(after ?? 0);
+            return { ok: true, data: { items: all.slice(start, start + 20), next: start + 20 < all.length ? '20' : null } };
+          },
+          progress: async route => {
+            const owner = route.structure === b[0]!.structure ? 'B' : 'A';
+            lifecycle.calls.push({ kind: 'progress', owner, id: route.occurrence });
+            const count = (counts.get(route.occurrence) ?? 0) + 1;
+            counts.set(route.occurrence, count);
+            if (owner === 'A' && (options.phase === 'page-progress' && route.occurrence === a[20]!.occurrence
+              || options.phase === 'selected' && route.occurrence === a[0]!.occurrence && count === 2)) {
+              await hold();
+              if (options.outcome === 'failure') return { ok: false, failure: 'sign-in' };
+            }
+            return { ok: true, data: result(route.occurrence) };
+          },
+          mark: async (route, change) => {
+            const owner = route.structure === b[0]!.structure ? 'B' : 'A';
+            lifecycle.calls.push({ kind: 'mark', owner, id: route.occurrence });
+            if (owner === 'A') {
+              await hold();
+              if (options.outcome === 'failure') return { ok: false, failure: 'unavailable' };
+              if (options.outcome === 'throw') throw new Error('Lost old-work response');
+              if (options.outcome === 'stale') return { ok: false, failure: 'stale', current: result(route.occurrence),
+                submitted: { ...change, position: change.position ?? null } };
+            } else if (options.holdB && route.occurrence === b[0]!.occurrence) {
+              lifecycle.bStarted = true;
+              await gateB;
+            }
+            const saved = { completed: change.completed, position: change.position ?? null, version: result(route.occurrence).version + 1 };
+            rows.set(route.occurrence, saved);
+            return { ok: true, data: saved };
+          },
+        } as MediaApi;
+      }
+      const original = client();
+      lifecycle.switch = () => target.renderGame(options.boundary === 'api' ? client(true) : original,
+        0, options.boundary === 'api' ? work : otherWork);
+      target.lifecycle = lifecycle;
+      target.renderGame(original, 0, work);
+    }, { options, a, b, work });
+    if (options.phase !== 'initial') await browserExpect(row(a[0]!.occurrence)).toBeVisible();
+    return { a, b };
+  }
+  async function switchToB(b: RouteRef[]) {
+    await page.waitForFunction(() => (window as unknown as TestWindow).lifecycle.started);
+    await page.evaluate(() => (window as unknown as TestWindow).lifecycle.switch());
+    await browserExpect(row(b[1]!.occurrence)).toHaveAttribute('data-route-state', 'played');
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'played');
+    await browserExpect(page.getByRole('button', { name: 'Mark completed', exact: true })).toBeEnabled();
+  }
+  async function releaseA() { await page.evaluate(() => (window as unknown as TestWindow).lifecycle.release()); }
+  async function onlyB(b: RouteRef[], aCalls: number) {
+    await browserExpect(page.locator('[data-route]')).toHaveCount(b.length);
+    await browserExpect(row(b[0]!.occurrence)).toHaveAttribute('data-route-state', 'none');
+    await browserExpect(row(b[1]!.occurrence)).toHaveAttribute('data-route-state', 'played');
+    await browserExpect(page.getByRole('status')).toBeEmpty();
+    await browserExpect(page.getByText('Changed on another device')).toHaveCount(0);
+    await browserExpect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as TestWindow).lifecycle.calls.filter(call => call.owner === 'A').length)).toBe(aCalls);
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+    expect(await page.evaluate(() => (window as unknown as TestWindow).lifecycle.calls
+      .filter(call => call.owner === 'B' && call.kind === 'mark').map(call => call.id))).toEqual(b.map(route => route.occurrence));
+  }
+  const aCallCount = () => page.evaluate(() => (window as unknown as TestWindow).lifecycle.calls.filter(call => call.owner === 'A').length);
+
+  for (const boundary of ['work', 'api'] as const) {
+    for (const action of ['whole-game', 'show-more'] as const) {
+      test(`${boundary} switch during a pending ${action} page keeps the new inventory and next action`, async () => {
+        const { b } = await pendingSwitch({ phase: 'page', boundary });
+        await page.getByRole('button', { name: action === 'whole-game' ? 'Mark completed' : 'Show more', exact: true }).click();
+        await switchToB(b);
+        const calls = await aCallCount();
+        await releaseA();
+        await onlyB(b, calls);
+      });
+    }
+    for (const outcome of ['success', 'failure', 'stale', 'throw'] as const) {
+      test(`${boundary} switch during a whole-game write drops its ${outcome} result and stops remaining writes`, async () => {
+        const { b } = await pendingSwitch({ phase: 'write', boundary, outcome });
+        await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+        await switchToB(b);
+        const calls = await aCallCount();
+        await releaseA();
+        await onlyB(b, calls);
+      });
+    }
+    test(`${boundary} switch isolates the new save lock from the old write's finally`, async () => {
+      const { b } = await pendingSwitch({ phase: 'write', boundary, holdB: true });
+      await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+      await switchToB(b);
+      const calls = await aCallCount();
+      await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+      await page.waitForFunction(() => (window as unknown as TestWindow).lifecycle.bStarted);
+      await releaseA();
+      await browserExpect(page.getByRole('button').first()).toBeDisabled();
+      await browserExpect(row(b[0]!.occurrence)).toBeDisabled();
+      expect(await aCallCount()).toBe(calls);
+      await page.evaluate(() => (window as unknown as TestWindow).lifecycle.releaseB());
+      await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+      expect(await page.evaluate(() => (window as unknown as TestWindow).lifecycle.calls
+        .filter(call => call.owner === 'B' && call.kind === 'mark').map(call => call.id))).toEqual(b.map(route => route.occurrence));
+    });
+  }
+  for (const phase of ['initial', 'page-progress', 'selected'] as const) {
+    for (const outcome of ['success', 'failure'] as const) {
+      test(`work switch drops pending ${phase} ${outcome} without changing new progress or errors`, async () => {
+        const { a, b } = await pendingSwitch({ phase, outcome });
+        if (phase === 'page-progress') await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+        if (phase === 'selected') await row(a[0]!.occurrence).click();
+        await switchToB(b);
+        await row(b[1]!.occurrence).click();
+        await browserExpect(page.locator('[data-selected]')).toContainText('Played');
+        const calls = await aCallCount();
+        await releaseA();
+        await browserExpect(page.locator('[data-selected]')).toHaveAttribute('data-selected', b[1]!.occurrence);
+        await browserExpect(page.locator('[data-selected]')).toContainText('Played');
+        await browserExpect(page.locator('[data-route]')).toHaveCount(2);
+        await browserExpect(page.getByRole('status')).toBeEmpty();
+        expect(await aCallCount()).toBe(calls);
+        await state().getByRole('button', { name: 'Mark completed', exact: true }).first().click();
+        await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+        expect(await page.evaluate(() => (window as unknown as TestWindow).lifecycle.calls
+          .filter(call => call.owner === 'B' && call.kind === 'mark').map(call => call.id))).toEqual(b.map(route => route.occurrence));
+      });
+    }
+  }
 
   test('required parts past 20 are reachable without optional routes; a completed page is only played', async () => {
     const all = parts(45);
