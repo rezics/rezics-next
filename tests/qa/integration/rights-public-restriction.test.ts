@@ -253,6 +253,8 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       const coverTarget = await f.stack.publicWork(maintainer.actor, ['en'], `Rights cover ${randomUUID()}`);
       const sharedCover = await f.stack.publicWork(maintainer.actor, ['en'], `Shared cover ${randomUUID()}`);
       const contentTarget = await f.stack.publicWork(maintainer.actor, ['en'], `Rights body ${randomUUID()}`);
+      const contentReadPath = (revision: string) =>
+        `/v1/content-revisions/${revision}?actingSubject=${encodeURIComponent(maintainer.actor)}`;
       for (const work of [workTarget, coverTarget, sharedCover, contentTarget])
         await maintainer.grant(`work:read:${work.work}`, 'work.read');
 
@@ -343,7 +345,7 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         await f.call('GET', `/v1/resources/${shortId(contentTarget.work)}`));
       expect(unrelatedCoverBefore.avatar.kind).toBe('image');
 
-      const exactContentBefore = await f.call('GET', `/v1/content-revisions/${content.revision}`);
+      const exactContentBefore = await f.call('GET', contentReadPath(content.revision), undefined, maintainer.token);
       expect(exactContentBefore.status).toBe(200);
       expect(await exactContentBefore.text()).toContain(bodyText);
       expect(preRestriction.get(contentNotice.caseId)!.search).toContain(bodyText);
@@ -519,13 +521,15 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         gaps.push('replacing the cover head reopened delivery of the previously restricted cover Use');
 
       const contentResult = caseResults.get(contentNotice.caseId)!;
-      const restrictedContent = await observed(await f.call('GET', `/v1/content-revisions/${content.revision}`));
-      const absentContent = await observed(await f.call('GET', `/v1/content-revisions/${randomUUID()}`));
+      const restrictedContent = await observed(await f.call('GET', contentReadPath(content.revision),
+        undefined, maintainer.token));
+      const absentContent = await observed(await f.call('GET', contentReadPath(randomUUID()),
+        undefined, maintainer.token));
       if (JSON.stringify(restrictedContent) !== JSON.stringify(absentContent))
         gaps.push('restricted Content revision read differs from an absent revision');
       for (const credential of [contentNotice.credential, contentResult.affected]) {
-        const credentialRead = await observed(await f.call('GET', `/v1/content-revisions/${content.revision}`,
-          undefined, undefined, randomUUID(), credential));
+        const credentialRead = await observed(await f.call('GET', contentReadPath(content.revision),
+          undefined, maintainer.token, randomUUID(), credential));
         if (JSON.stringify(credentialRead) !== JSON.stringify(restrictedContent))
           gaps.push('a case credential changes restricted Content revision delivery');
       }
@@ -535,9 +539,9 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
 
       const updatedText = `Rights body replacement ${randomUUID().replaceAll('-', '')}`;
       const updatedContent = await publishBody(f, maintainer, contentTarget.work, updatedText, content);
-      expect((await f.call('GET', `/v1/content-revisions/${content.revision}`)).status).toBe(404);
+      expect((await f.call('GET', contentReadPath(content.revision), undefined, maintainer.token)).status).toBe(404);
       const updatedRead = await body<{ body: { body: string } }>(
-        await f.call('GET', `/v1/content-revisions/${updatedContent.revision}`));
+        await f.call('GET', contentReadPath(updatedContent.revision), undefined, maintainer.token));
       expect(updatedRead.body.body).toBe(updatedText);
       const updatedSearch = await f.call('GET', `/v1/search/catalogue?q=${encodeURIComponent(updatedText)}&limit=20`);
       expect(updatedSearch.status).toBe(200);
