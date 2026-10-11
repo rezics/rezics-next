@@ -5,8 +5,14 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
+import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
+import type { readSeriesProgress } from '../../../services/main/src/modules/session/series-read.ts';
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { seedFirstPublicationDate } from '../../../scripts/dev/seed/relation-lexicon.ts';
+import { animeMangaSamplePlan } from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
+import { importBangumiWorkFacts } from '../../../scripts/datasets/bangumi.ts';
+import { call as catalogueCall, createCatalogueWork, publishCatalogueText, type SeedPort }
+  from '../../../scripts/dev/seed/vn-catalogue-step.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { startMediaStack } from './media-support.ts';
 
@@ -20,9 +26,10 @@ type Preference = { work: string; language: string; edition: Edition; version: n
 type StatementPage = { groups: Array<{ predicate: string; items: Array<{
   kind: string; value?: { kind: string; lexical?: string; datatype?: string };
 }> }> };
-type Work = { work: string; mainVersion: string; title: string };
+type Work = { work: string; mainVersion: string; title: string; concept: string };
 type Realization = { realization: string; revision: string };
 type Release = { release: string; revision: string; title: string };
+type Summary = Awaited<ReturnType<typeof readSeriesProgress>>;
 
 const persistedPreference = ({ work, language, edition, version }: Preference): Preference =>
   ({ work, language, edition, version });
@@ -41,7 +48,7 @@ async function write<T>(call: (method: string, path: string, body?: object, key?
   return response.json() as Promise<T>;
 }
 
-test('anime and manga hubs show recorded publication dates and keep edition choices per reader', async () => {
+test('anime and manga hubs show recorded and missing publication dates, name chosen releases per reader, and settle concurrent replayed saves', async () => {
   const stack = await startMediaStack('anime-manga-hub', { profileCredits: true });
   try {
     const a = await stack.member('anime-manga-reader');
@@ -63,6 +70,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
       libraryStatus: library,
       sessions: new ConsumptionSessionStore(stack.contentPool, library),
       editionPreferences: preferences,
+      seriesSessions: new SeriesSessionReader(stack.contentPool),
       structureObjects,
       media: stack.media,
       mediaAccess: stack.mediaAccess,
@@ -70,7 +78,8 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
         const member = [a, b].find(candidate => candidate.token === token);
         if (!member) throw new AccountAssertionDenied('Unknown bearer');
-        return { ...member.principal, emailVerified: true };
+        const verified = { ...member.principal, emailVerified: true as const };
+        return { ...verified, currentAssertion: async () => verified };
       } },
     });
     const call = (method: string, path: string, body?: object, key = randomUUID(), token = a.token) =>
@@ -78,7 +87,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         ...(token ? { authorization: `Bearer ${token}` } : {}), 'idempotency-key': key,
         ...(body ? { 'content-type': 'application/json' } : {}),
       }, ...(body ? { body: JSON.stringify(body) } : {}) }));
-    const mainCall = (method: string, path: string, body?: object, key = randomUUID()) =>
+    const mainCall = (method: string, path: string, body?: unknown, key = randomUUID()) =>
       a.send(method, path, body, key);
     const grant = async (scope: string, action: string, actor: string, principalId = a.principalId) => {
       const client = await stack.accessPool.connect();
@@ -94,17 +103,23 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
       } finally { client.release(); }
     };
     await grant('work:create:root', 'work.create', person);
+    await grant('catalogue:verify:root', 'catalogue.verify', person);
+    await grant('classification:define:global', 'classification.proposition.define', person);
     await grant('semantic:create:root', 'semantic.change', person);
+    await grant('context:create:root', 'context.create', person);
     await grant(`statement:speak:${person}`, 'statement.record', person);
     await grant('classification:decide:global', 'statement.decide', person);
-    const seedClient = {
-      post: async <T>(path: string, body: object, key: string): Promise<T> => {
-        const response = await mainCall('POST', path, body, key);
-        if (response.status !== 200 && response.status !== 201) {
-          throw new Error(`${response.status}: ${await response.text()}`);
-        }
-        return response.json() as Promise<T>;
+    const port: SeedPort = {
+      actingSubject: person,
+      request: async (method, path, body, key) => {
+        const response = await mainCall(method, path, body, key);
+        return { status: response.status, body: await response.json() };
       },
+      grant: (scope, action) => grant(scope, action, person),
+    };
+    const seedClient = {
+      post: <T>(path: string, body: object, key: string): Promise<T> => catalogueCall<T>(port, 'POST', path, body, key),
+      put: <T>(path: string, body: object, key: string): Promise<T> => catalogueCall<T>(port, 'PUT', path, body, key),
       authorizeDefinition: async (definition: { component: string }) => {
         await grant(`semantic:read:${definition.component}`, 'semantic.read', person);
       },
@@ -121,17 +136,36 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     };
     const firstPublication = await seedFirstPublicationDate(seedClient, person);
 
-    const createWork = async (title: string): Promise<Work> => {
-      const created = await stack.publicWork(person, ['ja'], title);
+    const samples = animeMangaSamplePlan();
+    const createWork = async (key: string): Promise<Work> => {
+      const sample = samples.find(item => item.key === key);
+      if (!sample || sample.subject.kind !== 'bangumi') throw new Error(`Missing classified catalogue sample ${key}`);
+      const created = await createCatalogueWork(port, { key: `anime-manga-hub:${key}`, title: sample.title,
+        language: sample.language, semanticType: 'https://schema.org/Book' });
       await grant(`work:edit:${created.work}`, 'work.edit', person);
       await grant(`work:read:${created.work}`, 'work.read', person);
       await grant(`work:read:${created.work}`, 'work.read', other, b.principalId);
-      return { work: created.work, mainVersion: created.mainVersion, title };
+      await grant(`contribution:create:${created.work}`, 'contribution.create', person);
+      await grant(`publication:select:${created.mainVersion}`, 'publication.select', person);
+      await publishCatalogueText(port, created, `anime-manga-hub:${key}`, sample.language, sample.title);
+      const imported = await importBangumiWorkFacts(seedClient, person, created, sample.subject.source);
+      expect(imported.facts.format).toBe(sample.zone === 'anime' ? 'tv' : 'manga');
+      if (!imported.concept) throw new Error(`Catalogue sample ${key} has no media classification`);
+      return { work: created.work, mainVersion: created.mainVersion, title: sample.title, concept: imported.concept };
     };
-    const anime = await createWork('Sky Lantern anime');
-    const animeWithoutDate = await createWork('Untitled anime record');
-    const manga = await createWork('River of Ink manga');
-    const mangaWithoutDate = await createWork('Untitled manga record');
+    const anime = await createWork('long-tv');
+    const animeWithoutDate = await createWork('tv-3');
+    const manga = await createWork('long-manga');
+    const mangaWithoutDate = await createWork('manga-3');
+    for (const [work, name] of [[anime, 'TV'], [animeWithoutDate, 'TV'], [manga, 'Manga'],
+      [mangaWithoutDate, 'Manga']] as const) {
+      const classified = await json<{ items: Array<{ concept: string; name: { value: string }; source: string }> }>(
+        await mainCall('GET', `/v1/works/${short(work.work)}/classifications?language=en&actingSubject=${encodeURIComponent(person)}`));
+      expect(classified.items).toContainEqual(expect.objectContaining({
+        concept: work.concept, name: expect.objectContaining({ value: name }), source: 'global',
+        decision: expect.any(String),
+      }));
+    }
 
     const recordDate = async (work: Work, lexical: string) => {
       const statement = await write<{ statement: string }>(mainCall, '/v1/statements', {
@@ -165,77 +199,78 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
       const saved = await json<{ revision: string }>(await mainCall('PUT',
         `/v1/works/${short(work.work)}/realizations/${short(realization)}`, {
           profile: 'realization-v1', id: realization, expectedHead: null, actingSubject: person,
-          language, kind: 'translation', translators: [person], publishers: [],
+          language, kind: 'original', translators: [], publishers: [],
           source: { kind: 'unresolved', work: work.work }, status: 'official', verification: 'verified', evidence: id(),
         }));
       return { realization, revision: saved.revision };
     };
-    const firstAnimeEdition = await realize(anime, 'ja');
-    const chosenAnimeEdition = await realize(anime, 'en');
+    const animeText = await realize(anime, 'ja');
     const mangaText = await realize(manga, 'ja');
-    const release = async (title: string, publicationYear: number): Promise<Release> => {
+    const release = async (work: Work, text: Realization, title: string, publicationYear: number,
+      platform: string): Promise<Release> => {
       const releaseId = id();
       const saved = await json<{ revision: string }>(await mainCall('PUT',
-        `/v1/works/${short(manga.work)}/releases/${short(releaseId)}`, {
+        `/v1/works/${short(work.work)}/releases/${short(releaseId)}`, {
           profile: 'release-v2', id: releaseId, expectedHead: null, actingSubject: person,
-          kind: 'formal', status: 'official', titleLanguage: 'ja', tracklistLanguage: null,
-          title: { value: title, language: 'ja' }, editionStatement: null, publisher: 'River House',
+          kind: 'formal', status: 'official', titleLanguage: 'en', tracklistLanguage: null,
+          title: { value: title, language: 'en' }, editionStatement: null, publisher: 'REZICS Catalogue',
           publicationYear, isbn13: null, originalUrl: null, fixedRelease: null,
-          identifiers: [], platform: null, territory: null,
-          coverage: [{ realization: mangaText.realization, revision: mangaText.revision, completeness: 'complete' }],
+          identifiers: [], platform, territory: null,
+          coverage: [{ realization: text.realization, revision: text.revision, completeness: 'complete' }],
           evidence: null,
         }));
       return { release: releaseId, revision: saved.revision, title };
     };
-    const firstMangaEdition = await release('River of Ink tankōbon', 2018);
-    const secondMangaEdition = await release('River of Ink omnibus', 2024);
+    const firstAnimeRelease = await release(anime, animeText, 'Sky Lantern television broadcast', 1980, 'Broadcast');
+    const secondAnimeRelease = await release(anime, animeText, 'Sky Lantern remastered Blu-ray', 2024, 'Blu-ray');
+    const firstMangaEdition = await release(manga, mangaText, 'River of Ink tankōbon', 2018, 'Tankōbon');
+    const secondMangaEdition = await release(manga, mangaText, 'River of Ink omnibus', 2024, 'Omnibus');
 
     const preferencePath = (work: Work) => `/v1/me/edition-preferences/${short(work.work)}`;
     const readPreference = (work: Work, actor: string, token: string) => call('GET',
       `${preferencePath(work)}?actingSubject=${encodeURIComponent(actor)}`, undefined, randomUUID(), token);
-    const chosenAnime = { actingSubject: person, expectedVersion: 0, language: 'en',
-      edition: { kind: 'realization' as const, resource: chosenAnimeEdition.realization, revision: chosenAnimeEdition.revision } };
-    const chosenAnimeKey = randomUUID();
-    const animeSaved = await json<Preference & { replayed: boolean }>(await call('PUT', preferencePath(anime),
-      chosenAnime, chosenAnimeKey));
-    expect(animeSaved).toMatchObject({ work: anime.work, version: 1, language: 'en', edition: chosenAnime.edition,
-      replayed: false });
-    expect(await json<Preference>(await readPreference(anime, person, a.token)))
-      .toMatchObject(persistedPreference(animeSaved));
-    expect(await json(await call('PUT', preferencePath(anime), chosenAnime, chosenAnimeKey)))
-      .toMatchObject({ ...animeSaved, replayed: true });
-    const animeEditionPage = await json<{ items: Array<{ id: string; revision: string; language: string }> }>(
-      await mainCall('GET', `/v1/works/${short(anime.work)}/realizations?actingSubject=${encodeURIComponent(person)}`));
-    expect(animeEditionPage.items).toContainEqual(expect.objectContaining({
-      id: chosenAnime.edition.resource, revision: chosenAnime.edition.revision, language: 'en',
-    }));
-    expect(await json(await readPreference(anime, other, b.token))).toBeNull();
-    expect(firstAnimeEdition.realization).not.toBe(chosenAnime.edition.resource);
-
-    const choices = [firstMangaEdition, secondMangaEdition].map((item, index) => ({
-      key: randomUUID(), body: { actingSubject: person, expectedVersion: 0, language: 'ja',
-        edition: { kind: 'release' as const, resource: item.release, revision: item.revision } },
-      item,
-      index,
-    }));
-    const raced = await Promise.all(choices.map(choice => call('PUT', preferencePath(manga), choice.body, choice.key)));
-    expect(raced.map(response => response.status).sort()).toEqual([200, 409]);
-    const winnerIndex = raced.findIndex(response => response.status === 200);
-    const winnerChoice = choices[winnerIndex]!;
-    const savedManga = await json<Preference & { replayed: boolean }>(raced[winnerIndex]!);
-    expect(savedManga).toMatchObject({ work: manga.work, version: 1, language: 'ja',
-      edition: winnerChoice.body.edition, replayed: false });
-    const stale = await json<{ current: Preference }>(raced[1 - winnerIndex]!, 409);
-    expect(stale.current).toMatchObject(persistedPreference(savedManga));
-    expect(await json<Preference>(await readPreference(manga, person, a.token)))
-      .toMatchObject(persistedPreference(savedManga));
-    expect(await json(await call('PUT', preferencePath(manga), winnerChoice.body, winnerChoice.key)))
-      .toMatchObject({ ...savedManga, replayed: true });
-    const mangaRelease = await json<{ id: string; revision: string; title: { value: string } }>(await mainCall('GET',
-      `/v1/works/${short(manga.work)}/releases/${short(winnerChoice.item.release)}?actingSubject=${encodeURIComponent(person)}`));
-    expect(mangaRelease).toMatchObject({ id: winnerChoice.item.release, revision: winnerChoice.item.revision,
-      title: { value: winnerChoice.item.title } });
-    expect(await json(await readPreference(manga, other, b.token))).toBeNull();
-    expect(firstMangaEdition.release).not.toBe(secondMangaEdition.release);
+    const summary = (work: Work, actor: string, token: string) => call('GET',
+      `/v1/me/progress-summaries/${short(work.work)}?language=ja&actingSubject=${encodeURIComponent(actor)}`,
+      undefined, randomUUID(), token);
+    for (const { work, releases } of [
+      { work: anime, releases: [firstAnimeRelease, secondAnimeRelease] },
+      { work: manga, releases: [firstMangaEdition, secondMangaEdition] },
+    ]) {
+      await write(call, '/v1/compositions', {
+        profile: 'work-composition', work: work.work, mainVersion: work.mainVersion, actingSubject: person,
+      });
+      expect(await json<Summary>(await summary(work, person, a.token)))
+        .toMatchObject({ resource: work.work, preference: null, language: 'ja' });
+      expect(releases[0]!.release).not.toBe(releases[1]!.release);
+      const choices = releases.map(item => ({
+        key: randomUUID(), body: { actingSubject: person, expectedVersion: 0, language: 'ja',
+          edition: { kind: 'release' as const, resource: item.release, revision: item.revision } },
+        item,
+      }));
+      const raced = await Promise.all(choices.map(choice => call('PUT', preferencePath(work), choice.body, choice.key)));
+      expect(raced.map(response => response.status).sort()).toEqual([200, 409]);
+      const winnerIndex = raced.findIndex(response => response.status === 200);
+      const winnerChoice = choices[winnerIndex]!;
+      const saved = await json<Preference & { replayed: boolean }>(raced[winnerIndex]!);
+      expect(saved).toMatchObject({ work: work.work, version: 1, language: 'ja',
+        edition: winnerChoice.body.edition, replayed: false });
+      const stale = await json<{ code: string; current: Preference }>(raced[1 - winnerIndex]!, 409);
+      expect(stale).toMatchObject({ code: 'stale_edition_preference', current: persistedPreference(saved) });
+      expect(await json<Preference>(await readPreference(work, person, a.token)))
+        .toEqual(persistedPreference(saved));
+      expect(await json(await call('PUT', preferencePath(work), winnerChoice.body, winnerChoice.key)))
+        .toEqual({ ...saved, replayed: true });
+      const hub = await json<Summary>(await summary(work, person, a.token));
+      expect(hub).toMatchObject({ resource: work.work, preference: persistedPreference(saved), language: 'ja' });
+      const selected = hub.preference!.edition!;
+      expect(selected).toEqual(winnerChoice.body.edition);
+      const namedRelease = await json<{ id: string; revision: string; title: { value: string } }>(await mainCall('GET',
+        `/v1/works/${short(work.work)}/releases/${short(selected.resource)}?actingSubject=${encodeURIComponent(person)}`));
+      expect(namedRelease).toMatchObject({ id: selected.resource, revision: selected.revision,
+        title: { value: winnerChoice.item.title } });
+      expect(await json(await readPreference(work, other, b.token))).toBeNull();
+      expect(await json<Summary>(await summary(work, other, b.token)))
+        .toMatchObject({ resource: work.work, preference: null, language: 'ja' });
+    }
   } finally { await stack.stop(); }
 }, 600_000);

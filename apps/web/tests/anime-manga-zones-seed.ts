@@ -42,9 +42,14 @@ interface SeededZone {
   zone: string;
   longWork: string;
   title: string;
+  concept: string;
+  publicationDate: string;
+  releases: SeededRelease[];
   undatedWork: string;
   undatedTitle: string;
+  undatedConcept: string;
 }
+interface SeededRelease { id: string; title: string }
 interface Seeded {
   anime: SeededZone;
   manga: SeededZone;
@@ -70,7 +75,7 @@ function parsed(text: string): unknown {
 
 async function addEditionChoices(request: SeedPort['request'], actor: string, work: CatalogueWorkRecord,
   choices: readonly [{ key: string; title: string; platform: string; year: number },
-    { key: string; title: string; platform: string; year: number }]): Promise<void> {
+    { key: string; title: string; platform: string; year: number }]): Promise<SeededRelease[]> {
   const realization = `https://rezics.com/id/${stableId(`anime-manga-hub:${work.work}:realization`)}`;
   const realizationResult = await seedJson<{ revision: string }>(request, 'PUT',
     `/v1/works/${work.work.slice(-36)}/realizations/${realization.slice(-36)}`, {
@@ -80,6 +85,7 @@ async function addEditionChoices(request: SeedPort['request'], actor: string, wo
       evidence: 'https://example.com/anime-manga-hub-original',
     }, seedKey('anime-manga-hub-realization', work.work));
 
+  const releases: SeededRelease[] = [];
   for (const choice of choices) {
     const release = `https://rezics.com/id/${stableId(`anime-manga-hub:${work.work}:${choice.key}`)}`;
     await seedJson(request, 'PUT', `/v1/works/${work.work.slice(-36)}/releases/${release.slice(-36)}`, {
@@ -91,7 +97,9 @@ async function addEditionChoices(request: SeedPort['request'], actor: string, wo
       platform: choice.platform, territory: null,
       coverage: [{ realization, revision: realizationResult.revision, completeness: 'complete' }],
     }, seedKey('anime-manga-hub-release', `${work.work}:${choice.key}`));
+    releases.push({ id: release, title: choice.title });
   }
+  return releases;
 }
 
 async function seedJson<T = unknown>(request: SeedPort['request'], method: 'GET' | 'POST' | 'PUT', path: string,
@@ -152,11 +160,11 @@ try {
   const longManga = workOf(created.works, 'long-manga');
   const undatedTv = workOf(created.works, 'tv-3');
   const undatedManga = workOf(created.works, 'manga-3');
-  await addEditionChoices(request, editor.actor, longTv, [
+  const animeReleases = await addEditionChoices(request, editor.actor, longTv, [
     { key: 'broadcast', title: 'Long TV broadcast edition', platform: 'television', year: 1980 },
     { key: 'disc', title: 'Long TV collector edition', platform: 'blu-ray', year: 1980 },
   ]);
-  await addEditionChoices(request, editor.actor, longManga, [
+  const mangaReleases = await addEditionChoices(request, editor.actor, longManga, [
     { key: 'tankobon', title: 'Long Manga tankōbon', platform: 'paperback', year: 1995 },
     { key: 'omnibus', title: 'Long Manga omnibus', platform: 'ebook', year: 1995 },
   ]);
@@ -179,7 +187,7 @@ try {
     await waitForCatalogueRead(admin.mainOrigin, longTv.work, '1155', 'episode-count');
     await waitForCatalogueRead(admin.mainOrigin, longManga.work, '21', 'volume-count');
   }
-  const seeded = record(created.zones, longTv, longManga, undatedTv, undatedManga);
+  const seeded = record(created.zones, longTv, longManga, undatedTv, undatedManga, animeReleases, mangaReleases);
   writeFileSync(resolve(directory, 'seed.json'), JSON.stringify(seeded));
   console.log(JSON.stringify(seeded));
 } finally {
@@ -194,14 +202,21 @@ function workOf(works: CatalogueWorkRecord[], key: string): CatalogueWorkRecord 
 }
 
 function record(zones: CatalogueZoneRecord[], longTv: CatalogueWorkRecord, longManga: CatalogueWorkRecord,
-  undatedTv: CatalogueWorkRecord, undatedManga: CatalogueWorkRecord): Seeded {
-  const zone = (id: 'anime' | 'manga', work: CatalogueWorkRecord, undated: CatalogueWorkRecord): SeededZone => {
+  undatedTv: CatalogueWorkRecord, undatedManga: CatalogueWorkRecord,
+  animeReleases: SeededRelease[], mangaReleases: SeededRelease[]): Seeded {
+  const zone = (id: 'anime' | 'manga', work: CatalogueWorkRecord, undated: CatalogueWorkRecord,
+    releases: SeededRelease[]): SeededZone => {
     const found = zones.find(item => item.id === id);
     if (!found) throw new Error(`${id} Zone was not created`);
+    if (!work.concept || !undated.concept || work.year === null) {
+      throw new Error(`${id} hub fixtures must be classified, with a recorded date on the dated Work`);
+    }
     return { handle: id, space: found.space, realm: found.realm, zone: found.zone,
-      longWork: work.work, title: work.title, undatedWork: undated.work, undatedTitle: undated.title };
+      longWork: work.work, title: work.title, concept: work.concept, publicationDate: `${work.year}-01-01`, releases,
+      undatedWork: undated.work, undatedTitle: undated.title, undatedConcept: undated.concept };
   };
-  return { anime: zone('anime', longTv, undatedTv), manga: zone('manga', longManga, undatedManga) };
+  return { anime: zone('anime', longTv, undatedTv, animeReleases),
+    manga: zone('manga', longManga, undatedManga, mangaReleases) };
 }
 
 interface DiscoveryView {
