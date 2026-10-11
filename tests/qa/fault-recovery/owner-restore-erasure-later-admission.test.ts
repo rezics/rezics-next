@@ -12,7 +12,7 @@ import {
 } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import type { RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { accessFence, graphReleased, outerOperation, ownerRestoreErasureFixture } from './owner-restore-erasure-fixture.ts';
+import { accessFence, expectReviewedAccountUsageChanges, graphReleased, outerOperation, ownerRestoreErasureFixture } from './owner-restore-erasure-fixture.ts';
 
 test(
   'OPS12: a later public erasure admission restores native Access and releases against both authenticated cuts',
@@ -24,10 +24,7 @@ test(
       expect(later).toBeDefined();
       if (!later) throw new Error('later public erasure admission was not prepared');
 
-      expect(later.accountChanges.length).toBeGreaterThan(0);
-      for (const change of later.accountChanges) expect(change).toMatchObject({
-        table: 'rezics_account_grant', kind: 'updated', columns: ['last_used_at'],
-      });
+      expectReviewedAccountUsageChanges(later.accountChanges);
       expect(fixture.currentCoverage.account).toEqual(fixture.baseCoverage.account);
 
       expect(fixture.erased.erasureId).toBe(later.erasureId);

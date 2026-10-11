@@ -14,6 +14,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
+import { ACCOUNT_RECOVERY_USAGE_EXCLUSIONS } from '../../../services/account/src/recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import {
   ContentComments,
@@ -171,6 +172,15 @@ interface AccountRowChange {
 }
 
 type AccountRows = Map<string, Map<string, Record<string, unknown>>>;
+
+export function expectReviewedAccountUsageChanges(changes: AccountRowChange[]): void {
+  const exclusions: Readonly<Record<string, readonly string[]>> =
+    ACCOUNT_RECOVERY_USAGE_EXCLUSIONS.columns;
+  const unreviewed = changes.filter(change => change.kind !== 'updated' ||
+    change.columns.some(column => !exclusions[change.table]?.includes(column)));
+  // Resource-use timestamps are throttled, so a fast C0 -> C1 run may change no rows.
+  expect(unreviewed, `C0/C1 Account row changes: ${JSON.stringify(changes)}`).toEqual([]);
+}
 
 // Measure whole rows, independently of the authority digest's usage projection.
 // Keep credential values in memory only; reports identify keys by digest.
@@ -1202,10 +1212,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       const accountChanges = changedAccountRows(baseAccountRows!, await accountRows(source.account));
       console.info('later-admission C0/C1 Account row changes', accountChanges);
       // An unreviewed change must stop before current attachment publication.
-      expect(accountChanges.length).toBeGreaterThan(0);
-      for (const change of accountChanges) expect(change).toMatchObject({
-        table: 'rezics_account_grant', kind: 'updated', columns: ['last_used_at'],
-      });
+      expectReviewedAccountUsageChanges(accountChanges);
       const captureRelay = await source.relay.connect();
       try {
         await captureRelay.query('BEGIN ISOLATION LEVEL READ COMMITTED');
