@@ -140,6 +140,7 @@ async function validations(env: WorkActivationEnvironment, changed: readonly Pla
 /** Recipe work owns a Main Version Structure whose revisions retain each line occurrence. */
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
   id: 'recipe-composition',
+  workPublication: true,
   graphProfile: `${RV}RecipeComposition`,
   ownerType: 'https://schema.org/Recipe',
   componentType: `${RV}MainVersion`,

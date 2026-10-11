@@ -28,6 +28,8 @@ export interface StructureProfileRegistration {
   id: StructureProfile;
   /** Value of rv:structureProfile in the current graph. */
   graphProfile: string;
+  /** Explicit review for use as a Work-owned public Structure source. */
+  workPublication?: true;
   /** Type of the resource that owns and authorizes this Structure. */
   ownerType: string;
   /** Type of the resource named by rv:structureOf. */
@@ -133,6 +135,11 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
       if (typeof profile.id !== 'string' || !profileIdPattern.test(profile.id) || profile.id.length > 64
         || profiles.has(profile.id as StructureProfile)
         || !validUri(profile.graphProfile) || graphProfiles.has(profile.graphProfile)
+        || profile.workPublication !== undefined && profile.workPublication !== true
+        || profile.workPublication === true
+          && (profile.componentType !== 'https://rezics.com/vocab/MainVersion'
+            || profile.componentPredicate !== 'https://rezics.com/vocab/mainVersion'
+            || profile.structurePredicate !== undefined)
         || !validUri(profile.ownerType) || !validUri(profile.componentType)
         || profile.componentPredicate !== undefined && !validUri(profile.componentPredicate)
         || profile.structurePredicate !== undefined && !validUri(profile.structurePredicate)
@@ -220,6 +227,17 @@ export function structureProfileFor(id: string): StructureProfileRegistration {
 export function structureProfileForGraph(graphProfile: string): StructureProfileRegistration {
   const profile = byGraph.get(graphProfile);
   if (!profile) throw new Error(`No registered Structure graph profile for ${graphProfile}`);
+  return profile;
+}
+
+/** Resolve only profiles whose owner reviewed the Work-publication source contract. */
+export function workPublicationProfileFor(
+  profileOrId: string | StructureProfileRegistration,
+): StructureProfileRegistration {
+  const profile = typeof profileOrId === 'string' ? structureProfileFor(profileOrId) : profileOrId;
+  if (profile.workPublication !== true) {
+    throw new Error(`Structure profile ${profile.id} is not reviewed for Work publication`);
+  }
   return profile;
 }
 

@@ -122,7 +122,7 @@ export async function readCompositionHeader(env: WorkActivationEnvironment,
           rv:placementCount ?count .
       }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StructureRevision ;
-        rv:component ${iri(structure)} ; rv:manifest ?manifest . }
+        rv:component ${iri(structure)} ; rv:generation ?generation ; rv:manifest ?manifest . }
     } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
