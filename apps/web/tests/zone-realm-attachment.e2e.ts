@@ -155,19 +155,27 @@ const discussion = (page: Page) => page.getByRole('region', { name: 'Discussion'
 async function compose(page: Page, body: string, language: string, spoiler: boolean) {
   const area = discussion(page);
   await expect(area.getByText('No messages yet.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Account menu' }))
+    .toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
   const start = area.getByRole('button', { name: 'Start the discussion' });
   for (let stop = 0; stop < 100; stop++) {
     await page.keyboard.press('Tab');
     if (await start.evaluate(element => element === document.activeElement)) break;
   }
   await expect(start).toBeFocused();
-  await page.keyboard.press('Enter');
   const input = area.getByRole('textbox', { name: 'Your message' });
+  // The entry can render before its separately loaded client boundary is live.
+  // Opening the form is local state only; wait for that state before typing.
+  await expect(async () => {
+    if (await input.isVisible()) return;
+    await start.press('Enter');
+    await expect(input).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await input.focus();
   await page.keyboard.type(body);
   await expect(input).toHaveValue(body);
   await area.getByRole('button', { name: /^Content language:/ }).press('Enter');
-  const search = page.getByRole('searchbox');
+  const search = page.getByRole('searchbox', { name: 'Find a language', exact: true });
   await search.fill(language === 'ar' ? 'Arabic' : 'Japanese');
   await search.press('Enter');
   if (spoiler) {
