@@ -393,12 +393,12 @@ export class StatementSeek {
       const sequences = Array.from({length: Number(through-BigInt(prior.through_sequence))},(_,i) => BigInt(prior.through_sequence)+BigInt(i+1));
       const batches = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence ?batch WHERE {
         VALUES ?sequence { ${sequences.join(' ')} } GRAPH ${iri(GRAPHS.outbox)} {
-          ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(epoch)} ; rv:sequence ?sequence } }`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
+          ?batch rv:sequence ?sequence . ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(epoch)} } }`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
       if (batches.length !== sequences.length || new Set(batches.map(row => row.sequence?.value)).size !== sequences.length)
         throw new WorkReadUnavailable('Statement index outbox coverage is incomplete');
       const changed = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?statement WHERE {
         VALUES ?sequence { ${sequences.join(' ')} } GRAPH ${iri(GRAPHS.revisions)} {
-          ?revision a rv:StatementRevision ; rv:dataEpoch ${lit(epoch)} ; rv:sequence ?sequence ; rv:component ?statement }
+          ?revision rv:sequence ?sequence . ?revision a rv:StatementRevision ; rv:dataEpoch ${lit(epoch)} ; rv:component ?statement }
       }`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
       const ids = changed.map(row => row.statement!.value);
       if (ids.length > STATEMENT_SEEK_COST.projectionReferences)
@@ -417,7 +417,7 @@ export class StatementSeek {
       // can move a coordinate between slots without revising the Statement.
       const coordinates = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?coordinate WHERE {
         VALUES ?sequence { ${sequences.join(' ')} } GRAPH ${iri(GRAPHS.revisions)} {
-          ?revision a rv:SemanticRevision ; rv:dataEpoch ${lit(epoch)} ; rv:sequence ?sequence ; rv:component ?coordinate }
+          ?revision rv:sequence ?sequence . ?revision a rv:SemanticRevision ; rv:dataEpoch ${lit(epoch)} ; rv:component ?coordinate }
       }`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
       if (coordinates.length > STATEMENT_SEEK_COST.projectionReferences)
         throw new WorkReadUnavailable('Coordinate projection exceeds its reference bound');
