@@ -56,6 +56,7 @@ Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recip
 - [Closed by default without a default decision: the recommended projection rule](reports/G-1697-specification.md).
 - [Owner, relay and outbox cluster and the deferred-forever projection class](reports/G-1641-specification.md).
 - [Claims into Statements: bounded work and the cutover boundary](reports/G-1698-specification.md): scheduled after opening.
+- [Public disclosure cursors and the explicit read mode](reports/G-1713-specification.md): 17 slices, the Launch web handoff.
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
 
 ## Open
