@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { FusekiClient, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   fusekiReadBudget, type SparqlResult }
   from '../../../services/main/src/infrastructure/fuseki.ts';
-import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, RV, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable,
   queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicRealmPhrase }
   from '../../../services/main/src/modules/work/search-public.ts';
@@ -18,12 +18,77 @@ import { assertPublicTextReady, assertQuerySnapshotMoved,
   SearchSnapshotMoved, withStableSearchSnapshot, type SearchAttemptDiagnostic }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
+import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
+  contentSearchEligibilityReceiptIri } from '../../../services/main/src/modules/content-publication/eligibility.ts';
+import { contentPublicationDecisionIri, contentPublicationReceiptIri }
+  from '../../../services/main/src/modules/content-publication/publish.ts';
 
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
 const work = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
 const main = 'https://rezics.com/id/22222222-2222-4222-8222-222222222222';
 const sense = 'https://rezics.com/id/33333333-3333-4333-8333-333333333333';
 const binding = (value: string) => ({ type: 'literal', value });
+const uri = (value: string) => ({ type: 'uri', value });
+
+function contentOwnerProof() {
+  const variant = 'urn:rezics:variant:one';
+  const revision = 'urn:rezics:content:revision:11111111-1111-4111-8111-111111111111';
+  const publicationAdmission = '22222222-2222-4222-8222-222222222222';
+  const eligibilityAdmission = '33333333-3333-4333-8333-333333333333';
+  const preparation = '44444444-4444-4444-8444-444444444444';
+  const actor = 'urn:rezics:actor:content-search-reviewer';
+  const publication = contentPublicationDecisionIri(publicationAdmission);
+  const eligibility = contentSearchEligibilityDecisionIri(eligibilityAdmission);
+  const eligibilityInput = { resourceId: work, variantId: variant, publicationDecision: publication,
+    expectedEligibilityHead: null, actingSubject: actor,
+    rightsBasis: 'original-contribution' as const, disclosure: 'public' as const };
+  const makeRow = (key: string, id: string, receipt: string,
+    fields: Array<[string, string | undefined, 'uri' | 'literal']>) => {
+    const row: Record<string, { type: string; value: string }> = { [key]: uri(id),
+      decisionTypeCount: binding('1'), anchorTypeCount: binding('1'), receiptCount: binding('1'),
+      receipt: uri(receipt), receiptTypeCount: binding('1') };
+    for (const [name, value, type] of fields) {
+      row[`${name}Count`] = binding(value === undefined ? '0' : '1');
+      if (value !== undefined) row[name] = type === 'uri' ? uri(value) : binding(value);
+    }
+    return row;
+  };
+  const publicationRow = makeRow('publication', publication, contentPublicationReceiptIri(publicationAdmission), [
+    ['dComponent', variant, 'uri'], ['dResource', work, 'uri'], ['dRevision', revision, 'uri'],
+    ['dDigest', 'a'.repeat(64), 'literal'], ['dOwnerEpoch', 'content-epoch', 'literal'],
+    ['dOwnerSequence', '3', 'literal'], ['dDataEpoch', 'epoch', 'literal'], ['dSequence', '6', 'literal'],
+    ['dModel', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+    ['dShape', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+    ['dDataset', DATASET, 'uri'], ['dPreparation', preparation, 'literal'],
+    ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'],
+    ['rRequestDigest', 'b'.repeat(64), 'literal'], ['rAdmissionId', publicationAdmission, 'literal'],
+    ['rAuthorityEpoch', '2', 'literal'], ['rScope', `content:publish:${variant}`, 'literal'],
+    ['rPreparation', preparation, 'literal'], ['rRevision', revision, 'uri'], ['rVariant', variant, 'uri'],
+    ['rResource', work, 'uri'], ['rByteDigest', 'a'.repeat(64), 'literal'],
+    ['rOwnerEpoch', 'content-epoch', 'literal'], ['rOwnerSequence', '3', 'literal'],
+    ['rExpectedHead', 'urn:rezics:none', 'uri'], ['rDataset', DATASET, 'uri'],
+    ['rDataEpoch', 'epoch', 'literal'], ['rSequence', '6', 'literal'], ['rDecision', publication, 'uri'],
+  ]);
+  const eligibilityRow = makeRow('eligibility', eligibility, contentSearchEligibilityReceiptIri(eligibilityAdmission), [
+    ['dComponent', variant, 'uri'], ['dVariant', variant, 'uri'], ['dResource', work, 'uri'],
+    ['dPublication', publication, 'uri'], ['dRightsBasis', `${RV}OriginalContribution`, 'uri'],
+    ['dAssessment', undefined, 'uri'], ['dDisclosure', `${RV}Public`, 'uri'],
+    ['dAdmissionId', eligibilityAdmission, 'literal'], ['dAuthorityEpoch', '2', 'literal'],
+    ['dScope', `content:search-eligibility:${variant}`, 'literal'], ['dActor', actor, 'uri'],
+    ['dModel', 'https://rezics.com/definition/content-search-eligibility-v1', 'uri'],
+    ['dShape', 'https://rezics.com/definition/content-search-eligibility-v1', 'uri'],
+    ['dDataset', DATASET, 'uri'], ['dDataEpoch', 'epoch', 'literal'], ['dSequence', '7', 'literal'],
+    ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'],
+    ['rRequestDigest', contentSearchEligibilityDigest(eligibilityInput), 'literal'],
+    ['rAdmissionId', eligibilityAdmission, 'literal'], ['rAuthorityEpoch', '2', 'literal'],
+    ['rScope', `content:search-eligibility:${variant}`, 'literal'], ['rActor', actor, 'uri'],
+    ['rResource', work, 'uri'], ['rVariant', variant, 'uri'], ['rPublication', publication, 'uri'],
+    ['rExpectedHead', 'urn:rezics:none', 'uri'], ['rRightsBasis', `${RV}OriginalContribution`, 'uri'],
+    ['rAssessment', undefined, 'uri'], ['rDisclosure', `${RV}Public`, 'uri'], ['rDataset', DATASET, 'uri'],
+    ['rDataEpoch', 'epoch', 'literal'], ['rSequence', '7', 'literal'], ['rEligibility', eligibility, 'uri'],
+  ]);
+  return { variant, revision, publication, eligibility, publicationRow, eligibilityRow };
+}
 
 function fake(initialPopulation = 102) {
   let sequence = '7';
@@ -229,6 +294,7 @@ test('SEARCH18: a native index mutation during the phrase relation still rejects
 
 test('SEARCH18: Content audits a later metadata cut and pins its phrase to that cut', async () => {
   const source = fake();
+  const owner = contentOwnerProof();
   const originalHealth = source.fuseki.commandHealth.bind(source.fuseki);
   source.fuseki.commandHealth = async () => ({ ...await originalHealth(), profiles: {
     'content-match-unit-v1': profileRegistry['content-match-unit-v1'].sha256,
@@ -237,8 +303,22 @@ test('SEARCH18: Content audits a later metadata cut and pins its phrase to that 
   const originalQuery = source.fuseki.query.bind(source.fuseki);
   let advanced = false;
   source.fuseki.query = async (sparql: string, maxResponseBytes?: number) => {
-    if (sparql.includes('?declared ?heads')) {
+    if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
       if (!advanced) { source.advance(); advanced = true; }
+      return { results: { bindings: [{ epoch: binding('epoch'), routing: binding('routing'), sequence: binding('8') }] } };
+    }
+    if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
+      return { results: { bindings: [{ variant: uri(owner.variant), resourceCount: binding('1'),
+        resource: uri(work), publicationCount: binding('1'), publication: uri(owner.publication),
+        eligibilityCount: binding('1'), eligibility: uri(owner.eligibility) }] } };
+    }
+    if (sparql.includes('SELECT ?eligibility') && sparql.includes('?decisionTypeCount')) {
+      return { results: { bindings: [owner.eligibilityRow] } };
+    }
+    if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
+      return { results: { bindings: [owner.publicationRow] } };
+    }
+    if (sparql.includes('?declared ?heads')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('8'),
         generation: binding(generation), declared: binding('1'), heads: binding('1'),
         missing: binding('0'), eligible: binding('1'), contentUnits: binding('1') }] } };
@@ -247,10 +327,8 @@ test('SEARCH18: Content audits a later metadata cut and pins its phrase to that 
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('8'),
         generation: binding(generation), candidateCount: binding('1'),
         unit: binding('urn:rezics:content:match-unit:one'), score: binding('1'),
-        resource: binding(work), variant: binding('urn:rezics:variant:one'),
-        revision: binding('urn:rezics:content:revision:11111111-1111-4111-8111-111111111111'),
-        decision: binding('urn:rezics:content:decision:one'),
-        eligibility: binding('urn:rezics:content:eligibility:one'), language: binding('en'),
+        resource: binding(work), variant: binding(owner.variant), revision: binding(owner.revision),
+        decision: binding(owner.publication), eligibility: binding(owner.eligibility), language: binding('en'),
         rightsBasis: binding('https://rezics.com/vocab/OriginalContribution') }] } };
     }
     return originalQuery(sparql, maxResponseBytes);
