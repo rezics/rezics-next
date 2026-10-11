@@ -48,6 +48,8 @@ export interface RecipeStore {
   finishLoad(state: RecipeState): void;
   /** The rest could not be read. The partial recipe stays unsaved. */
   failLoad(kind: RecipeLoadFailure): void;
+  /** Reads the full latest recipe after an external import, while writes are held. */
+  reload(): Promise<boolean>;
   /** Resolves once no write is in flight, so a form that adds something does not drop the person's Enter. */
   whenIdle(): Promise<void>;
   /** Resolves the last refusal. An unresolved command is sent again with its original key before it is replanned. */
@@ -321,6 +323,18 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
       loading = false;
       loadFailure = kind;
       notify();
+    },
+    async reload() {
+      if (disposed || loading || outstanding()) return false;
+      loading = true;
+      loadFailure = null;
+      notify();
+      const loaded = await refresh();
+      if (disposed) return false;
+      loading = false;
+      if (!loaded) loadFailure = 'failed';
+      notify();
+      return loaded;
     },
     whenIdle: () => outstanding() ? new Promise<void>(resolve => { idlers.push(resolve); }) : Promise.resolve(),
     retry() {

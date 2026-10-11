@@ -1,55 +1,197 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { DownloadIcon, LoaderCircleIcon } from 'lucide-react';
+import { DownloadIcon, LoaderCircleIcon, UploadIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { RecipeEditorMessages } from './messages.ts';
 import { downloadRecipeExport, mainRecipeExportApi, RecipeExportError, type RecipeExport, type RecipeExportApi } from './export-api.ts';
+import { mainRecipeImportApi, RecipeImportError, RECIPE_FILE_MAX_BYTES,
+  type RecipeFileImport, type RecipeImportApi, type RecipeImportFailure, type RecipeImportRequest } from './import-api.ts';
 
-type Stage = { kind: 'idle' } | { kind: 'exporting' } | { kind: 'done'; revision: string }
+type ExportStage = { kind: 'idle' } | { kind: 'exporting' } | { kind: 'done'; revision: string }
   | { kind: 'failed'; failure: 'denied' | 'too-large' | 'unavailable'; detail: string | null };
 
-/** Downloads the Schema.org representation of the editor's selected, saved revision. */
+type ImportStage = { kind: 'idle' } | { kind: 'importing' }
+  | { kind: 'failed'; failure: RecipeImportFailure; detail: string | null; retry: RecipeImportRequest | null }
+  | { kind: 'refreshing-stale'; file: File; detail: string | null }
+  | { kind: 'stale-refresh-failed'; file: File; detail: string | null }
+  | { kind: 'stale'; file: File; head: string; detail: string | null }
+  | { kind: 'done'; result: RecipeFileImport; refreshFailed: boolean; refreshing: boolean };
+
+/** Downloads the selected saved revision and imports a local Schema.org Recipe into the current head. */
 export function RecipeExchange({ structure, revision, actingSubject, locale, messages: catalog, disabled = false,
-  api, save = downloadRecipeExport }: {
+  api, importApi, save = downloadRecipeExport, onImportBusyChange, onStaleRefresh, onImported,
+  newId = () => crypto.randomUUID() }: {
   structure: string | null; revision: string | null; actingSubject: string; locale: UiLocale;
-  messages: RecipeEditorMessages; disabled?: boolean; api?: RecipeExportApi; save?: (exported: RecipeExport) => void;
+  messages: RecipeEditorMessages; disabled?: boolean; api?: RecipeExportApi; importApi?: RecipeImportApi;
+  save?: (exported: RecipeExport) => void;
+  onImportBusyChange?: (busy: boolean) => void;
+  /** Reload the recipe after a stale-head refusal, returning the head the cook can confirm. */
+  onStaleRefresh?: () => Promise<string | null>;
+  /** Read the imported revision back so the editor shows its sections, ingredients and steps. */
+  onImported?: (result: RecipeFileImport) => Promise<boolean | void> | boolean | void;
+  newId?: () => string;
 }) {
   const t = materializeData(catalog, { locale });
-  const [client] = useState(() => api ?? mainRecipeExportApi());
-  const [stage, setStage] = useState<Stage>({ kind: 'idle' });
-  const busy = stage.kind === 'exporting';
+  const [exportClient] = useState(() => api ?? mainRecipeExportApi());
+  const [importClient] = useState(() => importApi ?? mainRecipeImportApi());
+  const [exportStage, setExportStage] = useState<ExportStage>({ kind: 'idle' });
+  const [importStage, setImportStage] = useState<ImportStage>({ kind: 'idle' });
+  const fileInput = useRef<HTMLInputElement>(null);
+  const exportBusy = exportStage.kind === 'exporting';
+  const importBusy = importStage.kind === 'importing' || importStage.kind === 'refreshing-stale'
+    || (importStage.kind === 'done' && importStage.refreshing);
 
   async function exportRecipe() {
-    if (!structure || !revision || busy || disabled) return;
-    setStage({ kind: 'exporting' });
+    if (!structure || !revision || exportBusy || disabled) return;
+    setExportStage({ kind: 'exporting' });
     try {
-      const exported = await client.exportRevision({ structure, revision, actingSubject });
+      const exported = await exportClient.exportRevision({ structure, revision, actingSubject });
       save(exported);
-      setStage({ kind: 'done', revision: exported.revision });
+      setExportStage({ kind: 'done', revision: exported.revision });
     } catch (error) {
       const refusal = error instanceof RecipeExportError ? error : new RecipeExportError('unavailable');
-      setStage({ kind: 'failed', failure: refusal.failure, detail: refusal.detail });
+      setExportStage({ kind: 'failed', failure: refusal.failure, detail: refusal.detail });
+    }
+  }
+
+  const requestFor = (file: File, expectedHead: string): RecipeImportRequest => ({
+    structure: structure!, expectedHead, actingSubject, idempotencyKey: `recipe-file-import:${newId()}`, file,
+  });
+
+  async function readLatestAfterStale(file: File, detail: string | null) {
+    setImportStage({ kind: 'refreshing-stale', file, detail });
+    onImportBusyChange?.(true);
+    let head: string | null = null;
+    try { head = await onStaleRefresh?.() ?? null; } catch { /* Keep the selected file and offer another refresh. */ }
+    setImportStage(head ? { kind: 'stale', file, head, detail } : { kind: 'stale-refresh-failed', file, detail });
+    onImportBusyChange?.(false);
+  }
+
+  async function runImport(request: RecipeImportRequest) {
+    if (disabled || importBusy) return;
+    setImportStage({ kind: 'importing' });
+    onImportBusyChange?.(true);
+    try {
+      const result = await importClient.importFile(request);
+      let refreshFailed = false;
+      if (onImported) {
+        try { refreshFailed = (await onImported(result)) === false; }
+        catch { refreshFailed = true; }
+      }
+      setImportStage({ kind: 'done', result, refreshFailed, refreshing: false });
+    } catch (error) {
+      const refusal = error instanceof RecipeImportError ? error : new RecipeImportError('unavailable');
+      if (refusal.failure === 'stale') {
+        await readLatestAfterStale(request.file, refusal.detail);
+      } else {
+        setImportStage({ kind: 'failed', failure: refusal.failure, detail: refusal.detail,
+          retry: refusal.failure === 'unavailable' ? request : null });
+      }
+    } finally {
+      onImportBusyChange?.(false);
+    }
+  }
+
+  function selectFile(file: File | undefined) {
+    if (!file || disabled || !structure || !revision) return;
+    if (file.size > RECIPE_FILE_MAX_BYTES) {
+      setImportStage({ kind: 'failed', failure: 'too-large', detail: null, retry: null });
+      return;
+    }
+    void runImport(requestFor(file, revision));
+  }
+
+  async function refreshStale(file: File, detail: string | null) {
+    if (disabled || importBusy) return;
+    await readLatestAfterStale(file, detail);
+  }
+
+  async function refreshImported(result: RecipeFileImport) {
+    if (!onImported || disabled || importBusy) return;
+    setImportStage({ kind: 'done', result, refreshFailed: true, refreshing: true });
+    onImportBusyChange?.(true);
+    try {
+      const loaded = await onImported(result);
+      setImportStage({ kind: 'done', result, refreshFailed: loaded === false, refreshing: false });
+    } catch {
+      setImportStage({ kind: 'done', result, refreshFailed: true, refreshing: false });
+    } finally {
+      onImportBusyChange?.(false);
     }
   }
 
   const revisionName = (value: string) => value.slice(-36);
-  const failureText = stage.kind === 'failed'
-    ? stage.failure === 'too-large' ? stage.detail ?? t.exportTooLargeFallback
-      : stage.failure === 'denied' ? t.exportDenied : t.exportUnavailable
+  const exportFailureText = exportStage.kind === 'failed'
+    ? exportStage.failure === 'too-large' ? exportStage.detail ?? t.exportTooLargeFallback
+      : exportStage.failure === 'denied' ? t.exportDenied : t.exportUnavailable
+    : null;
+  const importFailureText = importStage.kind === 'failed'
+    ? importStage.failure === 'too-large' ? importStage.detail ?? t.importTooLarge
+      : importStage.failure === 'invalid' ? importStage.detail ?? t.importInvalid
+        : importStage.failure === 'conflict' ? t.importConflict
+          : importStage.failure === 'denied' ? t.importDenied : t.importUnavailable
     : null;
 
-  return <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
-    <Button type="button" size="sm" variant="outline" disabled={disabled || busy || !structure || !revision}
-      aria-busy={busy || undefined} className="pointer-coarse:min-h-11" onClick={() => void exportRecipe()}>
-      {busy ? <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-        : <DownloadIcon aria-hidden="true" />}
-      {busy ? t.exporting : t.exportAction}
-    </Button>
-    {stage.kind === 'done' ? <p role="status" className="max-w-72 text-right text-xs text-muted-foreground">
-      {t.exportedRevision({ revision: revisionName(stage.revision) })}</p> : null}
-    {failureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive sm:text-right">{failureText}</p> : null}
+  return <div className="grid min-w-0 gap-3 sm:grid-flow-col sm:auto-cols-max sm:items-start sm:justify-end">
+    <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
+      <Button type="button" size="sm" variant="outline" disabled={disabled || exportBusy || !structure || !revision}
+        aria-busy={exportBusy || undefined} className="pointer-coarse:min-h-11" onClick={() => void exportRecipe()}>
+        {exportBusy ? <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          : <DownloadIcon aria-hidden="true" />}
+        {exportBusy ? t.exporting : t.exportAction}
+      </Button>
+      {exportStage.kind === 'done' ? <p role="status" className="max-w-72 text-left text-xs text-muted-foreground sm:text-right">
+        {t.exportedRevision({ revision: revisionName(exportStage.revision) })}</p> : null}
+      {exportFailureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive sm:text-right">{exportFailureText}</p> : null}
+    </div>
+
+    <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
+      <input ref={fileInput} type="file" accept=".json,application/json,application/ld+json" className="sr-only"
+        aria-label={t.importAction} disabled={disabled || importBusy || !structure || !revision}
+        onChange={event => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          selectFile(file);
+        }} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={disabled || importBusy || !structure || !revision}
+          aria-busy={importBusy || undefined} className="pointer-coarse:min-h-11" onClick={() => fileInput.current?.click()}>
+          {importBusy ? <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+            : <UploadIcon aria-hidden="true" />}
+          {importBusy ? (importStage.kind === 'refreshing-stale' || (importStage.kind === 'done' && importStage.refreshing)
+            ? t.importRefreshing : t.importing) : t.importAction}
+        </Button>
+        {importStage.kind === 'stale' ? <Button type="button" size="sm" className="pointer-coarse:min-h-11"
+          disabled={disabled} onClick={() => void runImport(requestFor(importStage.file, importStage.head))}>
+          {t.importStaleAction}</Button> : null}
+        {importStage.kind === 'stale-refresh-failed' ? <Button type="button" size="sm" variant="outline"
+          className="pointer-coarse:min-h-11" disabled={disabled} onClick={() => void refreshStale(importStage.file, importStage.detail)}>
+          {t.importRefreshAction}</Button> : null}
+        {importStage.kind === 'failed' && importStage.retry ? <Button type="button" size="sm" variant="outline"
+          className="pointer-coarse:min-h-11" disabled={disabled} onClick={() => void runImport(importStage.retry!)}>
+          {t.retry}</Button> : null}
+        {importStage.kind === 'done' && importStage.refreshFailed && onImported ? <Button type="button" size="sm" variant="outline"
+          className="pointer-coarse:min-h-11" disabled={disabled || importStage.refreshing}
+          onClick={() => void refreshImported(importStage.result)}>
+          {importStage.refreshing ? t.importRefreshing : t.importRefreshAction}</Button> : null}
+      </div>
+      {importFailureText ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
+        {importFailureText}{importStage.kind === 'failed' && importStage.detail && importStage.failure !== 'too-large'
+          && importStage.failure !== 'invalid' ? <span> {t.mainSays}: {importStage.detail}</span> : null}
+      </p> : null}
+      {importStage.kind === 'stale' || importStage.kind === 'stale-refresh-failed'
+        ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
+          {t.importStale}{importStage.kind === 'stale-refresh-failed' ? ` ${t.importRefreshFailed}` : ''}
+          {importStage.detail ? <><span> {t.mainSays}: </span>{importStage.detail}</> : null}</p> : null}
+      {importStage.kind === 'done' ? <>
+        <p role="status" className="max-w-80 text-left text-xs text-muted-foreground sm:text-right">
+          {t.importedRevision({ revision: revisionName(importStage.result.revision) })}</p>
+        {importStage.refreshFailed ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
+          {t.importRefreshFailed}</p> : null}
+      </> : null}
+    </div>
   </div>;
 }

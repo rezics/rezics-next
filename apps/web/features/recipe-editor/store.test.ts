@@ -23,6 +23,41 @@ test('a write goes out at the head held and the answer updates the editor withou
   expect(store.snapshot().busy).toBe(false);
 });
 
+test('an external recipe import can reload all sections, ingredients and steps before editing resumes', async () => {
+  const { fake, store } = open();
+  fake.elsewhere(state => ({ ...state, nodes: [...state.nodes,
+    { occurrence: id(51), parent: state.structure!, role: 'group', label: { value: 'Dough', language: 'en' } },
+    { occurrence: id(52), parent: id(51), role: 'ingredient', qualifier: line('2 cups flour') },
+    { occurrence: id(53), parent: state.structure!, role: 'step', qualifier: {
+      type: 'recipe-step', instructionText: { value: 'Mix the dough.', language: 'en' },
+      usesIngredient: [id(52)], media: [], scaling: 'linear' } },
+  ] }));
+
+  expect(await store.reload()).toBe(true);
+  expect(store.snapshot().state.head).toBe(fake.world().recipe.head);
+  expect(store.snapshot().state.nodes).toEqual(expect.arrayContaining([
+    expect.objectContaining({ occurrence: id(51), role: 'group', label: { value: 'Dough', language: 'en' } }),
+    expect.objectContaining({ occurrence: id(52), role: 'ingredient', qualifier: expect.objectContaining({
+      originalText: expect.objectContaining({ value: '2 cups flour' }),
+    }) }),
+    expect.objectContaining({ occurrence: id(53), role: 'step', qualifier: expect.objectContaining({
+      instructionText: expect.objectContaining({ value: 'Mix the dough.' }),
+    }) }),
+  ]));
+  expect(store.snapshot().loading).toBe(false);
+});
+
+test('external reload waits until pending recipe writes have settled', async () => {
+  const { fake, store } = open();
+  const hold = gate();
+  fake.interference.gates = { changes: hold.held };
+  const write = store.submit({ kind: 'addLine', section: id(11), qualifier: line('1 cup milk') });
+  expect(await store.reload()).toBe(false);
+  hold.release();
+  expect(await write).toEqual({ kind: 'saved' });
+  expect(await store.reload()).toBe(true);
+});
+
 test('a refused head reads Main again and writes the intent over what is there now', async () => {
   const { fake, store } = open();
   let once = true;

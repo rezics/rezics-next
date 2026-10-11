@@ -51,8 +51,8 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const [store] = useState(() => createRecipeStore({ work, mainVersion, actingSubject, initial: initial.recipe, main: client,
     loading: Boolean(initial.next) }));
   const exportApi = useMemo(() => mainRecipeExportApi(client), [client]);
+  const [importing, setImporting] = useState(false);
   const [loaded, setLoaded] = useState(initial.recipe.nodes.length);
-  const [attempt, setAttempt] = useState(0);
   const [details] = useState(() => createDetailsSaver({ main: client, actingSubject, work, language, initial: initial.details }));
   const [notes] = useState(() => createNotesWriter({ main: client, actingSubject, work, mainVersion, language, initial: initial.notes }));
   useEffect(() => () => store.dispose(), [store]);
@@ -66,7 +66,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
       else store.failLoad(result.problem === 'stale' ? 'stale' : result.detail === 'too-large' ? 'too-large' : 'failed');
     });
     return () => { stop = true; };
-  }, [actingSubject, client, initial.next, store, work, attempt]);
+  }, [actingSubject, client, initial.next, store, work]);
   const recipe = useSnapshot(store);
   const saved = useSnapshot(details);
   const written = useSnapshot(notes);
@@ -77,7 +77,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const [dismissed, setDismissed] = useState<{ details: typeof saved.failure; notes: typeof written.failure }>({ details: null, notes: null });
   const state = recipe.state;
   const entry = entryOf(saved.values, language);
-  const saving = recipe.busy || saved.busy || written.busy;
+  const saving = recipe.busy || saved.busy || written.busy || importing;
   const held = recipe.loading || recipe.loadFailure !== null;
   const loadMessage = recipe.loadFailure === 'too-large' ? t.recipeTooLong
     : recipe.loadFailure === 'stale' ? t.recipeChangedWhileLoading
@@ -86,7 +86,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const missing = missingBeforePublishing({ title: entry.title, ingredients: ingredients(state).length, steps: steps(state).length,
     notes: typedNotes });
   const accessRemoved = recipe.revoked || saved.revoked || written.revoked;
-  const common = { store, state, language, t, busy: recipe.busy, closed: accessRemoved };
+  const common = { store, state, language, t, busy: recipe.busy || importing, closed: accessRemoved };
   const detailsFailure = saved.failure && saved.failure !== dismissed.details ? saved.failure : null;
   const notesFailure = written.failure && written.failure !== dismissed.notes ? written.failure : null;
   const denialAlert = recipe.failure?.refusal.kind === 'denied' || detailsFailure === 'denied' || notesFailure === 'denied';
@@ -111,10 +111,14 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
           <ArrowLeftIcon aria-hidden="true" />{t.backToRecipe}</Link>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <RecipeExchange structure={state.structure} revision={state.head} actingSubject={actingSubject} locale={locale}
-            messages={catalog} disabled={recipe.busy || recipe.loading || accessRemoved} api={exportApi} />
+            messages={catalog} disabled={saving || recipe.loading || accessRemoved} api={exportApi}
+            onImportBusyChange={setImporting}
+            onStaleRefresh={async () => await store.reload() ? store.snapshot().state.head : null}
+            onImported={async () => store.reload()} />
           <p role="status" aria-live="polite" className="flex items-center gap-1.5 text-muted-foreground text-sm">
             {recipe.loading ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.loadingRest}</>
-              : saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
+              : importing ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.importing}</>
+                : saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
               : recipe.loadFailure ? <span>{loadMessage}</span>
               : accessRemoved ? (denialAlert ? null : <span>{t.failDenied}</span>)
               : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
@@ -137,17 +141,20 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
     </div>
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className={cn('grid min-w-0 content-start gap-10', view === 'preview' && 'hidden lg:grid')}>
-        <DetailsSection details={details} notes={notes} notesField={notesField} onNotesInput={setTypedNotes} language={language} t={t} closed={accessRemoved} />
-        {held ? <section aria-busy={recipe.loading || undefined} className="grid justify-items-start gap-3 rounded-2xl border border-border/60 p-4">
-          <h2 className="font-semibold text-lg">{t.loadingRest}</h2>
-          <p role="status">{loadMessage}</p>
-          {recipe.loadFailure && recipe.loadFailure !== 'too-large'
-            ? <Button type="button" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t.retry}</Button> : null}
-        </section> : <>
-          <MeasuresSection {...common} />
-          <IngredientsSection {...common} />
-          <MethodSection {...common} />
-        </>}
+        <fieldset disabled={importing} className="m-0 grid min-w-0 content-start gap-10 border-0 p-0">
+          <DetailsSection details={details} notes={notes} notesField={notesField} onNotesInput={setTypedNotes}
+            language={language} t={t} closed={accessRemoved} />
+          {held ? <section aria-busy={recipe.loading || undefined} className="grid justify-items-start gap-3 rounded-2xl border border-border/60 p-4">
+            <h2 className="font-semibold text-lg">{t.loadingRest}</h2>
+            <p role="status">{loadMessage}</p>
+            {recipe.loadFailure && recipe.loadFailure !== 'too-large'
+              ? <Button type="button" variant="outline" onClick={() => void store.reload()}>{t.retry}</Button> : null}
+          </section> : <>
+            <MeasuresSection {...common} />
+            <IngredientsSection {...common} />
+            <MethodSection {...common} />
+          </>}
+        </fieldset>
       </div>
       <aside className={cn('min-w-0 lg:sticky lg:top-28 lg:self-start', view === 'edit' && 'hidden lg:block')}>
         <Preview state={state} title={entry.title} description={entry.description} notes={typedNotes} language={language} t={t}
