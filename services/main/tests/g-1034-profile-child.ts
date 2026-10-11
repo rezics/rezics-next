@@ -29,6 +29,7 @@ const {
   readRealmRankingCorpus,
   restoreRealmRankingCorpus,
   REALM_RANKING_SCALES,
+  timeRealmRankingStage,
 } = await import('./realm-ranking-corpus.ts');
 
 const corpus = readRealmRankingCorpus();
@@ -82,34 +83,39 @@ try {
   let api = workProfileCorpusApi('http://main.local', home.author.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });
-  const project = async () => {
-    // The scale snapshot exceeds Home's small-fixture 400-tick helper bound.
-    // Resume the same durable job rather than resetting/replaying any prefix.
-    // Relay and ranking each stop at that bound, so a full population takes
-    // several resumable waves.
-    for (let wave = 0; wave < 40; wave++) {
-      try {
-        await home.project();
-        return;
-      } catch (error) {
-        if (
-          !(error instanceof Error) ||
-          !/Home (projection|relay) exceeded/.test(error.message)
-        )
-          throw error;
-        const pending = (
-          await stack.accessPool.query(
-            `SELECT kind,resource,after_key FROM access.realm_thread_dirty
+  const project = async () =>
+    timeRealmRankingStage(
+      'projection',
+      async () => {
+        // The scale snapshot exceeds Home's small-fixture 400-tick helper bound.
+        // Resume the same durable job rather than resetting/replaying any prefix.
+        // Relay and ranking each stop at that bound, so a full population takes
+        // several resumable waves.
+        for (let wave = 0; wave < 40; wave++) {
+          try {
+            await home.project();
+            return;
+          } catch (error) {
+            if (
+              !(error instanceof Error) ||
+              !/Home (projection|relay) exceeded/.test(error.message)
+            )
+              throw error;
+            const pending = (
+              await stack.accessPool.query(
+                `SELECT kind,resource,after_key FROM access.realm_thread_dirty
         WHERE data_epoch=$1 ORDER BY kind,resource LIMIT 4`,
-            [stack.env.lineage.dataEpoch],
-          )
-        ).rows;
-        console.log(JSON.stringify({ projectionWave: wave, pending }));
-        if (performance.now() - started > 550_000) throw error;
-      }
-    }
-    throw new Error('Realm scale projection exceeded its resumable waves');
-  };
+                [stack.env.lineage.dataEpoch],
+              )
+            ).rows;
+            console.log(JSON.stringify({ projectionWave: wave, pending }));
+            if (performance.now() - started > 550_000) throw error;
+          }
+        }
+        throw new Error('Realm scale projection exceeded its resumable waves');
+      },
+      { target: restored.target },
+    );
   const actor = corpus.identity.author;
   const reader = corpus.identity.reader;
   const realm = corpus.identity.realm;
@@ -135,371 +141,388 @@ try {
     key: string,
     parent?: { reply: string; revision: string },
     targetRealm = realm,
-  ) => {
-    const reply = `https://rezics.com/id/${randomUUID()}`,
-      variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = await api.command<{ revisionId: string; revisionDigest: string }>(
-      `${key}:draft`,
-      {
-        method: 'POST',
-        path: '/v1/member-reply-drafts',
-        body: {
-          profile: 'member-reply-draft-v1',
+  ) =>
+    timeRealmRankingStage(
+      'reply',
+      async () => {
+        const reply = `https://rezics.com/id/${randomUUID()}`,
+          variantId = `urn:rezics:variant:${randomUUID()}`;
+        const draft = await api.command<{ revisionId: string; revisionDigest: string }>(
+          `${key}:draft`,
+          {
+            method: 'POST',
+            path: '/v1/member-reply-drafts',
+            body: {
+              profile: 'member-reply-draft-v1',
+              reply,
+              variantId,
+              rootTarget: work.work,
+              rootRevision: work.draftRevision,
+              language: 'en',
+              direction: 'ltr',
+              expectedHead: null,
+              body: `${key}\nDiscuss the book`,
+              actingSubject: actor,
+            },
+          },
+        );
+        await api.command(`${key}:identity`, {
+          method: 'POST',
+          path: '/v1/realm-replies',
+          body: {
+            profile: 'realm-reply-identity-v1',
+            reply,
+            variantId,
+            revisionId: draft.revisionId,
+            author: actor,
+            rootTarget: work.work,
+            rootRevision: work.draftRevision,
+            parentReply: parent?.reply ?? null,
+            parentRevision: parent?.revision ?? null,
+            contextRevision: null,
+          },
+        });
+        const review = await api.command<{ decisionId: string }>(`${key}:review`, {
+          method: 'POST',
+          path: '/v1/realm-reply-reviews',
+          body: {
+            profile: 'realm-reply-review-v1',
+            realm: targetRealm,
+            reply,
+            revisionId: draft.revisionId,
+            revisionDigest: draft.revisionDigest,
+            expectedGeneration: '0',
+            supersedes: null,
+            outcome: 'approved',
+            method: 'human',
+            methodRevision: 'g1034-v1',
+            dependencyDigest: 'a'.repeat(64),
+            reasonReference: null,
+            actingSubject: actor,
+          },
+        });
+        const placed = await api.command<{ placement: string }>(`${key}:place`, {
+          method: 'POST',
+          path: '/v1/realm-reply-placements',
+          body: {
+            profile: 'realm-reply-placement-v1',
+            realm: targetRealm,
+            reply,
+            revisionId: draft.revisionId,
+            revisionDigest: draft.revisionDigest,
+            reviewDecisionId: review.decisionId,
+            expectedHead: null,
+            actingSubject: actor,
+          },
+        });
+        return {
           reply,
+          placement: placed.placement,
+          revision: draft.revisionId,
           variantId,
-          rootTarget: work.work,
-          rootRevision: work.draftRevision,
-          language: 'en',
-          direction: 'ltr',
-          expectedHead: null,
-          body: `${key}\nDiscuss the book`,
+          review: review.decisionId,
+          digest: draft.revisionDigest,
+        };
+      },
+      { key, realm: targetRealm },
+    );
+  const opening = corpus.identity.opening;
+  await timeRealmRankingStage('header-setup', async () => {
+    // A newly-created Realm with no placed reply is empty under every order,
+    // even when its ranking index has not caught up yet.
+    const emptyRealm = (
+      await api.command<{ realm: string }>('g1034:empty-realm', {
+        method: 'POST',
+        path: '/v1/spaces',
+        body: {
+          profile: 'space-realm-v1',
+          name: 'Unranked',
+          capabilities: ['realm'],
           actingSubject: actor,
         },
-      },
+      })
+    ).realm;
+    const emptyPage = await app.handle(
+      new Request(`http://main.local/v1/realms/${emptyRealm.slice(-36)}/threads?sort=top&limit=2`),
     );
-    await api.command(`${key}:identity`, {
-      method: 'POST',
-      path: '/v1/realm-replies',
-      body: {
-        profile: 'realm-reply-identity-v1',
-        reply,
-        variantId,
-        revisionId: draft.revisionId,
-        author: actor,
-        rootTarget: work.work,
-        rootRevision: work.draftRevision,
-        parentReply: parent?.reply ?? null,
-        parentRevision: parent?.revision ?? null,
-        contextRevision: null,
-      },
-    });
-    const review = await api.command<{ decisionId: string }>(`${key}:review`, {
-      method: 'POST',
-      path: '/v1/realm-reply-reviews',
-      body: {
-        profile: 'realm-reply-review-v1',
-        realm: targetRealm,
-        reply,
-        revisionId: draft.revisionId,
-        revisionDigest: draft.revisionDigest,
-        expectedGeneration: '0',
-        supersedes: null,
-        outcome: 'approved',
-        method: 'human',
-        methodRevision: 'g1034-v1',
-        dependencyDigest: 'a'.repeat(64),
-        reasonReference: null,
-        actingSubject: actor,
-      },
-    });
-    const placed = await api.command<{ placement: string }>(`${key}:place`, {
-      method: 'POST',
-      path: '/v1/realm-reply-placements',
-      body: {
-        profile: 'realm-reply-placement-v1',
-        realm: targetRealm,
-        reply,
-        revisionId: draft.revisionId,
-        revisionDigest: draft.revisionDigest,
-        reviewDecisionId: review.decisionId,
-        expectedHead: null,
-        actingSubject: actor,
-      },
-    });
-    return {
-      reply,
-      placement: placed.placement,
-      revision: draft.revisionId,
-      variantId,
-      review: review.decisionId,
-      digest: draft.revisionDigest,
-    };
-  };
-  const opening = corpus.identity.opening;
-  // A newly-created Realm with no placed reply is empty under every order,
-  // even when its ranking index has not caught up yet.
-  const emptyRealm = (
-    await api.command<{ realm: string }>('g1034:empty-realm', {
+    assert.equal(emptyPage.status, 200);
+    assert.deepEqual(((await emptyPage.json()) as { items: unknown[] }).items, []);
+    const allRules = Array.from({ length: 12 }, (_, index) => ({
+      id: `rule-${index}`,
+      title: { original: 'en', labels: { en: `Rule ${index}` } },
+      body: { original: 'en', labels: { en: 'Read together' } },
+      governanceRule: { ref: `urn:g1034:rule:${randomUUID()}`, revision: '1' },
+    }));
+    for (const rule of allRules)
+      await api.command(rule.id, {
+        method: 'POST',
+        path: '/v1/governance/rules',
+        body: {
+          profile: 'governance-rule-v1',
+          ref: rule.governanceRule.ref,
+          scopeId: `governance:realm:${realm}`,
+          actingSubject: actor,
+          expectedRevision: null,
+          document: { text: rule.title.labels.en },
+          idempotencyKey: rule.id,
+        },
+      });
+    const moderators: string[] = [];
+    for (let index = 0; index < 16; index++) {
+      const moderator = (
+        await api.command<{ agent: string }>(`g1034:mod:${index}`, {
+          method: 'POST',
+          path: '/v1/agents',
+          body: {
+            profile: 'agent-provision-v1',
+            kind: 'person',
+            displayName: `Moderator ${index}`,
+          },
+        })
+      ).agent;
+      await grant(
+        `realm:moderator-choice:${realm.slice(-36)}:${moderator.slice(-36)}`,
+        'realm.moderator.choose',
+        moderator,
+      );
+      await api.command(`g1034:choice:${index}`, {
+        method: 'PUT',
+        path: `${root}/moderators/${moderator.slice(-36)}/public-choice`,
+        body: {
+          profile: 'realm-public-moderator-choice-v1',
+          expectedHead: null,
+          public: true,
+          actingSubject: moderator,
+        },
+      });
+      moderators.push(moderator);
+    }
+    let profileHead: string | null = null;
+    // Realm creation stores an empty settings rules document, and the header
+    // reads that document. Advance it with the same rules the profile publishes.
+    const rulesRef = `urn:rezics:realm-rules:${realm.slice(-36)}`;
+    for (const count of [0, 1, 12]) {
+      const currentRules = await rules.current(rulesRef, `governance:realm:${realm}`);
+      await api.command(`g1034:rules-document:${count}`, {
+        method: 'POST',
+        path: '/v1/governance/rules',
+        body: {
+          profile: 'governance-rule-v1',
+          ref: rulesRef,
+          scopeId: `governance:realm:${realm}`,
+          actingSubject: actor,
+          expectedRevision: currentRules?.revision ?? null,
+          document: {
+            profile: 'realm-settings-rules-v2',
+            public: true,
+            rules: allRules.slice(0, count),
+          },
+          idempotencyKey: `g1034:rules-document:${count}`,
+        },
+      });
+      const published: { revision: string } = await api.command<{ revision: string }>(
+        `g1034:profile:${count}`,
+        {
+          method: 'PUT',
+          path: `${root}/profile`,
+          body: {
+            profile: 'realm-public-profile-v2',
+            expectedHead: profileHead,
+            actingSubject: actor,
+            publication: {
+              name: { original: 'en', labels: { en: 'Rank community' } },
+              description: { original: 'en', labels: { en: 'Read together' } },
+              rules: allRules.slice(0, count),
+              moderators: moderators.slice(0, count === 12 ? 16 : count),
+              iconSelection: null,
+              bannerSelection: null,
+              count: { kind: 'exact', value: null },
+            },
+          },
+        },
+      );
+      profileHead = published.revision;
+      for (const viewer of ['anonymous', 'member']) {
+        sink.clear();
+        const measured = await timeRealmRankingStage(
+          'header-read',
+          () =>
+            profileRequest(
+              sink,
+              async (headers) => {
+                if (viewer === 'member')
+                  headers.set('authorization', `Bearer ${home.reader.token}`);
+                const response = await app.handle(
+                  new Request(
+                    `http://main.local${root}${viewer === 'member' ? `?actingSubject=${encodeURIComponent(reader)}` : ''}`,
+                    { headers },
+                  ),
+                );
+                const body = (await response.json()) as {
+                  rules: unknown[];
+                  moderators: { items: string[] };
+                };
+                assert.equal(response.status, 200, JSON.stringify(body));
+                assert.equal(body.rules.length, count);
+                assert.equal(body.moderators.items.length, count === 12 ? 16 : count);
+              },
+              { service: 'main', flush: flushTelemetryTraces },
+            ),
+          { rules: count, viewer },
+        );
+        assertWorkCost(measured.profile, {
+          postgresStatements:
+            viewer === 'anonymous'
+              ? REALM_RANK_COST.headerAnonymousStatements
+              : REALM_RANK_COST.headerMemberStatements,
+        });
+        evidence.push({
+          operation: 'header',
+          rules: count,
+          moderators: count === 12 ? 16 : count,
+          viewer,
+          profile: measured.profile,
+        });
+      }
+    }
+    await project();
+  });
+  const epoch = corpus.identity.dataEpoch;
+  await timeRealmRankingStage('private-admission', async () => {
+    // A real private membership episode: older posts precede its immutable cut.
+    // The cut's admitted-score index is built once, then votes/replies mirror it.
+    const privateCreated = await api.command<{ realm: string; space: string }>('g1034:private', {
       method: 'POST',
       path: '/v1/spaces',
       body: {
         profile: 'space-realm-v1',
-        name: 'Unranked',
+        name: 'Private ranking',
         capabilities: ['realm'],
         actingSubject: actor,
       },
-    })
-  ).realm;
-  const emptyPage = await app.handle(
-    new Request(`http://main.local/v1/realms/${emptyRealm.slice(-36)}/threads?sort=top&limit=2`),
-  );
-  assert.equal(emptyPage.status, 200);
-  assert.deepEqual((await emptyPage.json() as { items: unknown[] }).items, []);
-  const allRules = Array.from({ length: 12 }, (_, index) => ({
-    id: `rule-${index}`,
-    title: { original: 'en', labels: { en: `Rule ${index}` } },
-    body: { original: 'en', labels: { en: 'Read together' } },
-    governanceRule: { ref: `urn:g1034:rule:${randomUUID()}`, revision: '1' },
-  }));
-  for (const rule of allRules)
-    await api.command(rule.id, {
-      method: 'POST',
-      path: '/v1/governance/rules',
-      body: {
-        profile: 'governance-rule-v1',
-        ref: rule.governanceRule.ref,
-        scopeId: `governance:realm:${realm}`,
-        actingSubject: actor,
-        expectedRevision: null,
-        document: { text: rule.title.labels.en },
-        idempotencyKey: rule.id,
-      },
     });
-  const moderators: string[] = [];
-  for (let index = 0; index < 16; index++) {
-    const moderator = (
-      await api.command<{ agent: string }>(`g1034:mod:${index}`, {
-        method: 'POST',
-        path: '/v1/agents',
-        body: {
-          profile: 'agent-provision-v1',
-          kind: 'person',
-          displayName: `Moderator ${index}`,
-        },
-      })
-    ).agent;
-    await grant(
-      `realm:moderator-choice:${realm.slice(-36)}:${moderator.slice(-36)}`,
-      'realm.moderator.choose',
-      moderator,
+    const privateRealm = privateCreated.realm;
+    for (const [scope, action] of [
+      [`review:decide:${privateRealm}`, 'review.decide'],
+      [`reply:place:${privateRealm}`, 'reply.place'],
+      [`governance:realm:${privateRealm}`, 'governance.rule.publish'],
+      [`governance:realm:${privateRealm}`, 'realm.owner'],
+    ] as const)
+      await grant(scope, action);
+    await api.command('g1034:private:manage', {
+      method: 'POST',
+      path: `/v1/realms/${privateRealm.slice(-36)}/management`,
+      body: { actingSubject: actor },
+    });
+    const prior = await post('g1034:before-admission', undefined, privateRealm);
+    const floor = await workRead(
+      home.deps,
+      new Request('http://main.internal/private-cut'),
+      {},
+      (session) => Promise.resolve(session.position),
     );
-    await api.command(`g1034:choice:${index}`, {
+    const privateRoot = `/v1/realms/${privateRealm.slice(-36)}` as const;
+    const privateSettingsPath = `/v1/spaces/${privateCreated.space.slice(-36)}/settings` as const;
+    const settings = await api.read<Awaited<ReturnType<typeof realmAdmin.spaceSettings>>>(
+      `${privateSettingsPath}?actingSubject=${encodeURIComponent(actor)}`,
+    );
+    await api.command('g1034:private:settings', {
       method: 'PUT',
-      path: `${root}/moderators/${moderator.slice(-36)}/public-choice`,
+      path: privateSettingsPath,
       body: {
-        profile: 'realm-public-moderator-choice-v1',
-        expectedHead: null,
-        public: true,
-        actingSubject: moderator,
-      },
-    });
-    moderators.push(moderator);
-  }
-  let profileHead: string | null = null;
-  // Realm creation stores an empty settings rules document, and the header
-  // reads that document. Advance it with the same rules the profile publishes.
-  const rulesRef = `urn:rezics:realm-rules:${realm.slice(-36)}`;
-  for (const count of [0, 1, 12]) {
-    const currentRules = await rules.current(rulesRef, `governance:realm:${realm}`);
-    await api.command(`g1034:rules-document:${count}`, {
-      method: 'POST',
-      path: '/v1/governance/rules',
-      body: {
-        profile: 'governance-rule-v1',
-        ref: rulesRef,
-        scopeId: `governance:realm:${realm}`,
         actingSubject: actor,
-        expectedRevision: currentRules?.revision ?? null,
-        document: {
-          profile: 'realm-settings-rules-v2',
-          public: true,
-          rules: allRules.slice(0, count),
-        },
-        idempotencyKey: `g1034:rules-document:${count}`,
+        expectedGeneration: settings.generation,
+        reason: 'Exercise admission history',
+        settings: { ...settings.settings, visibility: 'private', history: 'from-admission' },
       },
     });
-    const published: { revision: string } = await api.command<{ revision: string }>(
-      `g1034:profile:${count}`,
-      {
-        method: 'PUT',
-        path: `${root}/profile`,
-        body: {
-          profile: 'realm-public-profile-v2',
-          expectedHead: profileHead,
-          actingSubject: actor,
-          publication: {
-            name: { original: 'en', labels: { en: 'Rank community' } },
-            description: { original: 'en', labels: { en: 'Read together' } },
-            rules: allRules.slice(0, count),
-            moderators: moderators.slice(0, count === 12 ? 16 : count),
-            iconSelection: null,
-            bannerSelection: null,
-            count: { kind: 'exact', value: null },
-          },
-        },
-      },
-    );
-    profileHead = published.revision;
-    for (const viewer of ['anonymous', 'member']) {
-      sink.clear();
-      const measured = await profileRequest(
-        sink,
-        async (headers) => {
-          if (viewer === 'member') headers.set('authorization', `Bearer ${home.reader.token}`);
-          const response = await app.handle(
-            new Request(
-              `http://main.local${root}${viewer === 'member' ? `?actingSubject=${encodeURIComponent(reader)}` : ''}`,
-              { headers },
-            ),
-          );
-          const body = (await response.json()) as {
-            rules: unknown[];
-            moderators: { items: string[] };
-          };
-          assert.equal(response.status, 200, JSON.stringify(body));
-          assert.equal(body.rules.length, count);
-          assert.equal(body.moderators.items.length, count === 12 ? 16 : count);
-        },
-        { service: 'main', flush: flushTelemetryTraces },
-      );
-      assertWorkCost(measured.profile, {
-        postgresStatements:
-          viewer === 'anonymous'
-            ? REALM_RANK_COST.headerAnonymousStatements
-            : REALM_RANK_COST.headerMemberStatements,
-      });
-      evidence.push({
-        operation: 'header',
-        rules: count,
-        moderators: count === 12 ? 16 : count,
-        viewer,
-        profile: measured.profile,
-      });
-    }
-  }
-  await project();
-  const epoch = corpus.identity.dataEpoch;
-  // A real private membership episode: older posts precede its immutable cut.
-  // The cut's admitted-score index is built once, then votes/replies mirror it.
-  const privateCreated = await api.command<{ realm: string; space: string }>('g1034:private', {
-    method: 'POST',
-    path: '/v1/spaces',
-    body: {
-      profile: 'space-realm-v1',
-      name: 'Private ranking',
-      capabilities: ['realm'],
-      actingSubject: actor,
-    },
-  });
-  const privateRealm = privateCreated.realm;
-  for (const [scope, action] of [
-    [`review:decide:${privateRealm}`, 'review.decide'],
-    [`reply:place:${privateRealm}`, 'reply.place'],
-    [`governance:realm:${privateRealm}`, 'governance.rule.publish'],
-    [`governance:realm:${privateRealm}`, 'realm.owner'],
-  ] as const)
-    await grant(scope, action);
-  await api.command('g1034:private:manage', {
-    method: 'POST',
-    path: `/v1/realms/${privateRealm.slice(-36)}/management`,
-    body: { actingSubject: actor },
-  });
-  const prior = await post('g1034:before-admission', undefined, privateRealm);
-  const floor = await workRead(
-    home.deps,
-    new Request('http://main.internal/private-cut'),
-    {},
-    (session) => Promise.resolve(session.position),
-  );
-  const privateRoot = `/v1/realms/${privateRealm.slice(-36)}` as const;
-  const privateSettingsPath = `/v1/spaces/${privateCreated.space.slice(-36)}/settings` as const;
-  const settings = await api.read<Awaited<ReturnType<typeof realmAdmin.spaceSettings>>>(
-    `${privateSettingsPath}?actingSubject=${encodeURIComponent(actor)}`,
-  );
-  await api.command('g1034:private:settings', {
-    method: 'PUT',
-    path: privateSettingsPath,
-    body: {
-      actingSubject: actor,
-      expectedGeneration: settings.generation,
-      reason: 'Exercise admission history',
-      settings: { ...settings.settings, visibility: 'private', history: 'from-admission' },
-    },
-  });
-  await stack.accessPool.query(
-    `INSERT INTO access.membership_policy(kind,owner_subject,revision,terms_revision)
+    await stack.accessPool.query(
+      `INSERT INTO access.membership_policy(kind,owner_subject,revision,terms_revision)
     VALUES('realm',$1,1,'g1034-terms') ON CONFLICT DO NOTHING`,
-    [privateRealm],
-  );
-  const membershipPolicy = (
-    await stack.accessPool.query<{ revision: string; terms_revision: string }>(
-      `SELECT revision::text,terms_revision FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1`,
       [privateRealm],
-    )
-  ).rows[0]!;
-  const consent = randomUUID(),
-    membership = randomUUID();
-  await stack.accessPool.query(
-    `INSERT INTO access.private_membership_consent(id,principal_id,principal_epoch,kind,
+    );
+    const membershipPolicy = (
+      await stack.accessPool.query<{ revision: string; terms_revision: string }>(
+        `SELECT revision::text,terms_revision FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1`,
+        [privateRealm],
+      )
+    ).rows[0]!;
+    const consent = randomUUID(),
+      membership = randomUUID();
+    await stack.accessPool.query(
+      `INSERT INTO access.private_membership_consent(id,principal_id,principal_epoch,kind,
     owner_subject,policy_revision,terms_revision,next_generation,expires_at)
     SELECT $1,id,enforcement_epoch,'realm',$3,$4::bigint,$5,1,now()+interval '5 minutes' FROM access.principal WHERE id=$2`,
-    [
-      consent,
-      home.reader.principalId,
-      privateRealm,
-      membershipPolicy.revision,
-      membershipPolicy.terms_revision,
-    ],
-  );
-  await stack.accessPool.query(
-    `INSERT INTO access.private_membership(id,kind,owner_subject,principal_id,state,generation,
-    policy_revision,terms_revision,consent_reference) VALUES($1,'realm',$2,$3,'joined',1,$5::bigint,$6,$4)`,
-    [
-      membership,
-      privateRealm,
-      home.reader.principalId,
-      consent,
-      membershipPolicy.revision,
-      membershipPolicy.terms_revision,
-    ],
-  );
-  await stack.accessPool.query(
-    `INSERT INTO access.realm_history_admission(kind,membership_id,generation,data_epoch,sequence)
-    VALUES('private',$1,1,$2,$3)`,
-    [membership, floor.dataEpoch, floor.sequence],
-  );
-  const later = await post('g1034:after-admission', undefined, privateRealm);
-  await project();
-  const privateRequest = () =>
-    new Request(
-      `http://main.local${privateRoot}/threads?sort=top&window=all&limit=2&actingSubject=${encodeURIComponent(reader)}`,
-      { headers: { authorization: `Bearer ${home.reader.token}` } },
+      [
+        consent,
+        home.reader.principalId,
+        privateRealm,
+        membershipPolicy.revision,
+        membershipPolicy.terms_revision,
+      ],
     );
-  assert.equal(
-    (await app.handle(privateRequest())).status,
-    503,
-    'An incomplete private cut must not return a recent sample',
-  );
-  await project();
-  const privatePage = await app.handle(privateRequest());
-  assert.equal(privatePage.status, 200, await privatePage.clone().text());
-  assert.deepEqual(
-    ((await privatePage.json()) as { items: { reply: string }[] }).items.map((item) => item.reply),
-    [later.reply],
-  );
-  assert.equal(
-    (await app.handle(new Request(`http://main.local${privateRoot}/threads?sort=best&limit=2`)))
-      .status,
-    404,
-  );
-  assert(
-    (
-      await stack.accessPool.query(
-        'SELECT 1 FROM access.realm_thread_population_admission WHERE reply=$1 AND NOT admitted',
-        [prior.reply],
-      )
-    ).rowCount,
-  );
-  const privateChild = await post('g1034:after-admission-child', later, privateRealm);
-  await project();
-  assert(
-    (
-      await stack.accessPool.query(
-        'SELECT 1 FROM access.realm_thread_population_admission WHERE reply=$1 AND admitted',
-        [privateChild.reply],
-      )
-    ).rowCount,
-  );
+    await stack.accessPool.query(
+      `INSERT INTO access.private_membership(id,kind,owner_subject,principal_id,state,generation,
+    policy_revision,terms_revision,consent_reference) VALUES($1,'realm',$2,$3,'joined',1,$5::bigint,$6,$4)`,
+      [
+        membership,
+        privateRealm,
+        home.reader.principalId,
+        consent,
+        membershipPolicy.revision,
+        membershipPolicy.terms_revision,
+      ],
+    );
+    await stack.accessPool.query(
+      `INSERT INTO access.realm_history_admission(kind,membership_id,generation,data_epoch,sequence)
+    VALUES('private',$1,1,$2,$3)`,
+      [membership, floor.dataEpoch, floor.sequence],
+    );
+    const later = await post('g1034:after-admission', undefined, privateRealm);
+    await project();
+    const privateRequest = () =>
+      new Request(
+        `http://main.local${privateRoot}/threads?sort=top&window=all&limit=2&actingSubject=${encodeURIComponent(reader)}`,
+        { headers: { authorization: `Bearer ${home.reader.token}` } },
+      );
+    assert.equal(
+      (await app.handle(privateRequest())).status,
+      503,
+      'An incomplete private cut must not return a recent sample',
+    );
+    await project();
+    const privatePage = await app.handle(privateRequest());
+    assert.equal(privatePage.status, 200, await privatePage.clone().text());
+    assert.deepEqual(
+      ((await privatePage.json()) as { items: { reply: string }[] }).items.map(
+        (item) => item.reply,
+      ),
+      [later.reply],
+    );
+    assert.equal(
+      (await app.handle(new Request(`http://main.local${privateRoot}/threads?sort=best&limit=2`)))
+        .status,
+      404,
+    );
+    assert(
+      (
+        await stack.accessPool.query(
+          'SELECT 1 FROM access.realm_thread_population_admission WHERE reply=$1 AND NOT admitted',
+          [prior.reply],
+        )
+      ).rowCount,
+    );
+    const privateChild = await post('g1034:after-admission-child', later, privateRealm);
+    await project();
+    assert(
+      (
+        await stack.accessPool.query(
+          'SELECT 1 FROM access.realm_thread_population_admission WHERE reply=$1 AND admitted',
+          [privateChild.reply],
+        )
+      ).rowCount,
+    );
+  });
   let created = 0;
   let winner: string | undefined = corpus.identity.winner.reply;
   for (const size of REALM_RANKING_SCALES) {
@@ -517,7 +540,11 @@ try {
           rules: nextRules,
           store: new GovernanceStore(
             stack.accessPool,
-            { capture: async () => { throw new Error('Evidence outside this test'); } },
+            {
+              capture: async () => {
+                throw new Error('Evidence outside this test');
+              },
+            },
             { current: async () => null },
             nextRules,
           ),
@@ -570,28 +597,34 @@ try {
         for (const temperature of ['first', 'warm']) {
           await flushTelemetryTraces();
           sink.clear();
-          const measured = await profileRequest(
-            sink,
-            async (headers) => {
-              if (viewer === 'member') headers.set('authorization', `Bearer ${home.reader.token}`);
-              const response = await app.handle(
-                new Request(
-                  `http://main.local${root}/threads?sort=${sort}&window=all&limit=2${viewer === 'member' ? `&actingSubject=${encodeURIComponent(reader)}` : ''}`,
-                  { headers },
-                ),
-              );
-              const body = (await response.json()) as {
-                items: { reply: string }[];
-                nextCursor: string | null;
-              };
-              assert.equal(response.status, 200, JSON.stringify(body));
-              assert.deepEqual(
-                body.items.map((item) => item.reply),
-                [winner, opening.reply],
-              );
-              assert(body.nextCursor);
-            },
-            { service: 'main', flush: flushTelemetryTraces },
+          const measured = await timeRealmRankingStage(
+            'ranking-read',
+            () =>
+              profileRequest(
+                sink,
+                async (headers) => {
+                  if (viewer === 'member')
+                    headers.set('authorization', `Bearer ${home.reader.token}`);
+                  const response = await app.handle(
+                    new Request(
+                      `http://main.local${root}/threads?sort=${sort}&window=all&limit=2${viewer === 'member' ? `&actingSubject=${encodeURIComponent(reader)}` : ''}`,
+                      { headers },
+                    ),
+                  );
+                  const body = (await response.json()) as {
+                    items: { reply: string }[];
+                    nextCursor: string | null;
+                  };
+                  assert.equal(response.status, 200, JSON.stringify(body));
+                  assert.deepEqual(
+                    body.items.map((item) => item.reply),
+                    [winner, opening.reply],
+                  );
+                  assert(body.nextCursor);
+                },
+                { service: 'main', flush: flushTelemetryTraces },
+              ),
+            { threads: size, sort, viewer, temperature },
           );
           profiles.push({ size, operation: sort, viewer, temperature, profile: measured.profile });
         }
@@ -645,16 +678,14 @@ try {
         evidence.push({ size, sort, after, plan });
       }
     }
-    const poolMeters = [...new Set([
-      stack.accessPool,
-      stack.contentPool,
-      home.relay,
-    ])].map(pool => {
-      const meter = meterPool(pool);
-      pool.query = meter.query as typeof pool.query;
-      pool.connect = meter.connect as typeof pool.connect;
-      return meter;
-    });
+    const poolMeters = [...new Set([stack.accessPool, stack.contentPool, home.relay])].map(
+      (pool) => {
+        const meter = meterPool(pool);
+        pool.query = meter.query as typeof pool.query;
+        pool.connect = meter.connect as typeof pool.connect;
+        return meter;
+      },
+    );
     const fusekiMeter = meterFuseki(stack.fuseki);
     stack.fuseki.query = fusekiMeter.query as typeof stack.fuseki.query;
     let replyCommandProfiles: WorkProfile[] | undefined;
@@ -667,7 +698,7 @@ try {
       if (!replyCommandProfiles) return invoke();
       const measured = await profileRequest(
         sink,
-        async headers => {
+        async (headers) => {
           const response = await invoke(headers.get('traceparent') ?? undefined);
           await response.clone().arrayBuffer();
           return response;
@@ -680,26 +711,35 @@ try {
     api = workProfileCorpusApi('http://main.local', home.author.token, {
       fetch: profileCommandFetch as typeof fetch,
     });
-    poolMeters.forEach(meter => meter.reset());
+    poolMeters.forEach((meter) => meter.reset());
     fusekiMeter.reset();
     replyCommandProfiles = [];
-    const posted = await post(`g1034:cost:${size}`);
+    const posted = await timeRealmRankingStage('measured-write', () => post(`g1034:cost:${size}`), {
+      threads: size,
+    });
     assert(posted.reply.startsWith('https://rezics.com/id/'));
     const commandProfiles = replyCommandProfiles;
     replyCommandProfiles = undefined;
-    assert.equal(commandProfiles.length, 4, 'A Realm reply has draft, identity, review, and placement commands');
+    assert.equal(
+      commandProfiles.length,
+      4,
+      'A Realm reply has draft, identity, review, and placement commands',
+    );
     const statements = poolMeters.reduce((sum, meter) => sum + meter.queries, 0);
-    const fusekiRequests = commandProfiles.every(profile => profile.fusekiRequests !== null)
+    const fusekiRequests = commandProfiles.every((profile) => profile.fusekiRequests !== null)
       ? commandProfiles.reduce((sum, profile) => sum + profile.fusekiRequests!, 0)
       : null;
-    const unobserved = [...new Set(commandProfiles.flatMap(profile => profile.unobserved))];
+    const unobserved = [...new Set(commandProfiles.flatMap((profile) => profile.unobserved))];
     replyWrites.push({
       size,
       profile: {
         ...commandProfiles.at(-1)!,
         postgresStatements: statements,
         fusekiRequests,
-        unclassifiedFetches: commandProfiles.reduce((sum, profile) => sum + profile.unclassifiedFetches, 0),
+        unclassifiedFetches: commandProfiles.reduce(
+          (sum, profile) => sum + profile.unclassifiedFetches,
+          0,
+        ),
         unobserved,
       },
       fusekiQueryCalls: fusekiMeter.queries,
@@ -767,16 +807,18 @@ try {
   const voter = workProfileCorpusApi('http://main.local', voterMember.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });
-  const voted = await voter.command<{ score: number; replayed: boolean }>(`g1034:vote:${randomUUID()}`, {
-    method: 'POST',
-    path: `/v1/feed/${opening.placement.slice(-36)}/vote`,
-    body: {
-      profile: 'feed-vote-command-v1',
-      actingSubject: voterSubject,
-      value: 1,
-      expectedRevision: null,
-    },
-  });
+  const voted = await timeRealmRankingStage('vote', () =>
+    voter.command<{ score: number; replayed: boolean }>(`g1034:vote:${randomUUID()}`, {
+      method: 'POST',
+      path: `/v1/feed/${opening.placement.slice(-36)}/vote`,
+      body: {
+        profile: 'feed-vote-command-v1',
+        actingSubject: voterSubject,
+        value: 1,
+        expectedRevision: null,
+      },
+    }),
+  );
   // Supporters and the author already voted. This reader's vote and the two
   // concurrent score writes compose on that baseline, whatever the baseline is.
   const baseline = (
@@ -902,7 +944,7 @@ try {
     JSON.stringify({ evidence, profiles, replyWrites, ownerDatabases }, null, 2) + '\n',
   );
   try {
-    await restored.close();
+    await timeRealmRankingStage('profile-cleanup', () => restored.close());
   } finally {
     await shutdownTelemetry();
     await sink.stop();

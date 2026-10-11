@@ -13,7 +13,10 @@ import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-repl
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { BACKPRESSURE_PROFILE_V1 } from '../../../services/main/src/operations/backpressure.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
-import { restoreRealmRankingCorpus } from '../../../services/main/tests/realm-ranking-corpus.ts';
+import {
+  restoreRealmRankingCorpus,
+  timeRealmRankingStage,
+} from '../../../services/main/tests/realm-ranking-corpus.ts';
 
 test('G1042: depth, row and ancestor caps report partial results; retired cuts and deleted references drain through invalidation', async () => {
   const restoreStarted = performance.now();
@@ -21,10 +24,16 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
   const home = restored.home;
   try {
     const { stack } = home;
-    const restoreReadyMs = Math.round(Math.max(restored.elapsedMs, performance.now() - restoreStarted));
+    const restoreReadyMs = Math.round(
+      Math.max(restored.elapsedMs, performance.now() - restoreStarted),
+    );
     if (restoreReadyMs >= 600_000)
-      throw new Error(`Realm ranking corpus restore, startup and readiness took ${restoreReadyMs} ms`);
-    console.log(JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }));
+      throw new Error(
+        `Realm ranking corpus restore, startup and readiness took ${restoreReadyMs} ms`,
+      );
+    console.log(
+      JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }),
+    );
     // The retained reply commands leave Content projection events in this stopped
     // copy. Advance Content directly so the composed poll does not tick an absent
     // Event Projection owner on every step.
@@ -39,49 +48,72 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       if (projectedEvents >= 10_000)
         throw new Error(`Content projection backlog did not fall below ${targetBacklog}`);
       const event = await relayContentProjectionOnce(
-        stack.env, projection.content, projection.cursor, projection.consumer,
+        stack.env,
+        projection.content,
+        projection.cursor,
+        projection.consumer,
       );
-      if (!event) throw new Error('Content projection stopped before its checkpoint reached the source');
+      if (!event)
+        throw new Error('Content projection stopped before its checkpoint reached the source');
       projectedEvents++;
       checkpoint = await projection.cursor.read(projection.consumer);
     }
-    console.log(JSON.stringify({
-      realmRankingContentProjectionCatchUpMs: Math.round(performance.now() - projectionStarted),
-      projectedEvents,
-      remainingBacklog: (contentHead - BigInt(checkpoint.sequence)).toString(),
-    }));
-    const seed = await seedHome(home, 3);
+    console.log(
+      JSON.stringify({
+        realmRankingContentProjectionCatchUpMs: Math.round(performance.now() - projectionStarted),
+        projectedEvents,
+        remainingBacklog: (contentHead - BigInt(checkpoint.sequence)).toString(),
+      }),
+    );
+    const seed = await timeRealmRankingStage('followup-setup', () => seedHome(home, 3));
     // A few hundred product replies exceed one 400-batch relay pass. Resume the
     // same checkpoint instead of treating that bound as a failed population.
-    const catchUp = async () => {
-      for (let wave = 0; wave < 8; wave++) {
-        try {
-          await home.project();
-          return;
-        } catch (error) {
-          if (!(error instanceof Error) || !/Home (projection|relay) exceeded/.test(error.message))
-            throw error;
+    const catchUp = async () =>
+      timeRealmRankingStage('followup-projection', async () => {
+        for (let wave = 0; wave < 8; wave++) {
+          try {
+            await home.project();
+            return;
+          } catch (error) {
+            if (
+              !(error instanceof Error) ||
+              !/Home (projection|relay) exceeded/.test(error.message)
+            )
+              throw error;
+          }
         }
-      }
-      throw new Error('Realm thread projection exceeded its resumable waves');
-    };
+        throw new Error('Realm thread projection exceeded its resumable waves');
+      });
     const realm = seed.realm.realm,
       epoch = stack.env.lineage.dataEpoch;
     const threads = home.deps.realmReplyThreads;
     const root = `/v1/realms/${realm.slice(-36)}`;
     const readThread = async (reply: string) =>
-      home.json<{ complete: boolean; items: unknown[]; ancestors: unknown[] }>(
-        await home.call('GET', `${root}/threads/${reply.slice(-36)}`),
+      timeRealmRankingStage(
+        'followup-read',
+        async () =>
+          home.json<{ complete: boolean; items: unknown[]; ancestors: unknown[] }>(
+            await home.call('GET', `${root}/threads/${reply.slice(-36)}`),
+          ),
+        { reply },
       );
     expect((await readThread(seed.discussion.reply)).complete).toBe(true);
     let replyCommands = 0;
     const postReply = async (key: string, parent?: { reply: string; revision: string }) => {
       const started = performance.now();
-      const created = await seed.post(key, parent && { reply: parent.reply, revisionId: parent.revision });
+      const created = await timeRealmRankingStage(
+        'followup-reply',
+        () => seed.post(key, parent && { reply: parent.reply, revisionId: parent.revision }),
+        { key },
+      );
       replyCommands++;
       if (replyCommands % 10 === 0 || replyCommands === 1) {
-        console.log(JSON.stringify({ realmRankingFollowupReplyCommands: replyCommands,
-          lastCommandMs: Math.round(performance.now() - started) }));
+        console.log(
+          JSON.stringify({
+            realmRankingFollowupReplyCommands: replyCommands,
+            lastCommandMs: Math.round(performance.now() - started),
+          }),
+        );
       }
       return { reply: created.reply, revision: created.revisionId };
     };
@@ -212,12 +244,15 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       (session) => Promise.resolve(session),
     );
     const before = await count('realm_thread_population_admission');
-    const meter = meterStatements(), queries = stack.fuseki.queries;
+    const meter = meterStatements(),
+      queries = stack.fuseki.queries;
     try {
       await retireRealmPopulation(stack.accessPool, session, epoch, realm, '');
       expect(meter.count()).toBeLessThanOrEqual(REALM_RETIREMENT_COST.postgresStatements);
-      expect(stack.fuseki.queries-queries).toBeLessThanOrEqual(REALM_RETIREMENT_COST.graphReads);
-    } finally { meter.restore(); }
+      expect(stack.fuseki.queries - queries).toBeLessThanOrEqual(REALM_RETIREMENT_COST.graphReads);
+    } finally {
+      meter.restore();
+    }
     expect(before - (await count('realm_thread_population_admission'))).toBe(
       REALM_RETIREMENT_COST.admissions,
     );
@@ -326,7 +361,10 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     }
     expect(realmHistoryPopulation(floor)).toBe(population);
   } finally {
-    try { await home.stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id'); }
-    finally { await restored.close(); }
+    try {
+      await home.stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
+    } finally {
+      await restored.close();
+    }
   }
 }, 420_000);

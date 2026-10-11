@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import protobuf from 'protobufjs';
 import {
@@ -14,9 +14,78 @@ import {
   type WorkCostGrowthClass,
 } from '../support/work-profile.ts';
 import { workProfileProbe } from '../support/work-profile-probe.ts';
+import { runWorkProfileChild } from '../support/work-profile-child.ts';
 import { aspireWorkProfileSource } from '../support/work-profile-aspire.ts';
 import { fusekiEngineTime } from '../../../packages/observability/src/http-measurement.ts';
 import { startFusekiMeter } from '../../../scripts/load/measurement.ts';
+
+for (const mode of ['success', 'failure', 'deadline'] as const) {
+  test(`work profile child retains complete stdout and stderr after ${mode}`, async () => {
+    const directory = mkdtempSync(join(process.cwd(), '.temp', 'work-profile-child-'));
+    const infoPath = join(directory, 'info.json');
+    const entry = join(directory, 'child.ts');
+    const stdout = `stdout-start\n${'o'.repeat(8192)}\nstdout-end\n`;
+    const stderr = `stderr-start\n${'e'.repeat(8192)}\nstderr-end\n`;
+    let resultPath: string | undefined;
+    writeFileSync(
+      entry,
+      `import { writeFileSync } from 'node:fs';
+writeFileSync(process.env.WORK_PROFILE_TEST_INFO!, JSON.stringify({
+  pid: process.pid,
+  resultPath: process.env.REZICS_WORK_PROFILE_RESULT,
+}));
+await Bun.write(Bun.stdout, ${JSON.stringify(stdout)});
+await Bun.write(Bun.stderr, ${JSON.stringify(stderr)});
+if (process.env.WORK_PROFILE_TEST_MODE === 'failure') process.exit(7);
+if (process.env.WORK_PROFILE_TEST_MODE === 'deadline') {
+  process.on('SIGTERM', () => {});
+  setInterval(() => {}, 100);
+}
+`,
+    );
+    try {
+      let message = '';
+      let result: Awaited<ReturnType<typeof runWorkProfileChild>> | undefined;
+      try {
+        result = await runWorkProfileChild(entry, {
+          timeoutMs: mode === 'deadline' ? 1000 : 5000,
+          env: { WORK_PROFILE_TEST_INFO: infoPath, WORK_PROFILE_TEST_MODE: mode },
+        });
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      const info = JSON.parse(readFileSync(infoPath, 'utf8')) as {
+        pid: number;
+        resultPath: string;
+      };
+      resultPath = info.resultPath;
+      expect(readFileSync(`${resultPath}.stdout.log`, 'utf8')).toBe(stdout);
+      expect(readFileSync(`${resultPath}.stderr.log`, 'utf8')).toBe(stderr);
+      expect(() => process.kill(info.pid, 0)).toThrow();
+      if (mode === 'success') {
+        expect(message).toBe('');
+        expect(result).toEqual({ stdout, resultPath });
+      } else {
+        expect(result).toBeUndefined();
+        expect(message).toContain(mode === 'failure' ? 'failed (7)' : 'exceeded 1000ms');
+        expect(message).toContain(`stdout retained at ${resultPath}.stdout.log`);
+        expect(message).toContain(`stderr retained at ${resultPath}.stderr.log`);
+        expect(message).toContain('stdout-end');
+        expect(message).toContain('stderr-end');
+        expect(message).not.toContain('stdout-start');
+        expect(message).not.toContain('stderr-start');
+        expect(message.length).toBeLessThan(5000);
+      }
+    } finally {
+      if (resultPath) {
+        rmSync(`${resultPath}.stdout.log`, { force: true });
+        rmSync(`${resultPath}.stderr.log`, { force: true });
+        rmSync(resultPath, { force: true });
+      }
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 10_000);
+}
 
 test('G1024: exported counters detect repeated Fuseki and PostgreSQL work before their zeros are trusted', async () => {
   const profiles: WorkProfile[] = [];

@@ -1,15 +1,63 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   createCorpusBackupDriver,
   type CorpusBackupDriverOptions,
   type ManagedCorpusBackupDriver,
 } from '../../../scripts/load/corpus-backup-driver.ts';
-import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from '../../../scripts/load/compatibility.ts';
+import {
+  compatibleLoadStorage,
+  loadCompatibility,
+  type LoadCompatibility,
+} from '../../../scripts/load/compatibility.ts';
 import { startHomeStack, type HomeStack } from '../../../tests/qa/integration/feed-read-support.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+const stageStarted = performance.now();
+const stageDirectory = join(root, '.temp', 'realm-ranking-corpus', 'stages');
+const stagePath = join(
+  stageDirectory,
+  `${process.env.REZICS_QA_RUN_ID ?? 'build'}-${process.pid}.jsonl`,
+);
+
+/** Keep completed and interrupted stages even if a profile child exceeds its deadline. */
+export async function timeRealmRankingStage<T>(
+  stage: string,
+  operation: () => Promise<T>,
+  details: Record<string, unknown> = {},
+): Promise<T> {
+  const started = performance.now();
+  const record = (outcome: 'started' | 'passed' | 'failed', error?: unknown) => {
+    const entry = {
+      realmRankingStage: stage,
+      ...details,
+      outcome,
+      elapsedMs: Math.round(performance.now() - started),
+      totalMs: Math.round(performance.now() - stageStarted),
+      ...(error === undefined ? {} : { error: String(error) }),
+    };
+    mkdirSync(stageDirectory, { recursive: true, mode: 0o700 });
+    appendFileSync(stagePath, JSON.stringify(entry) + '\n', { mode: 0o600 });
+    console.log(JSON.stringify({ ...entry, stagePath }));
+  };
+  record('started');
+  try {
+    const value = await operation();
+    record('passed');
+    return value;
+  } catch (error) {
+    record('failed', error);
+    throw error;
+  }
+}
 
 /** Bump when the reply recipe or the retained cuts change, not for unrelated code edits. */
 export const REALM_RANKING_CORPUS_VERSION = 'realm-ranking-commands-v2';
@@ -67,29 +115,38 @@ export function realmRankingBuildCommand(): string {
 }
 
 /** How to produce the backups. The ranking test prints this instead of writing storage directly. */
-export function realmRankingCorpusInstructions(reason = 'the backup is not in this checkout'): string {
+export function realmRankingCorpusInstructions(
+  reason = 'the backup is not in this checkout',
+): string {
   const key = realmRankingCorpusKey();
-  return `Realm ranking corpus ${REALM_RANKING_CORPUS_VERSION} (${key}) cannot be restored: ${reason}. `
-    + `Build it once, outside the 600s preparation budget, with \`${realmRankingBuildCommand()}\`. `
-    + `That posts ${REALM_RANKING_FILLERS} Realm replies through the product commands and retains `
-    + `stopped copies at ${REALM_RANKING_SCALES.join(', ')} root threads.`;
+  return (
+    `Realm ranking corpus ${REALM_RANKING_CORPUS_VERSION} (${key}) cannot be restored: ${reason}. ` +
+    `Build it once, outside the 600s preparation budget, with \`${realmRankingBuildCommand()}\`. ` +
+    `That posts ${REALM_RANKING_FILLERS} Realm replies through the product commands and retains ` +
+    `stopped copies at ${REALM_RANKING_SCALES.join(', ')} root threads.`
+  );
 }
 
 function cutReady(size: RealmRankingScale): boolean {
   const directory = join(realmRankingCorpusRoot(), String(size));
-  return existsSync(join(directory, 'backup.json'))
-    && existsSync(join(directory, 'compose.env'))
-    && existsSync(join(directory, 'objects'));
+  return (
+    existsSync(join(directory, 'backup.json')) &&
+    existsSync(join(directory, 'compose.env')) &&
+    existsSync(join(directory, 'objects'))
+  );
 }
 
 export function readRealmRankingCorpus(): RealmRankingCorpusManifest | undefined {
   const path = join(realmRankingCorpusRoot(), 'manifest.json');
   if (!existsSync(path)) return undefined;
   const manifest = JSON.parse(readFileSync(path, 'utf8')) as RealmRankingCorpusManifest;
-  if (manifest.format !== 'realm-ranking-corpus-v1' || manifest.version !== REALM_RANKING_CORPUS_VERSION
-    || manifest.fillers !== REALM_RANKING_FILLERS
-    || !compatibleLoadStorage(manifest.compatibility, loadCompatibility(root))
-    || REALM_RANKING_SCALES.some(size => !manifest.scales.includes(size) || !cutReady(size))) {
+  if (
+    manifest.format !== 'realm-ranking-corpus-v1' ||
+    manifest.version !== REALM_RANKING_CORPUS_VERSION ||
+    manifest.fillers !== REALM_RANKING_FILLERS ||
+    !compatibleLoadStorage(manifest.compatibility, loadCompatibility(root)) ||
+    REALM_RANKING_SCALES.some((size) => !manifest.scales.includes(size) || !cutReady(size))
+  ) {
     return undefined;
   }
   return manifest;
@@ -99,7 +156,7 @@ export function explainUnavailableCorpus(): string {
   const current = loadCompatibility(root);
   const directory = join(root, '.temp', 'realm-ranking-corpus');
   if (!existsSync(directory)) return realmRankingCorpusInstructions();
-  const stale = readdirSync(directory).flatMap(name => {
+  const stale = readdirSync(directory).flatMap((name) => {
     const path = join(directory, name, 'manifest.json');
     if (!existsSync(path)) return [];
     const manifest = JSON.parse(readFileSync(path, 'utf8')) as Partial<RealmRankingCorpusManifest>;
@@ -108,7 +165,9 @@ export function explainUnavailableCorpus(): string {
     return [name];
   });
   if (stale.length) {
-    return realmRankingCorpusInstructions(`retained cut ${stale[0]} does not match this checkout's owner migrations and graph model`);
+    return realmRankingCorpusInstructions(
+      `retained cut ${stale[0]} does not match this checkout's owner migrations and graph model`,
+    );
   }
   return realmRankingCorpusInstructions();
 }
@@ -130,17 +189,28 @@ export function readRealmRankingProgress(): RealmRankingProgress | undefined {
 export function writeRealmRankingProgress(progress: RealmRankingProgress): void {
   const directory = realmRankingCorpusRoot();
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(join(directory, 'progress.json'), JSON.stringify(progress, null, 2) + '\n', { mode: 0o600 });
+  writeFileSync(join(directory, 'progress.json'), JSON.stringify(progress, null, 2) + '\n', {
+    mode: 0o600,
+  });
 }
 
 export function writeRealmRankingManifest(manifest: RealmRankingCorpusManifest): void {
-  writeFileSync(join(realmRankingCorpusRoot(), 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  writeFileSync(
+    join(realmRankingCorpusRoot(), 'manifest.json'),
+    JSON.stringify(manifest, null, 2) + '\n',
+    { mode: 0o600 },
+  );
 }
 
-type RealmRankingDriverOptions = Pick<CorpusBackupDriverOptions, 'sourceRunId' | 'quiesce' | 'smokeRead'>
-  & Partial<Pick<CorpusBackupDriverOptions, 'resumeSource'>>;
+type RealmRankingDriverOptions = Pick<
+  CorpusBackupDriverOptions,
+  'sourceRunId' | 'quiesce' | 'smokeRead'
+> &
+  Partial<Pick<CorpusBackupDriverOptions, 'resumeSource'>>;
 
-export function createRealmRankingCorpusDriver(options: RealmRankingDriverOptions): ManagedCorpusBackupDriver {
+export function createRealmRankingCorpusDriver(
+  options: RealmRankingDriverOptions,
+): ManagedCorpusBackupDriver {
   return createCorpusBackupDriver({
     ...options,
     directory: realmRankingCorpusRoot(),
@@ -156,7 +226,9 @@ export interface RealmRankingRestore {
 }
 
 /** Restore one retained cut into its own QA project, then read it through Main before returning. */
-export async function restoreRealmRankingCorpus(size: RealmRankingScale): Promise<RealmRankingRestore> {
+export async function restoreRealmRankingCorpus(
+  size: RealmRankingScale,
+): Promise<RealmRankingRestore> {
   const started = performance.now();
   const manifest = readRealmRankingCorpus();
   if (!manifest) throw new Error(explainUnavailableCorpus());
@@ -182,16 +254,28 @@ export async function restoreRealmRankingCorpus(size: RealmRankingScale): Promis
         };
         for (const key of Object.keys(environment)) previous.set(key, Bun.env[key]);
         Object.assign(Bun.env, environment);
-        const restoredHome = await startHomeStack(`realm-ranking-restore-${target}`, {
-          projectionStart: 'current',
-          stableMembers: true,
-        });
+        const restoredHome = await timeRealmRankingStage(
+          'startup',
+          () =>
+            startHomeStack(`realm-ranking-restore-${target}`, {
+              projectionStart: 'current',
+              stableMembers: true,
+            }),
+          { threads: size, target },
+        );
         home = restoredHome;
         const realm = manifest.identity.realm;
-        const page = await restoredHome.json<{ items: unknown[] }>(await restoredHome.call(
-          'GET',
-          `/v1/realms/${realm.slice(-36)}/threads?sort=best&window=all&limit=2`,
-        ));
+        const page = await timeRealmRankingStage(
+          'readiness',
+          async () =>
+            restoredHome.json<{ items: unknown[] }>(
+              await restoredHome.call(
+                'GET',
+                `/v1/realms/${realm.slice(-36)}/threads?sort=best&window=all&limit=2`,
+              ),
+            ),
+          { threads: size, target },
+        );
         if (page.items.length !== 2)
           throw new Error(`Restored Realm ranking cut ${size} did not return two threads`);
         return async () => restoredHome.stop();
@@ -211,17 +295,30 @@ export async function restoreRealmRankingCorpus(size: RealmRankingScale): Promis
   const remaining = 600_000 - (performance.now() - started);
   if (remaining <= 0) throw new Error('Realm ranking restore preparation exceeded 600 seconds');
   try {
-    await driver.restore(realmRankingBackupPath(size), target, AbortSignal.timeout(Math.ceil(remaining)));
+    await timeRealmRankingStage(
+      'restore',
+      () =>
+        driver.restore(
+          realmRankingBackupPath(size),
+          target,
+          AbortSignal.timeout(Math.ceil(remaining)),
+        ),
+      { threads: size, target },
+    );
     const elapsedMs = performance.now() - started;
-    if (elapsedMs > 600_000) throw new Error('Realm ranking restore preparation exceeded 600 seconds');
+    if (elapsedMs > 600_000)
+      throw new Error('Realm ranking restore preparation exceeded 600 seconds');
     if (!home) throw new Error('Realm ranking smoke read did not retain its Main stack');
-    console.log(JSON.stringify({ realmRankingRestoreReadyMs: Math.round(elapsedMs), threads: size, target }));
+    console.log(
+      JSON.stringify({ realmRankingRestoreReadyMs: Math.round(elapsedMs), threads: size, target }),
+    );
     return {
       target,
       manifest,
       home,
       elapsedMs,
-      close: () => driver.stop(target),
+      close: () =>
+        timeRealmRankingStage('cleanup', () => driver.stop(target), { threads: size, target }),
     };
   } catch (error) {
     home = undefined;
