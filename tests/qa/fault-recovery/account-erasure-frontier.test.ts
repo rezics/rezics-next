@@ -21,7 +21,7 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
+import { OwnerOperations, type RestoreResources } from '../../../services/main/src/modules/owner/operations.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
@@ -31,7 +31,8 @@ import { GRAPHS, RV, initializeFreshGraph, type WorkActivationEnvironment } from
   '../../../services/main/src/modules/work/activate.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { assertGraphAdmissionOpen, captureGraphRecoveryCoverage,
-  cutoverRestoredGraphLineage, RecoveryHold, releaseRestoredGraphHold } from
+  cutoverRestoredGraphLineage, readRestoredGraphReleaseExpectation, readRestoredGraphReleaseProof,
+  RecoveryHold } from
   '../../../services/main/src/modules/work/restore-lineage.ts';
 import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent } from
   '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
@@ -41,6 +42,9 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from
   '../../../services/main/src/modules/outbox/relay.ts';
 import { retainRecoveryCoverageHead } from
   '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
+import { retainErasureCoverage } from '../../../services/main/src/modules/erasure/reconcile.ts';
+import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
+import { settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
@@ -293,7 +297,8 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
       const restoredAccount = restored('account');
       const restoredAccess = restored('access');
       const restoredContent = restored('content');
-      pools.push(restoredAccount, restoredAccess, restoredContent);
+      const restoredRelay = restored('relay');
+      pools.push(restoredAccount, restoredAccess, restoredContent, restoredRelay);
       let recovering = true;
       for (let attempt = 0; attempt < 100 && recovering; attempt += 1) {
         recovering = (await restoredAccount.query<{ recovering: boolean }>(
@@ -301,7 +306,73 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
         if (recovering) await Bun.sleep(100);
       }
       expect(recovering).toBe(false);
-      return { account: restoredAccount, access: restoredAccess, content: restoredContent };
+      return { account: restoredAccount, access: restoredAccess, content: restoredContent,
+        relay: restoredRelay };
+    };
+
+    type RestoreAuthority = NonNullable<RestoreResources['erasures']>['authority'];
+    const restoreOperator = (owners: { account: Pool; access: Pool; content: Pool; relay?: Pool },
+      lineage: { dataEpoch: string; routingEpoch: string }, authority?: RestoreAuthority) => {
+      const resources: RestoreResources = {
+        accountPool: owners.account,
+        accessPool: owners.access,
+        contentPool: owners.content,
+        ...(owners.relay ? { restoredRelayPool: owners.relay } : {}),
+        objectStore,
+        hmacKey: recoveryKey,
+        ...(authority ? { erasures: {
+          authority,
+          signingKey: compose.FUSEKI_TITLE_ADMISSION_KEY!,
+          maintenance: heldErasureMaintenanceClient(apps.FUSEKI_URL!,
+            compose.FUSEKI_MAINTENANCE_TOKEN!),
+          originalSource: 'retained-native-event' as const,
+        } } : {}),
+      };
+      const operations = new OwnerOperations(relay,
+        { fuseki, lineage, objectDirectory: objectStore.directory }, resources);
+      const operatorApp = createMainApp(fuseki, { ownerOperations: operations,
+        account: { verify: async (request: Request, scopes: readonly string[]) => {
+          if (request.headers.get('authorization') !== bearer || scopes[0] !== 'owner:operate') {
+            throw new Error('operator assertion denied');
+          }
+          return { issuer, subject: unaffected.id };
+        } }, access: new AccessAdmissionRegistry(owners.access) } as MainWorkDependencies);
+      const request = (key: string, sealedCoverage: string, sealedSets: string[] = []) =>
+        operatorApp.handle(new Request('http://main.local/v1/owners/reconciliations', {
+          method: 'POST', headers: { authorization: bearer, 'content-type': 'application/json',
+            'idempotency-key': key },
+          body: JSON.stringify({ profile: 'owner-reconciliation-v1', kind: 'restore',
+            sealedCoverage, sealedDeletionSets: sealedSets }),
+        }));
+      return { request };
+    };
+    const expectHeldRestore = async (input: { response: Response; key: string; access: Pool;
+      lineage: { dataEpoch: string; routingEpoch: string }; reason: string; owner: string }) => {
+      expect(input.response.status).toBe(201);
+      expect(await input.response.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+      const operationId = `owner:reconcile:${input.key}`;
+      const held = await relay.query<{ state: string; hold_reason: string | null }>(
+        'SELECT state, hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1',
+        [operationId]);
+      expect(held.rows).toEqual([{ state: 'held', hold_reason: input.reason }]);
+      const findings = await relay.query<{ owner: string; item_kind: string;
+        item_ref: string; disposition: string }>(`SELECT owner, item_kind, item_ref, disposition
+          FROM relay.owner_reconciliation_item WHERE reconciliation_id = (
+            SELECT id FROM relay.owner_reconciliation WHERE operation_id = $1)`, [operationId]);
+      expect(findings.rows).toEqual([{ owner: input.owner, item_kind: 'receipt',
+        item_ref: 'urn:rezics:dataset:product', disposition: 'conflict' }]);
+      expect((await input.access.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open).toBe(false);
+      await expect(assertGraphAdmissionOpen(fuseki, input.lineage))
+        .rejects.toBeInstanceOf(RecoveryHold);
+    };
+    const expectNativeRelease = async (lineage: { dataEpoch: string; routingEpoch: string },
+      coverage: Awaited<ReturnType<typeof capture>>) => {
+      const expectation = await readRestoredGraphReleaseExpectation(fuseki, lineage, coverage);
+      const proof = await readRestoredGraphReleaseProof(fuseki, expectation);
+      expect(proof).toMatchObject({ expectation,
+        receipt: { id: expect.stringMatching(/^urn:rezics:receipt:restore-release:/),
+          dataEpoch: lineage.dataEpoch, sequence: '0' } });
     };
 
     // A source backup predating deletion is a readable but unsafe recovery cut.
@@ -310,6 +381,14 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     expect(before).toMatchObject({ priorSequence: '2',
       content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(before.content?.graphReferencesCount)).toBeGreaterThan(0);
+    const beforeEnvelope = JSON.stringify(sealRecoveryPayload(
+      before, recoveryKey, 'graph-recovery-coverage'));
+    await retainRecoveryCoverageHead(relay, beforeEnvelope, recoveryKey);
+    const beforeErasureEpoch = await retainErasureCoverage(relay, consumerBefore);
+    const retainedBefore = await relay.query<{ erasure_epoch: string | null }>(
+      'SELECT erasure_epoch::text AS erasure_epoch FROM relay.recovery_coverage_head WHERE consumer = $1',
+      [consumerBefore]);
+    expect(retainedBefore.rows[0]?.erasure_epoch).toBe(beforeErasureEpoch);
     const firstLineage = { dataEpoch: randomUUID(), routingEpoch: '2' };
     await cutoverRestoredGraphLineage(fuseki, {
       prior: { ...initial, sequence: publication.graphSequence }, next: firstLineage });
@@ -317,13 +396,22 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     execFileSync('pg_verifybackup', ['--no-parse-wal', oldBackup],
       { cwd: state, timeout: 15_000 });
     const old = await restore(oldBackup, 'older');
-    const beforeEnvelope = JSON.stringify(sealRecoveryPayload(
-      before, recoveryKey, 'graph-recovery-coverage'));
-    await retainRecoveryCoverageHead(relay, beforeEnvelope, recoveryKey);
-    await releaseRestoredGraphHold(fuseki, old.access, relay, firstLineage, {
-      sealedCoverage: beforeEnvelope, hmacKey: recoveryKey,
-      accountPool: old.account, contentPool: old.content, objectStore });
-    await releaseAccessRecoveryFence(old.access, firstFence);
+    const missingCaptureKey = `missing-current-capture-${randomUUID()}`;
+    const unconfigured = restoreOperator(old, firstLineage);
+    await expectHeldRestore({ response: await unconfigured.request(missingCaptureKey, beforeEnvelope),
+      key: missingCaptureKey, access: old.access, lineage: firstLineage,
+      reason: 'retained erasure reconciliation lacks the retained current capture', owner: 'relay' });
+    const oldRestoreKey = `before-delete-restore-${randomUUID()}`;
+    const oldOperator = restoreOperator(old, firstLineage,
+      { sealedCoverage: beforeEnvelope, hmacKey: recoveryKey });
+    const oldResponse = await oldOperator.request(oldRestoreKey, beforeEnvelope);
+    expect(oldResponse.status).toBe(201);
+    expect(await oldResponse.json()).toMatchObject({ state: 'reconciled', disposition: 'matched' });
+    expect((await old.access.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0])
+      .toEqual({ open: true, generation: (BigInt(firstFence) + 1n).toString() });
+    await expect(assertGraphAdmissionOpen(fuseki, firstLineage)).resolves.toBeUndefined();
+    await expectNativeRelease(firstLineage, before);
     await releaseAccessRecoveryFence(access, firstFence);
     expect((await publicGraph()).boolean).toBe(true);
     const oldPublicContent = new ContentCore(old.content);
@@ -362,6 +450,20 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     expect(after).toMatchObject({ priorSequence: '0',
       content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(after.content?.graphReferencesCount)).toBeGreaterThan(0);
+    const envelope = JSON.stringify(sealRecoveryPayload(
+      after, recoveryKey, 'graph-recovery-coverage'));
+    await retainRecoveryCoverageHead(relay, envelope, recoveryKey);
+    const afterErasureEpoch = await retainErasureCoverage(relay, consumerAfter);
+    const retainedAfter = await relay.query<{ erasure_epoch: string | null }>(
+      'SELECT erasure_epoch::text AS erasure_epoch FROM relay.recovery_coverage_head WHERE consumer = $1',
+      [consumerAfter]);
+    expect(retainedAfter.rows[0]?.erasure_epoch).toBe(afterErasureEpoch);
+    expect(await settleAccountErasures(relay, access, accountOwner, 100, contentPool)).toBe(1);
+    const settledAccountErasure = await relay.query<{ stage: string; suppression_status: string }>(
+      `SELECT stage, suppression_status FROM relay.erasure
+       WHERE kind = 'account' AND account_issuer = $1 AND account_subject = $2`, [issuer, deleted.id]);
+    expect(settledAccountErasure.rows).toEqual([{ stage: 'inventory_complete',
+      suppression_status: 'suppressed' }]);
     const set = await captureDeletionRecoverySet(accountOwner, accessOwner, issuer, deleted.id);
     const sealedSet = JSON.stringify(sealRecoveryPayload(set,
       recoveryKey, 'deletion-recovery-set'));
@@ -371,6 +473,9 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const finalBackup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', finalBackup],
       { cwd: state, timeout: 15_000 });
+    // Release the source's capture fence after its signed owner cut is backed up.
+    // The restored candidate retains its own fence until owner composition releases it.
+    await releaseAccessRecoveryFence(access, finalFence);
     const current = await restore(finalBackup, 'current');
     const currentPublicContent = new ContentCore(current.content);
     expect((await currentPublicContent.readExactBatch([publicRevision],
@@ -396,60 +501,61 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     await expect(assertDeletionRecoverySet(current.account, current.access, set))
       .resolves.toBeUndefined();
 
-    const envelope = JSON.stringify(sealRecoveryPayload(
-      after, recoveryKey, 'graph-recovery-coverage'));
-    await retainRecoveryCoverageHead(relay, envelope, recoveryKey);
     await engageAccessRecoveryFence(old.access);
-    await expect(releaseRestoredGraphHold(fuseki, old.access, relay, finalLineage, {
-      sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: current.account, contentPool: current.content, objectStore,
-      deletions: { accountPool: current.account, hmacKey: recoveryKey,
-        sealedSets: [sealedSet] } })).rejects.toThrow('Access outbox differs from recovery coverage');
-    await expect(releaseRestoredGraphHold(fuseki, current.access, relay, finalLineage, {
-      sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: old.account, contentPool: current.content, objectStore,
-      deletions: { accountPool: old.account, hmacKey: recoveryKey,
-        sealedSets: [sealedSet] } })).rejects.toThrow('Account WAL differs from recovery coverage');
-    await expect(releaseRestoredGraphHold(fuseki, current.access, relay, finalLineage, {
-      sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: current.account, contentPool: current.content, objectStore,
-    })).rejects.toThrow('Account deletion recovery evidence is incomplete');
+    const accessMismatchKey = `access-mismatch-${randomUUID()}`;
+    const accessMismatchOperator = restoreOperator({ account: current.account, access: old.access,
+      content: current.content, relay: current.relay }, finalLineage,
+    { sealedCoverage: envelope, hmacKey: recoveryKey });
+    await expectHeldRestore({ response: await accessMismatchOperator.request(
+      accessMismatchKey, envelope, [sealedSet]), key: accessMismatchKey, access: old.access,
+      lineage: finalLineage, reason: 'Access outbox differs from recovery coverage', owner: 'access' });
+
+    const accountWalMismatchKey = `account-wal-mismatch-${randomUUID()}`;
+    const accountWalMismatchOperator = restoreOperator({ account: old.account, access: current.access,
+      content: current.content, relay: current.relay }, finalLineage,
+    { sealedCoverage: envelope, hmacKey: recoveryKey });
+    await expectHeldRestore({ response: await accountWalMismatchOperator.request(
+      accountWalMismatchKey, envelope, [sealedSet]), key: accountWalMismatchKey,
+      access: current.access, lineage: finalLineage,
+      reason: 'Account WAL differs from recovery coverage', owner: 'account' });
+
+    const missingDeletionKey = `missing-deletion-evidence-${randomUUID()}`;
+    const missingDeletionOperator = restoreOperator(current, finalLineage,
+      { sealedCoverage: envelope, hmacKey: recoveryKey });
+    const held = await missingDeletionOperator.request(missingDeletionKey, envelope);
+    await expectHeldRestore({ response: held, key: missingDeletionKey, access: current.access,
+      lineage: finalLineage, reason: 'Account deletion recovery evidence is incomplete',
+      owner: 'account' });
     await expect(assertGraphAdmissionOpen(fuseki, finalLineage))
       .rejects.toBeInstanceOf(RecoveryHold);
-    const operator = new OwnerOperations(relay, { fuseki, lineage: finalLineage,
-      objectDirectory: objectStore.directory }, { accountPool: current.account,
-      accessPool: current.access, contentPool: current.content,
-      objectStore, hmacKey: recoveryKey });
-    const operatorApp = createMainApp(fuseki, { ownerOperations: operator,
-      account: { verify: async (request: Request, scopes: readonly string[]) => {
-        if (request.headers.get('authorization') !== bearer || scopes[0] !== 'owner:operate') {
-          throw new Error('operator assertion denied');
-        }
-        return { issuer, subject: unaffected.id };
-      } }, access: new AccessAdmissionRegistry(current.access) } as MainWorkDependencies);
     const restoreKey = `deletion-restore-${randomUUID()}`;
-    const restoreRequest = (sets: string[], key = restoreKey) => operatorApp.handle(new Request(
-      'http://main.local/v1/owners/reconciliations', { method: 'POST',
-        headers: { authorization: bearer, 'content-type': 'application/json',
-          'idempotency-key': key },
-        body: JSON.stringify({ profile: 'owner-reconciliation-v1', kind: 'restore',
-          sealedCoverage: envelope, sealedDeletionSets: sets }) }));
-    const held = await restoreRequest([], `missing-deletion-${randomUUID()}`);
-    expect(held.status).toBe(201);
-    expect(await held.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+    const operator = restoreOperator(current, finalLineage,
+      { sealedCoverage: envelope, hmacKey: recoveryKey });
+    const restoreRequest = (sets: string[], key = restoreKey) => operator.request(key, envelope, sets);
     const restoredResponse = await restoreRequest([sealedSet]);
     expect(restoredResponse.status).toBe(201);
     const restoredResult = await restoredResponse.json() as { id: string; state: string;
       disposition: string };
     expect(restoredResult).toMatchObject({ state: 'reconciled', disposition: 'matched' });
     expect((await restoreRequest([sealedSet])).status).toBe(200);
+    expect((await current.access.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0])
+      .toEqual({ open: true, generation: (BigInt(finalFence) + 1n).toString() });
+    await expectNativeRelease(finalLineage, after);
+    const releaseBindings = await relay.query<{ owner: string; item_kind: string;
+      item_ref: string; disposition: string }>(`SELECT owner, item_kind, item_ref, disposition
+        FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1
+          AND item_ref LIKE 'restore-release:%'`, [restoredResult.id]);
+    expect(releaseBindings.rows).toHaveLength(1);
+    expect(releaseBindings.rows[0]).toMatchObject({ owner: 'access', item_kind: 'authority_fence',
+      disposition: 'matched' });
     const deletionCut = await relay.query<{ owner: string; status: string }>(
       'SELECT owner, status FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1',
       [restoredResult.id]);
+    expect(deletionCut.rows).toHaveLength(6);
     expect(new Set(deletionCut.rows.map(row => row.owner))).toEqual(new Set([
       'account', 'access', 'content', 'graph', 'object', 'relay']));
     expect(deletionCut.rows.every(row => row.status === 'matched')).toBe(true);
-    await releaseAccessRecoveryFence(current.access, finalFence);
     await expect(assertGraphAdmissionOpen(fuseki, finalLineage)).resolves.toBeUndefined();
     expect(await privateRows(current.account, deleted.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
     expect((await publicGraph()).boolean).toBe(true);
