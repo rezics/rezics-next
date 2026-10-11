@@ -9,6 +9,7 @@ import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing
   from '../../../content/src/comments.ts';
 import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from '../infrastructure/fuseki.ts';
+import { profileViolation } from '../infrastructure/profile-violation.ts';
 import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionLockBusy, AdmissionUnavailable }
   from '../modules/access/admission.ts';
 import {
@@ -132,8 +133,14 @@ import { WikiRejected } from '../modules/wiki/errors.ts';
 export class LibraryImportTooLarge extends Error {}
 export class LibraryImportTimedOut extends Error {}
 
-export function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
-  return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
+interface ProblemDetails {
+  detail?: string;
+  validation?: { path: string | null; constraint: string | null };
+}
+
+export function problem(status: number, code: string, title: string, headers?: HeadersInit,
+  details?: ProblemDetails): Response {
+  return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code, ...details }, {
     status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store', ...headers },
   });
 }
@@ -367,7 +374,14 @@ export function typedRefusal(error: unknown): Response | undefined {
   }
   if (error instanceof CommandRejected) {
     if (error.result.status === 'invalid') {
-      return problem(400, 'invalid_request', 'Persisted profile validation rejected the request');
+      const validation = profileViolation(error.result.report);
+      if (validation.path || validation.constraint) {
+        const detail = [validation.path, validation.constraint]
+          .filter((part): part is string => part !== null).join(' ').slice(0, 512);
+        return problem(400, 'invalid_request', 'Command validation rejected the request', undefined,
+          { detail, validation });
+      }
+      return problem(400, 'invalid_request', 'Command validation rejected the request');
     }
     if (error.result.status === 'conflict') {
       return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');

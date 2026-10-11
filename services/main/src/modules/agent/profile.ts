@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { profileViolation as agentProfileViolation } from '../../infrastructure/profile-violation.ts';
+export { profileViolation as agentProfileViolation } from '../../infrastructure/profile-violation.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { CommandOutcomeUnknown, type CommandResult } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -18,26 +20,6 @@ export class AgentProfileStale extends Error {
 export class AgentProfileConflict extends Error {}
 export class AgentProfileValidationFailed extends Error {}
 export class AgentProfileUnavailable extends Error {}
-
-const violationIri = (text: string, pattern: RegExp): string | null => {
-  pattern.lastIndex = 0;
-  return pattern.exec(text)?.[1] ?? null;
-};
-
-/** Path and constraint only. Report values and focus labels stay out of the problem and the log. */
-export function agentProfileViolation(report: unknown): { path: string | null; constraint: string | null } {
-  if (typeof report !== 'string' || !report) return { path: null, constraint: null };
-  const path = violationIri(report, /sh:resultPath\s+<([^>\s]+)>/g)
-    ?? violationIri(report, /<http:\/\/www\.w3\.org\/ns\/shacl#resultPath>\s+<([^>\s]+)>/g);
-  const component = violationIri(report, /sh:sourceConstraintComponent\s+<([^>\s]+)>/g)
-    ?? violationIri(report, /<http:\/\/www\.w3\.org\/ns\/shacl#sourceConstraintComponent>\s+<([^>\s]+)>/g);
-  const line = report.split('\n').map(item => item.trim()).find(item => item
-    && !item.startsWith('sh:resultPath') && !item.startsWith('sh:sourceConstraintComponent')
-    && !item.startsWith('<') && !item.includes('"'));
-  const policy = line && line.length <= 180 && /^[A-Za-z0-9][A-Za-z0-9 :._/-]*$/.test(line)
-    ? (line.split(/:\s+(?:https?:|urn:)/)[0] ?? line).trim() : null;
-  return { path, constraint: component ?? (policy || null) };
-}
 
 function validationDetail(report: unknown): string {
   const violation = agentProfileViolation(report);

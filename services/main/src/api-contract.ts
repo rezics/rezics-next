@@ -86,7 +86,12 @@ export const pendingOperation = t.Object({
 
 export function problemResult<const Status extends number>(status: Status) {
   return t.Object({ type: t.String(), title: t.String(), status: t.Literal(status),
-    code: t.String(), currentHead: t.Optional(t.Nullable(t.String())) });
+    code: t.String(), currentHead: t.Optional(t.Nullable(t.String())),
+    detail: t.Optional(t.String({ maxLength: 512 })),
+    validation: t.Optional(t.Object({
+      path: t.Nullable(t.String({ maxLength: 180 })),
+      constraint: t.Nullable(t.String({ maxLength: 180 })),
+    }, { additionalProperties: false })) });
 }
 
 export const phraseMatch = t.Object({
