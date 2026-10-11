@@ -411,6 +411,7 @@ async function runShardWork(
   // qualification keeps its closed raw-update endpoint in every storage mode.
   const rawUpdate = persistent && !files.some(file => commandOnlyIntegrationFiles.has(file));
   if (rawUpdate) rawUpdateProjects.add(projectRunId);
+  // Only integration stacks need the derived raw-SPARQL classification; keep that scan behind tier selection.
   const admitsWorkScope = tier === 'integration' && integrationStackAdmitsWorkScope(files, rawUpdate);
   if (admitsWorkScope) environment.REZICS_FUSEKI_ASSEMBLER = exclusiveWorkScopeAssembler;
   const stackArgs = ['--profile', 'qa', '--run-id', projectRunId,
