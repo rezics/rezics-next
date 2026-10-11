@@ -31,4 +31,9 @@ export const cases = defineCases('docs/testing/recipes.md', [
     scenario: 'Withdraw source after human confirmation',
     requiredResult: 'Independent native support survives.',
   },
+  {
+    id: 'RECIPE07',
+    scenario: 'Publish an own Recipe Structure without notes',
+    requiredResult: 'Remain private until admitted publication; anonymous readers see only the exact approved Structure, while drafts, notes, targets and media stay private through edit, withdrawal and recovery.',
+  },
 ]);

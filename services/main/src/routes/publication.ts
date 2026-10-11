@@ -13,6 +13,7 @@ import { organizationRejectionBody, organizationRejectionResult }
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri, lit } from '../modules/work/activate.ts';
 import { selectAdmittedMainDefault } from '../modules/work/select-main-admitted.ts';
+import { changeAdmittedWorkStructurePublication } from '../modules/work/structured-publication-admitted.ts';
 import { selectAdmittedRealmLocal } from '../modules/work/select-realm-admitted.ts';
 import { rejectAdmittedRealmLocal } from '../modules/work/reject-realm-admitted.ts';
 import { realmSelectionSlotIri } from '../modules/work/select-realm.ts';
@@ -61,8 +62,97 @@ const realmNativeVariantSelection = t.Union([
   }),
 ]);
 
+const workStructurePublicationWriteResult = t.Object({
+  profile: t.Literal('work-structure-publication-v1'),
+  operation: t.Union([t.Literal('publish'), t.Literal('withdraw')]),
+  work: t.String(),
+  publicationDecision: t.String(),
+  mainVersion: t.Optional(t.String()),
+  structure: t.Optional(t.String()),
+  structureProfile: t.Optional(t.String()),
+  structureRevision: t.Optional(t.String()),
+  selectedGeneration: t.Optional(t.String()),
+  sourceRoot: t.Optional(t.String()),
+  predecessor: t.Nullable(t.String()),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
+  replayed: t.Boolean(),
+});
+
+async function structuredPublicationAllowed(work: MainWorkDependencies, workId: string): Promise<boolean> {
+  const governance = work.governance?.store;
+  if (!governance) throw new AdmissionUnavailable('publication governance owner is unavailable');
+  try {
+    const parents = await work.environment.fuseki.query(`PREFIX schema: <https://schema.org/>
+      SELECT DISTINCT ?parent WHERE { GRAPH <urn:rezics:graph:current> {
+        ${iri(workId)} schema:isPartOf ?parent .
+      } } LIMIT 2`);
+    const rows = parents.results?.bindings ?? [];
+    if (rows.length > 1 || rows.some(row => !row.parent?.value)) {
+      throw new AdmissionUnavailable('publication parent authority is ambiguous');
+    }
+    const resources = [workId, ...(rows[0]?.parent?.value ? [rows[0].parent.value] : [])];
+    const targets = await Promise.all(resources.flatMap(resource =>
+      (['publication', 'structure', 'record'] as const).map(component =>
+        governance.readEnforcement({ owner: 'graph', resource, component }))));
+    return !targets.flat().some(fence => fence.state === 'restricted' && fence.effect === 'publication');
+  } catch (error) {
+    if (error instanceof AdmissionUnavailable) throw error;
+    throw new AdmissionUnavailable('publication governance owner is unavailable');
+  }
+}
+
 export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/work-publications', {
+      body: t.Union([
+        t.Object({
+          profile: t.Literal('work-structure-publication-v1'),
+          operation: t.Literal('publish'),
+          work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          expectedWorkHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          expectedMainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          structure: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          expectedStructureHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          expectedPublicationHead: t.Union([
+            t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
+          ]),
+          disclosure: t.Literal('public'),
+          rightsBasis: t.Literal('original-contribution'),
+        }, { additionalProperties: false }),
+        t.Object({
+          profile: t.Literal('work-structure-publication-v1'),
+          operation: t.Literal('withdraw'),
+          work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          expectedPublicationHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        }, { additionalProperties: false }),
+      ]),
+      response: { 200: workStructurePublicationWriteResult, 201: workStructurePublicationWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await changeAdmittedWorkStructurePublication(work.environment, work.account,
+          work.access, request, { ...body, idempotencyKey }, () =>
+          structuredPublicationAllowed(work, body.work));
+        return Response.json({ profile: 'work-structure-publication-v1', operation: body.operation,
+          work: receipt.work, publicationDecision: receipt.publicationDecision!,
+          ...(receipt.mainVersion ? { mainVersion: receipt.mainVersion } : {}),
+          ...(receipt.structure ? { structure: receipt.structure } : {}),
+          ...(receipt.structureProfile ? { structureProfile: receipt.structureProfile } : {}),
+          ...(receipt.structureRevision ? { structureRevision: receipt.structureRevision } : {}),
+          ...(receipt.selectedGeneration ? { selectedGeneration: receipt.selectedGeneration } : {}),
+          ...(receipt.sourceRoot ? { sourceRoot: receipt.sourceRoot } : {}),
+          predecessor: receipt.predecessor ?? null,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
+          replayed: receipt.replayed }, { status: receipt.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .post('/v1/publication-selections', {
       body: t.Union([t.Object({
         profile: t.Literal('main-default-selection-v1'),
@@ -652,4 +742,6 @@ export const openApiOperations = {
   '/v1/publication-rejections': { post: { exposure: 'public', rateLimitFamily: 'write' } },
   '/v1/organization-publication-rejections': { post: { exposure: 'platform:organization-authority', rateLimitFamily: 'write' } },
   '/v1/publication-selections': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/work-publications': { post: { exposure: 'public', rateLimitFamily: 'write',
+    bearer: true, idempotencyKey: true } },
 } as const;

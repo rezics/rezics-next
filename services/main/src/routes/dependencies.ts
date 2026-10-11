@@ -192,6 +192,7 @@ export interface MainWorkDependencies {
     & Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'withRealmPolicy'>>
     & Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'realmHistoryFloor'>>
+    & Partial<Pick<AccessAdmissionRegistry, 'admittedActingSubject'>>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
       | 'publicRealmCount' | 'realmDirectory'
       | 'withWorkEditAuthority'

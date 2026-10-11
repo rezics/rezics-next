@@ -29,6 +29,7 @@ type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'work-add
   | 'work-address-disposition' | 'translation-link'
   | 'work-derivation' | 'fixed-release' | 'contribution-draft' | 'contribution-edit'
   | 'contribution-publication' | 'publication-selection' | 'space-create'
+  | 'work-publication'
   | 'realm-adoption' | 'realm-rejection' | 'classification-context'
   | 'classification-proposition' | 'classification-decision' | 'rating-context'
   | 'rating-policy' | 'semantic-change-bulk'

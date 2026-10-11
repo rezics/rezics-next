@@ -24,6 +24,7 @@ import { sealRatingContextAdmission } from '../rating/context.ts';
 import { sealRatingPolicyAdmission } from '../rating/policy.ts';
 import { sealStandingRatingAdmission } from '../rating/observation.ts';
 import { sealPackageRecommendationAdmission } from '../package/release-recommendation.ts';
+import { sealWorkStructurePublicationAdmission } from './structured-publication.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -78,6 +79,8 @@ export async function strongRevokeWorkScope(
               ? await sealTextPublicationAdmission(env, admission)
             : admission.action === 'publication.select'
               ? await sealMainSelectionAdmission(env, admission)
+              : admission.action === 'work.publish' || admission.action === 'work.withdraw-publication'
+                ? await sealWorkStructurePublicationAdmission(env, admission)
             : admission.action === 'space.create'
               ? await sealRealmSpaceAdmission(env, admission)
             : admission.action === 'publication.adopt'
@@ -155,6 +158,8 @@ export async function strongRevokeWorkPrincipal(
               ? await sealTextPublicationAdmission(env, admission)
             : admission.action === 'publication.select'
               ? await sealMainSelectionAdmission(env, admission)
+              : admission.action === 'work.publish' || admission.action === 'work.withdraw-publication'
+                ? await sealWorkStructurePublicationAdmission(env, admission)
             : admission.action === 'space.create'
               ? await sealRealmSpaceAdmission(env, admission)
             : admission.action === 'publication.adopt'
