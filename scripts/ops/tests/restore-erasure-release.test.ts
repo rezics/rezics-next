@@ -145,25 +145,29 @@ test('operator restore default and incomplete adapters hold before reading or cr
 
 test('operator finish observes both owner releases before enabling logins, using exact bigint generations', async () => {
   const fixture = restored();
+  const startedAt = Date.now();
   await fixture.finish();
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
     'membership-status',
     'membership-prepare',
     'membership-status',
-    'graph-release-observation',
-    'access-release-observation',
     'advance-owner-epochs',
     'enable-owner-logins',
   ]);
   expect(fixture.preparationCalls).toHaveLength(1);
   expect(fixture.preparationCalls[0]).toMatchObject({ dataEpoch, routingEpoch });
   expect(Number.isSafeInteger(fixture.preparationCalls[0]?.deadline)).toBe(true);
+  expect(fixture.preparationCalls[0]!.deadline).toBeGreaterThanOrEqual(startedAt + 540_000);
+  expect(fixture.preparationCalls[0]!.deadline).toBeLessThanOrEqual(Date.now() + 540_000);
   expect(Object.keys(fixture.context.budget.phases)).toEqual([
     'owner-reconciliation-api',
+    'release-observation',
     'membership-preparation',
-    'release-observation-and-logins',
+    'epoch-advancement-and-logins',
   ]);
 });
 
@@ -174,6 +178,8 @@ test('operator finish confirms an already complete native membership proof witho
   await fixture.finish();
   await fixture.finish();
   expect(fixture.events.filter((event) => event === 'membership-status')).toHaveLength(2);
+  expect(fixture.events.filter((event) => event === 'graph-release-observation')).toHaveLength(2);
+  expect(fixture.events.filter((event) => event === 'access-release-observation')).toHaveLength(2);
   expect(fixture.events).not.toContain('membership-prepare');
   expect(fixture.events).toContain('enable-owner-logins');
 });
@@ -188,12 +194,12 @@ test('operator finish resumes native membership progress across bounded turns', 
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
-    'membership-status',
-    'membership-prepare',
-    'membership-prepare',
-    'membership-status',
     'graph-release-observation',
     'access-release-observation',
+    'membership-status',
+    'membership-prepare',
+    'membership-prepare',
+    'membership-status',
     'advance-owner-epochs',
     'enable-owner-logins',
   ]);
@@ -219,6 +225,8 @@ test('operator finish refuses release when membership status still needs prepara
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
     'membership-status',
     'membership-prepare',
     'membership-status',
@@ -235,6 +243,8 @@ test.each([
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
     'membership-status',
   ]);
   expect(fixture.events).not.toContain('enable-owner-logins');
@@ -246,10 +256,12 @@ test.each(['conflict', 'invalid', 'unknown-profile', 'deadline'] as const)(
     const fixture = restored({
       membership: { preparations: [{ status }], },
     });
-    await expect(fixture.finish()).rejects.toThrow(`Native membership preparation was refused (${status})`);
+    await expect(fixture.finish()).rejects.toThrow(`Fuseki command ${status}`);
     expect(fixture.events).toEqual([
       'independent-frontier-and-source-check',
       'authenticated-reconciliation',
+      'graph-release-observation',
+      'access-release-observation',
       'membership-status',
       'membership-prepare',
     ]);
@@ -262,30 +274,41 @@ test('partial native membership progress cannot outlive the restore deadline', a
     membership: { preparations: [membershipResult(false), membershipResult(true)] },
   });
   let now = 0;
-  fixture.context.budget = new RecoveryBudget(() => {
-    now += 70_000;
-    return now;
-  });
+  fixture.context.budget = new RecoveryBudget(() => now);
+  const prepare = fixture.context.fuseki.membershipPrepare.bind(fixture.context.fuseki);
+  fixture.context.fuseki.membershipPrepare = async (input, signal) => {
+    const result = await prepare(input, signal);
+    now = 600_000;
+    return result;
+  };
   await expect(fixture.finish()).rejects.toThrow('600-second budget');
   expect(fixture.preparationCalls).toHaveLength(1);
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
     'membership-status',
     'membership-prepare',
   ]);
   expect(fixture.events).not.toContain('enable-owner-logins');
 });
 
-test('a stale restored membership epoch stops before release observation and login', async () => {
-  const fixture = restored({ membership: { preparations: [{ status: 'guard-unmatched' }] } });
-  await expect(fixture.finish()).rejects.toThrow('Restored membership preparation lineage changed');
-  expect(fixture.events).toEqual([
+test('an unmatched restored membership epoch exhausts bounded preparation without login', async () => {
+  const fixture = restored({
+    membership: {
+      preparations: Array.from({ length: 256 }, () => ({ status: 'guard-unmatched' })),
+    },
+  });
+  await expect(fixture.finish()).rejects.toThrow('exceeded its recovery deadline or turn bound');
+  expect(fixture.events.slice(0, 4)).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
-    'membership-status',
-    'membership-prepare',
+    'graph-release-observation',
+    'access-release-observation',
   ]);
+  expect(fixture.preparationCalls).toHaveLength(256);
+  expect(fixture.events).not.toContain('advance-owner-epochs');
   expect(fixture.events).not.toContain('enable-owner-logins');
 });
 
@@ -308,6 +331,8 @@ test('lost native acknowledgment keeps logins held and the next finish resumes p
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
     'membership-status',
     'membership-prepare',
     'membership-prepare',
@@ -319,11 +344,11 @@ test('lost native acknowledgment keeps logins held and the next finish resumes p
   expect(fixture.events.slice(secondFinishStart)).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
     'membership-status',
     'membership-prepare',
     'membership-status',
-    'graph-release-observation',
-    'access-release-observation',
     'advance-owner-epochs',
     'enable-owner-logins',
   ]);
@@ -358,11 +383,10 @@ test('a matched response cannot bypass the restored graph hold or a different li
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
-    'membership-status',
-    'membership-prepare',
-    'membership-status',
     'graph-release-observation',
   ]);
+  expect(fixture.preparationCalls).toHaveLength(0);
+  expect(fixture.events).not.toContain('membership-status');
 });
 
 test.each([
@@ -380,12 +404,11 @@ test.each([
     expect(fixture.events).toEqual([
       'independent-frontier-and-source-check',
       'authenticated-reconciliation',
-      'membership-status',
-      'membership-prepare',
-      'membership-status',
       'graph-release-observation',
       'access-release-observation',
     ]);
+    expect(fixture.preparationCalls).toHaveLength(0);
+    expect(fixture.events).not.toContain('membership-status');
   },
 );
 
