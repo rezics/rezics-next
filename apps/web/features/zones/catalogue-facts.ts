@@ -93,16 +93,26 @@ async function statementPages(id: string): Promise<Loaded<StatementPage[]>> {
   if (!projection.ok) return projection;
   const section = sectionOf(projection.data, 'statements');
   if (!section) return { ok: true, data: [] };
+  return readCatalogueStatementPages(cursor => readStatements(section, cursor));
+}
+
+/** A bounded facts read succeeds only after Main has ended its continuation. */
+export async function readCatalogueStatementPages(
+  readPage: (cursor?: string) => Promise<Loaded<StatementPage>>,
+): Promise<Loaded<StatementPage[]>> {
   const pages: StatementPage[] = [];
+  const seen = new Set<string>();
   let cursor: string | undefined;
   for (let page = 0; page < 4; page++) {
-    const read = await readStatements(section, cursor);
+    const read = await readPage(cursor);
     if (!read.ok) return read;
     pages.push(read.data);
-    if (!read.data.nextCursor) break;
+    if (!read.data.nextCursor) return { ok: true, data: pages };
+    if (seen.has(read.data.nextCursor)) return { ok: false, failure: 'unavailable' };
+    seen.add(read.data.nextCursor);
     cursor = read.data.nextCursor;
   }
-  return { ok: true, data: pages };
+  return { ok: false, failure: 'unavailable' };
 }
 
 function countFrom(pages: readonly StatementPage[], predicate: string): number | null {
@@ -149,16 +159,20 @@ async function countPredicate(notation: 'episode-count' | 'volume-count',
  * `formatNames` are the public names of this Zone's formats; any other classification stays off the panel.
  */
 export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'episodes' | 'volumes',
-  formatNames: readonly string[]): Promise<CatalogueFacts> {
+  formatNames: readonly string[],
+  read = { classifications: readClassifications, statements: statementPages, predicate: countPredicate },
+): Promise<CatalogueFacts> {
   // A browse card names the Work by its IRI. Statement and classification paths take the UUID.
   const resource = idOf(id) ?? id;
   const names = new Set(formatNames);
   const [classifications, pages, predicate] = await Promise.all([
-    readClassifications(resource, locale, { kind: 'global' }),
-    statementPages(resource),
-    countPredicate(count === 'episodes' ? 'episode-count' : 'volume-count', locale),
+    read.classifications(resource, locale, { kind: 'global' }),
+    read.statements(resource),
+    read.predicate(count === 'episodes' ? 'episode-count' : 'volume-count', locale),
   ]);
-  if (!classifications.ok || !pages.ok || !predicate.ok) return { ...empty(), unavailable: true, factObligations: [] };
+  if (!classifications.ok || classifications.data.nextCursor || !pages.ok || !predicate.ok) {
+    return { ...empty(), unavailable: true, factObligations: [] };
+  }
   const matched = classifications.data.items.find(item => names.has(item.name.value));
   const format: ZoneText | null = matched
     ? { value: matched.name.value, lang: matched.name.language, dir: matched.name.direction }
