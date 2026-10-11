@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { DiscoveryProjection, discoveryResourceCardPayloadSql } from '../../../services/main/src/modules/discovery/store.ts';
+import { DiscoveryProjection, discoveryResourceCardPayloadSql,
+  discoveryScopeKey } from '../../../services/main/src/modules/discovery/store.ts';
 import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
+import { DiscoveryRefreshWorker } from '../../../services/main/src/modules/discovery/refresh.ts';
+import { DiscoveryRefreshStore } from '../../../services/main/src/modules/discovery/refresh-store.ts';
 import { projectDiscoveryBatch } from '../../../services/main/src/modules/discovery/source.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
@@ -16,6 +20,8 @@ import { resourceWork } from '../../../apps/web/features/discover/resource-card.
 import { startMediaStack } from './media-support.ts';
 import { isolateCardRatingContext } from './discovery-rating-context-fixture.ts';
 import { digest } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
+import { initializeRelayCheckpoint } from '../../../services/main/src/modules/outbox/relay.ts';
+import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 
 const native = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -38,20 +44,24 @@ function relationVisits(node: PlanNode): number {
 test('G1001: real Query cards show bounded ordered authors and Global ratings without scanning credit/rating degree', async () => {
   const prepared = performance.now();
   const f = await startMediaStack('g-1001-cards', { profileCredits: true, library: true });
+  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const restoreContexts = await isolateCardRatingContext(f.fuseki);
   try {
     const [a, b, c] = await Promise.all(['Lin Mei', 'Jane Austen', '森圭'].map(name => f.member(name)));
+    const jane = await json<{ agent: string }>(await b!.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Jane Austen',
+    }, randomUUID()), 201);
     const work = await f.publicWork(a!.actor, ['en'], 'G1001 rainy library');
     const head = (await f.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(work.work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
     await a!.grant(`work:edit:${work.work}`, 'work.edit');
     const creditApp = createMainApp(f.fuseki, { environment: f.env, access: f.access,
       profiles: new ProfilesAccess(f.accessPool), account: { verify: async () => a!.principal } });
-    for (const [index, author] of [a!, b!, c!].entries()) {
+    for (const [index, author] of [a!.actor, jane.agent, c!.actor].entries()) {
       await json(await creditApp.handle(new Request(`http://main.local/v1/works/${work.work.slice(-36)}/agent-credits`, {
         method: 'POST', headers: { authorization: `Bearer ${a!.token}`, 'content-type': 'application/json',
           'idempotency-key': randomUUID() }, body: JSON.stringify({
-        profile: 'native-agent-credit-v1', credit: native(index + 1), agent: author.actor, role: 'author',
+        profile: 'native-agent-credit-v1', credit: native(index + 1), agent: author, role: 'author',
         expectedWorkHead: head, actingSubject: a!.actor,
       }) })), 201);
     }
@@ -103,12 +113,15 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
     });
     let source = await buildSource(0);
     expect(performance.now() - prepared).toBeLessThan(600_000);
-    const request = () => app.handle(new Request('http://main.local/v1/query', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-        profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 1,
-        filter: { all: [{ facet: 'type', any: ['https://schema.org/CreativeWork'] }] },
-      }),
-    }));
+    const queryRequest = (target: ReturnType<typeof createMainApp>, token?: string) =>
+      target.handle(new Request('http://main.local/v1/query', {
+        method: 'POST', headers: { 'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({
+          profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 1,
+          filter: { all: [{ facet: 'type', any: ['https://schema.org/CreativeWork'] }] },
+        }),
+      }));
+    const request = () => queryRequest(app);
     const inspect = async () => {
       const calls = f.fuseki.queries;
       const result = await json<{ result: { items: ResourceCard[] } }>(await request());
@@ -181,11 +194,46 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
       INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ${sequence} } }
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old } }`);
     expect(await inspect()).toEqual(baseline);
-    await f.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(b!.actor)} rv:profileDisclosure ?old } }
-      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(b!.actor)} rv:profileDisclosure rv:Private } }
-      WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(b!.actor)} rv:profileDisclosure ?old } } }`);
-    const privateAuthor = await json<{ result: { items: ResourceCard[] } }>(await request());
-    expect(privateAuthor.result.items[0]!.work!.primaryCredits.map(credit => credit.displayName))
+    const privacySubject = encodeURIComponent(jane.agent);
+    const preferences = await json<{ profileVisibility: 'public' | 'private'; followPolicy: 'everyone' | 'nobody';
+      hideReadingActivity: boolean; contentLanguages: string[]; spoilerPolicy: 'hide-unread' | 'show'; version: number }>(
+      await f.call('GET', `/v1/me/person-preferences?actingSubject=${privacySubject}`, { token: b!.token }));
+    const changed = await json<{ profileVisibility: 'public' | 'private'; version: number }>(await b!.send(
+      'PUT', '/v1/me/person-preferences', { actingSubject: jane.agent, expectedVersion: preferences.version,
+        profileVisibility: 'private', followPolicy: preferences.followPolicy,
+        hideReadingActivity: preferences.hideReadingActivity, contentLanguages: preferences.contentLanguages,
+        spoilerPolicy: preferences.spoilerPolicy }, randomUUID()));
+    expect(changed).toMatchObject({ profileVisibility: 'private', version: preferences.version + 1 });
+
+    const laggingPrivacy = await json<{ result: { stale: boolean; items: ResourceCard[] } }>(await request());
+    expect(laggingPrivacy.result.stale).toBe(true);
+    expect(laggingPrivacy.result.items.map(card => card.id)).toEqual([work.work]);
+    expect(laggingPrivacy.result.items[0]!.work!.primaryCredits).toEqual([]);
+
+    const base = { scope: 'global' as const, realm: null, context: null, owner: null };
+    const scopeKey = discoveryScopeKey(base);
+    const refreshStore = new DiscoveryRefreshStore(f.accessPool);
+    const consumer = `g-1001-${randomUUID()}`;
+    await initializeRelayCheckpoint(relay, consumer, f.env.lineage.dataEpoch);
+    const refreshDeps = { ...deps, relayPosition: new RelayHandoffPositions(relay, consumer) };
+    const refreshWorker = new DiscoveryRefreshWorker(refreshDeps, refreshStore, projection);
+    await refreshStore.enroll([base]);
+    let refreshed: { result: { stale: boolean; items: ResourceCard[] } } | undefined;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at = clock_timestamp() - interval '1 minute'
+        WHERE scope_key = $1`, [scopeKey]);
+      const outcome = await refreshWorker.tick();
+      expect(['advanced', 'activated', 'current']).toContain(outcome);
+      refreshed = await json<{ result: { stale: boolean; items: ResourceCard[] } }>(await request());
+      if (!refreshed.result.stale) break;
+    }
+    expect(refreshed?.result.stale).toBe(false);
+    expect(refreshed?.result.items[0]!.work!.primaryCredits.map(credit => credit.displayName))
       .toEqual(['Lin Mei', '森圭']);
-  } finally { await restoreContexts(); await f.stop(); }
+
+    const ownerApp = createMainApp(f.fuseki, { ...deps, account: { verify: async () => b!.principal } });
+    const ownerRead = await json<{ result: { items: ResourceCard[] } }>(await queryRequest(ownerApp, b!.token));
+    expect(ownerRead.result.items[0]!.work!.primaryCredits.map(credit => credit.displayName))
+      .toEqual(['Lin Mei', 'Jane Austen', '森圭']);
+  } finally { await relay.end(); await restoreContexts(); await f.stop(); }
 }, 600_000);
