@@ -201,8 +201,8 @@ test('SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen re
 
       const damaged = await publish(`urn:rezics:variant:${randomUUID()}`, 'unresolved copper lantern');
       const corruptHead = `urn:rezics:corrupt-eligibility:${randomUUID()}`;
-      await raw(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(damaged.variantId)}
-        ${iri(RV + 'publicSearchEligibilityHead')} ${iri(corruptHead)} } }`);
+      await raw(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(damaged.variantId)}
+        rv:publicSearchEligibilityHead ${iri(corruptHead)} } }`);
       await drain();
       expect(BigInt((await cursor.read(consumer)).sequence)).toBeLessThan(BigInt((await content.ownerPosition()).sequence));
       expect(await pendingCount()).toBeGreaterThan(0);
@@ -232,8 +232,8 @@ test('SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen re
       expect(BigInt((await cursor.read(job.consumer)).sequence)).toBeLessThan(BigInt(job.cut.sequence));
       await expect(activateRebuiltPublicContentSearch(env, content, cursor, job, consumer, 'a'.repeat(64))).rejects.toThrow();
       expect(await health('search-ready')).toBe(503);
-      await raw(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(damaged.variantId)}
-        ${iri(RV + 'publicSearchEligibilityHead')} ${iri(corruptHead)} } }`);
+      await raw(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(damaged.variantId)}
+        rv:publicSearchEligibilityHead ${iri(corruptHead)} } }`);
       const noDelivery = async (): Promise<never> => { throw new Error('frozen resume attempted delivery'); };
       expect(await prepareContentRebuild({ env, content, frontier: frozen,
         delivery: { relayPosition: noDelivery, relayOnce: noDelivery, deliveryPosition: noDelivery, deliverOnce: noDelivery },
