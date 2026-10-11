@@ -42,12 +42,19 @@ test('GOV07/OPS11: erased subjects and recipients stay erased across history pin
       [issuer, user.subject])).rows[0]!.id;
     const a = await principalId(live.pool, users.a);
     const b = await principalId(live.pool, users.b);
+    const draftJson = JSON.stringify({ title: 'Erasable title', body: 'Erasable body' });
     const saved = await content.saveDraft({ operationId: `notification-erasure-${randomUUID()}`,
       variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: `https://rezics.com/id/${randomUUID()}`,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
-      provenance: { fixture: 'notification-erasure' }, serializedJson: JSON.stringify({ title: 'Erasable title' }) });
-    const revision = saved.revisionId!;
+      provenance: { fixture: 'notification-erasure' }, serializedJson: draftJson });
+    expect(saved.outcome).toBe('succeeded');
+    if (!saved.revisionId) throw new Error('Content revision was not saved');
+    const initialExact = (await content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
+    expect(initialExact).toMatchObject({ status: 'available', serializedJson: draftJson,
+      body: { title: 'Erasable title', body: 'Erasable body' } });
+    if (initialExact?.status !== 'available') throw new Error('initial exact Content body is unavailable');
+    const revision = saved.revisionId;
     // The item pins the exact revision (history pin); no rendered copy is stored.
     const event = (recipients: string[]): NotificationEvent => ({ sourceOwner: 'content',
       sourceEvent: `erasure-${randomUUID()}`, purpose: 'social', topic: 'reply',
