@@ -11,7 +11,7 @@ import org.apache.jena.query.text.changes.TextQuadAction;
 import org.apache.jena.sparql.core.DatasetGraph;
 
 /** Request-local native work. Times overlap (text indexing is inside update/commit),
- * so callers must not sum them as disjoint phases. Counters describe mutations,
+ * so callers must not sum them as disjoint phases. Counters describe mutations and visits,
  * not filesystem allocation or distinct node-table bytes. No RDF values escape. */
 final class CommandWork implements AutoCloseable, TextDatasetChanges {
     private static final ThreadLocal<CommandWork> CURRENT = new ThreadLocal<>();
@@ -75,6 +75,10 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
     static void count(String name, long value) {
         CommandWork current = CURRENT.get();
         if (current != null) current.counts.merge(name, value, Long::sum);
+    }
+    static String currentCounters() {
+        CommandWork current = CURRENT.get();
+        return current == null ? "" : current.counters();
     }
     DatasetGraph observed(DatasetGraph data) {
         return new DatasetGraphTextMonitor(data, this) {

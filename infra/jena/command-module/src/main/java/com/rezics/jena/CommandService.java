@@ -183,7 +183,10 @@ final class CommandService extends ActionService {
             }
             if (body.get("templateIndex") != null) {
                 if (!authorized(action, admittedCapability)) { respond(action,403,Map.of("status","forbidden")); return; }
-                respond(action,200,TemplateIndexService.read(action.getDataService().getDataset(),body.get("templateIndex").getAsObject())); return;
+                Map<String, Object> result = TemplateIndexService.read(action.getDataService().getDataset(),body.get("templateIndex").getAsObject());
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action,200,result); return;
             }
             if (body.get("templateQuery") != null) {
                 if (!authorized(action, admittedCapability)) {
@@ -193,6 +196,8 @@ final class CommandService extends ActionService {
                     throw new IllegalArgumentException("invalid template query envelope");
                 JsonObject result = TemplateQueryService.select(action.getDataService().getDataset(),
                     body.get("templateQuery").getAsObject());
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                 action.getResponse().setStatus(200);
                 action.getResponse().setContentType("application/sparql-results+json; charset=utf-8");
                 JSON.write(action.getResponse().getOutputStream(), result);
@@ -211,6 +216,8 @@ final class CommandService extends ActionService {
                     ProfileRegistry.required(evidence, "payloadSha256"), ProfileRegistry.required(evidence, "dataEpoch"),
                     ProfileRegistry.required(evidence, "sequence"), ProfileRegistry.required(evidence, "streamSequence"),
                     ProfileRegistry.required(evidence, "signature")));
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                 respond(action, 200, result); return;
             }
             if (body.get("items") != null) {

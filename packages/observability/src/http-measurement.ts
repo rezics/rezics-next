@@ -42,6 +42,19 @@ export const commandCounters = [
   'text_deletes',
   'validation_focuses',
   'durable_commits',
+  // Enumerated visits share the span sanitizer's allowlist; header text cannot
+  // introduce metric names or resource identifiers. Counts stay safe integers.
+  'catalogue_name_copies_visited',
+  'catalogue_name_values_visited',
+  'catalogue_name_witness_heads_visited',
+  'public_name_heads_visited',
+  'public_name_labels_visited',
+  'rank_group_candidates_visited',
+  'rank_live_witnesses_visited',
+  'rank_metadata_values_visited',
+  'rank_selection_units_visited',
+  'realm_owner_qualification_visits',
+  'work_name_scope_links_visited',
 ] as const;
 
 export function fusekiCommandWork(headers: Headers): Record<string, number> {

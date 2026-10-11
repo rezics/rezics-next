@@ -65,6 +65,8 @@ public final class CommandModule implements FusekiAutoModule {
         searchEvidence.install();
         builder.addFilter("/*", searchEvidence);
         builder.registerOperation(COMMAND, new CommandService(profiles));
+        builder.registerOperation(Operation.Query, org.apache.jena.riot.WebContent.contentTypeSPARQLQuery,
+            new QueryWorkService());
         builder.registerOperation(Operation.Update, new TemplateIndexService.RawMembershipUpdate());
         // No endpoint is added. Product assemblers remain command-only; unsafe
         // fixture/maintenance writers must participate in the owner fence.

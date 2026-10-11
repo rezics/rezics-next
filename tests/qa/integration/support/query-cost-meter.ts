@@ -1,8 +1,18 @@
 import type { FusekiClient } from '../../../../services/main/src/infrastructure/fuseki.ts';
 import type { Pool, PoolClient } from 'pg';
+import type { WorkProfile } from '../../support/work-profile.ts';
+import { commandCounters } from '../../../../packages/observability/src/http-measurement.ts';
 import { foregroundCounted } from './operation-cost.ts';
 
 export { foregroundCounted } from './operation-cost.ts';
+
+/** Actual native work, including rejected candidates. Missing evidence stays unknown. */
+export function nativeCounter(profile: WorkProfile, name: typeof commandCounters[number]): number | null {
+  const values = profile.fusekiCalls.map(call => call.nativeWork?.[name]);
+  return values.some(value => value !== undefined)
+    ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+    : null;
+}
 
 /** Call count and JSON byte size of results the caller itself issued. */
 export type QueryMeter = {

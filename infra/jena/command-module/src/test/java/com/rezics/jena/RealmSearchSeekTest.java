@@ -65,10 +65,10 @@ public class RealmSearchSeekTest {
             return org.apache.jena.util.iterator.WrappedIterator.create(super.find(graph,subject,predicate,object)).mapWith(quad->{rows++;return quad;});
         }
     }
-    private record Scan(List<FilteredGraphTextIndex.RankHit> hits,int pages,long maxRows,long maxGroups,int emptyPages,long maxWitnesses,long maxScores,long maxMoves,long maxCollections){}
+    private record Scan(List<FilteredGraphTextIndex.RankHit> hits,int pages,long maxRows,long maxGroups,int emptyPages,long maxWitnesses,long maxScores,long maxMoves,long maxCollections,long maxSelectionUnits){}
     private static long count(CommandWork work,String name){var match=java.util.regex.Pattern.compile("(?:^|,)"+name+"=([0-9]+)").matcher(work.counters());return match.find()?Long.parseLong(match.group(1)):0;}
     private static Scan scan(Fixture fixture,String phrase,String realm,int size){
-        var all=new ArrayList<FilteredGraphTextIndex.RankHit>();var seen=new HashSet<String>();int pages=0,empty=0;long maxRows=0,maxGroups=0,maxWitnesses=0,maxScores=0,maxMoves=0,maxCollections=0;
+        var all=new ArrayList<FilteredGraphTextIndex.RankHit>();var seen=new HashSet<String>();int pages=0,empty=0;long maxRows=0,maxGroups=0,maxWitnesses=0,maxScores=0,maxMoves=0,maxCollections=0,maxSelectionUnits=0;
         FilteredGraphTextIndex.RankAfter after=null;fixture.data.begin(ReadWrite.READ);
         try{
             for(;;){
@@ -80,6 +80,7 @@ public class RealmSearchSeekTest {
                     maxScores=Math.max(maxScores,count(work,"rank_lucene_score_calls"));
                     maxMoves=Math.max(maxMoves,count(work,"rank_lucene_iterator_next_calls")+count(work,"rank_lucene_iterator_advance_calls"));
                     maxCollections=Math.max(maxCollections,count(work,"rank_lucene_collection_events"));
+                    maxSelectionUnits=Math.max(maxSelectionUnits,count(work,"rank_selection_units_visited"));
                     assertTrue("snapshot witness ceiling exceeded",count(work,"rank_live_witnesses_visited")<=128);
                 }
                 maxRows=Math.max(maxRows,measured.rows);pages++;assertTrue("cursor did not finish",pages<2000);
@@ -90,7 +91,7 @@ public class RealmSearchSeekTest {
                 assertNotEquals(after,next);after=next;
             }
         }finally{fixture.data.end();}
-        return new Scan(all,pages,maxRows,maxGroups,empty,maxWitnesses,maxScores,maxMoves,maxCollections);
+        return new Scan(all,pages,maxRows,maxGroups,empty,maxWitnesses,maxScores,maxMoves,maxCollections,maxSelectionUnits);
     }
     @Test public void realmBodyPostingSeekIsCompleteAndIndependentOfAdoptionAndUnrelatedPopulation()throws Exception{
         for(int population:List.of(1,1500))try(var fixture=new Fixture()){
@@ -101,7 +102,54 @@ public class RealmSearchSeekTest {
             fixture.committed();var result=scan(fixture,BODY,REALM.getURI(),13);
             assertEquals(expected,new HashSet<>(result.hits().stream().map(FilteredGraphTextIndex.RankHit::key).toList()));assertTrue(result.pages()>1);
             assertTrue("RDF work grew with population: "+result.maxRows(),result.maxRows()<=13*100);assertEquals(13,result.maxGroups());
+            assertEquals("native live witnesses at population "+population,13,result.maxWitnesses());
+            assertEquals("native selection units at population "+population,13,result.maxSelectionUnits());
             System.out.println("realm body adoption/unrelated="+population+" pages="+result.pages()+" maxRows="+result.maxRows()+" groupProbes="+result.maxGroups()+" ownerWitnesses="+result.maxWitnesses()+" observedScoreCalls="+result.maxScores()+" iteratorMoves="+result.maxMoves()+" collectionEvents="+result.maxCollections());
+        }
+    }
+    @Test public void nativeRealmSeekCountersReachHttpBeforeResultsCommitAndDoNotLeakBetweenReads()throws Exception{
+        try(var fixture=new Fixture()){
+            for(int i=0;i<13;i++)fixture.owner(10000+i*10,true,false,BODY,null);
+            fixture.committed();
+            var nativeSeek=scan(fixture,BODY,REALM.getURI(),13);
+            String function="https://rezics.com/vocab/rankedText";
+            var functions=org.apache.jena.sparql.function.FunctionRegistry.get();var previous=functions.get(function);
+            functions.put(function,FilteredGraphTextIndex.RankedFunction.class);
+            fixture.data.getContext().set(org.apache.jena.query.text.TextQuery.textIndex,fixture.index);
+            var server=org.apache.jena.fuseki.main.FusekiServer.create().port(0).add("/data",fixture.data,false)
+                .fusekiModules(org.apache.jena.fuseki.main.sys.FusekiModules.empty())
+                .registerOperation(org.apache.jena.fuseki.server.Operation.Query,org.apache.jena.riot.WebContent.contentTypeSPARQLQuery,new QueryWorkService()).build().start();
+            try{
+                var scope=new org.apache.jena.atlas.json.JsonObject();scope.put("realm",REALM.getURI());scope.put("language","zh-Hant");scope.put("catalogue",true);
+                String literal=org.apache.jena.riot.out.NodeFmtLib.strNT(NodeFactory.createLiteralString(scope.toString()));
+                String padding=org.apache.jena.riot.out.NodeFmtLib.strNT(NodeFactory.createLiteralString("x".repeat(32768)));
+                String query="SELECT ?page ?padding WHERE { BIND(<"+function+">(<https://rezics.com/vocab/searchBody>,\""+BODY+"\",13,\"\","+literal+") AS ?page) BIND("+padding+" AS ?padding) }";
+                var client=java.net.http.HttpClient.newHttpClient();
+                var address=java.net.URI.create("http://127.0.0.1:"+server.getPort()+"/data/query");
+                var request=java.net.http.HttpRequest.newBuilder(address).header("Content-Type","application/sparql-query")
+                    .header("Accept","application/sparql-results+json").timeout(java.time.Duration.ofSeconds(10));
+                var response=client.send(request.POST(java.net.http.HttpRequest.BodyPublishers.ofString(query)).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+                assertEquals(response.body(),200,response.statusCode());assertTrue(response.body().length()>32768);
+                var counters=new HashMap<String,Long>();
+                for(String entry:response.headers().firstValue("X-Rezics-Command-Work").orElseThrow().split(",")){
+                    String[] value=entry.split("=",2);counters.put(value[0],Long.parseLong(value[1]));
+                }
+                assertEquals(nativeSeek.maxGroups(),counters.get("rank_group_candidates_visited").longValue());
+                assertEquals(nativeSeek.maxWitnesses(),counters.get("rank_live_witnesses_visited").longValue());
+                assertEquals(nativeSeek.maxSelectionUnits(),counters.get("rank_selection_units_visited").longValue());
+                assertEquals(Long.valueOf(0),counters.get("current_adds"));assertEquals(Long.valueOf(0),counters.get("durable_commits"));
+                var results=org.apache.jena.atlas.json.JSON.parse(response.body()).get("results").getAsObject().get("bindings").getAsArray();
+                assertEquals(1,results.size());
+                var page=org.apache.jena.atlas.json.JSON.parse(results.get(0).getAsObject().get("page").getAsObject().get("value").getAsString().value());
+                assertEquals(13,page.get("hits").getAsArray().size());
+                var next=client.send(request.POST(java.net.http.HttpRequest.BodyPublishers.ofString("SELECT (1 AS ?value) WHERE {} ")).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+                assertEquals(200,next.statusCode());
+                String nextCounters=next.headers().firstValue("X-Rezics-Command-Work").orElseThrow();
+                assertFalse(nextCounters.contains("rank_live_witnesses_visited"));assertTrue(nextCounters.contains("durable_commits=0"));
+            }finally{
+                server.stop();
+                if(previous==null)functions.remove(function);else functions.put(function,previous);
+            }
         }
     }
     @Test public void completeRealmNamesAdvanceThroughUnrelatedNamesWithoutASilentPopulationCap()throws Exception{
