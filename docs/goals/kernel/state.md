@@ -38,6 +38,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Content document recovery](reports/G-1801-specification.md): bad-edit restore already proven; slice 1 the Zone proof repair, slices 2 to 7 B.
 - [Publication of a Recipe without notes](reports/G-1802-specification.md): the structure publication chain, eight slices.
 - [Raw-update caller classes](reports/G-1828-specification.md): 149 roots, 47 migration candidates by a supported mechanism, 102 without a supported builder; B except roots still red after the fixture assembler selection (Program, 2026-10-11).
+- [Gated reads: one admission rule](reports/gated-reads-design.md): rankings, public and private Content search and private contribution search are served or refused by their own scope; 6 to 8 sessions, native capture first.
 - [Imported covers: source evidence, rights mark and scoped takedown](reports/G-1800-specification.md): eleven A slices; slices 1 and 2 running, slice 3 in Trust-ops' area, 4 to 11 wait for owner answers now given.
 - [Rights notice path](reports/G-1803-specification.md): two API gaps and eight A slices; slices 6 to 8 wait on Trust-ops' erasure chain; the public decision read is B.
 
