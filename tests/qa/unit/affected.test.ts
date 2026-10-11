@@ -475,17 +475,20 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
 
 test('main-wide regression stages module-input native proofs with the Jena image checks', async () => {
   const registry = await regressionRegistry(resolve(import.meta.dir, '../../..'));
+  const batchId = 'jena-check-2';
+  const artifactDirectory = resolve('.temp/goal/regress/planner/batches', batchId, 'attempt-1');
+  const junitXmlPath = join(artifactDirectory, 'batch.xml');
   for (const file of inputSelectedNativeTests) {
     expect(registry.filter(item => item.file === file)).toEqual([
       { file, tier: 'jena:check', outcome: 'pending' },
     ]);
     expect(registry.some(item => item.file === file && (item.tier === 'unit' || item.tier === 'owner'))).toBe(false);
-    const command = regressionBatchCommand({ id: 'jena-check-2', tier: 'jena:check', files: [file],
-      state: 'pending', attempts: [] }, '', '');
+    const command = regressionBatchCommand({ id: batchId, tier: 'jena:check', files: [file],
+      state: 'pending', attempts: [] }, join(artifactDirectory, 'slot.json'), junitXmlPath);
     expect(command.slice(0, 2)).toEqual(['bun', 'test']);
     expect(command[2]?.startsWith('--preload=')).toBe(true);
     expect(command[2]?.endsWith('/scripts/qa/container-reaper.ts')).toBe(true);
-    expect(command.slice(3)).toEqual([file]);
+    expect(command.slice(3)).toEqual(['--reporter=junit', `--reporter-outfile=${junitXmlPath}`, file]);
   }
 });
 
