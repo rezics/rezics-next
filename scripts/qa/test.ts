@@ -1,10 +1,11 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
-import { formatTierRunLine, goalSlotDirectory, implementedTiers, parseArgs, splitCallerTimeout, tierBunTestArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
+import { formatTierRunLine, goalSlotDirectory, implementedTiers, newRunId, parseArgs, qaArtifactDirectory, splitCallerTimeout, tierBunTestArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
+import { STORY_SCREENSHOTS_ENV } from './story-screenshots.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
@@ -188,11 +189,12 @@ function withoutForcedColor(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 // Direct Bun runs print only failures and the summary (AGENT=1); JUnit output is
 // unchanged and AGENT=0 restores the listing. QA tiers keep full logs, because a
 // killed tier otherwise leaves no record of the tests that had finished.
-async function run([program, args]: [string, string[]]): Promise<number> {
+async function run([program, args]: [string, string[]], envOverride?: NodeJS.ProcessEnv): Promise<number> {
   const spawningTest = program === 'bun' && (args[0] === 'test' || args[0] === 'scripts/qa/cli.ts');
+  const inherited = { ...process.env, ...envOverride };
   const base = withoutForcedColor(program === 'bun'
-    ? { ...process.env, AGENT: process.env.AGENT ?? '1' }
-    : process.env);
+    ? { ...inherited, AGENT: inherited.AGENT ?? '1' }
+    : inherited);
   const env = spawningTest ? reapChildEnvironment(base) : base;
   const scope = spawningTest ? env.REZICS_REAP_SCOPE : undefined;
   noteChildScope(scope);
@@ -252,8 +254,8 @@ export async function dispatchTest(args: string[], options: TestDispatchOptions 
   if (commands.length !== 1) return runTierGroups(groups, options);
   const command = commands[0]!;
   const env = options.env ?? process.env;
-  if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)
-    && await isLocalQaRun(root, env)) {
+  const stories = command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!);
+  if (stories && await isLocalQaRun(root, env)) {
     const slotDirectory = env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(root);
     const admissionEnv: NodeJS.ProcessEnv = { ...env,
       ...(slotDirectory && !env.GOAL_QA_WAIT_DIR ? { GOAL_QA_WAIT_DIR: join(slotDirectory, 'waiters') } : {}),
@@ -264,7 +266,37 @@ export async function dispatchTest(args: string[], options: TestDispatchOptions 
       deadline: qaMemoryDeadline(env, options.deadline),
     });
   }
-  return (options.runner ?? run)(command);
+  const runner = options.runner ?? run;
+  if (!stories) return runner(command);
+  const runId = newRunId();
+  const directory = resolve(root, env.REZICS_QA_ARTIFACT_ROOT ?? qaArtifactDirectory(root), runId);
+  const screenshots = join(directory, 'story-screenshots');
+  const summary = join(directory, 'summary.md');
+  let summaryReady = false;
+  let warned = false;
+  const artifactWarning = (error: unknown) => {
+    if (warned) return;
+    warned = true;
+    console.warn(`Warning: story screenshot artifacts ${directory}: ${String(error)}`.replaceAll(/[\r\n]+/g, ' '));
+  };
+  try {
+    mkdirSync(screenshots, { recursive: true });
+    writeFileSync(summary, [`# QA ${runId}`, '', `Story files: ${groups[0]!.files.join(', ')}`,
+      `Story screenshots: \`${screenshots}\``, ''].join('\n'));
+    summaryReady = true;
+  } catch (error) { artifactWarning(error); }
+  let code: number | undefined;
+  try {
+    code = await runner(command, { ...env, [STORY_SCREENSHOTS_ENV]: screenshots });
+    return code;
+  } finally {
+    const result = formatTierRunLine(command[1][0]!, runId, code === 0 ? 'passed' : 'failed');
+    if (summaryReady) {
+      try { appendFileSync(summary, `\n${result}\n`); } catch (error) { artifactWarning(error); }
+    }
+    console.log(`QA artifacts: ${directory}`);
+    console.log(result);
+  }
 }
 
 export async function runAffected(plan: AffectedPlan, runner = run): Promise<{ failed: boolean; results: string[] }> {

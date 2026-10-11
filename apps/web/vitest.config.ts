@@ -2,6 +2,15 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
+import { STORY_SCREENSHOTS_ENV, storyScreenshotCommand } from '../../scripts/qa/story-screenshots.ts';
+
+const screenshotDirectory = process.env[STORY_SCREENSHOTS_ENV];
+const screenshotSetup = screenshotDirectory ? {
+  setupFiles: [fileURLToPath(new URL('.storybook/story-screenshots.setup.ts', import.meta.url))],
+} : {};
+const screenshotCommands = screenshotDirectory ? {
+  commands: { captureStoryScreenshot: storyScreenshotCommand(screenshotDirectory, fileURLToPath(new URL('../..', import.meta.url))) },
+} : {};
 
 export default defineConfig({
   // Each concurrent story file holds a headless Chromium renderer (~0.8 GB); several workers' runs at
@@ -10,7 +19,8 @@ export default defineConfig({
     plugins: [storybookTest({ configDir: fileURLToPath(new URL('.storybook', import.meta.url)) })],
     // Interaction stories type and wait like a person; on a host shared with other stacks the 5 s default
     // failed whole stories that pass alone (Give Role With Impact took 5.08 s in a loaded QA run).
-    test: { name: 'storybook', testTimeout: 15_000, browser: { enabled: true, headless: true,
+    test: { name: 'storybook', ...screenshotSetup, testTimeout: 15_000, browser: { enabled: true, headless: true,
+      ...screenshotCommands,
       provider: playwright({}), instances: [{ browser: 'chromium' }] } },
   }] },
 });

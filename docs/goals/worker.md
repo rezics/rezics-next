@@ -79,6 +79,8 @@ stack. Run a passing file again only after a change that could affect it. A web
 build, `depcruise`, type-aware lint or a fresh install takes 2 to 3 GiB: run
 one at a time and not during your own QA run.
 
+After `task goal -- test <story file>`, read the PNGs under the run's `story-screenshots` directory to review your own change by eye; do not add screenshot helpers to stories.
+
 List affected tests outside your claim in the handoff; the manager and the
 program regression run them. Do not run whole tiers, `task qa`, Storybook suites
 or browser journeys unless the brief asks. Backend work starts no dev server.
