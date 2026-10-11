@@ -1,5 +1,5 @@
 // Row declarations for the erasure journal and per-store retention. The SQL
-// migrations (relay 010-011, Content 120) remain the DDL owner; these types
+// migrations (relay 010-011, 023, Content 120) remain the DDL owner; these types
 // mirror their columns as node-postgres returns them (bigint/numeric as strings).
 
 /** Workflow track from the erasure runbook; `blocked` needs an explicit reason. */
@@ -63,6 +63,18 @@ export interface ErasureTargetRow {
   owner: typeof ERASURE_TARGET_OWNERS[ErasureTargetKind];
   target_kind: ErasureTargetKind;
   target_ref: string;
+}
+
+export const ERASURE_TARGET_COMPLETION_STATES = ['pending', 'failed', 'completed'] as const;
+
+/** Per-target progress; reason and evidence are retained after their first write. */
+export interface ErasureTargetCompletionRow {
+  erasure_id: string;
+  ordinal: number;
+  completion_state: typeof ERASURE_TARGET_COMPLETION_STATES[number];
+  failure_reason: string | null;
+  completion_evidence_digest: string | null;
+  completed_at: Date | null;
 }
 
 export const RETENTION_OWNERS = ['account', 'access', 'content', 'source', 'graph', 'object',
@@ -155,6 +167,10 @@ export const erasureTables = {
   'relay.erasure_target': {
     erasure_id: true, ordinal: true, owner: true, target_kind: true, target_ref: true,
   } satisfies Record<keyof ErasureTargetRow, true>,
+  'relay.erasure_target_completion': {
+    erasure_id: true, ordinal: true, completion_state: true, failure_reason: true,
+    completion_evidence_digest: true, completed_at: true,
+  } satisfies Record<keyof ErasureTargetCompletionRow, true>,
   'relay.retention_domain': {
     id: true, label: true, owner: true, store: true, custody: true, expires_at: true,
     hold_reason: true, state: true, created_at: true, retired_at: true,
