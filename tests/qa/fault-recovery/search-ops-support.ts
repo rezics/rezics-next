@@ -200,7 +200,7 @@ const STOP_DIAGNOSTIC_DEADLINE_MS = 5_000;
 const REMOVE_TIMEOUT_MS = 60_000;
 
 const runStandaloneDocker: StandaloneDockerExecutor = (args, env, timeout) => spawnSync('docker', args,
-  { env, encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
+  { env: preserveReapEnvironment(env), encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
 
 function dockerFailure(args: string[], result: StandaloneDockerResult): Error {
   const detail = result.stderr || result.stdout || result.error?.message || '';
@@ -272,8 +272,9 @@ function captureStopFailure(execute: StandaloneDockerExecutor, env: NodeJS.Proce
   capture('engineVersion', ['version', '--format', '{{.Server.Version}}'], 200);
   capture('processes', ['exec', container, 'sh', '-ec', 'ps -eo comm=,state=,wchan='], 3_000);
   capture('logTail', ['logs', '--tail', '80', container], 8_000);
-  evidence.elapsedMs = Math.max(0, Math.round(now() - startedAt));
-  evidence.deadlineReached = evidence.elapsedMs >= STOP_DIAGNOSTIC_DEADLINE_MS;
+  const elapsedMs = Math.max(0, Math.round(now() - startedAt));
+  evidence.elapsedMs = elapsedMs;
+  evidence.deadlineReached = elapsedMs >= STOP_DIAGNOSTIC_DEADLINE_MS;
   return evidence;
 }
 
