@@ -12,6 +12,7 @@ export default {
   reviewRequired: '此社群會在發布前審核貼文，因此無法在此直接發布。',
   joinRequired: '請先加入此社群，再發布貼文。', viewCommunity: '查看社群', post: '發佈', posting: '正在發佈…',
   draftSaved: '草稿已儲存於此裝置', failed: '無法發布。草稿仍保留在此，請再試一次。',
+  postedAppearing: '貼文已發布，可能需要一點時間才會顯示在討論中。', openDiscussion: '開啟討論',
   refused: '此社群未接受這篇貼文。請查看社群規則與設定。',
   unavailable: '無法載入此社群，請再試一次。', noCommunity: '找不到符合條件的社群',
   noWork: '找不到符合條件的作品', signIn: '登入後即可發佈貼文',

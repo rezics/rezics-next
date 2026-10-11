@@ -13,6 +13,8 @@ export default {
   joinRequired: '게시하기 전에 이 커뮤니티에 가입하세요.', viewCommunity: '커뮤니티 보기',
   post: '게시', posting: '게시 중…', draftSaved: '이 기기에 초안을 저장했습니다',
   failed: '게시하지 못했습니다. 초안은 그대로 남아 있으니 다시 시도하세요.',
+  postedAppearing: '게시글이 게시되었습니다. 토론에 표시되기까지 잠시 걸릴 수 있습니다.',
+  openDiscussion: '토론 보기',
   refused: '커뮤니티에서 게시글을 받아들이지 않았습니다. 규칙과 설정을 확인하세요.',
   unavailable: '커뮤니티를 불러오지 못했습니다. 다시 시도하세요.',
   noCommunity: '일치하는 커뮤니티가 없습니다', noWork: '일치하는 작품이 없습니다',

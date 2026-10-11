@@ -26,6 +26,8 @@ export default {
   post: 'Publicar',
   posting: 'Publicando…',
   draftSaved: 'Borrador guardado en este dispositivo',
+  postedAppearing: 'Tu publicación ya está publicada. Puede tardar un momento en aparecer en la conversación.',
+  openDiscussion: 'Abrir discusión',
   failed: 'No se pudo publicar. Tu borrador sigue aquí; inténtalo de nuevo.',
   refused: 'Esta comunidad no aceptó la publicación. Revisa sus reglas y su configuración.',
   unavailable: 'No se pudo cargar esta comunidad. Inténtalo de nuevo.',

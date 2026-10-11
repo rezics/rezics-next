@@ -43,6 +43,33 @@ export type PostOutcome =
   | { kind: 'banned'; progress: PostProgress }
   | { kind: 'failed'; progress: PostProgress };
 
+const projectionReadAttempts = 3;
+const projectionReadDelayMs = 250;
+
+async function placedReplyIsVisible(
+  realm: string,
+  reply: string,
+  actingSubject: string,
+  main: ReturnType<typeof browserMainApi>,
+): Promise<boolean> {
+  if (typeof main.v1.realms !== 'function') return false;
+  for (let attempt = 0; attempt < projectionReadAttempts; attempt++) {
+    try {
+      const threads = main.v1.realms({ realm: realm.slice(-36) }).threads;
+      if (typeof threads !== 'function') return false;
+      const { data } = await threads({ reply: reply.slice(-36) }).get({
+        query: { actingSubject },
+      });
+      if (data) return true;
+    } catch {
+      // Placement is already confirmed. A lagging or unavailable read only delays navigation.
+    }
+    if (attempt + 1 < projectionReadAttempts)
+      await new Promise<void>((resolve) => setTimeout(resolve, projectionReadDelayMs));
+  }
+  return false;
+}
+
 export function newPostProgress(): PostProgress {
   return {
     key: crypto.randomUUID(),
@@ -92,6 +119,8 @@ export async function submitPost(
   original: PostProgress,
   onProgress: (progress: PostProgress) => void,
   main = browserMainApi(),
+  onPlaced?: (reply: string) => void,
+  onProjection?: (visible: boolean) => void,
 ): Promise<PostOutcome> {
   const step = { ...original };
   if (step.restartRequired) {
@@ -218,7 +247,25 @@ export async function submitPost(
       },
       keyed('place'),
     );
-    if (data) return { kind: 'posted', reply: data.reply };
+    if (data) {
+      try {
+        onPlaced?.(data.reply);
+      } catch {
+        // A UI callback cannot undo the placement receipt.
+      }
+      const visible = await placedReplyIsVisible(
+        intent.realm,
+        data.reply,
+        intent.actingSubject,
+        main,
+      ).catch(() => false);
+      try {
+        onProjection?.(visible);
+      } catch {
+        // A UI callback cannot change the placement outcome.
+      }
+      return { kind: 'posted', reply: data.reply };
+    }
     if (terminalRefusal(error)) refuseAttempt();
     if (await banned(error?.status)) return { kind: 'banned', progress: step };
     if (error?.status !== 403) return { kind: 'failed', progress: step };

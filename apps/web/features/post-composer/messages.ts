@@ -33,6 +33,8 @@ const en = {
   post: 'Post',
   posting: 'Posting…',
   draftSaved: 'Draft saved on this device',
+  postedAppearing: 'Your post is posted. It may take a moment to appear in the discussion.',
+  openDiscussion: 'Open discussion',
   failed: 'Could not publish. Your draft is still here; try again.',
   banned: 'You are banned from this community and cannot post. Your draft is still here.',
   refused: 'This community did not accept the post. Check its rules and settings.',

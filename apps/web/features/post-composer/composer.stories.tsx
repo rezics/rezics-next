@@ -28,9 +28,10 @@ const meta = {
       <PostComposer {...args} />
     </main>
   ),
-  beforeEach() {
+  beforeEach({ parameters }) {
     localStorage.removeItem(draftKey);
     forgetReadingLanguages();
+    const projectionPending = parameters.postProjection === 'lag';
     const original = window.fetch.bind(window);
     const fetch = spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const path = new URL(
@@ -39,8 +40,21 @@ const meta = {
       ).pathname;
       if (!path.startsWith('/api/main/')) return original(input, init);
       if (path.endsWith('/person-preferences')) return Response.json({ contentLanguages: ['en'] });
-      if (path.endsWith('/member-reply-drafts'))
+      if (path.endsWith('/member-reply-drafts')) {
+        if (projectionPending)
+          return Response.json({ revisionId: '00000000-0000-4000-8000-000000000003', revisionDigest: 'a'.repeat(64) });
         return Response.json({ code: 'authority_denied' }, { status: 403 });
+      }
+      if (path.endsWith('/realm-replies') && projectionPending)
+        return Response.json({ reply: 'https://rezics.com/id/00000000-0000-4000-8000-000000000004' });
+      if (path.endsWith('/realm-reply-placements') && projectionPending) {
+        const body = (input instanceof Request
+          ? await input.clone().json()
+          : JSON.parse(String(init?.body ?? '{}'))) as { reply?: string };
+        return Response.json({ reply: body.reply, placement: 'placement' });
+      }
+      if (path.includes(`/realms/${realm.slice(-36)}/threads/`) && projectionPending)
+        return Response.json({ code: 'reply_unavailable' }, { status: 404 });
       if (path.endsWith('/member-ban'))
         return Response.json({
           realm,
@@ -93,3 +107,28 @@ export const BannedMember: Story = {
 };
 
 export const BannedMemberChinese: Story = { ...BannedMember, args: { locale: 'zh-Hans' } };
+
+/** A placement receipt is success even while the new discussion projection catches up. */
+export const ProjectionCatchingUp: Story = {
+  parameters: { postProjection: 'lag' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }),
+      'A letter worth discussing',
+    );
+    const body = canvas.getByRole('textbox', { name: postText.body[args.locale] });
+    await userEvent.type(body, 'What did you think of the ending?');
+    await userEvent.click(canvas.getByRole('button', { name: postText.post[args.locale] }));
+
+    await expect(await canvas.findByText(postText.postedAppearing[args.locale])).toBeVisible();
+    await expect(
+      canvas.getByRole('link', { name: postText.openDiscussion[args.locale] }),
+    ).toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(
+      canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }),
+    ).toHaveValue('');
+    await expect(body.textContent).toBe('');
+  },
+};

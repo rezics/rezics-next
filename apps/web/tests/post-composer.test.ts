@@ -38,7 +38,7 @@ const activeBan = {
 type PostingStep = 'draft' | 'identity' | 'place';
 type WriteOptions = { headers: { 'idempotency-key': string } };
 
-/** Public reads deliberately reject: an author has no placement yet. */
+/** The thread projection can lag behind an authoritative placement receipt. */
 function unplacedReplyMain(
   options: {
     failStep?: PostingStep;
@@ -46,16 +46,19 @@ function unplacedReplyMain(
     ban?: object | null;
     banReadFails?: boolean;
     draftRevision?: string;
+    projectionVisibleAfter?: number | null;
   } = {},
 ) {
   const calls: Array<{ step: PostingStep; key: string; body: Record<string, unknown> }> = [];
+  const events: string[] = [];
   const banReads: Array<{ realm: string; query: { actingSubject: string } }> = [];
-  let publicReads = 0;
+  let threadReads = 0;
   let failed = false;
   const cancelledKeys = new Map<string, { status: number; value: { code: string } }>();
   let ban = options.ban ?? null;
   const write = async (step: PostingStep, body: Record<string, unknown>, request: WriteOptions) => {
     calls.push({ step, key: request.headers['idempotency-key'], body });
+    events.push(step);
     // Owner receipts permanently replay a cancelled operation, even after an unban.
     const cancelled = cancelledKeys.get(request.headers['idempotency-key']);
     if (cancelled) return { data: null, error: cancelled };
@@ -93,13 +96,22 @@ function unplacedReplyMain(
         post: (body: Record<string, unknown>, request: WriteOptions) =>
           write('place', body, request),
       },
-      'member-replies': () => ({
-        get: async () => {
-          publicReads++;
-          return { data: null, error: { status: 404, value: { code: 'reply_unavailable' } } };
-        },
-      }),
       realms: ({ realm }: { realm: string }) => ({
+        threads: ({ reply }: { reply: string }) => ({
+          get: async (_request: { query: { actingSubject: string } }) => {
+            threadReads++;
+            events.push('read');
+            if (
+              options.projectionVisibleAfter === null ||
+              threadReads < (options.projectionVisibleAfter ?? 1)
+            ) {
+              events.push('not-visible');
+              return { data: null, error: { status: 404, value: { code: 'reply_unavailable' } } };
+            }
+            events.push('visible');
+            return { data: { items: [{ reply }] } };
+          },
+        }),
         'member-ban': {
           get: async ({ query }: { query: { actingSubject: string } }) => {
             banReads.push({ realm, query });
@@ -113,15 +125,16 @@ function unplacedReplyMain(
   return {
     main,
     calls,
+    events,
     banReads,
-    publicReads: () => publicReads,
+    threadReads: () => threadReads,
     liftBan: () => {
       ban = null;
     },
   };
 }
 
-test('a fresh unplaced reply gets its placement digest from the draft without a public read', async () => {
+test('a fresh post uses its draft receipt, then waits for the placed reply projection', async () => {
   const api = unplacedReplyMain();
   const original = newPostProgress();
   const persisted: PostProgress[] = [];
@@ -135,7 +148,59 @@ test('a fresh unplaced reply gets its placement digest from the draft without a 
       (progress) => progress.revisionId === revisionId && progress.digest === revisionDigest,
     ),
   ).toBe(true);
-  expect(api.publicReads()).toBe(0);
+  expect(api.threadReads()).toBe(1);
+});
+
+test('a placed post stays confirmed while the projection catches up, then opens the reply', async () => {
+  const api = unplacedReplyMain({ projectionVisibleAfter: 2 });
+  const original = newPostProgress();
+  let confirmation = '';
+  let projectionVisible = false;
+  const result = await submitPost(
+    postIntent,
+    original,
+    () => undefined,
+    api.main,
+    (reply) => {
+      confirmation = reply;
+      api.events.push('confirmed');
+    },
+    (visible) => {
+      projectionVisible = visible;
+      api.events.push(visible ? 'visible' : 'not-visible');
+    },
+  );
+
+  expect(result).toEqual({ kind: 'posted', reply: original.reply });
+  expect(confirmation).toBe(original.reply);
+  expect(projectionVisible).toBe(true);
+  expect(api.events.slice(-7)).toEqual([
+    'place',
+    'confirmed',
+    'read',
+    'not-visible',
+    'read',
+    'visible',
+    'visible',
+  ]);
+  expect(api.threadReads()).toBe(2);
+});
+
+test('a successful placement remains posted when its projection misses the bounded reads', async () => {
+  const api = unplacedReplyMain({ projectionVisibleAfter: null });
+  const original = newPostProgress();
+  let confirmed: string | undefined;
+  let projectionVisible = true;
+  expect(
+    await submitPost(postIntent, original, () => undefined, api.main, (reply) => {
+      confirmed = reply;
+    }, (visible) => {
+      projectionVisible = visible;
+    }),
+  ).toEqual({ kind: 'posted', reply: original.reply });
+  expect(confirmed).toBe(original.reply);
+  expect(projectionVisible).toBe(false);
+  expect(api.threadReads()).toBe(3);
 });
 
 test.each([false, true])(
@@ -171,7 +236,7 @@ test.each([false, true])(
       },
     });
     expect(saved).toMatchObject({ revisionId, digest: revisionDigest, identified: true });
-    expect(api.publicReads()).toBe(0);
+    expect(api.threadReads()).toBe(1);
   },
 );
 
@@ -188,7 +253,7 @@ test('digest recovery fails before placement when the draft replay names another
     progress: original,
   });
   expect(api.calls.map((call) => call.step)).toEqual(['draft']);
-  expect(api.publicReads()).toBe(0);
+  expect(api.threadReads()).toBe(0);
 });
 
 test.each(['draft', 'identity', 'place'] as const)(
@@ -213,7 +278,7 @@ test.each(['draft', 'identity', 'place'] as const)(
     expect(api.calls.filter((call) => call.step === 'identity')).toHaveLength(
       step === 'identity' ? 2 : 1,
     );
-    expect(api.publicReads()).toBe(0);
+    expect(api.threadReads()).toBe(1);
     expect(api.banReads).toHaveLength(0);
   },
 );
@@ -267,7 +332,7 @@ test.each(['draft', 'identity', 'place'] as const)(
       expect(attempts[1]!.body).toEqual(attempts[0]!.body);
       expect(api.calls.filter((call) => call.step === 'draft')).toHaveLength(1);
     }
-    expect(api.publicReads()).toBe(0);
+    expect(api.threadReads()).toBe(1);
   },
 );
 
@@ -392,6 +457,7 @@ test('an unavailable placement stays retryable even when the member has a ban', 
     'failed',
   );
   expect(api.banReads).toHaveLength(0);
+  expect(api.threadReads()).toBe(0);
   expect(api.calls.some((call) => call.body.body === null)).toBe(false);
 });
 
@@ -416,12 +482,18 @@ test('a lost placement response retries with the same post identity and operatio
           return { data: { revisionId: 'revision', revisionDigest: 'digest' } };
         },
       },
+      realms: () => ({
+        threads: ({ reply }: { reply: string }) => ({
+          get: async () => ({ data: { items: [{ reply }] } }),
+        }),
+      }),
       'realm-replies': {
         post: async (body: unknown, options: { headers: { 'idempotency-key': string } }) => {
           record('identity', body, options);
           return { data: { reply: 'reply' } };
         },
       },
+      'member-replies': () => ({ get: async () => ({ data: { revisionDigest: 'digest' } }) }),
       'realm-reply-placements': {
         post: async (body: unknown, options: { headers: { 'idempotency-key': string } }) => {
           record('place', body, options);

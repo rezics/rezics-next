@@ -88,8 +88,11 @@ export function PostComposer({
   const [joined, setJoined] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'failed' | 'refused' | 'banned' | null>(null);
+  const [postedHref, setPostedHref] = useState<string | null>(null);
+  const [checkingProjection, setCheckingProjection] = useState(false);
   const locked = Boolean(
-    draft.progress && (busy || draft.progress.revisionId || !draft.progress.restartRequired),
+    checkingProjection ||
+      (draft.progress && (busy || draft.progress.revisionId || !draft.progress.restartRequired)),
   );
   const reading = useReadingLanguages(actingSubject);
   const language = writingLanguage({ chosen: draft.language, reading });
@@ -242,6 +245,7 @@ export function PostComposer({
 
   function change(patch: Partial<Draft>) {
     if (locked) return;
+    setPostedHref(null);
     setDraft((before) => ({
       ...before,
       ...patch,
@@ -278,8 +282,15 @@ export function PostComposer({
       (header.reviewMode === 'trusted-members' && !joined)
     )
       return;
+    const community = draft.community;
+    const discussionHref = (reply: string) =>
+      localizedPath(
+        threadPath(communityHref(community.address ?? community.id), reply),
+        locale,
+      );
     setBusy(true);
     setError(null);
+    let projectionVisible = false;
     const progress = draft.progress ?? newPostProgress();
     saveProgress(progress);
     const result = await submitPost(
@@ -296,20 +307,26 @@ export function PostComposer({
       },
       progress,
       saveProgress,
+      undefined,
+      (reply) => {
+        try {
+          localStorage.removeItem(draftKey(actingSubject));
+        } catch {
+          /* optional */
+        }
+        setDraft(blank(community, draft.work));
+        setPostedHref(discussionHref(reply));
+        setCheckingProjection(true);
+        setBusy(false);
+      },
+      (visible) => {
+        projectionVisible = visible;
+        setCheckingProjection(false);
+      },
     );
     setBusy(false);
     if (result.kind === 'posted') {
-      try {
-        localStorage.removeItem(draftKey(actingSubject));
-      } catch {
-        /* optional */
-      }
-      router.push(
-        localizedPath(
-          threadPath(communityHref(draft.community.address ?? draft.community.id), result.reply),
-          locale,
-        ),
-      );
+      if (projectionVisible) router.push(discussionHref(result.reply));
     } else if (result.kind === 'refused') {
       setDraft((before) => ({ ...before, progress: null }));
       setError('refused');
@@ -542,11 +559,21 @@ export function PostComposer({
               <AlertDescription>{words[error][locale]}</AlertDescription>
             </Alert>
           ) : null}
+          {postedHref ? (
+            <Alert role="status">
+              <AlertDescription>
+                {words.postedAppearing[locale]}{' '}
+                <Link href={postedHref} className="font-medium underline">
+                  {words.openDiscussion[locale]}
+                </Link>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={!canPost} isLoading={busy}>
               {busy ? words.posting[locale] : words.post[locale]}
             </Button>
-            {hydrated ? (
+            {hydrated && !postedHref ? (
               <span role="status" className="text-muted-foreground text-xs">
                 {words.draftSaved[locale]}
               </span>

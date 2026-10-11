@@ -26,6 +26,8 @@ export default {
   post: 'Publier',
   posting: 'Publication…',
   draftSaved: 'Brouillon enregistré sur cet appareil',
+  postedAppearing: 'Votre publication est publiée. Elle peut mettre un instant à apparaître dans la discussion.',
+  openDiscussion: 'Ouvrir la discussion',
   failed: 'Publication impossible. Votre brouillon est toujours là ; réessayez.',
   refused: 'Cette communauté n’a pas accepté la publication. Consultez ses règles et ses paramètres.',
   unavailable: 'Impossible de charger cette communauté. Réessayez.',

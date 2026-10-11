@@ -27,6 +27,8 @@ export default {
   posting: '正在发布…',
   draftSaved: '草稿已保存在此设备上',
   failed: '发布失败。草稿仍在这里，请重试。',
+  postedAppearing: '帖子已发布，可能需要片刻才会显示在讨论中。',
+  openDiscussion: '打开讨论',
   refused: '这个社区没有接受帖子。请查看其规则和设置。',
   unavailable: '无法加载这个社区，请重试。',
   noCommunity: '没有匹配的社区',

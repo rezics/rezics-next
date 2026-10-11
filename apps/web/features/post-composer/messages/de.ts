@@ -26,6 +26,8 @@ export default {
   post: 'Veröffentlichen',
   posting: 'Wird veröffentlicht…',
   draftSaved: 'Entwurf auf diesem Gerät gespeichert',
+  postedAppearing: 'Dein Beitrag wurde veröffentlicht. Es kann einen Moment dauern, bis er in der Diskussion erscheint.',
+  openDiscussion: 'Diskussion öffnen',
   failed: 'Der Beitrag konnte nicht veröffentlicht werden. Dein Entwurf ist noch hier. Versuch es noch einmal.',
   refused: 'Diese Community hat den Beitrag nicht angenommen. Sieh in ihren Regeln und Einstellungen nach.',
   unavailable: 'Diese Community konnte nicht geladen werden. Versuch es noch einmal.',
