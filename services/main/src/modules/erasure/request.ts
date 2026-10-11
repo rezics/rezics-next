@@ -15,9 +15,9 @@ import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequ
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
 import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from './revision-kind.ts';
 import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
-  inventoryContributionPayloads, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
+  inventoryContributionPayloads, preflightGraphErasure, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
-  findErasureByOperation,
+  createErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
   markErasureBlocked, markErasureSuppressed, readErasure, type ErasureTargetInput,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
@@ -335,15 +335,22 @@ export async function requestContentErasure(service: ErasureService,
       if (resolved.some(revision => revision.erased)) {
         throw new ContentErasureStale('Erasure revision is already erased');
       }
+      const budget = createErasurePreflightBudget();
+      await preflightGraphErasure(graph.fuseki,
+        resolved.map(revision => revision.kind === 'content_revision' ? revision.ref : revision.graphIri), budget);
       const privatePayloads = await inventoryContributionPayloads(
-        graph.fuseki, graph.objectDirectory, resolved);
+        graph.fuseki, graph.objectDirectory, resolved, budget);
       const custody = await commandCustodyErasureTargets(service.preservationAccess,
-        resolved.filter(revision => isGraphErasureKind(revision.kind)).map(revision => revision.graphIri));
+        resolved.filter(revision => isGraphErasureKind(revision.kind)).map(revision => revision.graphIri), budget);
       for (const target of custody) {
+        if (!Number.isSafeInteger(target.payloadBytes) || target.payloadBytes! < 0
+          || target.payloadBytes! > erasurePreflightRemaining(budget, 'metadataBytes')) {
+          throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+        }
         if (!graph.receiptCustody || !graph.workObjects || target.payloadAbsent || target.erasureId) {
           throw new ContentErasureStale('command custody is unavailable for erasure');
         }
-        const source = await graph.receiptCustody.readCommitted(target.receipt);
+        const source = await graph.receiptCustody.readCommitted(target.receipt, budget);
         if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
           throw new ContentErasureStale('command custody is unavailable for erasure');
         }
@@ -354,6 +361,7 @@ export async function requestContentErasure(service: ErasureService,
           ...custody.map(target => `sha256:${target.payloadSha256}`)])]
           .map(ref => ({ kind: 'object' as const, ref })),
       ];
+      budget.targets = targets;
       assertErasureJournalTargetBound(targets);
       const contentTargets = resolved.filter(revision => revision.kind === 'content_revision');
       if (contentTargets.length) {
@@ -381,8 +389,6 @@ export async function requestContentErasure(service: ErasureService,
         if (!service.mediaObjects) throw new MediaErasureUnsupported('media object inventory is unavailable');
         const guarded = await withErasureFence(service, input.resourceId, operationId,
           async fence => {
-            const budget = { targets, indexedUnits: 0, inventoryEntries: privatePayloads.length + custody.length,
-              metadataBytes: 0, listingBytes: 0 };
             await withMediaErasureInventory(service.content, { asset,
               revisionIds: contentTargets.map(target => target.ref), admission: registered }, fence,
             service.mediaObjects!, async (_inventory, apply) => {
@@ -406,6 +412,7 @@ export async function requestContentErasure(service: ErasureService,
       if (error instanceof ContentErasureInvalid || error instanceof ContentErasureStale
         || error instanceof ContentErasureGraphRequired || error instanceof ErasureStale
         || error instanceof GraphErasureUnavailable || error instanceof MediaErasureUnsupported
+        || error instanceof ErasurePreflightUnsupported
         || error instanceof MediaFenced || error instanceof MediaStale) {
         if (erasureId) throw error;
         await cancel(access, registered, error);

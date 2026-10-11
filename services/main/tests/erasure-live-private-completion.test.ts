@@ -15,7 +15,8 @@ import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { applyContentErasure, ContentErasureStale, probeContentErasure } from '../src/modules/erasure/content.ts';
-import { journalErasure, readErasure, sha256, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
+import { ERASURE_PREFLIGHT_LIMITS, journalErasure, readErasure,
+  sha256, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
 import { completePendingContentErasures, contentErasureDigest, ErasureDenied, ErasureService,
   requestContentErasure, type ContentErasureInput } from '../src/modules/erasure/request.ts';
 import { assetIri, assetNamespace, assetVariant, MediaStore } from '../src/modules/media/store.ts';
@@ -112,6 +113,7 @@ class Graph extends FusekiClient {
   readonly suppressed = new Set<string>();
   readonly commands: CommandEnvelope[] = [];
   readonly queries: string[] = [];
+  readonly units: { graph: string; unit: string; target: string }[] = [];
   constructor() { super('http://erasure-completion.invalid'); }
   override async commandHealth() { return { moduleVersion: 'fixture', instanceId: 'fixture',
     publicSearchWriteEpoch: 'fixture', publicSearchWriteActive: true, profiles: {
@@ -129,7 +131,11 @@ class Graph extends FusekiClient {
         .map(([id, row]) => ({ revision: uri(resourceIri(id)), component: uri(row.owner), manifest: uri(row.manifest!),
           erased: bool(this.suppressed.has(resourceIri(id))), duplicate: bool(false) })) } };
     }
-    if (query.includes('SELECT DISTINCT ?graph ?unit ?target')) return { results: { bindings: [] } };
+    if (query.includes('SELECT DISTINCT ?graph ?unit ?target')) {
+      const limit = Number(/LIMIT (\d+)/.exec(query)?.[1]);
+      return { results: { bindings: this.units.filter(unit => !this.suppressed.has(unit.target)).slice(0, limit)
+        .map(unit => ({ graph: uri(unit.graph), unit: uri(unit.unit), target: uri(unit.target) })) } };
+    }
     if (query.includes('SELECT DISTINCT ?target')) {
       const selected = /VALUES \?target \{([^}]+)\}/.exec(query)?.[1] ?? '';
       const targets = [...selected.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
@@ -377,6 +383,66 @@ async function media(f: Awaited<ReturnType<typeof environment>>, image: Buffer, 
   const recorded = await store.recordAssetRevision(upload.upload);
   return { store, upload, revision: recorded.revision };
 }
+
+test('D3 graph and Media indexed units share one preflight ceiling; exactly 64 passes', async () => {
+  for (const total of [65, 64]) await fixture(async f => {
+    const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bd335b' } }).png().toBuffer();
+    const { upload, revision } = await media(f, image);
+    // Media's representation and upload contribute the other two indexed units.
+    for (let at = 0; at < total - 2; at++) f.graph.units.push({ graph: 'urn:rezics:search:private',
+      unit: `urn:rezics:match-unit:${at}`, target: `urn:rezics:content:revision:${revision}` });
+    const input = f.input(assetIri(upload.asset), [revision]);
+    if (total > ERASURE_PREFLIGHT_LIMITS.indexedUnits) {
+      await expect(f.call(input)).rejects.toThrow(MediaErasureUnsupported);
+      expect((await f.pool.query('SELECT id FROM relay.erasure')).rows).toEqual([]);
+      expect(f.graph.commands).toEqual([]);
+      expect(f.objects.deletes).toEqual([]);
+      expect((await f.pool.query('SELECT availability,serialized_bytes IS NOT NULL AS present FROM content.revision WHERE id=$1',
+        [revision])).rows[0]).toEqual({ availability: 'available', present: true });
+      expect(f.outcomes).toEqual(['cancelled']);
+    } else {
+      const result = await f.call(input);
+      expect(result.report.targets.every(target => target.completionState === 'completed')).toBe(true);
+      expect(f.objects.data.size).toBe(0);
+      expect(f.outcomes).toEqual(['succeeded']);
+    }
+  });
+});
+
+test('D3 Contribution and Media metadata share one preflight ceiling; exactly 8 MiB passes', async () => {
+  for (const overflow of [1, 0]) await fixture(async f => {
+    const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bd335b' } }).png().toBuffer();
+    const { upload, revision } = await media(f, image);
+    const owner = assetIri(upload.asset), contribution = f.contribution(owner);
+    const mediaBytes = (await f.pool.query<{ byte_length: number }>('SELECT byte_length FROM content.revision WHERE id=$1',
+      [revision])).rows[0]!.byte_length;
+    const manifest = readFileSync(join(f.env.objectDirectory, contribution.digest));
+    const payload = readFileSync(join(f.env.objectDirectory, contribution.payload));
+    // Valid JSON whitespace makes the actual immutable manifest read reach the boundary.
+    const padded = Buffer.concat([manifest, Buffer.alloc(ERASURE_PREFLIGHT_LIMITS.metadataBytes
+      - mediaBytes - payload.length - manifest.length + overflow, 32)]);
+    const digest = hash(padded);
+    writeFileSync(join(f.env.objectDirectory, digest), padded);
+    f.graph.revisions.get(contribution.id)!.manifest = `urn:rezics:sha256:${digest}`;
+    const input = f.input(owner, [revision, contribution.id]);
+    if (overflow) {
+      await expect(f.call(input)).rejects.toThrow(MediaErasureUnsupported);
+      expect((await f.pool.query('SELECT id FROM relay.erasure')).rows).toEqual([]);
+      expect(f.graph.commands).toEqual([]);
+      expect(f.objects.deletes).toEqual([]);
+      expect((await f.pool.query('SELECT availability,serialized_bytes IS NOT NULL AS present FROM content.revision WHERE id=$1',
+        [revision])).rows[0]).toEqual({ availability: 'available', present: true });
+      expect(existsSync(join(f.env.objectDirectory, contribution.payload))).toBe(true);
+      expect(f.outcomes).toEqual(['cancelled']);
+    } else {
+      const result = await f.call(input);
+      expect(result.report.targets.every(target => target.completionState === 'completed')).toBe(true);
+      expect(existsSync(join(f.env.objectDirectory, contribution.payload))).toBe(false);
+      expect(f.objects.data.size).toBe(0);
+      expect(f.outcomes).toEqual(['succeeded']);
+    }
+  });
+});
 
 test('P3/P4 unfinished Media with an independently committed Content clear retries inventory, then deletes only after Media commit', async () => {
   await fixture(async f => {

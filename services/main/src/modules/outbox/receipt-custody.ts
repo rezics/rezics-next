@@ -3,8 +3,11 @@ import { Pool, type PoolClient } from 'pg';
 import { boundedPool } from '../../infrastructure/pg-pool.ts';
 import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type CommandResult,
   type FusekiClient } from '../../infrastructure/fuseki.ts';
-import { ObjectIntegrityError, ObjectNotFound, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectNotFound, ObjectReadBudgetExceeded,
+  type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ProofRetirement } from '../graph/slim-command.ts';
+import { consumeErasurePreflight, erasurePreflightRemaining, ErasurePreflightUnsupported,
+  type ErasurePreflightBudget } from '../erasure/journal.ts';
 import { checkedEditionV2, checkedMetadataState, editionV2Digest, metadataDigest,
   type MetadataEditionState, type MetadataEditionStateV2 } from '../work/metadata-schema.ts';
 import type { CustodiedOutbox, CustodiedOutboxSource, MainOutboxBatch } from './relay.ts';
@@ -103,7 +106,7 @@ type CustodyRowState = RetainedCustodyRow | ErasedCustodyRow;
 export interface ReceiptCustodySession {
   /** The already borrowed receipt-lock client; issuing must never check out another one. */
   readonly client?: PoolClient;
-  read(): Promise<CustodyRow | null>;
+  read(maxPayloadBytes?: number): Promise<CustodyRow | null>;
   prepare(row: CustodyRow): Promise<void>;
   reconcile(terminal: CustodiedReceipt, outbox: Record<string, unknown>): Promise<void>;
   retire(): Promise<void>;
@@ -245,14 +248,16 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
       };
       const session: ReceiptCustodySession = {
         client: held,
-        read: async () => {
+        read: async maxPayloadBytes => {
           const row = (await held.query<{ receipt: string; request_digest: string; payload_sha256: string;
             payload: Buffer | null; payload_erasure_id: string | null; payload_erasure_epoch: string | null;
             revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
             reconciled: boolean; retired: boolean }>(`SELECT receipt, request_digest, payload_sha256, payload,
               payload_erasure_id, payload_erasure_epoch, revision, terminal, outbox,
               reconciled_at IS NOT NULL AS reconciled, retired_at IS NOT NULL AS retired
-              FROM access.command_custody WHERE receipt = $1`, [receipt])).rows[0];
+              FROM access.command_custody WHERE receipt = $1
+                AND ($2::integer IS NULL OR coalesce(octet_length(payload),0) <= $2)`,
+          [receipt, maxPayloadBytes ?? null])).rows[0];
           if (!row) return null;
           if ((row.payload === null) !== (row.payload_erasure_id !== null)
             || (row.payload_erasure_id === null) !== (row.payload_erasure_epoch === null)) {
@@ -721,17 +726,33 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     return value;
   }
 
-  private async exactObject(row: RetainedCustodyRow): Promise<PreparedCommand> {
+  private async erasureObject(digest: string, budget?: ErasurePreflightBudget): Promise<Uint8Array> {
+    if (!budget) return this.objects.get(digest);
+    const remaining = erasurePreflightRemaining(budget, 'metadataBytes');
+    if (remaining === 0) consumeErasurePreflight(budget, 'metadataBytes', 1);
+    let bytes: Uint8Array;
+    try { bytes = await this.objects.get(digest, remaining); }
+    catch (error) {
+      if (error instanceof ObjectReadBudgetExceeded) {
+        throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+      }
+      throw error;
+    }
+    consumeErasurePreflight(budget, 'metadataBytes', bytes.byteLength);
+    return bytes;
+  }
+
+  private async exactObject(row: RetainedCustodyRow, budget?: ErasurePreflightBudget): Promise<PreparedCommand> {
     const commandBytes = custodyPayload(row);
     const prepared = this.prepared(row);
-    const bytes = await this.objects.get(row.payloadSha256);
+    const bytes = await this.erasureObject(row.payloadSha256, budget);
     if (sha256(bytes) !== row.payloadSha256 || !Buffer.from(bytes).equals(Buffer.from(commandBytes))) {
       throw new ObjectIntegrityError('Custodied command object differs');
     }
     // The command object also binds the exact component manifest and payload.
     const manifestDigest = prepared.manifest.replace(/^urn:rezics:sha256:/, '');
     if (!/^[0-9a-f]{64}$/.test(manifestDigest)) throw new ObjectIntegrityError('Invalid component manifest digest');
-    const manifestBytes = await this.objects.get(manifestDigest);
+    const manifestBytes = await this.erasureObject(manifestDigest, budget);
     if (sha256(manifestBytes) !== manifestDigest) throw new ObjectIntegrityError('Component manifest differs');
     const manifest = JSON.parse(Buffer.from(manifestBytes).toString('utf8')) as {
       format: string; component: string; payload: string; payloadBytes: number;
@@ -742,7 +763,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       || !['https://rezics.com/definition/work-metadata-details-v1',
         'https://rezics.com/definition/work-metadata-details-v2'].includes(manifest.model)
       || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) throw new ObjectIntegrityError('Component manifest binding differs');
-    const payload = await this.objects.get(manifest.payload.slice(7));
+    const payload = await this.erasureObject(manifest.payload.slice(7), budget);
     if (sha256(payload) !== manifest.payload.slice(7) || payload.length !== manifest.payloadBytes) {
       throw new ObjectIntegrityError('Exact component payload differs');
     }
@@ -765,13 +786,13 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   /** Persist the bounded object roots alongside the terminal outbox before payload erasure can occur. */
   private async exactObjectReferences(row: RetainedCustodyRow, prepared: PreparedCommand,
-    tolerateMissingShapes = false): Promise<{
+    tolerateMissingShapes = false, budget?: ErasurePreflightBudget): Promise<{
     manifestSha256: string; componentPayloadSha256: string; model: string;
     objectReferences: CustodyObjectReference[]; missingShapeDigests: Set<string>;
   }> {
     const manifestSha256 = prepared.manifest.replace(/^urn:rezics:sha256:/, '');
     if (!/^[0-9a-f]{64}$/.test(manifestSha256)) throw new ObjectIntegrityError('Invalid component manifest digest');
-    const manifestBytes = await this.objects.get(manifestSha256);
+    const manifestBytes = await this.erasureObject(manifestSha256, budget);
     if (sha256(manifestBytes) !== manifestSha256) throw new ObjectIntegrityError('Retained component manifest differs');
     let manifest: unknown;
     try { manifest = JSON.parse(Buffer.from(manifestBytes).toString('utf8')); }
@@ -788,7 +809,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     const missingShapeDigests = new Set<string>();
     for (const digest of shapeDigests) {
       let bytes: Uint8Array;
-      try { bytes = await this.objects.get(digest); }
+      try { bytes = await this.erasureObject(digest, budget); }
       catch (error) {
         if (tolerateMissingShapes && error instanceof ObjectNotFound) {
           missingShapeDigests.add(digest);
@@ -893,17 +914,18 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   /** Read an already committed source; recovery must never dispatch a live
    * command or turn a pending admission into historical authority. */
-  async readCommitted(receipt: string): Promise<CommittedCustodySource | null> {
+  async readCommitted(receipt: string, budget?: ErasurePreflightBudget): Promise<CommittedCustodySource | null> {
     nativeIri(receipt);
     return this.store.withReceipt(receipt, async session => {
-      const stored = await session.read();
+      const stored = await session.read(budget ? erasurePreflightRemaining(budget, 'metadataBytes') : undefined);
       const row = stored ? custodyState(stored) : null;
       if (!row) return null;
       if (row.payload === null) {
         erasedTerminal(row);
         return null;
       }
-      return this.verifyCommitted(row);
+      if (budget) consumeErasurePreflight(budget, 'metadataBytes', row.payload.byteLength);
+      return this.verifyCommitted(row, false, budget);
     });
   }
 
@@ -991,7 +1013,8 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       objectDigests: new Set(source.objectReferences.map(reference => reference.digest)) };
   }
 
-  private async verifyCommitted(row: RetainedCustodyRow, tolerateMissingShapes = false): Promise<CommittedCustodySource> {
+  private async verifyCommitted(row: RetainedCustodyRow, tolerateMissingShapes = false,
+    budget?: ErasurePreflightBudget): Promise<CommittedCustodySource> {
     nativeIri(row.receipt);
     const payload = custodyPayload(row);
     if (!row.reconciled || !row.terminal || !row.outbox
@@ -999,8 +1022,8 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       throw new ObjectIntegrityError('Retained command is not bounded committed custody');
     }
     const terminal = this.committedTerminal(row);
-    const prepared = await this.exactObject(row);
-    const closure = await this.exactObjectReferences(row, prepared, tolerateMissingShapes);
+    const prepared = await this.exactObject(row, budget);
+    const closure = await this.exactObjectReferences(row, prepared, tolerateMissingShapes, budget);
     if (row.outbox.custodyObjectReferences !== undefined
       && canonicalJson(row.outbox.custodyObjectReferences) !== canonicalJson(closure.objectReferences)) {
       throw new ObjectIntegrityError('Retained command object closure differs from its exact source');

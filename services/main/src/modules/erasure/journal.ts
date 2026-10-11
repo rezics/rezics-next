@@ -23,6 +23,43 @@ export const ERASURE_JOURNAL_EPOCH = 'urn:rezics:relay:erasure-journal';
 
 export interface ErasureTargetInput { kind: ErasureTargetKind; ref: string }
 
+/** All owners inventory one closure before any journal or destructive transition. */
+export const ERASURE_PREFLIGHT_LIMITS = {
+  indexedUnits: 64, inventoryEntries: MAX_ERASURE_TARGETS,
+  metadataBytes: 8 * 1024 * 1024, listingBytes: 1024 * 1024,
+} as const;
+
+export interface ErasurePreflightBudget {
+  targets: ErasureTargetInput[];
+  indexedUnits: number;
+  inventoryEntries: number;
+  metadataBytes: number;
+  listingBytes: number;
+}
+
+export class ErasurePreflightUnsupported extends ErasureUnavailable {}
+
+export function createErasurePreflightBudget(): ErasurePreflightBudget {
+  return { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 };
+}
+
+export function consumeErasurePreflight(budget: ErasurePreflightBudget,
+  field: keyof typeof ERASURE_PREFLIGHT_LIMITS, count: number): void {
+  const total = budget[field] + count;
+  if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(total)
+    || total > ERASURE_PREFLIGHT_LIMITS[field]) {
+    throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+  }
+  budget[field] = total;
+}
+
+/** Zero remaining still permits one lookahead to prove an empty next index. */
+export function erasurePreflightRemaining(budget: ErasurePreflightBudget,
+  field: keyof typeof ERASURE_PREFLIGHT_LIMITS): number {
+  consumeErasurePreflight(budget, field, 0);
+  return ERASURE_PREFLIGHT_LIMITS[field] - budget[field];
+}
+
 /** The complete target-list validation shared by erasure admission and journaling. */
 export function isValidErasureTargetList(
   targets: readonly { kind: string; ref: string }[],

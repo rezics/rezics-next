@@ -16,7 +16,8 @@ import { admittedContributionLanguage, CONTRIBUTION_CREATE_READ_COST, CONTRIBUTI
 import { readComponentState, RevisionCorrupt, RevisionReadBudgetExceeded, RevisionUnavailable,
   type RevisionReadBudget } from '../work/history.ts';
 import type { ResolvedErasureRevision } from './revision-kind.ts';
-import { isValidErasureTargetList } from './journal.ts';
+import { consumeErasurePreflight, erasurePreflightRemaining, isValidErasureTargetList,
+  type ErasurePreflightBudget } from './journal.ts';
 import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 
 const PUBLIC = 'urn:rezics:search:public';
@@ -118,17 +119,24 @@ interface Unit {
 }
 
 /** One indexed triple-pattern read, at most 65 rows. A larger fanout is refused. */
-async function indexedUnits(fuseki: FusekiClient, targets: readonly string[]): Promise<Unit[]> {
+async function indexedUnits(fuseki: FusekiClient, targets: readonly string[],
+  budget?: ErasurePreflightBudget): Promise<Unit[]> {
+  const limit = budget ? Math.min(MAX_UNITS, erasurePreflightRemaining(budget, 'indexedUnits'),
+    erasurePreflightRemaining(budget, 'inventoryEntries')) : MAX_UNITS;
   const result = await fuseki.query(
     `PREFIX rv: <${RV}> SELECT DISTINCT ?graph ?unit ?target WHERE {
     VALUES ?target { ${targets.map(iri).join(' ')} }
     VALUES ?graph { ${iri(PUBLIC)} ${iri(PRIVATE)} }
     VALUES ?reference { rv:revision rv:contentRevision }
     GRAPH ?graph { ?unit ?reference ?target . }
-  } ORDER BY ?graph ?unit LIMIT ${MAX_UNITS + 1}`,
+  } ORDER BY ?graph ?unit LIMIT ${limit + 1}`,
     65_536,
   );
   const rows = result.results?.bindings ?? [];
+  if (budget) {
+    consumeErasurePreflight(budget, 'indexedUnits', rows.length);
+    consumeErasurePreflight(budget, 'inventoryEntries', rows.length);
+  }
   if (rows.length > MAX_UNITS)
     throw new GraphErasureUnavailable('indexed erasure fanout exceeds 64 units');
   const accepted = new Set(targets);
@@ -148,6 +156,12 @@ async function indexedUnits(fuseki: FusekiClient, targets: readonly string[]): P
     throw new GraphErasureUnavailable('indexed erasure inventory differs');
   }
   return units;
+}
+
+/** The same owner index used by suppression is checked before committing intent. */
+export async function preflightGraphErasure(fuseki: FusekiClient, revisionIds: readonly string[],
+  budget: ErasurePreflightBudget): Promise<void> {
+  await indexedUnits(fuseki, checkedTargets(revisionIds), budget);
 }
 
 export interface ContributionPayloadInventory {
@@ -210,6 +224,7 @@ export async function inventoryContributionPayloads(
   fuseki: Pick<FusekiClient, 'query'>,
   objectDirectory: string,
   revisions: readonly ResolvedErasureRevision[],
+  sharedBudget?: ErasurePreflightBudget,
 ): Promise<ContributionPayloadInventory[]> {
   const contributions = revisions.filter(revision => revision.kind === 'text_contribution_draft');
   if (!contributions.length) return [];
@@ -237,6 +252,8 @@ export async function inventoryContributionPayloads(
   const seenReferences = new Set<string>();
   const seenTargets = new Set<string>();
   for (const candidateManifest of manifests) {
+    const referenceLimit = sharedBudget
+      ? Math.min(MAX_REFERENCES, erasurePreflightRemaining(sharedBudget, 'inventoryEntries')) : MAX_REFERENCES;
     const refs = await fuseki.query(
       `PREFIX rv: <${RV}> SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
       VALUES ?manifest { ${iri(candidateManifest)} }
@@ -246,10 +263,11 @@ export async function inventoryContributionPayloads(
       BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
       BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?otherManifest .
         FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
-    } ORDER BY ?revision LIMIT ${MAX_REFERENCES + 1}`,
+    } ORDER BY ?revision LIMIT ${referenceLimit + 1}`,
       65_536,
     );
     const rows = refs.results?.bindings;
+    if (sharedBudget && rows) consumeErasurePreflight(sharedBudget, 'inventoryEntries', rows.length);
     if (!rows || rows.length > MAX_REFERENCES) {
       throw new GraphErasureUnavailable('Contribution reverse-reference fanout exceeds 64');
     }
@@ -285,11 +303,13 @@ export async function inventoryContributionPayloads(
   }
 
   const budget: RevisionReadBudget = {
-    bytesLeft: CONTRIBUTION_CREATE_READ_COST.objectBytes,
+    bytesLeft: sharedBudget ? erasurePreflightRemaining(sharedBudget, 'metadataBytes')
+      : CONTRIBUTION_CREATE_READ_COST.objectBytes,
     signal: AbortSignal.timeout(CONTRIBUTION_CREATE_READ_COST.deadlineMs),
   };
   const payloadByManifest = new Map<string, { payloadRef: string; contentForm: 'body' | 'document' }>();
   for (const [manifest, component] of byManifest) {
+    const bytesBefore = budget.bytesLeft;
     const captured: string[] = [];
     let state: Record<string, unknown>;
     try {
@@ -302,6 +322,7 @@ export async function inventoryContributionPayloads(
       }
       throw error;
     }
+    if (sharedBudget) consumeErasurePreflight(sharedBudget, 'metadataBytes', bytesBefore - budget.bytesLeft);
     const manifestDigest = manifest.slice('urn:rezics:sha256:'.length);
     if (captured.length !== 2 || captured[0] !== manifestDigest
       || !/^[0-9a-f]{64}$/.test(captured[1] ?? '')) {

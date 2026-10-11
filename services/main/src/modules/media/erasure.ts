@@ -4,7 +4,8 @@ import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { MAX_CONTENT_ERASURE_TARGETS } from '../erasure/content.ts';
 import { readGraphErasureProof } from '../erasure/graph.ts';
-import { MAX_ERASURE_TARGETS, readErasure, type ErasureTargetInput } from '../erasure/journal.ts';
+import { ERASURE_PREFLIGHT_LIMITS, MAX_ERASURE_TARGETS, readErasure,
+  type ErasurePreflightBudget, type ErasureTargetInput } from '../erasure/journal.ts';
 import { graphRevisionIds } from '../erasure/revision-kind.ts';
 import { settledContentPosition } from '../content-sequence.ts';
 import { withPreservationFence, type PreservationAccess, type PreservationFence } from '../public-report/preservation.ts';
@@ -16,9 +17,9 @@ export class MediaErasureUnsupported extends MediaUnavailable {}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DIGEST = /^[0-9a-f]{64}$/;
-const MAX_INDEXED_UNITS = 64;
-const MAX_METADATA_BYTES = 8 * 1024 * 1024;
-const MAX_LISTING_BYTES = 1024 * 1024;
+const MAX_INDEXED_UNITS = ERASURE_PREFLIGHT_LIMITS.indexedUnits;
+const MAX_METADATA_BYTES = ERASURE_PREFLIGHT_LIMITS.metadataBytes;
+const MAX_LISTING_BYTES = ERASURE_PREFLIGHT_LIMITS.listingBytes;
 
 export interface MediaErasureSelection {
   asset: string;
@@ -28,13 +29,7 @@ export interface MediaErasureSelection {
 }
 
 /** The caller can share this budget with the other owners in one preflight. */
-export interface MediaErasureBudget {
-  targets: ErasureTargetInput[];
-  indexedUnits: number;
-  inventoryEntries: number;
-  metadataBytes: number;
-  listingBytes: number;
-}
+export type MediaErasureBudget = ErasurePreflightBudget;
 
 export interface MediaErasureInventory {
   asset: string;
@@ -75,7 +70,7 @@ function checkSelection(selection: MediaErasureSelection): void {
 
 function inventoryReadLimit(budget: MediaErasureBudget, ownerRemaining: number): number {
   const remaining = MAX_ERASURE_TARGETS - budget.inventoryEntries;
-  if (remaining < 1) throw new MediaErasureUnsupported('media inventory entry budget is exhausted');
+  if (remaining < 0) throw new MediaErasureUnsupported('media inventory entry budget is exhausted');
   return Math.min(ownerRemaining, remaining);
 }
 
@@ -166,7 +161,13 @@ async function inventoryLocked(client: PoolClient, selection: MediaErasureSelect
     && !(retained && revision.availability === 'erased'))) {
     throw new MediaErasureUnsupported('media revision manifest is unavailable');
   }
-  budget.metadataBytes += revisions.reduce((total, revision) => total + revision.byte_length, 0);
+  for (const revision of revisions) {
+    if (!Number.isSafeInteger(revision.byte_length) || revision.byte_length < 0) {
+      throw new MediaErasureUnsupported('media revision byte inventory is unavailable');
+    }
+    budget.metadataBytes += revision.byte_length;
+    checkBudget(budget);
+  }
   checkBudget(budget);
   const { representations, uploads } = await indexedRows(client, selection.asset, budget);
   const byRepresentation = new Map(representations.map(representation => [representation.id, representation]));

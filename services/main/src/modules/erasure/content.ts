@@ -2,7 +2,8 @@ import type { Pool, PoolClient } from 'pg';
 import { revisionsWithOpenCommentSource } from '../../../../content/src/comments.ts';
 import { withPreservationFence, type PreservationAccess } from '../public-report/preservation.ts';
 import { graphErasureReceipt } from './graph.ts';
-import { MAX_ERASURE_TARGETS } from './journal.ts';
+import { consumeErasurePreflight, erasurePreflightRemaining, MAX_ERASURE_TARGETS,
+  type ErasurePreflightBudget } from './journal.ts';
 import type { ReceiptCustody } from '../outbox/receipt-custody.ts';
 
 export class ContentErasureInvalid extends Error {}
@@ -264,21 +265,29 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
 export interface CommandCustodyErasureTarget {
   receipt: string; revision: string; payloadSha256: string;
   erasureId: string | null; erasureEpoch: string | null; payloadAbsent: boolean;
+  payloadBytes?: number;
 }
 
 /** The unique revision key bounds this lookup to one retained command per revision,
  * including retired proofs. No current-head or whole-custody scan is sufficient. */
 export async function commandCustodyErasureTargets(access: Pool | PoolClient,
-  revisionIris: readonly string[]): Promise<CommandCustodyErasureTarget[]> {
+  revisionIris: readonly string[], budget?: ErasurePreflightBudget): Promise<CommandCustodyErasureTarget[]> {
   if (!revisionIris.length) return [];
   if (revisionIris.length > MAX_CONTENT_ERASURE_TARGETS) {
     throw new ContentErasureInvalid('command custody inventory is too large');
   }
-  return (await access.query<CommandCustodyErasureTarget>(`SELECT receipt, revision,
+  const limit = budget ? Math.min(MAX_CONTENT_ERASURE_TARGETS,
+    erasurePreflightRemaining(budget, 'inventoryEntries')) : MAX_CONTENT_ERASURE_TARGETS;
+  const rows = (await access.query<CommandCustodyErasureTarget>(`SELECT receipt, revision,
     payload_sha256 AS "payloadSha256", payload_erasure_id::text AS "erasureId",
-    payload_erasure_epoch::text AS "erasureEpoch", payload IS NULL AS "payloadAbsent"
-    FROM access.command_custody WHERE revision = ANY($1::text[]) ORDER BY revision LIMIT 65`,
+    payload_erasure_epoch::text AS "erasureEpoch", payload IS NULL AS "payloadAbsent",
+    coalesce(octet_length(payload), 0) AS "payloadBytes"
+    FROM access.command_custody WHERE revision = ANY($1::text[]) ORDER BY revision LIMIT ${limit + 1}`,
   [revisionIris])).rows;
+  if (budget) {
+    consumeErasurePreflight(budget, 'inventoryEntries', rows.length);
+  }
+  return rows;
 }
 
 /** Custody's own receipt lock, original proof and guarded terminal transition remain
