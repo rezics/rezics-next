@@ -8,8 +8,8 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequired,
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
 import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from './revision-kind.ts';
-import { GraphErasureConflict, GraphErasureUnavailable, readGraphErasureProof,
-  suppressGraphContentRevisions } from './graph.ts';
+import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
+  inventoryContributionPayloads, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
   findErasureByOperation,
   journalErasure, markErasureBlocked, markErasureSuppressed, readErasure,
@@ -184,6 +184,14 @@ export async function requestContentErasure(service: ErasureService,
       if (resolved.some(revision => revision.erased)) {
         throw new ContentErasureStale('Erasure revision is already erased');
       }
+      const privatePayloads = await inventoryContributionPayloads(
+        graph.fuseki, graph.objectDirectory, resolved);
+      const payloadTargets = [...new Set(privatePayloads.map(payload => payload.payloadRef))]
+        .map(ref => ({ kind: 'object', ref }));
+      assertErasureJournalTargetBound([
+        ...resolved.map(revision => ({ kind: revision.kind, ref: revision.ref })),
+        ...payloadTargets,
+      ]);
       const contentTargets = resolved.filter(revision => revision.kind === 'content_revision');
       if (contentTargets.length) {
         assertFreshContentTargets(contentTargets.map(revision => ({
@@ -203,7 +211,8 @@ export async function requestContentErasure(service: ErasureService,
       replayed = journaled.replayed;
     } catch (error) {
       if (error instanceof ContentErasureInvalid || error instanceof ContentErasureStale
-        || error instanceof ContentErasureGraphRequired || error instanceof ErasureStale) {
+        || error instanceof ContentErasureGraphRequired || error instanceof ErasureStale
+        || error instanceof GraphErasureUnavailable) {
         await cancel(access, registered, error);
       }
       throw error;

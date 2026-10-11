@@ -5,6 +5,7 @@ import { ContentErasureInvalid, MAX_CONTENT_ERASURE_TARGETS, readContentErasureT
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const RESOURCE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const XSD_BOOLEAN = 'http://www.w3.org/2001/XMLSchema#boolean';
 
 /**
  * Graph revision kinds whose reads already hide `rv:ErasedRevision`.
@@ -48,6 +49,8 @@ export interface ResolvedErasureRevision {
   resourceId: string;
   /** Exact graph subject the shared tombstone names. */
   graphIri: string;
+  /** Contribution draft component manifest, captured with anchor identity. */
+  manifest?: string;
   /** The revision already carries `rv:ErasedRevision` or a Content tombstone. */
   erased: boolean;
   /** Content pin state from the same statement as identity. Absent for a graph kind. */
@@ -77,7 +80,7 @@ function identityQuery(revisions: readonly string[]): string {
     ?revision a rv:RevisionAnchor ; rv:component ?owner .
     FILTER NOT EXISTS { ?revision a ?specific . VALUES ?specific { ${SPECIFIC} } } }`;
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?revision ?kind ?owner ?erased WHERE {
+    SELECT ?revision ?kind ?owner ?manifest ?erased WHERE {
       VALUES ?revision { ${values} }
       { GRAPH ${iri(GRAPHS.revisions)} {
           ?revision a rv:ReleaseRevision ; rv:component ?owner . }
@@ -95,6 +98,7 @@ function identityQuery(revisions: readonly string[]): string {
         BIND("work_head" AS ?kind) }
       UNION { ${anchor}
         GRAPH ${iri(GRAPHS.current)} { ?owner a rv:TextContribution . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?manifest . }
         BIND("text_contribution_draft" AS ?kind) }
       BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
     } LIMIT ${revisions.length * 2 + 1}`;
@@ -134,16 +138,28 @@ export async function resolveErasureRevisions(content: Queryable,
       const revision = row.revision?.value ?? '';
       const kind = row.kind?.value ?? '';
       const owner = row.owner?.value ?? '';
+      const manifest = row.manifest?.value;
+      const erased = row.erased?.type === 'literal' && row.erased.datatype === XSD_BOOLEAN
+        && (row.erased.value === 'true' || row.erased.value === 'false')
+        ? row.erased.value === 'true' : null;
       const ref = revision.startsWith(ID) ? revision.slice(ID.length) : '';
       if (!graphIds.includes(ref) || !isGraphErasureKind(kind) || !RESOURCE.test(owner)
-        || row.revision?.type !== 'uri' || row.owner?.type !== 'uri') {
+        || row.revision?.type !== 'uri' || row.revision.datatype !== undefined || row.revision['xml:lang'] !== undefined
+        || row.kind?.type !== 'literal' || row.owner?.type !== 'uri'
+        || row.owner.datatype !== undefined || row.owner['xml:lang'] !== undefined || erased === null) {
         refuse('Erasure revision identity is ambiguous');
       }
+      if (kind === 'text_contribution_draft'
+        && (row.manifest?.type !== 'uri' || row.manifest.datatype !== undefined
+          || row.manifest['xml:lang'] !== undefined
+          || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifest ?? ''))) {
+        refuse('Contribution revision manifest is unavailable');
+      }
       const resolved: ResolvedErasureRevision = { kind, ref, resourceId: owner,
-        graphIri: revision, erased: row.erased?.value === 'true' };
+        graphIri: revision, ...(manifest ? { manifest } : {}), erased };
       const prior = graphById.get(ref);
       if (prior && (prior.kind !== resolved.kind || prior.resourceId !== resolved.resourceId
-        || prior.graphIri !== resolved.graphIri)) {
+        || prior.graphIri !== resolved.graphIri || prior.manifest !== resolved.manifest)) {
         refuse('Erasure revision identity is ambiguous');
       }
       graphById.set(ref, { ...resolved, erased: Boolean(prior?.erased) || resolved.erased });

@@ -11,12 +11,13 @@ import { ERASURE_REVISION_RESOURCES, GRAPH_ERASURE_KINDS, graphRevisionIds, reso
 
 const uuid = (ordinal: number) => `00000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
 const resource = (ordinal: number) => `https://rezics.com/id/${uuid(ordinal)}`;
+const XSD_BOOLEAN = 'http://www.w3.org/2001/XMLSchema#boolean';
 
 function content(rows: { id: string; resource_id: string; availability: string }[]) {
   return { query: async () => ({ rows }) } as unknown as Pick<Pool, 'query'>;
 }
 
-function graph(rows: { revision: string; kind: string; owner: string; erased?: boolean }[],
+function graph(rows: { revision: string; kind: string; owner: string; erased?: boolean; manifest?: string }[],
   seen: string[] = []) {
   return { query: async (sparql: string) => {
     seen.push(sparql);
@@ -24,13 +25,14 @@ function graph(rows: { revision: string; kind: string; owner: string; erased?: b
       revision: { type: 'uri' as const, value: row.revision },
       kind: { type: 'literal' as const, value: row.kind },
       owner: { type: 'uri' as const, value: row.owner },
-      erased: { type: 'literal' as const, value: row.erased ? 'true' : 'false' },
+      ...(row.manifest ? { manifest: { type: 'uri' as const, value: row.manifest } } : {}),
+      erased: { type: 'literal' as const, value: row.erased ? 'true' : 'false', datatype: XSD_BOOLEAN },
     })) } };
   } } as unknown as Pick<FusekiClient, 'query'>;
 }
 
 const kinds = [
-  ['text_contribution_draft', 'TextContribution', 'text-contribution'],
+  ['text_contribution_draft', 'TextContribution', 'text-contribution', `urn:rezics:sha256:${'ab'.repeat(32)}`],
   ['semantic_revision', 'SemanticRevision', 'semantic-component'],
   ['release_revision', 'ReleaseRevision', 'release'],
   ['work_head', 'CreativeWork', 'work'],
@@ -38,14 +40,14 @@ const kinds = [
 ] as const;
 
 test('each graph revision kind resolves to its owner resource', async () => {
-  for (const [kind, type, ownerKind] of kinds) {
+  for (const [kind, type, ownerKind, manifest] of kinds) {
     const seen: string[] = [];
     const owner = resource(1);
     const revision = resource(2);
     const resolved = await resolveErasureRevisions(content([]), graph([{
-      revision, kind, owner }], seen), owner, [uuid(2)]);
+      revision, kind, owner, ...(manifest ? { manifest } : {}) }], seen), owner, [uuid(2)]);
     expect(resolved).toEqual([{ kind, ref: uuid(2), resourceId: owner,
-      graphIri: revision, erased: false } satisfies ResolvedErasureRevision]);
+      graphIri: revision, ...(manifest ? { manifest } : {}), erased: false } satisfies ResolvedErasureRevision]);
     expect(seen[0]).toContain(type);
     expect(seen[0]).toContain('FixedRelease');
     expect(ERASURE_REVISION_RESOURCES[kind]).toBe(ownerKind);
