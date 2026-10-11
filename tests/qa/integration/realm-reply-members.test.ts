@@ -196,7 +196,7 @@ test('mandatory review refuses member and owner direct placement without creatin
   } finally { await h.close(); }
 }, 180_000);
 
-test('G-277: members place reviewed replies; direct policy respects membership, moderator veto and policy races', async () => {
+test('legacy Realm members place reviewed replies; direct policy respects membership, moderator veto and policy races', async () => {
   const h = await memberFixture();
   try {
     expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
@@ -232,17 +232,17 @@ test('G-277: members place reviewed replies; direct policy respects membership, 
     };
     const input = { profile: 'member-reply-draft-v1', reply: nativeId(), variantId: `urn:rezics:variant:${randomUUID()}`,
       rootTarget: h.work.work, rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr',
-      expectedHead: null, body: 'A Realm member reply.', actingSubject: h.actor };
+      expectedHead: null, body: 'A Realm member reply.', actingSubject: h.pen };
     const draft = await h.post('/v1/member-reply-drafts', input);
     expect(draft.status, JSON.stringify(draft.body)).toBe(201);
     expect((await h.post('/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply: input.reply,
-      variantId: input.variantId, revisionId: draft.body.revisionId, author: h.actor,
+      variantId: input.variantId, revisionId: draft.body.revisionId, author: h.pen,
       rootTarget: input.rootTarget, rootRevision: input.rootRevision,
       parentReply: null, parentRevision: null, contextRevision: null })).status).toBe(201);
     const bytes = draft.body.revisionDigest;
     const placement = { profile: 'realm-reply-placement-v1', realm, reply: input.reply,
       revisionId: draft.body.revisionId, revisionDigest: bytes, reviewDecisionId: null,
-      expectedHead: null, actingSubject: h.actor };
+      expectedHead: null, actingSubject: h.pen };
     expect((await h.post('/v1/realm-reply-placements', placement)).status).toBe(403);
     const review = { profile: 'realm-reply-review-v1', realm, reply: input.reply,
       revisionId: draft.body.revisionId, revisionDigest: bytes, expectedGeneration: '0', supersedes: null,
@@ -255,7 +255,7 @@ test('G-277: members place reviewed replies; direct policy respects membership, 
     const placed = await h.post('/v1/realm-reply-placements', { ...placement, reviewDecisionId: approved.body.decisionId });
     expect(placed.status, JSON.stringify(placed.body)).toBe(201);
     expect((await h.accessPool.query(`SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND action = 'reply.place'`, [h.actor])).rowCount).toBe(0);
+      WHERE recipient_subject = $1 AND action = 'reply.place'`, [h.pen])).rowCount).toBe(0);
     await grant(`realm:profile:${realm}`, 'realm.profile.publish');
     let profileHead: string | null = null;
     const policy = async (replyPolicy: 'moderated' | 'members-direct') => {
@@ -285,7 +285,7 @@ test('G-277: members place reviewed replies; direct policy respects membership, 
     expect(await h.replies.visible(realm, input.reply)).toBeNull();
     expect((await h.post('/v1/realm-reply-placements', { ...direct, expectedHead: accepted.body.placement })).status).toBe(403);
     // Register before leave/rejoin: the old episode cannot be claimed afterwards.
-    const registered = await h.access.register({ principal, actingSubject: h.actor,
+    const registered = await h.access.register({ principal, actingSubject: h.pen,
       action: 'reply.place', scope: `reply:place:${realm}`, idempotencyKey: randomUUID(),
       requestDigest: realmReplyDigest(direct) });
     await h.accessPool.query(`UPDATE access.private_membership SET state='left', generation=2,
