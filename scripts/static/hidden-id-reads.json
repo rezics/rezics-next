@@ -1579,6 +1579,15 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/realms/{realm}/about-thread",
+    "ids": [
+      "path:realm",
+      "query:about",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/realms/{realm}/audit",
     "ids": [
       "path:realm",

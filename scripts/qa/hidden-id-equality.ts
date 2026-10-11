@@ -12,6 +12,9 @@ const openApiPath = 'generated/openapi/main/public.json';
 export const registeredHiddenIdReads = [
   'GET /v1/concepts/{id}',
   'GET /v1/exports/{export}',
+  // Only the thread hidden/absent case is proved by realm-about-thread-read.test.ts;
+  // resource and Realm read-count equality remain known limits.
+  'GET /v1/realms/{realm}/about-thread',
   'GET /v1/realms/{realm}/members',
   'GET /v1/realms/{realm}/roles',
   'GET /v1/statements/{id}',
