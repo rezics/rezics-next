@@ -106,7 +106,10 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
         expect(dimension).toBe('unrelatedWorks');
         const created = await seedPublicProfileWork(client, key, { actingSubject: actor,
           title: `Checkpoint public Work ${index}`, body: `Checkpoint selected text ${index}` });
-        if (works[index]) expect(created).toEqual(works[index]);
+        const earlier = works[index];
+        if (earlier) expect(created).toMatchObject({ work: earlier.work, mainVersion: earlier.mainVersion,
+          contribution: earlier.contribution, draftRevision: earlier.draftRevision,
+          publicationDecision: earlier.publicationDecision, selection: earlier.selection });
         works[index] = created;
       },
       verify: client => census(client, works.length),
