@@ -38,6 +38,11 @@ export interface Standing {
   through: Episode | null;
   /** The episode to continue from: the one after the furthest completed, or after that run when none is. */
   next: Episode | null;
+  /**
+   * The furthest main occurrence completed, from the same resume read that places `next`.
+   * Null when the reader has not completed any main episode.
+   */
+  furthest: EpisodePart | null;
 }
 
 /** What marking an occurrence leaves in its position. */
@@ -139,15 +144,20 @@ export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<
     if (!mains.items.length && !present.length) return { ok: true, data: null };
     const length = await runLength(api, mains);
     let next: Episode | null = mains.items[length] ?? null;
+    let furthest: EpisodePart | null = null;
     const resumed = await api.resume(work);
     if (resumed.ok && resumed.data) {
+      furthest = { occurrence: resumed.data.occurrence, label: resumed.data.label };
       const following = await episodeAfter(api, mains, resumed.data.occurrence);
       if (following !== undefined) next = following;
       // The resume item names the episode even when this walk has not reached its page.
       const stopped = mains.items.find(item => item.occurrence === resumed.data!.occurrence);
-      if (stopped && resumed.data.label) stopped.label = resumed.data.label;
+      if (stopped) {
+        if (resumed.data.label) stopped.label = resumed.data.label;
+        furthest = { occurrence: stopped.occurrence, label: stopped.label };
+      }
     }
-    return { ok: true, data: { structure, mains, specials: present, through: mains.items[length - 1] ?? null, next } };
+    return { ok: true, data: { structure, mains, specials: present, through: mains.items[length - 1] ?? null, next, furthest } };
   } catch {
     return { ok: false, failure: 'unavailable' };
   }

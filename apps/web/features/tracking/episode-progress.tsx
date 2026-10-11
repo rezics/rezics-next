@@ -17,9 +17,25 @@ const nameOf = (episode: Episode, t: Copy) =>
 type Selected = { episode: Episode; mark: Mark | 'loading' | 'failed' };
 
 /**
+ * The furthest watched main part when there is no unbroken run: resume's part (same source as
+ * continue), else the ordered episode immediately before `next`. Episode numbers are labels, so this
+ * never subtracts from `next.number`.
+ */
+function lastWatchedPlace(read: Standing, t: Copy): string | 'some' | null {
+  if (read.furthest) {
+    const held = read.mains.items.find(item => item.occurrence === read.furthest!.occurrence);
+    if (held) return nameOf(held, t);
+    if (read.furthest.label) return read.furthest.label;
+    return 'some';
+  }
+  if (!read.next) return null;
+  const index = read.mains.items.findIndex(item => item.occurrence === read.next!.occurrence);
+  return index > 0 ? nameOf(read.mains.items[index - 1]!, t) : null;
+}
+
+/**
  * The line under Episodes: an unbroken run from episode 1, or the furthest watched when that run is
- * empty, or none yet. Continue already uses the episode after the furthest completed (`read.next`);
- * the sparse case takes the same place and names the episode before it.
+ * empty, or none yet.
  */
 export function episodeProgressWhere(read: Standing, total: number | null, t: Copy): string {
   if (read.through) {
@@ -27,10 +43,9 @@ export function episodeProgressWhere(read: Standing, total: number | null, t: Co
       ? t.watchedThroughOf({ number: String(read.through.number), total: String(total) })
       : t.watchedThrough({ number: String(read.through.number) });
   }
-  const last = read.next
-    ? (read.next.number > 1 ? read.next.number - 1 : null)
-    : (read.mains.items.at(-1)?.number ?? null);
-  return last === null ? t.noneWatched : t.lastWatched({ number: String(last) });
+  const place = lastWatchedPlace(read, t);
+  if (place === 'some') return t.someWatched;
+  return place === null ? t.noneWatched : t.lastWatched({ place });
 }
 
 /**
@@ -87,7 +102,8 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     const after = read!.mains.items[episode.number];
     if (completed && episode.occurrence === read!.next?.occurrence && (after || read!.mains.next === null)) {
       const extendsRun = episode.number === (read!.through?.number ?? 0) + 1;
-      setStanding({ ok: true, data: { ...read!, through: extendsRun ? episode : read!.through, next: after ?? null } });
+      setStanding({ ok: true, data: { ...read!, through: extendsRun ? episode : read!.through, next: after ?? null,
+        furthest: { occurrence: episode.occurrence, label: episode.label } } });
     }
     setReload(count => count + 1);
   }

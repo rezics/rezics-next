@@ -84,7 +84,8 @@ export default {
   watchedThroughOf: insert('Visto hasta el episodio {{number}} de {{total}}', { number: String, total: String }),
   noneWatched: 'Aún no has visto ningún episodio',
   // Machine-drafted; needs native review.
-  lastWatched: insert('Último visto: episodio {{number}}', { number: String }),
+  lastWatched: insert('Último visto: {{place}}', { place: String }),
+  someWatched: 'Algunos episodios vistos',
   continueFrom: insert('Continuar desde el episodio {{number}}', { number: String }),
   markNext: insert('Marcar el episodio {{number}} como visto', { number: String }),
   allWatched: 'Has visto todos los episodios.',

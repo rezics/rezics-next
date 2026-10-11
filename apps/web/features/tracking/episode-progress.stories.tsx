@@ -135,7 +135,7 @@ export const SparseLastWatched: Story = {
   })()) },
   async play({ canvasElement }) {
     const view = panel(canvasElement);
-    await view.findByText('Last watched: episode 1001');
+    await view.findByText('Last watched: Episode 1001');
     await expect(view.getByText('Continue from episode 1002')).toBeVisible();
     await expect(view.queryByRole('progressbar')).toBeNull();
   },

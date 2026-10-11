@@ -81,7 +81,8 @@ export default {
   watchedThroughOf: insert('총 {{total}}화 중 {{number}}화까지 시청함', { number: String, total: String }),
   noneWatched: '아직 시청한 에피소드가 없습니다',
   // Machine-drafted; needs native review.
-  lastWatched: insert('마지막으로 시청한 에피소드: {{number}}화', { number: String }),
+  lastWatched: insert('마지막으로 시청: {{place}}', { place: String }),
+  someWatched: '일부 에피소드를 시청함',
   continueFrom: insert('{{number}}화부터 이어 보기', { number: String }),
   markNext: insert('{{number}}화를 시청함으로 표시', { number: String }),
   allWatched: '모든 에피소드를 시청했습니다.',
