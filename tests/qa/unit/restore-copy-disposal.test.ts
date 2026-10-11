@@ -59,7 +59,7 @@ test('final cleanup owns a graph created before readiness fails and retries chec
   };
   const calls: string[][] = [];
   let removalAttempts = 0;
-  const docker = (args: string[]): StandaloneDockerResult => {
+  const fakeDockerCli = (args: string[]): StandaloneDockerResult => {
     calls.push(args);
     if (args[0] === 'run') {
       state.candidateGraph = true;
@@ -86,9 +86,9 @@ test('final cleanup owns a graph created before readiness fails and retries chec
   const env = { DOCKER_HOST: 'unix:///qa/docker.sock' };
 
   resources.registerVolume(input.volume);
-  docker(['volume', 'create', input.volume]);
+  fakeDockerCli(['volume', 'create', input.volume]);
   await expect(standaloneFuseki(env, input, {
-    docker: (args) => docker(args),
+    docker: (args) => fakeDockerCli(args),
     waitForReady: async () => {
       throw new Error('readiness fault');
     },
@@ -101,7 +101,7 @@ test('final cleanup owns a graph created before readiness fails and retries chec
   expect(state.candidateVolume).toBe(true);
 
   const removeVolume = (name: string) => {
-    const result = docker(['volume', 'rm', '-f', name]);
+    const result = fakeDockerCli(['volume', 'rm', '-f', name]);
     if (result.status !== 0) throw new Error('Docker volume removal failed');
     resources.unregisterVolume(name);
   };
@@ -150,7 +150,7 @@ test('final fixture cleanup removes a graph allocated before Docker run fails', 
     siblingCopy: true,
   };
   const calls: string[][] = [];
-  const docker = (args: string[]): StandaloneDockerResult => {
+  const fakeDockerCli = (args: string[]): StandaloneDockerResult => {
     calls.push(args);
     if (args[0] === 'run') {
       expect(resources.containers.map(({ name }) => name)).toEqual([input.name]);
@@ -177,9 +177,9 @@ test('final fixture cleanup removes a graph allocated before Docker run fails', 
   const env = { DOCKER_HOST: 'unix:///qa/docker.sock' };
 
   resources.registerVolume(input.volume);
-  docker(['volume', 'create', input.volume]);
+  fakeDockerCli(['volume', 'create', input.volume]);
   await expect(standaloneFuseki(env, input, {
-    docker: (args) => docker(args),
+    docker: (args) => fakeDockerCli(args),
     onAllocated: resources.registerContainer,
   })).rejects.toThrow('docker run failed');
 
@@ -189,7 +189,7 @@ test('final fixture cleanup removes a graph allocated before Docker run fails', 
   expect(state.candidateVolume).toBe(true);
 
   const removeVolume = (name: string) => {
-    const result = docker(['volume', 'rm', '-f', name]);
+    const result = fakeDockerCli(['volume', 'rm', '-f', name]);
     if (result.status !== 0) throw new Error('Docker volume removal failed');
     resources.unregisterVolume(name);
   };
