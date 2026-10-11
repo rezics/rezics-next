@@ -184,6 +184,12 @@ export type IndependentRestoreSourceInventory = Readonly<{
   project: string;
   containers: readonly Pick<IsolationContainer, 'id' | 'name' | 'state'>[];
   volumes: readonly string[];
+  volumeMounts: readonly Readonly<{
+    service: string;
+    name: string;
+    source: string;
+    destination: string;
+  }>[];
   networks: readonly Pick<IsolationNetwork, 'id' | 'name'>[];
   stackDirectory: string;
   objectDirectory: string;
@@ -195,6 +201,7 @@ export interface IsolationInspector {
   /** Docker label lookup; source ownership comes from the recorded container mounts. */
   projectLabeledVolumes(project: string): readonly string[];
   projectNetworks(project: string): readonly IsolationNetwork[];
+  volumeSource(name: string): string;
   containerPresent(idOrName: string): boolean;
   volumePresent(name: string): boolean;
   networkPresent(idOrName: string): boolean;
@@ -219,11 +226,17 @@ function pathContains(parent: string, candidate: string): boolean {
 }
 
 /** Fixture-restored source volumes may lack labels; container mounts retain their exact identities. */
-function sourceVolumeMountNames(project: string, containers: readonly IsolationContainer[]): string[] {
+function sourceVolumeMounts(project: string, containers: readonly IsolationContainer[]) {
   const mounts = containers.flatMap((container) => container.mounts
     .filter((mount) => mount.type === 'volume')
-    .map((mount) => ({ service: container.service, name: mount.name ?? '', destination: mount.destination })));
-  const volumes = exactUnique(mounts.map((mount) => mount.name), 'Source volume mount');
+    .map((mount) => ({
+      service: container.service,
+      name: mount.name ?? '',
+      source: mount.source,
+      destination: mount.destination,
+    })));
+  exactUnique(mounts.map((mount) => mount.name), 'Source volume mount');
+  exactUnique(mounts.map((mount) => mount.source), 'Source volume backing path');
   const expected = [
     { service: 'postgres', name: `${project}_postgres_data`, destination: '/var/lib/postgresql' },
     { service: 'fuseki', name: `${project}_fuseki_data`, destination: '/fuseki/databases' },
@@ -231,12 +244,14 @@ function sourceVolumeMountNames(project: string, containers: readonly IsolationC
   ];
   if (
     mounts.length !== expected.length ||
+    mounts.some((mount) => !isAbsolute(mount.source)) ||
     expected.some((required) => !mounts.some((mount) =>
       mount.service === required.service && mount.name === required.name && mount.destination === required.destination))
   ) {
     throw new Error('Source volume inventory is incomplete or belongs to another project');
   }
-  return volumes;
+  return mounts.map((mount) => ({ ...mount, source: resolve(mount.source) }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function assertPrivateSourceDirectory(path: string, root: string, label: string): string {
@@ -291,10 +306,12 @@ export function recordIndependentRestoreSourceInventory(
       throw new Error(`Source ${service} container is missing from the inventory`);
     }
   }
-  const volumes = sourceVolumeMountNames(project, containers);
+  const volumeMounts = sourceVolumeMounts(project, containers);
+  const volumes = volumeMounts.map((mount) => mount.name);
   const labeledVolumes = exactUnique(inspector.projectLabeledVolumes(project), 'Labeled source volume');
   if (
-    volumes.some((name) => !inspector.volumePresent(name)) ||
+    volumeMounts.some((mount) =>
+      !inspector.volumePresent(mount.name) || resolve(inspector.volumeSource(mount.name)) !== mount.source) ||
     labeledVolumes.some((name) => !volumes.includes(name))
   ) {
     throw new Error('Source volume inventory is incomplete or belongs to another project');
@@ -314,6 +331,7 @@ export function recordIndependentRestoreSourceInventory(
     containers: containers.map(({ id, name, state }) => ({ id, name, state }))
       .sort((left, right) => left.id.localeCompare(right.id)),
     volumes,
+    volumeMounts,
     networks: networks.map(({ id, name }) => ({ id, name }))
       .sort((left, right) => left.id.localeCompare(right.id)),
     stackDirectory: sourceDirectory,
@@ -331,7 +349,8 @@ function assertIndependentRestoreSourceInventoryCurrent(
     .map(({ id, name }) => `${id}\0${name}`).sort();
   const recordedContainers = inventory.containers
     .map(({ id, name }) => `${id}\0${name}`).sort();
-  const volumes = sourceVolumeMountNames(inventory.project, currentContainers);
+  const volumeMounts = sourceVolumeMounts(inventory.project, currentContainers);
+  const volumes = volumeMounts.map((mount) => mount.name);
   const labeledVolumes = exactUnique(inspector.projectLabeledVolumes(inventory.project), 'Current labeled source volume');
   const networks = inspector.projectNetworks(inventory.project)
     .map(({ id, name }) => `${id}\0${name}`).sort();
@@ -339,6 +358,7 @@ function assertIndependentRestoreSourceInventoryCurrent(
   if (
     JSON.stringify(containers) !== JSON.stringify(recordedContainers) ||
     JSON.stringify(volumes) !== JSON.stringify(inventory.volumes) ||
+    JSON.stringify(volumeMounts) !== JSON.stringify(inventory.volumeMounts) ||
     labeledVolumes.some((name) => !inventory.volumes.includes(name)) ||
     inventory.volumes.some((name) => !inspector.volumePresent(name)) ||
     JSON.stringify(networks) !== JSON.stringify(recordedNetworks) ||
@@ -476,6 +496,16 @@ export function createIsolationInspector(environment: NodeJS.ProcessEnv = proces
   const volumePresent = (name: string) => isolationDockerOutput([
     'volume', 'ls', '--format', '{{.Name}}', '--filter', `name=${name}`,
   ], environment).split(/\r?\n/).some((candidate) => candidate === name);
+  const volumeSource = (name: string) => {
+    const raw = JSON.parse(isolationDockerOutput(['volume', 'inspect', name], environment))[0] as {
+      Name: string;
+      Mountpoint: string;
+    } | undefined;
+    if (!raw || raw.Name !== name || !raw.Mountpoint || !isAbsolute(raw.Mountpoint)) {
+      throw new Error('Docker returned no volume backing path');
+    }
+    return raw.Mountpoint;
+  };
   const networkPresent = (idOrName: string) => {
     const filter = /^[0-9a-f]{12,64}$/.test(idOrName)
       ? `id=${idOrName}`
@@ -483,7 +513,7 @@ export function createIsolationInspector(environment: NodeJS.ProcessEnv = proces
     return isolationDockerOutput(['network', 'ls', '--no-trunc', '--format', '{{.ID}}\t{{.Name}}', '--filter', filter], environment)
       .split(/\r?\n/).some((line) => line.split('\t').some((candidate) => candidate === idOrName));
   };
-  return { projectContainers, projectLabeledVolumes, projectNetworks, containerPresent, volumePresent, networkPresent };
+  return { projectContainers, projectLabeledVolumes, projectNetworks, volumeSource, containerPresent, volumePresent, networkPresent };
 }
 
 /** Assert that the target storage containers use new volumes and an isolated project network. */
@@ -492,6 +522,7 @@ export function assertIndependentRestoreTargetIdentity(
   source: IndependentRestoreSourceInventory,
   containers: readonly IsolationContainer[],
   network: IsolationNetwork,
+  inspector: IsolationInspector,
 ): void {
   if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(targetProject)) {
     throw new Error('Target inspection requires an isolated QA project');
@@ -507,34 +538,66 @@ export function assertIndependentRestoreTargetIdentity(
   }
   const targetContainers = [...services.values()];
   const sourceVolumes = new Set(source.volumes);
-  const sourceBinds = source.bindMounts;
+  const sourceVolumePaths = new Set(source.volumeMounts.map((mount) => resolve(mount.source)));
   for (const [service, kind, destination] of [
     ['postgres', 'postgres_data', '/var/lib/postgresql'],
     ['fuseki', 'fuseki_data', '/fuseki/databases'],
     ['rustfs', 'rustfs_data', '/data'],
   ] as const) {
     const container = services.get(service)!;
+    const expectedName = `${targetProject}_${kind}`;
+    const expectedSourceValue = inspector.volumeSource(expectedName);
+    if (!isAbsolute(expectedSourceValue)) {
+      throw new Error(`Target ${service} expected volume backing path is invalid`);
+    }
+    const expectedSource = resolve(expectedSourceValue);
+    if (sourceVolumePaths.has(expectedSource)) {
+      throw new Error(`Target ${service} expected volume reuses a recorded source volume backing path`);
+    }
+    let expectedVolumeMounts = 0;
+    let expectedBootstrapMounts = 0;
     for (const mount of container.mounts) {
+      const sourcePath = mount.source ? resolve(mount.source) : '';
       if (mount.type === 'volume' && mount.name && sourceVolumes.has(mount.name)) {
         throw new Error(`Target ${service} aliases recorded source volume ${mount.name}`);
       }
+      if (sourcePath && sourceVolumePaths.has(sourcePath)) {
+        const sourceMount = source.volumeMounts.find((candidate) => resolve(candidate.source) === sourcePath);
+        throw new Error(`Target ${service} aliases recorded source volume backing path ${sourceMount?.name ?? sourcePath}`);
+      }
+      if (mount.type === 'volume') {
+        if (
+          mount.name !== expectedName ||
+          mount.destination !== destination ||
+          resolve(mount.source) !== expectedSource
+        ) {
+          throw new Error(`Target ${service} has an unapproved volume mount`);
+        }
+        expectedVolumeMounts++;
+        continue;
+      }
       if (mount.type === 'bind') {
-        const aliasesRecordedBind = sourceBinds.some((sourceBind) => {
-          const isSharedBootstrapBind =
-            resolve(sourceBind.source) === resolve(mount.source) &&
-            sourceBind.destination === mount.destination &&
-            service === 'postgres' &&
-            mount.destination === '/docker-entrypoint-initdb.d/00-owners.sh';
-          return resolve(sourceBind.source) === resolve(mount.source) && !isSharedBootstrapBind;
-        });
-        if (pathContains(source.stackDirectory, mount.source) || aliasesRecordedBind) {
+        if (pathContains(source.stackDirectory, mount.source)) {
           throw new Error(`Target ${service} aliases a source bind path`);
         }
+        const aliasesRecordedBind = source.bindMounts.some((sourceBind) =>
+          resolve(sourceBind.source) === sourcePath);
+        const isSharedBootstrapBind = service === 'postgres' &&
+          mount.destination === '/docker-entrypoint-initdb.d/00-owners.sh' &&
+          source.bindMounts.some((sourceBind) =>
+            resolve(sourceBind.source) === sourcePath && sourceBind.destination === mount.destination);
+        if (aliasesRecordedBind && !isSharedBootstrapBind) {
+          throw new Error(`Target ${service} aliases a source bind path`);
+        }
+        if (!isSharedBootstrapBind) {
+          throw new Error(`Target ${service} has an unapproved bind mount`);
+        }
+        expectedBootstrapMounts++;
+        continue;
       }
+      throw new Error(`Target ${service} has an unapproved ${mount.type} mount`);
     }
-    const expectedName = `${targetProject}_${kind}`;
-    if (!container.mounts.some((mount) =>
-      mount.type === 'volume' && mount.name === expectedName && mount.destination === destination)) {
+    if (expectedVolumeMounts !== 1 || (service === 'postgres' ? expectedBootstrapMounts !== 1 : expectedBootstrapMounts !== 0)) {
       throw new Error(`Target ${service} does not mount its expected new volume`);
     }
     if (!container.networkIds.includes(network.id)) {
@@ -569,7 +632,7 @@ export function inspectIndependentRestoreTarget(
   const networks = inspector.projectNetworks(targetProject);
   const network = networks.find((candidate) => candidate.name === `${targetProject}_default`);
   if (!network) throw new Error('Target project network is unavailable for local inspection');
-  assertIndependentRestoreTargetIdentity(targetProject, source, containers, network);
+  assertIndependentRestoreTargetIdentity(targetProject, source, containers, network, inspector);
 }
 
 function parseExpectations(value: unknown): IndependentRestoreExpectations {

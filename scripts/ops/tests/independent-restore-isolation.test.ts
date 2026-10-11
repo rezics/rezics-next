@@ -17,7 +17,7 @@ const repositoryRoot = resolve(import.meta.dir, '../../..');
 
 type FakeState = {
   containers: IsolationContainer[];
-  volumes: { project?: string; name: string }[];
+  volumes: { project?: string; name: string; source: string }[];
   networks: (IsolationNetwork & { project: string })[];
 };
 
@@ -57,13 +57,21 @@ function sourceFixture(state = 'running') {
     containers,
     // Fixture-restored volumes were created by `docker volume create`, so they
     // have no Compose project label even though these containers mount them.
-    volumes: ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => ({ name: `${project}_${kind}` })),
+    volumes: ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => ({
+      name: `${project}_${kind}`,
+      source: `/var/lib/docker/volumes/${project}_${kind}/_data`,
+    })),
     networks: [{ ...sourceNetwork, project, containerIds: containers.map((container) => container.id) }],
   };
   const inspector: IsolationInspector = {
     projectContainers: (name) => stateData.containers.filter((container) => container.project === name),
     projectLabeledVolumes: (name) => stateData.volumes.filter((volume) => volume.project === name).map((volume) => volume.name),
     projectNetworks: (name) => stateData.networks.filter((network) => network.project === name),
+    volumeSource: (name) => {
+      const volume = stateData.volumes.find((candidate) => candidate.name === name);
+      if (!volume) throw new Error(`Fake volume backing path is unavailable: ${name}`);
+      return volume.source;
+    },
     containerPresent: (idOrName) => stateData.containers.some((container) =>
       container.id === idOrName || container.name === idOrName),
     volumePresent: (name) => stateData.volumes.some((volume) => volume.name === name),
@@ -126,7 +134,32 @@ function installTargetInspection(
   network: IsolationNetwork,
 ): void {
   fixture.stateData.containers.push(...containers);
+  for (const mount of containers.flatMap((container) => container.mounts)
+    .filter((candidate) => candidate.type === 'volume' && candidate.name)) {
+    if (!fixture.stateData.volumes.some((volume) => volume.name === mount.name)) {
+      fixture.stateData.volumes.push({
+        project,
+        name: mount.name!,
+        source: mount.source,
+      });
+    }
+  }
   fixture.stateData.networks.push({ ...network, project });
+}
+
+function installedTargetFixture() {
+  const fixture = sourceFixture('exited');
+  const target = 'rezics-qa-isolation-successor';
+  const network: IsolationNetwork = {
+    id: 'e'.repeat(64),
+    name: `${target}_default`,
+    containerIds: [],
+  };
+  disposeSource(fixture);
+  const containers = targetContainers(target, network.id);
+  const validNetwork = { ...network, containerIds: containers.map((container) => container.id) };
+  installTargetInspection(fixture, target, containers, validNetwork);
+  return { fixture, target, containers, network: validNetwork };
 }
 
 test('source inventory blocks both live and stopped sources while their volumes remain', () => {
@@ -168,7 +201,11 @@ test('fixture-restored source inventory records and removes unlabeled volumes th
     networkIds: [],
   } satisfies IsolationContainer;
   fixture.stateData.containers.push(unrelated);
-  fixture.stateData.volumes.push({ project: 'rezics-fixture-retained', name: 'rezics-fixture-retained_postgres_data' });
+  fixture.stateData.volumes.push({
+    project: 'rezics-fixture-retained',
+    name: 'rezics-fixture-retained_postgres_data',
+    source: '/var/lib/docker/volumes/rezics-fixture-retained_postgres_data/_data',
+  });
   const unrelatedNetwork: IsolationNetwork & { project: string } = {
     id: 'e'.repeat(64),
     name: 'rezics-fixture-retained_default',
@@ -248,6 +285,67 @@ test('production restore guard refuses the original project and an occupied targ
   expect(() => assertFreshTarget(source, { source }, () => false)).toThrow('new empty isolated');
   expect(() => assertFreshTarget('rezics-qa-isolation-occupied', { source }, () => true))
     .toThrow('new empty isolated');
+});
+
+test('local target inspection refuses a retained fixture volume beside its expected volume', () => {
+  const { fixture, target, containers } = installedTargetFixture();
+  const retainedName = 'rezics-fixture-retained_postgres_data';
+  try {
+    const retainedSource = `/var/lib/docker/volumes/${retainedName}/_data`;
+    fixture.stateData.volumes.push({ project: 'rezics-fixture-retained', name: retainedName, source: retainedSource });
+    const polluted = {
+      ...containers[0]!,
+      mounts: [...containers[0]!.mounts, {
+        type: 'volume',
+        name: retainedName,
+        source: retainedSource,
+        destination: '/retained-fixture',
+      }],
+    };
+    fixture.stateData.containers = [polluted, ...containers.slice(1)];
+    expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
+      .toThrow('unapproved volume mount');
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses a bind mount of a source volume backing directory', () => {
+  const { fixture, target, containers } = installedTargetFixture();
+  try {
+    const polluted = {
+      ...containers[1]!,
+      mounts: [...containers[1]!.mounts, {
+        type: 'bind',
+        source: fixture.inventory.volumeMounts[0]!.source,
+        destination: '/source-volume',
+      }],
+    };
+    fixture.stateData.containers = [containers[0]!, polluted, containers[2]!];
+    expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
+      .toThrow('aliases recorded source volume backing path');
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses an unapproved host path bind mount', () => {
+  const { fixture, target, containers } = installedTargetFixture();
+  try {
+    const polluted = {
+      ...containers[1]!,
+      mounts: [...containers[1]!.mounts, {
+        type: 'bind',
+        source: join(repositoryRoot, 'README.md'),
+        destination: '/host-path',
+      }],
+    };
+    fixture.stateData.containers = [containers[0]!, polluted, containers[2]!];
+    expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
+      .toThrow('unapproved bind mount');
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
 });
 
 test('local target inspection accepts new storage and rejects source aliases and peers', () => {
