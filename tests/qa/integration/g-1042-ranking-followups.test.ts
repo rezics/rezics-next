@@ -12,6 +12,7 @@ import { realmHistoryPopulation } from '../../../services/main/src/modules/ranki
 import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { BACKPRESSURE_PROFILE_V1 } from '../../../services/main/src/operations/backpressure.ts';
+import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { restoreRealmRankingCorpus } from '../../../services/main/tests/realm-ranking-corpus.ts';
 
 test('G1042: depth, row and ancestor caps report partial results; retired cuts and deleted references drain through invalidation', async () => {
@@ -25,7 +26,8 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       throw new Error(`Realm ranking corpus restore, startup and readiness took ${restoreReadyMs} ms`);
     console.log(JSON.stringify({ realmRankingFollowupRestoreReadyMs: restoreReadyMs, threads: 400 }));
     // The retained reply commands leave Content projection events in this stopped
-    // copy. Resume the real worker until draft admission has room for this fixture.
+    // copy. Advance Content directly so the composed poll does not tick an absent
+    // Event Projection owner on every step.
     const projection = stack.composition;
     const contentHead = BigInt((await stack.content.ownerPosition()).sequence);
     const maxBacklog = BigInt(BACKPRESSURE_PROFILE_V1.worker.maxBacklog);
@@ -36,7 +38,9 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     while (contentHead - BigInt(checkpoint.sequence) >= targetBacklog) {
       if (projectedEvents >= 10_000)
         throw new Error(`Content projection backlog did not fall below ${targetBacklog}`);
-      const event = await projection.contentProjectionWorker.pollOnce();
+      const event = await relayContentProjectionOnce(
+        stack.env, projection.content, projection.cursor, projection.consumer,
+      );
       if (!event) throw new Error('Content projection stopped before its checkpoint reached the source');
       projectedEvents++;
       checkpoint = await projection.cursor.read(projection.consumer);
