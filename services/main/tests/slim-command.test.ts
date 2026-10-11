@@ -2,12 +2,13 @@ import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectNotFound, ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { hash, prepareWorkComponent } from '../src/modules/work/activate.ts';
-import { ReceiptCustody, type CustodyRow, type ReceiptCustodySession, type ReceiptCustodyStore,
-  type SlimEnvelope } from '../src/modules/outbox/receipt-custody.ts';
+import { ReceiptCustody, ReceiptCustodyErasureConflict, type CustodyObjectReference, type CustodyRow,
+  type CustodyPayloadErasure, type ReceiptCustodySession, type ReceiptCustodyStore, type SlimEnvelope }
+  from '../src/modules/outbox/receipt-custody.ts';
 import type { ProofRetirement } from '../src/modules/graph/slim-command.ts';
-import type { MetadataEditionState } from '../src/modules/work/metadata-schema.ts';
+import { metadataDigest, type MetadataEditionState } from '../src/modules/work/metadata-schema.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 class MemoryCustody implements ReceiptCustodyStore {
@@ -32,6 +33,24 @@ class MemoryCustody implements ReceiptCustodyStore {
         this.row = { ...this.row!, terminal, outbox, reconciled: true }; return Promise.resolve();
       },
       retire: () => { this.row = { ...this.row!, retired: true }; return Promise.resolve(); },
+      persistObjectReferences: references => {
+        const row = this.row;
+        if (!row?.payload || !row.outbox) throw new ReceiptCustodyErasureConflict();
+        this.row = { ...row, outbox: { ...row.outbox, custodyObjectReferences: [...references] } };
+        return Promise.resolve();
+      },
+      clearPayloadForErasure: erasure => {
+        const row = this.row;
+        if (row?.payload === null && row.payloadErasure?.erasureId === erasure.erasureId
+          && row.payloadErasure.erasureEpoch === erasure.erasureEpoch) return Promise.resolve();
+        if (!row?.payload || row.revision !== erasure.revision || row.payloadSha256 !== erasure.payloadSha256
+          || !row.outbox || !Object.hasOwn(row.outbox, 'custodyObjectReferences')) {
+          throw new ReceiptCustodyErasureConflict();
+        }
+        this.row = { ...row, payload: null, payloadErasure: {
+          erasureId: erasure.erasureId, erasureEpoch: erasure.erasureEpoch } };
+        return Promise.resolve();
+      },
     }));
     this.tail = next.catch(() => {});
     return next;
@@ -46,7 +65,7 @@ class MemoryObjects implements ImmutableObjects {
   }
   get(digest: string): Promise<Uint8Array> {
     const bytes = this.bytes.get(digest);
-    if (!bytes) throw new ObjectUnavailable('exact object missing');
+    if (!bytes) throw new ObjectNotFound('exact object missing');
     return Promise.resolve(bytes);
   }
 }
@@ -54,12 +73,22 @@ async function fixture() {
   const component = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
   const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
   const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000005';
-  const receipt = `urn:rezics:receipt:${hash('slim edition')}`, digest = hash('edition intent');
+  const receipt = `urn:rezics:receipt:${hash('slim edition')}`;
   const store = new MemoryCustody(), objects = new MemoryObjects();
   const state: MetadataEditionState = { kind: 'edition', id: component, status: 'active',
     title: { value: 'Measured edition', language: 'en' }, contentLanguage: 'en',
     editionStatement: 'First edition', publisher: 'Fixture Press', publicationYear: 2026,
     isbn13: '9780306406157' };
+  const digest = metadataDigest({ work, expectedHead: null, state });
+  const shapeDigest = await objects.put(Buffer.from('retained work metadata validation shape'));
+  const validations = [
+    { profile: 'work-metadata-details-v1', shape: 'https://rezics.com/definition/work-metadata-details-v1/work-shape',
+      focus: [work], graphs: ['urn:rezics:graph:current', 'urn:rezics:graph:revisions'], sha256: shapeDigest },
+    { profile: 'work-metadata-details-v1', shape: 'https://rezics.com/definition/work-metadata-details-v1/component-shape',
+      focus: [component], graphs: ['urn:rezics:graph:current', 'urn:rezics:graph:revisions'], sha256: shapeDigest },
+    { profile: 'work-metadata-details-v1', shape: 'https://rezics.com/definition/work-metadata-details-v1/revision-shape',
+      focus: [revision], graphs: ['urn:rezics:graph:current', 'urn:rezics:graph:revisions'], sha256: shapeDigest },
+  ];
   const manifest = await prepareWorkComponent(objects, component, { revision, intent: { work,
     expectedHead: null, state } },
   'https://rezics.com/definition/work-metadata-details-v1');
@@ -80,11 +109,12 @@ async function fixture() {
       sequence: { type: 'literal', value: proof.sequence },
       streamSequence: { type: 'literal', value: proof.streamSequence } }] : [] } });
   } }, key, retirement => { retirements.push(retirement); proof = null; return Promise.resolve(); });
-  const envelope: CommandEnvelope = { receipt, digest, update: 'bounded edition update', validations: [], deadlineMs: 10_000 };
+  const envelope: CommandEnvelope = { receipt, digest, update: 'bounded edition update', validations, deadlineMs: 10_000 };
   const input = { envelope, component, revision, manifest, routingEpoch: 'routing-a', state,
     receipt: { outcome: 'succeeded' as const,
     receipt, admissionId: '00000000-0000-4000-8000-000000000006', requestDigest: digest,
-    authorityEpoch: '1', scope: `work:edit:${work}`, dataEpoch: 'epoch-a', work, component, revision },
+    authorityEpoch: '1', scope: `work:edit:${work}`, dataEpoch: 'epoch-a', work, component, revision,
+    predecessor: component },
   dispatch: (candidate: CommandEnvelope): Promise<CommandResult> => {
     sends++;
     expect(store.row?.terminal).toBeNull();
@@ -97,7 +127,7 @@ async function fixture() {
     return Promise.resolve({ status: 'committed', position: {
       datasetId: 'urn:rezics:dataset:product', dataEpoch: 'epoch-a', sequence: '17' } });
   } };
-  return { custody, store, objects, input, retirements, key, queries, sends: () => sends,
+  return { custody, store, objects, input, retirements, key, queries, shapeDigest, sends: () => sends,
     loseResponse: () => { loseResponse = true; }, refuse: (result: CommandResult) => { refusal = result; },
     setProof: (value: typeof proof) => { proof = value; } };
 }
@@ -113,6 +143,39 @@ test('owner preparation and exact component custody precede graph dispatch; fail
   const unavailable = await fixture(); unavailable.store.failPrepare = true;
   await expect(unavailable.custody.commit(unavailable.input)).rejects.toThrow('owner unavailable');
   expect(unavailable.sends()).toBe(0);
+});
+
+test('fresh edition reconciliation does not require validation shape objects', async () => {
+  const f = await fixture();
+  f.objects.bytes.delete(f.shapeDigest);
+  expect(await f.custody.commit(f.input)).toMatchObject({ status: 'committed' });
+  expect(f.store.row?.reconciled).toBe(true);
+  expect(f.store.row?.outbox?.custodyObjectReferences).toBeUndefined();
+  expect(f.sends()).toBe(1);
+});
+
+test('a reconciled receipt without the closure field is upgraded under its lock before exact erasure', async () => {
+  const f = await fixture();
+  await f.custody.commit(f.input);
+  const retained = f.store.row!;
+  expect(retained.outbox?.custodyObjectReferences).toBeUndefined();
+  const erasure: CustodyPayloadErasure = { revision: f.input.revision,
+    payloadSha256: retained.payloadSha256, erasureId: '10000000-0000-4000-8000-000000000001', erasureEpoch: '12' };
+  f.objects.bytes.delete(f.shapeDigest);
+
+  const missing = await f.custody.erasePayloadForErasure(f.input.envelope.receipt, erasure);
+  expect(missing).toEqual([f.shapeDigest]);
+
+  const manifest = JSON.parse(Buffer.from(await f.objects.get(f.input.manifest)).toString('utf8')) as { payload: string };
+  expect(f.store.row).toMatchObject({ payload: null, payloadErasure: {
+    erasureId: erasure.erasureId, erasureEpoch: erasure.erasureEpoch }, reconciled: true,
+    terminal: retained.terminal });
+  expect(f.store.row?.outbox?.custodyObjectReferences).toEqual([
+    { digest: retained.payloadSha256, kind: 'command' },
+    { digest: f.input.manifest, kind: 'manifest' },
+    { digest: manifest.payload.slice(7), kind: 'payload' },
+    { digest: f.shapeDigest, kind: 'shape' },
+  ] satisfies CustodyObjectReference[]);
 });
 
 test('lost-response replay resolves the same durable receipt, including after proof retirement', async () => {

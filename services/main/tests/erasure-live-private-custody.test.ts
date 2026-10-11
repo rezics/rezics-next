@@ -60,6 +60,16 @@ function lifecycleSql(calls: readonly (readonly unknown[])[]): string[] {
 }
 
 async function clearPayload(session: ReceiptCustodySession, erasure: CustodyPayloadErasure): Promise<void> {
+  const row = await session.read();
+  if (row?.payload && !Object.hasOwn(row.outbox ?? {}, 'custodyObjectReferences')) {
+    if (!session.persistObjectReferences) throw new Error('Receipt custody closure persistence is unavailable');
+    await session.persistObjectReferences([
+      { digest: erasure.payloadSha256, kind: 'command' },
+      { digest: hash('fixture retained manifest'), kind: 'manifest' },
+      { digest: hash('fixture retained payload'), kind: 'payload' },
+      { digest: hash('fixture retained validation shape'), kind: 'shape' },
+    ]);
+  }
   if (!session.clearPayloadForErasure) throw new Error('PostgreSQL custody erasure is unavailable');
   await session.clearPayloadForErasure(erasure);
 }
@@ -249,6 +259,7 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
     const before = (await pool.query(`SELECT receipt,request_digest,payload_sha256,revision,terminal,outbox,
       reconciled_at,retired_at,data_epoch,stream_sequence::text AS stream_sequence
       FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0];
+    expect(before.outbox.custodyObjectReferences).toBeUndefined();
 
     const client = await pool.connect();
     borrowedClient = client;
@@ -638,7 +649,13 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
       reconciled_at,retired_at,data_epoch,stream_sequence::text AS stream_sequence,
       payload_erasure_id,payload_erasure_epoch::text AS payload_erasure_epoch
       FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0];
-    expect(after).toMatchObject({ ...before, payload: null, payload_erasure_id: erasure.erasureId,
+    expect(after).toMatchObject({ ...before, outbox: { ...before.outbox,
+      custodyObjectReferences: [
+        { digest: payloadSha256, kind: 'command' },
+        { digest: hash('fixture retained manifest'), kind: 'manifest' },
+        { digest: hash('fixture retained payload'), kind: 'payload' },
+        { digest: hash('fixture retained validation shape'), kind: 'shape' },
+      ] }, payload: null, payload_erasure_id: erasure.erasureId,
       payload_erasure_epoch: erasure.erasureEpoch });
     expect(after.payload_sha256).toBe(payloadSha256);
   } finally {

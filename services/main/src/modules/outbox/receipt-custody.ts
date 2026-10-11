@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import { boundedPool } from '../../infrastructure/pg-pool.ts';
 import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type CommandResult,
   type FusekiClient } from '../../infrastructure/fuseki.ts';
-import { ObjectIntegrityError, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectNotFound, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ProofRetirement } from '../graph/slim-command.ts';
 import { checkedEditionV2, checkedMetadataState, editionV2Digest, metadataDigest,
   type MetadataEditionState, type MetadataEditionStateV2 } from '../work/metadata-schema.ts';
@@ -54,6 +54,8 @@ export interface CommittedCustodySource {
   model: string;
   /** Existing owner retention traversals can protect this exact source closure. */
   objectReferences: { digest: string; kind: 'command' | 'manifest' | 'payload' | 'shape' }[];
+  /** Erasure can proceed with its digest protected when an original shape object is already absent. */
+  missingObjectDigests?: readonly string[];
 }
 export interface HistoricalReceiptSource {
   kind: 'retained';
@@ -105,6 +107,8 @@ export interface ReceiptCustodySession {
   prepare(row: CustodyRow): Promise<void>;
   reconcile(terminal: CustodiedReceipt, outbox: Record<string, unknown>): Promise<void>;
   retire(): Promise<void>;
+  /** Record a verified bounded closure while this receipt lock is held. */
+  persistObjectReferences?(references: readonly CustodyObjectReference[]): Promise<void>;
   /** Permanently clear only the exact payload bound to this receipt session. */
   clearPayloadForErasure?(erasure: CustodyPayloadErasure): Promise<void>;
 }
@@ -282,6 +286,32 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
               AND reconciled_at IS NOT NULL AND terminal IS NOT NULL AND outbox IS NOT NULL`, [receipt]);
           if (updated.rowCount !== 1) throw new Error('Receipt custody is not reconciled');
         },
+        persistObjectReferences: references => durable(async () => {
+          const existing = (await held.query<{ payload_sha256: string; payload: Buffer | null;
+            terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null; reconciled: boolean }>(
+          `SELECT payload_sha256,payload,terminal,outbox,reconciled_at IS NOT NULL AS reconciled
+            FROM access.command_custody WHERE receipt = $1`, [receipt])).rows[0];
+          if (!existing?.payload || !existing.reconciled || !existing.terminal || !existing.outbox
+            || !exactCustodyObjectReferences(references, existing.payload_sha256)) {
+            throw new ReceiptCustodyErasureConflict();
+          }
+          const current = existing.outbox.custodyObjectReferences;
+          if (current !== undefined) {
+            if (canonicalJson(current) !== canonicalJson(references)) throw new ReceiptCustodyErasureConflict();
+            return;
+          }
+          const updated = await held.query(`UPDATE access.command_custody
+            SET outbox = jsonb_set(outbox, '{custodyObjectReferences}', $2::jsonb, true)
+            WHERE receipt = $1 AND payload IS NOT NULL AND reconciled_at IS NOT NULL
+              AND terminal IS NOT NULL AND outbox IS NOT NULL AND NOT (outbox ? 'custodyObjectReferences')`,
+          [receipt, JSON.stringify(references)]);
+          if (updated.rowCount === 1) return;
+          const reread = (await held.query<{ outbox: Record<string, unknown> | null }>(
+            'SELECT outbox FROM access.command_custody WHERE receipt = $1', [receipt])).rows[0];
+          if (canonicalJson(reread?.outbox?.custodyObjectReferences) !== canonicalJson(references)) {
+            throw new ReceiptCustodyErasureConflict();
+          }
+        }),
         clearPayloadForErasure: erasure => durable(async () => {
           if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(erasure.erasureId)
             || !/^[1-9][0-9]*$/.test(erasure.erasureEpoch)
@@ -356,7 +386,7 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
 }
 
 interface CommitProof { digest: string; payloadSha256: string; dataEpoch: string; sequence: string; streamSequence: string }
-type CustodyObjectReference = { digest: string; kind: 'command' | 'manifest' | 'payload' | 'shape' };
+export type CustodyObjectReference = { digest: string; kind: 'command' | 'manifest' | 'payload' | 'shape' };
 type CustodiedOutboxRecord = Omit<MainOutboxBatch, 'eventIds'> & { eventCount: number; events: CustodiedOutbox['events'];
   custodyObjectReferences?: CustodyObjectReference[] };
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, member: unknown) =>
@@ -404,6 +434,19 @@ function exactCustodyObjectReference(value: unknown): value is CustodyObjectRefe
   return exactKeys(value, ['digest', 'kind']) && typeof value.digest === 'string'
     && /^[0-9a-f]{64}$/.test(value.digest) && typeof value.kind === 'string'
     && ['command', 'manifest', 'payload', 'shape'].includes(value.kind);
+}
+function exactCustodyObjectReferences(value: unknown, payloadSha256: string): value is CustodyObjectReference[] {
+  if (!Array.isArray(value) || value.length < 3 || value.length > CUSTODY_RECOVERY_COST.selectedProfiles + 3
+    || !value.every(exactCustodyObjectReference)
+    || new Set(value.map(reference => `${reference.digest}\0${reference.kind}`)).size !== value.length) return false;
+  const references = value as CustodyObjectReference[];
+  const shapes = references.filter(reference => reference.kind === 'shape');
+  return references.filter(reference => reference.kind === 'command').length === 1
+    && references.some(reference => reference.kind === 'command' && reference.digest === payloadSha256)
+    && references.filter(reference => reference.kind === 'manifest').length === 1
+    && references.filter(reference => reference.kind === 'payload').length === 1
+    && shapes.length <= CUSTODY_RECOVERY_COST.selectedProfiles
+    && references.length === 3 + shapes.length;
 }
 function erasedOutbox(row: ErasedCustodyRow, terminal: CustodiedReceipt): CustodiedOutboxRecord {
   const value: unknown = row.outbox;
@@ -468,15 +511,7 @@ function erasedOutbox(row: ErasedCustodyRow, terminal: CustodiedReceipt): Custod
   }
   if (hasObjectReferences) {
     const rawReferences = (value as Record<string, unknown>).custodyObjectReferences;
-    const references = Array.isArray(rawReferences) ? rawReferences as CustodyObjectReference[] : [];
-    if (!Array.isArray(rawReferences) || references.length < 3
-      || references.length > CUSTODY_RECOVERY_COST.selectedProfiles + 3
-      || !references.every(exactCustodyObjectReference)
-      || new Set(references.map(reference => `${reference.digest}\0${reference.kind}`)).size
-        !== references.length
-      || !references.some(reference => reference.kind === 'command' && reference.digest === row.payloadSha256)
-      || !references.some(reference => reference.kind === 'manifest')
-      || !references.some(reference => reference.kind === 'payload')) {
+    if (!exactCustodyObjectReferences(rawReferences, row.payloadSha256)) {
       throw new ObjectIntegrityError('Erased command object closure differs from its retained receipt');
     }
   }
@@ -699,9 +734,10 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   }
 
   /** Persist the bounded object roots alongside the terminal outbox before payload erasure can occur. */
-  private async exactObjectReferences(row: RetainedCustodyRow, prepared: PreparedCommand): Promise<{
+  private async exactObjectReferences(row: RetainedCustodyRow, prepared: PreparedCommand,
+    tolerateMissingShapes = false): Promise<{
     manifestSha256: string; componentPayloadSha256: string; model: string;
-    shapeDigests: Set<string>; objectReferences: CustodyObjectReference[];
+    shapeDigests: Set<string>; objectReferences: CustodyObjectReference[]; missingShapeDigests: Set<string>;
   }> {
     const manifestSha256 = prepared.manifest.replace(/^urn:rezics:sha256:/, '');
     if (!/^[0-9a-f]{64}$/.test(manifestSha256)) throw new ObjectIntegrityError('Invalid component manifest digest');
@@ -741,17 +777,26 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       throw new ObjectIntegrityError('Retained command validation roots differ');
     }
     const shapeDigests = new Set(validations.map(validation => validation.sha256));
+    const missingShapeDigests = new Set<string>();
     if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles) {
       throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
     }
     for (const digest of shapeDigests) {
-      const bytes = await this.objects.get(digest);
+      let bytes: Uint8Array;
+      try { bytes = await this.objects.get(digest); }
+      catch (error) {
+        if (tolerateMissingShapes && error instanceof ObjectNotFound) {
+          missingShapeDigests.add(digest);
+          continue;
+        }
+        throw error;
+      }
       if (bytes.byteLength > CUSTODY_RECOVERY_COST.shapeBytes || sha256(bytes) !== digest) {
         throw new ObjectIntegrityError('Retained profile artifact differs from its exact pin');
       }
     }
     return {
-      manifestSha256, componentPayloadSha256, model, shapeDigests,
+      manifestSha256, componentPayloadSha256, model, shapeDigests, missingShapeDigests,
       objectReferences: [
         { digest: row.payloadSha256, kind: 'command' as const },
         { digest: manifestSha256, kind: 'manifest' as const },
@@ -828,9 +873,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     const prepared = await this.exactObject(row);
     this.matched(row, prepared, proof);
     const terminal = { ...prepared.receipt, sequence: proof.sequence, streamSequence: proof.streamSequence };
-    const closure = await this.exactObjectReferences(row, prepared);
-    const outbox = { ...this.outbox(row, prepared, terminal), custodyObjectReferences: closure.objectReferences };
-    await session.reconcile(terminal, outbox);
+    await session.reconcile(terminal, this.outbox(row, prepared, terminal));
     return terminal;
   }
 
@@ -857,6 +900,35 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       }
       return this.verifyCommitted(row);
     });
+  }
+
+  /** Upgrade legacy reconciled receipts under their lock before an exact erasure clears their payload. */
+  async erasePayloadForErasure(receipt: string, erasure: CustodyPayloadErasure,
+    client?: PoolClient): Promise<readonly string[]> {
+    nativeIri(receipt);
+    return this.store.withReceipt(receipt, async session => {
+      const stored = await session.read();
+      const row = stored ? custodyState(stored) : null;
+      if (!row || !session.clearPayloadForErasure) throw new ReceiptCustodyErasureConflict();
+      let missingObjectDigests: readonly string[] = [];
+      if (row.payload === null) {
+        erasedTerminal(row);
+      } else {
+        if (!row.reconciled || !row.terminal || !row.outbox || !session.persistObjectReferences) {
+          throw new ReceiptCustodyErasureConflict();
+        }
+        const source = await this.verifyCommitted(row, true);
+        missingObjectDigests = source.missingObjectDigests ?? [];
+        if (source.terminal.revision !== erasure.revision || source.payloadSha256 !== erasure.payloadSha256) {
+          throw new ReceiptCustodyErasureConflict();
+        }
+        if (!Object.hasOwn(row.outbox, 'custodyObjectReferences')) {
+          await session.persistObjectReferences(source.objectReferences);
+        }
+      }
+      await session.clearPayloadForErasure(erasure);
+      return missingObjectDigests;
+    }, client);
   }
 
   /** The caller owns its held Access transaction and object store selection.
@@ -914,7 +986,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       objectDigests: new Set(source.objectReferences.map(reference => reference.digest)) };
   }
 
-  private async verifyCommitted(row: RetainedCustodyRow): Promise<CommittedCustodySource> {
+  private async verifyCommitted(row: RetainedCustodyRow, tolerateMissingShapes = false): Promise<CommittedCustodySource> {
     nativeIri(row.receipt);
     const payload = custodyPayload(row);
     if (!row.reconciled || !row.terminal || !row.outbox
@@ -923,7 +995,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     }
     const terminal = this.committedTerminal(row);
     const prepared = await this.exactObject(row);
-    const closure = await this.exactObjectReferences(row, prepared);
+    const closure = await this.exactObjectReferences(row, prepared, tolerateMissingShapes);
     if (row.outbox.custodyObjectReferences !== undefined
       && canonicalJson(row.outbox.custodyObjectReferences) !== canonicalJson(closure.objectReferences)) {
       throw new ObjectIntegrityError('Retained command object closure differs from its exact source');
@@ -931,10 +1003,10 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     if (Buffer.byteLength(JSON.stringify(prepared.state)) > CUSTODY_RECOVERY_COST.stateBytes) {
       throw new ObjectIntegrityError('Retained edition state exceeds its byte bound');
     }
-    const { manifestSha256, componentPayloadSha256, model, shapeDigests, objectReferences } = closure;
+    const { manifestSha256, componentPayloadSha256, model, shapeDigests, objectReferences, missingShapeDigests } = closure;
     const state = model.endsWith('-v2') ? checkedEditionV2(prepared.state) : checkedMetadataState(prepared.state);
-    const expectedHead = terminal.predecessor === prepared.component ? null : terminal.predecessor;
-    if (state.kind !== 'edition' || expectedHead === undefined || canonicalJson(state) !== canonicalJson(prepared.state)
+    const expectedHead = terminal.predecessor === prepared.component ? null : terminal.predecessor ?? null;
+    if (state.kind !== 'edition' || canonicalJson(state) !== canonicalJson(prepared.state)
       || ('contentLanguages' in state
         ? editionV2Digest({ work: terminal.work,expectedHead,state })
         : metadataDigest({ work: terminal.work,expectedHead,state })) !== terminal.requestDigest) {
@@ -970,6 +1042,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       },
       payloadSha256: row.payloadSha256, manifestSha256,
       componentPayloadSha256, model, objectReferences,
+      ...(missingShapeDigests.size ? { missingObjectDigests: [...missingShapeDigests].sort() } : {}),
     };
   }
 

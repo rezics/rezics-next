@@ -141,7 +141,7 @@ test('terminal erased custody serves receipt retries without restoring the comma
   const objects = new MemoryObjects();
   const proof = { value: null as Proof | null };
   const nativeQueries: string[] = [], retirements: unknown[] = [];
-  const { store, custody } = makeCustody(pool, objects, proof, nativeQueries, retirements);
+  const { custody } = makeCustody(pool, objects, proof, nativeQueries, retirements);
   const fixture = await commandFixture(objects);
   const counters = { dispatches: 0 };
   try {
@@ -168,10 +168,7 @@ test('terminal erased custody serves receipt retries without restoring the comma
 
     const erasure: CustodyPayloadErasure = { revision: fixture.revision, payloadSha256,
       erasureId: randomUUID(), erasureEpoch: '12' };
-    await store.withReceipt(fixture.receipt, async session => {
-      if (!session.clearPayloadForErasure) throw new Error('PostgreSQL custody erase capability is unavailable');
-      await session.clearPayloadForErasure(erasure);
-    });
+    await custody.erasePayloadForErasure(fixture.receipt, erasure);
     expect((await pool.query<{ payload: Buffer | null; payload_erasure_id: string | null;
       payload_erasure_epoch: string | null }>(`SELECT payload,payload_erasure_id,
       payload_erasure_epoch::text AS payload_erasure_epoch FROM access.command_custody WHERE receipt=$1`,
@@ -229,14 +226,13 @@ test('erasure waits for a pending command to settle under the same receipt lock'
   const proof = { value: null as Proof | null };
   const nativeQueries: string[] = [], retirements: unknown[] = [];
   const { custody } = makeCustody(pool, objects, proof, nativeQueries, retirements);
-  const erasureStore = new PostgresReceiptCustodyStore(pool);
   const fixture = await commandFixture(objects);
   const counters = { dispatches: 0 };
   let releaseDispatch!: () => void, signalDispatch!: () => void;
   const dispatchGate = new Promise<void>(resolveGate => { releaseDispatch = resolveGate; });
   const dispatchStarted = new Promise<void>(resolveStarted => { signalDispatch = resolveStarted; });
   let erasureClient: PoolClient | undefined;
-  let commit: Promise<CommandResult> | undefined, erase: Promise<void> | undefined;
+  let commit: Promise<CommandResult> | undefined, erase: Promise<readonly string[]> | undefined;
   try {
     await migrateAccess(pool);
     commit = custody.commit({ ...fixture.input, dispatch: committed(proof, counters, dispatchGate, signalDispatch) });
@@ -249,10 +245,11 @@ test('erasure waits for a pending command to settle under the same receipt lock'
     erasureClient = await pool.connect();
     const eraserPid = (await erasureClient.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
     let eraseFinished = false;
-    erase = erasureStore.withReceipt(fixture.receipt, async session => {
-      if (!session.clearPayloadForErasure) throw new Error('PostgreSQL custody erase capability is unavailable');
-      await session.clearPayloadForErasure(erasure);
-    }, erasureClient).then(() => { eraseFinished = true; });
+    erase = custody.erasePayloadForErasure(fixture.receipt, erasure, erasureClient).then(missing => {
+      expect(missing).toEqual([]);
+      eraseFinished = true;
+      return missing;
+    });
     expect(await waitUntilBlocked(observer, eraserPid)).toBe(true);
     expect(eraseFinished).toBe(false);
 
@@ -288,7 +285,7 @@ test('terminal erased custody replays a committed receipt that has no predecesso
   const objects = new MemoryObjects();
   const proof = { value: null as Proof | null };
   const nativeQueries: string[] = [], retirements: unknown[] = [];
-  const { store, custody } = makeCustody(pool, objects, proof, nativeQueries, retirements);
+  const { custody } = makeCustody(pool, objects, proof, nativeQueries, retirements);
   const fixture = await commandFixture(objects, false);
   const counters = { dispatches: 0 };
   try {
@@ -300,11 +297,8 @@ test('terminal erased custody replays a committed receipt that has no predecesso
 
     const payloadSha256 = (await pool.query<{ payload_sha256: string }>(
       'SELECT payload_sha256 FROM access.command_custody WHERE receipt=$1', [fixture.receipt])).rows[0]!.payload_sha256;
-    await store.withReceipt(fixture.receipt, async session => {
-      if (!session.clearPayloadForErasure) throw new Error('PostgreSQL custody erase capability is unavailable');
-      await session.clearPayloadForErasure({ revision: fixture.revision, payloadSha256,
-        erasureId: randomUUID(), erasureEpoch: '14' });
-    });
+    await custody.erasePayloadForErasure(fixture.receipt, { revision: fixture.revision, payloadSha256,
+      erasureId: randomUUID(), erasureEpoch: '14' });
 
     objects.bytes.clear();
     proof.value = { digest: 'b'.repeat(64), payloadSha256: 'c'.repeat(64), dataEpoch: 'stale-epoch',

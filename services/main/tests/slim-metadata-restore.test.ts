@@ -253,7 +253,8 @@ test('committed retired slim custody reads the original bare manifest digest wit
       { digest: f.payloadSha256, kind: 'command' }, { digest: f.manifestSha256, kind: 'manifest' },
       { digest: f.componentPayloadSha256, kind: 'payload' }, ...f.shapeDigests.map(digest => ({ digest, kind: 'shape' })),
     ]));
-    expect(source?.outbox).toEqual(f.outbox);
+    expect(source?.outbox).toMatchObject(f.outbox);
+    expect(source?.outbox.custodyObjectReferences).toEqual(source?.objectReferences);
     expect(JSON.stringify(f.store.row)).toBe(before);
     expect(f.objects.puts).toBe(puts);
     expect(f.store.mutations).toBe(0); expect(f.sourceQueries()).toBe(0); expect(f.native.commands).toEqual([]);
