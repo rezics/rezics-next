@@ -387,8 +387,9 @@ describe('game progress tracking adapter', () => {
         }
         const items = levels.find(level => level.parent === (query.parent ?? null))!.items;
         const start = Number(query.after ?? 0);
-        return { error: null, data: { structure: query.parent === options.changedStructure ? part(9002).occurrence : structure,
-          revision: query.parent === options.changedRevision ? part(9001).occurrence : revision,
+        return { error: null, data: { structure: options.changedStructure && query.parent === options.changedStructure
+          ? part(9002).occurrence : structure,
+          revision: options.changedRevision && query.parent === options.changedRevision ? part(9001).occurrence : revision,
           parts: items.slice(start, start + query.limit),
           next: options.loop ?? (start + query.limit < items.length ? String(start + query.limit) : null) } };
       },
