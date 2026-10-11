@@ -13,6 +13,7 @@ test('explicit preparation retains one API-built store at three population cuts'
   const { root } = await import('../../../scripts/fixture/stack.ts');
   const { readEnv } = await import('../../../scripts/dev/config.ts');
   const { startMediaStack } = await import('../integration/media-support.ts');
+  const { Pool } = await import('pg');
   const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
   const { createCorpusBackupDriver } = await import('../../../scripts/load/corpus-backup-driver.ts');
   const { initializeRelayCheckpoint } = await import('../../../services/main/src/modules/outbox/relay.ts');
@@ -24,6 +25,7 @@ test('explicit preparation retains one API-built store at three population cuts'
   const { initializeSeedCheckpointPopulation, growSeedCheckpointPopulation }
     = await import('../support/seed-checkpoint-population.ts');
   type CorpusApi = import('../../../scripts/load/work-profile-corpus.ts').CorpusApi;
+  type CorpusCommand = import('../../../scripts/load/work-profile-corpus.ts').CorpusCommand;
   type Recipe = import('../../../scripts/load/work-profile-corpus.ts').WorkProfileCorpusRecipe;
   type SeedWork = import('../support/seed-checkpoints.ts').SeedWork;
   type RetainedSeed = import('../support/seed-checkpoints.ts').RetainedSeed;
@@ -53,7 +55,9 @@ test('explicit preparation retains one API-built store at three population cuts'
     const openStarted = performance.now();
     source = await startMediaStack('seed-checkpoint-source', { library: true });
     stageStartupMs += performance.now() - openStarted;
-    await initializeRelayCheckpoint(source.relayPool, Bun.env.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
+    const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+    try { await initializeRelayCheckpoint(relay, Bun.env.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch); }
+    finally { await relay.end(); }
     let member = await source.member(seedAuthorName, { stable: true, verified: true });
     let currentApi = seedApi(source, member.token);
     let actor = '', population: Population | undefined;
@@ -61,7 +65,7 @@ test('explicit preparation retains one API-built store at three population cuts'
     const measured: Array<{ operation: string; profile: WorkProfile }> = [];
     let scale: (typeof WORK_PROFILE_SCALES)[number] = 'small';
     const api: CorpusApi = {
-      async command<T>(key, command, signal) {
+      async command<T>(key: string, command: CorpusCommand, signal?: AbortSignal) {
         if (scale === 'large') return await currentApi.command<T>(key, command, signal);
         const result = await profileRequest(sink, headers => currentApi.command<T>(key,
           { ...command, headers: new Headers([...new Headers(command.headers), ...headers]) }, signal),
@@ -147,7 +151,11 @@ test('explicit preparation retains one API-built store at three population cuts'
         Object.entries(timing).map(([key, value]) => [key.replace(/Ms$/, 'Seconds'), value / 1000]))));
       if (scale === 'medium') {
         writeFileSync(join(seedDirectory, 'command-cost-16.json'), JSON.stringify(measured, null, 2) + '\n');
-        const groups = Map.groupBy(measured, item => item.operation);
+        const groups = new Map<string, typeof measured>();
+        for (const item of measured) {
+          const group = groups.get(item.operation) ?? [];
+          group.push(item); groups.set(item.operation, group);
+        }
         const median = (values: number[]) => {
           const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
           return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
@@ -161,8 +169,10 @@ test('explicit preparation retains one API-built store at three population cuts'
             fuseki: median(values.map(item => item.profile.fusekiRequests!)) };
         }).sort((a, b) => b.ms - a.ms);
         const slowest = rows[0]!;
-        mkdirSync(join(root, 'docs/goals/kernel/reports'), { recursive: true });
-        writeFileSync(join(root, 'docs/goals/kernel/reports/seed-build-command-cost.md'),
+        mkdirSync(seedDirectory, { recursive: true });
+        // Keep generated measurement evidence outside the source fingerprint;
+        // the worker publishes this exact table after the command completes.
+        writeFileSync(join(seedDirectory, 'seed-build-command-cost.md'),
           '| API operation class | Count | Median time (ms) | SQL statements / command (median) | Fuseki calls / command (median) |\n'
           + '| --- | ---: | ---: | ---: | ---: |\n'
           + rows.map(row => `| ${row.operation} | ${row.count} | ${row.ms.toFixed(1)} | ${row.sql} | ${row.fuseki} |`).join('\n')

@@ -161,7 +161,7 @@ export async function verifySeedCheckpointPopulation(
   const shelfWorks: string[] = [];
   cursor = undefined;
   do {
-    const page = await api.read<{ items: Array<{ work: string; status: string }>; nextCursor: string | null }>(
+    const page: { items: Array<{ work: string; status: string }>; nextCursor: string | null } = await api.read(
       queryPath('/v1/me/shelves/status/reading/works', { actingSubject: actor, limit: '20', sort: 'added', order: 'asc', ...(cursor ? { cursor } : {}) }));
     if (page.items.some(item => item.status !== 'reading')) throw new Error('Retained shelf status changed');
     shelfWorks.push(...page.items.map(item => item.work));
@@ -171,7 +171,7 @@ export async function verifySeedCheckpointPopulation(
   const memberIds: string[] = [], memberWorks: string[] = [];
   cursor = undefined;
   do {
-    const page = await api.read<{ revision: string; occurrences: Array<{ occurrence: string; target: string }>; next: string | null }>(
+    const page: { revision: string; occurrences: Array<{ occurrence: string; target: string }>; next: string | null } = await api.read(
       queryPath(`/v1/collections/${short(collection.id)}`, { actingSubject: actor, limit: '100', ...(cursor ? { after: cursor } : {}) }));
     if (page.revision !== collection.revision) throw new Error('Retained collection revision changed');
     memberIds.push(...page.occurrences.map(item => item.occurrence));
@@ -183,7 +183,7 @@ export async function verifySeedCheckpointPopulation(
   const mountIds: string[] = [], mountSegments: string[] = [];
   cursor = undefined;
   do {
-    const page = await api.read<{ revision: string; mounts: Array<{ occurrence: string; target: string; qualifier: { routeSegment: string; disclosure: string } }>; next: string | null }>(
+    const page: { revision: string; mounts: Array<{ occurrence: string; target: string; qualifier: { routeSegment: string; disclosure: string } }>; next: string | null } = await api.read(
       queryPath(`/v1/zones/${short(zone.id)}`, { actingSubject: actor, limit: '100', ...(cursor ? { after: cursor } : {}) }));
     if (page.revision !== zone.revision || page.mounts.some(item => item.target !== collection.id || item.qualifier.disclosure !== 'public'))
       throw new Error('Retained public Zone mounts changed');
@@ -196,7 +196,11 @@ export async function verifySeedCheckpointPopulation(
   const routed = await api.read<{ kind: string; items: Array<{ id: string }> }>(
     queryPath(`/v1/zones/${short(zone.id)}/routes`, { path: '/reading' }));
   if (routed.kind !== 'index') throw new Error('Retained mounted Collection route is unavailable');
-  equalIdentities(routed.items.map(item => item.id), collection.members.slice(0, 24).map(item => item.work), 'mounted route page');
+  const routedWorks = routed.items.map(item => item.id);
+  if (routedWorks.length !== Math.min(24, collection.members.length)
+    || new Set(routedWorks).size !== routedWorks.length
+    || routedWorks.some(work => !collection.members.some(member => member.work === work)))
+    throw new Error('Retained mounted route page does not match its Collection population');
   return { recipeOccurrences: recipeIds.length, readerShelfEntries: shelfWorks.length,
     zoneNavigationEntries: mountIds.length, mountedCollectionResources: memberWorks.length };
 }

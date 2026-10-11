@@ -6,7 +6,7 @@ import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.t
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput }
   from '../../../scripts/load/corpus-backup-driver.ts';
 import { restoreWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_DIMENSIONS, WORK_PROFILE_SCALES,
-  type CorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
+  type CorpusApi, type CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { readRetainedSeed, seedAuthorName, seedApi, seedCensus, seedSelection,
   type RetainedSeedCut } from '../support/seed-checkpoints.ts';
@@ -53,7 +53,8 @@ test('retained checkpoints restore exact populations and identities into isolate
       const stack = await openCopy(input);
       try {
         const client = seedApi(stack, (await stack.member(seedAuthorName, { stable: true, verified: true })).token);
-        expect(await seedCensus(client, verifying)).toEqual(verifying.manifest.dimensions);
+        const actual: CorpusDimensions = await seedCensus(client, verifying);
+        expect(actual).toEqual(verifying.manifest.dimensions);
         for (const created of retained.cuts[2]!.works.slice(verifying.works.length))
           await expect(client.read(seedSelection(created.mainVersion))).rejects.toThrow('HTTP 404');
         if (isolatedWrite)
