@@ -13,6 +13,11 @@ import { ReaderReviews } from '../../../services/main/src/modules/review/store.t
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
+import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
+import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
@@ -31,11 +36,24 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     prefix: 'semantic/structure/' });
   await structureObjects.initialize();
   const replies = new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env);
-  const app = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
+  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  const consumer = `resource-targets-${randomUUID()}`;
+  const feed = new FeedStore(f.accessPool);
+  const deps = { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
     access: f.access, content, contentAuthoring: content, realmReplies: replies, structureObjects,
     realmReplyThreads: new RealmReplyThreadStore(f.pool, f.accessPool), reviews: new ReaderReviews(f.accessPool),
     agentProvisioning: new AgentProvisioning(f.accessPool, f.env), personPreferences: new PersonPreferencesStore(f.accessPool),
-    profiles: new ProfilesAccess(f.accessPool) });
+    profiles: new ProfilesAccess(f.accessPool), feed, relayPosition: new RelayHandoffPositions(relayPool, consumer) };
+  const app = createMainApp(f.env.fuseki, deps);
+  const refresh = new FeedRefreshWorker(deps, feed, relayPool);
+  const project = async () => {
+    for (let tick = 0; tick < 100; tick++) {
+      if (!(await relayMainOutboxOnce(f.env.fuseki, relayPool, consumer))) break;
+      if (tick === 99) throw new Error('Realm fixture relay exceeded its budget');
+    }
+    for (let tick = 0; tick < 100; tick++) if (await refresh.tick() === 'current') return;
+    throw new Error('Realm fixture projection exceeded its budget');
+  };
   const call = (method: string, path: string, body?: object, authenticated = true, key = randomUUID()) =>
     app.handle(new Request(`http://main.local${path}`, { method, headers: {
       ...(authenticated ? { authorization: `Bearer ${f.account.tokenA}` } : {}),
@@ -75,6 +93,13 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     return { target: result.occurrences[0]!, revision: result.revision, structure: structure.structure };
   };
   try {
+    // Match the Realm fixture's source cut before projecting this file's commands.
+    await initializeRelayCheckpoint(relayPool, consumer, f.env.lineage.dataEpoch);
+    const position = await workRead(deps, new Request('http://main.internal/fixture-position'), {},
+      async session => session.position);
+    await relayPool.query('UPDATE relay.checkpoint SET sequence=$2 WHERE consumer=$1 AND data_epoch=$3',
+      [consumer, position.sequence, position.dataEpoch]);
+    await feed.advance(await feed.initialize(position.dataEpoch), position.sequence, [], new Map());
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
     finally { await accountPool.end(); }
@@ -155,6 +180,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
         realm: realm.realm, reply, revisionId: draft.revisionId, revisionDigest: current.revisionDigest,
         reviewDecisionId: approved.decisionId, expectedHead: null, actingSubject: f.actor }), 201);
       expect(await json(await discussion(root.target))).toMatchObject({ items: [{ reply, realm: realm.realm }] });
+      await project();
       expect(await json(await call('GET', `/v1/realms/${shortId(realm.realm)}/threads/${shortId(reply)}`
         + `?actingSubject=${encodeURIComponent(reviewer.agent)}`))).toMatchObject({ work: { id: root.target } });
     }
@@ -177,6 +203,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
           lexical: 'Kirito revised', language: 'en', direction: 'ltr' } }] } }));
     for (const { input, key, identityKey, revisionId } of retained) {
       expect(await json(await discussion(input.rootTarget))).toMatchObject({ items: [{ reply: input.reply }] });
+      await project();
       expect(await json(await call('GET', `/v1/realms/${shortId(realm.realm)}/threads/${shortId(input.reply)}`
         + `?actingSubject=${encodeURIComponent(reviewer.agent)}`))).toMatchObject({ rootRevision: input.rootRevision });
       expect(await json(await call('POST', '/v1/member-reply-drafts', input, true, key)))
@@ -257,7 +284,8 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
       + `?actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(404);
     expect((await call('POST', '/v1/member-reply-drafts', { ...retained[0]!.input,
       expectedHead: retained[0]!.revisionId, body: 'Erased root cannot be edited' })).status).toBe(403);
+    await project();
     expect((await call('GET', `/v1/realms/${shortId(realm.realm)}/threads/${shortId(retained[0]!.input.reply)}`
       + `?actingSubject=${encodeURIComponent(reviewer.agent)}`)).status).toBe(404);
-  } finally { await f.close(); rmSync(directory, { recursive: true, force: true }); }
+  } finally { await relayPool.end(); await f.close(); rmSync(directory, { recursive: true, force: true }); }
 }, 240_000);

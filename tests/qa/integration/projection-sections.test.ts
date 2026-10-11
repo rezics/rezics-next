@@ -36,7 +36,7 @@ test('a projection page links its real ratings, reviews and discussion through t
     }), 201)).component;
     const projection = (await json<{ projection: { id: string; revision: string } }>(await owner.send('POST',
       '/v1/projections', { subject, frames: [work.work], actingSubject: owner.actor }), 201)).projection;
-    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+    const app = createMainApp(stack.fuseki, { ...stack.composition.dependencies, environment: stack.env, access: stack.access,
       content: stack.content, contentAuthoring: stack.content, media: stack.media, mediaAccess: stack.mediaAccess,
       reviews: new ReaderReviews(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
       realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env),
