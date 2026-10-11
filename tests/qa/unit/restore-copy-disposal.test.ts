@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import {
   attemptRestoreCleanup,
   createRestoreCopyDisposal,
+  createRestoreGraphResourceOwner,
 } from '../fault-recovery/owner-restore-erasure-fixture.ts';
+import {
+  standaloneFuseki,
+  type StandaloneDockerResult,
+} from '../fault-recovery/search-ops-support.ts';
 
 test('disposing a copy releases only its resources and is harmless when repeated', async () => {
   const resources = [
@@ -37,45 +42,96 @@ test('disposing a copy releases only its resources and is harmless when repeated
   expect(attempts).toEqual(resources);
 });
 
-test('final cleanup tries every partially allocated resource and retries only failures', async () => {
-  const outstanding = new Set<string>();
-  const retained = new Set(['source cut', 'immutable relay template', 'sibling copy']);
-  const allocations = ['candidate retained relay database', 'candidate graph volume'];
-  const allocate = () => {
-    for (const resource of allocations) outstanding.add(resource);
-    throw new Error('candidate allocation fault');
+test('final cleanup owns a graph created before readiness fails and retries checked removal', async () => {
+  const resources = createRestoreGraphResourceOwner();
+  const input = {
+    name: 'restore-copy-startup-fault',
+    image: 'fuseki:test',
+    volume: 'restore-copy-startup-fault-volume',
+    secrets: { FUSEKI_COMMAND_TOKEN: 'unit-secret-token-value' },
   };
+  const state = {
+    candidateGraph: false,
+    candidateVolume: false,
+    sourceCut: true,
+    immutableRelayTemplate: true,
+    siblingCopy: true,
+  };
+  const calls: string[][] = [];
+  let removalAttempts = 0;
+  const docker = (args: string[]): StandaloneDockerResult => {
+    calls.push(args);
+    if (args[0] === 'run') {
+      state.candidateGraph = true;
+      return { status: 0, stdout: 'container-id', stderr: '' };
+    }
+    if (args[0] === 'rm') {
+      removalAttempts++;
+      if (removalAttempts === 1) return { status: 1, stdout: '', stderr: 'temporary Docker removal fault' };
+      state.candidateGraph = false;
+      return { status: 0, stdout: '', stderr: '' };
+    }
+    if (args[0] === 'inspect')
+      return { status: 0, stdout: state.candidateGraph ? 'container-id' : '', stderr: '' };
+    if (args[0] === 'volume' && args[1] === 'create') {
+      state.candidateVolume = true;
+      return { status: 0, stdout: input.volume, stderr: '' };
+    }
+    if (args[0] === 'volume' && args[1] === 'rm') {
+      state.candidateVolume = false;
+      return { status: 0, stdout: input.volume, stderr: '' };
+    }
+    throw new Error(`unexpected Docker command: ${args[0]}`);
+  };
+  const env = { DOCKER_HOST: 'unix:///qa/docker.sock' };
 
-  expect(allocate).toThrow('candidate allocation fault');
-
-  const failedOnce = new Set(['candidate graph volume']);
-  const attempts = new Map<string, number>();
-  const cleanup = (resource: string) => ({
-    resource,
-    run: () => {
-      attempts.set(resource, (attempts.get(resource) ?? 0) + 1);
-      if (failedOnce.has(resource)) {
-        failedOnce.delete(resource);
-        throw new Error(`${resource} removal fault`);
-      }
-      outstanding.delete(resource);
+  resources.registerVolume(input.volume);
+  docker(['volume', 'create', input.volume]);
+  await expect(standaloneFuseki(env, input, {
+    docker: (args) => docker(args),
+    waitForReady: async () => {
+      throw new Error('readiness fault');
     },
-  });
+    onCreated: resources.registerContainer,
+  })).rejects.toThrow('readiness fault');
 
-  const firstFailures = await attemptRestoreCleanup([...outstanding].map(cleanup));
+  expect(resources.containers.map(({ name }) => name)).toEqual([input.name]);
+  expect(resources.volumes).toEqual([input.volume]);
+  expect(state.candidateGraph).toBe(true);
+  expect(state.candidateVolume).toBe(true);
 
-  expect(firstFailures.map(({ action }) => action.resource)).toEqual(['candidate graph volume']);
-  expect([...attempts.keys()]).toEqual(allocations);
-  expect(outstanding).toEqual(new Set(['candidate graph volume']));
-  expect(retained).toEqual(new Set(['source cut', 'immutable relay template', 'sibling copy']));
+  const removeVolume = (name: string) => {
+    const result = docker(['volume', 'rm', '-f', name]);
+    if (result.status !== 0) throw new Error('Docker volume removal failed');
+    resources.unregisterVolume(name);
+  };
+  const firstFailures = await attemptRestoreCleanup([
+    ...resources.containerCleanupActions(),
+    ...resources.volumeCleanupActions(removeVolume),
+  ]);
 
-  const finalFailures = await attemptRestoreCleanup([...outstanding].map(cleanup));
+  expect(firstFailures.map(({ action }) => action.resource)).toEqual([
+    `Fuseki container ${input.name}`,
+  ]);
+  expect(resources.containers.map(({ name }) => name)).toEqual([input.name]);
+  expect(resources.volumes).toEqual([]);
+  expect(state.candidateGraph).toBe(true);
+  expect(state.candidateVolume).toBe(false);
+  expect(state).toMatchObject({ sourceCut: true, immutableRelayTemplate: true, siblingCopy: true });
+
+  const finalFailures = await attemptRestoreCleanup([
+    ...resources.containerCleanupActions(),
+    ...resources.volumeCleanupActions(removeVolume),
+  ]);
 
   expect(finalFailures).toEqual([]);
-  expect(outstanding.size).toBe(0);
-  expect(attempts.get('candidate retained relay database')).toBe(1);
-  expect(attempts.get('candidate graph volume')).toBe(2);
-  expect(retained).toEqual(new Set(['source cut', 'immutable relay template', 'sibling copy']));
+  expect(resources.containers).toEqual([]);
+  expect(resources.volumes).toEqual([]);
+  expect(state.candidateGraph).toBe(false);
+  expect(state.candidateVolume).toBe(false);
+  expect(state).toMatchObject({ sourceCut: true, immutableRelayTemplate: true, siblingCopy: true });
+  expect(removalAttempts).toBe(2);
+  expect(calls.filter(([command]) => command === 'ps')).toEqual([]);
 });
 
 test('partial disposal reports failures and retries only resources still owned', async () => {

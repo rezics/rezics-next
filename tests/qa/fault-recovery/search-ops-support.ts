@@ -191,6 +191,7 @@ export type StandaloneDockerExecutor = (args: string[], env: NodeJS.ProcessEnv,
 export interface StandaloneFusekiDependencies {
   docker?: StandaloneDockerExecutor;
   waitForReady?: (url: string) => Promise<void>;
+  onCreated?: (container: StandaloneFuseki) => void;
   artifactDir?: string;
   now?: () => number;
 }
@@ -302,8 +303,7 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
     ...(input.mounts ?? []).flatMap(mount => ['--volume', mount]),
     ...Object.entries(input.secrets).flatMap(([key, value]) => ['--env', `${key}=${value}`]),
     input.image, ...(input.command ?? [])], owned, 60_000);
-  await waitForReady(url);
-  return { name: input.name, url,
+  const container: StandaloneFuseki = { name: input.name, url,
     runner: {
       exec: script => dockerOutput(execute, ['exec', input.name, 'sh', '-ec', script], owned, 120_000),
       offline: script => dockerOutput(execute, ['run', '--rm', '--network', 'none', '--volume', `${input.volume}:/fuseki/databases`,
@@ -343,6 +343,9 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
       }
     },
   };
+  dependencies.onCreated?.(container);
+  await waitForReady(url);
+  return container;
 }
 
 export function fusekiSecrets(composeEnv: Record<string, string>): Record<string, string> {

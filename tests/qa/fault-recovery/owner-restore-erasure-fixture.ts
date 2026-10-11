@@ -119,6 +119,7 @@ import {
   qaStack,
   requireFaultTier,
   standaloneFuseki,
+  type StandaloneFuseki,
 } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
 
 export const restoreKey = 'e6'.repeat(32);
@@ -153,6 +154,61 @@ export interface RestoreCleanupAction {
 export interface RestoreCleanupFailure {
   action: RestoreCleanupAction;
   error: unknown;
+}
+
+export interface RestoreGraphResourceOwner {
+  readonly containers: readonly StandaloneFuseki[];
+  readonly volumes: readonly string[];
+  registerContainer(container: StandaloneFuseki): void;
+  registerVolume(name: string): void;
+  unregisterVolume(name: string): void;
+  removeContainer(container: StandaloneFuseki): Promise<void>;
+  containerCleanupActions(): RestoreCleanupAction[];
+  volumeCleanupActions(removeVolume: (name: string) => void): RestoreCleanupAction[];
+}
+
+export function createRestoreGraphResourceOwner(): RestoreGraphResourceOwner {
+  const containers: StandaloneFuseki[] = [];
+  const volumes: string[] = [];
+  const unregisterContainer = (container: StandaloneFuseki) => {
+    const index = containers.indexOf(container);
+    if (index >= 0) containers.splice(index, 1);
+  };
+  const removeContainer = async (container: StandaloneFuseki) => {
+    await container.remove();
+    unregisterContainer(container);
+  };
+  return {
+    get containers() {
+      return [...containers];
+    },
+    get volumes() {
+      return [...volumes];
+    },
+    registerContainer(container) {
+      if (!containers.includes(container)) containers.push(container);
+    },
+    registerVolume(name) {
+      if (!volumes.includes(name)) volumes.push(name);
+    },
+    unregisterVolume(name) {
+      const index = volumes.indexOf(name);
+      if (index >= 0) volumes.splice(index, 1);
+    },
+    removeContainer,
+    containerCleanupActions() {
+      return containers.map((container) => ({
+        resource: `Fuseki container ${container.name}`,
+        run: () => removeContainer(container),
+      }));
+    },
+    volumeCleanupActions(removeVolume) {
+      return volumes.map((name) => ({
+        resource: `graph volume ${name}`,
+        run: () => removeVolume(name),
+      }));
+    },
+  };
 }
 
 export async function attemptRestoreCleanup(
@@ -238,11 +294,10 @@ export async function ownerRestoreErasureFixture() {
     content: pool(databases.urls.content),
     relay: pool(databases.urls.relay),
   };
-  const volumes: string[] = [],
-    copies: string[] = [],
+  const graphResources = createRestoreGraphResourceOwner();
+  const copies: string[] = [],
     pgCopies: string[] = [];
   const candidateDirectories = new Set<string>();
-  const containers: Awaited<ReturnType<typeof standaloneFuseki>>[] = [];
   const docker = (args: string[], timeout = 60_000) => {
     const result = spawnSync('docker', args, { env: qa.dockerEnv, encoding: 'utf8', timeout });
     if (result.status !== 0 || result.error)
@@ -251,24 +306,11 @@ export async function ownerRestoreErasureFixture() {
   };
   const volume = (label: string) => {
     const name = `rezics-owner-erasure-${suffix}-${label}`;
-    volumes.push(name);
+    graphResources.registerVolume(name);
     docker(['volume', 'create', name]);
     return name;
   };
-  const removeContainer = async (container: Awaited<ReturnType<typeof standaloneFuseki>>) => {
-    await container.remove();
-    const remaining = docker([
-      'ps',
-      '--all',
-      '--quiet',
-      '--no-trunc',
-      '--filter',
-      `name=^${container.name}$`,
-    ]);
-    if (remaining) throw new Error(`Fuseki container ${container.name} remains after removal`);
-    const index = containers.indexOf(container);
-    if (index >= 0) containers.splice(index, 1);
-  };
+  const removeContainer = (container: StandaloneFuseki) => graphResources.removeContainer(container);
   const removeVolume = (name: string) => {
     let removeFailure: unknown;
     try {
@@ -282,8 +324,7 @@ export async function ownerRestoreErasureFixture() {
     if (remaining.length) {
       throw removeFailure ?? new Error(`Docker volume ${name} remains after removal`);
     }
-    const index = volumes.indexOf(name);
-    if (index >= 0) volumes.splice(index, 1);
+    graphResources.unregisterVolume(name);
   };
   const copyGraph = (from: string, to: string) =>
     docker([
@@ -355,8 +396,7 @@ export async function ownerRestoreErasureFixture() {
         actions.push({ resource: 'authenticated fixture client', run: () => authenticated!.close() });
       for (const value of [...pools])
         actions.push({ resource: 'candidate or source pool', run: () => closePool(value) });
-      for (const container of [...containers])
-        actions.push({ resource: `Fuseki container ${container.name}`, run: () => removeContainer(container) });
+      actions.push(...graphResources.containerCleanupActions());
       for (const data of [...pgCopies])
         actions.push({ resource: `recovery PostgreSQL process ${data}`, run: () => stopPostgres(data) });
       for (const name of [...copies].reverse())
@@ -370,8 +410,7 @@ export async function ownerRestoreErasureFixture() {
           },
         });
       actions.push({ resource: 'source and relay template databases', run: () => databases.close() });
-      for (const name of [...volumes])
-        actions.push({ resource: `graph volume ${name}`, run: () => removeVolume(name) });
+      actions.push(...graphResources.volumeCleanupActions(removeVolume));
       for (const path of [...candidateDirectories]) {
         actions.push({
           resource: `candidate directory ${path}`,
@@ -381,10 +420,10 @@ export async function ownerRestoreErasureFixture() {
       const failures = await attemptRestoreCleanup(actions);
       const hasOutstandingResources =
         pools.size > 0 ||
-        containers.length > 0 ||
+        graphResources.containers.length > 0 ||
         pgCopies.length > 0 ||
         copies.length > 0 ||
-        volumes.length > 0 ||
+        graphResources.volumes.length > 0 ||
         candidateDirectories.size > 0;
       if (!hasOutstandingResources) {
         try {
@@ -421,9 +460,8 @@ export async function ownerRestoreErasureFixture() {
         image: image,
         volume: liveVolume,
         secrets: fusekiSecrets(qa.composeEnv),
-      }),
+      }, { onCreated: graphResources.registerContainer }),
     );
-    containers.push(live);
     const native = new FusekiClient(
       live.url,
       qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN,
@@ -1067,8 +1105,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             image: image,
             volume: restoredVolume,
             secrets: fusekiSecrets(qa.composeEnv),
-          });
-          containers.push(graph);
+          }, { onCreated: graphResources.registerContainer });
         },
         ordinal,
       );
