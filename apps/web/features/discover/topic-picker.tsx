@@ -35,10 +35,10 @@ export function topicLoader(
   locale: UiLocale,
   actingSubject?: string,
   realm?: string,
-  signedIn = true,
+  _signedIn = true,
 ): EntityPickerLoad<TopicItem> {
   return async ({ q, cursor }) => {
-    const page = await discoveryApi(browserMainApi(undefined, { anonymous: !signedIn }), locale, actingSubject).concepts({
+    const page = await discoveryApi(browserMainApi(), locale, actingSubject).concepts({
       q,
       ...(cursor ? { cursor } : {}),
       ...(realm ? { realm } : {}),

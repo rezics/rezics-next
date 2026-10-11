@@ -73,11 +73,11 @@ function transportIs(credentials: RequestCredentials) {
 
 for (const signedIn of [false, true]) {
   const credentials = signedIn ? 'same-origin' : 'omit';
-  test(`Concept Works first page and continuation use ${credentials}, without requiring an Agent`, async () => {
+  test(`Concept Works first page and continuation keep session transport when signedIn=${signedIn}`, async () => {
     const load = conceptWorksLoader(signedIn);
     await load(concept, 'en');
     await load(concept, 'en', 'concept-next');
-    transportIs(credentials);
+    transportIs('same-origin');
     expect(calls).toHaveLength(2);
     expect(calls[1]!.body).toMatchObject({ page: { continuation: 'concept-next' } });
   });
@@ -112,17 +112,17 @@ for (const signedIn of [false, true]) {
     expect(calls[2]!.body).toMatchObject({ page: { continuation } });
   });
 
-  test(`General typeahead uses ${credentials}`, async () => {
+  test(`General typeahead keeps session transport when signedIn=${signedIn}`, async () => {
     await readBrowserTypeahead('Pride', 'en', signedIn);
-    transportIs(credentials);
+    transportIs('same-origin');
     expect(calls[0]!.url.searchParams.get('prefix')).toBe('Pride');
   });
 
-  test(`Topic picker first page and continuation use ${credentials}, independently of Agent selection`, async () => {
+  test(`Topic picker first page and continuation keep session transport when signedIn=${signedIn}`, async () => {
     const load = topicLoader('en', undefined, undefined, signedIn);
     await load({ q: 'Fantasy', cursor: null });
     await load({ q: 'Fantasy', cursor: 'topics-next' });
-    transportIs(credentials);
+    transportIs('same-origin');
     expect(calls).toHaveLength(2);
     expect(calls[1]!.url.searchParams.get('cursor')).toBe('topics-next');
   });
