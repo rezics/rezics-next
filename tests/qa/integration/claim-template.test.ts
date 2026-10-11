@@ -528,15 +528,17 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
       `/v1/claims/${short(created.claim!.claim)}/assessments`, {
         ...longIntent, lineageContinuation: partial.analysis.lineageContinuation }, longKey);
     expect(completedResponse.status).toBe(200);
-    const completed = await completedResponse.json() as { assessment: { assessment: string }; analysis: { lineageNodes: number } };
+    const completed = await completedResponse.json() as { assessment: { assessment: string };
+      analysis: { lineageNodes: number } | null; activation: unknown; receipt: unknown; sourcePosition: unknown };
     expect(completed).toMatchObject({ assessment: { dependence: 'unknown', support: 'insufficient', coverage: 'complete' },
       analysis: { lineageComplete: true, lineageContinuation: null, lineageNodes: 41 } });
-    // A successful receipt replays its completed proof even without the last cursor.
+    // A terminal receipt replays its durable outcome without reattaching the old proof.
     const completedReplay = await call('POST',
       `/v1/claims/${short(created.claim!.claim)}/assessments`, longIntent, longKey);
     expect(completedReplay.status).toBe(200);
     expect(await completedReplay.json()).toMatchObject({ assessment: { assessment: completed.assessment.assessment },
-      analysis: { lineageComplete: true, lineageNodes: 41 } });
+      analysis: null, activation: completed.activation, receipt: completed.receipt,
+      sourcePosition: completed.sourcePosition, replayed: true });
 
     // FACT03: a rating's applicable interval is checked against the exact
     // observation time, while its domain/context remain independent of support.
