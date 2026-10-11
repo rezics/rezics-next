@@ -3,10 +3,11 @@ import type { PoolClient } from 'pg';
 import { ContentConflict, contentDraftIntentDigest, type ContentCore,
   type SaveDraftCommand } from '../../../../content/src/core.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { readReplyRoot, replyRoot } from '../realm-reply/root.ts';
+import { readReplyRoot, replyRoot, resolveCanonicalReplyParent,
+  type CanonicalReplyParentReader, type ValidatedCanonicalReplyParent } from '../realm-reply/root.ts';
 import { targetRead } from '../target/resolve.ts';
 import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
 import { readRealmPolicy } from '../space/policy.ts';
@@ -26,20 +27,55 @@ export interface MemberReplyDraft {
   body?: string | null; document?: DocumentSnapshot; actingSubject: string;
 }
 
-/** The author/root binding and every edit/delete use Content's draft CAS and
- * immutable receipts. Deletion is a tombstone revision; retained history and
- * moderation evidence remain intact. A later edit never inherits Realm review. */
-export async function saveMemberReplyDraft(env: WorkActivationEnvironment, content: ContentCore,
-  account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'fenceClaim' | 'withRealmPolicy' | 'canReadWork' | 'canReadSemanticResource'>>,
-  request: Request, input: MemberReplyDraft, key: string): Promise<{
-    reply: string; variantId: string; revisionId: string; revisionDigest: string; predecessor: string | null; deleted: boolean;
-    sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }> {
+/** Server command input: `about` and the observed live target revision come
+ * from the Zone attachment; opener and parent are resolved by the owner. */
+export interface CanonicalAboutReplyDraft extends Omit<MemberReplyDraft, 'rootTarget' | 'rootRevision' | 'originRealm'> {
+  about: string; realm: string; targetRevision: string; originRealm: string;
+}
+
+export type VerifiedMemberReplyDraftIntent =
+  | { kind: 'member-reply'; input: MemberReplyDraft }
+  | { kind: 'canonical-about-reply'; input: CanonicalAboutReplyDraft; parentReader: CanonicalReplyParentReader };
+
+export interface MemberReplyDraftResult {
+  reply: string; variantId: string; revisionId: string; revisionDigest: string;
+  predecessor: string | null; deleted: boolean;
+  sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean;
+}
+
+export interface CanonicalAboutReplyDraftResult extends MemberReplyDraftResult {
+  rootTarget: string; rootRevision: string; originRealm: string;
+  canonicalParent: ValidatedCanonicalReplyParent | null;
+}
+
+interface PreparedDraft { body: ReturnType<typeof authoredDocumentBody> | { body: string }; deleted: boolean }
+
+type ReplyDraftAccess = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
+  & Partial<Pick<AccessAdmissionRegistry, 'fenceClaim' | 'withRealmPolicy' | 'canReadWork' | 'canReadSemanticResource'>>;
+
+interface DraftPlan {
+  input: MemberReplyDraft;
+  canonical?: { realm: string; about: string; targetRevision: string; reader: CanonicalReplyParentReader };
+}
+
+function planDraft(intent: VerifiedMemberReplyDraftIntent): DraftPlan {
+  if (intent.kind === 'member-reply') return { input: intent.input };
+  const input = intent.input;
+  const allowed = new Set(['about', 'realm', 'targetRevision', 'originRealm', 'reply', 'variantId',
+    'language', 'direction', 'expectedHead', 'body', 'document', 'actingSubject', 'spoiler']);
+  if (Reflect.ownKeys(input).some(key => typeof key !== 'string' || !allowed.has(key)))
+    throw new ContentConflict('canonical reply parent is owner-derived');
+  return { input: { ...input, rootTarget: input.about, rootRevision: input.targetRevision,
+    originRealm: input.originRealm },
+    canonical: { realm: input.realm, about: input.about, targetRevision: input.targetRevision,
+      reader: intent.parentReader } };
+}
+
+function prepareDraft(input: MemberReplyDraft): PreparedDraft {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
   if (input.spoiler !== undefined && typeof input.spoiler !== 'boolean') throw new ContentConflict('invalid reply spoiler');
   const deleted = input.body === null && input.document === undefined;
-  let body;
+  let body: { body: string; document?: DocumentSnapshot };
   try { body = deleted ? { body: '' } : authoredDocumentBody({
     ...(input.body !== undefined ? { body: input.body as string } : {}),
     ...(input.document !== undefined ? { document: input.document } : {}),
@@ -52,8 +88,26 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       : body.document ? !hasDocumentContent(body.document) : !body.body)) {
     throw new ContentConflict('invalid member reply draft');
   }
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const principal = await account.verify(request, ['comment:create']);
+  return { body, deleted };
+}
+
+function sameCanonicalParent(left: ValidatedCanonicalReplyParent | null,
+  right: ValidatedCanonicalReplyParent | null): boolean {
+  if (left === null || right === null) return left === right;
+  return left.realm === right.realm && left.about === right.about && left.reply === right.reply
+    && left.parentRevision === right.parentRevision && left.rootRevision === right.rootRevision
+    && left.originRealm === right.originRealm;
+}
+
+/** The author/root binding and every edit/delete use Content's draft CAS and
+ * immutable receipts. Deletion is a tombstone revision; retained history and
+ * moderation evidence remain intact. A later edit never inherits Realm review. */
+async function saveVerifiedDraft(env: WorkActivationEnvironment, content: ContentCore,
+  access: ReplyDraftAccess, principal: VerifiedPrincipal, plan: DraftPlan,
+  key: string, prepared: PreparedDraft, graphOpen = false): Promise<MemberReplyDraftResult | CanonicalAboutReplyDraftResult> {
+  const input = plan.input;
+  const { body, deleted } = prepared;
+  if (!graphOpen) await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   if (input.originRealm) {
     if (!access.withRealmPolicy) throw new AdmissionDenied('Realm policy owner is unavailable');
   }
@@ -70,7 +124,15 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       throw new WorkReadUnavailable('reply root is unavailable');
     }
   };
-  await proveRoot(false);
+  let canonicalParent: ValidatedCanonicalReplyParent | null = null;
+  if (plan.canonical) {
+    canonicalParent = await targetRead(env, { access, principal, actingSubject: input.actingSubject }, session =>
+      resolveCanonicalReplyParent(session, { realm: plan.canonical!.realm, about: plan.canonical!.about,
+        targetRevision: plan.canonical!.targetRevision, originRealm: input.originRealm! },
+      principal, input.actingSubject, plan.canonical!.reader));
+    if (canonicalParent) input.rootRevision = canonicalParent.rootRevision;
+    else input.rootRevision = plan.canonical.targetRevision;
+  } else await proveRoot(false);
   let spoiler = input.spoiler;
   // A plain text edit must retain an author declaration it did not address.
   // Bind the one exact read to this reply and variant before using its value.
@@ -89,7 +151,11 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     sourceRevision: input.rootRevision, provenance: {}, serializedJson: JSON.stringify({ ...body,
       deleted, rootTarget: input.rootTarget, rootRevision: input.rootRevision,
       ...(spoiler !== undefined ? { spoiler } : {}),
-      ...(input.originRealm ? { originRealm: input.originRealm } : {}) }) };
+      ...(input.originRealm ? { originRealm: input.originRealm } : {}),
+      ...(plan.canonical ? { canonicalParent: canonicalParent ? { realm: canonicalParent.realm,
+        about: canonicalParent.about, reply: canonicalParent.reply,
+        parentRevision: canonicalParent.parentRevision, rootRevision: canonicalParent.rootRevision,
+        originRealm: canonicalParent.originRealm } : null } : {}) }) };
   const digest = contentDraftIntentDigest(command, input.actingSubject);
   const scope = `content:draft:${input.reply}`;
   const admission = await access.register({ principal, actingSubject: input.actingSubject, action: 'content.draft', scope,
@@ -115,7 +181,15 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   }
   // The earlier probe already disclosed the retained root. A new draft still
   // binds the target's current root; an edit does not resolve it again.
-  try { if (!priorReceipt && creating) await proveRoot(true); }
+  try {
+    if (!priorReceipt && plan.canonical) {
+      const current = await targetRead(env, { access, principal, actingSubject: input.actingSubject }, session =>
+        resolveCanonicalReplyParent(session, { realm: plan.canonical!.realm, about: plan.canonical!.about,
+          targetRevision: plan.canonical!.targetRevision, originRealm: input.originRealm! },
+        principal, input.actingSubject, plan.canonical!.reader));
+      if (!sameCanonicalParent(canonicalParent, current)) throw new ContentDraftStale('canonical reply parent changed');
+    } else if (!priorReceipt && creating) await proveRoot(true);
+  }
   catch (error) {
     if (error instanceof WorkReadUnavailable) throw error;
     await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
@@ -160,8 +234,34 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     dataEpoch: saved.position.dataEpoch, sequence: saved.position.sequence });
   if (saved.outcome === 'stale_head') throw new ContentDraftStale('reply head changed');
   if (saved.outcome !== 'succeeded') throw new AdmissionDenied('reply draft was cancelled');
-  return { reply: input.reply, variantId: input.variantId, revisionId: saved.revisionId!,
+  const result: MemberReplyDraftResult = { reply: input.reply, variantId: input.variantId, revisionId: saved.revisionId!,
     revisionDigest: createHash('sha256').update(command.serializedJson).digest('hex'),
     predecessor: saved.predecessor, deleted,
     sourcePosition: saved.position, replayed: admission.replayed || saved.replayed };
+  return plan.canonical ? { ...result, rootTarget: input.rootTarget, rootRevision: input.rootRevision,
+    originRealm: input.originRealm!, canonicalParent } : result;
+}
+
+/** Internal bridge for callers that have already verified Account identity.
+ * The canonical path takes about/Realm coordinates and a server owner reader;
+ * it never accepts opener or parent identifiers from its caller. */
+export async function saveVerifiedMemberReplyDraft(env: WorkActivationEnvironment, content: ContentCore,
+  access: ReplyDraftAccess, principal: VerifiedPrincipal, intent: VerifiedMemberReplyDraftIntent,
+  key: string): Promise<MemberReplyDraftResult | CanonicalAboutReplyDraftResult> {
+  const plan = planDraft(intent);
+  const prepared = prepareDraft(plan.input);
+  return saveVerifiedDraft(env, content, access, principal, plan, key, prepared);
+}
+
+/** Request adapter retained for existing public drafts. It verifies Account
+ * first, then uses the same owner flow as the already-verified entrypoint. */
+export async function saveMemberReplyDraft(env: WorkActivationEnvironment, content: ContentCore,
+  account: Pick<AccountAssertionVerifier, 'verify'>, access: ReplyDraftAccess,
+  request: Request, input: MemberReplyDraft, key: string): Promise<MemberReplyDraftResult> {
+  const prepared = prepareDraft(input);
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const principal = await account.verify(request, ['comment:create']);
+  const result = await saveVerifiedDraft(env, content, access, principal,
+    { input }, key, prepared, true);
+  return result;
 }
