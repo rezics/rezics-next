@@ -39,6 +39,7 @@ export interface FixtureLock {
 }
 export interface PullOptions {
   source?: string;
+  ids?: readonly string[];
   mode?: 'replay' | 'live';
   updateLock?: boolean;
   offline?: boolean;
@@ -210,6 +211,13 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
     ? adapters.filter((item) => item.name === options.source)
     : adapters;
   if (!selected.length) throw new Error(`Unsupported fixture source: ${options.source}`);
+  const requestedIds = options.ids;
+  if (requestedIds && (requestedIds.length === 0 || new Set(requestedIds).size !== requestedIds.length)) {
+    throw new Error('Fixture request ids must be non-empty and unique');
+  }
+  const availableIds = new Set(selected.flatMap((adapter) => adapter.requests.map((request) => request.id)));
+  const missingIds = requestedIds?.filter((id) => !availableIds.has(id)) ?? [];
+  if (missingIds.length) throw new Error(`Unsupported fixture request: ${missingIds.join(', ')}`);
   const mode = options.mode ?? 'replay';
   if (options.updateLock && mode !== 'live')
     throw new Error('--update-lock requires REZICS_FIXTURES=live');
@@ -218,7 +226,10 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
   const results: PullResult[] = [];
   const clock = pace(options.sleep ?? defaultSleep);
   for (const adapter of selected) {
-    for (const request of adapter.requests) {
+    const requests = requestedIds
+      ? adapter.requests.filter((request) => requestedIds.includes(request.id))
+      : adapter.requests;
+    for (const request of requests) {
       const index = next.findIndex(
         (item) => item.source === adapter.name && item.id === request.id,
       );
@@ -318,20 +329,25 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
 
 export function parseArgs(args: string[]): {
   source?: string;
+  ids?: string[];
   updateLock: boolean;
   offline?: boolean;
 } {
   let source: string | undefined;
+  const ids: string[] = [];
   let updateLock = false;
   let offline = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--source' && /^[a-z][a-z0-9-]*$/.test(args[i + 1] ?? '') && !source)
       source = args[++i];
+    else if (args[i] === '--id' && /^[A-Za-z0-9-]+$/.test(args[i + 1] ?? ''))
+      ids.push(args[++i]!);
     else if (args[i] === '--update-lock' && !updateLock) updateLock = true;
     else if (args[i] === '--offline' && !offline) offline = true;
     else throw new Error(`Unsupported fixture option: ${args[i]}`);
   }
-  return { ...(source ? { source } : {}), updateLock, ...(offline ? { offline: true } : {}) };
+  if (new Set(ids).size !== ids.length) throw new Error('Fixture request ids must be unique');
+  return { ...(source ? { source } : {}), ...(ids.length ? { ids } : {}), updateLock, ...(offline ? { offline: true } : {}) };
 }
 
 if (import.meta.main) {

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "pins": [
+    {
+      "id": "boston-cookbook",
+      "edition": 65061,
+      "title": "The Boston Cooking-School Cook Book",
+      "printingYear": 1910,
+      "sourceSha256": "d2718031e98e4f4bc2237353a47ad7e2885aadec01a0b19a057f563ad3c6bbe1",
+      "recipesExtracted": 20,
+      "ingredientLineCount": 111,
+      "twoStageCaseIds": ["boston-puff-paste-flour-dough-and-rolling"],
+      "fractionCount": 47,
+      "rangeCount": 2,
+      "recipes": [
+        { "id": "puff-paste", "sectionLine": 23194, "titleLine": 23262, "ingredientLines": [23264, 23266], "methodLines": [23268, 23293], "caseIds": ["boston-puff-paste-flour-dough-and-rolling"] },
+        { "id": "quick-puff-paste", "sectionLine": 23194, "titleLine": 23341, "ingredientLines": [23343, 23346], "methodLines": [23348, 23353], "caseIds": [] },
+        { "id": "plain-paste", "sectionLine": 23194, "titleLine": 23356, "ingredientLines": [23358, 23362], "methodLines": [23364, 23372], "caseIds": [] },
+        { "id": "chopped-paste", "sectionLine": 23194, "titleLine": 23375, "ingredientLines": [23377, 23381], "methodLines": [23383, 23389], "caseIds": [] },
+        { "id": "quick-paste", "sectionLine": 23194, "titleLine": 23392, "ingredientLines": [23394, 23397], "methodLines": [23399, 23402], "caseIds": [] },
+        { "id": "paste-with-lard", "sectionLine": 23194, "titleLine": 23405, "ingredientLines": [23407, 23410], "methodLines": [23412, 23425], "caseIds": [] },
+        { "id": "entire-wheat-paste", "sectionLine": 23194, "titleLine": 23428, "ingredientLines": [23430, 23435], "methodLines": [23437, 23441], "caseIds": [] },
+        { "id": "apple-pie-i", "sectionLine": 23447, "titleLine": 23488, "ingredientLines": [23490, 23496], "methodLines": [23498, 23508], "caseIds": [] },
+        { "id": "blueberry-pie", "sectionLine": 23447, "titleLine": 23530, "ingredientLines": [23532, 23535], "methodLines": [23537, 23543], "caseIds": [] },
+        { "id": "cranberry-pie", "sectionLine": 23447, "titleLine": 23546, "ingredientLines": [23548, 23550], "methodLines": [23552, 23553], "caseIds": [] },
+        { "id": "currant-pie", "sectionLine": 23447, "titleLine": 23556, "ingredientLines": [23558, 23562], "methodLines": [23564, 23567], "caseIds": [] },
+        { "id": "custard-pie", "sectionLine": 23447, "titleLine": 23577, "ingredientLines": [23579, 23584], "methodLines": [23585, 23589], "caseIds": [] },
+        { "id": "baked-custard", "sectionLine": 20485, "titleLine": 20676, "ingredientLines": [20678, 20682], "methodLines": [20684, 20693], "caseIds": [] },
+        { "id": "lemon-pie-i", "sectionLine": 23447, "titleLine": 23604, "ingredientLines": [23606, 23612], "methodLines": [23614, 23614], "caseIds": [] },
+        { "id": "lemon-pie-ii", "sectionLine": 23447, "titleLine": 23617, "ingredientLines": [23619, 23626], "methodLines": [23628, 23633], "caseIds": [] },
+        { "id": "lemon-pie-iii", "sectionLine": 23447, "titleLine": 23636, "ingredientLines": [23638, 23644], "methodLines": [23646, 23650], "caseIds": [] },
+        { "id": "lemon-pie-iv", "sectionLine": 23447, "titleLine": 23653, "ingredientLines": [23655, 23659], "methodLines": [23661, 23663], "caseIds": [] },
+        { "id": "lemon-pie-v", "sectionLine": 23447, "titleLine": 23666, "ingredientLines": [23668, 23675], "methodLines": [23677, 23679], "caseIds": [] },
+        { "id": "mock-mince-pie", "sectionLine": 23682, "titleLine": 23783, "ingredientLines": [23785, 23792], "methodLines": [23794, 23795], "caseIds": [] },
+        { "id": "pumpkin-pie", "sectionLine": 23447, "titleLine": 23881, "ingredientLines": [23883, 23890], "methodLines": [23892, 23892], "caseIds": [] }
+      ]
+    },
+    {
+      "id": "artusi",
+      "edition": 59047,
+      "title": "La scienza in cucina e l'arte di mangiar bene",
+      "printingYear": 1922,
+      "sourceSha256": "4b49e6e754b3f7c90e394d00b421f60061bffb39b9c212d2f956efad70901e47",
+      "recipesExtracted": 10,
+      "ingredientLineCount": 62,
+      "twoStageCaseIds": [],
+      "fractionCount": 0,
+      "rangeCount": 0,
+      "recipes": [
+        { "id": "gelatina", "sectionLine": 914, "titleLine": 972, "ingredientLines": [974, 979], "methodLines": [980, 1013], "caseIds": [] },
+        { "id": "cappelletti-romagna", "sectionLine": 1120, "titleLine": 1122, "ingredientLines": [1127, 1133], "methodLines": [1135, 1161], "caseIds": [] },
+        { "id": "tortellini-italiana", "sectionLine": 1120, "titleLine": 1204, "ingredientLines": [1206, 1211], "methodLines": [1213, 1221], "caseIds": [] },
+        { "id": "tortellini-bolognese", "sectionLine": 1120, "titleLine": 1226, "ingredientLines": [1236, 1242], "methodLines": [1244, 1251], "caseIds": [] },
+        { "id": "panata", "sectionLine": 1120, "titleLine": 1331, "ingredientLines": [1345, 1349], "methodLines": [1351, 1366], "caseIds": [] },
+        { "id": "semolino-composta-ii", "sectionLine": 1120, "titleLine": 1432, "ingredientLines": [1437, 1442], "methodLines": [1444, 1449], "caseIds": [] },
+        { "id": "krapfen-minestra", "sectionLine": 1120, "titleLine": 1453, "ingredientLines": [1458, 1463], "methodLines": [1464, 1470], "caseIds": [] },
+        { "id": "passatelli-di-carne", "sectionLine": 1120, "titleLine": 1556, "ingredientLines": [1558, 1565], "methodLines": [1567, 1577], "caseIds": [] },
+        { "id": "nocciuole-di-semolino", "sectionLine": 1120, "titleLine": 1585, "ingredientLines": [1587, 1594], "methodLines": [1596, 1606], "caseIds": [] },
+        { "id": "mattoncini-di-ricotta", "sectionLine": 1120, "titleLine": 1625, "ingredientLines": [1627, 1631], "methodLines": [1633, 1638], "caseIds": [] }
+      ]
+    }
+  ]
+}

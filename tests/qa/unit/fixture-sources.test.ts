@@ -43,6 +43,12 @@ test('fixture lock entries have a reuse basis and immutable, content-addressed s
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.sha256);
   }
   expect(parseArgs(['--offline'])).toEqual({ updateLock: false, offline: true });
+  expect(parseArgs([
+    '--source', 'gutenberg', '--id', 'pg65061', '--id', 'pg59047', '--update-lock',
+  ])).toEqual({
+    source: 'gutenberg', ids: ['pg65061', 'pg59047'], updateLock: true,
+  });
+  expect(() => parseArgs(['--id', 'pg59047', '--id', 'pg59047'])).toThrow('unique');
 });
 
 test('the Pride and Prejudice edition slice covers its six chosen distinctions', () => {

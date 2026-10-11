@@ -11,6 +11,30 @@ import {
 import { wikidataAuthors, type WikidataFact } from '../../fixtures/sources/wikidata.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+interface RecipeExtractRecipe {
+  id: string;
+  sectionLine: number;
+  titleLine: number;
+  ingredientLines: [number, number];
+  methodLines: [number, number];
+  caseIds: string[];
+}
+interface RecipeExtractPin {
+  id: string;
+  edition: number;
+  title: string;
+  printingYear: number;
+  sourceSha256: string;
+  recipesExtracted: number;
+  ingredientLineCount: number;
+  twoStageCaseIds: string[];
+  fractionCount: number;
+  rangeCount: number;
+  recipes: RecipeExtractRecipe[];
+}
+const recipeExtractPins = JSON.parse(
+  readFileSync(join(root, 'tests/fixtures/gutenberg/recipe-extract-pins.json'), 'utf8'),
+) as { version: number; pins: RecipeExtractPin[] };
 const wrapped = (body: string, title = 'Pride and Prejudice', edition = 1342, language = 'English') =>
   `Language: ${language}\r\nRelease date: January 1, 2000 [eBook #${edition}]\r\n` +
   `*** START OF THE PROJECT GUTENBERG EBOOK ${title.toUpperCase()} ***\r\n\r\n${body}\r\n` +
@@ -149,7 +173,7 @@ test('Gutenberg: language texts are complete, under 2 MB and explicitly US publi
     expect(pin.license).toBe('Public domain in the United States.');
   }
   const languageTexts = gutenbergTexts.filter((pin) => pin.language);
-  expect(languageTexts.map((pin) => pin.language)).toEqual(['it', 'ru', 'ar']);
+  expect(languageTexts.map((pin) => pin.language)).toEqual(['it', 'it', 'ru', 'ar']);
   for (const pin of languageTexts) {
     const fixture = readLockedFixture(root, 'gutenberg', `pg${pin.edition}`) as GutenbergText;
     expect(fixture.edition).toBe(pin.edition);
@@ -160,6 +184,95 @@ test('Gutenberg: language texts are complete, under 2 MB and explicitly US publi
     .toContain('Красавице, которая нюхала');
   expect((readLockedFixture(root, 'gutenberg', 'pg43007') as GutenbergText).text)
     .not.toMatch(/مشروع غوتنبر|مكتبة غوتنبر/u);
+});
+
+test('Gutenberg: recipe extract pins preserve exact source boundaries, counts, and edition provenance', () => {
+  expect(recipeExtractPins.version).toBe(1);
+  expect(recipeExtractPins.pins.map(({ id }) => id)).toEqual(['boston-cookbook', 'artusi']);
+  const extractedRecipes = new Map<string, { ingredients: string; method: string }>();
+  const extractedIngredientLines = new Map<string, string[]>();
+
+  for (const pin of recipeExtractPins.pins) {
+    const sourcePin = gutenbergTexts.find(({ id }) => id === pin.id);
+    expect(sourcePin).toBeDefined();
+    expect(sourcePin?.edition).toBe(pin.edition);
+    expect(sourcePin?.title).toBe(pin.title);
+    expect(sourcePin?.license).toBe('Public domain in the United States.');
+    expect(pin.sourceSha256).toMatch(/^[a-f0-9]{64}$/u);
+
+    const fixture = readLockedFixture(root, 'gutenberg', `pg${pin.edition}`) as GutenbergText;
+    expect(fixture.edition).toBe(pin.edition);
+    expect(fixture.sourceSha256).toBe(pin.sourceSha256);
+    const lines = fixture.text.split('\n');
+    const ids = new Set<string>();
+    const ingredientLines: string[] = [];
+    const twoStageCaseIds: string[] = [];
+    expect(pin.recipes).toHaveLength(pin.recipesExtracted);
+
+    for (const recipe of pin.recipes) {
+      expect(ids.has(recipe.id)).toBe(false);
+      ids.add(recipe.id);
+      const [ingredientStart, ingredientEnd] = recipe.ingredientLines;
+      const [methodStart, methodEnd] = recipe.methodLines;
+      expect(recipe.sectionLine).toBeGreaterThan(0);
+      expect(recipe.titleLine).toBeGreaterThan(recipe.sectionLine);
+      expect(ingredientStart).toBeGreaterThan(recipe.titleLine);
+      expect(ingredientEnd).toBeGreaterThanOrEqual(ingredientStart);
+      expect(methodStart).toBeGreaterThan(ingredientEnd);
+      expect(methodEnd).toBeGreaterThanOrEqual(methodStart);
+      expect(methodEnd).toBeLessThanOrEqual(lines.length);
+      expect(lines[recipe.sectionLine - 1]?.trim().length).toBeGreaterThan(0);
+      expect(lines[recipe.titleLine - 1]?.trim().length).toBeGreaterThan(0);
+
+      const ingredients = lines.slice(ingredientStart - 1, ingredientEnd).filter((line) => line.trim());
+      const method = lines.slice(methodStart - 1, methodEnd).filter((line) => line.trim());
+      expect(ingredients.length).toBeGreaterThan(0);
+      expect(method.length).toBeGreaterThan(0);
+      ingredientLines.push(...ingredients);
+      twoStageCaseIds.push(...recipe.caseIds);
+      extractedRecipes.set(`${pin.id}/${recipe.id}`, {
+        ingredients: ingredients.join('\n'), method: method.join(' '),
+      });
+    }
+
+    expect(ingredientLines).toHaveLength(pin.ingredientLineCount);
+    expect(new Set(twoStageCaseIds).size).toBe(twoStageCaseIds.length);
+    expect([...twoStageCaseIds].sort()).toEqual([...pin.twoStageCaseIds].sort());
+    expect((ingredientLines.join('\n').match(/(?:\d+\s*)?[½¼¾⅓⅔⅛⅜⅝⅞]/gu) ?? []).length)
+      .toBe(pin.fractionCount);
+    expect((ingredientLines.join('\n').match(/\b\d+\s+(?:to|or)\s+\d+\b/giu) ?? []).length)
+      .toBe(pin.rangeCount);
+    extractedIngredientLines.set(pin.id, ingredientLines);
+  }
+
+  const boston = recipeExtractPins.pins.find(({ id }) => id === 'boston-cookbook')!;
+  const bostonFixture = readLockedFixture(root, 'gutenberg', 'pg65061') as GutenbergText;
+  expect(boston.edition).toBe(65061);
+  expect(boston.printingYear).toBe(1910);
+  expect(bostonFixture.text).toContain('BOSTON COOKING-SCHOOL');
+  expect(bostonFixture.text).toContain('1910');
+  expect(bostonFixture.text).toContain('_Copyright, 1896,');
+  const puffPaste = extractedRecipes.get('boston-cookbook/puff-paste')!;
+  expect(puffPaste.ingredients).toContain('1 pound pastry flour');
+  expect(puffPaste.method).toContain('Work two tablespoons of butter into flour');
+  expect(puffPaste.method).toContain('Moisten to a dough with cold water');
+  expect(puffPaste.method).toContain('dredging board slightly with flour when necessary');
+  const bostonIngredients = extractedIngredientLines.get('boston-cookbook')!.join('\n');
+  expect(bostonIngredients).toContain('½');
+  expect(bostonIngredients).toContain('¾');
+  expect(bostonIngredients).toContain('1½');
+  expect(bostonIngredients).toContain('4 or 5 sour apples');
+  expect(bostonIngredients).toContain('4 to 6 eggs');
+
+  const artusi = recipeExtractPins.pins.find(({ id }) => id === 'artusi')!;
+  const artusiPin = gutenbergTexts.find(({ id }) => id === 'artusi');
+  const artusiFixture = readLockedFixture(root, 'gutenberg', 'pg59047') as GutenbergText;
+  expect(artusi.edition).toBe(59047);
+  expect(artusi.printingYear).toBe(1922);
+  expect(artusiPin?.language).toBe('it');
+  expect(artusiFixture.text).toContain('LA SCIENZA IN CUCINA');
+  expect(artusiFixture.text).toContain('1922');
+  expect(extractedRecipes.get('artusi/cappelletti-romagna')?.ingredients).toContain('Parmigiano grattato');
 });
 
 for (const pin of gutenbergOutlines) {

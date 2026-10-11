@@ -179,6 +179,26 @@
       "seed": "tests/fixtures/gutenberg/648cc41d5e1c93f33d8a3063786463fa3d920dd39aa51c1eef1c4acdd99aa889.json"
     },
     {
+      "id": "pg59047",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/59047/pg59047.txt",
+      "fetchedAt": "2026-10-11T19:03:19.813Z",
+      "sha256": "3fc5f084da016477ae65f45cde8b0047603f3fa77941f8db74d277d523f0e471",
+      "size": 1031201,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/3fc5f084da016477ae65f45cde8b0047603f3fa77941f8db74d277d523f0e471.json"
+    },
+    {
+      "id": "pg65061",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/65061/pg65061.txt",
+      "fetchedAt": "2026-10-11T19:03:41.838Z",
+      "sha256": "24ca660f8d7c2df8b2dfd3864041daa21a1eeae42696c0a87b674c5def78e095",
+      "size": 1379066,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/24ca660f8d7c2df8b2dfd3864041daa21a1eeae42696c0a87b674c5def78e095.json"
+    },
+    {
       "id": "pg84",
       "source": "gutenberg",
       "requestUrl": "https://www.gutenberg.org/cache/epub/84/pg84.txt",

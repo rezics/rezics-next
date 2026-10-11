@@ -46,6 +46,8 @@ export interface GutenbergTextPin {
 export const gutenbergTexts: readonly GutenbergTextPin[] = [
   ...gutenbergBooks.map(({ id, edition, title, license }) => ({ id, edition, title, license })),
   { id: 'divina-commedia', edition: 1000, title: 'La Divina Commedia di Dante: Complete', language: 'it', license: publicDomain },
+  { id: 'boston-cookbook', edition: 65061, title: 'The Boston Cooking-School Cook Book', license: publicDomain },
+  { id: 'artusi', edition: 59047, title: "La scienza in cucina e l'arte di mangiar bene", language: 'it', license: publicDomain },
   { id: 'beautiful-smoker', edition: 5316, title: 'Красавице, которая нюхала табак', language: 'ru', license: publicDomain },
   { id: 'tribute-to-michael-hart', edition: 43007, title: 'Tribute to Michael Hart', language: 'ar', license: publicDomain },
 ];
