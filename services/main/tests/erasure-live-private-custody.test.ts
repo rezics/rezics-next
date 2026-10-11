@@ -363,8 +363,8 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
       try {
         await expect(lockStore.withReceipt(abandonedReceipt, async session => {
           await session.client!.query('BEGIN');
-          await session.client!.query('SELECT * FROM access.receipt_custody_missing_fixture');
-        }, abandonedClient)).rejects.toThrow('does not exist');
+          await session.client!.query('SELECT 1 / 0');
+        }, abandonedClient)).rejects.toThrow('division by zero');
         expect(abandonedClient.getTransactionStatus()).toBe('I');
         expect((await abandonedClient.query('SELECT 1')).rowCount).toBe(1);
         expect(abandonedRelease).not.toHaveBeenCalled();
