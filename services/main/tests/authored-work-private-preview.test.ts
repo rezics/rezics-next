@@ -9,7 +9,7 @@ import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable, engageAccessRecoveryFence,
   releaseAccessRecoveryFence, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { ensureFixtureScopeGate, grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { ensureFixtureScopeGate, FixtureAuthorityDenied, grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { AccessPolicyChanges } from '../src/modules/access/policy-changes.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkMaintainers } from '../src/modules/work/maintainers.ts';
@@ -166,14 +166,36 @@ test('private PREVIEW refuses a provenance-lost authored native Work', async () 
 test('private PREVIEW preserves closed scope gates and recovery holds with symmetric restoration', async () => {
   const f = await fixture();
   await ensureFixtureScopeGate(pool, f.scope);
-  await pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [f.scope]);
+  await ensureFixtureScopeGate(pool, f.scope, { open: false });
   expect(await f.read()).toBe(false);
-  await pool.query('UPDATE access.scope_gate SET open = true WHERE id = $1', [f.scope]);
+  await ensureFixtureScopeGate(pool, f.scope, { open: true });
   expect(await f.read()).toBe(true);
   const generation = await engageAccessRecoveryFence(pool);
   try { await expect(f.read()).rejects.toBeInstanceOf(AdmissionUnavailable); }
   finally { await releaseAccessRecoveryFence(pool, generation); }
   expect(await f.read()).toBe(true);
+});
+
+test('fixture gate states preserve closed registrations, advance changed fences and refuse recovery holds', async () => {
+  const f = await fixture();
+  const gate = async () => (await pool.query<{ open: boolean; epoch: string }>(
+    'SELECT open,authority_epoch::text AS epoch FROM access.scope_gate WHERE id = $1', [f.scope])).rows[0]!;
+  await ensureFixtureScopeGate(pool, f.scope);
+  const initial = await gate();
+  await ensureFixtureScopeGate(pool, f.scope, { open: false });
+  const closed = await gate();
+  expect(closed).toEqual({ open: false, epoch: String(BigInt(initial.epoch) + 1n) });
+  await ensureFixtureScopeGate(pool, f.scope);
+  await ensureFixtureScopeGate(pool, f.scope, { open: false });
+  expect(await gate()).toEqual(closed);
+  await ensureFixtureScopeGate(pool, f.scope, { open: true });
+  const restored = await gate();
+  expect(restored).toEqual({ open: true, epoch: String(BigInt(closed.epoch) + 1n) });
+  const generation = await engageAccessRecoveryFence(pool);
+  try {
+    await expect(ensureFixtureScopeGate(pool, f.scope, { open: false })).rejects.toBeInstanceOf(FixtureAuthorityDenied);
+  } finally { await releaseAccessRecoveryFence(pool, generation); }
+  expect(await gate()).toEqual(restored);
 });
 
 test('private PREVIEW revokes former maintainer and controller authority after transfer', async () => {
@@ -321,6 +343,6 @@ test.each(publicationActions)('%s: a closed publication gate remains closed', as
   const f = await fixture();
   const request = publicationRequest(f, action);
   await ensureFixtureScopeGate(pool, request.scope);
-  await pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [request.scope]);
+  await ensureFixtureScopeGate(pool, request.scope, { open: false });
   await expect(f.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
 });

@@ -147,9 +147,19 @@ export async function expireFixtureAuthority(client: Sql, actor: string): Promis
       WHERE issuer_subject = $1 AND valid_until > clock_timestamp()`, [actor]);
 }
 
-/** Record a scope gate without granting. An existing closed gate stays closed. */
-export async function ensureFixtureScopeGate(client: Sql, scope: string): Promise<void> {
+/** Record a scope gate without granting. An existing closed gate stays closed
+ * unless a test explicitly changes its state; state changes advance the fence. */
+export async function ensureFixtureScopeGate(client: Sql, scope: string,
+  state?: { open: boolean }): Promise<void> {
   requireToken(scope, scopePattern, scope);
+  if (state) {
+    await recoveryOpen(client);
+    await client.query(`INSERT INTO access.scope_gate AS gate (id,open) VALUES ($1,$2)
+      ON CONFLICT (id) DO UPDATE SET open = EXCLUDED.open,
+        authority_epoch = gate.authority_epoch + CASE WHEN gate.open = EXCLUDED.open THEN 0 ELSE 1 END`,
+    [scope, state.open]);
+    return;
+  }
   await client.query(
     'INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
 }

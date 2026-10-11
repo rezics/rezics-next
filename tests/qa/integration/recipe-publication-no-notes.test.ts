@@ -5,7 +5,8 @@ import { Pool } from 'pg';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { ensureFixtureScopeGate, grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { AccessAgentControl } from '../../../services/main/src/modules/access/agent-control.ts';
 
 test('a current maintainer privately PREVIEWs their authored no-notes Work without a work.read grant or anonymous-public evidence', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -72,10 +73,9 @@ test('a current maintainer privately PREVIEWs their authored no-notes Work witho
     expect((await fixture.call('GET', `/v1/compositions/${shortId(created.structure)}`,
       undefined, randomUUID(), null)).status).toBe(404);
 
-    await fixture.accessPool.query(`INSERT INTO access.scope_gate (id,open)
-      VALUES ($1,false) ON CONFLICT (id) DO UPDATE SET open=false`, [`work:read:${work.work}`]);
+    await ensureFixtureScopeGate(fixture.accessPool, `work:read:${work.work}`, { open: false });
     expect((await fixture.call('GET', authorPath)).status).toBe(404);
-    await fixture.accessPool.query('UPDATE access.scope_gate SET open=true WHERE id=$1', [`work:read:${work.work}`]);
+    await ensureFixtureScopeGate(fixture.accessPool, `work:read:${work.work}`, { open: true });
     expect((await fixture.call('GET', authorPath)).status).toBe(200);
     await grantFixtureAuthority(fixture.accessPool, {
       scope: `agent:control:${fixture.actor}`, requireDispatch: true,
@@ -83,8 +83,15 @@ test('a current maintainer privately PREVIEWs their authored no-notes Work witho
         action: 'agent.control', lifetime: 'infinity' }],
       grant: { actor: fixture.actor, action: 'agent.control', lifetime: 'infinity' },
     });
-    await fixture.accessPool.query('UPDATE access.representation SET active=false,generation=generation+1 WHERE id=$1',
-      [control.representationIds[0]]);
+    const replacement = await fixture.account.verifier.verify(new Request('http://fixture.test', {
+      headers: { authorization: `Bearer ${fixture.account.tokenB}` },
+    }), ['work:edit']);
+    const controller = (await fixture.accessPool.query<{ generation: string }>(
+      'SELECT generation::text FROM access.representation WHERE id=$1', [control.representationIds[0]])).rows[0]!;
+    await new AccessAgentControl(fixture.accessPool).removeController(replacement, {
+      idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64),
+    }, { subjectId: fixture.actor, representationId: control.representationIds[0]!,
+      expectedGeneration: controller.generation });
     expect((await fixture.call('GET', authorPath)).status).toBe(404);
   } finally { await fixture.close(); }
 }, 180_000);

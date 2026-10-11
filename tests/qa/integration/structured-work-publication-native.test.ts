@@ -6,7 +6,7 @@ import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { iri } from '../../../services/main/src/modules/work/activate.ts';
 import { admittedPublicWorks, publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
-import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { ensureFixtureScopeGate, grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { configureDisclosure, DISCLOSURE_COST, DisclosureStore, type DisclosureTarget }
   from '../../../services/main/src/modules/disclosure/read.ts';
 
@@ -25,8 +25,7 @@ async function grantPublicationAuthority(fixture: PublicationFixture, scope: str
 async function restrictPublicationTarget(fixture: PublicationFixture, target: string): Promise<PublicationRestriction> {
   const caseId = randomUUID(), decisionId = randomUUID(), enforcementId = randomUUID();
   const digest = 'b'.repeat(64);
-  await fixture.accessPool.query(`INSERT INTO access.scope_gate (id)
-    VALUES ('governance:platform') ON CONFLICT DO NOTHING`);
+  await ensureFixtureScopeGate(fixture.accessPool, 'governance:platform');
   await fixture.accessPool.query(`INSERT INTO access.governance_case
     (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
     VALUES ($1,'content_report','platform','governance:platform','urn:rezics:context:global',
