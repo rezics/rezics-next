@@ -58,7 +58,8 @@ test('G1011: Query keeps Works and continuation when item credits, ratings or co
     }, randomUUID()), 201);
     const projection = new DiscoveryProjection(f.accessPool);
     const deps = { environment: f.env, access: f.access, media: f.media, profiles: new ProfilesAccess(f.accessPool),
-      discovery: projection, account: { verify: async () => bad.principal } };
+      discovery: projection, personPreferences: f.composition.dependencies.personPreferences,
+      account: { verify: async () => bad.principal } };
     await workRead(deps, new Request('http://main.local/source'), {}, async session => {
       for (const context of [null, global.context]) {
         const basis = { scope: 'global' as const, realm: null, context };

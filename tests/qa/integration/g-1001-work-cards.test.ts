@@ -68,7 +68,8 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
     }
     const projection = new DiscoveryProjection(f.accessPool);
     const deps = { environment: f.env, access: f.access, media: f.media, profiles: new ProfilesAccess(f.accessPool),
-      discovery: projection, account: { verify: async () => a!.principal } };
+      discovery: projection, personPreferences: f.composition.dependencies.personPreferences,
+      account: { verify: async () => a!.principal } };
     const app = createMainApp(f.fuseki, deps);
     const heads = new Map<string | null, string>();
     const buildSource = (degree: number) => workRead(deps, new Request('http://main.local/source'), {}, async session => {
@@ -141,9 +142,12 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
           rv:work ${iri(work.work)} ; rv:agent ${iri(agent)} ; schema:roleName "author" .
           ${iri(native(300000 + n))} a rv:RatingObservationRevision ; rv:targetMainVersion ${iri(work.mainVersion)} .` };
       });
-      await f.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
-        GRAPH ${iri(GRAPHS.current)} { ${rows.map(row => row.current).join('\n')} }
-        GRAPH ${iri(GRAPHS.revisions)} { ${rows.map(row => row.revision).join('\n')} } }`);
+      for (let offset = 0; offset < rows.length; offset += 256) {
+        const batch = rows.slice(offset, offset + 256);
+        await f.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
+          GRAPH ${iri(GRAPHS.current)} { ${batch.map(row => row.current).join('\n')} }
+          GRAPH ${iri(GRAPHS.revisions)} { ${batch.map(row => row.revision).join('\n')} } }`);
+      }
       // Cost control: an intentionally expensive count really sees the larger degree.
       const counted = (await f.fuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(?credit) AS ?count) WHERE {
         GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ${iri(work.work)} } }`))
