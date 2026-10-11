@@ -13,7 +13,8 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence }
 import { initializeRelayCheckpoint, relayCoverage, RelayCheckpointConflict, relayMainOutboxOnce,
   relayRetainedEventAt }
   from '../../../services/main/src/modules/outbox/relay.ts';
-import { GRAPHS, ID, RV, initializeFreshGraph, iri, lit,
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { DATASET, GRAPHS, ID, RV, initializeFreshGraph, iri, lit,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { createAdmittedWorkDerivation, readWorkDerivations }
@@ -180,12 +181,14 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
     expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '12',
       batchCount: '12', eventCount: '12' });
     const originalEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
-      'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
-      [lineage.dataEpoch])).rows[0];
+      `SELECT event_id, envelope FROM relay.delivered_event
+       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3`,
+      [MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3])).rows[0];
     const originalBatch = (await relayPool.query<{ batch_id: string; routing_epoch: string;
       event_count: number }>(
-      'SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 3',
-      [lineage.dataEpoch])).rows[0];
+      `SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch
+       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3`,
+      [MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3])).rows[0];
     if (!originalEvent || !originalBatch) throw new Error('retained derivation evidence is absent');
     let changedDuringScan = false;
     const snapshotPool = { connect: async () => {
@@ -193,13 +196,20 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
       return {
         query: async (sql: string, params?: unknown[]) => {
           const result = await client.query(sql, params);
-          if (!changedDuringScan && sql.startsWith('SELECT data_epoch, sequence FROM relay.checkpoint')) {
+          const checkpoint = result.rows?.[0] as { stream_scope?: string; data_epoch?: string;
+            sequence?: string } | undefined;
+          if (!changedDuringScan && /\bFROM\s+relay\.checkpoint\b/i.test(sql)
+            && result.rows?.length === 1 && checkpoint?.stream_scope === MAIN_RELAY_STREAM_SCOPE
+            && checkpoint.data_epoch === lineage.dataEpoch
+            && String(checkpoint.sequence) === coverage.sequence) {
             changedDuringScan = true;
-            await relayPool!.query('UPDATE relay.delivered_batch SET batch_id = $1 WHERE data_epoch = $2 AND sequence = 3',
-              [`changed-${randomUUID()}`, lineage.dataEpoch]);
+            await relayPool!.query(`UPDATE relay.delivered_batch SET batch_id = $1
+              WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4`,
+            [`changed-${randomUUID()}`, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3]);
             await relayPool!.query(`UPDATE relay.delivered_event SET envelope =
               jsonb_set(envelope, '{data,receipt,workDerivation}', to_jsonb($1::text))
-              WHERE event_id = $2`, [`changed-${randomUUID()}`, originalEvent.event_id]);
+              WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4 AND event_id = $5`,
+            [`changed-${randomUUID()}`, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3, originalEvent.event_id]);
           }
           return result;
         },
@@ -215,10 +225,12 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
       await expect(relayRetainedEventAt(relayPool, coverage, '3'))
         .rejects.toBeInstanceOf(RelayCheckpointConflict);
     } finally {
-      await relayPool.query('UPDATE relay.delivered_batch SET batch_id = $1 WHERE data_epoch = $2 AND sequence = 3',
-        [originalBatch.batch_id, lineage.dataEpoch]);
-      await relayPool.query('UPDATE relay.delivered_event SET envelope = $1 WHERE event_id = $2',
-        [originalEvent.envelope, originalEvent.event_id]);
+      await relayPool.query(`UPDATE relay.delivered_batch SET batch_id = $1
+        WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4`,
+      [originalBatch.batch_id, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3]);
+      await relayPool.query(`UPDATE relay.delivered_event SET envelope = $1
+        WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4 AND event_id = $5`,
+      [originalEvent.envelope, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3, originalEvent.event_id]);
     }
     expect(await relayCoverage(relayPool, consumer)).toEqual(coverage);
     await engageAccessRecoveryFence(accessPool);
@@ -246,25 +258,33 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
     await accessPool.query('UPDATE access.admission SET idempotency_key = $1 WHERE id = $2',
       [admitted.idempotency_key, admitted.id]);
 
-    const retained = (await relayPool.query<{ source: string; event_id: string;
+    const retained = (await relayPool.query<{ source: string; event_id: string; stream_scope: string;
       data_epoch: string; sequence: string; envelope: unknown }>(
-      'SELECT source, event_id, data_epoch, sequence::text, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
-      [lineage.dataEpoch])).rows[0];
+      `SELECT source, event_id, stream_scope, data_epoch, sequence::text, envelope
+       FROM relay.delivered_event WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3`,
+      [MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3])).rows[0];
     if (!retained) throw new Error('retained Work derivation event is absent');
-    await relayPool.query('DELETE FROM relay.delivered_event WHERE event_id = $1', [retained.event_id]);
+    await relayPool.query(`DELETE FROM relay.delivered_event
+      WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3 AND event_id = $4`,
+    [MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3, retained.event_id]);
     await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '3')).rejects.toThrow();
     expect(await readWorkDerivations(restored, target.mainVersion, target.mainRevision)).toEqual([]);
     await relayPool.query(`INSERT INTO relay.delivered_event
-      (source, event_id, data_epoch, sequence, envelope) VALUES ($1, $2, $3, $4, $5)`,
-    [retained.source, retained.event_id, retained.data_epoch, retained.sequence, retained.envelope]);
+      (source, event_id, stream_scope, data_epoch, sequence, envelope)
+      VALUES ($1, $2, $3, $4, $5, $6)`,
+    [retained.source, retained.event_id, MAIN_RELAY_STREAM_SCOPE,
+      retained.data_epoch, retained.sequence, retained.envelope]);
     await relayPool.query(`UPDATE relay.delivered_event SET envelope =
-      jsonb_set(envelope, '{data,receipt,derivationKind}', $1::jsonb) WHERE event_id = $2`,
-    [JSON.stringify('adaptation'), retained.event_id]);
+      jsonb_set(envelope, '{data,receipt,derivationKind}', $1::jsonb)
+      WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4 AND event_id = $5`,
+    [JSON.stringify('adaptation'), MAIN_RELAY_STREAM_SCOPE,
+      lineage.dataEpoch, 3, retained.event_id]);
     await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '3')).rejects.toThrow(RetainedEffectConflict);
-    await relayPool.query('UPDATE relay.delivered_event SET envelope = $1 WHERE event_id = $2',
-      [retained.envelope, retained.event_id]);
+    await relayPool.query(`UPDATE relay.delivered_event SET envelope = $1
+      WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4 AND event_id = $5`,
+    [retained.envelope, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 3, retained.event_id]);
     expect(await relayCoverage(relayPool, consumer)).toEqual(coverage);
     expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '3')).toEqual({ receipt: linked.receipt,
@@ -306,16 +326,19 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
     expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
       coverage, '10')).work).toBe(fourthSource.work);
     const workOnlyEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
-      'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 11',
-      [lineage.dataEpoch])).rows[0];
+      `SELECT event_id, envelope FROM relay.delivered_event
+       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3`,
+      [MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 11])).rows[0];
     if (!workOnlyEvent) throw new Error('retained Work-only event is absent');
     await relayPool.query(`UPDATE relay.delivered_event SET envelope =
       jsonb_set(envelope, '{data,receipt,sourceMainVersion}', to_jsonb($1::text))
-      WHERE event_id = $2`, [fourthSource.mainVersion, workOnlyEvent.event_id]);
+      WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4 AND event_id = $5`,
+    [fourthSource.mainVersion, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 11, workOnlyEvent.event_id]);
     await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '11')).rejects.toBeInstanceOf(RetainedEffectConflict);
-    await relayPool.query('UPDATE relay.delivered_event SET envelope = $1 WHERE event_id = $2',
-      [workOnlyEvent.envelope, workOnlyEvent.event_id]);
+    await relayPool.query(`UPDATE relay.delivered_event SET envelope = $1
+      WHERE stream_scope = $2 AND data_epoch = $3 AND sequence = $4 AND event_id = $5`,
+    [workOnlyEvent.envelope, MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch, 11, workOnlyEvent.event_id]);
     await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '12')).rejects.toBeInstanceOf(RetainedEffectConflict);
     for (const [position, restoredEffect] of [['11', workOnly],
@@ -354,6 +377,19 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
           rv:corrects ${iri(workOnly.derivation)} ; rv:sequence 12 .
       }
     }`)).boolean).toBe(true);
+    const restoreCutover = `urn:rezics:restore:${nextLineage.dataEpoch}`;
+    const heldCursors = await restoredFuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?graphCursor ?mainCursor WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(nextLineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(nextLineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(restoreCutover)} ; rv:restoreHold true .
+          ${iri(restoreCutover)} rv:reconciledPriorSequence ?graphCursor ;
+            rv:reconciledPriorMainSequence ?mainCursor .
+        }
+      }`);
+    expect((heldCursors.results?.bindings ?? []).map(row => [row.graphCursor?.value, row.mainCursor?.value]))
+      .toEqual([['12', '12']]);
   } finally {
     await Promise.all([accessPool?.end(), relayPool?.end()]);
     for (const runId of started.reverse()) await stack('stack:reset', runId);
