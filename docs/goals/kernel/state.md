@@ -37,6 +37,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
 - [Content document recovery](reports/G-1801-specification.md): bad-edit restore already proven; slice 1 the Zone proof repair, slices 2 to 7 B.
 - [Publication of a Recipe without notes](reports/G-1802-specification.md): the structure publication chain, eight slices.
+- [Imported covers: source evidence, rights mark and scoped takedown](reports/G-1800-specification.md): eleven A slices; slices 1 and 2 running, slice 3 in Trust-ops' area, 4 to 11 wait for owner answers now given.
 - [Rights notice path](reports/G-1803-specification.md): two API gaps and eight A slices; slices 6 to 8 wait on Trust-ops' erasure chain; the public decision read is B.
 
 ## Open
