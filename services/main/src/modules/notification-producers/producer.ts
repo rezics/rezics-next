@@ -20,6 +20,7 @@ import type { SavedViewNotifications } from './saved-views.ts';
 import { notificationProducerEventsSql } from './access-log.ts';
 import { membershipSanction } from './membership-sanction.ts';
 import { observeHorizonLag } from '../horizon/lag.ts';
+import { compareRelayPositions, MAIN_RELAY_STREAM_SCOPE, RelayHandoffPositions } from '../outbox/relay-position.ts';
 
 /** One indexed commit-safe source page and at most 256 inbox writes per audience batch. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -510,43 +511,54 @@ export class NotificationProducer {
 
   private async runRelayConsumerOnce(consumer: string, savedViewsOnly = false): Promise<number> {
     if (!this.relay || !this.relayCheckpoint || !this.relayConsumer) return 0;
-    const upstream = (await this.relayCheckpoint.query<{ data_epoch: string; sequence: string }>(`
-      SELECT data_epoch, sequence::text FROM relay.checkpoint WHERE consumer = $1`,
-    [this.relayConsumer])).rows[0];
+    const upstream = await new RelayHandoffPositions(this.relayCheckpoint, this.relayConsumer).read();
     if (!upstream) throw new Error('graph relay checkpoint is unavailable');
+    if (upstream.streamScope !== MAIN_RELAY_STREAM_SCOPE) {
+      throw new Error('notification relay checkpoint stream differs');
+    }
     const client: PoolClient = await this.relay.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '10s'");
       await client.query(`INSERT INTO relay.notification_producer_cursor (consumer, data_epoch)
-        VALUES ($1, $2) ON CONFLICT DO NOTHING`, [consumer, upstream.data_epoch]);
+        VALUES ($1, $2) ON CONFLICT DO NOTHING`, [consumer, upstream.dataEpoch]);
       const cursor = (await client.query<{ data_epoch: string; sequence: string }>(`
         SELECT data_epoch, sequence::text FROM relay.notification_producer_cursor
         WHERE consumer = $1 FOR UPDATE SKIP LOCKED`, [consumer])).rows[0];
       if (!cursor) { await client.query('COMMIT'); return 0; }
-      if (cursor.data_epoch !== upstream.data_epoch) {
+      if (cursor.data_epoch !== upstream.dataEpoch) {
         // A restored source starts a new epoch. Replaying its batches is safe:
         // Access deduplicates each recipient by the immutable event identity.
         await client.query(`UPDATE relay.notification_producer_cursor SET data_epoch = $2,
           sequence = 0, updated_at = clock_timestamp() WHERE consumer = $1`,
-        [consumer, upstream.data_epoch]);
-        cursor.data_epoch = upstream.data_epoch;
+        [consumer, upstream.dataEpoch]);
+        cursor.data_epoch = upstream.dataEpoch;
         cursor.sequence = '0';
-      } else if (BigInt(cursor.sequence) > BigInt(upstream.sequence)) {
-        throw new Error('notification cursor exceeds graph relay checkpoint');
+      } else if (compareRelayPositions({ streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: cursor.data_epoch, sequence: cursor.sequence }, upstream) > 0) {
+        throw new Error('notification cursor exceeds Main relay checkpoint');
       }
       const batch = (await client.query<{ sequence: string; event_count: number }>(`
         SELECT batch.sequence::text, event_count FROM relay.delivered_batch AS batch
-        WHERE data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
+        WHERE stream_scope = $1 AND data_epoch = $2 AND batch.sequence > $3 AND batch.sequence <= $4
         ORDER BY batch.sequence LIMIT 1`,
-      [cursor.data_epoch, cursor.sequence, upstream.sequence])).rows[0];
-      if (!batch) { await client.query('COMMIT'); return 0; }
+      [upstream.streamScope, upstream.dataEpoch, cursor.sequence, upstream.sequence])).rows[0];
+      if (!batch) {
+        if (compareRelayPositions({ streamScope: MAIN_RELAY_STREAM_SCOPE,
+          dataEpoch: cursor.data_epoch, sequence: cursor.sequence }, upstream) < 0) {
+          throw new Error('notification Main relay batch range is incomplete');
+        }
+        await client.query('COMMIT'); return 0;
+      }
+      if (BigInt(batch.sequence) !== BigInt(cursor.sequence) + 1n) {
+        throw new Error('notification Main relay batch range has a gap');
+      }
       if (batch.event_count > PRODUCER_COST.relayEventsPerBatch) throw new Error('relay event bound exceeded');
       const events = (await client.query<{ envelope: RelayEnvelope }>(`
-        SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2
-        ORDER BY (envelope->'data'->>'ordinal')::int LIMIT $3`,
-      [cursor.data_epoch, batch.sequence, PRODUCER_COST.relayEventsPerBatch + 1])).rows;
+        SELECT envelope FROM relay.delivered_event WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3
+        ORDER BY (envelope->'data'->>'ordinal')::int LIMIT $4`,
+      [upstream.streamScope, upstream.dataEpoch, batch.sequence, PRODUCER_COST.relayEventsPerBatch + 1])).rows;
       if (events.length !== batch.event_count) throw new Error('relay batch is incomplete');
       let produced = 0;
       let pending = false;
