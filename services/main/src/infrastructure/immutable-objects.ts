@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
+import { DOMParser, type Element } from '@xmldom/xmldom';
 import { AwsClient } from 'aws4fetch';
 
 const DIGEST = /^[0-9a-f]{64}$/;
+const S3_XML_NAMESPACE = 'http://s3.amazonaws.com/doc/2006-03-01/';
 
 /**
  * Verified immutable bytes, keyed by digest, for this process only. Main and
@@ -208,6 +210,21 @@ export class ObjectUnavailable extends Error {}
 export class ObjectNotFound extends ObjectUnavailable {}
 export class ObjectIntegrityError extends Error {}
 export class ObjectReadBudgetExceeded extends Error {}
+export class ObjectListingUnavailable extends ObjectUnavailable {}
+export class ObjectVersioningUnsupported extends ObjectUnavailable {}
+
+export const IMMUTABLE_OBJECT_LISTING_LIMITS = {
+  maxEntries: 256,
+  maxResponseBytes: 1024 * 1024,
+} as const;
+
+export interface ImmutableObjectListOptions {
+  /** Maximum returned keys. The adapter requests one extra key to detect overflow. */
+  maxEntries: number;
+  /** Shared budget for the versioning-capability and listing responses. */
+  maxResponseBytes?: number;
+  signal?: AbortSignal;
+}
 
 export interface ImmutableObjects {
   /** Return the digest only after a conditional create and verified read-back. */
@@ -218,6 +235,8 @@ export interface ImmutableObjects {
   probe?(digest: string, signal?: AbortSignal): Promise<void>;
   /** Remove one exact digest and prove it is absent with an uncached read-back. */
   deleteAndVerifyAbsent?(digest: string, signal?: AbortSignal): Promise<void>;
+  /** List one complete, bounded prefix within this store's configured namespace. */
+  listPrefix?(prefix: string, options: ImmutableObjectListOptions): Promise<readonly string[]>;
   /** Remove a known-unpublished staging candidate when the backend supports it. */
   discard?(digest: string, signal?: AbortSignal): Promise<void>;
 }
@@ -243,12 +262,107 @@ function checkedDigest(digest: string): string {
   return digest;
 }
 
+function checkedListingPrefix(prefix: string, namespace: string): string {
+  const segments = prefix.split('/');
+  if (!prefix.startsWith(namespace) || Buffer.byteLength(prefix, 'utf8') > 512
+    || !/^[a-z0-9][a-z0-9._/-]*$/.test(prefix)
+    || prefix.includes('//') || segments.some((segment, index) =>
+      segment === '.' || segment === '..' || (!segment && index !== segments.length - 1))) {
+    throw new ObjectIntegrityError('immutable object listing prefix is outside its namespace');
+  }
+  return prefix;
+}
+
+function xmlChildren(element: Element, name?: string): Element[] {
+  return Array.from(element.childNodes).filter((node): node is Element =>
+    node.nodeType === 1 && (!name || (node as Element).localName === name));
+}
+
+function xmlText(element: Element, name: string): string {
+  const children = xmlChildren(element, name);
+  if (children.length !== 1 || xmlChildren(children[0]!).length > 0) {
+    throw new ObjectListingUnavailable('immutable object listing response is malformed');
+  }
+  return children[0]!.textContent?.trim() ?? '';
+}
+
+function xmlRawText(element: Element, name: string): string {
+  const children = xmlChildren(element, name);
+  if (children.length !== 1 || xmlChildren(children[0]!).length > 0) {
+    throw new ObjectListingUnavailable('immutable object listing response is malformed');
+  }
+  return children[0]!.textContent ?? '';
+}
+
+function parseS3Xml(bytes: Uint8Array, rootName: string): Element {
+  let source: string;
+  try { source = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { throw new ObjectListingUnavailable('immutable object listing response is not UTF-8'); }
+  if (/<!DOCTYPE|<!ENTITY/i.test(source)) {
+    throw new ObjectListingUnavailable('immutable object listing response contains a declaration');
+  }
+  let malformed = false;
+  let root: Element | null;
+  try {
+    root = new DOMParser({ onError: () => { malformed = true; } })
+      .parseFromString(source, 'application/xml').documentElement;
+  } catch {
+    throw new ObjectListingUnavailable('immutable object listing response is malformed');
+  }
+  if (malformed || !root || root.localName !== rootName || root.namespaceURI !== S3_XML_NAMESPACE) {
+    throw new ObjectListingUnavailable('immutable object listing response is malformed');
+  }
+  return root;
+}
+
+async function readS3ResponseWithinBudget(response: Response, budget: number): Promise<Uint8Array> {
+  const declaredLength = response.headers.get('content-length');
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength) || !Number.isSafeInteger(Number(declaredLength))) {
+      throw new ObjectListingUnavailable('immutable object listing response length is invalid');
+    }
+    if (Number(declaredLength) > budget) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new ObjectReadBudgetExceeded('immutable object listing response exceeds its byte budget');
+    }
+  }
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      bytes += part.value.byteLength;
+      if (bytes > budget) {
+        await reader.cancel().catch(() => undefined);
+        throw new ObjectReadBudgetExceeded('immutable object listing response exceeds its byte budget');
+      }
+      chunks.push(part.value);
+    }
+  } catch (error) {
+    if (error instanceof ObjectReadBudgetExceeded) throw error;
+    throw new ObjectListingUnavailable('immutable object listing response could not be read');
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
 /**
  * Bun S3Client 1.4.2 cannot express If-None-Match on PUT and ignores NO_PROXY
  * for local reads on proxied hosts. Signed fetch covers both operations.
  */
 export class S3ImmutableObjects implements ImmutableObjects {
   private readonly signer: AwsClient;
+  private readonly bucket: string;
   private readonly bucketUrl: string;
   private readonly prefix: string;
   private readonly readSignal: (() => AbortSignal) | undefined;
@@ -266,6 +380,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
       throw new Error('invalid S3 bucket or immutable namespace');
     }
     const region = options.region ?? 'us-east-1';
+    this.bucket = options.bucket;
     this.bucketUrl = `${endpoint.origin}/${options.bucket}`;
     this.prefix = options.prefix;
     this.readSignal = options.readSignal;
@@ -365,8 +480,117 @@ export class S3ImmutableObjects implements ImmutableObjects {
     try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
       { method: 'HEAD', signal: signal ?? this.readSignal?.() }); }
     catch { throw new ObjectUnavailable('committed immutable object probe is unavailable'); }
-    if (response.status === 404) throw new ObjectNotFound('committed immutable object was not found (404)');
+    if (response.status === 404) {
+      if (response.headers.get('x-amz-delete-marker')?.toLowerCase() === 'true') {
+        throw new ObjectVersioningUnsupported('an S3 delete marker does not prove immutable object absence');
+      }
+      throw new ObjectNotFound('committed immutable object was not found (404)');
+    }
     if (!response.ok) throw new ObjectUnavailable(`committed immutable object probe is unavailable (${response.status})`);
+  }
+
+  private async assertBucketUnversioned(signal: AbortSignal | undefined, responseBudget: number): Promise<number> {
+    let response: Response;
+    try {
+      response = await this.signer.fetch(`${this.bucketUrl}?versioning`,
+        { method: 'GET', signal: signal ?? this.readSignal?.() });
+    } catch {
+      throw new ObjectListingUnavailable('immutable object versioning capability is unavailable');
+    }
+    if (!response.ok) {
+      throw new ObjectListingUnavailable(`immutable object versioning capability is unavailable (${response.status})`);
+    }
+    const bytes = await readS3ResponseWithinBudget(response, responseBudget);
+    const root = parseS3Xml(bytes, 'VersioningConfiguration');
+    const statusNodes = xmlChildren(root, 'Status');
+    if (statusNodes.length > 1) throw new ObjectListingUnavailable('immutable object versioning response is malformed');
+    const status = statusNodes.length ? xmlText(root, 'Status') : undefined;
+    if (status === 'Enabled' || status === 'Suspended') {
+      throw new ObjectVersioningUnsupported('immutable object namespace listing refuses versioned buckets');
+    }
+    if (status !== undefined || xmlChildren(root).length !== 0) {
+      throw new ObjectListingUnavailable('immutable object versioning capability is not authoritative');
+    }
+    return bytes.byteLength;
+  }
+
+  /**
+   * List one prefix in a single ListObjectsV2 response. A lookahead entry
+   * detects overflow; truncation, malformed metadata, and versioned buckets
+   * fail closed instead of returning a partial inventory.
+   */
+  async listPrefix(prefix: string, options: ImmutableObjectListOptions): Promise<readonly string[]> {
+    checkedListingPrefix(prefix, this.prefix);
+    const { maxEntries, signal } = options;
+    const maxResponseBytes = options.maxResponseBytes ?? IMMUTABLE_OBJECT_LISTING_LIMITS.maxResponseBytes;
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 1
+      || maxEntries > IMMUTABLE_OBJECT_LISTING_LIMITS.maxEntries) {
+      throw new ObjectReadBudgetExceeded('immutable object listing entry budget is invalid');
+    }
+    if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1
+      || maxResponseBytes > IMMUTABLE_OBJECT_LISTING_LIMITS.maxResponseBytes) {
+      throw new ObjectReadBudgetExceeded('immutable object listing byte budget is invalid');
+    }
+    if (signal?.aborted) throw new ObjectListingUnavailable('immutable object listing was aborted');
+
+    const versioningBytes = await this.assertBucketUnversioned(signal, maxResponseBytes);
+    const remainingBytes = maxResponseBytes - versioningBytes;
+    if (remainingBytes < 1) {
+      throw new ObjectReadBudgetExceeded('immutable object listing response exceeds its byte budget');
+    }
+    const requestedMaxKeys = maxEntries + 1;
+    const url = new URL(this.bucketUrl);
+    url.searchParams.set('list-type', '2');
+    url.searchParams.set('prefix', prefix);
+    url.searchParams.set('max-keys', String(requestedMaxKeys));
+
+    let response: Response;
+    try { response = await this.signer.fetch(url.toString(), { method: 'GET', signal: signal ?? this.readSignal?.() }); }
+    catch { throw new ObjectListingUnavailable('immutable object namespace listing is unavailable'); }
+    if (!response.ok) {
+      throw new ObjectListingUnavailable(`immutable object namespace listing is unavailable (${response.status})`);
+    }
+    const root = parseS3Xml(await readS3ResponseWithinBudget(response, remainingBytes), 'ListBucketResult');
+    const allowedRootChildren = new Set(['Name', 'Prefix', 'ContinuationToken', 'StartAfter', 'MaxKeys',
+      'Delimiter', 'IsTruncated', 'Contents', 'CommonPrefixes', 'EncodingType', 'KeyCount',
+      'NextContinuationToken', 'FetchOwner', 'RequestCharged']);
+    if (xmlChildren(root).some(child => !child.localName || !allowedRootChildren.has(child.localName))) {
+      throw new ObjectListingUnavailable('immutable object listing response has unsupported fields');
+    }
+    if (xmlText(root, 'Name') !== this.bucket || xmlText(root, 'Prefix') !== prefix
+      || xmlText(root, 'MaxKeys') !== String(requestedMaxKeys)) {
+      throw new ObjectListingUnavailable('immutable object listing metadata does not match its request');
+    }
+    const truncated = xmlText(root, 'IsTruncated');
+    if (truncated !== 'true' && truncated !== 'false') {
+      throw new ObjectListingUnavailable('immutable object listing truncation state is invalid');
+    }
+    if (truncated === 'true' || xmlChildren(root, 'NextContinuationToken').length > 0
+      || xmlChildren(root, 'ContinuationToken').length > 0 || xmlChildren(root, 'CommonPrefixes').length > 0) {
+      throw new ObjectListingUnavailable('immutable object namespace listing is incomplete');
+    }
+    if (xmlChildren(root, 'EncodingType').length > 0 || xmlChildren(root, 'StartAfter').length > 0
+      || xmlChildren(root, 'Delimiter').length > 0) {
+      throw new ObjectListingUnavailable('immutable object listing uses unsupported request parameters');
+    }
+
+    const contents = xmlChildren(root, 'Contents');
+    const keyCount = Number(xmlText(root, 'KeyCount'));
+    if (!Number.isSafeInteger(keyCount) || keyCount !== contents.length) {
+      throw new ObjectListingUnavailable('immutable object listing count is not authoritative');
+    }
+    if (contents.length > maxEntries) {
+      throw new ObjectReadBudgetExceeded('immutable object namespace listing exceeds its entry budget');
+    }
+    const keys = contents.map(content => xmlRawText(content, 'Key'));
+    const seen = new Set<string>();
+    for (const key of keys) {
+      try { checkedListingPrefix(key, prefix); }
+      catch { throw new ObjectListingUnavailable('immutable object listing returned a key outside its prefix'); }
+      if (seen.has(key)) throw new ObjectListingUnavailable('immutable object listing contains a duplicate key');
+      seen.add(key);
+    }
+    return keys;
   }
 
   /** Concurrent unbounded reads of one digest share the store fetch. A caller's abort does not cancel it. */

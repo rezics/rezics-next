@@ -4,7 +4,8 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { AwsClient } from 'aws4fetch';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
-import { S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectListingUnavailable, ObjectReadBudgetExceeded,
+  ObjectVersioningUnsupported, S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest, GRAPHS } from '../src/modules/work/activate.ts';
 import { editMetadataWork, metadataWorkEditDigest } from '../src/modules/work/edit.ts';
@@ -12,6 +13,52 @@ import { readExactWorkRevision } from '../src/modules/work/history.ts';
 
 const runId = Bun.env.REZICS_S3_GATE_PROJECT;
 const rustfsGate = runId ? test : test.skip;
+
+function listingXml(options: { bucket?: string; prefix: string; maxKeys: string; keys?: string[];
+  truncated?: string; reportedPrefix?: string; keyCount?: string }) {
+  const keys = options.keys ?? [];
+  const contents = keys.map(key => `<Contents><Key>${key.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}`
+    + `</Key><Size>1</Size></Contents>`).join('');
+  return `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">`
+    + `<Name>${options.bucket ?? 'rezics-semantic'}</Name>`
+    + `<Prefix>${options.reportedPrefix ?? options.prefix}</Prefix><MaxKeys>${options.maxKeys}</MaxKeys>`
+    + `<KeyCount>${options.keyCount ?? String(keys.length)}</KeyCount>`
+    + `<IsTruncated>${options.truncated ?? 'false'}</IsTruncated>${contents}</ListBucketResult>`;
+}
+
+function namespaceFixture(options: { versioning?: string; listing?: (url: URL) => string;
+  deleteMarker?: boolean }) {
+  const counts = { versioning: 0, listing: 0, deletes: 0, probes: 0 };
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+    const url = new URL(request.url);
+    if (url.searchParams.has('versioning')) {
+      counts.versioning++;
+      const status = options.versioning ? `<Status>${options.versioning}</Status>` : '';
+      return new Response(`<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">${status}</VersioningConfiguration>`);
+    }
+    if (url.searchParams.get('list-type') === '2') {
+      counts.listing++;
+      return new Response(options.listing?.(url) ?? listingXml({
+        prefix: url.searchParams.get('prefix') ?? '', maxKeys: url.searchParams.get('max-keys') ?? '',
+      }));
+    }
+    if (request.method === 'DELETE') {
+      counts.deletes++;
+      return new Response(null, { status: 204 });
+    }
+    if (request.method === 'HEAD') {
+      counts.probes++;
+      return options.deleteMarker
+        ? new Response(null, { status: 404, headers: { 'x-amz-delete-marker': 'true' } })
+        : new Response(null, { status: 404 });
+    }
+    return new Response(null, { status: 404 });
+  } });
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+    prefix: 'semantic/work/' });
+  return { store, server, counts };
+}
 
 rustfsGate('P0.5 RustFS signed conditional create, checksum and concurrent writers', async () => {
   const root = resolve(import.meta.dir, '../../..');
@@ -27,6 +74,8 @@ rustfsGate('P0.5 RustFS signed conditional create, checksum and concurrent write
   const results = await Promise.all(Array.from({ length: 8 }, () => store.put(bytes)));
   expect(results).toEqual(Array(8).fill(digest));
   expect(Buffer.from(await store.get(digest))).toEqual(bytes);
+  expect(await store.listPrefix('semantic/work/', { maxEntries: 8 }))
+    .toContain(`semantic/work/sha256/${digest}`);
 
   const signer = new AwsClient({ accessKeyId: options.accessKeyId,
     secretAccessKey: options.secretAccessKey, service: 's3', region: 'us-east-1', retries: 0 });
@@ -37,6 +86,85 @@ rustfsGate('P0.5 RustFS signed conditional create, checksum and concurrent write
   expect(overwrite.status).toBe(412);
   expect(Buffer.from(await store.get(digest))).toEqual(bytes);
   await new S3ImmutableObjects(options).initialize();
+});
+
+test('S3 namespace listing returns only a complete in-prefix inventory', async () => {
+  const prefix = 'semantic/work/';
+  const key = `${prefix}sha256/${'a'.repeat(64)}`;
+  const fixture = namespaceFixture({ listing: url => listingXml({ prefix,
+    maxKeys: url.searchParams.get('max-keys') ?? '', keys: [key] }) });
+  try {
+    expect(await fixture.store.listPrefix(prefix, { maxEntries: 2 })).toEqual([key]);
+    expect(fixture.counts).toEqual({ versioning: 1, listing: 1, deletes: 0, probes: 0 });
+    await expect(fixture.store.listPrefix('semantic/other/', { maxEntries: 2 }))
+      .rejects.toBeInstanceOf(ObjectIntegrityError);
+    expect(fixture.counts.listing).toBe(1);
+  } finally {
+    await fixture.server.stop(true);
+  }
+});
+
+test('S3 namespace listing refuses truncation, false metadata and lookahead overflow', async () => {
+  const prefix = 'semantic/work/';
+  const keys = [0, 1, 2].map(index => `${prefix}orphan/${index}`);
+  const cases = [
+    { name: 'truncated page', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: keys.slice(0, 2), truncated: 'true' }) },
+    { name: 'wrong reported prefix', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, reportedPrefix: 'semantic/work-other/', keys: [] }) },
+    { name: 'wrong key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [keys[0]!], keyCount: '2' }) },
+    { name: 'lookahead entry', expected: ObjectReadBudgetExceeded,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys }) },
+    { name: 'key outside requested prefix', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: ['semantic/work-other/object'] }) },
+  ];
+  for (const item of cases) {
+    const fixture = namespaceFixture({ listing: url => item.build(url.searchParams.get('max-keys') ?? '') });
+    try {
+      await expect(fixture.store.listPrefix(prefix, { maxEntries: 2 }))
+        .rejects.toBeInstanceOf(item.expected);
+      expect(fixture.counts.listing).toBe(1);
+    } finally {
+      await fixture.server.stop(true);
+    }
+  }
+});
+
+test('S3 namespace listing enforces its combined response byte budget', async () => {
+  const prefix = 'semantic/work/';
+  const fixture = namespaceFixture({ listing: url => listingXml({ prefix,
+    maxKeys: url.searchParams.get('max-keys') ?? '', keys: [`${prefix}${'a'.repeat(400)}`] }) });
+  try {
+    await expect(fixture.store.listPrefix(prefix, { maxEntries: 2, maxResponseBytes: 256 }))
+      .rejects.toBeInstanceOf(ObjectReadBudgetExceeded);
+  } finally {
+    await fixture.server.stop(true);
+  }
+});
+
+test('S3 namespace listing refuses versioned buckets even when current-key listing is empty', async () => {
+  for (const versioning of ['Enabled', 'Suspended']) {
+    const fixture = namespaceFixture({ versioning });
+    try {
+      await expect(fixture.store.listPrefix('semantic/work/', { maxEntries: 2 }))
+        .rejects.toBeInstanceOf(ObjectVersioningUnsupported);
+      expect(fixture.counts.listing).toBe(0);
+    } finally {
+      await fixture.server.stop(true);
+    }
+  }
+});
+
+test('S3 delete marker response cannot prove an immutable object is absent', async () => {
+  const fixture = namespaceFixture({ deleteMarker: true });
+  try {
+    await expect(fixture.store.deleteAndVerifyAbsent('b'.repeat(64)))
+      .rejects.toBeInstanceOf(ObjectVersioningUnsupported);
+    expect(fixture.counts).toEqual({ versioning: 0, listing: 0, deletes: 1, probes: 1 });
+  } finally {
+    await fixture.server.stop(true);
+  }
 });
 
 rustfsGate('P0.5 Main Work create, edit and exact read use RustFS manifests', async () => {
