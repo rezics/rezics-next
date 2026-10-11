@@ -141,6 +141,7 @@ const routineBrowserReason = 'Browser journeys and Storybook run in the nightly 
 const batchSize = (tier: RegressionTier, files: number): number =>
   tier === 'integration' || tier === 'e2e' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15
     : tier === 'jena:check' ? 1 : files;
+const jenaCliFile = 'scripts/qa/jena-cli.ts';
 const nativeImageProofs = new Set<string>(inputSelectedNativeTests);
 const jenaCheckDefaultBudgetMs = 75_000;
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
@@ -464,7 +465,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
   const core = await import(pathToFileURL(join(checkout, 'scripts/qa/core.ts')).href) as typeof import('../qa/core.ts');
   const nativeFiles = new Set<string>(registry.inputSelectedNativeTests ?? []);
   const files: ExpectedFile[] = [];
-  files.push({ file: 'scripts/qa/jena-cli.ts', tier: 'jena:check', outcome: 'pending' });
+  files.push({ file: jenaCliFile, tier: 'jena:check', outcome: 'pending' });
   for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'] as const) {
     const discovered = core.splitTestArgs(registry.testArgs(tier)).paths;
     const paths = tier === 'unit' || tier === 'owner'
@@ -687,8 +688,15 @@ function normalizedFile(checkout: string, workspace: string, file: string): stri
 
 /** Missing/skipped files and zero-test suites are evidence gaps, even when the process exits successfully. */
 export function executionOutcomes(checkout: string, batch: Batch, tests: TestResult[], storyXml = '', storyLog = '', commandCode?: number): Execution['outcomes'] {
-  if (batch.tier === 'jena:check') return Object.fromEntries(batch.files.map(file =>
-    [file, commandCode === undefined ? 'missing' : commandCode === 0 ? 'passed' : 'failed']));
+  const testOutcome = (file: string): 'passed' | 'failed' | 'missing' => {
+    const found = tests.filter(test => test.file.replace(/^\.\//, '') === file);
+    return found.some(test => test.name === UNEXECUTED_FILE_TEST) ? 'missing'
+      : found.some(test => test.failed) ? 'failed'
+      : found.some(test => !test.skipped) ? 'passed' : 'missing';
+  };
+  if (batch.tier === 'jena:check') return Object.fromEntries(batch.files.map(file => [file,
+    file === jenaCliFile ? commandCode === undefined ? 'missing' : commandCode === 0 ? 'passed' : 'failed'
+      : commandCode !== undefined && commandCode !== 0 ? 'failed' : testOutcome(file)]));
   const outcomes: Execution['outcomes'] = {};
   const workspace = batch.tier === 'accounts:storybook' ? 'apps/accounts' : 'apps/web';
   const stories = new Map<string, 'passed' | 'failed' | 'missing'>();
@@ -706,21 +714,19 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
       ? Number(match[3]) > 0 && !/skipped/.test(match[4]!) ? 'passed' : 'missing' : 'failed');
   }
   for (const file of batch.files) {
-    const found = tests.filter(test => test.file.replace(/^\.\//, '') === file);
     outcomes[file] = file.includes('.stories.') ? stories.get(file) ?? 'missing'
-      : found.some(test => test.name === UNEXECUTED_FILE_TEST) ? 'missing'
-      : found.some(test => test.failed) ? 'failed'
-      : found.some(test => !test.skipped) ? 'passed' : 'missing';
+      : testOutcome(file);
   }
   return outcomes;
 }
 
-export function regressionBatchCommand(batch: Batch, report: string, storyXmlPath: string): string[] {
+export function regressionBatchCommand(batch: Batch, report: string, junitXmlPath: string): string[] {
   if (batch.tier === 'jena:check') return batch.files.some(file => nativeImageProofs.has(file))
-    ? ['bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`, ...batch.files]
+    ? ['bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+      '--reporter=junit', `--reporter-outfile=${junitXmlPath}`, ...batch.files]
     : ['task', 'jena:check'];
   const standaloneStories = batch.files.every(file => file.includes('.stories.'));
-  const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
+  const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${junitXmlPath}`]
     : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file]),
       ...(batch.tier === 'e2e' && batch.files.some(file => file.includes('.stories.')) ? ['--storybook'] : [])];
   return ['bun', join(import.meta.dir, 'goalctl.ts'), 'test', ...(browserTier(batch.tier) ? ['--heavy'] : []),
@@ -769,7 +775,7 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   artifactRoot?: string, options: RegressionBatchOptions = {}): Promise<Execution> {
   mkdirSync(directory, { recursive: true });
   const report = join(directory, 'slot.json');
-  const storyXmlPath = join(directory, 'storybook.xml');
+  const junitXmlPath = join(directory, 'batch.xml');
   const started = Date.now();
   // Older resumed manifests have no budget; derive it from their pinned files while preserving their plan.
   const budgetMs = batch.tier === 'owner' ? batch.budgetMs
@@ -784,7 +790,7 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   }
   const effectiveDeadlineMs = options.deadlineCapMs === undefined
     ? deadlineMs : Math.min(deadlineMs, options.deadlineCapMs);
-  const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
+  const code = await command(checkout, regressionBatchCommand(batch, report, junitXmlPath), join(directory, 'runner.log'),
     effectiveDeadlineMs,
     regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
@@ -805,9 +811,12 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
       if (name === 'e2e-storybook.log') storyLog += log;
     }
   }
+  if (batch.tier === 'jena:check' && batch.files.some(file => nativeImageProofs.has(file)) && existsSync(junitXmlPath)) {
+    tests.push(...parseJUnit(readFileSync(junitXmlPath, 'utf8'), 'owner', { root: checkout }));
+  }
   const kernel = spawnSync('journalctl', ['-k', '--since', new Date(started).toISOString(), '--no-pager', '-q'], { encoding: 'utf8', timeout: 5000 });
   if (kernel.status === 0) evidence += `\n${kernel.stdout}`;
-  const storyXml = existsSync(storyXmlPath) ? readFileSync(storyXmlPath, 'utf8') : '';
+  const storyXml = batch.tier !== 'jena:check' && existsSync(junitXmlPath) ? readFileSync(junitXmlPath, 'utf8') : '';
   const outcomes = executionOutcomes(checkout, batch, tests, storyXml, storyLog, code);
   for (const entry of isolated.filter(entry => entry.status === 'order-dependent')) outcomes[entry.file] = 'failed';
   return { ...metadata, code, outcomes, evidence,

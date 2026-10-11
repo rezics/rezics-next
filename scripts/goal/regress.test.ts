@@ -113,8 +113,9 @@ describe('pinned main-wide regression', () => {
         r.write(file, file === longProof ? "test('native proof', () => {}, 900_000);\n" : 'pass\n');
       }
       expect(regressionBatchCommand({ id: 'native-proof', tier: 'jena:check', files: [longProof], state: 'pending', attempts: [] },
-        '/disk/report.json', '/disk/stories.xml')).toEqual([
-        'bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`, longProof,
+        '/disk/report.json', '/disk/native.xml')).toEqual([
+        'bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+        '--reporter=junit', '--reporter-outfile=/disk/native.xml', longProof,
       ]);
       r.commit();
       const result = await r.run({ runId: 'native-jena-deadlines' });
@@ -1747,13 +1748,22 @@ test('only browser and Storybook commands acquire the heavy lock', () => {
   }
 });
 
-test('Jena regression invokes its no-argument task and records command success or refusal without JUnit', () => {
+test('Jena CLI uses exit status while native proofs require executed JUnit cases', () => {
   const batch: Batch = { id: 'jena-check-1', tier: 'jena:check', files: ['scripts/qa/jena-cli.ts'], state: 'pending', attempts: [] };
   expect(regressionBatchCommand(batch, '/disk/report.json', '/disk/stories.xml')).toEqual(['task', 'jena:check']);
   expect(executionOutcomes('/repo', batch, [], '', '', 0)).toEqual({ 'scripts/qa/jena-cli.ts': 'passed' });
   expect(executionOutcomes('/repo', batch, [], '', '', 1)).toEqual({ 'scripts/qa/jena-cli.ts': 'failed' });
   expect(executionOutcomes('/repo', batch, [], '', '', 124)).toEqual({ 'scripts/qa/jena-cli.ts': 'failed' });
   expect(executionOutcomes('/repo', batch, [])).toEqual({ 'scripts/qa/jena-cli.ts': 'missing' });
+
+  const nativeFile = inputSelectedNativeTests[0]!;
+  const nativeBatch: Batch = { id: 'native-proof', tier: 'jena:check', files: [nativeFile], state: 'pending', attempts: [] };
+  const skipped = parseJUnit(`<testsuite><testcase file="${nativeFile}" name="skipped proof"><skipped/></testcase></testsuite>`, 'owner');
+  const zeroTests = parseJUnit(`<testsuite name="${nativeFile}" tests="0" failures="0" skipped="0"></testsuite>`, 'owner');
+  const executed = parseJUnit(`<testsuite><testcase file="${nativeFile}" name="proof"/></testsuite>`, 'owner');
+  expect(executionOutcomes('/repo', nativeBatch, skipped, '', '', 0)[nativeFile]).toBe('missing');
+  expect(executionOutcomes('/repo', nativeBatch, zeroTests, '', '', 0)[nativeFile]).toBe('missing');
+  expect(executionOutcomes('/repo', nativeBatch, executed, '', '', 0)[nativeFile]).toBe('passed');
 });
 
 test('mixed nightly browser batches request stories through the actual QA parser and retain complete evidence', () => {
