@@ -11,19 +11,21 @@ import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
 import { RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
+import { SuitabilityStore } from '../src/modules/suitability/store.ts';
 import { WorkMaintainers } from '../src/modules/work/maintainers.ts';
 
 const scopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'comment:create',
   'space:create', 'realm:profile', 'realm:adopt'];
 export const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 
-export async function memberFixture() {
+export async function memberFixture(options: { liveContentEvidence?: boolean } = {}) {
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'access'], 'owner');
   const prior = { account: Bun.env.ACCOUNT_DATABASE_URL, access: Bun.env.ACCESS_DATABASE_URL };
   Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;
   Bun.env.ACCESS_DATABASE_URL = databases.urls.access;
   let h: Awaited<ReturnType<typeof agentProvisionHarness>>;
-  try { h = await agentProvisionHarness(scopes); }
+  try { h = await agentProvisionHarness(scopes,
+    options.liveContentEvidence ? { contentEvidence: true } : {}); }
   catch (error) { await databases.close(); throw error; }
   finally { Bun.env.ACCOUNT_DATABASE_URL = prior.account; Bun.env.ACCESS_DATABASE_URL = prior.access; }
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
@@ -35,8 +37,10 @@ export async function memberFixture() {
   const owner = new RealmReplyContentStore(contentPool);
   const replies = new RealmReplyStore(owner, content, access, h.env);
   const maintainers = new WorkMaintainers(h.accessPool, h.env);
+  const suitability = options.liveContentEvidence ? new SuitabilityStore(h.accessPool, access) : undefined;
   const app = createMainApp(h.fuseki, { environment: h.env, account: h.verifier,
-    access, contentAuthoring: content, content, realmReplies: replies, maintainers });
+    access, contentAuthoring: content, content, realmReplies: replies, maintainers,
+    ...(suitability ? { suitability } : {}) });
   await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [h.user.id]);
   const signedIn = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
     headers: { 'content-type': 'application/json', origin: h.base },
@@ -86,7 +90,7 @@ export async function memberFixture() {
     work: work.work, contribution: first.contribution, publicationDecision: first.publicationDecision,
     expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor };
   return { ...h, contentPool, content, access, owner, replies, maintainers, app, token, actor, pen,
-    post, get, work, first, selection, contribution, workBody, workKey, agent,
+    ...(suitability ? { suitability } : {}), post, get, work, first, selection, contribution, workBody, workKey, agent,
     principal: () => h.verifier.verify(new Request('http://main.local', { headers: { authorization: `Bearer ${token}` } }), ['work:edit']),
     close: async () => { await contentPool.end(); await h.close(); await databases.close(); } };
 }

@@ -27,7 +27,8 @@ async function freePort(): Promise<number> {
   });
 }
 
-export async function agentProvisionHarness(scopes: readonly string[] = ['agent:create', 'work:create']) {
+export async function agentProvisionHarness(scopes: readonly string[] = ['agent:create', 'work:create'],
+  options: { contentEvidence?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
@@ -43,7 +44,7 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
   const operators = new Set<string>();
   const auth = createAccountAuth({ baseURL: base, secret: Bun.env.ACCOUNT_SECRET!,
     resource: Bun.env.ACCOUNT_MAIN_RESOURCE, pool: accountPool, operatorUserIds: operators });
-  const accountApp = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port });
+  let accountApp = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port });
 
   async function signUp(name: string) {
     const email = `agent-${name}-${randomUUID()}@example.test`;
@@ -67,6 +68,12 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
     client_name: 'Agent provision verifier', scope: scopes.join(' '),
     token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
     client_credentials_scopes: [...scopes] } });
+  if (options.contentEvidence) {
+    await accountApp.stop();
+    accountApp = createAccountApp(auth, accountPool, {
+      contentEvidenceSecret: verifierClient.client_secret!,
+    }).listen({ hostname: '127.0.0.1', port });
+  }
   const redirectUri = 'http://localhost:3000/auth/callback';
   const client = await auth.api.adminCreateOAuthClient({ headers, body: {
     client_name: 'Agent provision native client', application_type: 'native',

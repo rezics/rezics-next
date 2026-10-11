@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { memberFixture, nativeId } from '../../../services/main/tests/member-reply-fixture.ts';
+import { TARGET_RESOLVE_COST } from '../../../services/main/src/modules/target/resolve.ts';
 
 test('G265: controlled Persons author exact contribution comments and replay without resurrection', async () => {
   const h = await memberFixture();
@@ -219,6 +220,195 @@ test('restricted Work reply roots require exact live read authority through draf
       .rowCount).toBe(1);
   } finally { await h.close(); }
 }, 180_000);
+
+test('restricted semantic reply roots require semantic.read and use live Account eligibility', async () => {
+  const h = await memberFixture({ liveContentEvidence: true });
+  try {
+    const reader = await h.agent('Restricted semantic reader');
+    const principal = await h.principal();
+    const principalId = (await h.accessPool.query(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0].id as string;
+
+    async function authority(subject: string, scope: string, action: string) {
+      const ids = { representation: randomUUID(), grant: randomUUID() };
+      await h.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await h.accessPool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [ids.representation, principalId, subject, action]);
+      await h.accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,$5,now() + interval '1 hour')`,
+      [ids.grant, h.actor, subject, scope, action]);
+      return ids;
+    }
+    async function revoke(ids: { representation: string; grant: string }) {
+      await h.accessPool.query('UPDATE access.representation SET active = false WHERE id = $1', [ids.representation]);
+      await h.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [ids.grant]);
+    }
+
+    await authority(h.actor, 'semantic:create:root', 'semantic.change');
+    const created = await h.post('/v1/semantic/changes', { profile: 'semantic-change-v1',
+      expectedHead: null, actingSubject: h.actor,
+      state: { component: 'resource', types: ['https://schema.org/Person'], properties: [] } });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const root = created.body as { component: string; revision: string };
+    expect(root.component).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+    expect(root.revision).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+
+    const readAs = async (resource: string, subject: string) => {
+      const path = `/v1/semantic/resources/${resource.slice(-36)}?actingSubject=${encodeURIComponent(subject)}`;
+      const response = await h.app.handle(new Request(`http://main.local${path}`, {
+        headers: { authorization: `Bearer ${h.token}` } }));
+      return { status: response.status, body: await response.json() as Record<string, any> };
+    };
+    const draftInput = (reply = nativeId()) => ({ profile: 'member-reply-draft-v1', reply,
+      variantId: `urn:rezics:variant:${randomUUID()}`, rootTarget: root.component, rootRevision: root.revision,
+      language: 'en', direction: 'ltr', expectedHead: null, body: 'A restricted semantic-root reply.', actingSubject: reader });
+    const writeGrants = async (reply: string) => h.accessPool.query(`SELECT id FROM access.permission_grant
+      WHERE recipient_subject = $1 AND ((scope_id = $2 AND action = 'content.draft')
+        OR (scope_id = $3 AND action = 'reply.create'))`,
+    [reader, `content:draft:${reply}`, `reply:create:${root.component}`]);
+    const revisionCount = async (variantId: string) => (await h.contentPool.query(
+      'SELECT id FROM content.revision WHERE variant_id = $1', [variantId])).rowCount;
+    const replyCount = async (reply: string) => (await h.contentPool.query(
+      'SELECT id FROM content.reply WHERE id = $1', [reply])).rowCount;
+    const noEffectsBeforeRegistration = async (input: ReturnType<typeof draftInput>, key: string) => {
+      expect(await revisionCount(input.variantId)).toBe(0);
+      expect(await replyCount(input.reply)).toBe(0);
+      expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+    };
+
+    const hiddenInput = draftInput();
+    const hiddenKey = randomUUID();
+    expect((await readAs(root.component, reader)).status).toBe(404);
+    expect((await h.post('/v1/member-reply-drafts', hiddenInput, hiddenKey)).status).toBe(404);
+    await noEffectsBeforeRegistration(hiddenInput, hiddenKey);
+
+    const workRead = await authority(reader, `work:read:${root.component}`, 'work.read');
+    expect(await h.access.canReadWork(principal, reader, root.component)).toBe(true);
+    const workOnlyInput = draftInput();
+    const workOnlyKey = randomUUID();
+    expect((await readAs(root.component, reader)).status).toBe(404);
+    expect((await h.post('/v1/member-reply-drafts', workOnlyInput, workOnlyKey)).status).toBe(404);
+    await noEffectsBeforeRegistration(workOnlyInput, workOnlyKey);
+    expect((await writeGrants(workOnlyInput.reply)).rowCount).toBe(0);
+
+    const semanticRead = await authority(reader, `semantic:read:${root.component}`, 'semantic.read');
+    expect(await h.access.canReadSemanticResource(principal, reader, root.component, root.revision, h.fuseki)).toBe(true);
+    expect((await readAs(root.component, reader)).status).toBe(200);
+    const input = draftInput();
+    const key = randomUUID();
+    expect((await writeGrants(input.reply)).rowCount).toBe(0);
+    const draft = await h.post('/v1/member-reply-drafts', input, key);
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    expect(await revisionCount(input.variantId)).toBe(1);
+    const identity = { profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+      revisionId: draft.body.revisionId, author: reader, rootTarget: root.component,
+      rootRevision: root.revision, parentReply: null, parentRevision: null, contextRevision: null };
+    const identityResult = await h.post('/v1/realm-replies', identity);
+    expect(identityResult.status, JSON.stringify(identityResult.body)).toBe(201);
+    expect(identityResult.body).toMatchObject({ reply: input.reply, author: reader,
+      rootTarget: root.component, rootRevision: root.revision });
+    expect((await writeGrants(input.reply)).rowCount).toBe(0);
+
+    // The target is selected through the bounded exact-head query, not an inventory scan.
+    let selectionCapture: { query: string; rows: number }[] | undefined;
+    const originalQuery = h.fuseki.query.bind(h.fuseki);
+    h.fuseki.query = async (...args: Parameters<typeof h.fuseki.query>) => {
+      const result = await originalQuery(...args);
+      const query = args[0];
+      if (selectionCapture && query.includes('SELECT ?epoch ?sequence ?r ?revision ?type ?mergedInto')
+        && query.includes(`VALUES ?r { <${root.component}> }`)) {
+        const rows = result.results?.bindings ?? [];
+        selectionCapture.push({ query, rows: rows.filter(row => row.r?.value === root.component).length });
+      }
+      return result;
+    };
+
+    const signedIn = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
+      headers: { 'content-type': 'application/json', origin: h.base },
+      body: JSON.stringify({ email: h.user.email, password: h.user.password }) });
+    expect(signedIn.status).toBe(200);
+    const cookie = signedIn.headers.get('set-cookie')!;
+    const accountWrite = async (body: object) => {
+      const response = await fetch(`${h.base}/api/account/content-preferences`, { method: 'POST',
+        headers: { 'content-type': 'application/json', origin: h.base, cookie }, body: JSON.stringify(body) });
+      return { status: response.status, body: await response.json() as Record<string, any> };
+    };
+    const adultPreferences = await accountWrite({ expectedRevision: 0, birthDate: '1990-01-01', country: 'US',
+      categories: { r18: true } });
+    expect(adultPreferences.status, JSON.stringify(adultPreferences.body)).toBe(200);
+
+    const assessmentDigest = createHash('sha256').update(`${root.component}:${randomUUID()}`).digest('hex');
+    await h.accessPool.query(`INSERT INTO access.suitability_assessment
+      (id,target,labels,basis,assessor,principal_id,revision_number,authority_proof,idempotency_key,request_digest)
+      VALUES ($1,$2,ARRAY['r18']::text[],'author',$3,$4,1,'{}'::jsonb,$5,$6)`,
+    [randomUUID(), root.component, h.actor, principalId, randomUUID(), assessmentDigest]);
+
+    const readSuitability = async () => {
+      const observations: { query: string; rows: number }[] = [];
+      selectionCapture = observations;
+      try { return { ...(await h.post('/v1/suitability/reads', { targets: [root.component], actingSubject: reader })), observations }; }
+      finally { selectionCapture = undefined; }
+    };
+    const adultRead = await readSuitability();
+    expect(adultRead.status, JSON.stringify(adultRead.body)).toBe(200);
+    expect(adultRead.body.viewer).toMatchObject({ age: 'adult', country: 'US', optIns: { sexual: true } });
+    expect(adultRead.body.items[0]).toMatchObject({ assessment: { status: 'assessed', labels: ['r18'] },
+      eligible: true, reasons: [] });
+    expect(adultRead.observations.length).toBeGreaterThan(0);
+
+    const unrelated: string[] = [];
+    for (let index = 0; index < 8; index++) {
+      const resource = await h.post('/v1/semantic/changes', { profile: 'semantic-change-v1',
+        expectedHead: null, actingSubject: h.actor,
+        state: { component: 'resource', types: ['https://schema.org/Person'], properties: [] } });
+      expect(resource.status, JSON.stringify(resource.body)).toBe(201);
+      unrelated.push(resource.body.component as string);
+    }
+    expect(new Set(unrelated).size).toBe(8);
+    expect(unrelated).not.toContain(root.component);
+
+    const updatedPreferences = await accountWrite({ expectedRevision: adultPreferences.body.revision,
+      categories: { r18: false } });
+    expect(updatedPreferences.status, JSON.stringify(updatedPreferences.body)).toBe(200);
+    const restrictedRead = await readSuitability();
+    expect(restrictedRead.status, JSON.stringify(restrictedRead.body)).toBe(200);
+    expect(restrictedRead.body.viewer).toMatchObject({ age: 'adult', country: 'US', optIns: { sexual: false } });
+    expect(restrictedRead.body.items[0]).toMatchObject({ eligible: false, reasons: ['sexual_opt_in_required'] });
+
+    for (const observation of [...adultRead.observations, ...restrictedRead.observations]) {
+      expect(observation.query).toContain(`VALUES ?r { <${root.component}> }`);
+      expect(observation.query).toContain(`LIMIT ${TARGET_RESOLVE_COST.revisionRows + 1}`);
+      expect(observation.rows).toBeGreaterThan(0);
+      expect(observation.rows).toBeLessThanOrEqual(TARGET_RESOLVE_COST.typesPerTarget);
+    }
+    expect(restrictedRead.observations.map(observation => observation.rows))
+      .toEqual(adultRead.observations.map(observation => observation.rows));
+
+    const betweenRegisterAndClaim = draftInput();
+    const lateKey = randomUUID();
+    expect((await writeGrants(betweenRegisterAndClaim.reply)).rowCount).toBe(0);
+    const claim = h.access.claim.bind(h.access);
+    let revokedAtClaim = false;
+    h.access.claim = async (admissionId, digest, accountPrincipal) => {
+      revokedAtClaim = true;
+      await revoke(semanticRead);
+      return claim(admissionId, digest, accountPrincipal);
+    };
+    let lateResult: Awaited<ReturnType<typeof h.post>> | undefined;
+    try { lateResult = await h.post('/v1/member-reply-drafts', betweenRegisterAndClaim, lateKey); }
+    finally { h.access.claim = claim; }
+    expect(revokedAtClaim).toBe(true);
+    expect(lateResult!.status, JSON.stringify(lateResult!.body)).toBe(403);
+    expect(await revisionCount(betweenRegisterAndClaim.variantId)).toBe(0);
+    expect(await replyCount(betweenRegisterAndClaim.reply)).toBe(0);
+    expect((await h.accessPool.query('SELECT state FROM access.admission WHERE idempotency_key = $1', [lateKey]))
+      .rowCount).toBe(1);
+    expect(await h.access.canReadWork(principal, reader, root.component)).toBe(true);
+    await revoke(workRead);
+  } finally { await h.close(); }
+}, 240_000);
 
 test('G265: Org and legacy PenName action grants cannot author member reply drafts', async () => {
   const h = await memberFixture();
