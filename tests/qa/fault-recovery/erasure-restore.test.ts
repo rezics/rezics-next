@@ -52,8 +52,8 @@ import { proofRetirementSender } from '../../../services/main/src/modules/graph/
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
-import { constructRetainedErasureCandidatesInOrder, createRetainedErasureRecoveryFixture, DirectoryObjects } from
-  './retained-erasure-recovery-fixture.ts';
+import { constructRetainedErasureCandidatesInOrder, createRetainedErasureRecoveryFixture, DirectoryObjects,
+  type RetainedErasureNativeSnapshot } from './retained-erasure-recovery-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'c5'.repeat(32);
@@ -247,11 +247,12 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         if (!app) app = createAccountApp(auth, account).listen({ hostname: '127.0.0.1', port });
       },
     });
-    const captureAndBackup = async (name: string) => {
+    const captureAndBackup = async (name: string, reuseNativeSnapshot?: RetainedErasureNativeSnapshot) => {
       const captured = await recoveryFixture!.captureAndRestore(name, {
         ...(name === 'before' ? {} : { captureDeletionSet: async () => JSON.stringify(sealRecoveryPayload(
           await captureDeletionRecoverySet(accountOwner, access, issuer, erased.id),
           recoveryKey, 'deletion-recovery-set')) }),
+        ...(reuseNativeSnapshot ? { reuseNativeSnapshot } : {}),
       });
       const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60_000);
       for (const owner of ['account', 'content'] as const) {
@@ -369,9 +370,13 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       [issuer, erased.id])).rows[0]!.id;
 
     // Backup 2 follows Account erasure and still predates scope closure and Content erasure.
-    const second = await captureAndBackup('after-account');
+    const second = await captureAndBackup('after-account', first.nativeSnapshot);
     expect(Number(second.coveredEpoch)).toBeGreaterThan(Number(first.coveredEpoch ?? '0'));
     expect(second.sourceCut).toEqual(first.sourceCut);
+    expect(second.nativeSnapshot).toBe(first.nativeSnapshot);
+    expect(second.backup).not.toBe(first.backup);
+    expect(second.backupObjects).not.toBe(first.backupObjects);
+    expect(second.authority.sealedCoverage).not.toBe(first.authority.sealedCoverage);
 
     // Save the exact original owner bytes before the real Main erasure for the later corruption probe.
     const originalPayload = (await contentPool.query<{ serialized_bytes: Buffer; body: object }>(
@@ -450,6 +455,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     expect(BigInt(finalSourceCut.sequence)).toBeGreaterThan(BigInt(apiErasureCut.sequence));
     const third = await captureAndBackup('after-authority');
     expect(third.sourceCut).toEqual(finalSourceCut);
+    expect(third.nativeSnapshot).not.toBe(first.nativeSnapshot);
     expect(third.sourceCut).toMatchObject({ dataEpoch: lineage.dataEpoch,
       relay: { dataEpoch: lineage.dataEpoch } });
 

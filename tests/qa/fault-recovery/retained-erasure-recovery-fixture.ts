@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { isDeepStrictEqual } from 'node:util';
 import { Pool } from 'pg';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
   '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -66,6 +67,7 @@ export interface RetainedErasureRecoveryFixtureOptions {
 export interface RetainedErasureRecoveryCut {
   backup: string;
   backupObjects: string;
+  nativeSnapshot: RetainedErasureNativeSnapshot;
   coverage: RecoveryCoverage;
   sourceCut: Awaited<ReturnType<typeof readGraphRecoverySource>>;
   coveredEpoch: string;
@@ -78,6 +80,19 @@ export interface RetainedErasureRecoveryCut {
     candidateGraph: RecoveryCandidate['graph'];
     candidateObjects: ObjectRecoveryStore;
   }>;
+}
+
+export interface RetainedErasureNativeSnapshot {
+  readonly volume: string;
+  readonly sourceCut: Awaited<ReturnType<typeof readGraphRecoverySource>>;
+}
+
+export function assertRetainedErasureNativeSnapshotMatches(
+  sourceCut: Awaited<ReturnType<typeof readGraphRecoverySource>>,
+  snapshot: RetainedErasureNativeSnapshot,
+): void {
+  if (!isDeepStrictEqual(sourceCut, snapshot.sourceCut))
+    throw new Error('source graph cut changed before native snapshot reuse');
 }
 
 export function retainedObjectFiles(directory: string): Array<[string, string]> {
@@ -254,6 +269,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
 
   const captureAndRestore = async (name: string, input: {
     captureDeletionSet?: () => Promise<string>;
+    reuseNativeSnapshot?: RetainedErasureNativeSnapshot;
   } = {}): Promise<RetainedErasureRecoveryCut> => {
     if (disposed) throw new Error('retained erasure recovery fixture is disposed');
     const consumer = `erasure-restore-${randomUUID()}`;
@@ -269,6 +285,8 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       });
       const capture = await phase('capture.signed-owner-coverage', async () => {
         const sourceCut = await readGraphRecoverySource(options.fuseki);
+        if (input.reuseNativeSnapshot)
+          assertRetainedErasureNativeSnapshotMatches(sourceCut, input.reuseNativeSnapshot);
         await initializeRelayCheckpoint(options.source.relay, consumer, sourceCut.dataEpoch);
         for (let batch = 0; batch < 32; batch++) {
           if (!await relayMainOutboxOnce(options.fuseki, options.source.relay, consumer)) break;
@@ -307,17 +325,24 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       mkdirSync(backup, { recursive: true, mode: 0o700 });
       const backupPostgres = join(backup, 'postgres');
       const backupObjects = join(backup, 'objects');
-      const nativeVolume = volume(`native-${name}`);
       await phase('capture.object-backup', async () => {
         cpSync(options.objects.directory, backupObjects, { recursive: true });
         expect(retainedObjectFiles(backupObjects)).toEqual(objectFiles);
       });
 
-      await phase('capture.native-and-postgres-backup', async () => {
-        graphStopAttempted = true;
-        optionsStackStop();
-        try {
+      let nativeSnapshot = input.reuseNativeSnapshot;
+      if (!nativeSnapshot) {
+        const nativeVolume = volume(`native-${name}`);
+        await phase('capture.native-graph-snapshot', async () => {
+          graphStopAttempted = true;
+          optionsStackStop();
           copyGraph(qa.stateVolume, nativeVolume);
+        });
+        nativeSnapshot = { volume: nativeVolume, sourceCut };
+      }
+
+      await phase('capture.postgres-backup', async () => {
+        try {
           const remote = `/tmp/rezics-erasure-${suffix}-${name}`;
           try {
             const copied = qa.compose(['exec', '-T', '-u', 'postgres', 'postgres', 'sh', '-ec',
@@ -335,13 +360,15 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
             if (removed.status !== 0) throw new Error('physical erasure backup staging cleanup failed');
           }
         } finally {
-          await qa.runner.start();
-          graphStopAttempted = false;
+          if (graphStopAttempted) {
+            await qa.runner.start();
+            graphStopAttempted = false;
+          }
         }
       });
 
       const authority = { sealedCoverage, hmacKey: options.recoveryKey };
-      const captured = { name, backupPostgres, backupObjects, nativeVolume, coverage, sourceCut,
+      const captured = { name, backupPostgres, backupObjects, nativeVolume: nativeSnapshot.volume, coverage, sourceCut,
         fenceGeneration, objectFiles };
       let candidateOrdinal = 0;
       const restore = async () => {
@@ -356,7 +383,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       await options.resumeAccount();
       accountQuiesced = false;
       assertPreparationBudget();
-      return { backup, backupObjects, coverage, sourceCut, coveredEpoch, consumer, deletionSet,
+      return { backup, backupObjects, nativeSnapshot, coverage, sourceCut, coveredEpoch, consumer, deletionSet,
         authority, restoredFence: fenceGeneration, restore };
     } finally {
       if (graphStopAttempted) await qa.runner.start();
