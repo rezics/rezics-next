@@ -225,14 +225,23 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
       due_at: null, content_language: 'en', declarations: counterInput.counterNotice }));
     const obligationBeforeReplay = await counterNoticeReplayJob(access, counter.stepId);
     expect(obligationBeforeReplay).toHaveLength(1);
-    expect(obligationBeforeReplay[0]).toMatchObject({ step_id: counter.stepId, case_id: report.caseId,
-      report_id: report.reportId, restriction_id: restriction.decisionId,
-      occurred_at: expect.any(String), received_at: expect.any(String), delivered_at: null, phase: 'delivery',
-      not_before: expect.any(String), expected_not_before: expect.any(String),
-      not_after: expect.any(String), expected_not_after: expect.any(String) });
-    expect(obligationBeforeReplay[0]!.received_at).toBe(obligationBeforeReplay[0]!.occurred_at);
-    expect(obligationBeforeReplay[0]!.not_before).toBe(obligationBeforeReplay[0]!.expected_not_before);
-    expect(obligationBeforeReplay[0]!.not_after).toBe(obligationBeforeReplay[0]!.expected_not_after);
+    const obligation = obligationBeforeReplay[0]!;
+    expect(obligation.step_id).toBe(counter.stepId);
+    expect(obligation.case_id).toBe(report.caseId);
+    expect(obligation.report_id).toBe(report.reportId);
+    expect(obligation.restriction_id).toBe(restriction.decisionId);
+    expect(obligation.delivery_id.length).toBeGreaterThan(0);
+    expect(typeof obligation.occurred_at).toBe('string');
+    expect(typeof obligation.received_at).toBe('string');
+    expect(obligation.delivered_at).toBeNull();
+    expect(obligation.phase).toBe('delivery');
+    expect(typeof obligation.not_before).toBe('string');
+    expect(typeof obligation.expected_not_before).toBe('string');
+    expect(typeof obligation.not_after).toBe('string');
+    expect(typeof obligation.expected_not_after).toBe('string');
+    expect(obligation.received_at).toBe(obligation.occurred_at);
+    expect(obligation.not_before).toBe(obligation.expected_not_before);
+    expect(obligation.not_after).toBe(obligation.expected_not_after);
     const replayedCounter = await store.recordStep(principal, counterInput);
     expect(replayedCounter).toEqual({ stepId: counter.stepId, dueAt: null, replayed: true });
     expect(await store.readEnforcement(target)).toEqual(restrictedFence);
