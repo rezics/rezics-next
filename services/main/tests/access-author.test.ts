@@ -4,11 +4,14 @@ import { baselineTarget } from '../src/modules/access/baseline.ts';
 const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 test('author baseline uses exact resource scopes and a closed action vocabulary', () => {
   for (const [action, prefix] of [['work.edit', 'work:edit'], ['content.publish', 'content:publish'],
+    ['work.publish', 'work:publish'], ['work.withdraw-publication', 'work:publish'],
     ['content.search-eligibility', 'content:search-eligibility']]) {
     expect(baselineTarget(action!, `${prefix}:${id}`)).toEqual({ kind: 'author-work', id });
     expect(baselineTarget(action!, `${prefix}:urn:rezics:variant:00000000-0000-4000-8000-000000000001`)).toBeNull();
     expect(baselineTarget(action!, `${prefix}:${id}:extra`)).toBeNull();
   }
+  expect(baselineTarget('work.publish', `work:edit:${id}`)).toBeNull();
+  expect(baselineTarget('work.withdraw-publication', `work:edit:${id}`)).toBeNull();
   expect(baselineTarget('media.avatar', `media:avatar:${id}`)).toEqual({ kind: 'avatar', id });
   expect(baselineTarget('submission.submit', `submission:submit:${id}`)).toEqual({ kind: 'submission', id });
   expect(baselineTarget('submission.withdraw', `submission:submit:${id}`)).toEqual({ kind: 'submission-withdraw', id });

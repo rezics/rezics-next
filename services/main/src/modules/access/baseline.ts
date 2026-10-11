@@ -96,6 +96,8 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'media.campaign': { prefix: 'zone:edit:', kind: 'zone' },
     'realm.attach': { prefix: 'realm:attach:', kind: 'realm-attach' },
     'work.edit': { prefix: 'work:edit:', kind: 'author-work' },
+    'work.publish': { prefix: 'work:publish:', kind: 'author-work' },
+    'work.withdraw-publication': { prefix: 'work:publish:', kind: 'author-work' },
     // A cook who authored a recipe writes its Composition without a separate grant.
     'recipe.edit': { prefix: 'work:edit:', kind: 'author-work' },
     // Work and Post stay on author authority. A Zone page is not a scope prefix:

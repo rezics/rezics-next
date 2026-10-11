@@ -369,6 +369,7 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
       AND active FOR SHARE`, [principal.issuer, principal.subject]);
   const principalId = identity.rows[0]?.id;
   if (!principalId) return false;
+  // Every action uses one indexed read by scope_id (access.policy's UNIQUE key).
   const hasPolicy = !!(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount;
   if (platformAdministratorAction(action, scope)
     && !hasPolicy

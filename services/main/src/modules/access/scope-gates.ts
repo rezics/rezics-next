@@ -29,7 +29,7 @@ export function lockAdmissionKey(client: PoolClient, principalId: string,
 
 const native = 'https://rezics\\.com/id/[0-9a-f-]{36}';
 const target = new RegExp(`^(${[
-  'work:edit', 'contribution:create', 'contribution:edit', 'contribution:publish',
+  'work:edit', 'work:publish', 'contribution:create', 'contribution:edit', 'contribution:publish',
   'translation:link', 'collection:edit', 'rating:observe', 'rating:context', 'rating:policy',
   'content:comment', 'content:draft', 'content:publish', 'content:search-eligibility',
   'statement:speak', 'publication:select', 'publication:adopt', 'publication:reject',

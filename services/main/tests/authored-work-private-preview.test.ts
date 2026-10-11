@@ -6,7 +6,7 @@ import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
+import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable, engageAccessRecoveryFence,
   releaseAccessRecoveryFence, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
 import { ensureFixtureScopeGate, grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
@@ -146,10 +146,19 @@ test('private PREVIEW belongs to represented maintainer rows as well as the owne
     [f.work, colleagueAgent.actor])).rows[0]!.owner).toBe(false);
 });
 
-test('private PREVIEW requires verified identity and current authored native provenance', async () => {
+test('private PREVIEW refuses an unverified Account', async () => {
   const f = await fixture();
   expect(await f.registry.canReadWork({ ...f.owner.verified, emailVerified: false }, f.control.actor, f.work)).toBe(false);
+});
+
+test('private PREVIEW refuses a non-native Work', async () => {
+  const f = await fixture();
   expect(await f.registry.canReadWork(f.owner.verified, f.control.actor, 'https://other.example/work')).toBe(false);
+});
+
+test('private PREVIEW refuses a provenance-lost authored native Work', async () => {
+  const f = await fixture();
+  expect(await f.read()).toBe(true);
   f.loseReceipt();
   expect(await f.read()).toBe(false);
 });
@@ -188,14 +197,15 @@ test('private PREVIEW revokes former maintainer and controller authority after t
   expect(await f.read(replacement, target.actor)).toBe(true);
 });
 
-async function policy(f: Awaited<ReturnType<typeof fixture>>, effect: 'allow' | 'deny') {
-  await authority(f.owner, f.control.actor, f.scope, 'access.policy.manage');
+async function policy(f: Awaited<ReturnType<typeof fixture>>, effect: 'allow' | 'deny',
+  scope = f.scope, actions: string[] = ['work.read']) {
+  await authority(f.owner, f.control.actor, scope, 'access.policy.manage');
   const epoch = (await pool.query('SELECT authority_epoch::text FROM access.scope_gate WHERE id = $1',
-    [f.scope])).rows[0]!.authority_epoch;
+    [scope])).rows[0]!.authority_epoch;
   await new AccessPolicyChanges(pool).change({ principal: f.owner.verified, issuerSubject: f.control.actor,
     expectedAuthorityEpoch: epoch, idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()) }, {
-    action: 'publish-revision', policyId: randomUUID(), scopeId: f.scope, expectedHeadRevision: '0',
-    mandatory: [], ordered: [{ ruleId: randomUUID(), actions: ['work.read'], effect,
+    action: 'publish-revision', policyId: randomUUID(), scopeId: scope, expectedHeadRevision: '0',
+    mandatory: [], ordered: [{ ruleId: randomUUID(), actions, effect,
       condition: { op: 'authenticated' } }],
   });
 }
@@ -208,10 +218,109 @@ test('private PREVIEW respects explicit-policy precedence: explicit deny wins ev
   expect(await f.read()).toBe(false);
 });
 
+test('private PREVIEW preserves a grant holder whose installed policy ALLOWS work.read', async () => {
+  const f = await fixture();
+  await authority(f.owner, f.control.actor, f.scope, 'work.read');
+  expect(await f.read()).toBe(true);
+  await policy(f, 'allow');
+  expect(await f.read()).toBe(true);
+});
+
 test('private PREVIEW respects explicit-policy precedence: allow cannot manufacture a missing read grant', async () => {
   const f = await fixture();
   await policy(f, 'allow');
   expect(await f.read()).toBe(false);
   await authority(f.owner, f.control.actor, f.scope, 'work.read');
   expect(await f.read()).toBe(true);
+});
+
+type PublicationAction = 'work.publish' | 'work.withdraw-publication';
+const publicationActions: PublicationAction[] = ['work.publish', 'work.withdraw-publication'];
+
+function publicationRequest(f: Awaited<ReturnType<typeof fixture>>, action: PublicationAction,
+  who = f.owner, actor = f.control.actor) {
+  return { principal: who.verified, actingSubject: actor, baselineRelatedWork: f.work,
+    scope: `work:publish:${f.work}`, action, idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()) };
+}
+
+test.each(publicationActions)('%s: the Work controller is admitted without individual grants or a pre-existing gate', async action => {
+  const f = await fixture();
+  const request = publicationRequest(f, action);
+  expect((await pool.query('SELECT id FROM access.scope_gate WHERE id = $1', [request.scope])).rowCount).toBe(0);
+  const admitted = await f.registry.register(request);
+  expect(admitted).toMatchObject({ action, scope: request.scope, dispatchEligible: true, state: 'registered' });
+  expect((await pool.query('SELECT id FROM access.scope_gate WHERE id = $1', [request.scope])).rowCount).toBe(1);
+  expect((await pool.query('SELECT id FROM access.permission_grant WHERE scope_id = $1 AND action = $2',
+    [request.scope, action])).rowCount).toBe(0);
+  expect((await pool.query('SELECT author_work,representation_id FROM access.baseline_admission WHERE admission_id = $1',
+    [admitted.id])).rows[0]).toMatchObject({ author_work: f.work, representation_id: f.control.mandates[0]!.id });
+  expect(await f.registry.claim(admitted.id, request.requestDigest, f.owner.verified))
+    .toMatchObject({ action, state: 'claimed', dispatchEligible: true });
+  expect(f.queries.some(query => query.includes('rv:disclosure rv:Public'))).toBe(false);
+});
+
+test.each(publicationActions)('%s: a represented organization Work controller is admitted', async action => {
+  const f = await fixture('organization');
+  const request = publicationRequest(f, action);
+  const admitted = await f.registry.register(request);
+  expect(await f.registry.claim(admitted.id, request.requestDigest, f.owner.verified))
+    .toMatchObject({ action, state: 'claimed', dispatchEligible: true });
+});
+
+test.each(publicationActions)('%s: an unrelated member is refused', async action => {
+  const f = await fixture();
+  const other = await principal();
+  const otherAgent = await agent([other]);
+  await expect(f.registry.register(publicationRequest(f, action, other, otherAgent.actor)))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test.each(publicationActions)('%s: a read-only representative is refused', async action => {
+  const f = await fixture();
+  const reader = await principal();
+  await authority(reader, f.control.actor, f.scope, 'work.read');
+  expect(await f.read(reader)).toBe(true);
+  await expect(f.registry.register(publicationRequest(f, action, reader)))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test.each(publicationActions)('%s: an unverified Account is refused', async action => {
+  const f = await fixture();
+  const request = publicationRequest(f, action);
+  await expect(f.registry.register({ ...request, principal: { ...request.principal, emailVerified: false } }))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test.each(publicationActions)('%s: a suspended Account is refused', async action => {
+  const f = await fixture();
+  await pool.query('UPDATE access.principal SET active = false,enforcement_epoch = enforcement_epoch + 1 WHERE id = $1',
+    [f.owner.id]);
+  await expect(f.registry.register(publicationRequest(f, action))).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test.each(publicationActions)('%s: an installed policy deny wins over the author-work baseline and individual grants', async action => {
+  const f = await fixture();
+  const request = publicationRequest(f, action);
+  await authority(f.owner, f.control.actor, request.scope, action);
+  await policy(f, 'deny', request.scope, [action]);
+  await expect(f.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test.each(publicationActions)('%s: publication without a controller proof fails closed', async action => {
+  const f = await fixture();
+  const replacement = await principal();
+  await authority(replacement, f.control.actor, `agent:control:${f.control.actor}`, 'agent.control');
+  await new AccessAgentControl(pool).removeController(replacement.verified, {
+    idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()),
+  }, { subjectId: f.control.actor, representationId: f.control.mandates[0]!.id,
+    expectedGeneration: f.control.mandates[0]!.generation });
+  await expect(f.registry.register(publicationRequest(f, action))).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test.each(publicationActions)('%s: a closed publication gate remains closed', async action => {
+  const f = await fixture();
+  const request = publicationRequest(f, action);
+  await ensureFixtureScopeGate(pool, request.scope);
+  await pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [request.scope]);
+  await expect(f.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
 });
