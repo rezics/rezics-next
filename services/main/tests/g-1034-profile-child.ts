@@ -721,6 +721,9 @@ try {
         'replies posted through the Realm reply commands and projected; first/warm are not engine-cold',
     });
   }
+  // The final write above advances the population after its per-scale reads.
+  // Catch Home up before asserting the rolling-window pages are ready.
+  await project();
   // Rolling windows select their entire eligible populations before LIMIT.
   for (const period of ['week', 'month', 'all']) {
     const response = await app.handle(
