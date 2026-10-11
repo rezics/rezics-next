@@ -281,7 +281,11 @@ interface LoadedDraft {
 export function authoringModel(showcase: unknown, zone: unknown, zoneId: string, fallbackName: string): ZoneAuthoringModel | null {
   const draft = loadedDraft(showcase, zone);
   if (!draft || !uuid.test(zoneId)) return null;
-  const name = record(showcase)?.name;
+  const snapshot = record(showcase);
+  if (snapshot?.revision !== draft.zoneHead) return null;
+  const previewNavigation = record(record(snapshot.preview)?.navigation);
+  if (previewNavigation && previewNavigation.revision !== draft.navigationRevision) return null;
+  const name = snapshot.name;
   return {
     zoneId,
     zoneIri: `https://rezics.com/id/${zoneId}`,

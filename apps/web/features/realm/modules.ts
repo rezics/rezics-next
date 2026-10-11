@@ -531,7 +531,7 @@ async function load(
 }
 
 /** Where a module's "More" leads, when the Realm has a view for it. */
-function moreOf(module: PresentationModule, context: AdaptContext): string | null {
+export function moduleMoreHref(module: PresentationModule, context: AdaptContext): string | null {
   const { locale, ref } = context;
   if (module.type === 'shelf' && module.source.kind === 'collection') {
     const mount = context.mounts?.get(module.source.collection);
@@ -569,7 +569,7 @@ export async function loadModules(
     presentation.modules.map(
       async (module) =>
         ({
-          module: placedModule(module, moreOf(module, context)),
+          module: placedModule(module, moduleMoreHref(module, context)),
           state: await load(module, presentation, context, slideMedia),
         }) as PlacedModule,
     ),

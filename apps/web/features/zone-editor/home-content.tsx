@@ -1,36 +1,51 @@
 import { ResolvedMediaImages } from '@rezics/ui/media-image';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
-import type { UiLocale } from '../../i18n/define.ts';
 import type { AdaptContext } from '../realm/adapt.ts';
-import { loadHomeModules } from '../realm/modules.ts';
+import { readShowcaseWorks } from '../api/showcase.ts';
+import { enrichShowcaseModules, loadHomeModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext,
+  summaryWork } from '../realm/modules.ts';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import type { ZoneMessages } from '../zones/messages.ts';
-import { moduleTitle, type ZonePresentation } from '../zones/presentation.ts';
 import { ZoneDocumentHome } from '../zones/site-pages.tsx';
 import type { ZoneHomePage } from './home-document.tsx';
+import { loadPreviewHomeModules, localizedHomePresentation } from './home-modules.ts';
+import type { ZoneAuthoringPreview } from './read.ts';
+import type { ZoneEditorMessages } from './messages.ts';
+import { ZonePreviewHome } from './preview.tsx';
 
-/** Both publication and the authorized preview use the host's existing Showcase and module renderer. */
-export async function ZoneHomeContent({ page, presentation, slideMedia, context, zone, pkg, messages, preview = false }: {
-  page: ZoneHomePage;
-  presentation: ZonePresentationRead['presentation'];
-  slideMedia: ZonePresentationRead['slideMedia'];
+interface HomeContext {
   context: AdaptContext;
   zone: ZoneContext;
   pkg: ZonePackage | null;
   messages: ZoneMessages;
-  preview?: boolean;
+}
+
+/** The public publication uses Main's public source reads. */
+export async function ZoneHomeContent({ page, presentation, slideMedia, context, zone, pkg, messages }: HomeContext & {
+  page: ZoneHomePage;
+  presentation: ZonePresentationRead['presentation'];
+  slideMedia: ZonePresentationRead['slideMedia'];
 }) {
   const localized = localizedHomePresentation(presentation, context.locale);
   const { modules, images } = await loadHomeModules(localized, context, slideMedia);
   return <ResolvedMediaImages images={images}>
     <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={pkg} locale={context.locale}
-      messages={messages} avatarQuery={context.avatarQuery} preview={preview} />
+      messages={messages} avatarQuery={context.avatarQuery} />
   </ResolvedMediaImages>;
 }
 
-function localizedHomePresentation(presentation: ZonePresentationRead['presentation'], locale: UiLocale): ZonePresentation {
-  return { ...presentation, modules: presentation.modules.map(({ titles, tabs, ...module }) => ({
-    ...module, title: moduleTitle({ title: module.title, titles }, locale),
-    ...(tabs ? { tabs: tabs.map(({ labels, ...tab }) => ({ ...tab, label: labels?.[locale] ?? tab.label })) } : {}),
-  })) };
+/** The saved producer remains distinct from the public page throughout adaptation. */
+export async function ZoneSavedHomeContent({ preview, context, zone, pkg, messages, copy }: HomeContext & {
+  preview: ZoneAuthoringPreview;
+  copy: ZoneEditorMessages;
+}) {
+  const presentation = localizedHomePresentation(preview.presentation, context.locale);
+  const { modules, images } = await loadPreviewHomeModules(preview, presentation, context, {
+    publicModules: loadModules, summaries: readShowcaseWorks, work: summaryWork, context: showcaseContext,
+    more: moduleMoreHref, enrich: enrichShowcaseModules, images: readHeroImages,
+  });
+  return <ResolvedMediaImages images={images}>
+    <ZonePreviewHome page={preview.page} modules={modules} zone={zone} pkg={pkg} locale={context.locale}
+      messages={messages} copy={copy} avatarQuery={context.avatarQuery} />
+  </ResolvedMediaImages>;
 }

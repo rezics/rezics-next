@@ -39,6 +39,14 @@ function state(): EditorState {
   return model.state;
 }
 
+test('authoring refuses a saved preview paired with a different configuration or navigation head', () => {
+  const saved = showcase(fromPlainText('Saved home', 'blocks'), revision);
+  expect(authoringModel(saved, { ...zone, ownerRevision: navigation }, zoneId, 'Harbor')).toBeNull();
+  expect(authoringModel({ ...saved, preview: { navigation: { revision: zoneHead } } }, zone, zoneId, 'Harbor')).toBeNull();
+  expect(authoringModel({ ...saved, preview: { navigation: { revision: navigation } } }, zone, zoneId, 'Harbor')?.state)
+    .toMatchObject({ zoneHead, navigationRevision: navigation });
+});
+
 const round = (key = 'command-key', superseded = false): WriteRound => ({
   seq: 1, key, superseded: () => superseded, confirm() {}, afterConfirmed: false,
 });

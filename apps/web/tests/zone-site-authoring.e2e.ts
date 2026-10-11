@@ -105,6 +105,37 @@ async function createCollection(page: Page, collection: string, name: string, ac
   throw new Error(`Collection ${name} was not created`);
 }
 
+/** The Library journey's public creation/publication sequence, using this author. */
+async function createShelfWork(page: Page, actingSubject: string) {
+  const post = async <T>(path: string, data: object): Promise<T> => {
+    const key = randomUUID();
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const response = await page.request.post('/api/main' + path, { headers: { 'idempotency-key': key }, data });
+      if (response.status() === 200 || response.status() === 201) return await response.json() as T;
+      if (response.status() !== 202) throw new Error(`Fixture ${path} failed (${response.status()}): ${(await response.text()).slice(0, 400)}`);
+      await page.waitForTimeout(500);
+    }
+    throw new Error(`Fixture ${path} did not settle`);
+  };
+  const work = await post<{ work: string; mainVersion: string }>('/v1/works', {
+    profile: 'metadata-only-v1', authoring: 'own-work', title: 'The unpublished shelf member', language: 'en',
+    semanticTypes: ['https://schema.org/Book'], actingSubject,
+  });
+  const draft = await post<{ contribution: string; draftRevision: string }>('/v1/contributions', {
+    profile: 'text-contribution-v1', work: work.work, language: 'en', body: 'A public book for the saved shelf.', actingSubject,
+  });
+  const publication = await post<{ publicationDecision: string }>('/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
+    expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', actingSubject,
+  });
+  await post('/v1/publication-selections', {
+    profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
+    work: work.work, contribution: draft.contribution, publicationDecision: publication.publicationDecision,
+    expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject,
+  });
+  return work.work;
+}
+
 type AuthorFixture = {
   member: { email: string; password: string };
   principalId: string;
@@ -472,6 +503,89 @@ for (const withRealm of [false, true]) {
       } finally { await anonymous.close(); }
     });
 }
+
+test('Zone preview: a saved Collection shelf renders before its mount is published', async ({ page, context }, info) => {
+  test.setTimeout(600_000);
+  const actor = await startAuthor(page);
+  const site = await createZoneFixture(page, actor, 'Harbor saved shelf', false, false);
+  const work = await createShelfWork(page, actor.actingSubject);
+  const collection = 'https://rezics.com/id/' + randomUUID();
+  await grant('collection:edit:' + collection, 'collection.edit', actor.principalId, actor.actingSubject);
+  await grant('semantic:read:' + collection, 'semantic.read', actor.principalId, actor.actingSubject);
+  await createCollection(page, collection, 'Saved reading list', actor.actingSubject);
+  const collectionRead = await page.request.get(`/api/main/v1/collections/${uuidOf(collection)}?actingSubject=${encodeURIComponent(actor.actingSubject)}`);
+  expect(collectionRead.ok()).toBe(true);
+  const curated = await collectionRead.json() as { structure: string; revision: string };
+  const changed = await page.request.post(`/api/main/v1/collections/${uuidOf(collection)}/changes`, {
+    headers: { 'idempotency-key': randomUUID() }, data: {
+      expectedHead: curated.revision, actingSubject: actor.actingSubject,
+      operations: [{ op: 'insert', role: 'member', parent: curated.structure, position: 'last', target: work,
+        selection: { mode: 'follow-context' } }],
+    },
+  });
+  expect(changed.status()).toBe(200);
+  const currentNavigation = await page.request.get(`/api/main/v1/zones/${site.zoneId}?actingSubject=${encodeURIComponent(actor.actingSubject)}`);
+  expect(currentNavigation.ok()).toBe(true);
+  const { revision } = await currentNavigation.json() as { revision: string };
+  const mounted = await page.request.post(`/api/main/v1/zones/${site.zoneId}/mounts`, {
+    headers: { 'idempotency-key': randomUUID() }, data: { expectedHead: revision, target: collection,
+      routeSegment: 'saved-reading', disclosure: 'public', actingSubject: actor.actingSubject },
+  });
+  expect(mounted.status()).toBe(200);
+  const configuration = await zoneConfiguration(page, site.zoneId, actor.actingSubject);
+  const saved = await page.request.put(`/api/main/v1/zones/${site.zoneId}/configuration`, {
+    headers: { 'idempotency-key': randomUUID() }, data: { expectedHead: configuration.revision, actingSubject: actor.actingSubject,
+      presentation: { ...baselinePresentation, modules: [{ id: 'saved-shelf', type: 'shelf', title: 'Saved reading list',
+        source: { kind: 'collection', collection } }] } },
+  });
+  expect([200, 202]).toContain(saved.status());
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/main/v1/zones/${site.zoneId}/showcase-editor?actingSubject=${encodeURIComponent(actor.actingSubject)}`);
+    const data = await response.json() as { preview?: { moduleData: { sources: { members: { work: string }[] }[] }[] } };
+    return data.preview?.moduleData.flatMap(module => module.sources.flatMap(source => source.members.map(member => member.work)));
+  }, { timeout: 30_000 }).toContain(work);
+  // There is deliberately no home document: saved presentation modules must still render.
+  await page.goto(site.previewHref);
+  await expect(page.getByText('The unpublished shelf member', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home', 'Saved reading list']);
+  await expect(page.getByText('Couldn’t load Saved reading list')).toHaveCount(0);
+  await shoot(page, 'zone-unpublished-collection-preview', info);
+  const anonymous = await context.browser()!.newContext();
+  try {
+    const reader = await anonymous.newPage();
+    await reader.goto(site.siteHref);
+    await expect(reader.getByText('The unpublished shelf member', { exact: true })).toHaveCount(0);
+    const route = await reader.request.get(`/api/main/v1/zones/${site.zoneId}/routes?path=${encodeURIComponent('/saved-reading')}`);
+    expect(route.status()).toBe(404);
+  } finally { await anonymous.close(); }
+});
+
+test('Zone publication: a new Zone reviews Main’s default presentation after a stale publish', async ({ page }, info) => {
+  test.setTimeout(600_000);
+  const actor = await startAuthor(page);
+  const site = await createZoneFixture(page, actor, 'Harbor default presentation', false, false);
+  await writeHome(page, morning);
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Draft saved.')).toBeVisible({ timeout: 30_000 });
+  const configuration = await zoneConfiguration(page, site.zoneId, actor.actingSubject);
+  expect(configuration.configuration.presentation).toBeUndefined();
+  const changed = await page.request.put(`/api/main/v1/zones/${site.zoneId}/configuration`, {
+    headers: { 'idempotency-key': randomUUID() }, data: { expectedHead: configuration.revision, actingSubject: actor.actingSubject,
+      name: 'Harbor default presentation revised', language: 'en' },
+  });
+  expect([200, 202]).toContain(changed.status());
+  await expect.poll(async () => (await zoneConfiguration(page, site.zoneId, actor.actingSubject)).revision,
+    { timeout: 30_000 }).not.toBe(configuration.revision);
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('button', { name: 'Review saved selection' }).click();
+  await expect(page.getByText('Shelf density: Comfortable · fewer items per row')).toBeVisible();
+  await expect(page.getByText('Page surface: On the page')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Publish this selection' })).toBeEnabled();
+  await shoot(page, 'zone-default-presentation-stale-review', info);
+  await page.getByRole('button', { name: 'Publish this selection' }).click();
+  await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 30_000 });
+  expect((await zoneConfiguration(page, site.zoneId, actor.actingSubject)).configuration.presentation).toBeUndefined();
+});
 
 test('Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site', async ({ page, context }, info) => {
   test.setTimeout(600_000);

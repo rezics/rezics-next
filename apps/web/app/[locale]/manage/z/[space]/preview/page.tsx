@@ -7,10 +7,10 @@ import { RealmFrame, loadRealmView } from '../../../../../../features/realm/real
 import { readPresentation, resolveSite } from '../../../../../../features/realm/read.ts';
 import { siteHref } from '../../../../../../features/realm/route.ts';
 import type { RealmMessages } from '../../../../../../features/realm/messages.ts';
-import { loadZoneNavigation } from '../../../../../../features/zone-editor/api.ts';
+import { loadCompleteZoneNavigation } from '../../../../../../features/zone-editor/api.ts';
 import { messages } from '../../../../../../features/zone-editor/messages.ts';
 import { ZoneDraftPreview } from '../../../../../../features/zone-editor/preview.tsx';
-import { ZoneHomeContent } from '../../../../../../features/zone-editor/home-content.tsx';
+import { ZoneSavedHomeContent } from '../../../../../../features/zone-editor/home-content.tsx';
 import { loadZoneAuthoring } from '../../../../../../features/zone-editor/read.ts';
 import { zonePreviewPath } from '../../../../../../features/zone-editor/routes.ts';
 import { ZoneAuthoringFailure } from '../../../../../../features/zone-editor/states.tsx';
@@ -31,10 +31,10 @@ export default async function ZoneDraftPreviewPage({ params }: { params: Promise
   const loaded = await loadZoneAuthoring(main, space, locale, actingSubject);
   if (loaded.kind === 'missing') notFound();
   if (loaded.kind === 'failure') return <ZoneAuthoringFailure failure={loaded.failure} copy={messages[locale]} />;
-  const { model, preview, editorPath, sitePath } = loaded;
+  const { model, preview, realm, editorPath, sitePath } = loaded;
   const [resolved, navigation] = await Promise.all([
     resolveSite(space, locale),
-    loadZoneNavigation(main, model.zoneId, actingSubject),
+    loadCompleteZoneNavigation(main, model.zoneId, actingSubject, model.state),
   ]);
   if (!navigation.ok) return <ZoneAuthoringFailure failure={navigation.failure} copy={messages[locale]} />;
   const siteTokens = preview.presentation.tokens;
@@ -58,9 +58,8 @@ export default async function ZoneDraftPreviewPage({ params }: { params: Promise
       <PageContainer>
         <ZoneDraftPreview copy={messages[locale]} document={model.document} editorPath={editorPath}
           sitePath={sitePath} status={status} pageSurface={siteTokens.pageSurface}>
-          {preview.page ? <ZoneHomeContent page={preview.page} presentation={preview.presentation}
-            slideMedia={preview.slideMedia} context={{ ...view.context, mounts }} zone={zone}
-            pkg={view.pkg} messages={view.zoneMessages} preview /> : null}
+          <ZoneSavedHomeContent preview={preview} context={{ ...view.context, realm: realm ?? resolved.zone, mounts }} zone={zone}
+            pkg={view.pkg} messages={view.zoneMessages} copy={messages[locale]} />
         </ZoneDraftPreview>
       </PageContainer>
     </RealmFrame>;
@@ -87,9 +86,8 @@ export default async function ZoneDraftPreviewPage({ params }: { params: Promise
     <PageContainer>
       <ZoneDraftPreview copy={messages[locale]} document={model.document} editorPath={editorPath}
         sitePath={sitePath} status={status} pageSurface={siteTokens.pageSurface}>
-        {preview.page ? <ZoneHomeContent page={preview.page} presentation={preview.presentation}
-          slideMedia={preview.slideMedia} context={{ locale, ref, realm: resolved.zone, zone: resolved.zone, mounts }}
-          zone={zone} pkg={null} messages={zoneMessages} preview /> : null}
+        <ZoneSavedHomeContent preview={preview} context={{ locale, ref, realm: realm ?? resolved.zone, zone: resolved.zone, mounts }}
+          zone={zone} pkg={null} messages={zoneMessages} copy={messages[locale]} />
       </ZoneDraftPreview>
     </PageContainer>
   </StandaloneZoneSiteFrame>;

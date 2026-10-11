@@ -7,6 +7,7 @@ import {
 import { readSavedPublicationSelection } from './publication-review.ts';
 import type { ZonePresentationBaseline } from './theme.ts';
 import { presetTokens } from '../zones/presentation.ts';
+import { zoneContentText } from '../language/untagged.ts';
 
 const zoneId = '00000000-0000-4000-8000-000000000601';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000602';
@@ -167,7 +168,8 @@ describe('saved publication presentation', () => {
 
 describe('browser draft refresh consistency', () => {
   function editor(revision = zoneHead, navigation = navigationRevision) {
-    return { revision, language: 'en', direction: 'ltr',
+    const text = zoneContentText('Saved body', 'en');
+    return { revision, language: text.lang, direction: text.dir,
       draft: { variantId: 'urn:rezics:variant:00000000-0000-4000-8000-000000000607',
         revisionId: null, document: fromPlainText('Saved body', 'blocks'), byteDigest: null, editable: true },
       preview: { navigation: { revision: navigation } }, publishedPage: null };

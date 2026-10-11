@@ -1,6 +1,7 @@
 import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
+import { useEffect, useState } from 'react';
 import { spaceHref } from '../address/path.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { PageContainer } from '../shell/page.tsx';
@@ -12,7 +13,9 @@ import { ZoneDocumentHome } from '../zones/site-pages.tsx';
 import { zoneTheme } from '../zones/theme.ts';
 import { ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import type { PlacedModule } from '../zones/zone-home.tsx';
-import { ZoneDraftPreview } from './preview.tsx';
+import { ZoneDraftPreview, ZonePreviewHome } from './preview.tsx';
+import { loadPreviewHomeModules, localizedHomePresentation } from './home-modules.ts';
+import { collectionPreview, previewCollection, previewReaders } from './home-modules.fixtures.ts';
 import { messages } from './messages.ts';
 import type { ZoneHomePage } from './home-document.tsx';
 
@@ -81,3 +84,46 @@ export const SavedPreview: Story = { render: () => <Home preview />,
     await expect(within(canvasElement).getByRole('heading', { name: 'Draft preview' })).toBeVisible();
   } };
 export const SavedPreviewPhone: Story = { ...SavedPreview, globals: { viewport: { value: 'phone' } } };
+
+function SavedCollection({ incomplete = false, document = true }: { incomplete?: boolean; document?: boolean }) {
+  const [savedModules, setSavedModules] = useState<PlacedModule[]>([]);
+  useEffect(() => {
+    const preview = collectionPreview(incomplete ? 'partial' : 'complete');
+    void loadPreviewHomeModules(preview, localizedHomePresentation(preview.presentation, 'en'), {
+      locale: 'en', ref: 'harbor', realm: previewCollection,
+      mounts: new Map([[previewCollection, 'saved-reading']]),
+    }, previewReaders()).then(loaded => setSavedModules(loaded.modules));
+  }, [incomplete]);
+  return <ZoneFrame zone={zone} dataZone="harbor" theme={zoneTheme(zone.tokens, { reader: 'light', enabled: true })}
+    pkg={null} members={null} actions={null} tabs={null}
+    masthead={<ZoneMasthead zone={zone} members={null} actions={null} />}
+    site={{ label: zone.name.value, links: cuts.navigation }}>
+    <PageContainer><ZoneDraftPreview copy={messages.en} document={document ? homeDocument : null}
+      editorPath="/manage/z/harbor" sitePath={sitePath} status="private">
+      <ZonePreviewHome page={document ? page : null} modules={savedModules} zone={zone} pkg={null} locale="en"
+        messages={zoneMessagesFor('en')} copy={messages.en} />
+    </ZoneDraftPreview></PageContainer>
+  </ZoneFrame>;
+}
+
+export const SavedCollectionPreview: Story = { render: () => <SavedCollection />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('The saved Collection member', { exact: true })).toBeVisible();
+    await expect(canvas.getByText('Morning edition of the harbor')).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Draft preview' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  } };
+export const SavedCollectionPreviewPhone: Story = { ...SavedCollectionPreview, globals: { viewport: { value: 'phone' } } };
+export const PresentationOnlyPreview: Story = { render: () => <SavedCollection document={false} />,
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('The saved Collection member', { exact: true })).toBeVisible();
+    await expect(canvasElement.querySelector('.rezics-document')).not.toBeInTheDocument();
+  } };
+export const IncompleteCollectionPreview: Story = { render: () => <SavedCollection incomplete />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Couldn’t load Saved reading list')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(canvas.queryByText('The saved Collection member')).not.toBeInTheDocument();
+  } };

@@ -15,7 +15,7 @@ export type ZoneAuthoringPreview = EditorRead['preview'];
 export type ZoneAuthoringLoad =
   | { kind: 'missing' }
   | { kind: 'failure'; failure: ReadFailure }
-  | { kind: 'ready'; model: ZoneAuthoringModel; preview: ZoneAuthoringPreview;
+  | { kind: 'ready'; model: ZoneAuthoringModel; preview: ZoneAuthoringPreview; realm: string | null;
     editorPath: string; previewPath: string; sitePath: string };
 
 export type ZoneLifecycleLoad =
@@ -44,6 +44,7 @@ export const loadZoneAuthoring = cache(async (
   if (!model) return { kind: 'failure', failure: 'unavailable' };
   return {
     kind: 'ready', model, preview: editor.data.preview,
+    realm: typeof editor.data.configuration.defaultRealm === 'string' ? editor.data.configuration.defaultRealm : null,
     editorPath: zoneEditorPath(space),
     previewPath: zonePreviewPath(space),
     sitePath: spaceHref(site.address.canonical, 'site'),

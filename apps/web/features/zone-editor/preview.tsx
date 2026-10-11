@@ -4,11 +4,27 @@ import { FileTextIcon } from 'lucide-react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { ZoneHomeDocument } from './home-document.tsx';
+import { ZoneHomeDocument, type ZoneHomePage } from './home-document.tsx';
+import { ZoneDocumentHome } from '../zones/site-pages.tsx';
+import { ZoneHome, type PlacedModule } from '../zones/zone-home.tsx';
+import type { ZoneMessages } from '../zones/messages.ts';
+import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
+import type { UiLocale } from '../../i18n/define.ts';
 import type { ReactNode } from 'react';
 import type { ZoneEditorMessages } from './messages.ts';
 
 const linkClass = 'h-auto min-h-9 w-full whitespace-normal sm:w-auto';
+
+/** A presentation-only draft still has modules to preview before its first home document. */
+export function ZonePreviewHome({ page, modules, zone, pkg, locale, messages, copy, avatarQuery }: {
+  page: ZoneHomePage | null; modules: readonly PlacedModule[]; zone: ZoneContext; pkg: ZonePackage | null;
+  locale: UiLocale; messages: ZoneMessages; copy: ZoneEditorMessages; avatarQuery?: string;
+}) {
+  if (page) return <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={pkg} locale={locale}
+    messages={messages} avatarQuery={avatarQuery} preview />;
+  return <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={messages} avatarQuery={avatarQuery}
+    empty={<EmptyState icon={FileTextIcon} title={copy.previewEmptyTitle} description={copy.previewEmptyBody} headingLevel={3} />} />;
+}
 
 /** The saved draft, as readers will see it. Unsaved keystrokes are not part of this view. */
 export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status, pageSurface, children }: {
