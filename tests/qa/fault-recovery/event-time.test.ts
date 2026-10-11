@@ -11,6 +11,10 @@ import { EventObservationUnavailable, eventObservationDigest, eventTimeSlotIri,
   from '../../../services/main/src/modules/event/observation.ts';
 import { EventQueryUnavailable, EventTemporalQueries }
   from '../../../services/main/src/modules/event/queries.ts';
+import { EventTemporalProjection }
+  from '../../../services/main/src/modules/event/projection.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce }
+  from '../../../services/main/src/modules/outbox/relay.ts';
 import { GRAPHS, ID, iri, RV, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
@@ -27,9 +31,10 @@ test('RATE09: Access recovery hold and a missing event manifest fail closed, the
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN,
     Bun.env.FUSEKI_COMMAND_TOKEN);
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'relay'], 'owner');
   const access = new Pool({ connectionString: databases.urls.access, max: 4 });
-  const env: WorkActivationEnvironment = { fuseki,
+  const relay = new Pool({ connectionString: databases.urls.relay, max: 4 });
+  const env: WorkActivationEnvironment & { eventTemporalAccess: Pool } = { fuseki, eventTemporalAccess: access,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(stateDir, 'objects') };
   const event = `${ID}${randomUUID()}`, actor = `${ID}${randomUUID()}`;
@@ -42,16 +47,40 @@ test('RATE09: Access recovery hold and a missing event manifest fail closed, the
     requestDigest: eventObservationDigest(input), authorityEpoch: '0', registeredAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'claimed', dispatchEligible: true, replayed: false };
   const queries = new EventTemporalQueries(access, env, Buffer.alloc(32, 9));
+  const projection = new EventTemporalProjection(access, relay, env);
+  const relayConsumer = `event-time-recovery:${randomUUID()}`;
   const request = () => queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
     start: '2026-08-05', end: '2026-08-05', pageSize: 5 });
+  const drain = async () => {
+    for (let batch = 0; batch < 1000; batch++) {
+      if (!await relayMainOutboxOnce(fuseki, relay, relayConsumer)) return;
+    }
+    throw new Error('Event recovery fixture relay exceeded its batch bound');
+  };
   try {
+    await initializeRelayCheckpoint(relay, relayConsumer, env.lineage.dataEpoch);
+    const initial = await request();
+    expect(initial).toMatchObject({ state: 'unavailable', progress: expect.any(Object) });
+
     const receipt = await setEventObservation(env, admission, input);
     expect(receipt.outcome).toBe('succeeded');
+    await drain();
+    const warm = async () => {
+      for (let tick = 0; tick < 100; tick++) {
+        const result = await request();
+        if (result.state === 'ready') return result;
+        expect(result.state === 'unavailable' || result.state === 'partial').toBe(true);
+        expect(result.progress).toBeDefined();
+        await projection.tick();
+      }
+      throw new Error('Event recovery fixture projection did not become ready within its tick bound');
+    };
+    const first = await warm();
+    expect(first.items.map(item => item.event)).toContain(event);
+
     const accessFence = await engageAccessRecoveryFence(access);
     await expect(request()).rejects.toBeInstanceOf(EventQueryUnavailable);
     await releaseAccessRecoveryFence(access, accessFence);
-    const first = await request() as { sourcePosition: { sequence: string }; items: { event: string }[] };
-    expect(first.items.map(item => item.event)).toContain(event);
 
     const manifestRows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(receipt.revision!)} rv:manifest ?manifest } }`)).results?.bindings ?? [];
@@ -62,14 +91,18 @@ test('RATE09: Access recovery hold and a missing event manifest fail closed, the
     unlinkSync(objectPath);
     await expect(request()).rejects.toBeInstanceOf(EventObservationUnavailable);
     writeFileSync(objectPath, exactBytes, { mode: 0o600, flag: 'wx' });
-    const restored = await request() as { sourcePosition: { sequence: string }; items: { event: string }[] };
+    const restored = await request();
+    if (restored.state !== 'ready') throw new Error('Event recovery fixture query was not ready after exact manifest repair');
     expect(restored.sourcePosition.sequence).toBe(first.sourcePosition.sequence);
     expect(restored.items.map(item => item.event)).toContain(event);
     expect(eventTimeSlotIri(event, 'actual')).toBe(receipt.eventTime);
     expect(await readEventObservationReceipt(env, admission.id)).toMatchObject({ outcome: 'succeeded' });
   } finally {
     // Graph facts and their object directory remain paired for the QA project's lifetime.
-    await access.end();
-    await databases.close();
+    try { await access.end(); }
+    finally {
+      try { await relay.end(); }
+      finally { await databases.close(); }
+    }
   }
 });
