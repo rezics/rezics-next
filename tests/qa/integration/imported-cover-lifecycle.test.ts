@@ -451,10 +451,10 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         documentDigest: null, occurredAt: new Date().toISOString(), dueAt: null,
         idempotencyKey: restorationStepKey,
       }, moderator.token, restorationStepKey), 201);
-      const beforeRestore = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId, '0',
+      const beforeRestore = await decide(publicReceipt, target, 'restore', null, '0',
         restorationStep.stepId);
-      expect(beforeRestore.accepted.status).toBe(409);
-      const restoreAttempt = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId, undefined,
+      expect(beforeRestore.accepted.status, await beforeRestore.accepted.clone().text()).toBe(409);
+      const restoreAttempt = await decide(publicReceipt, target, 'restore', null, undefined,
         restorationStep.stepId);
       expect(restoreAttempt.accepted.status).toBe(202);
       const restored = await govern('POST', `/v1/safety-cases/${publicReceipt.caseId}/decisions`,
