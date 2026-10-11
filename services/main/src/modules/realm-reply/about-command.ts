@@ -69,6 +69,7 @@ export class RealmAboutPostCommand {
         throw new RealmReplyDenied('Realm policy requires moderator approval');
       }
     });
+    return { zone: input.zone, zoneRevision: current.revision, routeRevision: route.revision };
   }
 
   private parentReader(selected: AboutPostOperation): CanonicalReplyParentReader {
@@ -112,6 +113,35 @@ export class RealmAboutPostCommand {
     let selected = await this.store.readIntent(principalKey, key, digest);
     // Exact successful replay consumes receipts, never a newer route/target cut.
     if (selected?.phase === 'posted') return { status: 200 as const, body: await this.posted(selected) };
+    const phaseKey = (phase: string) => `about-post:${selected!.id}:${phase}`;
+    const place = async (draft: { revisionId: string; revisionDigest: string },
+      basis: NonNullable<AboutPostOperation['dispatchBasis']>, replay: boolean) => {
+      const placement = { realm, reply: selected!.reply, revisionId: draft.revisionId,
+        revisionDigest: draft.revisionDigest, reviewDecisionId: null, expectedHead: null };
+      const admission = await this.work.access.register({ principal, actingSubject: input.actingSubject,
+        action: 'reply.place', scope: `reply:place:${realm}`, idempotencyKey: phaseKey('placement'),
+        requestDigest: realmReplyDigest(placement) });
+      selected = await this.store.recordDispatch(selected!.id, admission.id, basis);
+      await this.work.realmReplies!.place(principal, input.actingSubject, placement,
+        phaseKey('placement'), realmReplyDigest(placement), basis);
+      const receipt = await readReplyGraphReceipt(this.work.environment, admission);
+      if (receipt?.outcome !== 'succeeded' || receipt.realm !== realm || receipt.reply !== selected.reply
+        || receipt.revisionId !== draft.revisionId) throw new RealmReplyUnavailable('Discussion placement is pending');
+      selected = await this.store.recordPosted(selected.id, admission.id, receipt.receipt);
+      return { status: replay ? 200 as const : 201 as const, body: await this.posted(selected) };
+    };
+    // The graph receipt decides a committed winner before current authority,
+    // target or route checks. Recover settlement under the same admission; a
+    // cancellation also stays terminal. No fresh key or opener is allocated.
+    if (selected?.placementAdmissionId && selected.dispatchBasis) {
+      const receipt = await readReplyGraphReceipt(this.work.environment,
+        { id: selected.placementAdmissionId, action: 'reply.place' });
+      if (receipt) {
+        const draft = await this.store.savedDraft(selected);
+        if (!draft) throw new RealmReplyUnavailable('Discussion draft receipt is unavailable');
+        return place(draft, selected.dispatchBasis, true);
+      }
+    }
     try {
       const authored = authoredDocumentBody(input, 8192);
       if (authored.document ? !hasDocumentContent(authored.document) : !authored.body) {
@@ -122,7 +152,7 @@ export class RealmAboutPostCommand {
     if (!this.work.access.assertAuthority) throw new RealmReplyUnavailable('Posting authority owner is unavailable');
     // Refuse ineligible authors before allocating a canonical reservation.
     // These read-only Access probes retain exactly the three effect owners' policy.
-    for (const request of [
+    for (const request of selected ? [] : [
       { action: 'content.draft', scope: `content:draft:https://rezics.com/id/${randomUUID()}`,
         baselineRelatedWork: input.about, baselineSourceRevision: input.targetRevision },
       { action: 'reply.create', scope: `reply:create:${input.about}`, baselineSourceRevision: input.targetRevision },
@@ -133,38 +163,49 @@ export class RealmAboutPostCommand {
     selected = selected ? await this.store.resume(selected.id) : await this.store.reserve({ realm,
       about: input.about, actor: input.actingSubject, intentKey: key, intentDigest: digest,
       rootRevision: input.targetRevision }, principalKey);
-    if (selected.pending) return { status: 202 as const, body: { operationId: selected.id } };
-    const phaseKey = (phase: string) => `about-post:${selected!.id}:${phase}`;
-    const draft = await saveVerifiedMemberReplyDraft(this.work.environment, this.work.contentAuthoring!,
-      this.work.access, principal, { kind: 'canonical-about-reply', parentReader: this.parentReader(selected),
-        input: { reply: selected.reply, variantId: selected.variantId, expectedHead: null,
-          about: input.about, realm, targetRevision: input.targetRevision, originRealm: realm,
-          language: input.language, direction: input.direction, actingSubject: input.actingSubject,
-          ...(input.body !== undefined ? { body: input.body } : { document: input.document! }),
-          ...(input.spoiler !== undefined ? { spoiler: input.spoiler } : {}) } }, phaseKey('draft')) as CanonicalAboutReplyDraftResult;
-    if (draft.rootRevision !== selected.rootRevision || (draft.canonicalParent?.reply ?? null) !== selected.parentReply
-      || (draft.canonicalParent?.parentRevision ?? null) !== selected.parentRevision) {
-      throw new RealmReplyStale('Discussion draft selection changed');
+    if (selected.pending) {
+      const opening = await this.store.openingPlacement(selected);
+      if (opening && (await readReplyGraphReceipt(this.work.environment,
+        { id: opening, action: 'reply.place' }))?.outcome === 'cancelled') {
+        throw new RealmReplyStale('Discussion opener operation was cancelled');
+      }
+      return { status: 202 as const, body: { operationId: selected.id } };
     }
-    selected = await this.store.recordDraftRevision(selected.id, draft.revisionId);
+    let draft = await this.store.savedDraft(selected);
+    if (!draft) {
+      let saved: CanonicalAboutReplyDraftResult;
+      try {
+        saved = await saveVerifiedMemberReplyDraft(this.work.environment, this.work.contentAuthoring!,
+          this.work.access, principal, { kind: 'canonical-about-reply', parentReader: this.parentReader(selected),
+            input: { reply: selected.reply, variantId: selected.variantId, expectedHead: null,
+              about: input.about, realm, targetRevision: input.targetRevision, originRealm: realm,
+              language: input.language, direction: input.direction, actingSubject: input.actingSubject,
+              ...(input.body !== undefined ? { body: input.body } : { document: input.document! }),
+              ...(input.spoiler !== undefined ? { spoiler: input.spoiler } : {}) } }, phaseKey('draft')) as CanonicalAboutReplyDraftResult;
+      } catch (error) {
+        // If transport failed after Content committed, retain that transition.
+        // The immutable owner receipt remains the recovery source of truth.
+        await this.store.savedDraft(selected);
+        throw error;
+      }
+      if (saved.rootRevision !== selected.rootRevision || (saved.canonicalParent?.reply ?? null) !== selected.parentReply
+        || (saved.canonicalParent?.parentRevision ?? null) !== selected.parentRevision) {
+        throw new RealmReplyStale('Discussion draft selection changed');
+      }
+      selected = await this.store.recordDraftRevision(selected.id, saved.revisionId);
+      draft = saved;
+    }
+    selected = await this.store.resume(selected.id);
     await this.basis(request, principal, realm, input);
     const identity = { reply: selected.reply, variantId: selected.variantId, revisionId: draft.revisionId,
       author: input.actingSubject, rootTarget: input.about, rootRevision: selected.rootRevision,
       parentReply: selected.parentReply, parentRevision: selected.parentRevision, contextRevision: null, originRealm: realm,
       ...(input.spoiler !== undefined ? { spoiler: input.spoiler } : {}) };
-    await this.work.realmReplies!.create(principal, identity, phaseKey('identity'), realmReplyDigest(identity));
-    await this.basis(request, principal, realm, input);
-    const placement = { realm, reply: selected.reply, revisionId: draft.revisionId,
-      revisionDigest: draft.revisionDigest, reviewDecisionId: null, expectedHead: null };
-    await this.work.realmReplies!.place(principal, input.actingSubject, placement,
-      phaseKey('placement'), realmReplyDigest(placement));
-    const admission = await this.work.access.register({ principal, actingSubject: input.actingSubject,
-      action: 'reply.place', scope: `reply:place:${realm}`, idempotencyKey: phaseKey('placement'),
-      requestDigest: realmReplyDigest(placement) });
-    const receipt = await readReplyGraphReceipt(this.work.environment, admission);
-    if (receipt?.outcome !== 'succeeded' || receipt.realm !== realm || receipt.reply !== selected.reply
-      || receipt.revisionId !== draft.revisionId) throw new RealmReplyUnavailable('Discussion placement is pending');
-    selected = await this.store.recordPosted(selected.id, admission.id, receipt.receipt);
-    return { status: 201 as const, body: await this.posted(selected) };
+    if (selected.phase === 'drafted') {
+      await this.work.realmReplies!.create(principal, identity, phaseKey('identity'), realmReplyDigest(identity));
+      selected = await this.store.resume(selected.id);
+    }
+    const basis = await this.basis(request, principal, realm, input);
+    return place(draft, basis, false);
   }
 }

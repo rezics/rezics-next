@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { RealmReplyConflict, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable } from './content-store.ts';
+import type { RealmReplyDispatchBasis } from './graph.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -24,6 +25,7 @@ export interface AboutPostOperation extends Omit<AboutPostIntent, 'rootRevision'
   revisionId: string | null; draftOperationId: string | null;
   identityOperationId: string | null; placementOperationId: string | null;
   placementReceipt: string | null; pending: boolean; replayed: boolean;
+  placementAdmissionId: string | null; dispatchBasis: RealmReplyDispatchBasis | null;
 }
 interface OperationRow {
   id: string; realm: string; about: string; actor: string; intent_key: string; intent_digest: string;
@@ -32,6 +34,8 @@ interface OperationRow {
   parent_reply: string | null; parent_revision: string | null;
   phase: AboutPostOperation['phase']; revision_id: string | null; draft_operation_id: string | null;
   identity_operation_id: string | null; placement_operation_id: string | null; placement_receipt: string | null;
+  placement_admission_id: string | null; dispatch_zone: string | null;
+  dispatch_zone_revision: string | null; dispatch_route_revision: string | null;
 }
 function operation(row: OperationRow, replayed: boolean): AboutPostOperation {
   return { id: row.id, realm: row.realm, about: row.about, actor: row.actor,
@@ -41,6 +45,9 @@ function operation(row: OperationRow, replayed: boolean): AboutPostOperation {
     revisionId: row.revision_id, draftOperationId: row.draft_operation_id,
     identityOperationId: row.identity_operation_id, placementOperationId: row.placement_operation_id,
     placementReceipt: row.placement_receipt,
+    placementAdmissionId: row.placement_admission_id,
+    dispatchBasis: row.dispatch_zone ? { zone: row.dispatch_zone,
+      zoneRevision: row.dispatch_zone_revision!, routeRevision: row.dispatch_route_revision! } : null,
     pending: row.parent_reply !== null && row.parent_revision === null, replayed };
 }
 function assertReference(value: string, maximum = 300): void {
@@ -152,6 +159,16 @@ export class RealmAboutThreadStore {
     return this.transaction(async client => operation(await this.resolve(client, await this.selected(client, id)), true));
   }
 
+  /** A retained reservation whose placement was cancelled is terminal, not
+   * an in-flight opener. Its graph owner decides that distinction. */
+  async openingPlacement(selected: AboutPostOperation): Promise<string | null> {
+    const rows = (await this.pool.query<{ placement_admission_id: string | null }>(`
+      SELECT placement_admission_id FROM content.realm_about_post_operation WHERE reply=$1 LIMIT 2`,
+    [selected.openerReply])).rows;
+    if (rows.length !== 1) throw new RealmReplyUnavailable('discussion opener operation is unavailable');
+    return rows[0]!.placement_admission_id;
+  }
+
   /** Owner lookup includes reservations and hidden openers. Disclosure belongs
    * to the later lookup command, and must not delete or reallocate this key. */
   async readThread(realm: string, about: string): Promise<AboutThread | null> {
@@ -212,6 +229,43 @@ export class RealmAboutThreadStore {
     [selected.variantId, revisionId])).rows;
     if (rows.length !== 1) throw new RealmReplyUnavailable('discussion draft receipt is unavailable');
     return this.recordDraft(id, rows[0]!.operation_id);
+  }
+
+  /** Resolve a lost draft response from the exact allocated variant's owner
+   * receipt. The bridge need not be dispatched again, nor its authority renewed. */
+  async savedDraft(selected: AboutPostOperation): Promise<{ revisionId: string; revisionDigest: string } | null> {
+    const rows = (await this.pool.query<{ operation_id: string; revision_id: string; byte_digest: string }>(`
+      SELECT c.operation_id,c.revision_id::text,r.byte_digest FROM content.receipt c
+      JOIN content.revision r ON r.id=c.revision_id AND r.variant_id=c.variant_id
+      WHERE c.variant_id=$1 AND c.action='draft.save' AND c.outcome='succeeded' LIMIT 2`,
+    [selected.variantId])).rows;
+    if (rows.length > 1) throw new RealmReplyUnavailable('discussion draft receipt is ambiguous');
+    const row = rows[0];
+    if (!row) return null;
+    await this.recordDraft(selected.id, row.operation_id);
+    return { revisionId: row.revision_id, revisionDigest: row.byte_digest };
+  }
+
+  async recordDispatch(id: string, admissionId: string, basis: RealmReplyDispatchBasis): Promise<AboutPostOperation> {
+    assertOperationId(id);
+    assertReference(admissionId);
+    if (![basis.zone, basis.zoneRevision, basis.routeRevision].every(value => native.test(value))) {
+      throw new RealmReplyInvalid('invalid discussion dispatch basis');
+    }
+    return this.transaction(async client => {
+      const row = await this.selected(client, id);
+      if (row.placement_admission_id) {
+        if (row.placement_admission_id !== admissionId || row.dispatch_zone !== basis.zone
+          || row.dispatch_zone_revision !== basis.zoneRevision || row.dispatch_route_revision !== basis.routeRevision) {
+          throw new RealmReplyStale('discussion dispatch basis changed');
+        }
+        return operation(row, true);
+      }
+      if (row.phase !== 'identified') throw new RealmReplyStale('discussion identity is pending');
+      return operation((await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
+        SET placement_admission_id=$2,dispatch_zone=$3,dispatch_zone_revision=$4,dispatch_route_revision=$5
+        WHERE id=$1 RETURNING *`, [id, admissionId, basis.zone, basis.zoneRevision, basis.routeRevision])).rows[0]!, false);
+    });
   }
 
   /** Call only after resolving the immutable successful graph placement receipt.

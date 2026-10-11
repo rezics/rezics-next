@@ -12,6 +12,12 @@ import { unerased } from '../work/public-patterns.ts';
 const PROFILE = 'https://rezics.com/definition/realm-reply-placement-v1';
 const NONE = 'urn:rezics:none';
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
+
+/** Server-resolved Zone basis for a composite page discussion command.
+ * Ordinary Realm placement has no Zone dependency. */
+export interface RealmReplyDispatchBasis {
+  zone: string; zoneRevision: string; routeRevision: string;
+}
 /** A public profile revision is https://rezics.com/id/<uuid>. A Realm policy
  * head is the creation receipt or a later urn:rezics:realm-policy receipt. */
 const realmPolicyHead = (revision: string) =>
@@ -226,7 +232,8 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
 /** Exact, one-slot graph CAS. A different Realm has a different slot and count. */
 export async function placeReply(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, preparation: PlacementPreparation,
-  expectedHead: string | null, observed?: ReplyGraphReceipt | null): Promise<ReplyGraphReceipt> {
+  expectedHead: string | null, observed?: ReplyGraphReceipt | null,
+  basis?: RealmReplyDispatchBasis): Promise<ReplyGraphReceipt> {
   if (observed) return checked(observed, admission);
   if (observed === undefined) {
     const prior = await readReplyGraphReceipt(env, admission);
@@ -251,6 +258,11 @@ export async function placeReply(env: WorkActivationEnvironment,
     ? `rv:contextRevision ${iri(preparation.contextRevision)} ;` : '';
   const predecessor = expectedHead ? `rv:previousPlacement ${iri(expectedHead)} ;` : '';
   const receiptPredecessor = expectedHead ? `rv:expectedHead ${iri(expectedHead)} ;` : '';
+  // The attachment and both observed Zone heads must still match in the same
+  // graph switch as placement. A withdrawal never races through a read-only check.
+  const zoneGuard = basis ? `GRAPH ${iri(GRAPHS.current)} {
+    ${iri(basis.zone)} a rv:Zone ; rv:zoneHead ${iri(basis.zoneRevision)} ;
+      rv:sitePublicationHead ${iri(basis.routeRevision)} ; rv:defaultRealm ${iri(preparation.realm)} . }` : '';
   const parentGuard = preparation.parentReply && preparation.parentRevision ? `
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(replySlotIri(preparation.realm, preparation.parentReply))} rv:replyPlacementHead ?parentHead . }
@@ -341,6 +353,7 @@ export async function placeReply(env: WorkActivationEnvironment,
           ${iri(preparation.realm)} ${realmPolicyHead(preparation.directPolicyRevision)
             ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} }` : ''}
         ${parentGuard}
+        ${zoneGuard}
         FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(expectedHead ?? NONE)})
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -357,6 +370,10 @@ export async function placeReply(env: WorkActivationEnvironment,
         ${realmPolicyHead(preparation.directPolicyRevision)
           ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} } }`);
     if (currentPolicy.boolean !== true) throw new RealmReplyStale('Realm reply policy changed');
+  }
+  if (!terminal && basis) {
+    const currentZone = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${zoneGuard} }`);
+    if (currentZone.boolean !== true) throw new RealmReplyStale('Zone discussion basis changed');
   }
   if (!terminal) throw new RealmReplyUnavailable(updateError
     ? 'placement graph command outcome is unknown'

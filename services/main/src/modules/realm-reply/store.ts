@@ -9,7 +9,7 @@ import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavail
   type ReplyIdentityInput, type ReviewInput, RealmReplyContentStore } from './content-store.ts';
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads, replySlotIri,
-  readReplyGraphReceipt, type ReplyGraphReceipt } from './graph.ts';
+  readReplyGraphReceipt, type RealmReplyDispatchBasis, type ReplyGraphReceipt } from './graph.ts';
 import { boundReplyRoot, readableReplyRoot } from './root.ts';
 import { TargetUnavailable, targetRead } from '../target/resolve.ts';
 import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
@@ -21,6 +21,8 @@ import { realmHistoryOriginCutFilter } from '../realm-admin/history.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { RatingTargetNotAccepted } from '../rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../rating/release.ts';
+
+export type { RealmReplyDispatchBasis } from './graph.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -300,7 +302,7 @@ export class RealmReplyStore {
   }
 
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
-    key: string, digest: string) {
+    key: string, digest: string, basis?: RealmReplyDispatchBasis) {
     const opened = await this.admission(principal, actingSubject, 'reply.place',
       `reply:place:${input.realm}`, key, digest);
     const admission = opened.registered;
@@ -311,9 +313,9 @@ export class RealmReplyStore {
       && await this.access.hasRealmMemberAdmission?.(admission.id) === true;
     try {
       const placed = graph || !this.access.withRealmPolicy
-        ? await this.placeAdmitted(principal, input, admission, memberAdmission, graph)
+        ? await this.placeAdmitted(principal, input, admission, memberAdmission, graph, undefined, undefined, basis)
         : await this.access.withRealmPolicy(principal, actingSubject, input.realm, 'reply',
-          (permit, client) => this.placeAdmitted(principal, input, admission, memberAdmission, graph, permit, client));
+          (permit, client) => this.placeAdmitted(principal, input, admission, memberAdmission, graph, permit, client, basis));
       graph = placed.terminal;
       return placed.body;
     } catch (error) {
@@ -328,7 +330,7 @@ export class RealmReplyStore {
         const terminal = await cancelPlacement(this.env, admission);
         graph = terminal;
         if (terminal.outcome === 'succeeded') {
-          const placed = await this.placeAdmitted(principal, input, admission, memberAdmission, terminal);
+          const placed = await this.placeAdmitted(principal, input, admission, memberAdmission, terminal, undefined, undefined, basis);
           graph = placed.terminal;
           return placed.body;
         }
@@ -346,7 +348,7 @@ export class RealmReplyStore {
 
   private async placeAdmitted(principal: VerifiedPrincipal, input: PlacementInput,
     admission: RegisteredAdmission, memberAdmission: boolean, observed: ReplyGraphReceipt | null,
-    permit?: RealmPermit, client?: PoolClient) {
+    permit?: RealmPermit, client?: PoolClient, basis?: RealmReplyDispatchBasis) {
     const unified = await readRealmPolicy(this.env, input.realm);
     if (permit && (!unified || unified.visibility !== 'public' && !permit.member)) {
       throw new RealmReplyDenied('Realm membership is required');
@@ -384,7 +386,7 @@ export class RealmReplyStore {
       // A previous attempt can leave the pin while its graph result is unknown.
       // The immutable receipt resolves that ambiguity before another dispatch.
       // The caller already observed that this receipt was absent.
-      terminal = await placeReply(this.env, admission, prepared, input.expectedHead, null);
+      terminal = await placeReply(this.env, admission, prepared, input.expectedHead, null, basis);
     }
     if (terminal.outcome === 'cancelled') {
       await this.contentCore.settlePublication(`${admission.id}:settle`, admission.id, {

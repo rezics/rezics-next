@@ -256,10 +256,10 @@ export class RealmReplyContentStore {
       const spoiler = revision.rows[0]!.spoiler;
       if (spoiler != null && typeof spoiler !== 'boolean') throw new RealmReplyUnavailable('reply spoiler is corrupt');
       if (input.spoiler !== undefined && input.spoiler !== spoiler) throw new RealmReplyInvalid('reply spoiler differs from the exact draft');
-      // One exact parent probe for every identity. Canonical children consume
+      // One exact parent probe for every canonical identity. Children consume
       // the retained posted selection; moderation of its body is not authority
       // to allocate a replacement opener. Ordinary replies keep their head checks.
-      const parent = await client.query<{ root_target: string; root_revision: string; origin_realm: string | null }>(`
+      const parent = about || input.parentReply ? await client.query<{ root_target: string; root_revision: string; origin_realm: string | null }>(`
           SELECT p.root_target, p.root_revision, p.origin_realm FROM content.reply p
           JOIN content.variant v ON v.id = p.variant_id
           JOIN content.revision head ON head.id = v.draft_head
@@ -269,9 +269,9 @@ export class RealmReplyContentStore {
             ($3 AND opener.phase = 'posted' AND opener.revision_id = r.id)
             OR (NOT $3 AND r.availability = 'available' AND head.availability = 'available'
               AND head.body->>'deleted' = 'false')) LIMIT 2`,
-      [input.parentReply, input.parentRevision, Boolean(about)]);
+      [input.parentReply, input.parentRevision, Boolean(about)]) : null;
       if (input.parentReply) {
-        if (!parent.rows[0] || parent.rows[0].root_target !== input.rootTarget
+        if (!parent?.rows[0] || parent.rows.length !== 1 || parent.rows[0].root_target !== input.rootTarget
           || parent.rows[0].root_revision !== input.rootRevision
           || parent.rows[0].origin_realm !== author.rows[0]!.origin_realm) {
           throw new RealmReplyDenied('parent is not an exact reply to this root');
