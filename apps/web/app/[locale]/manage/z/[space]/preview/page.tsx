@@ -4,14 +4,14 @@ import type { ZoneContext } from '@rezics/zone-sdk';
 import { addressKey } from '../../../../../../features/address/path.ts';
 import { manager } from '../../../../../../features/manage/server.ts';
 import { RealmFrame, loadRealmView } from '../../../../../../features/realm/realm-page.tsx';
-import { readPresentation, resolveSite } from '../../../../../../features/realm/read.ts';
+import { readPresentation } from '../../../../../../features/realm/read.ts';
 import { siteHref } from '../../../../../../features/realm/route.ts';
 import type { RealmMessages } from '../../../../../../features/realm/messages.ts';
 import { loadCompleteZoneNavigation } from '../../../../../../features/zone-editor/api.ts';
 import { messages } from '../../../../../../features/zone-editor/messages.ts';
 import { ZoneDraftPreview } from '../../../../../../features/zone-editor/preview.tsx';
 import { ZoneSavedHomeContent } from '../../../../../../features/zone-editor/home-content.tsx';
-import { loadZoneAuthoring } from '../../../../../../features/zone-editor/read.ts';
+import { loadZoneAuthoring, resolveZoneAuthoringSite } from '../../../../../../features/zone-editor/read.ts';
 import { zonePreviewPath } from '../../../../../../features/zone-editor/routes.ts';
 import { ZoneAuthoringFailure } from '../../../../../../features/zone-editor/states.tsx';
 import { StandaloneZoneSiteFrame } from '../../../../../../features/zones/site-route.tsx';
@@ -33,7 +33,7 @@ export default async function ZoneDraftPreviewPage({ params }: { params: Promise
   if (loaded.kind === 'failure') return <ZoneAuthoringFailure failure={loaded.failure} copy={messages[locale]} />;
   const { model, preview, realm, editorPath, sitePath } = loaded;
   const [resolved, navigation] = await Promise.all([
-    resolveSite(space, locale),
+    resolveZoneAuthoringSite(space, locale),
     loadCompleteZoneNavigation(main, model.zoneId, actingSubject, model.state),
   ]);
   if (!navigation.ok) return <ZoneAuthoringFailure failure={navigation.failure} copy={messages[locale]} />;

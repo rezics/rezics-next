@@ -903,6 +903,10 @@ test('Zone lifecycle: a populated site retires and recovers the same published c
     await expect(reader.getByText(morning)).toHaveCount(0);
     await shoot(reader, 'zone-retired-public-site', info);
 
+    // A retired management lookup can leave the ingress admission cached without a Zone capability.
+    await competingEditor.goto(site.editorPath);
+    await expect(competingEditor.getByRole('textbox', { name: 'Home page' })).toHaveCount(0);
+
     await page.getByRole('button', { name: 'Recover site' }).click();
     await expect(page.getByText('Recover this site?', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();

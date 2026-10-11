@@ -6,15 +6,15 @@ import { ADDRESS_HEADER, type AddressRead, readAddress, resolvedAddress } from '
 import type { AddressScope } from './path.ts';
 
 /** Reuse the proxy's admission read; incoming clients cannot supply this header. */
-export const resolveAddress = cache(async (scope: AddressScope, key: string, locale: UiLocale): Promise<AddressRead> => {
+export const resolveAddress = cache(async (scope: AddressScope, key: string, locale: UiLocale, fresh = false): Promise<AddressRead> => {
   const incoming = await headers();
   const carried = incoming.get(ADDRESS_HEADER);
-  if (carried) {
+  if (carried && !fresh) {
     try {
       const data = resolvedAddress(JSON.parse(decodeURIComponent(carried)));
       if (data?.scope === scope && (data.key === key || data.holder.slice(-36) === key)) return { kind: 'resolved', data };
     } catch { /* A malformed internal header is never admission. */ }
   }
   const languages = displayLanguages({ pageUrl: incoming.get('x-rezics-page-url'), uiLocale: locale });
-  return readAddress({ scope, key }, languages.join(','), undefined, incoming);
+  return readAddress({ scope, key }, languages.join(','), undefined, incoming, undefined, fresh);
 });

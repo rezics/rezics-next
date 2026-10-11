@@ -142,9 +142,9 @@ export type SiteResolution =
   | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
 
 /** Site resolution never guesses a Zone segment or requires a Realm capability. */
-export const resolveSite = cache(async (ref: string, locale: UiLocale): Promise<SiteResolution> => {
-  if ((await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
-  const resolved = await resolveAddress('space', ref, locale);
+export const resolveSite = cache(async (ref: string, locale: UiLocale, fresh = false): Promise<SiteResolution> => {
+  if (!fresh && (await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
+  const resolved = await resolveAddress('space', ref, locale, fresh);
   if (resolved.kind !== 'resolved') {
     if (resolved.kind !== 'missing')
       return resolved.kind === 'unavailable'

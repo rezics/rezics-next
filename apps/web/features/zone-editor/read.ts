@@ -3,7 +3,7 @@ import { addressKey, spaceHref } from '../address/path.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { settle } from '../manage/read.ts';
 import { isUuid, type MainClient, type ReadFailure } from '../manage/types.ts';
-import { resolveSite } from '../realm/read.ts';
+import { resolveSite, type SiteResolution } from '../realm/read.ts';
 import type { ReadFailure as SiteReadFailure } from '../realm/types.ts';
 import { authoringModel, type ZoneAuthoringModel } from './model.ts';
 import { readZoneLifecycleSnapshot } from './lifecycle.ts';
@@ -23,6 +23,16 @@ export type ZoneLifecycleLoad =
   | { kind: 'failure'; failure: ReadFailure }
   | { kind: 'ready'; zoneId: string; revision: string; status: 'active' | 'retired'; name: string };
 
+/** Recovery can outlive a cached retired address. Revalidate with the same admission owner. */
+export async function readZoneAuthoringSite(space: string, locale: UiLocale,
+  resolve = resolveSite,
+): Promise<SiteResolution> {
+  const site = await resolve(space, locale);
+  return site.kind === 'missing' ? resolve(space, locale, true) : site;
+}
+
+export const resolveZoneAuthoringSite = cache(readZoneAuthoringSite);
+
 /**
  * The home draft and the two heads a publish names. Shared by the editor and its preview
  * for one request. An editor who cannot read the draft is refused here, never shown the public page.
@@ -30,7 +40,7 @@ export type ZoneLifecycleLoad =
 export const loadZoneAuthoring = cache(async (
   main: MainClient, space: string, locale: UiLocale, actingSubject: string,
 ): Promise<ZoneAuthoringLoad> => {
-  const site = await resolveSite(space, locale);
+  const site = await resolveZoneAuthoringSite(space, locale);
   if (site.kind === 'missing' || site.kind === 'join') return { kind: 'missing' };
   if (site.kind !== 'site') return { kind: 'failure', failure: authoringReadFailure(site.failure) };
   const [editor, zone] = await Promise.all([
@@ -61,7 +71,7 @@ export const loadZoneLifecycle = cache(async (
   let zoneId: string;
   if (isUuid(space)) zoneId = space;
   else {
-    const site = await resolveSite(space, locale);
+    const site = await resolveZoneAuthoringSite(space, locale);
     if (site.kind === 'missing' || site.kind === 'join') return { kind: 'missing' };
     if (site.kind !== 'site') return { kind: 'failure', failure: authoringReadFailure(site.failure) };
     zoneId = site.zone;
