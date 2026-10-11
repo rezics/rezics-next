@@ -90,13 +90,6 @@ function Page({ outcome, importOutcome = 'success', locale = 'en' }: {
   </div>;
 }
 
-async function capture(name: string) {
-  if (import.meta.env.VITE_RECIPE_EXCHANGE_VISUAL !== '1') return;
-  const { page } = await import('vitest/browser');
-  await document.fonts.ready;
-  await page.screenshot({ path: `../../../../.temp/recipe-exchange/${name}.png` });
-}
-
 const meta = { title: 'Recipe editor/Exchange', component: Page, args: { outcome: 'success' },
   parameters: { route: { pathname: localizedPath(recipeEditHref(structure), 'en') } } } satisfies Meta<typeof Page>;
 export default meta;
@@ -109,7 +102,6 @@ export const SelectedRevision: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Downloaded revision 00000000-0000-4000-8000-000000000900.'));
-    await capture('selected-revision');
     await expect(current.request).toEqual({ structure, revision, actingSubject });
     await expect(current.saved).toEqual(exported);
   },
@@ -123,7 +115,6 @@ export const OverExportLimit: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
     await expect(canvas.getByRole('alert')).toHaveTextContent('Recipe export exceeds 4,096 occurrences');
-    await capture('over-export-limit');
   },
 };
 
@@ -135,7 +126,6 @@ export const ReadDenied: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
     await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').exportDenied);
-    await capture('read-denied');
   },
 };
 
@@ -155,7 +145,6 @@ export const ImportSuccess: Story = {
     await expect(exchangeCalls).toHaveLength(1);
     await expect(exchangeCalls[0]).toMatchObject({ structure, expectedHead: revision, actingSubject,
       idempotencyKey: 'recipe-file-import:story-1' });
-    await capture('import-success');
   },
 };
 
@@ -170,7 +159,6 @@ export const ImportClientTooLarge: Story = {
       new File([new Uint8Array(RECIPE_FILE_MAX_BYTES + 1)], 'too-large.json', { type: 'application/json' }));
     await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').importTooLarge);
     await expect(exchangeCalls).toHaveLength(0);
-    await capture('import-client-too-large');
   },
 };
 
@@ -182,7 +170,6 @@ export const ImportServerTooLarge: Story = {
     const canvas = within(canvasElement);
     await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
     await expect(canvas.getByRole('alert')).toHaveTextContent('Recipe file exceeds 256 KiB');
-    await capture('import-server-too-large');
   },
 };
 
@@ -194,7 +181,6 @@ export const ImportInvalidFile: Story = {
     const canvas = within(canvasElement);
     await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
     await expect(canvas.getByRole('alert')).toHaveTextContent('Recipe file must use the fixed Schema.org context');
-    await capture('import-invalid-file');
   },
 };
 
@@ -209,7 +195,6 @@ export const ImportConflict: Story = {
     await expect(alert).toHaveTextContent(copyOf('en').importConflict);
     await expect(alert).toHaveTextContent('Recipe import exceeds the supported occurrence bound');
     await expect(canvas.queryByRole('button', { name: copyOf('en').retry })).not.toBeInTheDocument();
-    await capture('import-conflict');
   },
 };
 
@@ -222,14 +207,12 @@ export const ImportStaleHead: Story = {
     await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
     await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').importStale);
     await expect(canvas.getByRole('region', { name: 'Latest recipe from Main' })).toHaveTextContent('1 tsp lemon zest');
-    await capture('import-stale-head');
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').importStaleAction }));
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Imported into revision 00000000-0000-4000-8000-000000000905.'));
     await expect(exchangeCalls).toHaveLength(2);
     await expect(exchangeCalls[0]?.expectedHead).toBe(revision);
     await expect(exchangeCalls[1]?.expectedHead).toBe(id(908));
     await expect(exchangeCalls[0]?.idempotencyKey).not.toBe(exchangeCalls[1]?.idempotencyKey);
-    await capture('import-stale-confirmed');
   },
 };
 
@@ -241,7 +224,6 @@ export const ImportDenied: Story = {
     const canvas = within(canvasElement);
     await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
     await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').importDenied);
-    await capture('import-denied');
   },
 };
 
@@ -257,6 +239,5 @@ export const ImportLostResponseRetry: Story = {
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Imported into revision 00000000-0000-4000-8000-000000000905.'));
     await expect(exchangeCalls).toHaveLength(2);
     await expect(exchangeCalls[1]).toEqual(exchangeCalls[0]);
-    await capture('import-lost-response-retry');
   },
 };
