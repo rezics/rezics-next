@@ -150,7 +150,10 @@ async function publishedWorkPage(page: Page, zone: string, actor: string, princi
   return created.work;
 }
 
-const discussion = (page: Page) => page.getByRole('region', { name: 'Discussion', exact: true });
+// A Work also has its own discussion summary. Identify the attached Realm's
+// entry by its visible Realm link, including when checking removal afterward.
+const discussion = (page: Page) => page.getByRole('region', { name: 'Discussion', exact: true })
+  .filter({ has: page.getByRole('link', { name: 'North realm', exact: true }) });
 
 async function compose(page: Page, body: string, language: string, spoiler: boolean) {
   const area = discussion(page);
