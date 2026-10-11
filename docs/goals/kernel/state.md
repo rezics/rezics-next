@@ -1,10 +1,10 @@
 # State
 
-Checkpoint 2026-10-10 17:10 UTC, paused for the Cursor quota (Program's rule: no dispatch, no resume, Codex wrap-up allowance is Program's). Manager `kernel-sonnet` (Claude; tmux `goal-kernel`), which took over from the Sol manager on 2026-10-08 when both Codex accounts ran out. The Goal is active; C4-C6 and the completion criteria are not proven. The landed pieces below are component proofs, not whole contracts.
+Checkpoint 2026-10-11 14:00 UTC. Manager `kernel-sonnet` (Claude; tmux `goal-kernel`), which took over from the Sol manager on 2026-10-08. The Goal is active; C4-C6 and the completion criteria are not proven. The landed pieces below are component proofs, not whole contracts. Program's target: every A implementation finished by about 23:00 UTC, verification after.
 
 ## Routing
 
-Workers are Cursor only, at most 4 live. Cursor sessions drop their connection often (an empty `attempt-N.json`, "Connection stalled repeatedly"): commit after every step, run long commands in the background with a log, resume with `--fresh` and a note naming the state. No Claude, Grok, Sol or Luna workers; no top-ups. Land reviews run on Sonnet. The unit gate decides; `--skip-unit-gate` is never used, and a refusal goes to Program with the evidence.
+Workers are Luna at max for bounded implementation (width 8 live) and Sol (`codex`) for analysis and judgment, `codex-1` as overflow. Cursor quota is spent and Claude is never a worker; no top-ups. Land reviews run on Sonnet. The unit gate decides; `--skip-unit-gate` is never used, and a refusal goes to Program with the evidence. Three attempts, then stop and mail Program.
 
 ## Landing recipe
 
@@ -18,34 +18,9 @@ Workers are Cursor only, at most 4 live. Cursor sessions drop their connection o
 - No command seals an idempotency key on a current-visibility outcome (G-1623): the audit table and a source-scan guard are in `services/main/tests/seal-on-visibility.test.ts`. Reference shape: visibility checked before the write answers 404 with nothing written; a target lost inside the write answers 503 unsealed. `TargetUnavailable` stays the hidden==absent 404.
 - Erasure of every revision kind, rights T1, conversions, discovery and meter work (see the git history).
 
-## Wave 1 (2026-10-11, analysis first)
+## Running and queued (2026-10-11 14:00 UTC)
 
-Live: G-1630 (Luna max, scan test and derived assembler set), G-1631 (Luna max, three 503-for-409), G-1632 (Sol, read-only: search cluster and idle timeouts), G-1637 (Sol, read-only: recipe refusal after earlier tests). Queued Sol read-only: G-1642 (local-consistency inventory with the size of converging before opening), G-1643 (provider identity in slices; G-1593 stays as input until it lands), G-1639 (graph, claim, model cluster), G-1640 (structure, discovery cluster), G-1641 (owner, relay, outbox cluster). Queued Luna: G-1638 (native tests to the image tier), G-1636 (migrate raw-update callers, after G-1630 and a Sol class table). Closed: G-1617, G-1330, G-1345 verified; G-1282, G-1300, G-1352, G-1379 cancelled; G-1397 and G-1290 were already verified. Width: 2 Sol and 3 Luna live. Three attempts, then stop and mail Program.
-
-## Paused tasks
-
-No kernel worktree is dirty and no task is half-done. Next step for each, when quota returns:
-
-| Task | What exists | What is missing | Next step |
-| --- | --- | --- | --- |
-| G-1630 raw-update callers classified by source, not shard luck | brief; research first (classification scan, categories, one supported way) | scan test, category table, migrations | dispatch with G-1631 and G-1593 together (different files); step A lands alone first |
-| G-1631 three 503-for-409 races, three hung native tests | brief | find the commits, fix or re-contract, route native tests to their tier | together with G-1630 and G-1593; prefer moving the native tests to the image tier over a skip |
-| G-1632 search cluster triage and idle search budget | brief; evidence includes Program's four idle timeouts (hour 00, 02, 06:49:13, 06:51:16 UTC) | triage of SEARCH01-20 red IDs; the native phase behind the idle timeouts | with the first wave (A: red IDs) |
-| G-1593 provider identity | brief only; attempt 1 exited at the quota error with a clean worktree | all of it: observation-plus-allowlist lookup in `source/*`, tests, proof | `resume G-1593 --fresh`; native-free, expect one image-free landing |
-| G-1618 Claims are Statements | brief; depends on G-1593 | all of it | dispatch after G-1593 lands; no compatibility layer, `/v1/claims` retired |
-| field-disposition projector | decision only (targets Statements, from `source.field_disposition`) | the brief | write after G-1618 settles |
-| G-1603 year template `concept` | brief; native; depends on G-1593 | all; needs a pinned image build | after G-1593 |
-| G-1591 explicit public `mode` | brief (claims `query/**`) | all | after G-1618 (same files) |
-| G-1629 seal guard follows helpers | brief (Program's finding: the scan misses a seal reached through a same-file helper) | the stronger scan, failing fixtures, the list of newly surfaced seals | after G-1593; queue only while paused |
-| G-1582 discovery never-produced reads | brief; depends on landed G-1579 | all | any time |
-| G-1615 maintainer move | brief | waits for Launch's change to `realm-management.ts` | after it lands |
-| G-1300 | old exited task; needs the original G847 integration | Launch wires production Statement seek | close when that lands |
-
-Landed directly on main from regression run 9 (no worker needed): the recipe reader no longer takes a qualifier node as a target (the recipes went 503 after the structure-profile change), and hidden/absent targets answer 404 again with their keys still unsealed (G-1623's 503s). No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. The shared stack runs pin `ce9c77bee5cd` (refreshed 2026-10-10 17:01 UTC; the rebuilt search index survived the restart).
-
-## Launch asks (2026-10-11, not briefed)
-
-Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recipe export paging (limit kept, typed); cover rights mark (M, needs media stack and rights takedown; contract in source-lifecycle); board tags and primary board as Statements with a filtered thread read (M, needs G-1618 and G-1591). G-1593, G-1618 and G-1591 are A (public API shape before opening, no compatibility layer).
+Inside the window (Program's cuts): eligibility chain (one branch, after the classifier and the reply bridge land), the Zone recovery proof, the structure publication chain (steps in order, Access preview last), imported covers slices 1 and 2 (slice 3 is in Trust-ops' area and waits for the answers on scope), rights notice slices 1, 2 and 5, and seven position repairs (Feed, Discover, notifications, Zone browse, serial summary, ranking input, Realm rankings; the load helper is B). Outside: G-1582, G-1615, G-1603 with its image build, unfinished class-table batches. Parked B: Realm boards, public read mode, Claims into Statements, provider identity, history and undelete for replies and Zone pages, the redacted public decision read, the absent-Realm cost equality, the position-domain load helper.
 
 ## Specifications (read-only analyses, 2026-10-11)
 
@@ -60,6 +35,8 @@ Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recip
 - [Two races that survive the retryable-refusal fix](reports/G-1679-specification.md): test hook and fixture repairs.
 - [Where local consistency is persisted](reports/G-1642-specification.md): defer; eight position-domain slices pending reproducers.
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
+- [Content document recovery](reports/G-1801-specification.md): bad-edit restore already proven; slice 1 the Zone proof repair, slices 2 to 7 B.
+- [Publication of a Recipe without notes](reports/G-1802-specification.md): the structure publication chain, eight slices.
 
 ## Open
 
