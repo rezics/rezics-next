@@ -41,7 +41,7 @@ export interface ReplyProgress {
 
 export type ReplyOutcome =
   | { kind: 'placed'; reply: string; placement: string }
-  /** The Realm would not place it: it needs a moderator or membership. The draft is withdrawn. */
+  /** Main rejected this intent. Keep the words; any saved draft is withdrawn when possible. */
   | { kind: 'refused' }
   | { kind: 'failed'; progress: ReplyProgress };
 
@@ -58,6 +58,22 @@ export function replyProgress(): ReplyProgress {
     variantId: `urn:rezics:variant:${crypto.randomUUID()}`,
     originVersion: 1,
   };
+}
+
+function terminalRefusal(error: { status: number; value?: unknown } | null | undefined): boolean {
+  if (!error) return false;
+  const code =
+    error.value && typeof error.value === 'object' && 'code' in error.value
+      ? error.value.code
+      : undefined;
+  if ([400, 403, 413].includes(error.status)) return true;
+  if (error.status === 422) return code !== 'work_read_budget_exceeded';
+  // A busy admission or changed read basis can still finish under the same key.
+  // Only Main's definitive write conflicts retire an intent.
+  if (error.status !== 409 || typeof code !== 'string') return false;
+  return ['stale_head', 'content_conflict', 'realm_reply_stale', 'idempotency_conflict'].includes(
+    code,
+  );
 }
 
 export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadApi {
@@ -89,8 +105,29 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
       headers(step.key, name),
     );
   const withdraw = async (input: ReplyInput, step: ReplyProgress) => {
-    if (step.revisionId)
-      await draft(input, step, null, step.revisionId, 'withdraw').catch(() => undefined);
+    try {
+      if (step.revisionId) await draft(input, step, null, step.revisionId, 'withdraw');
+    } catch {
+      // Cleanup cannot make a definitively rejected posting key retryable.
+    }
+  };
+  const refuse = async (input: ReplyInput, step: ReplyProgress): Promise<ReplyOutcome> => {
+    await withdraw(input, step);
+    return { kind: 'refused' };
+  };
+  const recoverDraft = async (
+    input: ReplyInput,
+    step: ReplyProgress,
+  ): Promise<ReplyOutcome | null> => {
+    step.draftStarted = true;
+    const { data, error } = await draft(input, step, input.body, null, 'draft');
+    if (!data)
+      return terminalRefusal(error) ? refuse(input, step) : { kind: 'failed', progress: step };
+    // A different revision cannot repair this immutable intent by another replay.
+    if (step.revisionId && data.revisionId !== step.revisionId) return refuse(input, step);
+    step.revisionId = data.revisionId;
+    step.digest = data.revisionDigest;
+    return null;
   };
   return {
     withdraw,
@@ -99,7 +136,9 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
       let step = { ...progress };
       try {
         if (step.originRealm === undefined) {
-          const { data } = await api['member-replies']({ reply: input.parent.reply.slice(-36) }).get({
+          const { data } = await api['member-replies']({
+            reply: input.parent.reply.slice(-36),
+          }).get({
             query: { actingSubject: input.actingSubject },
           });
           if (!data) return { kind: 'failed', progress: step };
@@ -108,44 +147,31 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
           // Recover legacy writes with the original null-origin payload before
           // changing their intent. The old key cannot be replayed with a Realm origin.
           if (legacyNullOrigin && (!step.revisionId || (!parentOriginRealm && !step.digest))) {
-            step.draftStarted = true;
-            const { data: recovered } = await draft(input, step, input.body, null, 'draft');
-            if (!recovered || (step.revisionId && recovered.revisionId !== step.revisionId))
-              return { kind: 'failed', progress: step };
-            step.revisionId = recovered.revisionId;
-            step.digest = recovered.revisionDigest;
+            const outcome = await recoverDraft(input, step);
+            if (outcome) return outcome;
           }
-          if (step.revisionId && (legacyNullOrigin
-            ? parentOriginRealm !== null
-            : (step.originRealm ?? null) !== parentOriginRealm)) {
-            await withdraw(input, step);
+          if (
+            step.revisionId &&
+            (legacyNullOrigin
+              ? parentOriginRealm !== null
+              : (step.originRealm ?? null) !== parentOriginRealm)
+          ) {
+            const { data, error } = await draft(input, step, null, step.revisionId, 'withdraw');
+            if (!data)
+              return terminalRefusal(error)
+                ? { kind: 'refused' }
+                : { kind: 'failed', progress: step };
             step = replyProgress();
           }
           step.originRealm = parentOriginRealm;
           step.originVersion = 1;
         }
-        if (!step.revisionId) {
-          step.draftStarted = true;
-          const { data, error } = await draft(input, step, input.body, null, 'draft');
-          if (!data && error?.status === 403) {
-            await withdraw(input, step);
-            return { kind: 'refused' };
-          }
-          if (!data) return { kind: 'failed', progress: step };
-          step.revisionId = data.revisionId;
-          step.digest = data.revisionDigest;
-        } else if (!step.digest) {
-          // Same-key replay recovers the digest from older saved progress.
-          step.draftStarted = true;
-          const { data, error } = await draft(input, step, input.body, null, 'draft');
-          if (!data && error?.status === 403) {
-            await withdraw(input, step);
-            return { kind: 'refused' };
-          }
-          if (!data || data.revisionId !== step.revisionId)
-            return { kind: 'failed', progress: step };
-          step.digest = data.revisionDigest;
+        if (!step.revisionId || !step.digest) {
+          // Same-key replay also recovers a digest missing from older saved progress.
+          const outcome = await recoverDraft(input, step);
+          if (outcome) return outcome;
         }
+        if (!step.revisionId || !step.digest) return { kind: 'failed', progress: step };
         if (!step.identified) {
           const { data, error } = await api['realm-replies'].post(
             {
@@ -163,10 +189,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
             },
             headers(step.key, 'identity'),
           );
-          if (!data && error?.status === 403) {
-            await withdraw(input, step);
-            return { kind: 'refused' };
-          }
+          if (!data && terminalRefusal(error)) return refuse(input, step);
           if (!data) return { kind: 'failed', progress: step };
           step.identified = true;
         }
@@ -184,10 +207,9 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
           headers(step.key, 'place'),
         );
         if (data) return { kind: 'placed', reply: data.reply, placement: data.placement };
-        if (error?.status !== 403) return { kind: 'failed', progress: step };
+        if (!terminalRefusal(error)) return { kind: 'failed', progress: step };
         // Nothing places it here, so it must not linger as a public reply to the Work.
-        await withdraw(input, step);
-        return { kind: 'refused' };
+        return refuse(input, step);
       } catch {
         return { kind: 'failed', progress: step };
       }
