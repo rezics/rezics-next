@@ -74,6 +74,10 @@ export const repositoryGuards = [
       'Every schema in the generated public contract must use JSON Schema 2020-12 tuple keywords.',
   },
   {
+    file: 'tests/qa/unit/acceptance.test.ts',
+    reason: 'Every acceptance case file must leave the frozen rows and their digest unchanged.',
+  },
+  {
     file: 'tests/qa/unit/backend-operation-map.test.ts',
     reason:
       'The complete frozen backend case inventory must map existing operations to the public contract.',
