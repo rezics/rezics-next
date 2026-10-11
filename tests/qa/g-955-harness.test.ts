@@ -37,6 +37,8 @@ import { qaStackEnvironment, scaleIntegrationFiles } from '../../scripts/qa/stac
 const root = resolve(import.meta.dir, '../..');
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
+// Prepare the derived set before the planner test's default five-second timeout.
+const rawFiles = rawSparqlIntegrationFiles();
 const suite = (file: string) =>
   `<testsuite name="${file}" file="${file}"><testcase name="one" file="${file}" time="1" /></testsuite>`;
 
@@ -56,7 +58,6 @@ test('G-955: integration balances all files onto bounded reusable stacks and pre
     ...fresh.map((file) => [file, 20_000] as const),
     ...[...dedicated].map((file) => [file, 40_000] as const),
   ]);
-  const rawFiles = rawSparqlIntegrationFiles();
   const ownProject = (file: string) => commandOnlyIntegrationFiles.has(file) || integrationResourceClasses.has(file);
   const reusable = new Map([...estimates].filter(([file]) => !ownProject(file)));
   const assemblerGroups = [false, true]

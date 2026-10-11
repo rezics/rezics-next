@@ -12,7 +12,7 @@ test('G1044: discovery owns a reset batch after ten shared files and keeps every
     .map(name => `tests/qa/integration/${name}.test.ts`);
   const files = [...prior, ...discovery];
   const rawFiles = rawSparqlIntegrationFiles();
-  const isolatedFiles = new Set(isolatedIntegrationFileList);
+  const isolatedFiles: ReadonlySet<string> = new Set(isolatedIntegrationFileList);
   const plans = planIntegrationShards(new Map(files.map(file => [file, 1000])), 1);
   const assemblerClasses = new Set(files.map(file => rawFiles.has(file)));
 
