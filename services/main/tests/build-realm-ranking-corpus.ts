@@ -115,9 +115,44 @@ let home = await openHome();
 console.log(JSON.stringify({ realmRankingCorpus: 'home', elapsedMs: Date.now() - startedAt }));
 let stack = home.stack;
 let actor = '';
+class RealmRankingCommandReadRestart extends Error {}
 const apiFor = (current: typeof home) =>
   workProfileCorpusApi('http://main.local', current.author.token, {
-    fetch: ((input, init) => current.app.handle(new Request(input, init))) as typeof fetch,
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const response = await current.app.handle(request);
+      const key = request.headers.get('idempotency-key');
+      if (!response.ok) {
+        const body = (await response.clone().text()).slice(0, 2_000);
+        let problem: Record<string, unknown> | null = null;
+        try {
+          const parsed: unknown = JSON.parse(body);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+            problem = parsed as Record<string, unknown>;
+        } catch {
+          // Retain bounded non-JSON failures too.
+        }
+        console.log(
+          JSON.stringify({
+            realmRankingCommandFailure: key,
+            status: response.status,
+            problem,
+            body,
+          }),
+        );
+        if (response.status === 409 && problem?.code === 'read_basis_changed')
+          throw new RealmRankingCommandReadRestart(`Corpus command ${key} must restart its read`);
+      } else if (response.status === 200 && key?.endsWith(':identity')) {
+        console.log(
+          JSON.stringify({
+            realmRankingCommandReplay: key,
+            status: response.status,
+            response: await response.clone().json(),
+          }),
+        );
+      }
+      return response;
+    }) as typeof fetch,
   });
 let api = apiFor(home);
 const backupDriver = createRealmRankingCorpusDriver({
@@ -190,7 +225,11 @@ const command = async <T>(key: string, init: Parameters<typeof api.command>[1]) 
     try {
       return await api.command<T>(key, init);
     } catch (error) {
-      const transient = error instanceof Error && /HTTP 503/.test(error.message);
+      // A late native commit can move the authorization read during a replay.
+      // Honor only the API's explicit restart response, retaining the same intent.
+      const transient =
+        error instanceof RealmRankingCommandReadRestart ||
+        (error instanceof Error && /HTTP 503/.test(error.message));
       if (!transient || attempt === 7) throw error;
       console.log(
         JSON.stringify({ realmRankingRetry: key, attempt, elapsedMs: Date.now() - startedAt }),
