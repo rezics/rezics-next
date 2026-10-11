@@ -15,6 +15,16 @@ import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts
 import { startPostgresCluster } from '../support/postgres-cluster.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
+const sharedPostgresBootstrapPath = realpathSync(join(repositoryRoot, 'infra/dev/postgres/00-owners.sh'));
+
+function resolvesToSharedPostgresBootstrap(path: string): boolean {
+  try {
+    return realpathSync(path) === sharedPostgresBootstrapPath;
+  } catch {
+    return false;
+  }
+}
+
 const ownKeys = (value: Record<string, unknown>, expected: readonly string[], label: string) => {
   const actual = Object.keys(value).sort();
   const allowed = [...expected].sort();
@@ -610,13 +620,26 @@ function sourceIdentityFragments(source: IndependentRestoreSourceInventory): str
   const containerIds = source.containers.flatMap(({ id }) =>
     /^[0-9a-f]{12,64}$/.test(id) ? [id.slice(0, 12), id] : [id]);
   return [...new Set([
-    source.project,
     ...source.containers.flatMap(({ name }) => [name]),
     ...containerIds,
     ...source.volumes,
     ...source.volumeMounts.flatMap((mount) => [mount.name, resolve(mount.source)]),
     ...source.networks.flatMap((network) => [network.id, network.name]),
   ].filter(Boolean))];
+}
+
+function namesExactSourceProject(container: IsolationContainer, sourceProject: string): boolean {
+  const values = [
+    ...container.environment,
+    ...container.command,
+    ...Object.entries(container.labels)
+      .filter(([key]) => key !== 'com.docker.compose.project')
+      .map(([, value]) => value),
+  ].map((value) => {
+    const separator = value.indexOf('=');
+    return separator === -1 ? value : value.slice(separator + 1);
+  });
+  return values.some((value) => value === sourceProject);
 }
 
 function sourceContainerFragments(source: IndependentRestoreSourceInventory): string[] {
@@ -653,7 +676,10 @@ export function assertIndependentRestoreTargetIdentity(
     if (
       containers.length !== 3 ||
       services.size !== 3 ||
-      containers.some((container) => container.project !== targetProject) ||
+      containers.some((container) =>
+        container.project !== targetProject ||
+        container.labels['com.docker.compose.project'] !== targetProject ||
+        container.labels['com.docker.compose.project'] === source.project) ||
       ['postgres', 'fuseki', 'rustfs'].some((service) => !services.has(service))
     ) {
       throw new Error('Target storage container inventory is incomplete or mixed with another project');
@@ -711,8 +737,10 @@ export function assertIndependentRestoreTargetIdentity(
             resolve(sourceBind.source) === sourcePath);
           const isSharedBootstrapBind = service === 'postgres' &&
             mount.destination === '/docker-entrypoint-initdb.d/00-owners.sh' &&
+            resolvesToSharedPostgresBootstrap(mount.source) &&
             source.bindMounts.some((sourceBind) =>
-              resolve(sourceBind.source) === sourcePath && sourceBind.destination === mount.destination);
+              sourceBind.destination === mount.destination &&
+              resolvesToSharedPostgresBootstrap(sourceBind.source));
           if (aliasesRecordedBind && !isSharedBootstrapBind) {
             throw new Error(`Target ${service} aliases a source bind path`);
           }
@@ -734,8 +762,11 @@ export function assertIndependentRestoreTargetIdentity(
       if (sourceAliases.some((value) => sourceContainerReferences.some((reference) => value.includes(reference)))) {
         throw new Error(`Target ${service} aliases or links to a recorded source container`);
       }
-      if ([...container.environment, ...container.command, ...Object.entries(container.labels).flatMap(([key, value]) => [key, value])]
-        .some((value) => sourceReferences.some((reference) => value.includes(reference)))) {
+      if ([...container.environment, ...container.command, ...Object.entries(container.labels)
+        .filter(([key]) => key !== 'com.docker.compose.project')
+        .flatMap(([key, value]) => [key, value])]
+        .some((value) => sourceReferences.some((reference) => value.includes(reference))) ||
+        namesExactSourceProject(container, source.project)) {
         throw new Error(`Target ${service} metadata names a recorded source identity`);
       }
       for (const port of container.publishedPorts) {

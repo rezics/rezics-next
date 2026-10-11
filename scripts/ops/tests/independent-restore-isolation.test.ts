@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   assertIndependentRestoreSourceAbsent,
@@ -334,11 +334,35 @@ test('source disposal refuses resources added after the recorded inventory', () 
 });
 
 test('production restore guard refuses the original project and an occupied target', () => {
-  const source = 'rezics-qa-isolation-source';
-  expect(() => assertFreshTarget('rezics-qa-isolation-successor', { source }, () => false)).not.toThrow();
+  const source = 'rezics-qa-src';
+  expect(() => assertFreshTarget('rezics-qa-src-new', { source }, () => false)).not.toThrow();
   expect(() => assertFreshTarget(source, { source }, () => false)).toThrow('new empty isolated');
   expect(() => assertFreshTarget('rezics-qa-isolation-occupied', { source }, () => true))
     .toThrow('new empty isolated');
+});
+
+test('local target inspection compares project labels exactly when the target extends the source name', () => {
+  const fixture = sourceFixture('exited');
+  const source = { ...fixture.inventory, project: 'rezics-qa-src' };
+  const target = 'rezics-qa-src-new';
+  const network: IsolationNetwork = {
+    id: 'e'.repeat(64),
+    name: `${target}_default`,
+    containerIds: [],
+  };
+  try {
+    disposeSource(fixture);
+    const containers = targetContainers(target, network.id);
+    installTargetInspection(fixture, target, containers, {
+      ...network,
+      containerIds: containers.map((container) => container.id),
+    });
+    expect(() => inspectIndependentRestoreTarget(target, source, fixture.inspector)).not.toThrow();
+    expect(() => inspectIndependentRestoreTarget(source.project, source, fixture.inspector))
+      .toThrow('distinct from the source');
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
 });
 
 test('local target inspection refuses a retained fixture volume beside its expected volume', () => {
@@ -398,6 +422,53 @@ test('local target inspection refuses an unapproved host path bind mount', () =>
     expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
       .toThrow('unapproved bind mount');
   } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses a source-specific bootstrap bind at the shared destination', () => {
+  const fixture = sourceFixture('exited');
+  const sourceSpecificBind = join(fixture.stackDirectory, '..', `${fixture.project}-owners.sh`);
+  const bootstrapDestination = '/docker-entrypoint-initdb.d/00-owners.sh';
+  try {
+    writeFileSync(sourceSpecificBind, '# source-specific bootstrap\n');
+    fixture.stateData.containers = fixture.stateData.containers.map((container) => container.service === 'postgres'
+      ? {
+          ...container,
+          mounts: container.mounts.map((mount) => mount.destination === bootstrapDestination
+            ? { ...mount, source: sourceSpecificBind }
+            : mount),
+        }
+      : container);
+    fixture.inventory = recordIndependentRestoreSourceInventory(
+      fixture.project,
+      fixture.stackDirectory,
+      fixture.objectDirectory,
+      fixture.inspector,
+    );
+    disposeSource(fixture);
+
+    const target = 'rezics-qa-isolation-bootstrap';
+    const network: IsolationNetwork = {
+      id: 'e'.repeat(64),
+      name: `${target}_default`,
+      containerIds: [],
+    };
+    const containers = targetContainers(target, network.id).map((container) => container.service === 'postgres'
+      ? {
+          ...container,
+          mounts: container.mounts.map((mount) => mount.destination === bootstrapDestination
+            ? { ...mount, source: sourceSpecificBind }
+            : mount),
+        }
+      : container);
+    installTargetInspection(fixture, target, containers, {
+      ...network,
+      containerIds: containers.map((container) => container.id),
+    });
+    expect(expectTargetRefusal(fixture, target).message).toContain('aliases a source bind path');
+  } finally {
+    rmSync(sourceSpecificBind, { force: true });
     rmSync(fixture.stackDirectory, { recursive: true, force: true });
   }
 });
