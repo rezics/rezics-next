@@ -261,7 +261,7 @@ export interface CommandCustodyErasureTarget {
 
 /** The unique revision key bounds this lookup to one retained command per revision,
  * including retired proofs. No current-head or whole-custody scan is sufficient. */
-export async function commandCustodyErasureTargets(access: Pool,
+export async function commandCustodyErasureTargets(access: Pool | PoolClient,
   revisionIris: readonly string[]): Promise<CommandCustodyErasureTarget[]> {
   if (!revisionIris.length) return [];
   if (revisionIris.length > MAX_CONTENT_ERASURE_TARGETS) {

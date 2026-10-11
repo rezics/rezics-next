@@ -151,17 +151,22 @@ async function fixture(run: (f: Awaited<ReturnType<typeof environment>>) => Prom
   const name = `erasure_completion_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE DATABASE ${name} TEMPLATE erasure_completion_template`);
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
+  const relay = boundedPool({ ...cluster!.connection, database: name, max: 2 });
+  const accessPool = boundedPool({ ...cluster!.connection, database: name, max: 2 });
   const objectDirectory = join(directory, name);
   mkdirSync(objectDirectory);
-  try { await run(await environment(pool, objectDirectory)); }
-  finally { await pool.end(); await admin.query(`DROP DATABASE ${name}`); }
+  try { await run(await environment(pool, objectDirectory, relay, accessPool)); }
+  finally {
+    await Promise.all([pool.end(), relay.end(), accessPool.end()]);
+    await admin.query(`DROP DATABASE ${name}`);
+  }
 }
 
-async function environment(pool: Pool, objectDirectory: string) {
+async function environment(pool: Pool, objectDirectory: string, relay: Pool, accessPool: Pool) {
   const graph = new Graph(), objects = new Objects(), core = new ContentCore(pool);
   const env: WorkActivationEnvironment = { fuseki: graph, lineage: graph.lineage,
     objectDirectory, workObjects: objects.namespace() };
-  const service = new ErasureService(pool, pool, pool, objects.namespace);
+  const service = new ErasureService(relay, pool, accessPool, objects.namespace);
   const admissions = new Map<string, RegisteredAdmission>();
   const outcomes: string[] = [];
   let denied = false;
@@ -176,7 +181,7 @@ async function environment(pool: Pool, objectDirectory: string) {
       const admitted: RegisteredAdmission = { ...input, id: randomUUID(), principalId: randomUUID(), authorityEpoch: '7',
         expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'registered', dispatchEligible: true, replayed: false };
       admissions.set(input.idempotencyKey, admitted);
-      await pool.query(`INSERT INTO access.admission VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [admitted.id,
+      await accessPool.query(`INSERT INTO access.admission VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [admitted.id,
         admitted.principalId, admitted.actingSubject, admitted.scope, admitted.action, admitted.idempotencyKey,
         admitted.requestDigest, admitted.authorityEpoch, admitted.expiresAt]);
       return admitted;
@@ -210,7 +215,7 @@ async function environment(pool: Pool, objectDirectory: string) {
     graph.revisions.set(id, { kind: 'text_contribution_draft', owner, manifest: `urn:rezics:sha256:${digest}` });
     return { id, digest, payload };
   };
-  return { pool, core, graph, objects, env, service, admissions, outcomes, access, call, draft, input, contribution,
+  return { pool, relay, accessPool, core, graph, objects, env, service, admissions, outcomes, access, call, draft, input, contribution,
     objectDirectory, deny: () => { denied = true; } };
 }
 
@@ -333,8 +338,9 @@ test('P4 one pending tick attempts sixteen objects, includes deleting entries an
 
 async function media(f: Awaited<ReturnType<typeof environment>>, image: Buffer, asset: string | null = null) {
   const store = new MediaStore(f.pool, f.core);
+  const actor = asset ? (await f.pool.query<{ owner: string }>('SELECT owner FROM media.asset WHERE id=$1', [asset])).rows[0]!.owner : resource();
   const upload = await store.reserveUpload({ admissionId: randomUUID(), principalId: randomUUID(),
-    actingSubject: resource(), authorityEpoch: '1', requestDigest: hash(image) },
+    actingSubject: actor, authorityEpoch: '1', requestDigest: hash(image) },
   { asset, disclosure: 'private', mediaType: 'image/png', byteLength: image.length, sha256: hash(image) });
   await store.settleUpload(upload.upload, { status: 'activated', sha256: hash(image), byteLength: image.length,
     mediaType: 'image/png', width: 16, height: 16 }, async signal => {
@@ -345,7 +351,7 @@ async function media(f: Awaited<ReturnType<typeof environment>>, image: Buffer, 
   return { store, upload, revision: recorded.revision };
 }
 
-test('P3/P4 Media rollback after Content clear retries with object inventory, then deletes only after Media commit', async () => {
+test('P3/P4 unfinished Media with an independently committed Content clear retries inventory, then deletes only after Media commit', async () => {
   await fixture(async f => {
     const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bd335b' } }).png().toBuffer();
     const { upload, revision } = await media(f, image);
@@ -370,14 +376,19 @@ test('P3/P4 Media rollback after Content clear retries with object inventory, th
       const value = Reflect.get(target, property);
       return typeof value === 'function' ? value.bind(target) : value;
     } });
-    const service = new ErasureService(f.pool, failing, f.pool, f.objects.namespace);
+    const service = new ErasureService(f.relay, failing, f.accessPool, f.objects.namespace);
     const call = () => requestContentErasure(service, f.env, { verify: async () => ({}) } as never,
       f.access as never, new Request('http://localhost'), input);
     await expect(call()).rejects.toThrow('failure after Content clear');
-    expect((await f.pool.query('SELECT body,serialized_bytes FROM content.revision WHERE id=$1', [revision])).rows[0])
-      .toEqual({ body: null, serialized_bytes: null });
     const retained = (await f.pool.query<{ id: string }>('SELECT id FROM relay.erasure')).rows[0]!.id;
     const first = await readErasure(f.pool, retained);
+    // An independently restored owner may already carry this journal's SQL clear.
+    await applyContentErasure(f.pool, { erasureId: retained, erasureEpoch: first.erasureEpoch,
+      resourceId: input.resourceId, revisionIds: [revision], preservationAccess: f.accessPool,
+      graphProof: { receipt: `urn:rezics:receipt:erasure-graph:${hash(retained)}`,
+        dataEpoch: f.graph.lineage.dataEpoch, sequence: '5' } });
+    expect((await f.pool.query('SELECT body,serialized_bytes FROM content.revision WHERE id=$1', [revision])).rows[0])
+      .toEqual({ body: null, serialized_bytes: null });
     expect(first.stage).toBe('requested');
     expect(first.targets.some(target => target.ref === `media-asset:v1:${upload.asset}:sha256:${orphan}`)).toBe(true);
     expect(f.objects.deletes).toEqual([]);
@@ -426,7 +437,7 @@ test('P2/P4 the existing ReceiptCustody owner clears a journaled command before 
       focus: [role === 'work' ? work : role === 'component' ? component : revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] }));
     let proof: { payload: string } | undefined;
-    const custody = new ReceiptCustody(new PostgresReceiptCustodyStore(f.pool), f.objects.namespace(), {
+    const custody = new ReceiptCustody(new PostgresReceiptCustodyStore(f.accessPool), f.objects.namespace(), {
       query: async () => ({ results: { bindings: proof ? [{ digest: lit(digest), payload: lit(proof.payload),
         epoch: lit(f.graph.lineage.dataEpoch), sequence: lit('4'), streamSequence: lit('4') }] : [] } }),
     }, 'a'.repeat(64), async () => undefined);
@@ -484,6 +495,7 @@ test('P4 final SQL absence rejects replanted bytes with a matching erasure ident
     const first = await f.call(input);
     const tombstone = (await f.pool.query('SELECT * FROM content.revision_erasure WHERE revision_id=$1', [revision])).rows[0];
     await f.pool.query('ALTER TABLE content.revision DISABLE TRIGGER revision_immutable');
+    await f.pool.query('ALTER TABLE content.revision DROP CONSTRAINT revision_check');
     try {
       await f.pool.query('UPDATE content.revision SET serialized_bytes=$2 WHERE id=$1', [revision, Buffer.from('replanted private SQL')]);
     } finally { await f.pool.query('ALTER TABLE content.revision ENABLE TRIGGER revision_immutable'); }
