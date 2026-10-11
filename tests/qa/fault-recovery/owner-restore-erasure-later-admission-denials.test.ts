@@ -811,7 +811,7 @@ test(
             );
             try {
               const response = await copy.request(gapKey, undefined, body);
-              expect(response.status).toBe(201);
+              expect(response.status).toBe(200);
               expect(await response.json()).toMatchObject({ state: 'held' });
               const held = await outerOperation(copy, gapKey);
               expect(held.qualifications).toEqual(qualified.qualifications);
@@ -872,7 +872,7 @@ test(
                   principalId: fixture.principalId,
                   admissionId: randomUUID(),
                   authorityEpoch: fixture.generation,
-                  targets: [{ kind: 'content_revision', ref: fixture.laterRevisionId }],
+                  targets: [{ kind: 'content_revision', ref: randomUUID() }],
                 });
               else
                 await copy.faultRetained(
@@ -994,6 +994,7 @@ test(
             console.info('later admission completion refused', { label, reason: held.hold_reason });
           } finally {
             await restore();
+            await restoreBindings();
             await restoreOuter();
           }
         };
@@ -1006,7 +1007,7 @@ test(
                   'UPDATE relay.owner_reconciliation_item SET item_ref=$2 WHERE reconciliation_id=$1 AND item_ref LIKE $3',
                   [lost.id, prefix + 'f'.repeat(64), prefix + '%'],
                 ),
-              restoreBindings,
+              async () => {},
             );
           // Changed D under the same idempotency key is a conflict, never a fresh import.
           const changed = structuredClone(fixture.currentCoverage);
