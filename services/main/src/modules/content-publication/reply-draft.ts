@@ -242,15 +242,23 @@ async function saveVerifiedDraft(env: WorkActivationEnvironment, content: Conten
     originRealm: input.originRealm!, canonicalParent } : result;
 }
 
-/** Internal bridge for callers that have already verified Account identity.
- * The canonical path takes about/Realm coordinates and a server owner reader;
- * it never accepts opener or parent identifiers from its caller. */
+/** Internal bridge for callers with an already-verified Account identity.
+ * Callers must obtain `principal` with `verifyMemberReplyDraftPrincipal(account, request)`,
+ * which verifies the `comment:create` scope. The canonical path takes about/Realm
+ * coordinates and a server owner reader; it never accepts opener or parent ids. */
 export async function saveVerifiedMemberReplyDraft(env: WorkActivationEnvironment, content: ContentCore,
   access: ReplyDraftAccess, principal: VerifiedPrincipal, intent: VerifiedMemberReplyDraftIntent,
   key: string): Promise<MemberReplyDraftResult | CanonicalAboutReplyDraftResult> {
   const plan = planDraft(intent);
   const prepared = prepareDraft(plan.input);
   return saveVerifiedDraft(env, content, access, principal, plan, key, prepared);
+}
+
+/** Verify Account identity for a member reply draft, including its write scope.
+ * Server commands and the Request adapter share this check before drafting. */
+export async function verifyMemberReplyDraftPrincipal(account: Pick<AccountAssertionVerifier, 'verify'>,
+  request: Request): Promise<VerifiedPrincipal> {
+  return account.verify(request, ['comment:create']);
 }
 
 /** Request adapter retained for existing public drafts. It verifies Account
@@ -260,7 +268,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   request: Request, input: MemberReplyDraft, key: string): Promise<MemberReplyDraftResult> {
   const prepared = prepareDraft(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const principal = await account.verify(request, ['comment:create']);
+  const principal = await verifyMemberReplyDraftPrincipal(account, request);
   const result = await saveVerifiedDraft(env, content, access, principal,
     { input }, key, prepared, true);
   return result;

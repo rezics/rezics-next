@@ -1,6 +1,9 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { ContentCore, SaveDraftCommand } from '../../content/src/core.ts';
+import { AccountAssertionInsufficientScope } from '../src/modules/account/verify-assertion.ts';
+import type { VerifiedAccountAssertion } from '../src/modules/account/verify-assertion.ts';
+import { AdmissionDenied } from '../src/modules/access/admission.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal, RegisteredAdmission } from '../src/modules/access/admission.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { CanonicalReplyParentReader } from '../src/modules/realm-reply/root.ts';
@@ -20,6 +23,8 @@ type TestAccess = DraftAccess & {
   registrations: Array<{ requestDigest: string; scope: string; idempotencyKey: string }>;
   readonly claims: number;
 };
+type TestAdmissionRequest = { requestDigest: string; scope: string; idempotencyKey: string;
+  principal?: VerifiedPrincipal; actingSubject?: string; action?: string };
 
 function targetSession(authority: { access?: unknown; principal?: VerifiedPrincipal; actingSubject?: string }): TargetReadSession {
   const query = async (sparql: string) => {
@@ -49,15 +54,15 @@ await mock.module('../src/modules/target/resolve.ts', () => ({
 afterAll(async () => { await mock.module('../src/modules/target/resolve.ts', () => targetModule); });
 
 const { ContentConflict } = await import('../../content/src/core.ts');
-const { saveMemberReplyDraft, saveVerifiedMemberReplyDraft } =
+const { saveMemberReplyDraft, saveVerifiedMemberReplyDraft, verifyMemberReplyDraftPrincipal } =
   await import('../src/modules/content-publication/reply-draft.ts');
 const { WorkReadMissing, WorkReadMoved } = await import('../src/modules/work/read-session.ts');
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
-const principal: VerifiedPrincipal = { issuer: 'https://account.example', subject: 'person-subject' };
+const principal: VerifiedAccountAssertion = { issuer: 'https://account.example', subject: 'person-subject' };
 const position = { dataEpoch: '00000000-0000-4000-8000-000000000001', sequence: '7' };
 
-function fixture(): {
+function fixture(access = accessOwner()): {
   env: WorkActivationEnvironment;
   content: ContentCore;
   access: ReturnType<typeof accessOwner>;
@@ -84,18 +89,18 @@ function fixture(): {
         predecessor: command.expectedHead, position, replayed: prior };
     },
   } as unknown as ContentCore;
-  const access = accessOwner();
   return { env, content, access, commands,
     get saveCalls() { return saveCalls; } };
 }
 
-function accessOwner(): TestAccess {
+function accessOwner(refuse: (request: TestAdmissionRequest) => boolean = () => false): TestAccess {
   const registrations: Array<{ requestDigest: string; scope: string; idempotencyKey: string }> = [];
   let claims = 0;
   return {
     registrations,
     get claims() { return claims; },
-    register: async (request: { requestDigest: string; scope: string; idempotencyKey: string }) => {
+    register: async (request: TestAdmissionRequest) => {
+      if (refuse(request)) throw new AdmissionDenied('reply author is not eligible');
       const existing = registrations.find(item => item.idempotencyKey === request.idempotencyKey);
       if (existing && existing.requestDigest !== request.requestDigest) throw new ContentConflict('request changed');
       if (!existing) registrations.push(request);
@@ -153,6 +158,32 @@ test('the Request adapter and verified-principal entrypoint save the same public
   expect(adapter.saveCalls).toBe(1);
 });
 
+test('the shared principal verifier refuses a token without comment:create before draft effects', async () => {
+  const target = id(), rootRevision = id();
+  rootState(rootRevision);
+  const fx = fixture();
+  const request = new Request('http://main.local/v1/realms/realm/about-posts', {
+    headers: { authorization: 'Bearer token-without-comment-create' },
+  });
+  const grantedScopes = new Set(['work:read']);
+  const account = { verify: async (actual: Request, scopes: readonly string[]) => {
+    expect(actual).toBe(request);
+    expect(actual.headers.get('authorization')).toBe('Bearer token-without-comment-create');
+    if (scopes.some(scope => !grantedScopes.has(scope))) {
+      throw new AccountAssertionInsufficientScope('Account assertion lacks a required scope');
+    }
+    return principal;
+  } };
+  const intent = async () => {
+    const verified = await verifyMemberReplyDraftPrincipal(account, request);
+    return saveVerifiedMemberReplyDraft(fx.env, fx.content, fx.access, verified,
+      { kind: 'member-reply', input: ordinaryInput(target, rootRevision) }, 'missing-comment-scope');
+  };
+  await expect(intent()).rejects.toBeInstanceOf(AccountAssertionInsufficientScope);
+  expect(fx.access.registrations).toHaveLength(0);
+  expect(fx.saveCalls).toBe(0);
+});
+
 test('a canonical child draft uses the opener retained root after the about resource changes', async () => {
   const realm = id(), about = id(), opener = id(), oldRoot = id(), currentTarget = id();
   const parentRevision = randomUUID();
@@ -168,6 +199,22 @@ test('a canonical child draft uses the opener retained root after the about reso
   expect(saved.rootRevision).toBe(oldRoot);
   expect(saved.canonicalParent).toMatchObject({ reply: opener, parentRevision, rootRevision: oldRoot });
   expect(fx.saveCalls).toBe(1);
+});
+
+test.skip('a steward cannot draft canonically as a controlled Org (pending Trust-ops Access Person-author change)', async () => {
+  const realm = id(), about = id(), targetRevision = id(), organization = id();
+  rootState(targetRevision);
+  const steward = principal;
+  const controlledOrganizations = new Map([[organization, steward.subject]]);
+  const fx = fixture(accessOwner(request => request.action === 'content.draft'
+    && controlledOrganizations.get(request.actingSubject ?? '') === request.principal?.subject));
+  const input = canonicalInput(realm, about, targetRevision);
+  input.actingSubject = organization;
+  await expect(saveVerifiedMemberReplyDraft(fx.env, fx.content, fx.access, steward,
+    { kind: 'canonical-about-reply', input, parentReader: parentReader(null, null) }, 'org-steward-reply'))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+  expect(fx.saveCalls).toBe(0);
+  expect(fx.access.registrations).toHaveLength(0);
 });
 
 test('caller-supplied parent, approval, or retained-root fields are rejected', async () => {
