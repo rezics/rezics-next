@@ -5,7 +5,7 @@ import { restoreCatalogueBackup, retainStoppedOwnerBackup } from '../../../scrip
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
 
-async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 'budget' | 'success' | 'timing' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
+async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 'budget' | 'success' | 'ordinary-allocation' | 'timing' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'startup-diagnostics' | 'cleanup-failure') {
   const directory = mkdtempSync(join(root, '.temp/catalogue-restore-'));
   const runId = directory.split('/').at(-1)!.toLowerCase();
   const project = `rezics-qa-${runId}`;
@@ -30,12 +30,14 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
       writeFileSync(join(target, 'retained'), 'existing target');
     }
     const operation = restoreCatalogueBackup(join(directory, 'backup.json'), runId, {
+      resourceClass: mode === 'ordinary-allocation' ? 'ordinary' : undefined,
       now: () => elapsed,
       dockerEnvironment: () => ({}), projectRunning: () => false,
       freshPorts: async () => { if (mode === 'timing') elapsed += 10; return {}; },
       retargetGraphRoute: async apps => { retargeted.push(apps); if (mode === 'timing') elapsed += 50; },
       run: (_program, args) => {
         commands.push(args);
+        if (args[0] === 'logs' && mode === 'startup-diagnostics') return 'FATAL: data directory has wrong ownership';
         if (args[0] === 'volume' && args[1] === 'ls') {
           const name = args.at(-1)!.slice('name=^'.length, -1);
           return volumes.has(name) ? name : '';
@@ -63,6 +65,7 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
           if (mode === 'timing') elapsed += 100;
           running = true;
           if (mode === 'startup-failure') throw new Error('injected startup failure');
+          if (mode === 'startup-diagnostics') throw new Error('injected startup failure');
           if (mode === 'cleanup-failure') throw failure;
           if (mode === 'budget') elapsed = 600_001;
           if (mode === 'admission-wait') {
@@ -78,7 +81,7 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
         return '';
       },
     });
-    if (mode === 'success' || mode === 'timing' || mode === 'admission-wait') {
+    if (mode === 'success' || mode === 'ordinary-allocation' || mode === 'timing' || mode === 'admission-wait') {
       const restored = await operation;
       if (mode === 'admission-wait') {
         expect(restored.elapsedMs).toBe(300_000);
@@ -95,6 +98,11 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
       expect(retargeted).toHaveLength(1);
       expect(retargeted[0]?.FUSEKI_URL).toBe('http://127.0.0.1:3030/rezics/');
       expect(readFileSync(join(target, 'objects/retained'), 'utf8')).toBe('immutable object');
+      if (mode === 'ordinary-allocation') {
+        const compose = readFileSync(join(target, 'compose.env'), 'utf8');
+        expect(compose).toContain('REZICS_FUSEKI_MEMORY_LIMIT=2g');
+        expect(compose).toContain('-Xmx512m');
+      }
       await restored.stop();
     } else {
       await expect(operation.catch(error => {
@@ -108,7 +116,12 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
       })).rejects.toThrow(mode === 'budget' ? 'exceeded 600 seconds'
         : mode === 'existing-volume' ? 'already has storage'
         : mode === 'existing-directory' ? 'already exists'
+        : mode === 'startup-diagnostics' ? 'data directory has wrong ownership'
         : mode === 'startup-failure' ? 'injected startup failure' : failure.message);
+      if (mode === 'startup-diagnostics') {
+        expect(commands.findIndex(args => args[0] === 'logs'))
+          .toBeLessThan(commands.findIndex(args => args[0] === 'stack:reset'));
+      }
     }
     if (mode === 'existing-volume') {
       expect([...volumes]).toEqual([`${project}_${VOLUME_KINDS[1]}`]);
@@ -157,6 +170,12 @@ test('catalogue restore: memory admission does not consume the preparation budge
 });
 test('catalogue restore: preparation records copy, startup and readiness wall time separately', async () => {
   await restoreScenario('timing');
+});
+test('catalogue restore: modest copies use the existing ordinary memory allocation', async () => {
+  await restoreScenario('ordinary-allocation');
+});
+test('catalogue restore: failed startup retains PostgreSQL diagnostics before cleanup', async () => {
+  await restoreScenario('startup-diagnostics');
 });
 test('catalogue restore: preexisting storage and directories survive rejection', async () => {
   await restoreScenario('existing-volume');

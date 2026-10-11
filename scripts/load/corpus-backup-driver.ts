@@ -4,6 +4,7 @@ import { restoreCatalogueBackup, retainStoppedOwnerBackup,
   type CorpusPreparationTiming } from './catalogue-backup.ts';
 import type { CorpusBackupDriver } from './work-profile-corpus.ts';
 import { dockerEnvironment, root, stream } from '../fixture/stack.ts';
+import type { QaResourceClass } from '../qa/resource-classes.ts';
 
 export interface CorpusRestoreSmokeInput {
   target: string;
@@ -24,6 +25,7 @@ export interface CorpusBackupDriverOptions {
   /** Leave source storage stopped while restored copies run, when requested. */
   resumeSource?: boolean;
   onSourceStartup?: (elapsedMs: number) => void;
+  restoreResourceClass?: QaResourceClass;
 }
 
 interface RestoredCopy {
@@ -90,7 +92,7 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
       signal.throwIfAborted();
       const runId = restoreRunId(target);
       const startedAt = performance.now();
-      const backup = await restoreCatalogueBackup(backupPath, runId, { signal });
+      const backup = await restoreCatalogueBackup(backupPath, runId, { signal, resourceClass: options.restoreResourceClass });
       let stopSmokeRead: (() => Promise<void>) | undefined;
       try {
         signal.throwIfAborted();

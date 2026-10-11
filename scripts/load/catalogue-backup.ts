@@ -14,6 +14,7 @@ import {
 } from '../fixture/stack.ts';
 import { appEnvironment, readEnv, replacePrivate } from '../dev/config.ts';
 import { admissionWaitDuration, runQaStartupChildAsync } from '../qa/stack-startup.ts';
+import { qaResourceClasses, type QaResourceClass } from '../qa/resource-classes.ts';
 import {
   loadCompatibility,
   compatibleLoadStorage,
@@ -231,8 +232,8 @@ export interface CorpusPreparationTiming {
  * artifacts; recorded absolute directories are provenance, not restore keys.
  * Fresh ports, retained owner secrets/lineage and all stores agree. */
 export async function restoreCatalogueBackup(path: string, runId: string,
-  dependencies: Partial<typeof restoreRuntime> & { signal?: AbortSignal } = {}) {
-  const { signal, ...runtimeDependencies } = dependencies;
+  dependencies: Partial<typeof restoreRuntime> & { signal?: AbortSignal; resourceClass?: QaResourceClass } = {}) {
+  const { signal, resourceClass, ...runtimeDependencies } = dependencies;
   const { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts,
     retargetGraphRoute, now } = { ...restoreRuntime, ...runtimeDependencies };
   const checkSignal = () => signal?.throwIfAborted();
@@ -284,6 +285,12 @@ export async function restoreCatalogueBackup(path: string, runId: string,
   };
   try {
     const compose = { ...readEnv(join(directory, 'compose.env')), ...(await freshPorts()) };
+    if (resourceClass) {
+      // Storage lineage is retained; a modest restored corpus can qualify
+      // under an existing smaller QA allocation without inheriting BUILD's cap.
+      compose.REZICS_FUSEKI_MEMORY_LIMIT = qaResourceClasses[resourceClass].memory;
+      compose.REZICS_FUSEKI_JVM_ARGS = qaResourceClasses[resourceClass].jvmArgs;
+    }
     replacePrivate(join(target, 'compose.env'), compose);
     const apps = appEnvironment(compose, target);
     replacePrivate(join(target, 'apps.env'), apps);
@@ -303,7 +310,17 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
     const copiedAt = now();
     stackAttempted = true;
-    const startup = await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+    let startup: string;
+    try { startup = await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']); }
+    catch (error) {
+      // Startup's Compose tail does not contain PostgreSQL's failure reason.
+      // Capture it while the failed container still exists, before cleanup.
+      let postgres = '';
+      try { postgres = run('docker', ['logs', '--tail', '60', `${project}-postgres-1`], docker); }
+      catch { /* Preserve the original startup failure if the container is gone. */ }
+      if (postgres.trim()) throw new Error(`${error instanceof Error ? error.message : String(error)}\nPostgreSQL startup diagnostics:\n${postgres}`, { cause: error });
+      throw error;
+    }
     const startedUpAt = now();
     checkSignal();
     await retargetGraphRoute(apps);

@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { root, VOLUME_KINDS, stream, dockerEnvironment } from '../../../scripts/fixture/stack.ts';
-import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput }
   from '../../../scripts/load/corpus-backup-driver.ts';
 import { restoreWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_DIMENSIONS, WORK_PROFILE_SCALES,
@@ -44,10 +43,10 @@ test('retained checkpoints restore exact populations and identities into isolate
   let copy: { stack: MediaStack; api: CorpusApi; input: CorpusRestoreSmokeInput } | undefined;
   const stores: CorpusRestoreSmokeInput[] = [];
   const evidence: Array<Record<string, unknown>> = [];
-  let isolatedWrite: Awaited<ReturnType<typeof seedPublicProfileWork>> | undefined;
+  let isolatedWrite = false;
   const targets: string[] = [];
   const driver = createCorpusBackupDriver({ sourceRunId: retained.sourceRunId,
-    directory: join(root, '.temp/work-profiles/seed-checkpoints'), resumeSource: false,
+    directory: join(root, '.temp/work-profiles/seed-checkpoints'), resumeSource: false, restoreResourceClass: 'ordinary',
     quiesce: async () => { throw new Error('Routine TEST never builds a checkpoint'); },
     async smokeRead(input) {
       const stack = await openCopy(input);
@@ -58,7 +57,8 @@ test('retained checkpoints restore exact populations and identities into isolate
         for (const created of retained.cuts[2]!.works.slice(verifying.works.length))
           await expect(client.read(seedSelection(created.mainVersion))).rejects.toThrow('HTTP 404');
         if (isolatedWrite)
-          await expect(client.read(seedSelection(isolatedWrite.mainVersion))).rejects.toThrow('HTTP 404');
+          expect(await client.read(`/v1/works/${retained.cuts[0]!.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
+            .toMatchObject({ status: { status: 'reading', version: 1 } });
         copy = { stack, api: client, input };
         stores.push(input);
         return async () => { copy = undefined; await stack.stop(); };
@@ -66,9 +66,11 @@ test('retained checkpoints restore exact populations and identities into isolate
     },
   });
   try {
-    for (const cut of retained.cuts) {
+    // Restore the smallest retained cut twice: the write must not mutate its
+    // backup or appear in a second writable copy of that same cut.
+    for (const [index, cut] of [retained.cuts[0]!, ...retained.cuts].entries()) {
       verifying = cut;
-      const target = `seed-${cut.manifest.scale}-${qaRunId}`;
+      const target = `seed-${index}-${cut.manifest.scale}-${qaRunId}`;
       targets.push(target);
       const elapsedMs = await restoreWorkProfileCorpus(cut.manifest, target, driver);
       const timing = driver.preparation(target)!;
@@ -77,10 +79,14 @@ test('retained checkpoints restore exact populations and identities into isolate
       for (const value of [timing.restoreMs, timing.startupMs, timing.readinessMs]) expect(value).toBeGreaterThan(0);
       expect(timing.restoreMs + timing.startupMs + timing.readinessMs).toBeCloseTo(timing.totalMs, 3);
       evidence.push({ scale: cut.manifest.scale, dimensions: cut.manifest.dimensions, ...timing });
-      if (cut.manifest.scale === 'small') {
-        isolatedWrite = await seedPublicProfileWork(copy!.api, `checkpoint-isolated-${qaRunId}`, {
-          actingSubject: retained.actor, title: 'Checkpoint isolated write', body: 'Only the first copy contains this Work' });
-        expect(await copy!.api.read(seedSelection(isolatedWrite.mainVersion))).toMatchObject({ work: isolatedWrite.work });
+      if (index === 0) {
+        const state = await copy!.api.command(`checkpoint-isolated-${qaRunId}`, {
+          method: 'PUT', path: `/v1/works/${cut.works[0]!.work.slice(-36)}/reader-status`,
+          body: { actingSubject: retained.actor, expectedVersion: 1, status: 'want-to-read', startedOn: null, finishedOn: null } });
+        expect(state).toMatchObject({ status: 'want-to-read', version: 2 });
+        expect(await copy!.api.read(`/v1/works/${cut.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
+          .toMatchObject({ status: { status: 'want-to-read', version: 2 } });
+        isolatedWrite = true;
       }
       await driver.stop(target);
     }
@@ -100,4 +106,4 @@ test('retained checkpoints restore exact populations and identities into isolate
     for (const target of targets) { try { await driver.stop(target); } catch (error) { errors.push(error); } }
     if (errors.length) throw new AggregateError(errors, 'Seed restore cleanup failed');
   }
-}, 3 * 600_000);
+}, 4 * 600_000);

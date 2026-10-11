@@ -30,10 +30,12 @@ export function saveRetainedSeed(seed: RetainedSeed) {
   writeFileSync(`${retainedSeedPath}.pending`, JSON.stringify(seed, null, 2) + '\n', { mode: 0o600 });
   renameSync(`${retainedSeedPath}.pending`, retainedSeedPath);
 }
-export function readRetainedSeed(): RetainedSeed {
-  if (!existsSync(retainedSeedPath)) throw new Error(`Retained seed checkpoints are absent. Build them explicitly: ${SEED_BUILD_COMMAND}`);
-  const seed = JSON.parse(readFileSync(retainedSeedPath, 'utf8')) as RetainedSeed;
-  if (seed.format !== 'seed-checkpoints-v2' || seed.cuts.length !== 3
+export function readRetainedSeed(path = retainedSeedPath): RetainedSeed {
+  if (!existsSync(path)) throw new Error(`Retained seed checkpoints are absent. Build them explicitly: ${SEED_BUILD_COMMAND}`);
+  let seed: RetainedSeed;
+  try { seed = JSON.parse(readFileSync(path, 'utf8')) as RetainedSeed; }
+  catch { throw new Error(`Retained seed checkpoints are invalid. Build them explicitly: ${SEED_BUILD_COMMAND}`); }
+  if (seed.format !== 'seed-checkpoints-v2' || !Array.isArray(seed.cuts) || seed.cuts.length !== 3
     || seed.cuts.some((cut, index) => cut.manifest.scale !== ['small', 'medium', 'large'][index]
       || !existsSync(cut.manifest.backup)))
     throw new Error(`Retained seed checkpoints are incomplete. Build them explicitly: ${SEED_BUILD_COMMAND}`);
