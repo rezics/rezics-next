@@ -67,6 +67,10 @@ Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recip
 - Episode-number seek on work-composition: `traversal.ts` refuses numeric queries on work-composition manifests because no production reader exists.
 - Whole-Goal remainder: 18-family and current-model convergence, external search copies and physical population locality, Discover remeasurement, exact populated restore/erasure/startup, reciprocal source promotion.
 
+## Parked
+
+- Parked 2026-10-11 (scope cut, Program with the maintainer): Realm boards (Statement tags, primary board, filtered thread read) are B; the G-1649 specification brief was cancelled before it started, G-1648 (game facts) stays wave 3, G-1591 and the public read mode specification (G-1713) wait for after opening, Claims into Statements (G-1698 plan) after opening.
+
 ## Boundaries
 
 - Trust-ops owns Comment/Verification C6 erasure and the hidden==absent inventory; never edit `erasure`, `content.ts` or the barriers concurrently with it.
