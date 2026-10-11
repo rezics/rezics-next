@@ -211,7 +211,12 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
     cancelled, and the 46 tasks with four or more attempts took 63%. A task
     that has not landed after three attempts stops: it goes back to analysis and
     is split, re-specified or cancelled. Attempts lost to a dropped session or
-    a quota pause do not count.
+    a quota pause do not count, and neither does a resume that starts the next
+    step of a serial chain (write "step N of M" in the resume note). A blocking
+    review does count: each one costs a worker session, a review and a gate, so
+    the third on one task ends the fix rounds and the task goes to Sol with
+    every finding so far, as a read-only pass over the whole contract or a
+    fresh implementation.
   - **Session length.** Context grows with every call, so cost grows with the
     square of a session's length (88 calls on average, half of them searching
     and reading). A brief names the files and lines to change and the tests that
