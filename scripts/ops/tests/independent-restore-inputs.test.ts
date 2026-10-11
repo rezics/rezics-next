@@ -148,8 +148,16 @@ test('copied relay dump imports with a fresh identity after transfer serializati
     const sourceUrl = `postgresql://postgres@127.0.0.1:${sourcePort}/postgres`;
     sourcePool = new Pool({ connectionString: sourceUrl, max: 1 });
     await sourcePool.query('CREATE SCHEMA relay');
-    await sourcePool.query('CREATE TABLE relay.custody_marker (id text PRIMARY KEY, value text NOT NULL)');
-    await sourcePool.query("INSERT INTO relay.custody_marker VALUES ('retained', 'latest relay copy')");
+    await sourcePool.query(`CREATE TABLE relay.checkpoint (
+      consumer text PRIMARY KEY CHECK (length(consumer) BETWEEN 1 AND 128),
+      data_epoch text NOT NULL CHECK (data_epoch <> ''),
+      sequence numeric NOT NULL DEFAULT 0 CHECK (sequence >= 0 AND sequence = trunc(sequence)),
+      updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      stream_scope text NOT NULL DEFAULT 'urn:rezics:stream:main-rdf' CHECK (stream_scope <> '')
+    )`);
+    await sourcePool.query(
+      "INSERT INTO relay.checkpoint (consumer, data_epoch, sequence) VALUES ('retained', 'latest relay copy', 42)",
+    );
     await sourcePool.end();
     sourcePool = undefined;
 
@@ -173,8 +181,8 @@ test('copied relay dump imports with a fresh identity after transfer serializati
     });
     expect(retained.identity.clusterDirectory).not.toBe(sourceClusterDirectory);
     await expect(
-      retained.relayPool.query("SELECT value FROM relay.custody_marker WHERE id = 'retained'"),
-    ).resolves.toMatchObject({ rows: [{ value: 'latest relay copy' }] });
+      retained.relayPool.query("SELECT data_epoch FROM relay.checkpoint WHERE consumer = 'retained'"),
+    ).resolves.toMatchObject({ rows: [{ data_epoch: 'latest relay copy' }] });
   } finally {
     await sourcePool?.end();
     await retained?.close();
