@@ -152,7 +152,7 @@ export async function reconcileRetainedNativeChild(env: WorkActivationEnvironmen
         rv:editControl rv:HumanConfirmed ; rv:rightsStatus rv:Undetermined`;
       update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
-        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
           GRAPH ${iri(GRAPHS.current)} { ${iri(value.child)} a rv:NativeChild ;
             rv:childRevision ${iri(value.revision)} ; ${common} . }
           GRAPH ${iri(GRAPHS.revisions)} { ${iri(value.revision)} a rv:NativeChildRevision, rv:RevisionAnchor ;
@@ -191,7 +191,7 @@ export async function reconcileRetainedNativeChild(env: WorkActivationEnvironmen
       prior = await readNativeChildRetirement(env, receipt.nativeChild);
       update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
-        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
           GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.nativeChild)} rv:retiredBy ${iri(receipt.id)} . }
           ${envelope(receipt, coverage, sequence, retained.eventId, true)} }
         WHERE { ${where}
