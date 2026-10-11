@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { definitionStateRequest }
   from '../../../services/main/src/modules/context/definition-state.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
-import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { contextFixture, nativeId, RV, type ContextFixture } from './context-fixture.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 
 type ContextWrite = { context: string; semanticRevision: string; replayed: boolean;
@@ -13,12 +14,23 @@ type ContextWrite = { context: string; semanticRevision: string; replayed: boole
 type StatementWrite = { statement: string; meaningKey: string; revision: string };
 const short = (id: string) => id.split('/').at(-1)!;
 
+async function defineStatementProperty(f: ContextFixture) {
+  const definition = await f.json<{ component: string; revision: string }>(await f.call('POST',
+    '/v1/semantic/changes', { profile: 'semantic-change-v1', expectedHead: null,
+      state: { component: 'definition', kind: 'property', lifecycle: 'active',
+        successor: null, roles: [] }, actingSubject: f.actorA }), 201);
+  await f.grant(`semantic:read:${definition.component}`, 'semantic.read');
+  return definition;
+}
+
 test('CTX09: exact DefinitionRef retirement keeps older Statements readable and rejects new use', async () => {
   const f = await contextFixture(Bun.env as Record<string, string>);
   try {
     const object = nativeId();
     const definition = nativeId();
-    const relation = `${RV}classifiedAs`;
+    await f.grant('semantic:create:root', 'semantic.change');
+    const relationDefinition = await defineStatementProperty(f);
+    const relation = relationDefinition.component;
     await f.grant('context:create:root', 'context.create');
     const context = await f.json<ContextWrite>(await f.call('POST', '/v1/contexts', {
       profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
@@ -27,7 +39,7 @@ test('CTX09: exact DefinitionRef retirement keeps older Statements readable and 
     const work = await f.work('Definition retirement');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
     const statementBody = { profile: 'statement-v1', speaker: { kind: 'personal' },
-      subject: work.mainVersion, predicate: relation, relationDefinition: nativeId(),
+      subject: work.mainVersion, predicate: relation, relationDefinition: relationDefinition.revision,
       value: { kind: 'resource', iri: object }, applicability: [],
       interpretation: { kind: 'explicit', context: context.context,
         semanticRevision: context.semanticRevision }, evidence: [], actingSubject: f.actorA };
@@ -202,15 +214,15 @@ test('CTX04: Global, Realm and personal exact interpretations remain independent
     const work = await f.work('Independent meanings');
     await f.grant(`statement:speak:${realmA.realm}`, 'statement.record');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
+    const relationDefinition = CLASSIFICATION_PROPOSITION_PROFILE;
     const statement = (speaker: object) => ({ profile: 'statement-v1', speaker,
-      subject: work.mainVersion, predicate: relation, relationDefinition: nativeId(),
+      subject: work.mainVersion, predicate: relation, relationDefinition,
       value: { kind: 'resource', iri: broad }, applicability: [],
       interpretation: { kind: 'selected' }, evidence: [], actingSubject: f.actorA });
-    const relationDefinition = nativeId();
     const realmStatement = await f.json<StatementWrite>(await f.call('POST', '/v1/statements', {
-      ...statement({ kind: 'realm', realm: realmA.realm }), relationDefinition }), 201);
+      ...statement({ kind: 'realm', realm: realmA.realm }) }), 201);
     const personalStatement = await f.json<StatementWrite>(await f.call('POST', '/v1/statements', {
-      ...statement({ kind: 'personal' }), relationDefinition }), 201);
+      ...statement({ kind: 'personal' }) }), 201);
     expect(realmStatement.meaningKey).not.toBe(personalStatement.meaningKey);
     const read = async (id: string) => f.json<{ meaningKey: string; value: { iri: string };
       meaningBasis: { interpretationDefinitions: string[] } }>(await f.call('GET', `/v1/statements/${short(id)}`), 200);
@@ -259,7 +271,8 @@ test('CTX09: retirement preserves exact Statement meaning and receipts, blocks n
     const work = await f.work('Retained meaning');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
     const statementBody = { profile: 'statement-v1', speaker: { kind: 'personal' },
-      subject: work.mainVersion, predicate: relation, relationDefinition: nativeId(),
+      subject: work.mainVersion, predicate: relation,
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
       value: { kind: 'resource', iri: object }, applicability: [],
       interpretation: { kind: 'explicit', context: created.context,
         semanticRevision: created.semanticRevision }, evidence: [], actingSubject: f.actorA };
@@ -406,7 +419,8 @@ test('CTX08/CTX10: concurrent reparent has one winner; pinned consumers survive 
     for (let index = 0; index < 12; index++) {
       statements.push(await f.json<StatementWrite>(await f.call('POST', '/v1/statements', {
         profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.mainVersion,
-        predicate: relation, relationDefinition: nativeId(), value: { kind: 'resource', iri: object },
+        predicate: relation, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+        value: { kind: 'resource', iri: object },
         applicability: [], interpretation: { kind: 'explicit', context: child.context,
           semanticRevision: child.semanticRevision }, evidence: [], actingSubject: f.actorA }), 201));
     }
@@ -450,12 +464,14 @@ test('CTX05: exact relation, value and definition qualify meaning while support 
   try {
     const red = nativeId();
     const redHair = nativeId();
-    const hairColor = nativeId();
-    const eyeColor = nativeId();
+    await f.grant('semantic:create:root', 'semantic.change');
+    const hairProperty = await defineStatementProperty(f);
+    const eyeProperty = await defineStatementProperty(f);
+    const hairColor = hairProperty.component;
+    const eyeColor = eyeProperty.component;
     const classifiedAs = `${RV}classifiedAs`;
     const hairDefinition = nativeId();
     const eyeDefinition = nativeId();
-    const relationDefinition = nativeId();
     await f.grant('context:create:root', 'context.create');
     const contextBody = { profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
       entries: [{ target: red, relation: hairColor, state: 'defined', definition: hairDefinition,
@@ -476,17 +492,18 @@ test('CTX05: exact relation, value and definition qualify meaning while support 
       .toEqual([[eyeColor, eyeDefinition], [hairColor, hairDefinition]].sort((a, b) => a[0]!.localeCompare(b[0]!)));
     const work = await f.work('Qualified red');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
-    const record = (predicate: string, value: string, context: ContextWrite) =>
+    const record = (predicate: string, relationDefinition: string, value: string, context: ContextWrite) =>
       f.call('POST', '/v1/statements', { profile: 'statement-v1', speaker: { kind: 'personal' },
         subject: work.mainVersion, predicate, relationDefinition,
         value: { kind: 'resource', iri: value }, applicability: [],
         interpretation: { kind: 'explicit', context: context.context,
           semanticRevision: context.semanticRevision }, evidence: [], actingSubject: f.actorA });
-    const hairA = await f.json<StatementWrite>(await record(hairColor, red, first), 201);
-    const hairB = await f.json<StatementWrite>(await record(hairColor, red, second), 201);
-    const bare = await f.json<StatementWrite>(await record(classifiedAs, red, first), 201);
-    const eye = await f.json<StatementWrite>(await record(eyeColor, red, first), 201);
-    const named = await f.json<StatementWrite>(await record(hairColor, redHair, first), 201);
+    const hairA = await f.json<StatementWrite>(await record(hairColor, hairProperty.revision, red, first), 201);
+    const hairB = await f.json<StatementWrite>(await record(hairColor, hairProperty.revision, red, second), 201);
+    const bare = await f.json<StatementWrite>(await record(classifiedAs,
+      CLASSIFICATION_PROPOSITION_PROFILE, red, first), 201);
+    const eye = await f.json<StatementWrite>(await record(eyeColor, eyeProperty.revision, red, first), 201);
+    const named = await f.json<StatementWrite>(await record(hairColor, hairProperty.revision, redHair, first), 201);
     expect(hairA.meaningKey).toBe(hairB.meaningKey);
     expect(new Set([hairA.meaningKey, bare.meaningKey, eye.meaningKey, named.meaningKey]).size).toBe(4);
     expect(hairA.statement).not.toBe(hairB.statement);
