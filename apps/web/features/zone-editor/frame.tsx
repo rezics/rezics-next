@@ -13,7 +13,8 @@ import { useUnsavedZoneEditorSections } from './draft-provider.tsx';
  * The Zone an author is working on: its name, who is acting, and the site sections.
  * Authors can move between home, navigation, Realm and structural theme settings.
  */
-export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation, sectionRealm, sectionTheme, unsavedWork, children }: {
+export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation,
+  sectionRealm, sectionTheme, sectionLifecycle, lifecycleOnly = false, unsavedWork, children }: {
   name: string;
   editorPath: string;
   agent: AgentOption;
@@ -24,6 +25,8 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
   sectionNavigation: string;
   sectionRealm: string;
   sectionTheme: string;
+  sectionLifecycle?: string;
+  lifecycleOnly?: boolean;
   unsavedWork?: string;
   children: ReactNode;
 }) {
@@ -46,7 +49,9 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
         {unsaved.length && unsavedWork ? <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
           <span className="font-medium">{unsavedWork}: </span>{unsaved.map(section => sectionLabels[section]).join(', ')}
         </p> : null}
-        <ZoneEditorSections editorPath={editorPath} sectionsLabel={sectionsLabel} sectionHome={sectionHome} sectionNavigation={sectionNavigation} sectionRealm={sectionRealm} sectionTheme={sectionTheme} />
+        <ZoneEditorSections editorPath={editorPath} sectionsLabel={sectionsLabel} sectionHome={sectionHome}
+          sectionNavigation={sectionNavigation} sectionRealm={sectionRealm} sectionTheme={sectionTheme}
+          sectionLifecycle={sectionLifecycle} lifecycleOnly={lifecycleOnly} />
       </div>
     </div>
     <div className="mx-auto w-full min-w-0 max-w-7xl px-4 py-3 sm:px-6 sm:py-6 lg:px-10">{children}</div>

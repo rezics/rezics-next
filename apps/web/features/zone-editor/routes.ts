@@ -18,3 +18,8 @@ export function zoneRealmPath(space: string): string {
 export function zoneThemePath(space: string): string {
   return `${zoneEditorPath(space)}/theme`;
 }
+
+/** A stable management address that still works when public Space resolution is retired. */
+export function zoneLifecyclePath(space: string, returnAddress?: string): string {
+  return `${zoneEditorPath(space)}/lifecycle${returnAddress ? `?address=${encodeURIComponent(returnAddress)}` : ''}`;
+}

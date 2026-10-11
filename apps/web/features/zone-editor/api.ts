@@ -13,6 +13,7 @@ import {
   type NavigationReadTarget, type NavPosition, type NavWriteFailure, type NavWriteResult, type SiteLink,
 } from './navigation.ts';
 import type { ZonePresentationBaseline } from './theme.ts';
+import { readZoneLifecycleSnapshot } from './lifecycle.ts';
 
 export type WriteResult<T> =
   | { ok: true; data: T }
@@ -33,6 +34,17 @@ export interface ZoneThemeWrite {
 export interface ZoneThemeClient {
   readConfiguration(zoneId: string, actingSubject: string): Promise<WriteResult<ZoneThemeSnapshot>>;
   saveConfiguration(zoneId: string, body: ZoneThemeWrite, key: string): Promise<WriteResult<SavedZoneTheme>>;
+}
+
+export type ZoneLifecycleStatus = 'active' | 'retired';
+export interface ZoneLifecycleSnapshot { revision: string; status: ZoneLifecycleStatus }
+export interface ZoneLifecycleWrite { expectedHead: string; actingSubject: string }
+export interface SavedZoneLifecycle { revision: string; replayed: boolean }
+
+export interface ZoneLifecycleClient {
+  readConfiguration(zoneId: string, actingSubject: string): Promise<WriteResult<ZoneLifecycleSnapshot>>;
+  retire(zoneId: string, body: ZoneLifecycleWrite, key: string): Promise<WriteResult<SavedZoneLifecycle>>;
+  recover(zoneId: string, body: ZoneLifecycleWrite, key: string): Promise<WriteResult<SavedZoneLifecycle>>;
 }
 
 /**
@@ -113,6 +125,27 @@ export function browserZoneTheme(main: ReturnType<typeof browserMainApi> = brows
   };
 }
 
+/** Lifecycle reads are authorized configuration reads, so they remain available without active navigation. */
+export function browserZoneLifecycle(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneLifecycleClient {
+  return {
+    async readConfiguration(zoneId, actingSubject) {
+      const answer = await post(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }));
+      if (!answer.ok) return answer;
+      const row = record(answer.data);
+      const snapshot = readZoneLifecycleSnapshot(row?.revision, row?.configuration);
+      return snapshot ? { ok: true, data: snapshot } : { ok: false, failure: 'unavailable' };
+    },
+    async retire(zoneId, body, key) {
+      return lifecycleWrittenOf(await post(() => main.v1.zones({ id: zoneId }).retirements.post(
+        body, { headers: { 'idempotency-key': key } })));
+    },
+    async recover(zoneId, body, key) {
+      return lifecycleWrittenOf(await post(() => main.v1.zones({ id: zoneId }).recoveries.post(
+        body, { headers: { 'idempotency-key': key } })));
+    },
+  };
+}
+
 /** The choice the lane keys, without the fields that never go on the wire. */
 export function choiceWire(choice: DraftChoice): DraftWire {
   return draftWire(choice);
@@ -157,6 +190,14 @@ function publishedOf(result: WriteResult<unknown>): WriteResult<PublishedSite> {
   const revision = record(result.data)?.revision;
   if (typeof revision !== 'string' || !iriPattern.test(revision)) return { ok: false, failure: 'unavailable' };
   return { ok: true, data: { zoneHead: revision, replayed: record(result.data)?.replayed === true } };
+}
+
+function lifecycleWrittenOf(result: WriteResult<unknown>): WriteResult<SavedZoneLifecycle> {
+  if (!result.ok) return result;
+  const row = record(result.data);
+  const revision = row?.revision;
+  if (typeof revision !== 'string' || !iriPattern.test(revision)) return { ok: false, failure: 'unavailable' };
+  return { ok: true, data: { revision, replayed: row?.replayed === true } };
 }
 
 function headsOf(data: unknown): WriteResult<ZoneHeads> | null {
