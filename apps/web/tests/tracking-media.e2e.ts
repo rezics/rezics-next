@@ -224,7 +224,8 @@ test('identified anime watched progress resumes across devices and rejects stale
   expect(await refused.json()).toMatchObject({ code: 'stale_progress' });
   await handset.reload();
   await loaded(handset, '[data-episode-progress]', 180_000);
-  await expect(phoneEpisodes.getByText('Continue from episode 1001')).toBeVisible();
+  await expect(phoneEpisodes.getByText('No episode watched yet')).toBeVisible();
+  await expect(phoneEpisodes.getByText('Continue from episode 1', { exact: true })).toBeVisible();
   await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
   await phoneEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(phoneEpisodes.locator('[data-selected="main"]')).toContainText('Not watched', { timeout: 180_000 });
