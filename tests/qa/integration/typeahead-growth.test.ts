@@ -78,7 +78,7 @@ class GrowthFuseki extends FusekiClient {
   }
 }
 
-test('SEARCH18: public typeahead native work follows population before prefix cutover and the page after it', async () => {
+test('SEARCH21: public typeahead native work follows population before prefix cutover and the page after it', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
