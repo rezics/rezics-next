@@ -195,15 +195,17 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
         // The owner holds the asset and reservation fence across both writes.
         const quarantine = media.objects(`${upload.quarantineKey}/`);
         const original = media.objects(upload.objectNamespace);
-        if (!quarantine.deleteAndVerifyAbsent || !original.deleteAndVerifyAbsent)
-          throw new MediaUnavailable('media persistence requires verified object deletion');
-        onFailure(cleanupSignal => quarantine.deleteAndVerifyAbsent!(digest, cleanupSignal));
-        const staged = await quarantine.get(await quarantine.put(bytes, signal), bytes.length, signal);
+        if (!quarantine.deleteAndVerifyAbsent || !original.deleteAndVerifyAbsent
+          || !quarantine.putTracked || !original.putTracked)
+          throw new MediaUnavailable('media persistence requires tracked object creation and verified deletion');
+        const quarantinePut = await quarantine.putTracked(bytes, signal, created => onFailure({ digest: created,
+          cleanup: cleanupSignal => quarantine.deleteAndVerifyAbsent!(created, cleanupSignal) }));
+        const staged = await quarantine.get(quarantinePut.digest, bytes.length, signal);
         signal.throwIfAborted();
         if (staged.length !== bytes.length || sha256(staged) !== digest)
           throw new MediaUnavailable('quarantined media integrity differs');
-        onFailure(cleanupSignal => original.deleteAndVerifyAbsent!(digest, cleanupSignal));
-        return original.put(staged, signal);
+        return (await original.putTracked(staged, signal, created => onFailure({ digest: created,
+          cleanup: cleanupSignal => original.deleteAndVerifyAbsent!(created, cleanupSignal) }))).digest;
       };
     } catch (error) {
       if (!(error instanceof ImageFormatRejected)) throw error;

@@ -201,24 +201,36 @@ function checkAdmission(admission: MediaAdmission): void {
 const recorded = new WeakMap<PoolClient, string[]>();
 
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
-  onFailure?: () => Promise<void>,
+  onFailure?: (client: PoolClient) => Promise<void>,
+  resolveFailure?: () => Promise<{ value: T } | undefined>,
 ): Promise<T> {
   const client = await pool.connect();
   const operations: string[] = [];
   recorded.set(client, operations);
-  let result: T;
+  let result!: T;
+  let failed = false;
+  let failure: unknown;
+  let committing = false;
   try {
     await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
     result = await work(client);
+    committing = true;
     await client.query('COMMIT');
   } catch (error) {
-    // Compensation runs while the owner lock is still held whenever possible.
-    if (onFailure) await onFailure();
+    failed = true;
+    failure = error;
+    // An unacknowledged COMMIT may already be durable. Resolve it after releasing
+    // this client, before any compensation on a fresh owner transaction.
+    if (!committing && onFailure) await onFailure(client).catch(() => undefined);
     await client.query('ROLLBACK').catch(() => undefined);
-    throw error;
   } finally {
     recorded.delete(client);
     client.release();
+  }
+  if (failed) {
+    const resolved = await resolveFailure?.();
+    if (!resolved) throw failure;
+    result = resolved.value;
   }
   // A command is acknowledged once its events are numbered. The sequencer numbers
   // in insertion order, so the transaction's last receipt covers the earlier ones.
@@ -619,19 +631,33 @@ export class MediaStore {
 
   /** Persist quarantine and original bytes under the asset -> upload fence, then
    * activate their exact representation. Every callback I/O must honor the shared
-   * abort signal and register exact-key compensation before attempting a write.
+   * abort signal and register compensation only for acknowledged new keys.
    * A replay never invokes persistence. */
   async settleUpload(upload: string, verdict: { status: 'activated'; sha256: string; byteLength: number;
     mediaType: MediaType; width: number; height: number } | { status: 'rejected'; reason: string },
-    persist?: (signal: AbortSignal, onFailure: (cleanup: (signal: AbortSignal) => Promise<void>) => void)
+    persist?: (signal: AbortSignal, onFailure: (created: { digest: string;
+      cleanup: (signal: AbortSignal) => Promise<void> }) => void)
       => Promise<string>,
   ): Promise<ActivatedUpload> {
     const current = await this.readUpload(upload);
     if (!current) throw new MediaMissing('media upload is unavailable');
     const operationId = `media-activate:${upload}`;
     const digest = hash(JSON.stringify({ family: 'media-upload-settle-v1', upload, verdict }));
-    const cleanup: ((signal: AbortSignal) => Promise<void>)[] = [];
+    const cleanup: { digest: string; cleanup: (signal: AbortSignal) => Promise<void> }[] = [];
     let cleanupMs = 1;
+    let compensated = false;
+    const compensate = async (client: PoolClient) => {
+      const signal = AbortSignal.timeout(cleanupMs);
+      for (const created of cleanup) {
+        // Digest keys can be shared by historical originals and renditions. Even
+        // a newly restored key belongs to those retained representations.
+        const retained = await client.query(`SELECT 1 FROM media.representation
+          WHERE asset_id=$1 AND byte_digest=$2 AND availability <> 'erased' LIMIT 1`,
+        [current.asset, created.digest]);
+        if (!retained.rowCount) await created.cleanup(signal).catch(() => undefined);
+      }
+      compensated = true;
+    };
     return this.positioned(operationId, await transaction(this.pool, async (client):
       Promise<Omit<ActivatedUpload, 'position'>> => {
       const previous = await prior(client, operationId, digest, 'media.upload.settle');
@@ -679,13 +705,15 @@ export class MediaStore {
       const bounds = (await client.query<{ idle_ms: number; transaction_id: string }>(`
         SELECT (extract(epoch FROM current_setting('idle_in_transaction_session_timeout')::interval)
           * 1000)::float8 AS idle_ms, txid_current()::text AS transaction_id`)).rows[0]!;
-      if (!Number.isFinite(bounds.idle_ms) || bounds.idle_ms < 0)
+      if (!Number.isFinite(bounds.idle_ms) || bounds.idle_ms <= 0)
         throw new MediaUnavailable('media persistence requires a bounded transaction');
-      // Zero disables PostgreSQL's idle timeout (e.g. migration/test pools).
-      const idleBudgetMs = bounds.idle_ms || Infinity;
+      const idleBudgetMs = bounds.idle_ms;
       const deadlineMs = Math.max(1, Math.floor(Math.min(idleBudgetMs / 2, 30_000)));
       cleanupMs = Math.max(1, Math.floor(Math.min(idleBudgetMs / 4, 5_000)));
       const controller = new AbortController();
+      // Roll back failed activation SQL without releasing the owner locks that
+      // protect the reference check and exact-key compensation.
+      await client.query('SAVEPOINT media_persistence');
       const timer = setTimeout(() => controller.abort(new MediaUnavailable('media persistence deadline elapsed')),
         deadlineMs);
       let persisted: string;
@@ -728,12 +756,30 @@ export class MediaStore {
       [randomUUID(), operationId, current.asset, verdict.sha256]);
       return { asset: current.asset, upload, representation, sha256: verdict.sha256, status: 'activated',
         reason: null, replayed: false };
+    }, async client => {
+      if (!cleanup.length) return;
+      await client.query('ROLLBACK TO SAVEPOINT media_persistence');
+      await compensate(client);
     }, async () => {
-      // Aborted PUT responses can still have stored bytes, so every attempted key
-      // is registered before I/O. Failed verified deletion leaves the existing
-      // asset/upload orphan sweep as the recovery backstop.
-      const signal = AbortSignal.timeout(cleanupMs);
-      await Promise.allSettled(cleanup.map(async undo => undo(signal)));
+      // The previous backend may have committed, rolled back, or still be
+      // completing COMMIT. Its operation lock serializes this fresh read with
+      // that outcome; failure to establish it leaves bytes for owner recovery.
+      return transaction(this.pool, async client => {
+        const previous = await prior(client, operationId, digest, 'media.upload.settle');
+        await client.query('SELECT id FROM media.asset WHERE id=$1 FOR UPDATE', [current.asset]);
+        if (previous) {
+          const row = (await client.query<{ id: string; byte_digest: string }>(
+            'SELECT id,byte_digest FROM media.representation WHERE upload_id=$1 AND operation_id=$2',
+          [upload, operationId])).rows[0];
+          if (previous.outcome === 'succeeded' && !row)
+            throw new MediaUnavailable('media activation receipt lacks its original');
+          return { value: { asset: current.asset, upload, representation: row?.id ?? '',
+            sha256: row?.byte_digest ?? '', status: previous.outcome === 'succeeded'
+              ? 'activated' as const : 'rejected' as const, reason: previous.reason, replayed: true } };
+        }
+        if (!compensated) await compensate(client);
+        return undefined;
+      });
     }));
   }
 
@@ -781,9 +827,11 @@ export class MediaStore {
       // A stale attempt keeps its receipt; each retry uses the next derived operation.
       const receipts = await transaction(this.pool, async client => {
         await transactionFence(client);
-        const result = await client.query<{ operation_id: string; outcome: string; revision_id: string | null }>(
-          `SELECT operation_id, outcome, revision_id FROM content.receipt
-           WHERE operation_id = ANY($1::text[]) AND action = 'draft.save'`, [attempts]);
+        const result = await client.query<{ operation_id: string; outcome: string; revision_id: string | null;
+          predecessor: string | null }>(
+          `SELECT c.operation_id,c.outcome,c.revision_id,r.predecessor FROM content.receipt c
+           LEFT JOIN content.revision r ON r.id=c.revision_id
+           WHERE c.operation_id = ANY($1::text[]) AND c.action = 'draft.save'`, [attempts]);
         const done = result.rows.find(receipt => receipt.outcome === 'succeeded' && receipt.revision_id);
         if (done) {
           const revision = (await client.query<{ availability: string }>(
@@ -793,21 +841,23 @@ export class MediaStore {
         return result.rows;
       });
       const done = receipts.find(receipt => receipt.outcome === 'succeeded' && receipt.revision_id);
-      if (done) {
-        if (!await this.repairImportedCoverProjection(done.revision_id!))
-          throw new MediaStale('asset revision is no longer available');
-        return { revision: done.revision_id!, replayed: true };
-      }
-      const next = attempts.find(id => !receipts.some(receipt => receipt.operation_id === id));
+      const next = done?.operation_id ?? attempts.find(id => !receipts.some(receipt => receipt.operation_id === id));
       if (!next) break;
       const head = (await this.pool.query<{ draft_head: string | null }>(
         'SELECT draft_head FROM content.variant WHERE id = $1', [assetVariant(row.asset_id)])).rows[0];
       const saved = await this.content.saveDraft({ operationId: next,
         variant: { id: assetVariant(row.asset_id), resourceId: assetIri(row.asset_id),
           language: { kind: 'zxx' }, direction: 'none' },
-        expectedHead: head?.draft_head ?? null, model: 'media-asset-v1', sourceRevision: null,
+        expectedHead: done ? done.predecessor : head?.draft_head ?? null, model: 'media-asset-v1', sourceRevision: null,
         provenance: { kind: 'media-upload-activation-v1', upload, representation: row.id },
-        serializedJson: manifest }, transactionFence);
+        serializedJson: manifest }, async client => {
+          await transactionFence(client);
+          if (done) {
+            const revision = (await client.query<{ availability: string }>(
+              'SELECT availability FROM content.revision WHERE id=$1 FOR SHARE', [done.revision_id])).rows[0];
+            if (revision?.availability !== 'available') throw new MediaStale('asset revision is no longer available');
+          }
+        });
       if (saved.outcome === 'succeeded' && saved.revisionId) {
         if (!await this.repairImportedCoverProjection(saved.revisionId))
           throw new MediaStale('asset revision is no longer available');
