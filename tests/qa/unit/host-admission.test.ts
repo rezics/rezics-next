@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { GiB } from '../../../scripts/qa/memory-admission.ts';
-import { hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission } from '../../../scripts/qa/host-admission.ts';
+import { hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission, SERIAL_ADMISSION_GIB } from '../../../scripts/qa/host-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
@@ -108,4 +108,24 @@ test('the host admission command returns the child status and rejects a bad invo
   });
   expect(usage.status).not.toBe(0);
   expect(usage.stderr).toContain('positive number of gibibytes');
+});
+
+test('a large need runs again under the host-wide lock, and a small or already locked one runs directly', async () => {
+  const lock = join(scratch, `large-admission-${process.pid}.lock`);
+  const seen: (readonly string[])[] = [];
+  const options = {
+    deadline: 30, now: () => 0, sleep: async () => {}, pollMs: 10, announce: () => {},
+    read: async () => host(64 * GiB), run: async (command: readonly string[]) => { seen.push(command); return 0; },
+  };
+  try {
+    await runHostAdmission(SERIAL_ADMISSION_GIB, ['tsc', '--noEmit'], { ...options, env: qaEnv, serialLock: lock });
+    expect(seen[0]!.slice(0, 4)).toEqual(['flock', lock, 'env', 'REZICS_QA_SERIAL_ADMISSION=1']);
+    expect(seen[0]!.slice(-5)).toEqual(['--gib', String(SERIAL_ADMISSION_GIB), '--', 'tsc', '--noEmit']);
+    await runHostAdmission(SERIAL_ADMISSION_GIB - 0.5, ['tsc'], { ...options, env: qaEnv, serialLock: lock });
+    expect(seen[1]).toEqual(['tsc']);
+    await runHostAdmission(7, ['tsc'], { ...options, env: { ...qaEnv, REZICS_QA_SERIAL_ADMISSION: '1' }, serialLock: lock });
+    expect(seen[2]).toEqual(['tsc']);
+    await runHostAdmission(7, ['tsc'], { ...options, env: qaEnv });
+    expect(seen[3]).toEqual(['tsc']);
+  } finally { rmSync(lock, { force: true }); }
 });

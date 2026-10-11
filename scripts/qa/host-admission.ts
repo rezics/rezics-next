@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { GiB, isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory,
   type MemoryReading } from './memory-admission.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from './process/terminate.ts';
@@ -16,8 +17,15 @@ export function parseHostAdmissionArgs(args: readonly string[]): { gib: number; 
   return { gib: Number(args[1]), command: args.slice(split + 1) };
 }
 
+/** Needs this large take turns. Two type checks that each fit when measured can exhaust the host together,
+ * because a process grows to its need only after it was admitted. */
+export const SERIAL_ADMISSION_GIB = 4;
+const SERIAL_ADMISSION_MARK = 'REZICS_QA_SERIAL_ADMISSION';
+
 export interface HostAdmissionOptions {
   root?: string;
+  /** The host-wide lock large needs take turns on. The command line derives it from the Goal state. */
+  serialLock?: string;
   env?: NodeJS.ProcessEnv;
   deadline?: number;
   read?: (remainingMs: number) => Promise<MemoryReading>;
@@ -61,6 +69,12 @@ export async function runHostAdmission(gib: number, command: readonly string[],
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const run = options.run ?? spawnInherited;
   if (!await isLocalQaRun(root, env)) return await run(command);
+  if (gib >= SERIAL_ADMISSION_GIB && options.serialLock && !env[SERIAL_ADMISSION_MARK]) {
+    mkdirSync(dirname(options.serialLock), { recursive: true });
+    // The whole admission and command run again under the lock, so the memory reading is taken by its holder.
+    return await run(['flock', options.serialLock, 'env', `${SERIAL_ADMISSION_MARK}=1`, process.execPath,
+      import.meta.path, '--gib', String(gib), '--', ...command]);
+  }
   const reserve = qaMemoryNeed(root, 'other', undefined, env).hostReserve;
   await waitForMemory({ vm: 0, vmReserve: 0, host: gib * GiB, hostReserve: reserve }, {
     root, env, deadline: options.deadline ?? qaMemoryDeadline(env),
@@ -69,10 +83,17 @@ export async function runHostAdmission(gib: number, command: readonly string[],
   return await run(command);
 }
 
+async function serialAdmissionLock(root: string): Promise<string | undefined> {
+  const { goalSlotDirectory } = await import('./core.ts');
+  const slots = goalSlotDirectory(root);
+  return slots ? join(dirname(slots), 'large-admission.lock') : undefined;
+}
+
 if (import.meta.main) {
   try {
     const parsed = parseHostAdmissionArgs(process.argv.slice(2));
-    process.exit(await runHostAdmission(parsed.gib, parsed.command));
+    process.exit(await runHostAdmission(parsed.gib, parsed.command,
+      { serialLock: await serialAdmissionLock(resolve(import.meta.dir, '../..')) }));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
