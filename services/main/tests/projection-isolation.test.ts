@@ -16,6 +16,7 @@ import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
 import { contentPublicationDecisionIri, contentPublicationReceiptIri }
   from '../src/modules/content-publication/publish.ts';
 import { DATASET, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const id = () => `https://rezics.com/id/${crypto.randomUUID()}`;
@@ -96,12 +97,16 @@ class ProjectionGraph extends FusekiClient {
   publications: ProjectionPublication[] = [];
   heads = new Map<string, string>();
   eligibilityAdmissions = new Map<string, string>();
+  ownerRecords = new Map<string, ProjectionOwnerRecord>();
+  eligibilityHeads = new Map<string, ProjectionOwnerRecord | null>();
   failed = new Set<string>();
   commands = new Set<string>();
   attempts = 0;
+  healthReads = 0;
   structures = new Map<string, string>();
   constructor() { super('http://localhost:1/rezics'); }
   override async commandHealth() {
+    this.healthReads++;
     return { moduleVersion: 'test', instanceId: graphEpoch, publicSearchWriteEpoch: '0',
       publicSearchWriteActive: false, profiles: Object.fromEntries(Object.entries(profileRegistry).map(([name, p]) => [name, p.sha256])) };
   }
@@ -118,19 +123,21 @@ class ProjectionGraph extends FusekiClient {
     }
     const currentOwners = [...new Set(this.publications.map(item => item.reference.variantId))]
       .map(variant => this.currentOwnerRecord(variant)).filter((record): record is ProjectionOwnerRecord => Boolean(record));
+    const allOwners = this.publications.map(publication => this.ownerRecord(publication));
     if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
       return { results: { bindings: currentOwners.filter(record => sparql.includes(`<${record.variant}>`)).map(record => ({
         variant: uri(record.variant), resourceCount: binding('1'), resource: uri(record.resource),
         publicationCount: binding('1'), publication: uri(record.publication),
-        eligibilityCount: binding('1'), eligibility: uri(record.eligibility),
+        eligibilityCount: binding(this.eligibilityRecord(record.variant) ? '1' : '0'),
+        ...(this.eligibilityRecord(record.variant) ? { eligibility: uri(this.eligibilityRecord(record.variant)!.eligibility) } : {}),
       })) } };
     }
     if (sparql.includes('SELECT ?eligibility') && sparql.includes('?decisionTypeCount')) {
-      return { results: { bindings: currentOwners.filter(record => sparql.includes(`<${record.eligibility}>`))
+      return { results: { bindings: allOwners.filter(record => sparql.includes(`<${record.eligibility}>`))
         .map(record => record.eligibilityRow) } };
     }
     if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
-      return { results: { bindings: currentOwners.filter(record => sparql.includes(`<${record.publication}>`))
+      return { results: { bindings: allOwners.filter(record => sparql.includes(`<${record.publication}>`))
         .map(record => record.publicationRow) } };
     }
     const publication = this.publications.find(p => sparql.includes(`<${p.graph.receipt}>`));
@@ -138,11 +145,11 @@ class ProjectionGraph extends FusekiClient {
     if (this.failed.has(publication.reference.variantId)) throw new Error('target unavailable');
     const { reference: r, preparationPosition: at, preparationId } = publication;
     const decision = contentPublicationDecisionIri(preparationId);
-    const current = this.currentOwnerRecord(r.variantId);
+    const current = this.eligibilityRecord(r.variantId);
     return { results: { bindings: [{ epoch: binding(graphEpoch), routing: binding('1'), sequence: binding('100'),
       outcome: binding(`${RV}Succeeded`), receiptEpoch: binding(graphEpoch), receiptSequence: binding(publication.graph.sequence),
       decision: binding(decision), head: binding(this.heads.get(r.variantId) ?? decision),
-      eligibility: binding(current?.eligibility ?? ''), eligibleDecision: binding(current?.publication ?? decision),
+      ...(current ? { eligibility: uri(current.eligibility), eligibleDecision: uri(current.publication) } : {}),
       revision: binding(`urn:rezics:content:revision:${r.revisionId}`), digest: binding(r.byteDigest),
       ownerEpoch: binding(at.dataEpoch), ownerSequence: binding(at.sequence), resource: binding(r.resourceId), variant: binding(r.variantId),
       decisionRevision: binding(`urn:rezics:content:revision:${r.revisionId}`), decisionDigest: binding(r.byteDigest),
@@ -154,9 +161,36 @@ class ProjectionGraph extends FusekiClient {
     const publication = [...this.publications].reverse().find(item => item.reference.variantId === variant
       && (!currentDecision || contentPublicationDecisionIri(item.preparationId) === currentDecision));
     if (!publication) return undefined;
+    return this.ownerRecord(publication);
+  }
+  private eligibilityRecord(variant: string): ProjectionOwnerRecord | undefined | null {
+    return this.eligibilityHeads.has(variant) ? this.eligibilityHeads.get(variant) : this.currentOwnerRecord(variant);
+  }
+  ownerRecord(publication: ProjectionPublication): ProjectionOwnerRecord {
+    const retained = this.ownerRecords.get(publication.preparationId);
+    if (retained) return retained;
     let admission = this.eligibilityAdmissions.get(publication.preparationId);
     if (!admission) { admission = crypto.randomUUID(); this.eligibilityAdmissions.set(publication.preparationId, admission); }
-    return projectionOwnerRecord(publication, admission);
+    const record = projectionOwnerRecord(publication, admission);
+    this.ownerRecords.set(publication.preparationId, record);
+    return record;
+  }
+  async deliverApproval(content: ContentCore, publication: ProjectionPublication) {
+    const record = this.ownerRecord(publication);
+    const expected = await content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, graphEpoch);
+    const sequence = (BigInt(expected.sequence) + 1n).toString();
+    const delivered = await content.ingestEligibilityDeliveryPage({ expected, batches: [{
+      sequence, id: `batch-${sequence}`, digest: 'a'.repeat(64), events: [{
+        id: `urn:rezics:event:${crypto.randomUUID()}`, type: 'com.rezics.content.search-eligible.v1', ordinal: 0,
+        sourcePosition: { dataEpoch: graphEpoch, sequence: record.eligibilityRow.dSequence!.value },
+        receipt: { id: record.eligibilityRow.receipt!.value, action: 'content.search-eligibility', outcome: 'succeeded',
+          requestDigest: record.eligibilityRow.rRequestDigest!.value, resource: record.resource, variant: record.variant,
+          publicationDecision: record.publication, eligibilityDecision: record.eligibility, disclosure: 'public' },
+        publication: { preparationId: publication.preparationId, revisionId: publication.reference.revisionId },
+      }],
+    }] });
+    return (await content.readOutbox(expected.contentDataEpoch, '0', 100))
+      .find(event => event.operationId === delivered.events[0]!.operationId)!;
   }
   override async command(command: Parameters<FusekiClient['command']>[0]) {
     this.attempts++;
@@ -173,28 +207,33 @@ async function postgres(run: (pool: Pool) => Promise<void>) {
   finally { await pool.end(); cluster.remove(); }
 }
 
+async function publishProjection(content: ContentCore, graph: ProjectionGraph, variant: VariantIdentity,
+  body: string, predecessor: string | null = null, model = 'content-shape-v1', approve = true) {
+  const saved = await content.saveDraft({ operationId: crypto.randomUUID(), variant, model, expectedHead: predecessor,
+    sourceRevision: null, provenance: {}, serializedJson: JSON.stringify({ body }) });
+  const exact = (await content.readExactBatch([saved.revisionId!], async ids => new Set(ids)))[0];
+  if (exact?.status !== 'available') throw new Error('source missing');
+  const preparationId = crypto.randomUUID();
+  await content.preparePublication(preparationId, saved.revisionId!, exact.reference.byteDigest, true, saved.position.dataEpoch);
+  const settled = await content.settlePublication(crypto.randomUUID(), preparationId, { outcome: 'active', revisionId: saved.revisionId!,
+    receipt: `urn:rezics:receipt:${preparationId}`, dataEpoch: graphEpoch,
+    sequence: String(graph.publications.length * 10 + 7) }, saved.position.dataEpoch);
+  if (!settled.position) throw new Error('terminal source missing');
+  const event = (await content.readOutbox(saved.position.dataEpoch, String(BigInt(settled.position.sequence) - 1n), 1))[0]!;
+  const publication = await content.readProjectionPublication(event);
+  graph.publications.push(publication); graph.heads.set(variant.id, contentPublicationDecisionIri(preparationId));
+  if (approve) await graph.deliverApproval(content, publication);
+  return { revision: saved.revisionId!, event, publication };
+}
+
 test('Content retains failed A while B projects, survives restart, supersedes in order and replays a graph commit', async () => {
   await postgres(async pool => {
     const content = new ContentCore(pool), graph = new ProjectionGraph();
     const env: WorkActivationEnvironment = { fuseki: graph, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' }, objectDirectory: '.temp/unused' };
     const cursor = new ContentProjectionCursor(pool), consumer = 'isolation';
     await cursor.initialize(consumer);
-    const publish = async (variant: VariantIdentity, body: string, predecessor: string | null = null, model = 'content-shape-v1') => {
-      const saved = await content.saveDraft({ operationId: crypto.randomUUID(), variant, model, expectedHead: predecessor,
-        sourceRevision: null, provenance: {}, serializedJson: JSON.stringify({ body }) });
-      const exact = (await content.readExactBatch([saved.revisionId!], async ids => new Set(ids)))[0];
-      if (exact?.status !== 'available') throw new Error('source missing');
-      const preparationId = crypto.randomUUID();
-      await content.preparePublication(preparationId, saved.revisionId!, exact.reference.byteDigest, true, saved.position.dataEpoch);
-      const settled = await content.settlePublication(crypto.randomUUID(), preparationId, { outcome: 'active', revisionId: saved.revisionId!,
-        receipt: `urn:rezics:receipt:${preparationId}`, dataEpoch: graphEpoch, sequence: '7' }, saved.position.dataEpoch);
-      if (!settled.position) throw new Error('terminal source missing');
-      const event = (await content.readOutbox(saved.position.dataEpoch, String(BigInt(settled.position.sequence) - 1n), 1))[0]!;
-      const publication = await content.readProjectionPublication(event);
-      const decision = contentPublicationDecisionIri(preparationId);
-      graph.publications.push(publication); graph.heads.set(variant.id, decision);
-      return { revision: saved.revisionId!, event };
-    };
+    const publish = (variant: VariantIdentity, body: string, predecessor: string | null = null, model = 'content-shape-v1') =>
+      publishProjection(content, graph, variant, body, predecessor, model);
     const variant = (language = 'en'): VariantIdentity => ({ id: `urn:rezics:variant:${crypto.randomUUID()}`, resourceId: id(),
       language: { kind: 'tag', tag: language, originalTag: language }, direction: 'ltr' });
     const a = variant('zh-Hans-u-nu-hanidec'), b = variant();
@@ -202,9 +241,9 @@ test('Content retains failed A while B projects, survives restart, supersedes in
     graph.failed.add(a.id);
     await publish(b, '... !!!');
     const later = await publish(a, '后来', first.revision);
-    for (let n = 0; n < 9; n++) await relayContentProjectionOnce(env, content, cursor, consumer);
+    for (let n = 0; n < 12; n++) await relayContentProjectionOnce(env, content, cursor, consumer);
     expect(graph.commands.size).toBe(1);
-    expect((await cursor.readScan(consumer)).sequence).toBe('9');
+    expect((await cursor.readScan(consumer)).sequence).toBe('12');
     expect((await cursor.read(consumer)).sequence).toBe('2');
     expect(await pool.query('DELETE FROM content.outbox WHERE id=$1', [first.event.id]).then(() => false, () => true)).toBe(true);
     const restarted = new ContentProjectionCursor(pool);
@@ -216,14 +255,17 @@ test('Content retains failed A while B projects, survives restart, supersedes in
       return content.readProjectionPublication(event, metadataOnly);
     };
     expect((await relayContentProjectionOnce(env, unavailableOldBody, restarted, consumer))?.disposition).toBe('superseded');
+    expect((await relayContentProjectionOnce(env, content, restarted, consumer))?.disposition).toBe('superseded');
+    expect((await relayContentProjectionOnce(env, content, restarted, consumer))?.disposition).toBe('superseded');
     expect((await relayContentProjectionOnce(env, content, restarted, consumer))?.disposition).toBe('projected');
-    expect((await restarted.read(consumer)).sequence).toBe('9');
+    expect((await restarted.read(consumer)).sequence).toBe('12');
     expect(graph.commands.size).toBe(2);
-    expect(later.event.position.sequence).toBe('9');
+    expect(later.event.position.sequence).toBe('11');
 
     // A crash after graph commit leaves the source unacknowledged. Restart
     // executes the same receipt and never creates another graph effect.
     await publish(b, 'new body', graph.publications.find(p => p.reference.variantId === b.id)!.reference.revisionId);
+    await relayContentProjectionOnce(env, content, restarted, consumer);
     await relayContentProjectionOnce(env, content, restarted, consumer);
     await relayContentProjectionOnce(env, content, restarted, consumer);
     await pool.query(`CREATE FUNCTION content.fail_projection_ack() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -231,25 +273,126 @@ test('Content retains failed A while B projects, survives restart, supersedes in
       CREATE TRIGGER fail_projection_ack BEFORE UPDATE ON content.projection_checkpoint
       FOR EACH ROW EXECUTE FUNCTION content.fail_projection_ack()`);
     await expect(relayContentProjectionOnce(env, content, restarted, consumer)).rejects.toThrow('crash before acknowledgement');
-    expect((await restarted.readScan(consumer)).sequence).toBe('11');
+    expect((await restarted.readScan(consumer)).sequence).toBe('15');
     const effects = graph.commands.size;
     await pool.query('DROP TRIGGER fail_projection_ack ON content.projection_checkpoint');
     await relayContentProjectionOnce(env, content, new ContentProjectionCursor(pool), consumer);
     expect(graph.commands.size).toBe(effects);
-    expect((await restarted.read(consumer)).sequence).toBe('12');
+    expect((await restarted.read(consumer)).sequence).toBe('16');
 
     const organization = variant();
     await publish(organization, 'Organization description', null, 'catalog-description-v1');
-    for (let n = 0; n < 3; n++) await relayContentProjectionOnce(env, content, restarted, consumer);
+    for (let n = 0; n < 4; n++) await relayContentProjectionOnce(env, content, restarted, consumer);
     expect(graph.commands.size).toBe(effects);
-    expect((await restarted.read(consumer)).sequence).toBe('15');
+    expect((await restarted.read(consumer)).sequence).toBe('20');
     const unknown = await content.saveDraft({ operationId: crypto.randomUUID(), variant: variant(), expectedHead: null,
       model: 'content-shape-v1', sourceRevision: null, provenance: {}, serializedJson: '{"body":"valid"}' });
-    const event = (await content.readOutbox(unknown.position.dataEpoch, '15', 1))[0]!;
+    const event = (await content.readOutbox(unknown.position.dataEpoch, '20', 1))[0]!;
     const corrupt = Object.create(content) as ContentCore;
     corrupt.readOutbox = async () => [{ ...event, eventType: 'malformed' }];
     await expect(relayContentProjectionOnce(env, corrupt, restarted, consumer)).rejects.toThrow('unrecognized Content event');
-    expect((await restarted.readScan(consumer)).sequence).toBe('15');
+    expect((await restarted.readScan(consumer)).sequence).toBe('20');
+  });
+}, 60_000);
+
+test('Content completes proved closed states without bytes while corrupt predecessors and unproved erasure stay pending', async () => {
+  await postgres(async pool => {
+    const content = new ContentCore(pool), graph = new ProjectionGraph(), cursor = new ContentProjectionCursor(pool);
+    const consumer = 'closed-evaluation';
+    await cursor.initialize(consumer);
+    const env: WorkActivationEnvironment = { fuseki: graph, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' },
+      objectDirectory: '.temp/unused' };
+    const variant = (): VariantIdentity => ({ id: `urn:rezics:variant:${crypto.randomUUID()}`, resourceId: id(),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' });
+    const a = variant(), b = variant();
+    graph.eligibilityHeads.set(a.id, null);
+    const first = await publishProjection(content, graph, a, 'closed body', null, 'content-shape-v1', false);
+    const metadataOnly = Object.create(content) as ContentCore;
+    metadataOnly.readProjectionPublication = async (event, allowUnavailable) => {
+      if (!allowUnavailable) throw new ContentUnavailable('closed body must not be read');
+      return content.readProjectionPublication(event, true);
+    };
+    metadataOnly.readExactBatch = async () => { throw new ContentUnavailable('closed bytes must not be read'); };
+    await relayContentProjectionOnce(env, metadataOnly, cursor, consumer);
+    await relayContentProjectionOnce(env, metadataOnly, cursor, consumer);
+    const erasureRefusal = Object.create(metadataOnly) as ContentCore;
+    erasureRefusal.readPublicationErasureSupersession = async () => ({ revisionId: first.revision,
+      erasureId: crypto.randomUUID(), erasureEpoch: '1', graphReceipt: 'urn:unproven-erasure',
+      graphDataEpoch: graphEpoch, graphSequence: '9' });
+    expect((await relayContentProjectionOnce(env, erasureRefusal, cursor, consumer))?.disposition).toBe('deferred');
+    expect((await cursor.read(consumer)).sequence).toBe('2');
+    expect((await relayContentProjectionOnce(env, metadataOnly, cursor, consumer))?.disposition).toBe('ignored');
+    expect(await cursor.read(consumer)).toEqual(await content.ownerPosition());
+    expect(graph.healthReads).toBe(0);
+    expect(graph.commands.size).toBe(0);
+
+    graph.eligibilityHeads.delete(a.id);
+    await graph.deliverApproval(content, first.publication);
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
+    const approval = graph.ownerRecord(first.publication);
+    graph.eligibilityHeads.set(a.id, approval);
+    await publishProjection(content, graph, a, 'replacement closed body', first.revision, 'content-shape-v1', false);
+    await relayContentProjectionOnce(env, metadataOnly, cursor, consumer);
+    await relayContentProjectionOnce(env, metadataOnly, cursor, consumer);
+    const profilesBeforeClosed = graph.healthReads;
+    await pool.query(`CREATE FUNCTION content.fail_closed_ack() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'lost closed evaluation acknowledgement'; END $$;
+      CREATE TRIGGER fail_closed_ack BEFORE UPDATE ON content.projection_checkpoint
+      FOR EACH ROW EXECUTE FUNCTION content.fail_closed_ack()`);
+    try {
+      await expect(relayContentProjectionOnce(env, metadataOnly, cursor, consumer))
+        .rejects.toThrow('lost closed evaluation acknowledgement');
+      expect((await cursor.read(consumer)).sequence).toBe('6');
+    } finally { await pool.query('DROP TRIGGER fail_closed_ack ON content.projection_checkpoint'); }
+
+    // A present retained approval with damaged authority cannot count as closed.
+    approval.eligibilityRow.dDisclosure = uri(`${RV}Private`);
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('deferred');
+    await publishProjection(content, graph, b, 'unrelated public body');
+    for (let n = 0; n < 4; n++) await relayContentProjectionOnce(env, content, cursor, consumer);
+    expect(graph.commands.size).toBe(2);
+    expect((await cursor.read(consumer)).sequence).toBe('6');
+    expect((await cursor.readScan(consumer)).sequence).toBe('11');
+    expect(await cursor.retries(consumer)).toHaveLength(1);
+    approval.eligibilityRow.dDisclosure = uri(`${RV}Public`);
+    const profilesBeforeRetry = graph.healthReads;
+    expect((await relayContentProjectionOnce(env, metadataOnly, cursor, consumer))?.disposition).toBe('ignored');
+    expect(graph.healthReads).toBe(profilesBeforeRetry);
+    expect(profilesBeforeClosed).toBe(1);
+    expect(await cursor.read(consumer)).toEqual(await content.ownerPosition());
+    expect(await cursor.retries(consumer)).toHaveLength(0);
+  });
+}, 60_000);
+
+test('Content re-evaluates a lost closed acknowledgement after a durable later Public approval', async () => {
+  await postgres(async pool => {
+    const content = new ContentCore(pool), graph = new ProjectionGraph(), cursor = new ContentProjectionCursor(pool);
+    const consumer = 'closed-approval-race';
+    await cursor.initialize(consumer);
+    const env: WorkActivationEnvironment = { fuseki: graph, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' },
+      objectDirectory: '.temp/unused' };
+    const variant: VariantIdentity = { id: `urn:rezics:variant:${crypto.randomUUID()}`, resourceId: id(),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' };
+    graph.eligibilityHeads.set(variant.id, null);
+    const published = await publishProjection(content, graph, variant, 'later approved body', null, 'content-shape-v1', false);
+    await relayContentProjectionOnce(env, content, cursor, consumer);
+    await relayContentProjectionOnce(env, content, cursor, consumer);
+    await pool.query(`CREATE FUNCTION content.fail_closed_ack() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'lost closed evaluation acknowledgement'; END $$;
+      CREATE TRIGGER fail_closed_ack BEFORE UPDATE ON content.projection_checkpoint
+      FOR EACH ROW EXECUTE FUNCTION content.fail_closed_ack()`);
+    try {
+      await expect(relayContentProjectionOnce(env, content, cursor, consumer))
+        .rejects.toThrow('lost closed evaluation acknowledgement');
+    } finally { await pool.query('DROP TRIGGER fail_closed_ack ON content.projection_checkpoint'); }
+    expect((await cursor.read(consumer)).sequence).toBe('2');
+    graph.eligibilityHeads.delete(variant.id);
+    await graph.deliverApproval(content, published.publication);
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('superseded');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
+    expect(await cursor.read(consumer)).toEqual(await content.ownerPosition());
+    expect(await relayContentProjectionOnce(env, content, cursor, consumer)).toBeNull();
+    expect(graph.commands.size).toBe(1);
   });
 }, 60_000);
 

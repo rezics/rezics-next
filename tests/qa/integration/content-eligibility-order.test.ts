@@ -11,6 +11,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { saveAdmittedContentDraft }
   from '../../../services/main/src/modules/content-publication/draft.ts';
 import { contentSearchEligibilityDigest, selectPublicContentSearch,
@@ -31,7 +32,7 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outb
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot replace newer text', async () => {
+test('SEARCH19: closed eligibility completes and a stale worker cannot replace newer text', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -67,15 +68,9 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
     } });
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     async function grant(scope: string, action: string) {
-      await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
-      await accessPool.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until)
-        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), principalId, actor, action]);
-      await accessPool.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), actor, scope, action]);
+      await grantFixtureAuthority(accessPool, { scope, requireDispatch: true,
+        representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+        grant: { actor, action, lifetime: '8 hours' } });
     }
     await grant(`content:draft:${work.work}`, 'content.draft');
     await grant(`content:search-eligibility:${variantId}`, 'content.search-eligibility');
@@ -207,6 +202,9 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
 
     const v1 = await draft('one', null);
     const p1 = await publish(v1, null);
+    expect(await relayTo(consumer)).toContain('ignored');
+    expect(await cursor.read(consumer)).toEqual(await content.ownerPosition());
+    expect(await units()).toEqual([]);
     const e1 = await eligible(p1.decision, null);
     // This test exercises approval delivery and stale-worker ordering against
     // an open search index; rebuild tests cover the closed-index lifecycle.
@@ -221,11 +219,19 @@ test('SEARCH19: lagging eligibility stays unavailable and a stale worker cannot 
     const v2 = await draft('two', v1.revision);
     await expectUnavailable([v1.phrase, v2.phrase]);
     const p2 = await publish(v2, p1.decision);
-    expect(await relayTo(consumer)).toContain('deferred');
-    const blockedAt = (await cursor.read(consumer)).sequence;
+    expect(await relayTo(consumer)).toContain('ignored');
+    const closedAt = await content.ownerPosition();
     expect(await relayContentProjectionOnce(env, content, cursor, consumer)).toBeNull();
-    expect((await cursor.read(consumer)).sequence).toBe(blockedAt);
-    await expectUnavailable([v1.phrase, v2.phrase]);
+    expect(await cursor.read(consumer)).toEqual(closedAt);
+    for (const phrase of [v1.phrase, v2.phrase]) {
+      expect(await queryPublicContentPhrase(env, content, cursor, consumer,
+        { phrase, language: 'en' })).toMatchObject({ complete: true, total: 0 });
+      const response = await publicQuery(phrase);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ complete: true, total: 0 });
+      expect((await pageQuery(phrase)).status).toBe(200);
+    }
+    expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(200);
     // Main adoption removes the superseded body MatchUnit before new eligibility arrives.
     expect(await units()).toEqual([]);
 

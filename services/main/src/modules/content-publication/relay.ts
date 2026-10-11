@@ -345,6 +345,15 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
       return 'superseded';
     }
     const source = deliveredEligibilitySource(event);
+    if (source && (source.sourceReceipt.resource !== publication.reference.resourceId
+      || source.sourceReceipt.variant !== publication.reference.variantId
+      || source.sourceReceipt.publicationDecision !== graph.decision)) {
+      throw new ContentProjectionUnavailable('delivered eligibility differs from its settled publication');
+    }
+    // Absence and a proved approval of an older publication are terminal owner
+    // evaluations. A later approval has its own durable Content source event.
+    if (graph.eligibilityState?.kind === 'closed-absent'
+      || graph.eligibilityState?.kind === 'closed-superseded-approval') return 'ignored';
     if (event.eventType === 'content.publication.active' && graph.eligibilityState?.kind === 'public-current') {
       if (!graph.eligibility || !graph.decision || graph.eligibleDecision !== graph.decision) {
         throw new ContentProjectionUnavailable('current Public approval does not bind the active publication');
@@ -380,11 +389,6 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
         throw new ContentProjectionUnavailable('durable Public approval delivery names another Content pin');
       }
       return 'superseded';
-    }
-    if (source && (source.sourceReceipt.resource !== publication.reference.resourceId
-      || source.sourceReceipt.variant !== publication.reference.variantId
-      || source.sourceReceipt.publicationDecision !== graph.decision)) {
-      throw new ContentProjectionUnavailable('delivered eligibility differs from its settled publication');
     }
     if (source && source.sourceReceipt.eligibilityDecision !== graph.eligibility) {
       if (graph.eligibilityState?.kind !== 'public-current' || !graph.eligibility || !graph.decision) {

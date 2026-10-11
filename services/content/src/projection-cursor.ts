@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { ContentConflict, ContentUnavailable, type ContentPosition, type ContentOutboxEvent } from './core.ts';
 
 export const CONTENT_PROJECTION_COST = { scanEvents: 1, retryEvents: 8, graphCommandsPerEvent: 1, deadlineMs: 10_000 } as const;
@@ -20,6 +20,15 @@ const decimal = /^(0|[1-9][0-9]*)$/;
 
 function consumerName(value: string): void {
   if (!/^[a-z][a-z0-9._-]{0,99}$/.test(value)) throw new ContentConflict('invalid projection consumer');
+}
+
+async function verifyCompletedCoverage(client: PoolClient, consumer: string, epoch: string,
+  completed: string, scanned: string): Promise<void> {
+  // Read after taking the checkpoint lock: a waiting FOR UPDATE statement can
+  // return the new checkpoint row with subqueries from its older snapshot.
+  const coverage = await client.query(`SELECT COALESCE(min(sequence) - 1, $3::bigint)::text AS sequence
+    FROM content.projection_pending WHERE consumer = $1 AND data_epoch = $2`, [consumer, epoch, scanned]);
+  if (completed !== coverage.rows[0].sequence) throw new ContentConflict('retained projection coverage differs');
 }
 
 /** Durable Content-side acknowledgement; the graph receipt makes replay safe across stores. */
@@ -76,14 +85,12 @@ export class ContentProjectionCursor {
       // an epoch cut racing this check leaves a checkpoint that read() rejects.
       const current = await client.query(`SELECT c.data_epoch, c.scan_sequence::text AS sequence,
         c.sequence::text AS completed, c.pending_count::text AS pending_count,
-        COALESCE((SELECT min(sequence) - 1 FROM content.projection_pending
-          WHERE consumer = c.consumer AND data_epoch = c.data_epoch), c.scan_sequence)::text AS covered,
         o.data_epoch AS owner_epoch FROM content.projection_checkpoint c
         CROSS JOIN content.owner_control o WHERE c.consumer = $1 AND o.singleton FOR UPDATE OF c`, [consumer]);
       const row = current.rows[0];
       if (!row || row.owner_epoch !== expected.dataEpoch || row.data_epoch !== expected.dataEpoch
         || row.sequence !== expected.sequence) throw new ContentConflict('projection checkpoint changed');
-      if (row.completed !== row.covered) throw new ContentConflict('retained projection coverage differs');
+      await verifyCompletedCoverage(client, consumer, row.data_epoch, row.completed, row.sequence);
       const event = await client.query(`SELECT id FROM content.outbox
         WHERE data_epoch = $1::uuid AND sequence = $2::bigint`, [next.dataEpoch, next.sequence]);
       if (event.rowCount !== 1) throw new ContentUnavailable('projection source event missing');
@@ -141,17 +148,43 @@ export class ContentProjectionCursor {
 
   async finishRetry(consumer: string, event: ContentOutboxEvent, completed: boolean): Promise<void> {
     consumerName(consumer);
+    if (event.position.owner !== 'content' || !decimal.test(event.position.sequence)
+      || BigInt(event.position.sequence) === 0n) throw new ContentConflict('invalid projection retry source');
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       const current = await client.query(`SELECT c.data_epoch, o.data_epoch AS owner_epoch, c.sequence::text AS completed,
-        COALESCE((SELECT min(sequence) - 1 FROM content.projection_pending WHERE consumer=c.consumer
-          AND data_epoch=c.data_epoch), c.scan_sequence)::text AS covered
+        c.scan_sequence::text AS scanned
         FROM content.projection_checkpoint c CROSS JOIN content.owner_control o
         WHERE c.consumer = $1 AND o.singleton FOR UPDATE OF c`, [consumer]);
       if (current.rows[0]?.data_epoch !== event.position.dataEpoch
         || current.rows[0]?.owner_epoch !== event.position.dataEpoch) throw new ContentConflict('Content owner epoch changed');
-      if (current.rows[0].completed !== current.rows[0].covered) throw new ContentConflict('retained projection coverage differs');
+      await verifyCompletedCoverage(client, consumer, current.rows[0].data_epoch,
+        current.rows[0].completed, current.rows[0].scanned);
+      const source = await client.query(`SELECT id FROM content.outbox
+        WHERE data_epoch = $1::uuid AND sequence = $2::bigint`,
+      [event.position.dataEpoch, event.position.sequence]);
+      if (source.rowCount !== 1) throw new ContentUnavailable('projection retry source event missing');
+      if (source.rows[0].id !== event.id) throw new ContentConflict('projection retry differs from source event');
+      const pending = await client.query(`SELECT p.event_id, t.first_sequence::text AS first_sequence,
+        (SELECT min(sequence)::text FROM content.projection_pending
+          WHERE consumer = p.consumer AND data_epoch = p.data_epoch AND target = p.target) AS oldest
+        FROM content.projection_pending p LEFT JOIN content.projection_target t
+          ON t.consumer = p.consumer AND t.data_epoch = p.data_epoch AND t.target = p.target
+        WHERE p.consumer = $1 AND p.data_epoch = $2 AND p.sequence = $3::bigint`,
+      [consumer, event.position.dataEpoch, event.position.sequence]);
+      if (!pending.rowCount) {
+        if (BigInt(event.position.sequence) > BigInt(current.rows[0].scanned)) {
+          throw new ContentConflict('projection retry source has not been scanned');
+        }
+        // A competing completion may already have retired this exact source.
+        await client.query('COMMIT');
+        return;
+      }
+      if (pending.rows[0].event_id !== event.id || pending.rows[0].first_sequence !== event.position.sequence
+        || pending.rows[0].oldest !== event.position.sequence) {
+        throw new ContentConflict('projection retry must finish the oldest target event');
+      }
       if (completed) {
         const removed = await client.query(`DELETE FROM content.projection_pending
           WHERE consumer = $1 AND data_epoch = $2 AND sequence = $3 AND event_id = $4 RETURNING target`,
