@@ -13,7 +13,7 @@ import { ZoneEditorFrame } from './frame.tsx';
 import { messages } from './messages.ts';
 import { authoringModel, type EditorState } from './model.ts';
 import { ZoneNavigationEditor } from './navigation-editor.tsx';
-import type { NavigationState, SiteLink } from './navigation.ts';
+import type { NavigationState, NavPosition, SiteLink } from './navigation.ts';
 import { ZoneDraftPreview } from './preview.tsx';
 
 const zoneId = '00000000-0000-4000-8000-000000000301';
@@ -369,8 +369,9 @@ export const DraftPreview: Story = {
 const charts = 'https://rezics.com/id/00000000-0000-4000-8000-000000000321';
 const tides = 'https://rezics.com/id/00000000-0000-4000-8000-000000000322';
 let navCalls: { name: string; key: string; segment?: string }[] = [];
+let navServer: SiteLink[] = [];
 
-type NavigationMode = 'save' | 'stale' | 'stale-removal' | 'partial' | 'incomplete';
+type NavigationMode = 'save' | 'stale' | 'stale-removal' | 'partial' | 'incomplete' | 'paths';
 const loadedMounts: SiteLink[] = [
   {
     id: '00000000-0000-4000-8000-000000000351',
@@ -418,6 +419,17 @@ function navigationClient(
 ): ZoneNavigationClient {
   let inserts = 0;
   let removes = 0;
+  if (mode === 'paths') navServer = loadedMounts.map((link) => ({ ...link }));
+  function placeServer(link: SiteLink, position: NavPosition) {
+    navServer = navServer.filter((item) => item.occurrence !== link.occurrence);
+    const at =
+      position === 'first'
+        ? 0
+        : position === 'last'
+          ? navServer.length
+          : navServer.findIndex((item) => item.occurrence === position.after) + 1;
+    navServer.splice(at, 0, link);
+  }
   return {
     async readNavigation() {
       calls.push({ name: 'read', key: '' });
@@ -438,7 +450,7 @@ function navigationClient(
         data: {
           head: navigation,
           navigation,
-          links: [],
+          links: mode === 'paths' ? navServer : [],
           complete: true,
           after: null,
           zoneHead: null,
@@ -474,10 +486,23 @@ function navigationClient(
       if (mode === 'stale' && inserts === 1)
         return { ok: false, failure: 'stale', currentHead: null };
       if (mode === 'partial' && inserts <= 2) return { ok: false, failure: 'unavailable' };
+      const occurrence = `https://rezics.com/id/00000000-0000-4000-8000-00000000033${inserts}`;
+      if (mode === 'paths')
+        placeServer(
+          {
+            ...unsavedMount,
+            id: occurrence.slice(-36),
+            occurrence,
+            target: body.target,
+            segment: body.routeSegment,
+            disclosure: body.disclosure,
+          },
+          body.position,
+        );
       return {
         ok: true,
         head: `https://rezics.com/id/00000000-0000-4000-8000-00000000032${inserts}`,
-        occurrence: `https://rezics.com/id/00000000-0000-4000-8000-00000000033${inserts}`,
+        occurrence,
         replayed: false,
       };
     },
@@ -493,8 +518,13 @@ function navigationClient(
         replayed: false,
       };
     },
-    async moveMount(_navigation, _body, key) {
+    async moveMount(_navigation, body, key) {
       calls.push({ name: 'move', key });
+      if (mode === 'paths') {
+        const mounted = navServer.find((item) => item.occurrence === body.occurrence);
+        if (!mounted) throw new Error('Only existing occurrences may move');
+        placeServer(mounted, body.position);
+      }
       return {
         ok: true,
         head: 'https://rezics.com/id/00000000-0000-4000-8000-000000000341',
@@ -507,6 +537,7 @@ function navigationClient(
         ? [
             { target: charts, name: 'Harbor charts' },
             { target: tides, name: 'Harbor tides' },
+            ...(mode === 'paths' ? [{ target: unsavedMount.target, name: unsavedMount.name }] : []),
           ]
         : [];
     },
@@ -556,7 +587,8 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
         complete: false,
         after: 'cursor:2',
       };
-    if (mode === 'stale-removal') return { ...base, links: loadedMounts, saved: loadedMounts };
+    if (mode === 'stale-removal' || mode === 'paths')
+      return { ...base, links: loadedMounts, saved: loadedMounts };
     return base;
   });
   return (
@@ -626,6 +658,57 @@ export const AddsAndReordersLinks: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(navCalls.filter((call) => call.name === 'remove')).toHaveLength(1));
     await expect(canvas.queryByText('Harbor charts')).toBeNull();
+    await noOverflow();
+  },
+};
+
+/** Saved paths remain the server’s paths; a new link’s edited path is acknowledged when saved. */
+export const SavedPathsStayReadOnlyWhenReordering: Story = {
+  parameters: { route: { pathname: '/en/manage/z/harbor/navigation' } },
+  render: () => <NavigationPage mode="paths" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    for (const item of loadedMounts) {
+      const field = canvas.getByRole('textbox', { name: `Path ${item.name}` });
+      await expect(field).toHaveAttribute('readonly');
+      await expect(field).toHaveAccessibleDescription(messages.en.pathEditLimited);
+      await userEvent.click(field);
+      await userEvent.keyboard('{Control>}a{/Control}{Backspace}');
+      await userEvent.type(field, `changed-${item.segment}`);
+      await expect(field).toHaveValue(item.segment);
+    }
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await expect(canvas.queryByText('Draft saved.')).toBeNull();
+    await expect(navCalls).toHaveLength(0);
+    await addPage(canvas, 'Harbor soundings');
+    const newPath = canvas.getByRole('textbox', { name: 'Path Harbor soundings' });
+    await expect(newPath).not.toHaveAttribute('readonly');
+    await userEvent.clear(newPath);
+    await userEvent.type(newPath, 'new-soundings-path');
+    await expect(newPath).toHaveValue('new-soundings-path');
+    await userEvent.click(canvas.getByRole('button', { name: 'Move up Harbor tides' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Move up Harbor soundings' }));
+    await expect(canvas.queryByText('Draft saved.')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Save draft' }));
+    await expect(await canvas.findByText('Draft saved.')).toBeVisible();
+    await expect(navServer.map((item) => item.segment)).toEqual([
+      'harbor-tides',
+      'new-soundings-path',
+      'harbor-charts',
+    ]);
+    const links = within(canvas.getByRole('list', { name: 'Links' }));
+    await expect(
+      links.getAllByRole('textbox').map((field) => (field as HTMLInputElement).value),
+    ).toEqual(navServer.map((item) => item.segment));
+    for (const item of navServer) {
+      await expect(canvas.getByRole('textbox', { name: `Path ${item.name}` })).toHaveAttribute(
+        'readonly',
+      );
+    }
+    await expect(navServer.find((item) => item.target === charts)).toEqual(loadedMounts[0]);
+    await expect(navServer.find((item) => item.target === tides)).toEqual(loadedMounts[1]);
+    await expect(navCalls.map((call) => call.name)).toEqual(['move', 'insert']);
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
     await noOverflow();
   },
 };

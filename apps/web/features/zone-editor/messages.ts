@@ -98,8 +98,7 @@ const en = {
   duplicatePath: 'That path is already a link.',
   navIncomplete: 'Not all links have loaded yet. Load more links before editing or saving.',
   navContinue: 'Load more links',
-  pathEditLimited:
-    'A saved link’s path can’t be changed here yet. Keep this path, or remove the link and add it again.',
+  pathEditLimited: 'Changing a saved link’s path is not supported yet.',
   sectionRealm: 'Realm',
   realmTitle: 'Realm',
   realmHelp:

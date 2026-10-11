@@ -96,8 +96,7 @@ const messages: ZoneEditorMessages = {
   navIncomplete:
     'Aún no se han cargado todos los enlaces. Carga más enlaces antes de editar o guardar.',
   navContinue: 'Cargar más enlaces',
-  pathEditLimited:
-    'La ruta de un enlace guardado aún no se puede cambiar aquí. Mantén esta ruta, o quita el enlace y vuelve a añadirlo.',
+  pathEditLimited: 'Aún no se puede cambiar la ruta de un enlace guardado.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Comunidad',
   realmTitle: 'Comunidad',

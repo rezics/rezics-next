@@ -101,7 +101,7 @@ const messages: ZoneEditorMessages = {
     'Tous les liens ne sont pas encore chargés. Chargez plus de liens avant de modifier ou d’enregistrer.',
   navContinue: 'Charger plus de liens',
   pathEditLimited:
-    'Le chemin d’un lien enregistré ne peut pas encore être modifié ici. Gardez ce chemin, ou retirez le lien et ajoutez-le à nouveau.',
+    'La modification du chemin d’un lien enregistré n’est pas encore prise en charge.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Communauté',
   realmTitle: 'Communauté',

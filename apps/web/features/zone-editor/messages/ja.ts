@@ -96,8 +96,7 @@ const messages: ZoneEditorMessages = {
   navIncomplete:
     'すべてのリンクがまだ読み込まれていません。編集や保存の前にさらにリンクを読み込んでください。',
   navContinue: 'リンクをさらに読み込む',
-  pathEditLimited:
-    '保存済みリンクのパスは、ここではまだ変更できません。このパスのままにするか、リンクを削除して追加し直してください。',
+  pathEditLimited: '保存済みリンクのパス変更にはまだ対応していません。',
   // Machine-drafted; needs native review.
   sectionRealm: 'コミュニティ',
   realmTitle: 'コミュニティ',

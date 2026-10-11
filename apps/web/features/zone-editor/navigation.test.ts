@@ -177,6 +177,85 @@ test('new links still insert; a path edit on a saved mount is refused', () => {
   expect(pathEditBlocked(link('Charts', charts, 'charts', null))).toBe(false);
 });
 
+test('saved paths reject edits while a new path and reorder save exactly the server’s paths', async () => {
+  const saved = [
+    link('Charts', charts, 'charts', 1, 'private', { routeKey: 'alias', presentation }),
+    link('Tides', tides, 'tides', 2),
+  ];
+  let edited = state(saved);
+  for (const item of saved) {
+    const attempted = reduceNavigation(edited, {
+      type: 'segment',
+      id: item.id,
+      segment: `changed-${item.segment}`,
+    });
+    expect(attempted).toEqual(edited);
+    expect(attempted.links.find((candidate) => candidate.id === item.id)?.segment).toBe(
+      item.segment,
+    );
+    edited = attempted;
+  }
+  expect(isNavigationDirty(edited)).toBe(false);
+  const added = link('Soundings', occurrence(10), 'soundings', null);
+  edited = reduceNavigation(edited, { type: 'add', link: added });
+  edited = reduceNavigation(edited, {
+    type: 'segment',
+    id: added.id,
+    segment: 'new-soundings-path',
+  });
+  expect(edited.links.at(-1)?.segment).toBe('new-soundings-path');
+  edited = reduceNavigation(edited, { type: 'move', index: 1, direction: -1 });
+  edited = reduceNavigation(edited, { type: 'move', index: 2, direction: -1 });
+  let server = [...saved];
+  const written = await commitNavigation(
+    edited.saved,
+    edited.links,
+    edited.head,
+    'saved-paths',
+    async (op) => {
+      if (op.kind === 'remove') throw new Error('A path edit must never recreate saved mounts');
+      const item =
+        op.kind === 'move'
+          ? server.find((candidate) => candidate.occurrence === op.occurrence)!
+          : {
+              ...added,
+              id: occurrence(3).slice(-36),
+              occurrence: occurrence(3),
+              segment: op.segment,
+            };
+      if (op.kind === 'move')
+        server = server.filter((candidate) => candidate.occurrence !== op.occurrence);
+      const position = op.position;
+      const at =
+        position === 'first'
+          ? 0
+          : position === 'last'
+            ? server.length
+            : server.findIndex((candidate) => candidate.occurrence === position.after) + 1;
+      server.splice(at, 0, item);
+      return {
+        ok: true,
+        head: next,
+        occurrence: op.kind === 'insert' ? occurrence(3) : null,
+        replayed: false,
+      };
+    },
+    edited.pending,
+  );
+  expect(written.ok).toBe(true);
+  if (!written.ok) return;
+  expect(server.map((item) => item.segment)).toEqual(['tides', 'new-soundings-path', 'charts']);
+  expect(written.links).toEqual(server);
+  expect(written.progress.saved).toEqual(server);
+  expect(server.find((item) => item.occurrence === occurrence(1))).toEqual(saved[0]);
+  expect(server.find((item) => item.occurrence === occurrence(2))).toEqual(saved[1]);
+  const acknowledged = reduceNavigation(edited, { type: 'saved', ...written });
+  expect(acknowledged.notice).toEqual({ kind: 'saved', replayed: false });
+  expect(acknowledged.links).toEqual(server);
+  expect(acknowledged.saved).toEqual(server);
+  expect(isNavigationDirty(acknowledged)).toBe(false);
+});
+
 test('removing one link deletes only that occurrence', () => {
   const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2)];
   expect(fixtureOps(saved, [saved[0]!])).toEqual([{ kind: 'remove', occurrence: occurrence(2) }]);

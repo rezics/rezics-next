@@ -84,7 +84,7 @@ const messages: ZoneEditorMessages = {
   duplicatePath: '這個路徑已經是一個連結。',
   navIncomplete: '尚未載入全部連結。編輯或儲存前，請載入更多連結。',
   navContinue: '載入更多連結',
-  pathEditLimited: '已儲存連結的路徑暫時無法在此變更。請保留目前路徑，或移除該連結後重新新增。',
+  pathEditLimited: '暫不支援變更已儲存連結的路徑。',
   // Machine-drafted; needs native review.
   sectionRealm: '社群',
   realmTitle: '社群',

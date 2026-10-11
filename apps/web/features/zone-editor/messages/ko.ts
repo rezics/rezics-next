@@ -94,8 +94,7 @@ const messages: ZoneEditorMessages = {
   navIncomplete:
     '아직 모든 링크를 불러오지 않았습니다. 편집하거나 저장하기 전에 링크를 더 불러오세요.',
   navContinue: '링크 더 불러오기',
-  pathEditLimited:
-    '저장된 링크의 경로는 아직 여기서 바꿀 수 없습니다. 이 경로를 유지하거나, 링크를 지운 뒤 다시 추가하세요.',
+  pathEditLimited: '저장된 링크의 경로 변경은 아직 지원하지 않습니다.',
   // Machine-drafted; needs native review.
   sectionRealm: '커뮤니티',
   realmTitle: '커뮤니티',

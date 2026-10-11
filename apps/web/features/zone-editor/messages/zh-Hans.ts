@@ -84,7 +84,7 @@ const messages: ZoneEditorMessages = {
   duplicatePath: '这个路径已经是一个链接。',
   navIncomplete: '尚未加载全部链接。编辑或保存前，请加载更多链接。',
   navContinue: '加载更多链接',
-  pathEditLimited: '已保存链接的路径暂时无法在此更改。请保留当前路径，或移除该链接后重新添加。',
+  pathEditLimited: '暂不支持更改已保存链接的路径。',
   // Machine-drafted; needs native review.
   sectionRealm: '社区',
   realmTitle: '社区',

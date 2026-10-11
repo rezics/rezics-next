@@ -101,8 +101,7 @@ const messages: ZoneEditorMessages = {
   navIncomplete:
     'Noch sind nicht alle Links geladen. Laden Sie weitere Links, bevor Sie bearbeiten oder speichern.',
   navContinue: 'Weitere Links laden',
-  pathEditLimited:
-    'Der Pfad eines gespeicherten Links lässt sich hier noch nicht ändern. Behalten Sie diesen Pfad, oder entfernen Sie den Link und fügen Sie ihn erneut hinzu.',
+  pathEditLimited: 'Der Pfad eines gespeicherten Links lässt sich noch nicht ändern.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Community',
   realmTitle: 'Community',

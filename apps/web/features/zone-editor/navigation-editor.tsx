@@ -85,7 +85,6 @@ export function ZoneNavigationEditor({
   const [picked, setPicked] = useState<PageChoice | null>(null);
   const [paths, setPaths] = useState<Record<string, string>>({});
   const [addNotice, setAddNotice] = useState<string | null>(null);
-  const [pathLimitId, setPathLimitId] = useState<string | null>(null);
   const [searched, setSearched] = useState<string | null>(null);
   const [saveCompleted, setSaveCompleted] = useState(0);
   const saveSession = useRef<{ choice: NavigationState; progress?: NavigationSaveProgress } | null>(
@@ -318,7 +317,6 @@ export function ZoneNavigationEditor({
       complete = page.data.complete;
     }
     setPaths({});
-    setPathLimitId(null);
     saveSession.current = null;
     setSaveCompleted(0);
     put({ type: 'review', links, head: snapshot.head, navigation: snapshot.navigation });
@@ -444,12 +442,8 @@ export function ZoneNavigationEditor({
   }
 
   function onPath(link: SiteLink, value: string) {
+    if (pathEditBlocked(link)) return;
     setPaths((current) => ({ ...current, [link.id]: value }));
-    if (pathEditBlocked(link)) {
-      setPathLimitId(value === link.segment ? null : link.id);
-      return;
-    }
-    setPathLimitId(null);
     if (value === link.segment || !isSegment(value)) return;
     if (state.links.some((other) => other.id !== link.id && other.segment === value)) return;
     put({ type: 'segment', id: link.id, segment: value });
@@ -567,7 +561,8 @@ export function ZoneNavigationEditor({
       {state.links.length ? (
         <ul aria-label={copy.linksLabel} className="grid gap-2">
           {state.links.map((link, index) => {
-            const typed = paths[link.id];
+            const savedPath = pathEditBlocked(link);
+            const typed = savedPath ? undefined : paths[link.id];
             const invalid = typed !== undefined && typed !== link.segment && !isSegment(typed);
             const taken =
               typed !== undefined &&
@@ -588,16 +583,21 @@ export function ZoneNavigationEditor({
                   <input
                     className={fieldClass}
                     aria-label={`${copy.pathLabel} ${link.name}`}
+                    aria-describedby={savedPath ? `path-note-${link.id}` : undefined}
                     value={typed ?? link.segment}
                     spellCheck={false}
+                    readOnly={savedPath}
                     disabled={editingDisabled}
                     onChange={(event) => onPath(link, event.target.value)}
                   />
                 </label>
                 {invalid ? <p className="text-destructive text-sm">{copy.pathInvalid}</p> : null}
                 {taken ? <p className="text-destructive text-sm">{copy.duplicatePath}</p> : null}
-                {pathLimitId === link.id ? (
-                  <p className="text-pretty text-muted-foreground text-sm">
+                {savedPath ? (
+                  <p
+                    id={`path-note-${link.id}`}
+                    className="text-pretty text-muted-foreground text-sm"
+                  >
                     {copy.pathEditLimited}
                   </p>
                 ) : null}
