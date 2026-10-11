@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { registryProbeDirectory, registryProbeFiles, registryProbeProfile }
   from '../tests/fixtures/registry-probe.ts';
@@ -83,6 +83,17 @@ test('P0.3: generation check detects emitted artifact drift in a clean checkout'
   const schema = join(root, 'packages/model/src/generated/schemas.ts');
   writeFileSync(schema, readFileSync(schema, 'utf8').replace('Type.Array', 'Type.Unknown'));
   expect(() => generate(root, true)).toThrow('Generated artifact differs');
+  generate(root, false);
+  const revisionClasses = 'infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java';
+  const java = join(root, revisionClasses);
+  expect(readFileSync(java, 'utf8')).toBe(buildArtifacts(repo).get(revisionClasses)!);
+  writeFileSync(java, `${readFileSync(java, 'utf8')}\n// hand edit\n`);
+  expect(() => generate(root, true)).toThrow(`Generated artifact differs: ${revisionClasses}`);
+  generate(root, false);
+  rmSync(java);
+  expect(() => generate(root, true)).toThrow(`Missing generated artifact: ${revisionClasses}`);
+  generate(root, false);
+  expect(() => generate(root, true)).not.toThrow();
 });
 
 /** Latest recorded evidence per profile. `work-profile` is the historical file name of work-metadata-v1. */
@@ -450,7 +461,9 @@ async function copiedProject(mutate: (root: string) => void): Promise<{ root: st
     recursive: true, filter: source => !source.endsWith('generate.test.ts'),
   });
   cpSync(join(repo, 'model/definitions'), join(root, 'model/definitions'), { recursive: true });
-  symlinkSync(join(repo, 'infra'), join(root, 'infra'));
+  const commandModule = 'infra/jena/command-module';
+  mkdirSync(join(root, commandModule), { recursive: true });
+  cpSync(join(repo, commandModule, 'pom.xml'), join(root, commandModule, 'pom.xml'));
   mutate(root);
   const loaded = await import(join(root, 'model/compiler/generate.ts')) as { generate: typeof generate };
   return { root, generate: loaded.generate };
@@ -560,7 +573,9 @@ test('a new exact Turtle author joins generation without a separate digest file'
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rv: <https://rezics.com/vocab/> .
 <https://rezics.com/definition/${id}/example-shape> a sh:NodeShape ;
-  sh:property [ sh:path rv:example ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .\n`;
+  sh:property [ sh:path rv:example ; sh:maxCount 1 ; sh:hasValue rv:ReviewedExampleRevision ; sh:nodeKind sh:IRI ] .\n`;
+  const revisionClasses = 'infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java';
+  const originalJava = readFileSync(join(repo, revisionClasses), 'utf8');
   const { root, generate: copied } = await copiedProject(copy =>
     writeFileSync(join(copy, `model/definitions/${id}.ttl`), source));
   expect(() => copied(root, false)).not.toThrow();
@@ -570,6 +585,9 @@ test('a new exact Turtle author joins generation without a separate digest file'
   expect(entry).toBeDefined();
   expect(entry.sha256).toBe(createHash('sha256').update(source).digest('hex'));
   expect(readFileSync(join(root, `generated/model/${entry.file}`), 'utf8')).toBe(source);
+  expect(readFileSync(join(root, revisionClasses), 'utf8')).toContain('"ReviewedExampleRevision"');
+  expect(readFileSync(join(repo, revisionClasses), 'utf8')).toBe(originalJava);
+  expect(manifest.artifacts).not.toHaveProperty(revisionClasses);
 });
 
 test('a TS-only Profile export refuses generation without captured Turtle', async () => {

@@ -153,6 +153,11 @@ export function buildArtifacts(_root: string): Map<string, string> {
   // manifest the Fuseki image copies, so a Facet change never rebuilds Fuseki.
   artifacts.set('packages/model/src/generated/facets.ts', renderFacetRegistry(authoredFacets));
   artifacts.set('packages/model/src/generated/types.ts', renderTypeRegistry(typesV1, workKindV2Profile, workTypeV2Profile));
+  // Like profiles, revision classes use this compiler's authored basis, whatever
+  // the output root. Keep the Java source outside the Fuseki profile manifest.
+  const names = revisionClassNames(join(repository, 'model/definitions'));
+  artifacts.set('infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java',
+    renderRevisionClasses(names, priorRevisionTypes(names)));
   return artifacts;
 }
 
@@ -189,19 +194,6 @@ export function generate(root: string, check: boolean): void {
       writeFileSync(path, expected);
     }
   }
-  // The command module cannot read the model tree. The constant is the same
-  // scan the revision-class enumeration uses, plus the identity-resolution types
-  // that are not named `*Revision`.
-  const revisionClasses = 'infra/jena/command-module/src/main/java/com/rezics/jena/RevisionClasses.java';
-  const names = revisionClassNames(join(root, 'model/definitions'));
-  const rendered = renderRevisionClasses(names, priorRevisionTypes(names));
-  const revisionPath = join(root, revisionClasses);
-  if (check) {
-    let actual: string;
-    try { actual = readFileSync(revisionPath, 'utf8'); }
-    catch { throw new Error(`Missing generated artifact: ${revisionClasses}`); }
-    if (actual !== rendered) throw new Error(`Generated artifact differs: ${revisionClasses}; run task gen`);
-  } else writeFileSync(revisionPath, rendered);
 }
 
 if (import.meta.main) {
