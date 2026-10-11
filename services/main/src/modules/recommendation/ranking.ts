@@ -4,6 +4,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { DISCOVERY_SERVICE_PRINCIPAL } from '../discovery/automation.ts';
 import { automaticPublicRanking, DISCOVERY_RANKING_HEALTH_COST, DISCOVERY_RANKING_REFRESH_COST, PUBLIC_DISCOVERY_RANKING,
   publicRankingAutomation, type PublicRankingAutomation } from '../discovery/public-ranking.ts';
+import { compareRelayPositions, MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import {
   activateHead, authorizeManager, claimLease, digest, fenceLease, inAccess, markFailed,
   type Activation, type ManageContext, nativeIri, type ReceiptKey, RecommendationDenied,
@@ -73,6 +74,32 @@ interface SlotSignal { slot: string; candidate: string; weight: bigint; sequence
 interface Totals { score: bigint; signals: bigint }
 type RankingOperator = ManageContext | PublicRankingAutomation;
 
+function mainRelayPosition(streamScope: string | null | undefined, dataEpoch: string, sequence: string,
+  expectedEpoch: string, declaredEpoch?: string | null): RelayHandoffPosition {
+  const position: RelayHandoffPosition = {
+    // Older input manifests are bound to the fixed main-graph relay owner.
+    streamScope: streamScope ?? MAIN_RELAY_STREAM_SCOPE,
+    dataEpoch,
+    sequence,
+  };
+  if (position.streamScope !== MAIN_RELAY_STREAM_SCOPE || position.dataEpoch !== expectedEpoch
+    || declaredEpoch === null || declaredEpoch !== undefined && declaredEpoch !== dataEpoch) {
+    throw new RecommendationStale('ranking input belongs to another relay stream or source epoch');
+  }
+  try { compareRelayPositions(position, position); }
+  catch { throw new RecommendationStale('ranking input has an invalid relay position'); }
+  return position;
+}
+
+function compareMainRelayPositions(left: RelayHandoffPosition, right: RelayHandoffPosition): number {
+  if (left.streamScope !== MAIN_RELAY_STREAM_SCOPE || right.streamScope !== MAIN_RELAY_STREAM_SCOPE
+    || left.dataEpoch !== right.dataEpoch) {
+    throw new RecommendationStale('ranking relay positions belong to another stream or source epoch');
+  }
+  try { return compareRelayPositions(left, right); }
+  catch { throw new RecommendationStale('ranking relay position is invalid'); }
+}
+
 async function rankingOperator(client: PoolClient, context: RankingOperator, basis: RankingBasis): Promise<string> {
   if (!(publicRankingAutomation in context)) return authorizeManager(client, context);
   if (digest(basis) !== digest(PUBLIC_DISCOVERY_RANKING)) {
@@ -128,10 +155,12 @@ export class RankingGenerations {
     catch (cause) { throw new RecommendationUnavailable('zero-score source snapshot is unavailable', { cause }); }
   }
 
-  private async relayHead(): Promise<string> {
+  private async mainStreamCoverage(): Promise<RelayHandoffPosition> {
     try {
-      return (await this.options.relay.query<{ head: string }>(`SELECT coalesce(max(sequence), 0)::text AS head
-        FROM relay.delivered_batch WHERE data_epoch = $1`, [this.options.dataEpoch])).rows[0]!.head;
+      const row = (await this.options.relay.query<{ sequence: string }>(`SELECT coalesce(max(sequence), 0)::text AS sequence
+        FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2`,
+      [MAIN_RELAY_STREAM_SCOPE, this.options.dataEpoch])).rows[0];
+      return mainRelayPosition(MAIN_RELAY_STREAM_SCOPE, this.options.dataEpoch, row?.sequence ?? '0', this.options.dataEpoch);
     } catch (cause) { throw new RecommendationUnavailable('relay retention is unavailable', { cause }); }
   }
 
@@ -175,7 +204,7 @@ export class RankingGenerations {
     if (!Number.isInteger(partitionCount) || partitionCount < 1 || partitionCount > 256) {
       throw new RecommendationDenied('partition count is not admitted');
     }
-    const snapshotTarget = await this.relayHead();
+    const snapshotTarget = await this.mainStreamCoverage();
     const erasureEpoch = await this.erasureHead();
     const zeroSnapshot = await this.candidateSnapshot();
     return inAccess(this.options.access, async client => {
@@ -196,8 +225,8 @@ export class RankingGenerations {
         if (pending) return { ...await this.describe(client, pending.id), replayed: true };
       }
       const manifest = { basis, owner, partitionCount,
-        source: { source: 'main-graph', relay: RELAY_SOURCE, dataEpoch: this.options.dataEpoch,
-          snapshotTarget, erasureEpoch, zeroSnapshot } };
+        source: { source: 'main-graph', relay: RELAY_SOURCE, streamScope: snapshotTarget.streamScope,
+          dataEpoch: snapshotTarget.dataEpoch, snapshotTarget: snapshotTarget.sequence, erasureEpoch, zeroSnapshot } };
       const generation = randomUUID();
       await client.query(`INSERT INTO access.derived_generation
         (id, family, scope_key, input_digest, input_manifest, lease_expires_at)
@@ -215,7 +244,7 @@ export class RankingGenerations {
         SELECT $1, generate_series(0, $2 - 1)`, [generation, partitionCount]);
       await client.query(`INSERT INTO access.derived_generation_input (generation_id, source,
         data_epoch, pinned_sequence, checkpoint_sequence, snapshot_complete)
-        VALUES ($1, 'main-graph', $2, 0, 0, $3)`, [generation, this.options.dataEpoch, snapshotTarget === '0']);
+        VALUES ($1, 'main-graph', $2, 0, 0, $3)`, [generation, snapshotTarget.dataEpoch, snapshotTarget.sequence === '0']);
       await recordReceipt(client, principalId, receipt, { action: 'build', generation_id: generation,
         outcome: 'succeeded', head_revision: null });
       return { ...await this.describe(client, generation), replayed: false };
@@ -236,19 +265,25 @@ export class RankingGenerations {
     const scope = scopeKey(PUBLIC_DISCOVERY_RANKING, null, this.options.dataEpoch);
     const row = await inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
-      return (await client.query<{ generation: string; data_epoch: string; checkpoint: string;
-        zero_snapshot: string | null; erasure_epoch: string }>(`SELECT g.id::text AS generation,i.data_epoch,
-          i.checkpoint_sequence::text AS checkpoint,g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
+      return (await client.query<{ generation: string; data_epoch: string; manifest_data_epoch: string | null;
+        checkpoint: string;
+        stream_scope: string | null; zero_snapshot: string | null; erasure_epoch: string }>(`SELECT g.id::text AS generation,
+          i.data_epoch,i.checkpoint_sequence::text AS checkpoint,
+          g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
+          g.input_manifest->'source'->>'streamScope' AS stream_scope,
+          g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
           g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
         FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
         JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
         WHERE h.family='ranking' AND h.scope_key=$1 AND g.state='ready'`, [scope])).rows[0] ?? null;
     });
     if (!row) return null;
+    // Validate the signal cursor in its relay domain, but report the graph
+    // candidate snapshot in the graph diagnostic domain.
+    mainRelayPosition(row.stream_scope, row.data_epoch, row.checkpoint, this.options.dataEpoch, row.manifest_data_epoch);
     await this.assertContributorsCurrent(row.generation, row.erasure_epoch);
-    const sequence = row.zero_snapshot !== null && BigInt(row.zero_snapshot) < BigInt(row.checkpoint)
-      ? row.zero_snapshot : row.checkpoint;
-    return { generation: row.generation, dataEpoch: row.data_epoch, sequence };
+    if (row.zero_snapshot === null) return null;
+    return { generation: row.generation, dataEpoch: row.data_epoch, sequence: row.zero_snapshot };
   }
 
   /** The scope's indexed recent window covers the single automatic pending
@@ -275,15 +310,22 @@ export class RankingGenerations {
     const state = await inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       const head = (await client.query<{ generation: string; revision: string; checkpoint: string;
+        data_epoch: string; manifest_data_epoch: string | null; stream_scope: string | null;
         zero_snapshot: string | null; erasure_epoch: string }>(`SELECT h.active_generation::text AS generation,
-          h.revision::text,i.checkpoint_sequence::text AS checkpoint,
+          h.revision::text,i.checkpoint_sequence::text AS checkpoint,i.data_epoch,
+          g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
+          g.input_manifest->'source'->>'streamScope' AS stream_scope,
           g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
           g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
         FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
         JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
         WHERE h.family='ranking' AND h.scope_key=$1`, [scope])).rows[0] ?? null;
       const pending = (await client.query<{ id: string; state: string; checkpoint: string;
-        zero_snapshot: string | null }>(`SELECT g.id::text,g.state,i.checkpoint_sequence::text AS checkpoint,
+        data_epoch: string; manifest_data_epoch: string | null; stream_scope: string | null;
+        zero_snapshot: string | null }>(`SELECT g.id::text,g.state,
+          i.checkpoint_sequence::text AS checkpoint,i.data_epoch,
+          g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
+          g.input_manifest->'source'->>'streamScope' AS stream_scope,
           g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot
         FROM access.derived_generation g JOIN access.derived_generation_input i
           ON i.generation_id=g.id AND i.source='main-graph'
@@ -296,7 +338,11 @@ export class RankingGenerations {
     if (state.pending) {
       // A manual build can finish after a newer public head. Never replace that
       // head with an older candidate population or an older signal checkpoint.
-      if (state.head && (BigInt(state.pending.checkpoint) < BigInt(state.head.checkpoint)
+      const pendingCheckpoint = mainRelayPosition(state.pending.stream_scope, state.pending.data_epoch,
+        state.pending.checkpoint, this.options.dataEpoch, state.pending.manifest_data_epoch);
+      const headCheckpoint = state.head && mainRelayPosition(state.head.stream_scope, state.head.data_epoch,
+        state.head.checkpoint, this.options.dataEpoch, state.head.manifest_data_epoch);
+      if (state.head && (compareMainRelayPositions(pendingCheckpoint, headCheckpoint!) < 0
         || state.head.zero_snapshot !== null && (state.pending.zero_snapshot === null
           || BigInt(state.pending.zero_snapshot) < BigInt(state.head.zero_snapshot)))) {
         await inAccess(this.options.access, async client => {
@@ -314,9 +360,11 @@ export class RankingGenerations {
       if (activation.outcome !== 'succeeded') throw new RecommendationStale('Public ranking head changed');
       return 'activated';
     }
-    const relay = await this.relayHead(), erasure = await this.erasureHead();
+    const relay = await this.mainStreamCoverage(), erasure = await this.erasureHead();
     const candidates = await this.candidateSnapshot();
-    if (state.head && BigInt(state.head.checkpoint) >= BigInt(relay)
+    const headCheckpoint = state.head && mainRelayPosition(state.head.stream_scope, state.head.data_epoch,
+      state.head.checkpoint, this.options.dataEpoch, state.head.manifest_data_epoch);
+    if (state.head && compareMainRelayPositions(headCheckpoint!, relay) >= 0
       && state.head.erasure_epoch === erasure && state.head.zero_snapshot === candidates) return 'current';
     await this.registerBuild(automaticPublicRanking, PUBLIC_DISCOVERY_RANKING, DISCOVERY_RANKING_REFRESH_COST.partitions,
       { idempotencyKey: `public-ranking-build:${randomUUID()}`, requestDigest: digest([relay, candidates, erasure]) });
@@ -352,9 +400,13 @@ export class RankingGenerations {
   /** Apply one bounded, coalesced batch of contiguous relay batches under the caller's lease. */
   async runBatch(generation: string, leaseEpoch: string): Promise<BatchResult> {
     const basis = (await this.options.access.query<{ population: RankingPopulation['kind']; realm: string | null;
-      principal_id: string | null; partition_count: number; data_epoch: string; checkpoint: string;
-      target: string; zero_snapshot: string | null }>(`SELECT r.population, r.realm, r.principal_id::text, r.partition_count, i.data_epoch,
-        i.checkpoint_sequence::text AS checkpoint, g.input_manifest->'source'->>'snapshotTarget' AS target,
+      principal_id: string | null; partition_count: number; data_epoch: string;
+      manifest_data_epoch: string | null; checkpoint: string;
+      stream_scope: string | null; target: string; zero_snapshot: string | null }>(`SELECT r.population, r.realm, r.principal_id::text, r.partition_count, i.data_epoch,
+        i.checkpoint_sequence::text AS checkpoint,
+        g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
+        g.input_manifest->'source'->>'snapshotTarget' AS target,
+        g.input_manifest->'source'->>'streamScope' AS stream_scope,
         g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot
       FROM access.derived_generation g JOIN access.ranking_generation r ON r.generation_id = g.id
       JOIN access.derived_generation_input i ON i.generation_id = g.id AND i.source = 'main-graph'
@@ -365,19 +417,30 @@ export class RankingGenerations {
     if (basis.data_epoch !== this.options.dataEpoch) {
       throw new RecommendationStale('generation belongs to another source epoch');
     }
+    const checkpoint = mainRelayPosition(basis.stream_scope, basis.data_epoch, basis.checkpoint,
+      this.options.dataEpoch, basis.manifest_data_epoch);
+    const target = mainRelayPosition(basis.stream_scope, basis.data_epoch, basis.target,
+      this.options.dataEpoch, basis.manifest_data_epoch);
     const relay = this.options.relay;
     let batches: { sequence: string; event_count: number }[];
     let events: { event_id: string; sequence: string; envelope: { type?: string; data?: {
       ordinal?: number; receipt?: Record<string, unknown> } } }[] = [];
     try {
+      const coverage = await this.mainStreamCoverage();
+      if (compareMainRelayPositions(checkpoint, coverage) > 0) {
+        throw new RecommendationStale('ranking checkpoint is ahead of Main stream coverage');
+      }
       batches = (await relay.query<{ sequence: string; event_count: number }>(`SELECT sequence::text, event_count
-        FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2::numeric
-        ORDER BY relay.delivered_batch.sequence LIMIT $3`,
-      [basis.data_epoch, basis.checkpoint, this.signalBatches])).rows;
+        FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2 AND sequence > $3::numeric
+        ORDER BY relay.delivered_batch.sequence LIMIT $4`,
+      [checkpoint.streamScope, checkpoint.dataEpoch, checkpoint.sequence, this.signalBatches])).rows;
       let expected = BigInt(basis.checkpoint) + 1n;
       const contiguous = [];
       for (const batch of batches) {
-        if (BigInt(batch.sequence) !== expected) break;
+        const batchPosition = mainRelayPosition(checkpoint.streamScope, checkpoint.dataEpoch,
+          batch.sequence, this.options.dataEpoch);
+        const expectedPosition = { ...checkpoint, sequence: expected.toString() };
+        if (compareMainRelayPositions(batchPosition, expectedPosition) !== 0) break;
         contiguous.push(batch);
         expected++;
       }
@@ -389,8 +452,10 @@ export class RankingGenerations {
       batches = contiguous;
       if (batches.length) {
         events = (await relay.query(`SELECT event_id, sequence::text, envelope FROM relay.delivered_event
-          WHERE source = $1 AND data_epoch = $2 AND sequence BETWEEN $3::numeric AND $4::numeric`,
-        [RELAY_SOURCE, basis.data_epoch, batches[0]!.sequence, batches.at(-1)!.sequence])).rows;
+          WHERE stream_scope = $1 AND source = $2 AND data_epoch = $3
+            AND sequence BETWEEN $4::numeric AND $5::numeric`,
+        [checkpoint.streamScope, RELAY_SOURCE, checkpoint.dataEpoch,
+          batches[0]!.sequence, batches.at(-1)!.sequence])).rows;
       }
     } catch (error) {
       if (error instanceof RecommendationStale) throw error;
@@ -456,7 +521,8 @@ export class RankingGenerations {
       // zero-score tail. An admitted non-Work target is irrelevant to this grain.
       signals = signals.filter(signal => !targets.has(signal.candidate) || works.has(signal.candidate));
     }
-    const last = batches.at(-1)?.sequence ?? basis.checkpoint;
+    const last = batches.at(-1)?.sequence ?? checkpoint.sequence;
+    const completeTarget = compareMainRelayPositions({ ...checkpoint, sequence: last }, target) >= 0;
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, generation, leaseEpoch, this.leaseMs);
@@ -501,10 +567,10 @@ export class RankingGenerations {
       if (latest.size) await this.apply(client, generation, basis.partition_count, [...latest.values()]);
       const advanced = await client.query<{ complete: boolean }>(`UPDATE access.derived_generation_input
         SET checkpoint_sequence = $3::numeric, checkpoint_event = $4,
-          snapshot_complete = snapshot_complete OR $3::numeric >= $5::numeric
+          snapshot_complete = snapshot_complete OR $5
         WHERE generation_id = $1 AND source = 'main-graph' AND checkpoint_sequence = $2::numeric
         RETURNING snapshot_complete AS complete`,
-      [generation, basis.checkpoint, last, `relay-batch:${last}`, basis.target]);
+      [generation, checkpoint.sequence, last, `relay-batch:${last}`, completeTarget]);
       if (advanced.rowCount !== 1) throw new RecommendationStale('checkpoint moved');
       return { relayBatches: batches.length, signals: latest.size, checkpoint: last,
         snapshotComplete: advanced.rows[0]!.complete };
@@ -583,18 +649,21 @@ export class RankingGenerations {
 
   /** Ready only after catch-up to the current relay head and a partition-total validation. */
   async finish(generation: string, leaseEpoch: string): Promise<GenerationView> {
-    const head = await this.relayHead();
+    const head = await this.mainStreamCoverage();
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, generation, leaseEpoch, this.leaseMs);
-      const input = (await client.query<{ checkpoint: string; complete: boolean; data_epoch: string }>(`SELECT
-        checkpoint_sequence::text AS checkpoint, snapshot_complete AS complete, data_epoch
-        FROM access.derived_generation_input WHERE generation_id = $1 AND source = 'main-graph'`,
+      const input = (await client.query<{ checkpoint: string; complete: boolean; data_epoch: string;
+        manifest_data_epoch: string | null;
+        stream_scope: string | null }>(`SELECT i.checkpoint_sequence::text AS checkpoint, i.snapshot_complete AS complete,
+          i.data_epoch, g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
+          g.input_manifest->'source'->>'streamScope' AS stream_scope
+        FROM access.derived_generation_input i JOIN access.derived_generation g ON g.id = i.generation_id
+        WHERE i.generation_id = $1 AND i.source = 'main-graph'`,
       [generation])).rows[0]!;
-      if (input.data_epoch !== this.options.dataEpoch) {
-        throw new RecommendationStale('generation belongs to another source epoch');
-      }
-      if (!input.complete || BigInt(input.checkpoint) < BigInt(head)) {
+      const checkpoint = mainRelayPosition(input.stream_scope, input.data_epoch, input.checkpoint,
+        this.options.dataEpoch, input.manifest_data_epoch);
+      if (!input.complete || compareMainRelayPositions(checkpoint, head) < 0) {
         throw new RecommendationNotReady('generation has not caught up with the relay');
       }
       const partitions = (await client.query<{ partition: number; candidates: string; signals: string;
