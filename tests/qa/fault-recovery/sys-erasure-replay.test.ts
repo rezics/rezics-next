@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -14,7 +14,7 @@ import { graphErasureSuppressed, suppressGraphContentRevisions }
 import { markErasureSuppressed, journalErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
   retainErasureCoverage } from '../../../services/main/src/modules/erasure/reconcile.ts';
-import { initializeFreshGraph, prepareComponent, type GraphLineage }
+import { hash as hashSha256, initializeFreshGraph, prepareComponent, type GraphLineage }
   from '../../../services/main/src/modules/work/activate.ts';
 import { captureGraphRecoveryCoverage, RestoreLineageConflict,
   type RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
@@ -101,10 +101,22 @@ test('SYS07: older Account, Access, Content, graph and object copies replay with
     const retainedUnit = `urn:rezics:content:match-unit:${randomUUID()}`;
     const retainedComponent = `urn:rezics:work:${randomUUID()}`;
     const objectBytes = Buffer.from('SYS07 private object from the older copy');
-    const objectDigest = createHash('sha256').update(objectBytes).digest('hex');
+    const objectDigest = hashSha256(objectBytes);
     writeFileSync(join(objects, objectDigest), objectBytes, { mode: 0o600, flag: 'wx' });
+    const retainedState = { title: 'unrelated retained object' };
+    const retainedPayloadBytes = Buffer.from(JSON.stringify({ format: 'rezics-component-v1',
+      component: retainedComponent, state: retainedState }));
+    const retainedPayloadDigest = hashSha256(retainedPayloadBytes);
     const retainedManifest = prepareComponent(objects, retainedComponent,
-      { title: 'unrelated retained object' });
+      retainedState);
+    const retainedManifestBytes = readFileSync(join(objects, retainedManifest));
+    expect(hashSha256(retainedManifestBytes)).toBe(retainedManifest);
+    expect(JSON.parse(retainedManifestBytes.toString('utf8'))).toMatchObject({
+      component: retainedComponent, payload: `sha256:${retainedPayloadDigest}`,
+    });
+    expect(readFileSync(join(objects, retainedPayloadDigest))).toEqual(retainedPayloadBytes);
+    const custodyRootsRef = `retained-custody-roots:${hashSha256(JSON.stringify(
+      [retainedManifest, retainedPayloadDigest].sort()))}`;
 
     await initializeFreshGraph(fuseki, lineage);
     live.runner.stop();
@@ -121,6 +133,11 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
   /fuseki/databases/sys07-seed.nq`);
     await live.runner.start();
     await offlineTextIndex(live.runner);
+    const retainedRoots = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?subject ?manifest WHERE { GRAPH <urn:rezics:graph:revisions> {
+        ?subject rv:manifest ?manifest . } }`);
+    expect(retainedRoots.results?.bindings.map(row => [row.subject?.value, row.manifest?.value]))
+      .toEqual([[retainedComponent, `urn:rezics:sha256:${retainedManifest}`]]);
     await initializeRelayCheckpoint(relay, consumer, dataEpoch);
     const fence = await engageAccessRecoveryFence(access);
     await closeAccount();
@@ -139,6 +156,9 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       recoveryKey, 'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relay, sealedCoverage, recoveryKey);
     await retainErasureCoverage(relay, consumer);
+    const retainedHead = (await relay.query<{ generation: string }>(`SELECT generation::text AS generation
+      FROM relay.recovery_coverage_head WHERE consumer = $1`, [consumer])).rows[0];
+    if (!retainedHead) throw new Error('retained recovery coverage head was not captured');
 
     const accountBackup = await databases.snapshot('account', async () => {
       await closeAccount();
@@ -211,20 +231,60 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       ?.serialized_bytes).not.toBeNull();
     expect(await graphErasureSuppressed(restored.graph.fuseki, intent.erasureId,
       intent.erasureEpoch, [saved.revisionId])).toBe(false);
+    const heldOperationId = `sys07-unreplayed-${randomUUID()}`;
     const held = await reconcileRestoredErasures(relay, restored, {
-      operationId: `sys07-unreplayed-${randomUUID()}`, consumer, replay: false,
+      operationId: heldOperationId, consumer, replay: false,
       authority: { sealedCoverage, hmacKey: recoveryKey },
     });
-    expect(held).toMatchObject({ state: 'held', counts: { conflict: 3 } });
+    expect(held).toMatchObject({ state: 'held' });
+    expect(held.counts).toEqual({ conflict: 3, matched: 7 });
+    const graphBindingRef = `restored-graph-binding:${hashSha256(JSON.stringify(
+      [lineage.dataEpoch, lineage.routingEpoch, null]))}`;
+    const reconciliationIdentityRef = (operationId: string, replay: boolean) => {
+      const requestDigest = hashSha256(`${consumer}\0${replay}\0${hashSha256(sealedCoverage)}`);
+      return `restore-reconciliation:${hashSha256(JSON.stringify([
+        `${operationId}:erasures`, requestDigest, consumer, retainedHead.generation, intent.erasureEpoch,
+      ]))}`;
+    };
+    const expectedFindings = (targetDisposition: 'conflict' | 'replayed', operationId: string) => [
+      { owner: 'access', item_kind: 'authority_fence', item_ref: 'current-retained-authority-coverage',
+        disposition: 'matched' },
+      { owner: 'access', item_kind: 'authority_fence', item_ref: `restore-access-generation:${restoredFence}`,
+        disposition: 'matched' },
+      { owner: 'access', item_kind: 'deletion_intent', item_ref: 'account-deletion-journal',
+        disposition: 'matched' },
+      { owner: 'content', item_kind: 'revision', item_ref: saved.revisionId,
+        disposition: targetDisposition },
+      { owner: 'graph', item_kind: 'authority_fence', item_ref: graphBindingRef,
+        disposition: 'matched' },
+      { owner: 'graph', item_kind: 'erasure', item_ref: intent.erasureId,
+        disposition: targetDisposition },
+      { owner: 'object', item_kind: 'erasure', item_ref: `sha256:${objectDigest}`,
+        disposition: targetDisposition },
+      { owner: 'object', item_kind: 'payload', item_ref: 'retained-command-model-custody',
+        disposition: 'matched' },
+      { owner: 'object', item_kind: 'receipt', item_ref: custodyRootsRef,
+        disposition: 'matched' },
+      { owner: 'relay', item_kind: 'receipt', item_ref: reconciliationIdentityRef(operationId,
+        targetDisposition === 'replayed'), disposition: 'matched' },
+    ];
+    const persistedFindings = async (reconciliationId: string) => (await relay.query<{
+      owner: string; item_kind: string; item_ref: string; disposition: string;
+    }>(`SELECT owner, item_kind, item_ref, disposition FROM relay.owner_reconciliation_item
+      WHERE reconciliation_id = $1 ORDER BY owner, item_kind, item_ref`, [reconciliationId])).rows;
+    expect(await persistedFindings(held.reconciliationId)).toEqual(expectedFindings('conflict', heldOperationId));
     await expect(releaseErasureRestoreHold(relay, restored, held.reconciliationId,
       restoredFence, { sealedCoverage, hmacKey: recoveryKey }))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
 
+    const replayOperationId = `sys07-replay-${randomUUID()}`;
     const pass = await reconcileRestoredErasures(relay, restored, {
-      operationId: `sys07-replay-${randomUUID()}`, consumer, replay: true,
+      operationId: replayOperationId, consumer, replay: true,
       authority: { sealedCoverage, hmacKey: recoveryKey },
     });
-    expect(pass).toMatchObject({ state: 'reconciled', counts: { replayed: 3, matched: 2 } });
+    expect(pass).toMatchObject({ state: 'reconciled' });
+    expect(pass.counts).toEqual({ replayed: 3, matched: 7 });
+    expect(await persistedFindings(pass.reconciliationId)).toEqual(expectedFindings('replayed', replayOperationId));
     expect((await restored.content.query<{ availability: string }>(
       'SELECT availability FROM content.revision WHERE id = $1', [saved.revisionId])).rows[0])
       .toEqual({ availability: 'erased' });
