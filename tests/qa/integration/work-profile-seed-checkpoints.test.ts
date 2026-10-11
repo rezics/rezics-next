@@ -73,6 +73,7 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
   const targets: string[] = [];
   let currentApi: CorpusApi;
   let actor = '';
+  const seeded = { initialize: 0, works: 0 };
   let verifying: WorkProfileCorpusManifest | undefined;
   let driver: ManagedCorpusBackupDriver | undefined;
   const evidence: Array<Record<string, unknown>> = [];
@@ -98,19 +99,21 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
     const recipe: WorkProfileCorpusRecipe = {
       version: 'public-work-checkpoints-v1', fixed,
       async initialize(client, key) {
+        // The same live source continues after each stopped cut. Scenario
+        // handles already returned by its API remain valid across that restart.
+        if (actor) return;
         actor = (await client.command<{ agent: string }>(`${key}:author`, { method: 'POST',
           path: '/v1/agents', body: { profile: 'agent-provision-v1', kind: 'person',
             displayName: 'Checkpoint corpus author' } })).agent;
+        seeded.initialize++;
       },
       async grow(client, dimension, index, key) {
         expect(dimension).toBe('unrelatedWorks');
+        if (works[index]) return;
         const created = await seedPublicProfileWork(client, key, { actingSubject: actor,
           title: `Checkpoint public Work ${index}`, body: `Checkpoint selected text ${index}` });
-        const earlier = works[index];
-        if (earlier) expect(created).toMatchObject({ work: earlier.work, mainVersion: earlier.mainVersion,
-          contribution: earlier.contribution, draftRevision: earlier.draftRevision,
-          publicationDecision: earlier.publicationDecision, selection: earlier.selection });
         works[index] = created;
+        seeded.works++;
       },
       verify: client => census(client, works.length),
     };
@@ -151,9 +154,10 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
       expect(await prepareWorkProfileCorpus(input)).toEqual(checkpoint);
     }
     expect(works).toHaveLength(64);
+    expect(seeded).toEqual({ initialize: 1, works: 64 });
     const buildMs = performance.now() - buildStartedAt;
     expect(buildMs).toBeLessThan(600_000);
-    evidence.push({ stage: 'build', stackStartupMs, sourceStartupMs, totalMs: buildMs,
+    evidence.push({ stage: 'build', seeded, stackStartupMs, sourceStartupMs, totalMs: buildMs,
       largestCheckpointPreparationMs: checkpoints[2]!.preparationMs });
     for (const checkpoint of checkpoints) {
       verifying = checkpoint;

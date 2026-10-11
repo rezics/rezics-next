@@ -229,7 +229,9 @@ async function measure(dimension: string, scale: string, operation: string, path
         displayName: `Unrelated author ${index}` } })).agent);
   }
   const joinTargets: Array<{ realm: string; space: string }> = [];
-  for (let index = 0; index < (selectedDimensions.includes('memberships') ? 24 : 0); index++) joinTargets.push(await createRealm(`g1026:join-target:${index}`));
+  const membershipTargets = selectedDimensions.includes('memberships')
+    ? workProfileDimensions('memberships', 'large', fixed).memberships : 0;
+  for (let index = 0; index < membershipTargets; index++) joinTargets.push(await createRealm(`g1026:join-target:${index}`));
   const actual: CorpusDimensions = { ...fixed,realmSize: posts.length,historyDepth: 1,follows: 1,memberships: 1 };
   async function inventory(path: `/v1/${string}`) {
     const items: any[] = [];
