@@ -9,6 +9,10 @@ import type { FusekiClient } from '../../../services/main/src/infrastructure/fus
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
+import { initializeRelayCheckpoint, relayCoverage }
+  from '../../../services/main/src/modules/outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE }
+  from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
@@ -109,7 +113,8 @@ test('SUB08: an older gift restore differs from the retained Commerce revocation
     await import('../../../services/main/src/modules/commerce/store.ts');
   const { captureCommerceRecoveryCoverage, assertCommerceRecoveryCoverage } =
     await import('../../../services/main/src/modules/commerce/recovery-coverage.ts');
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID,
+    ['account', 'access', 'relay'], 'owner');
   const stack = join(root, '.temp', 'stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
   const compose = readEnv(join(stack, 'compose.env'));
   const admin = new Pool({ connectionString:
@@ -117,6 +122,8 @@ test('SUB08: an older gift restore differs from the retained Commerce revocation
   const oldName = `qa_gift_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   let live = new Pool({ connectionString: databases.urls.access });
   let old: Pool | undefined;
+  let relayPool: Pool | undefined = new Pool({ connectionString: databases.urls.relay });
+  let restoredRelay: Pool | undefined;
   try {
     const seller = `https://rezics.com/id/${randomUUID()}`;
     const beneficiary = `https://rezics.com/id/${randomUUID()}`;
@@ -188,22 +195,34 @@ test('SUB08: an older gift restore differs from the retained Commerce revocation
       .rejects.toThrow('restored Commerce owner differs from retained cut');
     await assertCommerceRecoveryCoverage(live, retained);
 
-    // The global release must reject this same old Access snapshot before it
-    // probes Account, relay or Jena. Commerce is the only changed owner here.
+    // This synthetic signed envelope binds old Access state to newer Commerce coverage to isolate this guard.
+    // Catalog-based Access coverage includes Commerce tables, so an ordinary older Access capture can fail
+    // the Access-state check first; this contradictory envelope is not a valid successful capture.
     await engageAccessRecoveryFence(old);
     const [outbox, accessState] = await Promise.all([
       accessOutboxCoverage(old), accessStateCoverage(old),
     ]);
     const priorDataEpoch = randomUUID();
+    const relayConsumer = 'gift-restore';
+    await initializeRelayCheckpoint(relayPool!, relayConsumer, priorDataEpoch);
+    const retainedRelayCoverage = await relayCoverage(relayPool!, relayConsumer);
+    const restoredRelayUrl = await databases.snapshot('relay', async () => {
+      await relayPool!.end();
+      relayPool = undefined;
+    });
+    relayPool = new Pool({ connectionString: databases.urls.relay });
+    restoredRelay = new Pool({ connectionString: restoredRelayUrl });
+    const restoredRelayCoverage = await relayCoverage(restoredRelay, relayConsumer);
+    expect(retainedRelayCoverage.streamScope).toBe(MAIN_RELAY_STREAM_SCOPE);
+    expect(restoredRelayCoverage).toEqual(retainedRelayCoverage);
+
     const coverage: RecoveryCoverage = {
       priorDataEpoch, priorSequence: '0',
       accountPg: { systemIdentifier: '1', flushedLsn: '0/0', walFile: '0'.repeat(24) },
       account: { rowCount: '0', rowDigest: '0'.repeat(64) },
       accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
       accessStateCount: accessState.count, accessStateDigest: accessState.digest,
-      relay: { consumer: 'gift-restore', dataEpoch: priorDataEpoch,
-        sequence: '0', batchCount: '0', batchDigest: '0'.repeat(64),
-        eventCount: '0', eventDigest: '0'.repeat(64) },
+      relay: { ...retainedRelayCoverage, streamScope: MAIN_RELAY_STREAM_SCOPE },
       commerce: retained,
     };
     const hmacKey = 'cd'.repeat(32);
@@ -211,18 +230,30 @@ test('SUB08: an older gift restore differs from the retained Commerce revocation
       coverage, hmacKey, 'graph-recovery-coverage'));
     const untouchedGraph = ({ query: async () => { throw new Error('graph release was reached'); },
       commandWithReceipt: async () => { throw new Error('graph release was reached'); } }) as unknown as FusekiClient;
-    const release = (saved: string) => releaseRestoredGraphHold(untouchedGraph, old!, old!,
+    const untouchedAccount = ({ query: async () => { throw new Error('Account release was reached'); }
+    }) as unknown as Pool;
+    let erasureCalls = 0;
+    const releaseErasures = async () => {
+      erasureCalls++;
+      throw new Error('retained erasure reconciliation was reached');
+    };
+    const release = (saved: string) => releaseRestoredGraphHold(untouchedGraph, old!, relayPool!,
       { dataEpoch: randomUUID(), routingEpoch: '2' },
-      { sealedCoverage: saved, hmacKey, accountPool: old! });
+      { sealedCoverage: saved, hmacKey, accountPool: untouchedAccount,
+        restoredRelayPool: restoredRelay!, releaseErasures });
     await expect(release(sealedCoverage))
       .rejects.toThrow('Commerce owner differs from recovery coverage');
+    expect(erasureCalls).toBe(0);
     const { commerce: _omitted, ...withoutCommerce } = coverage;
     await expect(release(JSON.stringify(sealRecoveryPayload(
       withoutCommerce, hmacKey, 'graph-recovery-coverage'))))
       .rejects.toThrow('invalid recovery coverage');
+    expect(erasureCalls).toBe(0);
   } finally {
     await live.end();
     if (old) await old.end();
+    if (relayPool) await relayPool.end();
+    if (restoredRelay) await restoredRelay.end();
     await admin.query(`DROP DATABASE IF EXISTS ${oldName} WITH (FORCE)`);
     await admin.end();
     await databases.close();
