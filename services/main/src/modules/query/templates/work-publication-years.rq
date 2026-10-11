@@ -32,7 +32,23 @@ FILTER EXISTS { GRAPH <urn:rezics:graph:current> {
       ?publicDecision a rv:PublicationDecision ; rv:component ?publicContribution ; rv:work ?id ;
         rv:contribution ?publicContribution ; rv:disclosure rv:Public ; rv:selectedDraft ?publicDraft .
       ?publicDraft a rv:RevisionAnchor ; rv:component ?publicContribution .
-      FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } })
+      FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } } || EXISTS {
+    GRAPH <urn:rezics:graph:current> {
+      ?id rv:workStructurePublicationHead ?structuredDecision .
+      ?structuredStructure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?structuredProfile .
+      ?structuredGeneration a rv:StructureGeneration ; rv:structure ?structuredStructure . }
+    GRAPH <urn:rezics:graph:revisions> {
+      ?structuredDecision a rv:WorkStructurePublicationDecision ; rv:component ?id ;
+        rv:publicationOutcome rv:Published ; rv:publicSource ?structuredSource ;
+        rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution .
+      ?structuredSource a rv:WorkStructurePublicSource ; rv:work ?id ; rv:component ?main ;
+        rv:structureProfile ?structuredProfile ; rv:structure ?structuredStructure ;
+        rv:structureRevision ?structuredRevision ; rv:selectedGeneration ?structuredGeneration ;
+        rv:sourceRoot ?structuredRoot .
+      ?structuredRevision a rv:StructureRevision ; rv:component ?structuredStructure ;
+        rv:generation ?structuredGeneration ; rv:manifest ?structuredRoot .
+      FILTER(REGEX(STR(?structuredRoot), "^urn:rezics:sha256:[0-9a-f]{64}$"))
+      FILTER NOT EXISTS { ?structuredRevision a rv:ErasedRevision } } })
   FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {
       ?erasedVariant rv:resource ?id ; rv:contentPublicationHead ?erasedPublication }
     GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .

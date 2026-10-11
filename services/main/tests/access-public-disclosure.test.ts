@@ -5,6 +5,7 @@ import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { MediaAccessBatchReader } from '../src/modules/media/access-batch.ts';
 import { publicCatalogueWork } from '../src/modules/access/role-proof.ts';
 import { publicSemantics, readSemanticDisclosure } from '../src/modules/access/semantic-disclosure.ts';
+import { publishedStructuredWork, publishedWork, publicWork } from '../src/modules/work/public-patterns.ts';
 
 const resource = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 // Any pool use would mean the check ran after a database round trip.
@@ -38,6 +39,18 @@ test('configured catalogue disclosure distinguishes public Works from hidden Wor
   for (const readable of [true, false]) {
     expect(await publicCatalogueWork({ query: async () => ({ boolean: readable }) }, resource)).toBe(readable);
   }
+});
+
+test('common Work candidates accept exact structured sources while selected-text bindings stay text-only', () => {
+  const structured = publishedStructuredWork('?work', '?main');
+  expect(structured).toContain('rv:workStructurePublicationHead ?structuredDecision');
+  expect(structured).toContain('rv:publicationOutcome rv:Published');
+  expect(structured).toContain('rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution');
+  expect(structured).toContain('rv:manifest ?structuredRoot');
+  expect(structured).toContain('rv:ErasedRevision');
+  expect(publicWork('?work', '?main')).toContain(structured);
+  expect(publishedWork('?work', '?main')).not.toContain('WorkStructurePublicationDecision');
+  expect(structured).not.toContain('searchBody');
 });
 
 test('the production composition configures the baseline graph on the registry it serves', () => {

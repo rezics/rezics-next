@@ -34,6 +34,10 @@ public class PublicNameProjectionTest {
         data.deleteAny(CURRENT,subject,p(predicate),Node.ANY);
         if (value!=null) data.add(CURRENT,subject,p(predicate),value);
     }
+    private static void setRevision(DatasetGraph data, Node subject, String predicate, Node value) {
+        data.deleteAny(REVISION_GRAPH,subject,p(predicate),Node.ANY);
+        if (value!=null) data.add(REVISION_GRAPH,subject,p(predicate),value);
+    }
     private static void space(DatasetGraph data) {
         data.add(CURRENT,SPACE,RDF.type.asNode(),p("Space"));
         data.add(CURRENT,SPACE,LABEL,NodeFactory.createLiteralLang("Lantern parent","en"));
@@ -917,5 +921,70 @@ public class PublicNameProjectionTest {
             set(data,SCHEME,"schemeState",p("Active")); assertTrue(PublicNameProjection.visible(data,id(101)));
             set(data,REALM,"realmState",p("Retired")); assertFalse(PublicNameProjection.visible(data,id(100)));
         } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void structuredWorkNamesUseExactOwnedSourceAndWithdrawImmediately() {
+        var data=DatasetGraphFactory.createTxnMem();data.begin(ReadWrite.WRITE);
+        Node work=id(92000),main=id(92001),structure=id(92002),revision=id(92003),generation=id(92004),decision=id(92005);
+        Node source=uri("urn:rezics:work-source:bounded-native-proof"),root=uri("urn:rezics:sha256:"+"a".repeat(64));
+        try {
+            data.add(CURRENT,work,RDF.type.asNode(),uri("https://schema.org/CreativeWork"));
+            data.add(CURRENT,work,LABEL,NodeFactory.createLiteralLang("Structured Work title","en"));
+            data.add(CURRENT,work,p("mainVersion"),main);
+            data.add(CURRENT,main,RDF.type.asNode(),p("MainVersion"));data.add(CURRENT,main,p("work"),work);
+            data.add(CURRENT,structure,RDF.type.asNode(),p("Structure"));
+            data.add(CURRENT,structure,p("structureOf"),main);
+            data.add(CURRENT,structure,p("structureProfile"),uri("https://rezics.com/vocab/RecipeComposition"));
+            data.add(CURRENT,generation,RDF.type.asNode(),p("StructureGeneration"));
+            data.add(CURRENT,generation,p("structure"),structure);
+            data.add(CURRENT,work,p("workStructurePublicationHead"),decision);
+            data.add(REVISION_GRAPH,revision,RDF.type.asNode(),p("StructureRevision"));
+            data.add(REVISION_GRAPH,revision,p("component"),structure);
+            data.add(REVISION_GRAPH,revision,p("generation"),generation);
+            data.add(REVISION_GRAPH,revision,p("manifest"),root);
+            data.add(REVISION_GRAPH,source,RDF.type.asNode(),p("WorkStructurePublicSource"));
+            data.add(REVISION_GRAPH,source,p("work"),work);data.add(REVISION_GRAPH,source,p("component"),main);
+            data.add(REVISION_GRAPH,source,p("structure"),structure);
+            data.add(REVISION_GRAPH,source,p("structureProfile"),uri("https://rezics.com/vocab/RecipeComposition"));
+            data.add(REVISION_GRAPH,source,p("structureRevision"),revision);
+            data.add(REVISION_GRAPH,source,p("selectedGeneration"),generation);
+            data.add(REVISION_GRAPH,source,p("sourceRoot"),root);
+            data.add(REVISION_GRAPH,decision,RDF.type.asNode(),p("WorkStructurePublicationDecision"));
+            data.add(REVISION_GRAPH,decision,RDF.type.asNode(),p("RevisionAnchor"));
+            data.add(REVISION_GRAPH,decision,p("component"),work);
+            data.add(REVISION_GRAPH,decision,p("publicationOutcome"),p("Published"));
+            data.add(REVISION_GRAPH,decision,p("publicSource"),source);
+            data.add(REVISION_GRAPH,decision,p("disclosure"),p("Public"));
+            data.add(REVISION_GRAPH,decision,p("rightsBasis"),p("OriginalContribution"));
+            var forbiddenFanout=new DatasetGraphWrapper(data) {
+                @Override public Iterator<Quad> find(Node graph,Node subject,Node predicate,Node object) {
+                    if(graph.equals(PUBLIC)&&subject.equals(Node.ANY)&&predicate.equals(p("work")))
+                        fail("Work name visibility must use owned source probes, not publication-unit enumeration");
+                    return super.find(graph,subject,predicate,object);
+                }
+            };
+            PublicNameProjection.refresh(data,work);
+            assertTrue(PublicNameProjection.visible(forbiddenFanout,work));
+            assertTrue(stored(data,work,"work"));
+            assertFalse(data.contains(PUBLIC,unit(work,"work"),p("searchBody"),Node.ANY));
+
+            setRevision(data,decision,"publicationOutcome",p("Withdrawn"));
+            data.deleteAny(REVISION_GRAPH,decision,p("publicSource"),Node.ANY);
+            PublicNameProjection.refresh(data,work);
+            assertFalse(PublicNameProjection.visible(forbiddenFanout,work));
+            assertFalse(stored(data,work,"work"));
+
+            setRevision(data,decision,"publicationOutcome",p("Published"));
+            data.add(REVISION_GRAPH,decision,p("publicSource"),source);
+            setRevision(data,source,"work",id(92009));
+            PublicNameProjection.refresh(data,work);
+            assertFalse(PublicNameProjection.visible(forbiddenFanout,work));
+            assertFalse(stored(data,work,"work"));
+
+            setRevision(data,source,"work",work);
+            data.add(REVISION_GRAPH,revision,RDF.type.asNode(),p("ErasedRevision"));
+            PublicNameProjection.refresh(data,work);
+            assertFalse(PublicNameProjection.visible(forbiddenFanout,work));
+            assertFalse(stored(data,work,"work"));
+        } finally {data.abort();data.end();data.close();}
     }
 }

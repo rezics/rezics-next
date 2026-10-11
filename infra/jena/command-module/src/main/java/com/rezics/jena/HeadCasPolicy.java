@@ -22,6 +22,7 @@ final class HeadCasPolicy {
     private static final Node RECEIPTS = uri(CommandPolicy.RECEIPTS);
     private static final Node HEAD = rv("head");
     private static final Node SELECTION_HEAD = rv("selectionHead");
+    private static final Node WORK_STRUCTURE_PUBLICATION_HEAD = rv("workStructurePublicationHead");
     private static final Node STATEMENT = RDF.Statement.asNode();
     private static final Node CONTEXT = rv("SemanticContext");
 
@@ -106,7 +107,10 @@ final class HeadCasPolicy {
                 data.contains(CURRENT, Node.ANY, rv("mainVersion"), key.subject())
                     || data.contains(CURRENT, key.subject(), RDF.type.asNode(), rv("MainVersion"))));
         }
-        if (transitions.size() > 2) return new Snapshot(List.of(), "one head transition required");
+        if (transitions.size() > 2 || transitions.stream()
+            .anyMatch(change -> WORK_STRUCTURE_PUBLICATION_HEAD.equals(change.key().predicate()))
+                && transitions.size() != 1)
+            return new Snapshot(List.of(), "one head transition required");
         Transition expected = transitions.isEmpty() ? null : transitions.getFirst();
         if (transitions.size() == 2) {
             Transition head = transition(transitions, HEAD);
@@ -167,7 +171,30 @@ final class HeadCasPolicy {
             || scope == null || !scope.isLiteral()) return "head transition lacks an exact Access admission";
 
         String requiredScope;
-        if (HEAD.equals(transition.key().predicate())) {
+        if (WORK_STRUCTURE_PUBLICATION_HEAD.equals(transition.key().predicate())) {
+            Node work = subject;
+            Node publication = one(data, REVISIONS, next, rv("publicationOutcome"));
+            boolean published = rv("Published").equals(publication);
+            boolean withdrawn = rv("Withdrawn").equals(publication);
+            Node action = one(data, RECEIPTS, own, rv("action"));
+            Node family = one(data, RECEIPTS, own, rv("commandFamily"));
+            if (!data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
+                || !data.contains(REVISIONS, next, RDF.type.asNode(), rv("WorkStructurePublicationDecision"))
+                || !same(data, RECEIPTS, own, "work", work)
+                || !same(data, RECEIPTS, own, "publicationDecision", next)
+                || !published && !withdrawn
+                || published && (action == null || !action.equals(NodeFactory.createLiteralString("work.publish"))
+                    || family == null || !family.equals(NodeFactory.createLiteralString("work-structure-publication-v1")))
+                || withdrawn && (before == null
+                    || action == null || !action.equals(NodeFactory.createLiteralString("work.withdraw-publication"))
+                    || family == null || !family.equals(NodeFactory.createLiteralString("work-structure-withdrawal-v1"))
+                    || !data.contains(REVISIONS, before, RDF.type.asNode(), rv("WorkStructurePublicationDecision"))
+                    || !data.contains(REVISIONS, before, rv("component"), work)
+                    || !data.contains(REVISIONS, before, rv("publicationOutcome"), rv("Published"))
+                    || !data.contains(REVISIONS, before, rv("publicSource"), Node.ANY)))
+                return "Work structure publication transition differs from its receipt or predecessor";
+            requiredScope = "work:publish:" + work.getURI();
+        } else if (HEAD.equals(transition.key().predicate())) {
             boolean statement = STATEMENT.equals(transition.ownerType());
             boolean context = CONTEXT.equals(transition.ownerType());
             if (statement != data.contains(CURRENT, subject, RDF.type.asNode(), STATEMENT)
@@ -342,7 +369,8 @@ final class HeadCasPolicy {
         }
     }
     private static boolean isHead(Node predicate) {
-        return HEAD.equals(predicate) || SELECTION_HEAD.equals(predicate);
+        return HEAD.equals(predicate) || SELECTION_HEAD.equals(predicate)
+            || WORK_STRUCTURE_PUBLICATION_HEAD.equals(predicate);
     }
     private static Node rv(String name) { return uri(RV + name); }
     private static Node uri(String name) { return NodeFactory.createURI(name); }

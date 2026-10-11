@@ -20,7 +20,7 @@ export async function changeAdmittedWorkStructurePublication(
     & Partial<Pick<AccessAdmissionRegistry, 'admittedActingSubject'>>,
   request: Request,
   input: WorkStructurePublicationInput & { idempotencyKey: string },
-  publicationAllowed: () => Promise<boolean>,
+  publicationFence: <T>(dispatch: (allowed: boolean) => Promise<T>) => Promise<T>,
 ): Promise<WorkStructurePublicationReceipt & { replayed: boolean }> {
   const digest = workStructurePublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -44,12 +44,12 @@ export async function changeAdmittedWorkStructurePublication(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         terminal = await sealWorkStructurePublicationAdmission(env, admission);
       } else {
-        terminal = !await publicationAllowed()
-          ? await denyWorkStructurePublicationAdmission(env, admission, input)
-          : await changeStructuredWorkPublication(env, admission, input,
+        terminal = await publicationFence(allowed => !allowed
+          ? denyWorkStructurePublicationAdmission(env, admission, input)
+          : changeStructuredWorkPublication(env, admission, input,
             id => access.admittedActingSubject
               ? access.admittedActingSubject(id)
-              : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable')));
+              : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable'))));
       }
     }
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-publication');

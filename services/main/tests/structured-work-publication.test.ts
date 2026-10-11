@@ -116,7 +116,7 @@ test('RECIPE07: a retained success replays the exact admitted source without cla
     recordGraphOutcome: async (_id, receipt) => { calls.push(`record:${receipt.outcome}`); },
     admittedActingSubject: async () => actor,
   }, new Request('https://main.invalid/v1/work-publications'), { ...publishInput, idempotencyKey: 'publication-one' },
-  async () => true);
+  async dispatch => dispatch(true));
 
   expect(result).toMatchObject({ outcome: 'succeeded', replayed: true, publicationDecision: decision,
     sourceRoot, structureRevision: structureHead });
@@ -185,7 +185,7 @@ test('RECIPE07: an Access claim denial is terminally recorded and cannot authori
     recordGraphOutcome: async (_id, receipt) => { calls.push(`record:${receipt.outcome}`); },
     admittedActingSubject: async () => actor,
   }, new Request('https://main.invalid/v1/work-publications'), { ...publishInput, idempotencyKey: 'publication-one' },
-  async () => true))
+  async dispatch => dispatch(true)))
     .rejects.toBeInstanceOf(AdmissionDenied);
 
   expect(calls).toEqual(['scope:work:edit',
@@ -218,7 +218,7 @@ test('RECIPE07: a current publication restriction seals an authority-denied rece
     recordGraphOutcome: async () => { calls.push('recorded'); },
     admittedActingSubject: async () => actor,
   }, new Request('https://main.invalid/v1/work-publications'), { ...publishInput, idempotencyKey: 'publication-one' },
-  async () => false)).rejects.toBeInstanceOf(AdmissionDenied);
+  async dispatch => dispatch(false))).rejects.toBeInstanceOf(AdmissionDenied);
 
   expect(reads).toBe(2);
   expect(writes).toBe(1);

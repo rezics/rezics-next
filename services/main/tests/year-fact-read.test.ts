@@ -66,4 +66,15 @@ describe('first-publication year page', () => {
     expect(rows.filter(row => keepPublicationRow(seen, row.id, row.year)).map(row => row.statement)).toEqual(['one', 'other']);
     expect(publicationRowKey(rows[0]!.id, '2024')).toBe(`${rows[0]!.id}\0${'2024'}`);
   });
+
+  test('public year candidates include only exact admitted Structure roots', async () => {
+    const query = await Bun.file(new URL('../src/modules/query/templates/work-publication-years.rq', import.meta.url)).text();
+    expect(query).toContain('rv:workStructurePublicationHead ?structuredDecision');
+    expect(query).toContain('rv:publicationOutcome rv:Published');
+    expect(query).toContain('rv:rightsBasis rv:OriginalContribution');
+    expect(query).toContain('rv:structureOf ?main ; rv:structureProfile ?structuredProfile');
+    expect(query).toContain('rv:manifest ?structuredRoot');
+    expect(query).toContain('FILTER NOT EXISTS { ?structuredRevision a rv:ErasedRevision }');
+    expect(query).not.toContain('rv:searchBody');
+  });
 });

@@ -119,12 +119,21 @@ final class PublicNameProjection {
         try { return rows.hasNext() ? rows.next().getObject() : null; }
         finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
     }
+    /** One indexed owner probe that refuses missing or ambiguous evidence. */
+    private static Node exactlyOne(DatasetGraph data, Node graph, Node subject, String predicate) {
+        var rows = data.find(graph, subject, p(predicate), Node.ANY);
+        try {
+            if (!rows.hasNext()) return null;
+            Node value = rows.next().getObject();
+            return rows.hasNext() ? null : value;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
     /** The same owner proof used by publishedWork in Main: current Main heads,
      * current Contribution decision and an unerased selected draft. HeadCasPolicy
      * admits at most 64 language heads. Search units (including chapters) are
      * derived copies and neither establish nor withdraw publication authority. */
     private static boolean publishedWork(DatasetGraph data, Node work) {
-        Node main = one(data, work, "mainVersion");
+        Node main = exactlyOne(data, CURRENT, work, "mainVersion");
         if (main == null || withdrawn(data, main) || !type(data, main, RV + "MainVersion")
             || !has(data, main, "work", work)) return false;
         var heads = data.find(CURRENT, main, p("selectionHead"), Node.ANY);
@@ -134,7 +143,44 @@ final class PublicNameProjection {
             CommandWork.count("public_name_heads_visited", 1);
             if (publishedSelection(data, work, main, selection, main)) return true;
         } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
-        return false;
+        return publishedStructuredWork(data, work, main);
+    }
+    /** Generic structured publication contributes only a Work name candidate.
+     * The exact source revision must belong to this Work/Main and remain unerased. */
+    private static boolean publishedStructuredWork(DatasetGraph data, Node work, Node main) {
+        Node decision = exactlyOne(data, CURRENT, work, "workStructurePublicationHead");
+        if (decision == null || !decision.isURI()
+            || !data.contains(REVISIONS, decision, RDF.type.asNode(), p("WorkStructurePublicationDecision"))
+            || !data.contains(REVISIONS, decision, RDF.type.asNode(), p("RevisionAnchor"))
+            || !work.equals(exactlyOne(data, REVISIONS, decision, "component"))
+            || !p("Published").equals(exactlyOne(data, REVISIONS, decision, "publicationOutcome"))
+            || !p("Public").equals(exactlyOne(data, REVISIONS, decision, "disclosure"))
+            || !p("OriginalContribution").equals(exactlyOne(data, REVISIONS, decision, "rightsBasis"))) return false;
+        Node currentMain = exactlyOne(data, CURRENT, work, "mainVersion");
+        Node source = exactlyOne(data, REVISIONS, decision, "publicSource");
+        if (!main.equals(currentMain) || source == null || !source.isURI()
+            || !data.contains(REVISIONS, source, RDF.type.asNode(), p("WorkStructurePublicSource"))
+            || !work.equals(exactlyOne(data, REVISIONS, source, "work"))
+            || !main.equals(exactlyOne(data, REVISIONS, source, "component"))) return false;
+        Node structure = exactlyOne(data, REVISIONS, source, "structure");
+        Node revision = exactlyOne(data, REVISIONS, source, "structureRevision");
+        Node generation = exactlyOne(data, REVISIONS, source, "selectedGeneration");
+        Node root = exactlyOne(data, REVISIONS, source, "sourceRoot");
+        Node profile = exactlyOne(data, REVISIONS, source, "structureProfile");
+        if (!productResource(structure) || !productResource(revision) || !productResource(generation)
+            || profile == null || !profile.isURI() || root == null || !root.isURI()
+            || !root.getURI().matches("urn:rezics:sha256:[0-9a-f]{64}")
+            || !type(data, structure, RV + "Structure")
+            || !profile.equals(exactlyOne(data, CURRENT, structure, "structureProfile"))
+            || !main.equals(exactlyOne(data, CURRENT, structure, "structureOf"))
+            || !type(data, generation, RV + "StructureGeneration")
+            || !structure.equals(exactlyOne(data, CURRENT, generation, "structure"))
+            || !data.contains(REVISIONS, revision, RDF.type.asNode(), p("StructureRevision"))
+            || !structure.equals(exactlyOne(data, REVISIONS, revision, "component"))
+            || !generation.equals(exactlyOne(data, REVISIONS, revision, "generation"))
+            || !root.equals(exactlyOne(data, REVISIONS, revision, "manifest"))
+            || data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))) return false;
+        return type(data, main, RV + "MainVersion") && has(data, main, "work", work);
     }
     /** Exact selected publication authority, independently of another live
      * language keeping the Work name visible. Uses only owned revision probes. */
