@@ -9,6 +9,7 @@ import type { ReadAssessment } from '../suitability/contract.ts';
 import { SCREEN_POLICY, screenVerdict, type Scores } from '../media-screen/policy.ts';
 import { assetIri, DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaFenced, MediaInvalid,
   MediaMissing, MediaStale, type MediaAdmission } from './store.ts';
+import { coverCreditFromProvenance, type CoverCredit } from './cover-credit.ts';
 
 export const IMAGE_INFERENCE_POLICY = 'image-nsfw-v1';
 export type ImageNsfw = 'unknown' | 'sfw' | 'nsfw';
@@ -20,7 +21,7 @@ export interface MediaFieldControl {
 export interface ImageMetadata {
   representation: string; asset: string; sha256: string; use: string | null;
   mediaType: string; width: number; height: number; url: string;
-  nsfw: ImageNsfw; ageRating: ReadAssessment; conceal: boolean;
+  nsfw: ImageNsfw; ageRating: ReadAssessment; conceal: boolean; coverCredit: CoverCredit | null;
   /** Exact source representation when NSFW is derived rather than labelled here. */
   nsfwSourceId?: string | null;
   controls: { nsfw: MediaFieldControl; ageRating: MediaFieldControl; conceal: MediaFieldControl | null };
@@ -135,7 +136,8 @@ export class MediaPresentationStore {
         r.value->>'selection' AS selection, r.ordinality
         FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY r(value,ordinality))
       SELECT q.ordinality,p.id,p.asset_id,p.byte_digest,p.media_type,p.pixel_width,p.pixel_height,p.byte_length,
-        a.owner,a.object_namespace,s.disclosure,u.id AS use_id,u.actor,u.target,u.context,
+        a.owner,a.object_namespace,a.cover_only,s.disclosure,u.id AS use_id,u.actor,u.target,u.context,
+        cover_revision.body->'importedCover' AS cover_provenance,
         (u.role LIKE 'campaign-%' OR u.id IS NULL AND EXISTS (
           SELECT 1 FROM media.use campaign WHERE campaign.representation_id = COALESCE(p.source_id,p.id)
             AND campaign.role LIKE 'campaign-%')) AS campaign,
@@ -167,6 +169,11 @@ export class MediaPresentationStore {
       LEFT JOIN media.use u ON u.id = COALESCE(q.use::uuid,selected_use.id)
         AND (u.representation_id = p.id OR (p.kind = 'rendition' AND p.source_id = u.representation_id
           AND p.crop IS NOT DISTINCT FROM u.crop))
+      LEFT JOIN media.imported_cover_revision cover_projection ON cover_projection.asset_id = a.id
+        AND cover_projection.original_representation_id = COALESCE(p.source_id,p.id)
+        AND (u.id IS NULL OR cover_projection.asset_revision_id = u.asset_revision_id)
+      LEFT JOIN content.revision cover_revision ON cover_revision.id = cover_projection.asset_revision_id
+        AND cover_revision.availability = 'available'
       LEFT JOIN content.receipt campaign_receipt ON campaign_receipt.operation_id = u.operation_id
         AND u.role LIKE 'campaign-%'
       LEFT JOIN content.outbox campaign_event ON campaign_event.operation_id = campaign_receipt.operation_id
@@ -189,7 +196,9 @@ export class MediaPresentationStore {
           SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision current ON current.id=slot.head
           WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND current.use_id=u.id))
       ORDER BY q.ordinality`, [JSON.stringify(refs)])).rows;
-    const byIndex = new Map(rows.map(row => [Number(row.ordinality) - 1, row]));
+    const byIndex = new Map(rows.filter(row => !row.cover_only
+      || coverCreditFromProvenance(row.cover_provenance) !== null)
+      .map(row => [Number(row.ordinality) - 1, row]));
     return refs.map((ref, index) => {
       const row = byIndex.get(index); if (!row) return null;
       const control = (field: ImageField, prefix: string): MediaFieldControl => ({
@@ -208,6 +217,7 @@ export class MediaPresentationStore {
         use: row.use_id ?? null, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height,
         url: `/v1/media/representations/${row.id}/bytes${row.use_id ? `?use=${row.use_id}` : ''}`,
         nsfw: row.nsfw ?? 'unknown', nsfwSourceId: IRI(row.nsfw_source_id), ageRating, conceal: row.conceal ?? false,
+        coverCredit: coverCreditFromProvenance(row.cover_provenance),
         controls: { nsfw: control('nsfw','nsfw'), ageRating: control('ageRating','age'),
           conceal: row.use_id ? control('conceal','conceal') : null }, canEdit: false, canProtect: false },
         owner: row.owner, actor: row.actor ?? null, target: row.target ?? null,

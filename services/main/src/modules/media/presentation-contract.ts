@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { labels, readAssessment } from '../suitability/contract.ts';
+import { coverCreditSchema } from './cover-credit.ts';
 
 export const mediaUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 export const mediaNative = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -27,7 +28,7 @@ const control = t.Object({target:t.Object({component:t.String(),definition:t.Str
   basis:mediaControlBasis,valueHead:nullableHead,locked:t.Boolean(),canEdit:t.Boolean(),canProtect:t.Boolean()},{additionalProperties:false});
 export const mediaDescriptorFields = {representation:mediaUuid,asset:mediaUuid,sha256:t.String(),use:t.Nullable(mediaUuid),
   mediaType:t.String(),width:t.Integer(),height:t.Integer(),url:t.String(),nsfw:imageNsfw,
-  nsfwSourceId:t.Optional(t.Nullable(mediaNative)),ageRating:readAssessment,conceal:t.Boolean(),
+  nsfwSourceId:t.Optional(t.Nullable(mediaNative)),ageRating:readAssessment,conceal:t.Boolean(),coverCredit:coverCreditSchema,
   controls:t.Object({nsfw:control,ageRating:control,conceal:t.Nullable(control)}),canEdit:t.Boolean(),canProtect:t.Boolean()};
 export const mediaDescriptor = t.Object(mediaDescriptorFields,{additionalProperties:false});
 export const metadataRef = t.Union([t.Object({representation:mediaUuid,use:t.Optional(mediaUuid)},{additionalProperties:false}),

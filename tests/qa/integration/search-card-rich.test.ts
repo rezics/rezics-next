@@ -26,12 +26,13 @@ test('public phrase page hydrates current Work card fields after the bounded sea
       profile: 'public-main-phrase-page-v1', phrase, language: 'en', pageSize: 20 } });
     expect(response.status).toBe(200);
     const page = await response.json() as { total: number; results: Array<{ work: string;
-      title: { value: string }; cover: { kind: string }; primaryCredits: unknown[];
+      title: { value: string }; cover: { kind: string; coverCredit?: unknown }; primaryCredits: unknown[];
       rating: null; tagline: null; completionStatus: null }> };
     expect(page.total).toBe(1);
     expect(page.results).toMatchObject([{ work: created.work, title: { value: 'A named search card' },
       cover: { kind: 'fallback' }, primaryCredits: [], rating: null,
       tagline: null, completionStatus: null }]);
+    expect(page.results[0]?.cover).not.toHaveProperty('coverCredit');
   } finally { await stack.stop(); }
 });
 

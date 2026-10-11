@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
 import type { ImportedCoverProvenance } from './typed-schema.ts';
+import { coverCreditFromProvenance, type CoverCredit } from './cover-credit.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import { MediaPresentationStore } from './presentation.ts';
 import { MediaRenditionStore } from '../media-rendition/store.ts';
@@ -170,6 +171,8 @@ export interface AvatarRow {
   nsfw?: ImageNsfw;
   ageRating?: ReadAssessment;
   conceal?: boolean;
+  coverOnly?: boolean;
+  coverCredit?: CoverCredit | null;
 }
 
 function hash(value: string): string {
@@ -1388,6 +1391,7 @@ export class MediaStore {
         ORDER BY w.target, w.rank)
       SELECT c.target, c.context, c.head AS selection, selection_receipt.sequence::text AS selection_position,
         u.id AS use, u.asset_id, u.crop, p.id AS representation, p.byte_digest, p.media_type, p.byte_length,
+        a.cover_only, cover_revision.body->'importedCover' AS cover_provenance,
         p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, st.disclosure, st.moderation, st.lifecycle,
         state_receipt.sequence::text AS state_position, o.data_epoch AS owner_epoch, o.sequence AS owner_sequence,
         COALESCE(nr.value, CASE WHEN legacy.reason = 'likely-explicit' THEN '"nsfw"'::jsonb
@@ -1402,6 +1406,11 @@ export class MediaStore {
       LEFT JOIN media.asset_state st ON st.id = a.state_head
       LEFT JOIN content.receipt state_receipt ON state_receipt.operation_id = st.operation_id
       LEFT JOIN media.representation p ON p.id = u.representation_id
+      LEFT JOIN media.imported_cover_revision cover_projection ON cover_projection.asset_revision_id = u.asset_revision_id
+        AND cover_projection.asset_id = u.asset_id
+        AND cover_projection.original_representation_id = CASE WHEN p.kind = 'original' THEN p.id ELSE p.source_id END
+      LEFT JOIN content.revision cover_revision ON cover_revision.id = cover_projection.asset_revision_id
+        AND cover_revision.availability = 'available'
       LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
       LEFT JOIN media.field_revision nr ON nr.id = n.value_head
       LEFT JOIN media.screen_result legacy ON legacy.source_id = p.id
@@ -1418,6 +1427,7 @@ export class MediaStore {
         byteLength: row.byte_length, width: row.pixel_width, height: row.pixel_height,
         availability: row.availability, clearance: row.clearance, disclosure: row.disclosure, moderation: row.moderation,
         lifecycle: row.lifecycle, statePosition: row.state_position, nsfw: row.nsfw,conceal:row.conceal??false,
+        coverOnly: row.cover_only, coverCredit: coverCreditFromProvenance(row.cover_provenance),
         ageRating:row.age_rating?.status==='assessed' ? {status:'assessed',labels:row.age_rating.labels,
           revision:assetIri(row.age_revision),predecessor:row.age_predecessor?assetIri(row.age_predecessor):null,
           basis:row.age_source==='platform'?'platform':'author',sourceId:null,createdAt:row.age_created.toISOString()}:UNASSESSED });

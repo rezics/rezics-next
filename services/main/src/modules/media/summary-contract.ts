@@ -6,6 +6,7 @@ import { targetBase, targetRef } from '../target/contract.ts';
 import { mergedIdentity } from '../identity-merge/resolution.ts';
 import { readAssessment } from '../suitability/contract.ts';
 import { imageNsfw } from './presentation-contract.ts';
+import { coverCreditSchema } from './cover-credit.ts';
 import { canonicalAddress } from '../address/schema.ts';
 
 // Written as literals, not mapped from an array, so the contract's static type is the union and not `never`.
@@ -24,7 +25,7 @@ const avatar = t.Union([
     resourceType }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('image'), selection: t.String(), url: t.String(),
     representation:t.Optional(t.String()),use:t.Optional(t.String()),nsfw:t.Optional(imageNsfw),
-    ageRating:t.Optional(readAssessment),conceal:t.Optional(t.Boolean()),
+    ageRating:t.Optional(readAssessment),conceal:t.Optional(t.Boolean()),coverCredit:coverCreditSchema,
     mediaType: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
     crop: t.Nullable(t.String()),
     basis: t.Object({ policy: t.Literal(AVATAR_POLICY), context: t.String() },

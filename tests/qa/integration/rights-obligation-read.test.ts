@@ -72,9 +72,12 @@ test('public reads return wiki-display obligations, an unassessed head, and noth
 
     stack.fuseki.queries = 0;
     const plainHeader = await stack.call('GET', `/v1/works/${plain.work.slice(-36)}`);
-    const plainBody = await plainHeader.json() as { descriptionObligations: unknown };
+    const plainBody = await plainHeader.json() as { descriptionObligations: unknown;
+      cover: { kind: string; coverCredit?: unknown } };
     expect(plainHeader.status).toBe(200);
     expect(plainBody.descriptionObligations).toEqual({ status: 'unassessed' });
+    expect(plainBody.cover.kind).toBe('fallback');
+    expect(plainBody.cover).not.toHaveProperty('coverCredit');
     expect(stack.fuseki.queries).toBe(licensedGraph);
 
     const caseId = randomUUID(), decisionId = randomUUID(), fenceId = randomUUID();
@@ -104,7 +107,11 @@ test('public reads return wiki-display obligations, an unassessed head, and noth
     const hiddenHeader = await stack.call('GET', `/v1/works/${hidden.work.slice(-36)}`);
     const hiddenText = await hiddenHeader.text();
     expect(hiddenHeader.status, hiddenText).toBe(200);
-    expect(JSON.parse(hiddenText).descriptionObligations).toEqual({ status: 'unassessed' });
+    const hiddenBody = JSON.parse(hiddenText) as { descriptionObligations: unknown;
+      cover: { kind: string; coverCredit?: unknown } };
+    expect(hiddenBody.descriptionObligations).toEqual({ status: 'unassessed' });
+    expect(hiddenBody.cover.kind).toBe('fallback');
+    expect(hiddenBody.cover).not.toHaveProperty('coverCredit');
     expect(hiddenText).not.toContain(secret);
     expect(hiddenText).not.toContain('hidden-license');
 

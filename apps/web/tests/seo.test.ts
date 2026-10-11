@@ -118,6 +118,7 @@ describe('Work metadata', () => {
       width: 600,
       height: 900,
       crop: null,
+      coverCredit: null,
       basis: { policy: 'p', context: 'c' },
     };
     const metadata = workMetadata(

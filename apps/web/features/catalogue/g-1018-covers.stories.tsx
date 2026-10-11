@@ -57,6 +57,7 @@ function Covers({ locale }: { locale: UiLocale }) {
               selection: browseId(index + 8200),
               mediaType: 'image/svg+xml',
               crop: null,
+              coverCredit: null,
               basis: { policy: 'story', context: browseId(8300) },
               width: size[0],
               height: size[1],

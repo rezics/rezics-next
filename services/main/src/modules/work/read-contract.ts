@@ -3,6 +3,7 @@ import { displayLanguageBasis } from '../display-language/schema.ts';
 import { obligationKinds } from '../rights/schema.ts';
 import type { PersonPreferencesStore } from '../preferences/store.ts';
 import { authorNameProvenance } from '../source/author-name.ts';
+import { coverCreditSchema } from '../media/cover-credit.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { recordedText, recordedRelevance, serialStatus } from './metadata-schema.ts';
 
@@ -56,7 +57,7 @@ export const wikiDisplayObligations = t.Union([
 export const readAvatar = t.Union([
   t.Object({ kind: t.Literal('fallback'), policy: t.String(), key: t.String(), resourceType: t.String() }),
   t.Object({ kind: t.Literal('image'), selection: t.String(), url: t.String(), mediaType: t.String(),
-    width: t.Integer(), height: t.Integer(), crop: t.Nullable(t.String()),
+    width: t.Integer(), height: t.Integer(), crop: t.Nullable(t.String()), coverCredit: coverCreditSchema,
     basis: t.Object({ policy: t.String(), context: t.String() }) }),
 ]);
 export const readQuery = { language: t.Optional(readLanguage), actingSubject: t.Optional(readId) };

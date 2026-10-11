@@ -21,6 +21,7 @@ import { propertyRevelationRecord } from '../reading-position/store.ts';
 import { MERGE_COST } from '../identity-merge/contract.ts';
 import type { MergedIdentity } from '../identity-merge/resolution.ts';
 import type { ImageNsfw } from './presentation.ts';
+import type { CoverCredit } from './cover-credit.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
@@ -96,6 +97,7 @@ export interface SummaryInput {
 export type AvatarDescriptor =
   | { kind: 'image'; selection: string; url: string; mediaType: string; width: number; height: number;
     representation?: string; use?: string; nsfw?: ImageNsfw; ageRating?: ReadAssessment; conceal?: boolean;
+    coverCredit: CoverCredit | null;
     crop: string | null; basis: { policy: string; context: string } }
   | { kind: 'fallback'; policy: string; key: string; resourceType: ResourceType };
 
@@ -242,9 +244,10 @@ export function fallbackAvatar(type: ResourceType, reference: string): AvatarDes
 
 function avatar(type: ResourceType, reference: string, row: AvatarRow | undefined): AvatarDescriptor {
   // Every hidden or missing case shares one fallback: no asset, use or reason leaks.
-  if (!row?.selection || !avatarImageEligible(row)) return fallbackAvatar(type, reference);
+  if (!row?.selection || !avatarImageEligible(row) || row.coverOnly && !row.coverCredit) return fallbackAvatar(type, reference);
   return { kind: 'image', selection: row.selection, url: `/v1/media/avatars/${row.selection}`,
     representation:row.representation!,use:row.use!,nsfw:row.nsfw??'unknown',ageRating:row.ageRating??UNASSESSED,conceal:row.conceal??false,
+    coverCredit: row.coverCredit ?? null,
     mediaType: row.mediaType!, width: row.width!, height: row.height!, crop: row.crop,
     basis: { policy: AVATAR_POLICY, context: row.context! } };
 }

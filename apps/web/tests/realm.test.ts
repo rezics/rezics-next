@@ -130,6 +130,7 @@ const card = (overrides: Partial<WorkCard> = {}): WorkCard => ({
     width: 400,
     height: 600,
     crop: null,
+    coverCredit: null,
     basis: { policy: 'p', context: 'c' },
   },
   types: ['https://schema.org/Book'],
