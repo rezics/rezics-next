@@ -17,6 +17,14 @@ Content and relay share the local PostgreSQL cluster; operations state belongs
 to relay. An undeclared database or an owner table without a primary key or an
 explicit coverage exclusion fails capture.
 
+The graph diagnostic position (`rv:sequence`) and Main's scoped delivery
+position (`rv:streamSequence` on `urn:rezics:stream:main-rdf`) are independent;
+neither substitutes for the other. Capture reads both from one control-graph
+snapshot, then checks the retained relay cut against Main's scoped position.
+See [recovery cut capture and validation](../../services/main/src/modules/work/restore-lineage.ts),
+the [Main stream position](../../services/main/src/modules/outbox/relay-position.ts)
+and [relay coverage](../../services/main/src/modules/outbox/relay.ts).
+
 ```sh
 export RECOVERY_MANIFEST_HMAC_KEY=<independently-retained-64-hex-key>
 export OPS_RECOVERY_FRONTIER=<protected-current-frontier-file-outside-the-set>
@@ -123,6 +131,16 @@ old cursors, handles, caches and workers cannot cross that boundary. Owner login
 roles and Access remain closed throughout. It rebuilds Lucene offline with the
 pinned assembler and erasure-aware indexer.
 
+New paired restore markers save the captured graph position as
+`priorSequence` and Main's scoped position as `priorMainSequence`. Held retained
+replay advances `reconciledPriorSequence` and `reconciledPriorMainSequence`
+together on the marker; the restored dataset's diagnostic sequence remains zero.
+Replay leaves original receipt positions unchanged. Legacy unpaired markers
+remain compatible with diagnostic-only replay. The [restore marker and release
+proof](../../services/main/src/modules/work/restore-lineage.ts) and [held replay
+cursors](../../services/main/src/modules/work/reconcile-restored.ts) implement
+these paired and legacy paths.
+
 The integrated command keeps the copy held through replay and verification.
 Its `RestoreChecks` interface must check exact samples, authorized and
 denied reads, retained deletions/revocations, representative search
@@ -136,17 +154,22 @@ replaced by a recovery-command assertion.
 The default CLI cannot create a physical held copy without authenticated
 checks. The QA drills supply an in-process Main route adapter with test
 authentication; they require no listening Main or environment-selected
-verification Task. The release adapter must replay against the independently retained current relay, not the
+verification Task. The restored relay copy proves the prefix in the signed
+recovery capture; it does not provide current authority. Replay current
+authority and erasures from the independently retained relay/journal, not the
 restored backup's own journal. Keep the graph and Access holds closed throughout
 retained erasure replay. Held erasure replay must authenticate exact target/epoch
 and original receipt evidence while preserving diagnostic sequence zero,
 restore lineage and the prior cursor; ordinary suppression cannot substitute
 for that replay. Release the graph only inside the retained-erasure callback,
-after current journal, authority, live-copy and exact original custody checks,
-then release the captured Access fence generation on its held client. Missing
-or divergent evidence keeps the copy unavailable. A newer authority/erasure
-frontier still needs the owner's verified replay and reconciliation; it is never
-permission to reopen a stale cut. A held result needs repair and a new
+after current journal, authority, live-copy and exact original custody checks.
+The successful
+[OwnerOperations release](../../services/main/src/modules/owner/operations.ts)
+owns this transition and reopens the captured Access fence generation on its
+held client. Missing or divergent evidence keeps the copy unavailable. A newer
+authority/erasure frontier still needs the owner's verified replay and
+reconciliation; it is never permission to reopen a stale cut. A held result
+needs repair and a new
 project/idempotency key, not a forced Access reopen. Failed copies
 preserve their stopped volumes and `recovery-evidence.json` for diagnosis;
 remove only that failed target when discarding it.
