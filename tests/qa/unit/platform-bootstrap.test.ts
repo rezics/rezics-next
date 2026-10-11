@@ -31,7 +31,7 @@ test('appEnvironment designates a first administrator for dev and QA profiles on
   expect(appEnvironment({ ...qa, PLATFORM_FIRST_ADMIN_ACCOUNT: subject }, root).PLATFORM_FIRST_ADMIN_ACCOUNT)
     .toBe(subject);
   expect(appEnvironment(restored, devDir).PLATFORM_FIRST_ADMIN_ACCOUNT).toBeUndefined();
-  const withoutProfile = { ...restored, PLATFORM_FIRST_ADMIN_ACCOUNT: subject };
+  const withoutProfile: Record<string, string> = { ...restored, PLATFORM_FIRST_ADMIN_ACCOUNT: subject };
   delete withoutProfile.REZICS_STACK_PROFILE;
   expect(appEnvironment(withoutProfile, devDir).PLATFORM_FIRST_ADMIN_ACCOUNT).toBeUndefined();
   expect(appEnvironment({ ...restored, REZICS_STACK_PROFILE: 'production',
