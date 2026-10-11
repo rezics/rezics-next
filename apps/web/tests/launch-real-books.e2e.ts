@@ -106,6 +106,9 @@ for (const journey of journeys) test(journey.title, async ({ browser }, info) =>
       const findings: Findings = [];
       const language = availability.getByRole('combobox', { name: 'Language', exact: true });
       const edition = availability.getByRole('combobox', { name: 'Edition', exact: true });
+      // The server renders the section before the signed-in reader actions and
+      // private preference reads finish. Wait for this feature's client readiness.
+      await expect(language).toBeVisible({ timeout: 30_000 });
 
       // The French pin is offered in its own content language, rather than
       // disappearing because the interface is English.
@@ -145,7 +148,7 @@ for (const journey of journeys) test(journey.title, async ({ browser }, info) =>
       await page.keyboard.press('Enter');
       await expect(availability.getByRole('status')).toHaveText('Saved.');
       await page.reload();
-      await expect(availability.getByRole('combobox', { name: 'Edition', exact: true })).toContainText(chosen.publisher);
+      await expect(availability.getByRole('combobox', { name: 'Edition', exact: true })).toContainText(chosen.publisher, { timeout: 30_000 });
       await expect(availability.getByRole('combobox', { name: 'Edition', exact: true })).toContainText(chosen.year);
       if (chosen.format) await expect(availability.getByRole('combobox', { name: 'Edition', exact: true })).toContainText(chosen.format);
 
