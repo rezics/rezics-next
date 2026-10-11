@@ -19,7 +19,7 @@ const tableReference = String.raw`(?:only\s+)?"?access"?\s*\.\s*"?(${tableNames.
 const rowWrite = new RegExp(String.raw`\b(?:insert\s+into|delete\s+from|update)\s+${tableReference}`, 'gi');
 const copyIn = new RegExp(String.raw`\bcopy\s+${tableReference}\s*(?:\([^)]*\)\s*)?from\b`, 'gi');
 // A TRUNCATE names a list; each entry may carry ONLY before its name and * after it.
-const truncateList = /\btruncate\s+(?:table\s+)?([^;`']{0,400})/gi;
+const truncateList = /\btruncate\s+(?:table\s+)?([^;`']*)/gi;
 const listedTable = new RegExp(tableReference, 'gi');
 
 export function scanAccessFixtureWriteText(source: string, file = '<source>'): AccessFixtureWrite[] {

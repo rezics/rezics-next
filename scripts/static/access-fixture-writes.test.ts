@@ -43,6 +43,9 @@ test('surrounding syntax cannot hide a plainly written statement', () => {
   }
   expect(scanAccessFixtureWriteText(acrossLines, 'lines.fixture').map(finding => finding.table)).toEqual(['access.scope_gate']);
   expect(scanAccessFixtureWriteText("const q = 'UPDATE access.representation_archive SET x = 1';", 'other.fixture')).toEqual([]);
+  const longList = Array.from({ length: 60 }, (_, index) => `content.ordinary_table_with_a_long_name_${index}`).join(', ');
+  expect(scanAccessFixtureWriteText(`const q = \`${['TRUNCATE', longList].join(' ')}, access.scope_gate CASCADE\`;`, 'long.fixture')
+    .map(finding => finding.table)).toEqual(['access.scope_gate']);
 });
 
 test('scans TypeScript below directories named migrations and excludes only the access module', () => {
