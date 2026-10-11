@@ -228,9 +228,11 @@ final class PublicSearchPhaseEvidence implements Filter {
         }
     }
     private void expire(Request request, long now) {
+        // Capture before claiming emission: a losing phase-close observer can then
+        // restore its parent without changing the winning observer's snapshot.
+        View view = request.view.get();
         if (closed.get() || now < request.deadline || !request.emitted.compareAndSet(false, true)) return;
         if (!takeToken(now)) { suppressed.incrementAndGet(); return; }
-        View view = request.view.get();
         MergeObservation observation = merge.get();
         StringBuilder event = new StringBuilder("{\"event\":\"public_search_native_deadline\",\"elapsedMs\":")
             .append(ms(now - request.started)).append(",\"active\":\"").append(view.active().phase())

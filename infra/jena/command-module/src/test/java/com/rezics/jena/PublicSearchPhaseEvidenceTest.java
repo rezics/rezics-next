@@ -268,4 +268,32 @@ public class PublicSearchPhaseEvidenceTest {
             assertTrue(events.stream().noneMatch(line -> line.contains("secret")));
         } finally { evidence.destroy(); }
     }
+
+    @Test public void concurrentPhaseCloseCannotReplaceTheBreachedPhaseInTheSnapshot() throws Exception {
+        AtomicLong clock = new AtomicLong(1);
+        List<String> events = new CopyOnWriteArrayList<>();
+        var evidence = new PublicSearchPhaseEvidence(clock::get, events::add, false);
+        evidence.install();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < 200; i++) {
+                CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+                var worker = executor.submit(() -> {
+                    evidence.doFilter(request("1", null), null, (req, res) -> {
+                        try (var scope = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PROOF)) {
+                            entered.countDown(); await(release);
+                        }
+                    });
+                    return null;
+                });
+                try {
+                    await(entered); clock.addAndGet(TimeUnit.SECONDS.toNanos(2));
+                    var scan = executor.submit(() -> { await(release); evidence.scan(); });
+                    release.countDown(); scan.get(5, TimeUnit.SECONDS); worker.get(5, TimeUnit.SECONDS);
+                    assertEquals(i + 1, events.size());
+                    assertTrue(events.getLast(), events.getLast().contains("\"active\":\"PROOF\""));
+                    assertEquals(0, evidence.activeCount());
+                } finally { release.countDown(); }
+            }
+        } finally { evidence.destroy(); }
+    }
 }
