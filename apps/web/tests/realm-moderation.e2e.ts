@@ -436,9 +436,21 @@ test('a moderator bans a member through Manage and restores their posting access
         `${error instanceof Error ? error.message : String(error)}\nComposer API responses:\n${composerResponses.join('\n')}`,
       );
     }
-    await expect(member.page.getByRole('heading', { name: postTitle, exact: true })).toBeVisible({
-      timeout: 60_000,
-    });
+    const postedTitle = member.page.getByRole('heading', { name: postTitle, exact: true });
+    // Placement is durable before the discussion projection catches up. Exercise its offered recovery.
+    await expect
+      .poll(
+        async () => {
+          if (await postedTitle.isVisible()) return true;
+          const retry = member.page
+            .getByRole('alert')
+            .getByRole('link', { name: 'Try again', exact: true });
+          if (await retry.isVisible()) await retry.click();
+          return postedTitle.isVisible();
+        },
+        { timeout: 60_000, intervals: [1000, 2000, 5000] },
+      )
+      .toBe(true);
     const restoredScreenshot = info.outputPath('restored-post.png');
     await member.page.screenshot({ path: restoredScreenshot, fullPage: true });
     await info.attach('restored-post', { path: restoredScreenshot, contentType: 'image/png' });
