@@ -18,6 +18,8 @@ export const rightsCases: CaseDeclarations = {
       name: 'GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh' },
     { tier: 'integration', file: 'tests/qa/integration/rights-notice-review.test.ts',
       name: 'GOV01/GOV24: platform reviewers read exact retained rights notices without disclosing the staff projection to reporters' },
+    { tier: 'integration', file: 'tests/qa/integration/rights-notice-targets.test.ts',
+      name: 'GOV01/GOV02/GOV24: public notices bind exact Content revisions and retries keep their original anchors' },
   ],
   GOV25: [
     { tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',

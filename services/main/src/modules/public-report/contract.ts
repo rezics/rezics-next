@@ -38,8 +38,15 @@ export const reportCategory = t.Union([t.Literal('child_exploitation'), t.Litera
     t.Literal('copyright'), t.Literal('privacy'), t.Literal('harassment'), t.Literal('hateful_abuse'),
     t.Literal('fraud_or_malware'), t.Literal('explicit_imagery'), t.Literal('impersonation'),
     t.Literal('spam_or_manipulation'), t.Literal('illegal_content'), t.Literal('realm_rules')]);
+const contentRevision = t.String({ maxLength: 64,
+  pattern: '^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+/** Public intake names a Content revision but never its owner. The resolver
+ * derives resource and variant from Content, then checks the publication head. */
+export const publicReportSelection = t.Object({ component: t.Literal('body'),
+  revision: contentRevision, locator: t.Null() }, { additionalProperties: false });
 export const publicReportInput = t.Object({ profile: t.Literal(CATEGORY_VERSION),
   target: t.Union([readId, t.String({ format: 'uri', maxLength: 2048 })]),
+  selection: t.Optional(publicReportSelection),
   category: reportCategory,
   statement: text(4000), contentLanguage,
   contactEmail: t.Optional(t.String({ format: 'email', maxLength: 320 })),

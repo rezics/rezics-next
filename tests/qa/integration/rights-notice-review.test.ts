@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
+import { mintPartyCredential } from '../../../services/main/src/modules/public-report/store.ts';
 
 const PLATFORM_SCOPE = 'governance:platform';
 const GLOBAL_CONTEXT = 'urn:rezics:context:global';
@@ -57,6 +58,20 @@ test('GOV01/GOV24: platform reviewers read exact retained rights notices without
       expect(partyStatus).toMatchObject({ contentLanguage: 'fr-CA', process: 'dmca_512',
         notice: { statement: publicNotice.statement, contactEmail: publicNotice.contactEmail, declarations: copyright } });
       expect(partyStatus).not.toHaveProperty('staffNotice');
+
+      // A Work maintainer with a decider grant on another scope still receives
+      // only the affected-party projection for this case.
+      const credentialClient = await stack.accessPool.connect();
+      let affectedCredential: string;
+      try { affectedCredential = await mintPartyCredential(credentialClient, publicReceipt.caseId, publicReceipt.reportId); }
+      finally { credentialClient.release(); }
+      await reporter.grant(`${PLATFORM_SCOPE}:other`, 'governance.rights.decide');
+      const affectedRead = await stack.main.handle(new Request(`http://main.local/v1/public-reports/${publicReceipt.caseId}`, {
+        headers: { authorization: `Bearer ${reporter.token}`, 'x-rezics-case-credential': affectedCredential },
+      }));
+      expect(affectedRead.status).toBe(200);
+      expect(await affectedRead.json()).not.toHaveProperty('staffNotice');
+      expect((await reporter.read(`/v1/reports/${publicReceipt.reportId}`)).status).toBe(404);
 
       const staffGrant = await reviewer.grant(PLATFORM_SCOPE, 'governance.rights.decide');
       const staffPublicRead = await json<{

@@ -436428,6 +436428,29 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "selection": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "component": {
+                        "const": "body",
+                        "type": "string"
+                      },
+                      "locator": {
+                        "type": "null"
+                      },
+                      "revision": {
+                        "maxLength": 64,
+                        "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "component",
+                      "revision",
+                      "locator"
+                    ],
+                    "type": "object"
+                  },
                   "statement": {
                     "maxLength": 4000,
                     "minLength": 1,
@@ -436595,6 +436618,29 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "selection": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "component": {
+                        "const": "body",
+                        "type": "string"
+                      },
+                      "locator": {
+                        "type": "null"
+                      },
+                      "revision": {
+                        "maxLength": 64,
+                        "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "component",
+                      "revision",
+                      "locator"
+                    ],
+                    "type": "object"
+                  },
                   "statement": {
                     "maxLength": 4000,
                     "minLength": 1,
@@ -436761,6 +436807,29 @@
                   "realm": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
+                  },
+                  "selection": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "component": {
+                        "const": "body",
+                        "type": "string"
+                      },
+                      "locator": {
+                        "type": "null"
+                      },
+                      "revision": {
+                        "maxLength": 64,
+                        "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "component",
+                      "revision",
+                      "locator"
+                    ],
+                    "type": "object"
                   },
                   "statement": {
                     "maxLength": 4000,

@@ -2,6 +2,8 @@ import type { CaseDeclarations } from './declaration.ts';
 
 export const govProposalCases: CaseDeclarations = {
   GOV02: [
+    { tier: 'integration', file: 'tests/qa/integration/rights-notice-targets.test.ts',
+      name: 'GOV01/GOV02/GOV24: public notices bind exact Content revisions and retries keep their original anchors' },
     { tier: 'integration', file: 'tests/qa/integration/governance-report.test.ts',
       name: 'GOV02: a published rule has an exact scoped head, immutable revisions and an API CAS receipt' },
     { tier: 'integration', file: 'tests/qa/integration/governance-report.test.ts',

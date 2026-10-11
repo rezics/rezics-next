@@ -15,6 +15,20 @@ import type { PublicReportOwners } from './store.ts';
 
 const ID = 'https://rezics.com/id/';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const contentRevision = /^urn:rezics:content:revision:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/** A revision URL is a selector only; its Content owner supplies the resource. */
+function contentRevisionAddress(value: string): string | null {
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  if (url.origin !== 'https://rezics.com' || !url.pathname.startsWith('/v1/content-revisions/')) return null;
+  if (url.username || url.password || url.search || url.hash) {
+    throw new GovernanceInvalid('Content revision URL must name one exact revision');
+  }
+  const match = /^\/v1\/content-revisions\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(url.pathname);
+  if (!match) throw new GovernanceInvalid('Invalid Content revision URL');
+  return match[1]!;
+}
 
 /** Resolve service-owned URLs locally. Never fetch a caller's URL. */
 export async function reportAddress(deps: MainWorkDependencies, value: string): Promise<string> {
@@ -79,6 +93,27 @@ function reportOwnerTargets(content: Pool): ReportTargets {
   };
 }
 
+/** Current public eligibility binds one exact Content revision to its variant. */
+async function publicContentPublication(session: WorkReadSession, resource: string, revision: string) {
+  const revisionIri = `urn:rezics:content:revision:${revision}`;
+  const rows = await session.query(`SELECT ?variant ?model WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ${iri(resource)} ;
+      rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility . }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?publication a rv:ContentPublicationDecision ; rv:component ?variant ; rv:resource ${iri(resource)} ;
+        rv:contentRevision ${iri(revisionIri)} ; rv:contentModel ?model .
+      ?eligibility a rv:ContentSearchEligibilityDecision ; rv:publicationDecision ?publication ;
+        rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ${iri(revisionIri)} a rv:ErasedRevision }
+    }
+  } LIMIT 2`, 2);
+  if (rows.length > 1 || rows.some(row => !row.variant?.value || !row.model?.value)) {
+    throw new GovernanceUnavailable('Content publication mapping is ambiguous');
+  }
+  const row = rows[0];
+  return row ? { variant: row.variant!.value, model: row.model!.value } : null;
+}
+
 async function authorAndRealm(session: WorkReadSession, resource: string, work: string | null,
   content: Pool): Promise<{ author: string | null; realm: string | null }> {
   const rows = await session.query(`SELECT ?author ?realm WHERE {
@@ -109,13 +144,68 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
     content: { core, canRead: async () => new Set() } });
   return {
     async resolve(input, request, principal) {
-      const resource = await reportAddress(deps, input.target);
+      const revisionAddress = contentRevisionAddress(input.target);
+      if (revisionAddress && input.selection) {
+        throw new GovernanceInvalid('Content revision URL cannot be combined with a selection');
+      }
+      const selectedRevision = revisionAddress ?? (input.selection
+        ? contentRevision.exec(input.selection.revision)?.[1] ?? null : null);
+      if (input.selection && !selectedRevision) throw new GovernanceInvalid('Content revision selection is invalid');
+      const requestedResource = revisionAddress ? null : await reportAddress(deps, input.target);
+      let contentResource: string | null = null;
+      if (selectedRevision) {
+        contentResource = await core.owningResourceForRevision(selectedRevision)
+          .catch(() => { throw new GovernanceUnavailable('Content owner is unavailable'); });
+        if (!contentResource) throw new GovernanceDenied('Content revision is unavailable');
+        if (requestedResource && requestedResource !== contentResource) {
+          throw new GovernanceInvalid('Content revision belongs to another resource');
+        }
+      }
+      const resource = contentResource ?? requestedResource!;
       const headers = new Headers(request.headers);
       // Invalid/suspended assertions and optional sign-in must never close intake.
       // Only an explicitly represented reader uses a private target read.
       if (!principal || !input.actingSubject) headers.delete('authorization');
       const reading = new Request(request.url, { method: 'POST', headers });
       const resolve = async (session: WorkReadSession) => {
+          if (selectedRevision) {
+            const [target] = await resolveTargets(session, [resource], 'report', undefined, reportOwnerTargets(contentPool));
+            if (!target) throw new GovernanceDenied('Content target is unavailable');
+            if (target.base !== 'work' || target.work !== resource || target.resource !== resource
+              || target.types.includes('https://rezics.com/vocab/MediaAsset')) {
+              throw new GovernanceInvalid('Content selection requires an ordinary Work body');
+            }
+            const publication = await publicContentPublication(session, resource, selectedRevision);
+            const publiclyReadable = target.disclosure === 'public' && publication !== null;
+            const actor = session.options.actingSubject;
+            if (!publiclyReadable && (!session.principal || !actor
+              || !await deps.access.canReadWork(session.principal, actor, resource))) {
+              throw new GovernanceDenied('reporter cannot read the reported Content revision');
+            }
+            if (publication && ['media-set-v1', 'member-reply-v1'].includes(publication.model)) {
+              throw new GovernanceInvalid('Content selection does not name an ordinary body');
+            }
+            const [exact] = await core.readExactBatch([selectedRevision], async ids => new Set(ids))
+              .catch(() => { throw new GovernanceUnavailable('Content owner is unavailable'); });
+            if (!exact || exact.status === 'denied') {
+              throw new GovernanceDenied('reporter cannot read the reported Content revision');
+            }
+            if (exact.status === 'available') {
+              if (exact.reference.resourceId !== resource) {
+                throw new GovernanceInvalid('Content revision belongs to another resource');
+              }
+              if (publication && exact.reference.variantId !== publication.variant) {
+                throw new GovernanceUnavailable('Content publication differs from its owner revision');
+              }
+              if (['media-set-v1', 'member-reply-v1'].includes(exact.reference.model)) {
+                throw new GovernanceInvalid('Content selection does not name an ordinary body');
+              }
+            }
+            const evidence = await capture.admitted({ owner: 'content', resource,
+              component: 'body', revision: selectedRevision, locator: null });
+            const attribution = await authorAndRealm(session, resource, target.work, contentPool);
+            return { evidence, ...attribution };
+          }
           const reply = await captureReplyEvidence(replyOwner, { owner: 'content', component: 'body',
             resource, revision: null, locator: null }, session.principal, session.options.actingSubject, true);
           if (reply) return { evidence: reply, author: reply.provenance.author!,
