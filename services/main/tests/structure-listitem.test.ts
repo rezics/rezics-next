@@ -175,3 +175,21 @@ test('Native membership transport carries cancellation through bounded response 
     expect(cancelled).toBe(true);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('a recipe line without a target does not read its qualifier node or itself as the target', async () => {
+  const generation = id('generation');
+  const qualifier = 'urn:rezics:recipe-qualifier:line';
+  const line = (item: string, qualifierNode?: string) => {
+    const { mode: _mode, ...row } = binding(item);
+    return { ...row, role: field(`${RV}IngredientRole`),
+      ...(qualifierNode ? { qualifierNode: field(qualifierNode) } : {}) };
+  };
+  const ingredient = line(qualifier, qualifier);
+  const own = line(id('occurrence'));
+  const real = line(id('ingredient-entity'), qualifier);
+  for (const [row, target] of [[ingredient, undefined], [own, undefined], [real, id('ingredient-entity')]] as const) {
+    const [placement] = await readPlacements(env(row), generation, { occurrences: [id('occurrence')] },
+      'recipe-composition');
+    expect(placement?.target).toBe(target);
+  }
+});

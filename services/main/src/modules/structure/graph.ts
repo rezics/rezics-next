@@ -177,7 +177,7 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     : `?placement rv:orderSegment ${iri(selector.segment)} .`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?placement ?occurrence ?type ?segment ?parent ?segmentKey ?orderKey ?role ?label
-      ?item ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
+      ?item ?qualifierNode ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ${scope}
         ?placement rv:generation ${iri(generation)} ; rv:occurrence ?occurrence ; a ?type ;
@@ -188,6 +188,7 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
           ?segment rv:parent ?parent ; rv:segmentKey ?segmentKey . }
         OPTIONAL { ?placement rv:occurrenceLabel ?label }
         OPTIONAL { ?placement schema:item ?item }
+        OPTIONAL { ?placement rv:qualifier ?qualifierNode }
         OPTIONAL { ?placement rv:selectionMode ?mode }
         OPTIONAL { ?placement rv:pinnedRevision ?pinned }
         OPTIONAL { ?placement rv:sourceKey ?sourceKey }
@@ -208,8 +209,11 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     const role = (roleName ?? null) as OccurrenceRole | null;
     const mode = value(row, 'mode');
     const item = value(row, 'item');
+    // A placement without a target carries its qualifier node, or itself, as the
+    // list item; that is not a target, whichever role it has.
     const target = role && (registration.targetRoles.includes(role)
-      || registration.optionalTargetRoles?.includes(role)) ? item : undefined;
+      || registration.optionalTargetRoles?.includes(role))
+      && item !== occurrence && item !== value(row, 'qualifierNode') ? item : undefined;
     const labelLanguage = row.label?.['xml:lang'];
     const state: PlacementState = { occurrence, placement: value(row, 'placement')!, active,
       parent: active ? value(row, 'parent') ?? '' : value(row, 'lastParent') ?? '',
