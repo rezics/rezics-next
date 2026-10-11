@@ -117,8 +117,9 @@ async function summary(relay: Pool | PoolClient, operationId: string): Promise<R
 }
 
 /**
- * Verify one suppressed erasure against its live owners: every exact target is
- * erased (or the Account credentials are absent and the Access principal fenced)
+ * Verify one suppressed erasure against its live owners: every exact target has
+ * durable completion evidence and is freshly probed as erased (or the Account
+ * credentials are absent and the Access principal fenced)
  * and every copy location reports a terminal or explicitly retained disposition.
  * Success advances the journal entry to verified; otherwise it stays unverified.
  */
@@ -132,6 +133,12 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
   if (prior) return prior;
   const report = await readErasure(reader, erasureId);
   if (report.suppression !== 'suppressed') throw new ErasureUnavailable('erasure is not suppressed');
+  // A tombstone can precede durable target completion; absence alone cannot
+  // qualify an interrupted or legacy erasure, even for a held reconciliation.
+  if (report.targets.some(target => target.completionState !== 'completed'
+    || target.completionEvidenceRef === null || target.completedAt === null)) {
+    throw new ErasureUnavailable('erasure target completion is unavailable');
+  }
   const items: Item[] = [];
   if (report.kind === 'account') {
     const header = (await reader.query<{ account_subject: string; deleted_principal_id: string | null }>(
@@ -157,9 +164,10 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
       openSources.add(row.revision_id);
     }
     for (const target of report.targets) {
-      items.push({ owner: 'content', kind: 'revision', ref: target.ref,
-        disposition: probes.get(target.ref) === 'erased' && !openSources.has(target.ref)
-          ? 'erased' : 'conflict' });
+      if (probes.get(target.ref) !== 'erased' || openSources.has(target.ref)) {
+        throw new ErasureUnavailable('Content erasure target absence proof is unavailable');
+      }
+      items.push({ owner: 'content', kind: 'revision', ref: target.ref, disposition: 'erased' });
     }
   }
   for (const disposition of report.dispositions) {
