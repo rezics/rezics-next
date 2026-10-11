@@ -53,8 +53,8 @@ export function ZoneDocumentHome({ page, modules, zone, pkg, locale, messages, a
  * direction. It sets the text as the reader does and adds none of the reader's chrome: the Zone's frame is
  * the page.
  */
-export function DocumentPage({ work, text, messages }: {
-  work: WorkHeader; text: WorkText; messages: WorkPageMessages;
+export function DocumentPage({ work, text, messages, discussion }: {
+  work: WorkHeader; text: WorkText; messages: WorkPageMessages; discussion?: ReactNode;
 }) {
   return <PageContainer>
     <article lang={text.language} dir="auto" className="mx-auto grid w-full max-w-3xl gap-6 [text-autospace:normal]">
@@ -67,6 +67,7 @@ export function DocumentPage({ work, text, messages }: {
         <ReaderText lines={bodyAfterTitle(paragraphs(text.body), work.title.value)} formatNote={messages.textFormat} />
       </div>
     </article>
+    {discussion ? <div className="mx-auto max-w-3xl">{discussion}</div> : null}
   </PageContainer>;
 }
 

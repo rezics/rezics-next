@@ -57,6 +57,7 @@ import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from './csp.ts';
+import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
 
 // /{locale}/z/{space}/… has one optional catch-all, including home. Main's
 // route table decides which mount or member a path names; community tabs cannot shadow it.
@@ -290,7 +291,9 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
           crumbs,
         );
       return frame(
-        <DocumentPage work={work.header} text={text.data} messages={workMessages} />,
+        <DocumentPage work={work.header} text={text.data} messages={workMessages}
+          discussion={<ZoneAboutDiscussion zone={zone.id} path={routePath(path)}
+            href={spaceHref(ref, 'site', path)} locale={locale} />} />,
         crumbs,
       );
     }
@@ -519,6 +522,8 @@ async function standaloneSite(
         />
       </PageContainer>,
     );
+  const discussion = <ZoneAboutDiscussion zone={resolved.zone} path={routePath(path)}
+    href={spaceHref(ref, 'site', path)} locale={locale} />;
   const id = idOf(read.resource.id);
   if (!id) notFound();
   if (read.kind === 'document') {
@@ -528,13 +533,16 @@ async function standaloneSite(
     const text = await readText(work.header.mainVersion, work.header.selectedLanguage ?? undefined);
     return frame(
       text.ok ? (
-        <DocumentPage work={work.header} text={text.data} messages={workMessages} />
+        <DocumentPage work={work.header} text={text.data} messages={workMessages} discussion={discussion} />
       ) : (
         <DocumentUnavailable messages={messages} workMessages={workMessages} />
       ),
     );
   }
-  return frame(<EntityPage resource={id} locale={locale} cursors={{}} />);
+  return frame(<PageContainer className="max-w-4xl [text-autospace:normal]">
+    <EntityPage resource={id} locale={locale} cursors={{}} frame={false} />
+    {discussion}
+  </PageContainer>);
 }
 
 /** The common standalone Zone frame used by its public site and the editor's saved preview. */
