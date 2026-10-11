@@ -1588,6 +1588,22 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             );
           };
           const ready = () => app.handle(new Request('http://main.local/health/ready'));
+          // Native HTTP exposes admitted commands, not raw SPARQL updates. A
+          // graph fault edits only this stopped disposable owner's TDB custody.
+          const faultGraph = async (sparql: string) => {
+            const delimiter = `OWNER_ERASURE_GRAPH_FAULT_${randomUUID().replaceAll('-', '')}`;
+            graph.runner.stop();
+            try {
+              graph.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
+flock -n 9
+cat > /tmp/owner-erasure-fault.ru <<'${delimiter}'
+${sparql}
+${delimiter}
+java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/owner-erasure-fault.ru`);
+            } finally {
+              await graph.runner.start();
+            }
+          };
           const faultRetained = async (
             sql: string | readonly { sql: string; values?: unknown[] }[],
             values: unknown[] = [],
@@ -1626,6 +1642,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             recipeRequest,
             request,
             ready,
+            faultGraph,
             faultRetained,
           };
         },

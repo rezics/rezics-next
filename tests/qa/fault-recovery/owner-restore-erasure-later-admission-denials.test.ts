@@ -1055,11 +1055,11 @@ test(
           await controlled(
             'replanted-graph-tombstone',
             () =>
-              completed.fuseki.update(
+              completed.faultGraph(
                 `PREFIX rv: <${RV}> DELETE DATA { GRAPH <${GRAPHS.revisions}> { <${target}> a rv:ErasedRevision } }`,
               ),
             async () => {
-              await completed.fuseki.update(
+              await completed.faultGraph(
                 `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.revisions}> { <${target}> a rv:ErasedRevision } }`,
               );
               expect((await completed.fuseki.query(tombstone)).boolean).toBe(true);
