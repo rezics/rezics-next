@@ -24,6 +24,8 @@ No kernel worktree is dirty and no task is half-done. Next step for each, when q
 
 | Task | What exists | What is missing | Next step |
 | --- | --- | --- | --- |
+| G-1630 raw-update callers classified by source, not shard luck | brief; research first (classification scan, categories, one supported way) | scan test, category table, migrations | first when quota returns; research runs beside G-1593 |
+| G-1631 three 503-for-409 races, three hung native tests | brief | find the commits, fix or re-contract, route native tests to their tier | second |
 | G-1593 provider identity | brief only; attempt 1 exited at the quota error with a clean worktree | all of it: observation-plus-allowlist lookup in `source/*`, tests, proof | `resume G-1593 --fresh`; native-free, expect one image-free landing |
 | G-1618 Claims are Statements | brief; depends on G-1593 | all of it | dispatch after G-1593 lands; no compatibility layer, `/v1/claims` retired |
 | field-disposition projector | decision only (targets Statements, from `source.field_disposition`) | the brief | write after G-1618 settles |
@@ -34,7 +36,7 @@ No kernel worktree is dirty and no task is half-done. Next step for each, when q
 | G-1615 maintainer move | brief | waits for Launch's change to `realm-management.ts` | after it lands |
 | G-1300 | old exited task; needs the original G847 integration | Launch wires production Statement seek | close when that lands |
 
-No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. The shared stack runs pin `ce9c77bee5cd` (refreshed 2026-10-10 17:01 UTC; the rebuilt search index survived the restart).
+Landed directly on main from regression run 9 (no worker needed): the recipe reader no longer takes a qualifier node as a target (the recipes went 503 after the structure-profile change), and hidden/absent targets answer 404 again with their keys still unsealed (G-1623's 503s). No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. The shared stack runs pin `ce9c77bee5cd` (refreshed 2026-10-10 17:01 UTC; the rebuilt search index survived the restart).
 
 ## Open
 
