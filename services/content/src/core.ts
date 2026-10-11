@@ -124,6 +124,51 @@ export interface ProjectionPublication {
   status: 'active' | 'rejected';
   graph: GraphTerminalProof;
 }
+export interface EligibilityDeliveryProgress {
+  streamScope: string;
+  graphDataEpoch: string;
+  contentDataEpoch: string;
+  sequence: string;
+}
+export interface EligibilityDeliverySourceEvent {
+  id: string;
+  type: 'com.rezics.content.search-eligible.v1';
+  ordinal: number;
+  sourcePosition: { dataEpoch: string; sequence: string };
+  receipt: {
+    id: string;
+    action: 'content.search-eligibility';
+    outcome: 'succeeded';
+    requestDigest: string;
+    resource: string;
+    variant: string;
+    publicationDecision: string;
+    eligibilityDecision: string;
+    disclosure: 'public';
+  };
+  publication: { preparationId: string; revisionId: string };
+}
+export interface EligibilityDeliveryBatch {
+  sequence: string;
+  id: string;
+  digest: string;
+  events: readonly EligibilityDeliverySourceEvent[];
+}
+export interface EligibilityDeliveryResult {
+  progress: EligibilityDeliveryProgress;
+  replayed: boolean;
+  events: Array<{
+    sourceEventId: string;
+    sourceReceiptId: string;
+    operationId: string;
+    appended: boolean;
+    position: ContentPosition | null;
+  }>;
+}
+export interface EligibilityDeliveryPage {
+  expected: EligibilityDeliveryProgress;
+  batches: readonly EligibilityDeliveryBatch[];
+}
 export type ExactReadResult =
   | { revisionId: string; status: 'available'; reference: ExactContentReference; serializedJson: string; body: Record<string, unknown> }
   | { revisionId: string; status: 'denied' | 'missing' | 'erased' | 'unavailable' | 'corrupt' };
@@ -131,8 +176,13 @@ export type ExactReadResult =
 const MAX_BODY_BYTES = 1_048_576;
 const MAX_READ_ITEMS = 64;
 const MAX_READ_BYTES = 4_194_304;
+const MAX_ELIGIBILITY_DELIVERY_BATCHES = 100;
+const MAX_ELIGIBILITY_DELIVERY_EVENTS = 100;
+const MAX_SQL_BIGINT = 9_223_372_036_854_775_807n;
 const FORMAT = 'rezics-content-json-v1' as const;
 const RECIPE = 'content-body-v1';
+const ELIGIBILITY_DELIVERY_ACTION = 'publication.eligibility-deliver';
+const ELIGIBILITY_DELIVERY_EVENT = 'content.publication.eligibility-delivered';
 
 function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
@@ -175,6 +225,149 @@ function checkId(value: string, name: string, max = 300): void {
   if (typeof value !== 'string' || value.length < 1 || value.length > max || value.includes('\0')) {
     throw new ContentConflict(`invalid ${name}`);
   }
+}
+
+function checkedMainPosition(value: string, name: string): bigint {
+  return checkedDeliverySequence(value, name);
+}
+
+function checkedDeliverySequence(value: string, name: string, allowZero = false): bigint {
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new ContentConflict(`invalid ${name}`);
+  }
+  const sequence = BigInt(value);
+  if ((!allowZero && sequence === 0n) || sequence > MAX_SQL_BIGINT) {
+    throw new ContentConflict(`invalid ${name}`);
+  }
+  return sequence;
+}
+
+interface CheckedEligibilityDeliveryEvent {
+  input: EligibilityDeliverySourceEvent;
+  batch: EligibilityDeliveryBatch;
+  operationId: string;
+  requestDigest: string;
+  identity: Record<string, unknown>;
+  payload: Record<string, unknown>;
+}
+
+function checkedEligibilityDeliveryPage(page: EligibilityDeliveryPage): {
+  expected: EligibilityDeliveryProgress;
+  batches: Array<{ input: EligibilityDeliveryBatch; requestDigest: string; events: CheckedEligibilityDeliveryEvent[] }>;
+  events: CheckedEligibilityDeliveryEvent[];
+} {
+  if (!page || !page.expected || !Array.isArray(page.batches)
+    || page.batches.length < 1 || page.batches.length > MAX_ELIGIBILITY_DELIVERY_BATCHES) {
+    throw new ContentLimitExceeded('eligibility delivery requires 1 to 100 Main batches');
+  }
+  const expected = page.expected;
+  checkId(expected.streamScope, 'Main stream scope');
+  checkUuid(expected.graphDataEpoch, 'Main graph epoch');
+  checkUuid(expected.contentDataEpoch, 'Content owner epoch');
+  let sequence = checkedDeliverySequence(expected.sequence, 'expected Main stream position', true);
+  const seenEvents = new Set<string>(), seenReceipts = new Set<string>();
+  let eventCount = 0;
+  const checkedBatches: Array<{ input: EligibilityDeliveryBatch; requestDigest: string; events: CheckedEligibilityDeliveryEvent[] }> = [];
+  const allEvents: CheckedEligibilityDeliveryEvent[] = [];
+  for (const batch of page.batches) {
+    const next = checkedDeliverySequence(batch.sequence, 'Main batch position');
+    if (next !== sequence + 1n) throw new ContentConflict('Main eligibility delivery batches are not contiguous');
+    sequence = next;
+    checkId(batch.id, 'Main batch id');
+    if (!/^[0-9a-f]{64}$/.test(batch.digest)) throw new ContentConflict('invalid Main batch digest');
+    if (!Array.isArray(batch.events)) throw new ContentConflict('invalid Main eligibility event list');
+    eventCount += batch.events.length;
+    if (batch.events.length > MAX_ELIGIBILITY_DELIVERY_EVENTS
+      || eventCount > MAX_ELIGIBILITY_DELIVERY_EVENTS) {
+      throw new ContentLimitExceeded('eligibility delivery accepts at most 100 events');
+    }
+    let ordinal = -1;
+    const checkedEvents: CheckedEligibilityDeliveryEvent[] = [];
+    for (const input of batch.events) {
+      checkId(input.id, 'Main eligibility event id', 2048);
+      if (input.type !== 'com.rezics.content.search-eligible.v1') {
+        throw new ContentConflict('Main source is not a succeeded Public eligibility event');
+      }
+      if (!Number.isSafeInteger(input.ordinal) || input.ordinal < 0 || input.ordinal <= ordinal) {
+        throw new ContentConflict('Main eligibility event ordinals are not strictly ordered');
+      }
+      ordinal = input.ordinal;
+      checkUuid(input.sourcePosition.dataEpoch, 'Main source epoch');
+      if (input.sourcePosition.dataEpoch !== expected.graphDataEpoch
+        || checkedMainPosition(input.sourcePosition.sequence, 'Main source position') === 0n) {
+        throw new ContentConflict('Main eligibility event belongs to another graph epoch or position');
+      }
+      checkId(input.receipt.id, 'Main receipt id', 2048);
+      if (input.receipt.action !== 'content.search-eligibility'
+        || input.receipt.outcome !== 'succeeded' || input.receipt.disclosure !== 'public'
+        || !/^[0-9a-f]{64}$/.test(input.receipt.requestDigest)) {
+        throw new ContentConflict('Main eligibility receipt is not the exact succeeded Public receipt');
+      }
+      checkId(input.receipt.resource, 'eligibility resource');
+      checkId(input.receipt.variant, 'eligibility variant');
+      checkId(input.receipt.publicationDecision, 'publication decision', 2048);
+      checkId(input.receipt.eligibilityDecision, 'eligibility decision', 2048);
+      checkId(input.publication.preparationId, 'publication preparation id', 200);
+      checkUuid(input.publication.revisionId, 'publication revision');
+      if (seenEvents.has(input.id) || seenReceipts.has(input.receipt.id)) {
+        throw new ContentConflict('Main eligibility page repeats an event or receipt identity');
+      }
+      seenEvents.add(input.id);
+      seenReceipts.add(input.receipt.id);
+      const identity = {
+        streamScope: expected.streamScope,
+        graphDataEpoch: expected.graphDataEpoch,
+        contentDataEpoch: expected.contentDataEpoch,
+        sourceEventId: input.id,
+        sourceEventType: input.type,
+        sourceOrdinal: input.ordinal,
+        sourcePosition: input.sourcePosition,
+        sourceReceipt: input.receipt,
+        publication: input.publication,
+      };
+      const operationId = `content-eligibility-delivery:${hash(stable({
+        contentDataEpoch: expected.contentDataEpoch, sourceEventId: input.id,
+      }))}`;
+      const requestDigest = hash(stable({ action: ELIGIBILITY_DELIVERY_ACTION, identity }));
+      const payload = { kind: 'main-content-search-eligibility-delivery-v1', ...identity,
+        deliveryBatch: { sequence: batch.sequence, id: batch.id, digest: batch.digest } };
+      const checked: CheckedEligibilityDeliveryEvent = { input, batch, operationId, requestDigest, identity, payload };
+      checkedEvents.push(checked);
+      allEvents.push(checked);
+    }
+    const requestDigest = hash(stable({
+      streamScope: expected.streamScope, graphDataEpoch: expected.graphDataEpoch,
+      contentDataEpoch: expected.contentDataEpoch, sequence: batch.sequence,
+      id: batch.id, sourceDigest: batch.digest,
+      events: checkedEvents.map(event => event.identity),
+    }));
+    checkedBatches.push({ input: batch, requestDigest, events: checkedEvents });
+  }
+  return { expected, batches: checkedBatches, events: allEvents };
+}
+
+function eligibilityDeliverySourceMatches(row: Record<string, unknown>, event: CheckedEligibilityDeliveryEvent,
+  expected: EligibilityDeliveryProgress): boolean {
+  const input = event.input;
+  return row.content_data_epoch === expected.contentDataEpoch
+    && row.stream_scope === expected.streamScope
+    && row.graph_data_epoch === expected.graphDataEpoch
+    && row.source_event_id === input.id
+    && row.source_receipt_id === input.receipt.id
+    && row.source_sequence === input.sourcePosition.sequence
+    && row.source_digest === input.receipt.requestDigest
+    && row.source_batch_sequence === event.batch.sequence
+    && row.source_batch_id === event.batch.id
+    && row.source_batch_digest === event.batch.digest
+    && row.source_ordinal === input.ordinal
+    && row.preparation_id === input.publication.preparationId
+    && row.revision_id === input.publication.revisionId
+    && row.resource_id === input.receipt.resource
+    && row.variant_id === input.receipt.variant
+    && row.publication_decision === input.receipt.publicationDecision
+    && row.eligibility_decision === input.receipt.eligibilityDecision
+    && row.operation_id === event.operationId
+    && row.request_digest === event.requestDigest;
 }
 
 export function canonicalContentLanguage(value: string): string {
@@ -840,6 +1033,214 @@ export class ContentCore {
     [dataEpoch, afterSequence, limit]);
     return result.rows.map((row) => ({ id: row.id, position: position(row), operationId: row.operation_id,
       eventType: row.event_type, recipe: row.recipe, revisionId: row.revision_id, payload: row.payload }));
+  }
+
+  /** Main's verified retained relay reads this cursor before requesting a bounded page. */
+  async readEligibilityDeliveryProgress(streamScope: string, graphDataEpoch: string): Promise<EligibilityDeliveryProgress> {
+    checkId(streamScope, 'Main stream scope');
+    checkUuid(graphDataEpoch, 'Main graph epoch');
+    const owner = (await this.pool.query<{ data_epoch: string }>(
+      'SELECT data_epoch FROM content.owner_control WHERE singleton')).rows[0];
+    if (!owner) throw new ContentUnavailable('Content owner epoch unavailable');
+    const row = (await this.pool.query<{ sequence: string }>(`SELECT sequence::text AS sequence
+      FROM content.eligibility_delivery_progress
+      WHERE stream_scope = $1 AND graph_data_epoch = $2 AND content_data_epoch = $3`,
+    [streamScope, graphDataEpoch, owner.data_epoch])).rows[0];
+    return { streamScope, graphDataEpoch, contentDataEpoch: owner.data_epoch, sequence: row?.sequence ?? '0' };
+  }
+
+  /** Append a verified Main Public-eligibility page to Content custody and move
+   * its source cursor atomically. Only the existing Content sequencer assigns
+   * owner positions, after this transaction commits. */
+  async ingestEligibilityDeliveryPage(page: EligibilityDeliveryPage): Promise<EligibilityDeliveryResult> {
+    const checked = checkedEligibilityDeliveryPage(page);
+    const expected = checked.expected;
+    const expectedSequence = checkedDeliverySequence(expected.sequence, 'expected Main stream position', true);
+    const finalSequence = checkedDeliverySequence(checked.batches.at(-1)!.input.sequence, 'Main batch position');
+    const result = await transaction(this.pool, async client => {
+      // The owner epoch cannot change between the source cursor check and commit.
+      const owner = await client.query<{ data_epoch: string }>(
+        'SELECT data_epoch FROM content.owner_control WHERE singleton FOR SHARE');
+      if (owner.rows[0]?.data_epoch !== expected.contentDataEpoch) {
+        throw new ContentConflict('Content owner epoch changed before eligibility delivery');
+      }
+      await client.query(`INSERT INTO content.eligibility_delivery_progress
+        (stream_scope, graph_data_epoch, content_data_epoch, sequence)
+        VALUES ($1, $2, $3, 0) ON CONFLICT DO NOTHING`,
+      [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch]);
+      const progress = await client.query<{ sequence: string }>(`SELECT sequence::text AS sequence
+        FROM content.eligibility_delivery_progress
+        WHERE stream_scope = $1 AND graph_data_epoch = $2 AND content_data_epoch = $3 FOR UPDATE`,
+      [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch]);
+      if (progress.rowCount !== 1) throw new ContentUnavailable('eligibility delivery progress unavailable');
+      const currentSequence = checkedDeliverySequence(progress.rows[0]!.sequence, 'stored Main stream position', true);
+
+      const compareRecordedBatches = async (): Promise<boolean> => {
+        for (const batch of checked.batches) {
+          const row = (await client.query<{ batch_id: string; source_digest: string; request_digest: string }>(
+            `SELECT batch_id, source_digest, request_digest FROM content.eligibility_delivery_batch
+             WHERE stream_scope = $1 AND graph_data_epoch = $2 AND content_data_epoch = $3 AND sequence = $4`,
+            [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch, batch.input.sequence])).rows[0];
+          if (!row || row.batch_id !== batch.input.id || row.source_digest !== batch.input.digest
+            || row.request_digest !== batch.requestDigest) return false;
+        }
+        for (const event of checked.events) {
+          const rows = await client.query(`SELECT * FROM content.eligibility_delivery_source
+            WHERE content_data_epoch = $1 AND (source_event_id = $2 OR source_receipt_id = $3)`,
+          [expected.contentDataEpoch, event.input.id, event.input.receipt.id]);
+          if (rows.rowCount !== 1 || !eligibilityDeliverySourceMatches(rows.rows[0], event, expected)) return false;
+        }
+        return true;
+      };
+
+      if (currentSequence !== expectedSequence) {
+        if (currentSequence >= finalSequence && await compareRecordedBatches()) {
+          return { progress: { ...expected, sequence: currentSequence.toString() }, replayed: true,
+            events: checked.events.map(event => ({ sourceEventId: event.input.id,
+              sourceReceiptId: event.input.receipt.id, operationId: event.operationId, appended: false })) };
+        }
+        throw new ContentConflict('Main eligibility delivery progress moved before this page');
+      }
+
+      const operationIds = [...new Set(checked.events.map(event => event.operationId))].sort();
+      for (const operationId of operationIds) await operationLock(client, operationId);
+      for (const batch of checked.batches) {
+        const inserted = await client.query(`INSERT INTO content.eligibility_delivery_batch
+          (stream_scope, graph_data_epoch, content_data_epoch, sequence, batch_id,
+           source_digest, request_digest, selected_events)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+        [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch,
+          batch.input.sequence, batch.input.id, batch.input.digest, batch.requestDigest, batch.events.length]);
+        if (inserted.rowCount !== 1) throw new ContentConflict('Main eligibility batch identity was already consumed');
+      }
+
+      const eventResults: EligibilityDeliveryResult['events'] = [];
+      const pins = new Map<string, { reference: ExactContentReference; recipe: string }>();
+      for (const event of checked.events) {
+        const existing = await client.query(`SELECT * FROM content.eligibility_delivery_source
+          WHERE content_data_epoch = $1 AND (source_event_id = $2 OR source_receipt_id = $3) FOR SHARE`,
+        [expected.contentDataEpoch, event.input.id, event.input.receipt.id]);
+        if (existing.rowCount) {
+          if (existing.rowCount !== 1 || !eligibilityDeliverySourceMatches(existing.rows[0], event, expected)) {
+            throw new ContentConflict('Main eligibility event or receipt replay differs');
+          }
+          const recorded = await client.query(`SELECT receipt.action, receipt.request_digest, receipt.outcome,
+              receipt.variant_id, receipt.revision_id, outbox.event_type, outbox.payload
+            FROM content.receipt receipt JOIN content.outbox outbox ON outbox.operation_id = receipt.operation_id
+            WHERE receipt.operation_id = $1`, [event.operationId]);
+          const row = recorded.rows[0];
+          if (recorded.rowCount !== 1 || row.action !== ELIGIBILITY_DELIVERY_ACTION
+            || row.request_digest !== event.requestDigest || row.outcome !== 'succeeded'
+            || row.variant_id !== event.input.receipt.variant || row.revision_id !== event.input.publication.revisionId
+            || row.event_type !== ELIGIBILITY_DELIVERY_EVENT
+            || row.payload?.kind !== 'main-content-search-eligibility-delivery-v1') {
+            throw new ContentUnavailable('Content eligibility delivery record is incomplete');
+          }
+          const source = Object.fromEntries(Object.entries(row.payload)
+            .filter(([key]) => key !== 'kind' && key !== 'deliveryBatch'));
+          if (stable(source) !== stable(event.identity)) {
+            throw new ContentUnavailable('Content eligibility delivery source differs from its receipt');
+          }
+          eventResults.push({ sourceEventId: event.input.id, sourceReceiptId: event.input.receipt.id,
+            operationId: event.operationId, appended: false, position: null });
+          continue;
+        }
+        const occupied = await client.query('SELECT action FROM content.receipt WHERE operation_id = $1', [event.operationId]);
+        if (occupied.rowCount) throw new ContentConflict('eligibility delivery operation key is already occupied');
+
+        let pin = pins.get(event.input.publication.preparationId);
+        if (!pin) {
+          const settled = await client.query<{ id: string; variant_id: string; model: string;
+            byte_digest: string; byte_length: number; source_revision: string | null; predecessor: string | null;
+            provenance: Record<string, unknown>; language_kind: string; language_tag: string | null;
+            original_language_tag: string | null; direction: VariantIdentity['direction']; resource_id: string;
+            revision_id: string; status: string; pin_active: boolean; graph_receipt: string | null;
+            graph_data_epoch: string | null; graph_sequence: string | null; terminal_proof_digest: string | null;
+            settlement_action: string; settlement_outcome: string; settlement_revision_id: string | null;
+            event_type: string; recipe: string; payload: Record<string, unknown> }>(`SELECT revision.id, revision.variant_id,
+              revision.model, revision.byte_digest, revision.byte_length, revision.source_revision,
+              revision.predecessor, revision.provenance, variant.language_kind, variant.language_tag,
+              variant.original_language_tag, variant.direction, variant.resource_id,
+              preparation.revision_id::text AS revision_id, preparation.status, preparation.pin_active,
+              preparation.graph_receipt, preparation.graph_data_epoch, preparation.graph_sequence::text AS graph_sequence,
+              preparation.terminal_proof_digest, settlement.action AS settlement_action,
+              settlement.outcome AS settlement_outcome, settlement.revision_id::text AS settlement_revision_id,
+              settled.event_type, settled.recipe, settled.payload
+            FROM content.publication_preparation preparation
+            JOIN content.receipt settlement ON settlement.action = 'publication.settle'
+              AND settlement.revision_id = preparation.revision_id
+            JOIN content.outbox settled ON settled.operation_id = settlement.operation_id
+            JOIN content.revision revision ON revision.id = preparation.revision_id
+            JOIN content.variant variant ON variant.id = revision.variant_id
+            WHERE preparation.operation_id = $1 AND settled.payload->>'preparationId' = preparation.operation_id
+            FOR SHARE OF preparation, revision`, [event.input.publication.preparationId]);
+          if (settled.rowCount !== 1) throw new ContentUnavailable('eligibility source settled Content pin is unavailable');
+          const row = settled.rows[0]!;
+          const graph = row.payload?.graph as GraphTerminalProof | undefined;
+          if (row.status !== 'active' || !row.pin_active || row.settlement_action !== 'publication.settle'
+            || row.settlement_outcome !== 'succeeded' || row.settlement_revision_id !== event.input.publication.revisionId
+            || row.revision_id !== event.input.publication.revisionId || row.event_type !== 'content.publication.active'
+            || !graph || graph.outcome !== 'active' || graph.revisionId !== event.input.publication.revisionId
+            || graph.receipt !== row.graph_receipt || graph.dataEpoch !== row.graph_data_epoch
+            || graph.sequence !== row.graph_sequence || row.terminal_proof_digest !== hash(stable(graph))
+            || stable(row.payload) !== stable({ preparationId: event.input.publication.preparationId,
+              revisionId: event.input.publication.revisionId, graph })) {
+            throw new ContentConflict('eligibility source does not name the exact active settled pin');
+          }
+          const reference = referenceFromRow(row as unknown as Record<string, any>);
+          if (reference.resourceId !== event.input.receipt.resource
+            || reference.variantId !== event.input.receipt.variant
+            || reference.revisionId !== event.input.publication.revisionId) {
+            throw new ContentConflict('eligibility source publication differs from its settled Content pin');
+          }
+          pin = { reference, recipe: row.recipe };
+          pins.set(event.input.publication.preparationId, pin);
+        }
+        if (pin.reference.resourceId !== event.input.receipt.resource
+          || pin.reference.variantId !== event.input.receipt.variant
+          || pin.reference.revisionId !== event.input.publication.revisionId) {
+          throw new ContentConflict('eligibility source publication differs from its settled Content pin');
+        }
+
+        await appendContentEvent(client, { operationId: event.operationId, requestDigest: event.requestDigest,
+          action: ELIGIBILITY_DELIVERY_ACTION, outcome: 'succeeded', variantId: pin.reference.variantId,
+          revisionId: pin.reference.revisionId, eventType: ELIGIBILITY_DELIVERY_EVENT,
+          recipe: pin.recipe, payload: event.payload });
+        await client.query(`INSERT INTO content.eligibility_delivery_source
+          (content_data_epoch, stream_scope, graph_data_epoch, source_event_id, source_receipt_id,
+           source_sequence, source_digest, source_batch_sequence, source_batch_id, source_batch_digest, source_ordinal,
+           preparation_id, revision_id, resource_id, variant_id, publication_decision,
+           eligibility_decision, operation_id, request_digest)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+        [expected.contentDataEpoch, expected.streamScope, expected.graphDataEpoch, event.input.id,
+          event.input.receipt.id, event.input.sourcePosition.sequence, event.input.receipt.requestDigest,
+          event.batch.sequence, event.batch.id, event.batch.digest, event.input.ordinal, event.input.publication.preparationId,
+          event.input.publication.revisionId, event.input.receipt.resource, event.input.receipt.variant,
+          event.input.receipt.publicationDecision, event.input.receipt.eligibilityDecision,
+          event.operationId, event.requestDigest]);
+        eventResults.push({ sourceEventId: event.input.id, sourceReceiptId: event.input.receipt.id,
+          operationId: event.operationId, appended: true, position: null });
+      }
+
+      const advanced = await client.query(`UPDATE content.eligibility_delivery_progress SET sequence = $4
+        WHERE stream_scope = $1 AND graph_data_epoch = $2 AND content_data_epoch = $3 AND sequence = $5`,
+      [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch,
+        finalSequence.toString(), expectedSequence.toString()]);
+      if (advanced.rowCount !== 1) throw new ContentConflict('Main eligibility delivery progress compare-and-set failed');
+      return { progress: { ...expected, sequence: finalSequence.toString() }, replayed: false, events: eventResults };
+    });
+
+    // A process may stop after the transaction above and before this numbering
+    // pass. A replay retries the existing sequencer and never creates new work.
+    await sequenceContentEvents(this.pool);
+    const operationIds = result.events.map(event => event.operationId);
+    const positions = operationIds.length ? await this.pool.query<{ operation_id: string;
+      data_epoch: string | null; sequence: string | null }>(`SELECT operation_id, data_epoch,
+        sequence::text AS sequence FROM content.receipt WHERE operation_id = ANY($1::text[])`, [operationIds]) : null;
+    const byOperation = new Map((positions?.rows ?? []).map(row => [row.operation_id,
+      row.data_epoch && row.sequence ? position({ data_epoch: row.data_epoch, sequence: row.sequence }) : null]));
+    return { progress: result.progress, replayed: result.replayed,
+      events: result.events.map(event => ({ ...event, position: byOperation.get(event.operationId) ?? null })) };
   }
 
   /** Resolve a terminal event against its settled pin; rebuild may read historical metadata. */
