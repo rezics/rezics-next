@@ -175,19 +175,19 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
     };
     const replayFailureDetails = async (replayConsumer: string) => {
       const [checkpoint, pendingEvents, pendingTargets] = await Promise.all([
-        relayPool!.query(`SELECT c.consumer, c.data_epoch, c.sequence::text AS completed_sequence,
+        contentPool!.query(`SELECT c.consumer, c.data_epoch, c.sequence::text AS completed_sequence,
           c.scan_sequence::text AS scan_sequence,
           COALESCE((SELECT min(p.sequence) - 1 FROM content.projection_pending p
             WHERE p.consumer = c.consumer AND p.data_epoch = c.data_epoch), c.scan_sequence)::text AS covered_sequence,
           o.data_epoch AS owner_epoch, o.sequence::text AS owner_sequence
           FROM content.projection_checkpoint c CROSS JOIN content.owner_control o
           WHERE c.consumer = $1 AND o.singleton`, [replayConsumer]),
-        relayPool!.query(`SELECT p.consumer, p.data_epoch, p.sequence::text AS sequence, p.event_id,
+        contentPool!.query(`SELECT p.consumer, p.data_epoch, p.sequence::text AS sequence, p.event_id,
           p.target, o.operation_id, o.event_type, o.recipe, o.revision_id, o.payload
           FROM content.projection_pending p JOIN content.outbox o
             ON o.id = p.event_id AND o.data_epoch = p.data_epoch AND o.sequence = p.sequence
           WHERE p.consumer = $1 ORDER BY p.data_epoch, p.sequence`, [replayConsumer]),
-        relayPool!.query(`SELECT consumer, data_epoch, target, first_sequence::text AS first_sequence,
+        contentPool!.query(`SELECT consumer, data_epoch, target, first_sequence::text AS first_sequence,
           attempted_at::text AS attempted_at FROM content.projection_target
           WHERE consumer = $1 ORDER BY data_epoch, first_sequence, target`, [replayConsumer]),
       ]);
@@ -273,6 +273,19 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
     expect(await cursor.read(replay)).toEqual(replayCut);
     expect(dispositions).toContain('superseded');
     expect(dispositions).toContain('projected');
+    expect(JSON.parse(await replayFailureDetails(replay))).toEqual({
+      checkpoint: {
+        consumer: replay,
+        data_epoch: replayCut.dataEpoch,
+        completed_sequence: replayCut.sequence,
+        scan_sequence: replayCut.sequence,
+        covered_sequence: replayCut.sequence,
+        owner_epoch: replayCut.dataEpoch,
+        owner_sequence: replayCut.sequence,
+      },
+      pendingEvents: [],
+      pendingTargets: [],
+    });
 
     // A retained Content cut is replayed after the current RDF unit is lost.
     // The erased old active event must be acknowledged through its exact graph
