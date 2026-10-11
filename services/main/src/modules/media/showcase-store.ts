@@ -145,7 +145,8 @@ export class MediaShowcaseStore {
       JOIN content.revision revision ON revision.id=v.draft_head AND revision.availability='available'
       JOIN media.representation p ON p.id::text=revision.body->'representations'->0->>'id'
         AND p.asset_id=a.id AND p.kind='original' AND p.availability='available'
-      WHERE a.id=$1 AND a.owner=$2 AND s.lifecycle='active' AND s.moderation='none'
+      WHERE a.id=$1 AND a.owner=$2 AND NOT a.cover_only
+        AND s.lifecycle='active' AND s.moderation='none'
         AND (NOT $3::boolean OR s.disclosure='public')
         AND media.delivery_clearance(p)='cleared' FOR SHARE OF a,p,v`, [asset, actor, publicOnly])).rows[0];
     if (!row) throw new MediaMissing('showcase source is unavailable');

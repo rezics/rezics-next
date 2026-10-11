@@ -326,7 +326,8 @@ export class MediaPresentationStore {
         JOIN media.asset a ON a.id = p.asset_id JOIN media.asset_state s ON s.id = a.state_head
         JOIN content.variant v ON v.id = a.variant_id
         WHERE p.id = $1 AND a.owner = $2 AND p.availability = 'available' AND s.lifecycle = 'active'
-          AND s.moderation = 'none' AND media.delivery_clearance(p) = 'cleared' AND v.draft_head IS NOT NULL FOR SHARE OF a,p`,
+          AND s.moderation = 'none' AND NOT a.cover_only AND media.delivery_clearance(p) = 'cleared'
+          AND v.draft_head IS NOT NULL FOR SHARE OF a,p`,
       [input.representation,admission.actingSubject])).rows[0];
       if (!resource) throw new MediaMissing('image is unavailable');
       await advanceContentSequence(client,{operationId:operation,requestDigest:admission.requestDigest,

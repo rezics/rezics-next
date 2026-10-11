@@ -312,8 +312,10 @@ export function validateImportedCoverProvenance(value: unknown, expectedBytes?: 
   mediaType: string;
 }): ImportedCoverProvenance {
   const root = object(value);
-  keys(root, ['format', 'source', 'image', 'originalDigest', 'holderEvidence']);
+  keys(root, ['format', 'targetWork', 'source', 'image', 'originalDigest', 'holderEvidence']);
   if (root.format !== 'media-imported-cover-v1') throw new MediaInvalid('imported cover provenance is invalid');
+  const targetWork = textField(root.targetWork, 80);
+  if (!nativeId.test(targetWork)) throw new MediaInvalid('imported cover provenance is invalid');
 
   const source = object(root.source);
   keys(source, ['record', 'component', 'observation', 'provider', 'namespace', 'externalId',
@@ -383,7 +385,7 @@ export function validateImportedCoverProvenance(value: unknown, expectedBytes?: 
     holderEvidence = { name: textField(holder.name, 200), fieldLocator: textField(holder.fieldLocator, 500) };
   }
 
-  return { format: 'media-imported-cover-v1', source: normalizedSource, image: normalizedImage,
+  return { format: 'media-imported-cover-v1', targetWork, source: normalizedSource, image: normalizedImage,
     originalDigest, holderEvidence };
 }
 
@@ -517,8 +519,11 @@ export class MediaStore {
       let stateHead: string;
       if (input.asset) {
         const current = await client.query<{ owner: string; state_head: string; lifecycle: string;
-          erasure_epoch: string; cover_only: boolean }>(`SELECT a.owner, a.state_head, a.cover_only,
-          s.lifecycle, s.erasure_epoch::text
+          erasure_epoch: string; cover_only: boolean; cover_target_work: string | null }>(`SELECT a.owner, a.state_head, a.cover_only,
+          s.lifecycle, s.erasure_epoch::text,
+          (SELECT u.imported_cover_intent->>'targetWork' FROM media.upload u
+            WHERE u.asset_id=a.id AND u.imported_cover_intent IS NOT NULL
+            ORDER BY u.created_at,u.id LIMIT 1) AS cover_target_work
           FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head WHERE a.id = $1
           FOR SHARE OF a`, [asset]);
         const row = current.rows[0];
@@ -526,6 +531,9 @@ export class MediaStore {
         if (row.lifecycle !== 'active') throw new MediaStale('media asset is not active');
         if (row.cover_only !== (importedCover !== null)) {
           throw new MediaInvalid('cover-only asset replacements require imported cover provenance');
+        }
+        if (row.cover_only && row.cover_target_work !== importedCover?.targetWork) {
+          throw new MediaInvalid('cover-only asset replacements cannot change their Work');
         }
         epoch = row.erasure_epoch;
         stateHead = row.state_head;
@@ -587,6 +595,19 @@ export class MediaStore {
       objectNamespace: row.object_namespace, owner: row.owner, expired: row.expired,
       representation: row.representation, principal: row.principal_id, reason: row.reason,
       clearance: row.clearance, clearanceReason: row.clearance_reason } : null;
+  }
+
+  /** Exact Work pinned by the current imported-cover asset revision, or null for ordinary media. */
+  async importedCoverTargetWork(asset: string): Promise<string | null> {
+    if (!uuid.test(asset)) throw new MediaInvalid('invalid media asset id');
+    const row = (await this.pool.query<{ cover_only: boolean; body: unknown }>(`SELECT a.cover_only,r.body
+      FROM media.asset a JOIN content.variant v ON v.id=a.variant_id
+      JOIN content.revision r ON r.id=v.draft_head AND r.availability='available'
+      WHERE a.id=$1`, [asset])).rows[0];
+    if (!row?.cover_only) return null;
+    const provenance = manifestProvenance(row.body);
+    if (!provenance) throw new MediaUnavailable('imported cover revision is unavailable');
+    return provenance.targetWork;
   }
 
   /** Activate verified bytes already present in the asset namespace, or record a rejection. */
@@ -948,7 +969,8 @@ export class MediaStore {
       let basis: { revision: string; representation: string } | null = null;
       if (input.asset) {
         const asset = await client.query<{ owner: string; lifecycle: string; draft_head: string | null;
-          body: { representations?: Array<{ id: string }> } | null }>(`SELECT a.owner, s.lifecycle,
+          cover_only: boolean; body: { representations?: Array<{ id: string }>; coverOnly?: boolean;
+            importedCover?: ImportedCoverProvenance } | null }>(`SELECT a.owner, s.lifecycle,a.cover_only AS cover_only,
           v.draft_head, rev.body FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
           LEFT JOIN content.variant v ON v.id = a.variant_id
           LEFT JOIN content.revision rev ON rev.id = v.draft_head AND rev.availability = 'available'
@@ -958,6 +980,12 @@ export class MediaStore {
         if (!row || row.owner !== admission.actingSubject || row.lifecycle !== 'active'
           || !row.draft_head || !row.body?.representations?.[0]) {
           throw new MediaMissing('media asset is unavailable for selection');
+        }
+        if (row.cover_only) {
+          const provenance = manifestProvenance(row.body);
+          if (!provenance || provenance.targetWork !== input.target) {
+            throw new MediaMissing('imported cover is unavailable for this Work');
+          }
         }
         basis = { revision: row.draft_head, representation: row.body.representations[0].id };
       }
@@ -1002,7 +1030,7 @@ export class MediaStore {
       JOIN media.representation p ON p.asset_id = a.id AND p.availability = 'available'
         AND p.id::text = rev.body -> 'representations' -> 0 ->> 'id'
       WHERE a.id = ANY($1::uuid[]) AND a.owner = $2 AND s.lifecycle = 'active'
-        AND s.moderation = 'none' AND s.disclosure = 'public'`, [assets, actor]);
+        AND s.moderation = 'none' AND s.disclosure = 'public' AND NOT a.cover_only`, [assets, actor]);
     const found = new Map(result.rows.map(row => [row.asset as string, row]));
     return assets.map(asset => {
       const row = found.get(asset);
@@ -1058,7 +1086,7 @@ export class MediaStore {
       LEFT JOIN content.outbox campaign_event ON campaign_event.operation_id = campaign_receipt.operation_id
         AND campaign_event.event_type = 'media.use.created'
       WHERE u.id = ANY($1::uuid[]) AND (u.role = 'publication-item' OR u.role LIKE 'campaign-%')
-        AND media.delivery_clearance(p) = 'cleared'`,
+        AND NOT a.cover_only AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
     return new Map(rows.map(row => [row.use as string, { target: row.target as string, asset: row.asset_id as string,
       representation: row.representation as string,

@@ -17,6 +17,7 @@ interface CoverFixture {
   bytes: Buffer;
   provenance: {
     format: 'media-imported-cover-v1';
+    targetWork: string;
     source: {
       record: string;
       component: string | null;
@@ -54,6 +55,7 @@ async function sourceCover(label: string, options: { sourceRevision?: string | n
   const image = bytes(label);
   return { bytes: image, provenance: {
     format: 'media-imported-cover-v1',
+    targetWork: iri(randomUUID()),
     source: {
       record: iri(record), component: options.component ? iri(randomUUID()) : null,
       observation: iri(observation), provider: 'bangumi', namespace: 'subject', externalId: label,

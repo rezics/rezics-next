@@ -114,6 +114,7 @@ import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
 import { verificationCorrectionSubjectReader } from './modules/verification/correction-delivery.ts';
 import { NotificationStore } from './modules/notification/store.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
+import { SourceCoverEvidenceVerifier } from './modules/source/cover-evidence.ts';
 import { SourceAuthorNameStore } from './modules/source/author-name.ts';
 import { RecipeSourceConversionStore } from './modules/recipe/source-conversion.ts';
 import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
@@ -321,7 +322,8 @@ export async function composeMain(input: ComposeMainInput) {
       hookExecutor: new DockerNodeHookExecutor(join(environment.objectDirectory, 'package-installations'),
         process.env.PATH ?? '/usr/bin:/bin') });
   const matcherMode = requiredMatcherMode(config.MAIN_REQUIRED_MEDIA_MATCHER, process.env.NODE_ENV === 'production');
-  const media = { store: new MediaStore(contentPool, content, matcherMode), content, objects: mediaObjects };
+  const media = { store: new MediaStore(contentPool, content, matcherMode), content,
+    sourceCoverEvidence: new SourceCoverEvidenceVerifier(sourceIntake), objects: mediaObjects };
   const requiredMatcher = requiredSafetyMatcher(matcherMode);
   const account = new AccountAssertionVerifier({
     issuer: config.ACCOUNT_ISSUER, audience: config.ACCOUNT_MAIN_RESOURCE,

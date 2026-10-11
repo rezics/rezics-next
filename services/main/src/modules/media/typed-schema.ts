@@ -13,6 +13,8 @@ type MediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif' | 'ima
 
 export interface ImportedCoverProvenance {
   format: 'media-imported-cover-v1';
+  /** Work whose identifying avatar slot may select this imported image. */
+  targetWork: string;
   source: {
     record: string;
     component: string | null;

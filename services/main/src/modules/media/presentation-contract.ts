@@ -3,6 +3,23 @@ import { labels, readAssessment } from '../suitability/contract.ts';
 
 export const mediaUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 export const mediaNative = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
+const mediaType = t.Union([t.Literal('image/png'), t.Literal('image/jpeg'),
+  t.Literal('image/webp'), t.Literal('image/gif')]);
+const coverHolderEvidence = t.Union([t.Null(), t.Object({ name: t.String({ minLength: 1, maxLength: 200 }),
+  fieldLocator: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false })]);
+export const importedCoverIntent = t.Object({
+  format: t.Literal('media-imported-cover-v1'), targetWork: mediaNative,
+  source: t.Object({ record: mediaNative, component: t.Nullable(mediaNative), observation: mediaNative,
+    provider: t.String({ minLength: 1, maxLength: 100 }), namespace: t.String({ minLength: 1, maxLength: 100 }),
+    externalId: t.String({ minLength: 1, maxLength: 500 }), sourceRevision: t.Nullable(t.String({ maxLength: 200 })),
+    observationDigest: digest, datasetSnapshotDigest: digest, recordDigest: digest,
+    fieldLocator: t.String({ minLength: 1, maxLength: 500 }), displayName: t.String({ minLength: 1, maxLength: 200 }),
+    href: t.String({ format: 'uri', maxLength: 2048 }), }, { additionalProperties: false }),
+  image: t.Object({ captureUrl: t.String({ format: 'uri', maxLength: 2048 }), captureDigest: digest,
+    byteLength: t.Integer({ minimum: 1, maximum: 8_388_608 }), mediaType }, { additionalProperties: false }),
+  originalDigest: digest, holderEvidence: coverHolderEvidence,
+}, { additionalProperties: false });
 export const imageNsfw = t.Union([t.Literal('unknown'),t.Literal('sfw'),t.Literal('nsfw')]);
 const nullableHead = t.Nullable(mediaNative);
 export const mediaControlBasis = t.Object({head:nullableHead,epoch:t.String({pattern:'^(0|[1-9][0-9]{0,18})$'}),protection:nullableHead},{additionalProperties:false});

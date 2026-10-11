@@ -11,7 +11,7 @@ import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAd
   createAdmittedCampaignArt,
   type MediaDependencies } from '../modules/media/commands.ts';
 import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
-  mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
+  importedCoverIntent, mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
 import type { MetadataRef } from '../modules/media/presentation.ts';
 import { ShowcaseRefused, campaignArtCommand } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
@@ -434,7 +434,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         byteLength: t.Integer({ minimum: 1, maximum: MAX_UPLOAD_BYTES }),
         sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
         disclosure: t.Union([t.Literal('private'), t.Literal('public')]),
-        actingSubject: nativeId }, { additionalProperties: false }),
+        actingSubject: nativeId, importedCover: t.Optional(importedCoverIntent) }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');

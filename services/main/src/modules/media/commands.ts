@@ -7,7 +7,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { contentDraftReceiptIri } from '../content-publication/draft.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ImageFormatRejected, verifyImage } from './image.ts';
 import { validateImageInference, validateMediaField, type ImageInferenceInput,
   type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
@@ -17,6 +17,7 @@ import { RequiredMediaMatchWorker } from '../media-screen/required-match-worker.
 import { LocalImageTransformer } from '../media-rendition/transform.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
 import { RENDITION_LIMITS } from '../media-rendition/policy.ts';
+import { SourceCoverEvidenceInvalid, SourceCoverEvidenceVerifier } from '../source/cover-evidence.ts';
 import { normalizeTrailer, showcaseSlot, type CampaignArtInput, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from './showcase-contract.ts';
 import { assetIri, MediaConflict, MediaInvalid, MediaMissing,
   MediaStale, MediaFenced, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
@@ -29,6 +30,8 @@ export class MediaDenied extends Error {}
 export interface MediaDependencies {
   store: MediaStore;
   content: ContentCore;
+  /** Principal-scoped Source owner proof for imported-cover upload intent. */
+  sourceCoverEvidence?: Pick<SourceCoverEvidenceVerifier, 'verify'>;
   /** Returns the conditional-create adapter for one retention/disclosure namespace. */
   objects: (namespace: string) => ImmutableObjects;
   matcher?: RequiredSafetyMatcher;
@@ -131,7 +134,20 @@ export function reserveAdmittedUpload(env: WorkActivationEnvironment, media: Med
   return admitted(env, account, access, request, { scope: mediaOwnerScope(actingSubject),
     action: 'media.upload', actingSubject, idempotencyKey, digest: uploadDigest(reservation),
     operation: id => `media-upload:${id}`, accountScope: 'work:edit' },
-  media.store, admission => media.store.reserveUpload(admission, reservation));
+  media.store, async admission => {
+    if (reservation.importedCover) {
+      const target = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(reservation.importedCover.targetWork)} a rv:Work . } }`, 8192);
+      if (target.boolean !== true) throw new MediaDenied('imported covers require an active Work target');
+      if (!media.sourceCoverEvidence) throw new MediaUnavailable('Source cover evidence owner is unavailable');
+      try { await media.sourceCoverEvidence.verify(admission.principalId, reservation.importedCover); }
+      catch (error) {
+        if (error instanceof SourceCoverEvidenceInvalid) throw new MediaInvalid('source cover evidence is invalid');
+        throw new MediaUnavailable('Source cover evidence is unavailable');
+      }
+    }
+    return media.store.reserveUpload(admission, reservation);
+  });
 }
 
 /** Verify quarantined bytes, copy them into the asset namespace, activate the original
@@ -235,7 +251,18 @@ export function selectAdmittedAvatar(env: WorkActivationEnvironment, media: Medi
   return admitted(env, account, access, request, { scope: avatarScope(selection.target),
     action: 'media.avatar', actingSubject, idempotencyKey, digest: avatarDigest(selection),
     operation: id => `media-avatar:${id}`, accountScope: 'work:edit' },
-  media.store, admission => media.store.selectAvatar(admission, selection));
+  media.store, async admission => {
+    if (selection.asset) {
+      const targetWork = await media.store.importedCoverTargetWork(selection.asset);
+      if (targetWork) {
+        if (selection.target !== targetWork) throw new MediaDenied('imported covers are limited to their Work');
+        const target = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(targetWork)} a rv:Work . } }`, 8192);
+        if (target.boolean !== true) throw new MediaDenied('imported cover Work is unavailable');
+      }
+    }
+    return media.store.selectAvatar(admission, selection);
+  });
 }
 
 /** Showcase art and trailers use exactly the Work avatar scope/action and its

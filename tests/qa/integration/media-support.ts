@@ -24,6 +24,8 @@ import type { MediaDependencies } from '../../../services/main/src/modules/media
 import { MediaScreenStore } from '../../../services/main/src/modules/media-screen/store.ts';
 import { screenVerdict } from '../../../services/main/src/modules/media-screen/policy.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
+import { SourceCoverEvidenceVerifier } from '../../../services/main/src/modules/source/cover-evidence.ts';
+import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { activateMetadataWork, GRAPHS, ID, RV, iri, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
@@ -93,6 +95,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix });
   await objects('media/').initialize();
   const media: MediaDependencies = { store, content, objects,
+    sourceCoverEvidence: new SourceCoverEvidenceVerifier(new SourceIntakeStore(contentPool)),
     matcher: options.matchUploads === false ? undefined : requiredSafetyMatcher(matcherMode) };
   const issuer = `https://qa-${label}.test`;
   const tokens = new Map<string, { issuer: string; subject: string; emailVerified: boolean }>();
