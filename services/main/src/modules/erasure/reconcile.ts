@@ -5,7 +5,7 @@ import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.t
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
 import { readRestoredGraphReleaseProof, type RestoredGraphReleaseExpectation,
-  type RestoredGraphReleaseProof, type RecoveryCoverage } from '../work/restore-lineage.ts';
+  assertRestoreAuthorityBaseline, type RestoredGraphReleaseProof, type RecoveryCoverage } from '../work/restore-lineage.ts';
 import { lockAccessRecoveryFenceForRelease, releaseAccessRecoveryFence } from '../access/admission.ts';
 import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -194,6 +194,7 @@ export interface RestoredOwners {
 }
 
 export interface OwnerRestoreEvidence {
+  baseCoverageEnvelope: string;
   baseCoverageDigest: string;
   currentCoverageDigest: string;
   nativeAccessDigest: string;
@@ -342,7 +343,12 @@ function sameProof(left: GraphSuppressionProof, right: GraphSuppressionProof): b
 
 export function restoreRequestDigest(consumer: string, replay: boolean,
   authority: RetainedAuthorityCoverage, ownerRestore?: OwnerRestoreEvidence): string {
-  const legacy = `${consumer}\0${replay}\0${sha256(authority.sealedCoverage)}`;
+  return restoreRequestDigestFromAuthorityDigest(consumer, replay, sha256(authority.sealedCoverage), ownerRestore);
+}
+
+export function restoreRequestDigestFromAuthorityDigest(consumer: string, replay: boolean,
+  authorityDigest: string, ownerRestore?: OwnerRestoreEvidence): string {
+  const legacy = `${consumer}\0${replay}\0${authorityDigest}`;
   return sha256(ownerRestore ? `${legacy}\0${JSON.stringify(ownerRestore)}` : legacy);
 }
 
@@ -505,7 +511,8 @@ async function authenticateRestoreReconciliation(relay: PoolClient, restored: Re
   if (restored.ownerRestore) await requireRecordedItem(relay, id, ownerRestoreItem(restored.ownerRestore));
   try { await assertRetainedAuthorityCoverage(relay, restored.access, record.consumer, authority, accessClient,
     released ? { graphRelease: released.expectation, fuseki: restored.graph!.fuseki,
-      capturedGeneration: fenceGeneration, ...(outerReconciliationId ? { binding: {
+      capturedGeneration: fenceGeneration, ...(restored.ownerRestore ? { ownerRestore: restored.ownerRestore } : {}),
+      ...(outerReconciliationId ? { binding: {
         outerReconciliationId, erasuresReconciliationId: id } } : {}) } : undefined); }
   catch (error) { throw new ErasureRestoreHold('restored Access differs from current retained authority', { cause: error }); }
 }
@@ -1004,14 +1011,26 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
       authority.hmacKey, 'graph-recovery-coverage'); }
     catch { throw new ErasureRestoreHold('signed release authority is unavailable'); }
     const effective = graphRelease.effective;
-    if (effective.dataEpoch !== coverage.priorDataEpoch || effective.graphSequence !== coverage.priorSequence
+    if (!restored.ownerRestore && (effective.dataEpoch !== coverage.priorDataEpoch || effective.graphSequence !== coverage.priorSequence
       || effective.main && (effective.main.streamScope !== coverage.relay?.streamScope
         || effective.main.dataEpoch !== coverage.relay.dataEpoch
-        || effective.main.sequence !== coverage.relay.sequence)) {
+        || effective.main.sequence !== coverage.relay.sequence))) {
       throw new ErasureRestoreHold('native release cut differs from signed current authority');
     }
   }
   await withRestoreClients(relay, restored, options?.clients, async ({ relayClient: client, accessClient }, released) => {
+    if (restored.ownerRestore) {
+      if (!graphRelease) throw new ErasureRestoreHold('two-cut release expectation is unavailable');
+      try {
+        const base = openRecoveryPayload<RecoveryCoverage>(restored.ownerRestore.baseCoverageEnvelope,
+          authority.hmacKey, 'graph-recovery-coverage');
+        await assertRestoreAuthorityBaseline(client, { sealedCoverage: restored.ownerRestore.baseCoverageEnvelope,
+          retainedAuthorityCoverage: authority.sealedCoverage, hmacKey: authority.hmacKey }, base,
+        { graphRelease, ownerRestore: restored.ownerRestore });
+        if (fenceGeneration !== restored.ownerRestore.baseFenceGeneration)
+          throw new ErasureRestoreHold('release generation differs from signed C0');
+      } catch (error) { throw new ErasureRestoreHold('two-cut native release relation is invalid', { cause: error }); }
+    }
     const fence = (await accessClient.query<{ open: boolean; generation: string }>(
       'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE')).rows[0]!;
     if (fence.open === false) await lockAccessRecoveryFenceForRelease(accessClient, fenceGeneration);

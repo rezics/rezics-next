@@ -5,16 +5,17 @@ import { readFileSync } from 'node:fs';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ERASURE_JOURNAL_EPOCH } from '../../../services/main/src/modules/erasure/journal.ts';
 import { probeContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
+import { ContentCore } from '../../../services/content/src/core.ts';
 import {
   accessOutboxCoverage,
   accessStateCoverage,
 } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import type { RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { graphReleased, outerOperation, ownerRestoreErasureFixture } from './owner-restore-erasure-fixture.ts';
+import { accessFence, graphReleased, outerOperation, ownerRestoreErasureFixture } from './owner-restore-erasure-fixture.ts';
 
 test(
-  'OPS12: a later public erasure admission preserves C0 and verifies its current two-cut restore baseline',
+  'OPS12: a later public erasure admission restores native Access and releases against both authenticated cuts',
   async () => {
     const fixtureStarted = Date.now();
     const fixture = await ownerRestoreErasureFixture({ laterApiAdmission: true });
@@ -220,21 +221,37 @@ test(
           .toBe('independently current authority capture is invalid or superseded');
 
         const twoCutKey = 'later-admission-two-cut-replay';
+        const content = new ContentCore(copy.owners.content);
+        const unrelatedBefore = (await content.readExactBatch([fixture.laterRevisionId], async ids => new Set(ids)))[0];
+        expect(unrelatedBefore?.status).toBe('available');
         const twoCut = await copy.request(twoCutKey, undefined, body);
         expect(twoCut.status).toBe(201);
-        expect(await twoCut.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
-        const held = await outerOperation(copy, twoCutKey);
-        expect(held.hold_reason).toBe('retained erasure reconciliation failed: native release cut differs from signed current authority');
-        expect(held.erasures?.state).toBe('reconciled');
-        expect(held.qualifications).toHaveLength(1);
-        expect(held.releases).toEqual([]);
-        expect(await graphReleased(copy)).toBe(false);
-        expect(await accessStateCoverage(copy.owners.access)).toEqual(currentState);
+        const released = await outerOperation(copy, twoCutKey);
+        expect(released.hold_reason).toBeNull();
+        expect(await twoCut.json()).toMatchObject({ state: 'reconciled', disposition: 'erased' });
+        expect(released.erasures?.state).toBe('reconciled');
+        expect(released.qualifications).toHaveLength(1);
+        expect(released.releases).toHaveLength(1);
+        expect(await graphReleased(copy)).toBe(true);
+        expect(await accessFence(copy)).toEqual([{ open: true,
+          generation: (BigInt(fixture.generation) + 1n).toString() }]);
+        const postState = await accessStateCoverage(copy.owners.access);
+        expect(postState.count).toBe((BigInt(currentState.count) + 2n).toString());
+        expect(postState.digest).not.toBe(currentState.digest);
         expect(await accessOutboxCoverage(copy.owners.access)).toEqual(currentOutbox);
         expect((await probeContentErasure(copy.owners.content, later.erasureId,
           [fixture.revisionId], later.erasureEpoch)).get(fixture.revisionId)).toBe('erased');
+        const [erasedAfter, unrelatedAfter] = await content.readExactBatch(
+          [fixture.revisionId, fixture.laterRevisionId], async ids => new Set(ids));
+        expect(erasedAfter?.status).toBe('erased');
+        expect(unrelatedAfter).toEqual(unrelatedBefore);
         expect((await copy.ready()).status).toBe(503);
-        expect((await copy.request(twoCutKey, undefined, body)).status).toBe(200);
+        const retry = await copy.request(twoCutKey, undefined, body);
+        expect(retry.status).toBe(200);
+        expect(await retry.json()).toMatchObject({ state: 'reconciled', disposition: 'erased', replayed: true });
+        expect(await outerOperation(copy, twoCutKey)).toEqual(released);
+        expect(await accessStateCoverage(copy.owners.access)).toEqual(postState);
+        expect(await accessOutboxCoverage(copy.owners.access)).toEqual(currentOutbox);
         expect((await copy.request(twoCutKey)).status).toBe(409);
       } finally {
         await copy.dispose();
@@ -249,6 +266,7 @@ test(
       expect(elapsedMs).toBeLessThan(600_000);
     }
   },
-  // The source-only predecessor has not yet passed QA; 600 s is a hang deadline.
+  // 600 s is a hang deadline: verified replay measured 242,936 ms fixture work
+  // (246.0 s file) in QA 20261011t220649-f78dff, including native source/copy startup.
   qaStartupTestTimeout(600_000),
 );

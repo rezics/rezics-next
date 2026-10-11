@@ -1,6 +1,7 @@
 import { createHash, createHmac, type Hash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { restoreRequestDigestFromAuthorityDigest, type OwnerRestoreEvidence } from '../erasure/reconcile.ts';
 import {
   accessOutboxCoverage,
   accessStateTables,
@@ -27,7 +28,7 @@ import {
  * the Access opening and records a PROVEN transition, not an observation: the
  * full Access coverage before the captured-generation CAS equals the signed
  * authority, and the coverage after it equals that coverage plus exactly the one
- * `id`-only row each of the two source-change tables gains from the CAS.
+ * default invalidation row each of the two source-change tables gains from the CAS.
  */
 const QUALIFICATION = 'restore-qualification:';
 const RELEASE = 'restore-release:';
@@ -117,14 +118,17 @@ export function qualificationRef(
   record: ErasuresRecord,
   capturedGeneration: string,
   expectation: RestoredGraphReleaseExpectation,
+  ownerRestore?: OwnerRestoreEvidence,
 ): string {
   return (
-    QUALIFICATION + mac(key, ['restore-qualification-v1', record, capturedGeneration, expectation])
+    QUALIFICATION + mac(key, ownerRestore
+      ? ['restore-qualification-v2', record, capturedGeneration, expectation, ownerRestore]
+      : ['restore-qualification-v1', record, capturedGeneration, expectation])
   );
 }
 
 /** The retained head and journal bound at release, read on the caller's relay client. */
-async function frontier(relay: Pool | PoolClient, consumer: string) {
+async function frontier(relay: Pool | PoolClient, consumer: string, twoCut = false) {
   const head =
     (
       await relay.query<{ generation: string; coverage_digest: string }>(
@@ -138,7 +142,9 @@ async function frontier(relay: Pool | PoolClient, consumer: string) {
       'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure',
     )
   ).rows[0]!.epoch;
-  return { head, journal };
+  return { head, journal, ...(twoCut ? { current: (await relay.query(
+    `SELECT consumer, coverage_digest, coverage_generation::text FROM relay.current_authority_coverage
+     WHERE id=true FOR SHARE`)).rows[0] ?? null } : {}) };
 }
 
 export interface AccessCoverage {
@@ -159,7 +165,7 @@ const sameCoverage = (left: RowCoverage, right: RowCoverage): boolean =>
 
 function invalidationTable(name: Invalidation): OwnerTable {
   const [schema, table] = name.split('.') as [string, string];
-  // Both are `id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY` and nothing else.
+  // The scanner reads the whole native row, including the reviewed source defaults.
   return { name, schema, table, key: ['id'], keyTypes: ['bigint'], columns: [] };
 }
 
@@ -263,6 +269,12 @@ export async function proveReleaseTransition(
         retained.update(record(key, body));
         retainedCount++;
       } else {
+        const row = JSON.parse(body) as Record<string, unknown>;
+        const defaults = name === INVALIDATIONS[0]
+          ? Object.keys(row).sort().join(',') === 'context_key,id,statement'
+            && row.context_key === '' && row.statement === ''
+          : Object.keys(row).sort().join(',') === 'id,privacy' && row.privacy === true;
+        if (!defaults) throw unexpected(`${name} release defaults`);
         added.push(key[0]!);
         derived.update(record(key, body));
       }
@@ -367,11 +379,12 @@ export async function recordQualification(
   erasures: ErasuresRecord,
   capturedGeneration: string,
   expectation: RestoredGraphReleaseExpectation,
+  ownerRestore?: OwnerRestoreEvidence,
 ): Promise<void> {
   await insertBinding(
     relay,
     outerId,
-    qualificationRef(key, erasures, capturedGeneration, expectation),
+    qualificationRef(key, erasures, capturedGeneration, expectation, ownerRestore),
   );
 }
 
@@ -400,10 +413,11 @@ export async function requireQualification(
   erasures: ErasuresRecord,
   capturedGeneration: string,
   expectation: RestoredGraphReleaseExpectation,
+  ownerRestore?: OwnerRestoreEvidence,
 ): Promise<void> {
   if (
     (await readBindings(relay, outerId)).qualification !==
-    qualificationRef(key, erasures, capturedGeneration, expectation)
+    qualificationRef(key, erasures, capturedGeneration, expectation, ownerRestore)
   ) {
     throw new RestoreLineageConflict(
       'durable restore qualification differs from the retained record',
@@ -426,12 +440,13 @@ export async function recordRelease(
   expectation: RestoredGraphReleaseExpectation,
   authority: string,
   transition: ReleaseTransition,
+  ownerRestore?: OwnerRestoreEvidence,
 ): Promise<void> {
-  const qualification = qualificationRef(key, erasures, capturedGeneration, expectation);
-  await requireQualification(relay, key, outerId, erasures, capturedGeneration, expectation);
+  const qualification = qualificationRef(key, erasures, capturedGeneration, expectation, ownerRestore);
+  await requireQualification(relay, key, outerId, erasures, capturedGeneration, expectation, ownerRestore);
   const proof = await readRestoredGraphReleaseProof(fuseki, expectation);
   if (!proof) throw new RestoreLineageConflict('native graph release evidence is unavailable');
-  const retained = await frontier(relay, erasures.consumer);
+  const retained = await frontier(relay, erasures.consumer, Boolean(ownerRestore));
   await insertBinding(
     relay,
     outerId,
@@ -472,6 +487,7 @@ export async function verifyReleasedRestore(input: {
   coverage: RecoveryCoverage;
   authority: string;
   capturedGeneration: string;
+  ownerRestore?: OwnerRestoreEvidence;
 }): Promise<AccessCoverage> {
   const { relay, fuseki, key, expectation, capturedGeneration } = input;
   const consumer = input.coverage.relay.consumer;
@@ -503,13 +519,13 @@ export async function verifyReleasedRestore(input: {
       erasures.id !== input.erasuresReconciliationId) ||
     ![false, true].some(
       (replay) =>
-        sha256Text(`${consumer}\0${replay}\0${input.authority}`) === erasures.requestDigest,
+        restoreRequestDigestFromAuthorityDigest(consumer, replay, input.authority, input.ownerRestore) === erasures.requestDigest,
     )
   ) {
     throw new RestoreLineageConflict('restore completion has no matching retained erasure record');
   }
   const bound = await readBindings(relay, input.outerId);
-  const qualification = qualificationRef(key, erasures, capturedGeneration, expectation);
+  const qualification = qualificationRef(key, erasures, capturedGeneration, expectation, input.ownerRestore);
   if (bound.qualification !== qualification) {
     throw new RestoreLineageConflict('restore completion differs from its durable qualification');
   }
@@ -518,7 +534,7 @@ export async function verifyReleasedRestore(input: {
     throw new RestoreLineageConflict('restore completion has no durable release binding');
   const proof = await readRestoredGraphReleaseProof(fuseki, expectation);
   if (!proof) throw new RestoreLineageConflict('native graph release evidence is unavailable');
-  const retained = await frontier(relay, consumer);
+  const retained = await frontier(relay, consumer, Boolean(input.ownerRestore));
   const transition: ReleaseTransition = {
     pre: signedAccess(input.coverage),
     post: release.post,
@@ -542,8 +558,4 @@ export async function verifyReleasedRestore(input: {
     throw new RestoreLineageConflict('restore completion differs from its durable release binding');
   }
   return release.post;
-}
-
-function sha256Text(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
 }

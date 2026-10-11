@@ -71,6 +71,8 @@ export const mainSpec = {
   MAIN_NOTIFICATION_INTERVAL_MS: num({ default: 1000, desc: 'Notification delivery polling interval.' }),
   ACCOUNT_RECOVERY_DATABASE_URL: optionalPostgres('Account recovery URL used by owner operations.'),
   RECOVERY_MANIFEST_HMAC_KEY: optionalSecret('HMAC key for owner recovery manifests.'),
+  RECOVERY_NATIVE_ACCESS_CUSTODY_DIRECTORY: str({ default: undefined,
+    desc: 'Private encrypted native Access attachment directory for two-cut owner recovery.' }),
   OWNER_RELOCATION_TARGET_URL: optionalPostgres('Target URL for an owner relocation.'),
   OWNER_RELOCATION_TARGET_OBJECT_DIRECTORY: str({ default: undefined, desc: 'Target object directory for an owner relocation.' }),
   REZICS_LOAD_RUN_ID: str({ default: undefined, desc: 'Load run ID tagged onto search metrics during `task load`.' }),

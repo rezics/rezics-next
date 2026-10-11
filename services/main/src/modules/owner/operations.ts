@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { constants } from 'node:fs';
+import { lstat, open } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { importAccessErasureRecoveryAttachment } from '../access/erasure-recovery.ts';
 import { createPublicRevisionJournalDeltaVerifier } from '../erasure/core-journal-coverage.ts';
-import { relayCoverageOnClient, relayPrefixCoverageOnClient } from '../outbox/relay.ts';
+import { accessOutboxCoverage, accessStateCoverage } from '../work/access-recovery-coverage.ts';
+import { isRelayTransientFailure } from '../outbox/relay.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
@@ -28,7 +34,7 @@ import { StructureGroupRootStore } from '../structure/group-root.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable }
   from '../work/history.ts';
-import { assertNativeAccessErasureBaseBinding, assertRetainedRecoveryRelayCut,
+import { assertRestoreAuthorityBaseline, ownerRestoreEvidence,
   readRestoredGraphReleaseExpectation, releaseRestoredGraphHold, RestoreInterrupted,
   RestoreLineageConflict, type RecoveryCoverage, type RestoredGraphReleaseExpectation,
   type RestoredReleaseClients }
@@ -114,6 +120,52 @@ export interface RelocationView {
 
 function digest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+/** Private content-addressed custody, streamed on one verified file descriptor.
+ * Caller inputs contain a signed reference only; directory/key custody belongs
+ * to the service. Plaintext never goes to a temporary file or environment value. */
+export async function* readNativeAccessAttachment(
+  reference: NonNullable<RecoveryCoverage['nativeAccessErasure']>, directory: string,
+  environment: NodeJS.ProcessEnv,
+): AsyncGenerator<Uint8Array> {
+  if (!/^[0-9a-f]{64}$/.test(reference.ciphertextDigest))
+    throw new RestoreLineageConflict('private native Access attachment identity is invalid');
+  const root = resolve(directory);
+  const rootStat = await lstat(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || (rootStat.mode & 0o077) !== 0)
+    throw new RestoreLineageConflict('native Access custody directory is not private');
+  const file = await open(join(root, `${reference.ciphertextDigest}.gpg`), constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || (stat.mode & 0o077) !== 0)
+      throw new RestoreLineageConflict('native Access attachment is not a private regular file');
+    const hash = createHash('sha256');
+    let bytes = 0n;
+    for await (const chunk of file.createReadStream({ autoClose: false })) {
+      hash.update(chunk);
+      bytes += BigInt(chunk.byteLength);
+    }
+    if (hash.digest('hex') !== reference.ciphertextDigest || bytes.toString() !== reference.ciphertextBytes)
+      throw new RestoreLineageConflict('native Access ciphertext differs from signed custody');
+    const child = spawn('gpg', ['--batch', '--no-tty', '--output', '-', '--decrypt'],
+      { env: environment, stdio: ['pipe', 'pipe', 'ignore'] });
+    const exited = new Promise<number | null>((resolveExit, reject) => {
+      child.once('error', reject);
+      child.once('close', resolveExit);
+    });
+    const inputDone = pipeline(file.createReadStream({ start: 0, autoClose: false }), child.stdin);
+    void exited.catch(() => {});
+    void inputDone.catch(() => {});
+    try {
+      for await (const chunk of child.stdout) yield chunk as Uint8Array;
+      const [code] = await Promise.all([exited, inputDone]);
+      if (code !== 0) throw new RestoreLineageConflict('native Access custody decryption failed');
+    } finally {
+      child.kill();
+      await Promise.allSettled([exited, inputDone]);
+    }
+  } finally { await file.close(); }
 }
 
 /**
@@ -215,6 +267,10 @@ export class OwnerOperations {
           structureQualifierRoots: new StructureQualifierRootStore(pools[2]!, structureObjects),
           structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) },
       ...(restoredRelayPool ? { restoredRelayPool } : {}),
+      ...(Bun.env.RECOVERY_NATIVE_ACCESS_CUSTODY_DIRECTORY ? {
+        nativeAccessAttachment: (reference) => readNativeAccessAttachment(reference,
+          Bun.env.RECOVERY_NATIVE_ACCESS_CUSTODY_DIRECTORY!, Bun.env),
+      } : {}),
       ...(configuredRetained ? { erasures: { authority: { sealedCoverage: retainedAuthorityCoverage ?? sealedCoverage, hmacKey },
         signingKey, maintenance: heldErasureMaintenanceClient(graphUrl, maintenanceKey),
         originalSource: 'retained-native-event' as const } } : {}) },
@@ -301,8 +357,8 @@ export class OwnerOperations {
             if (!bindings?.release) {
               throw new RestoreLineageConflict('Access is open without this restore\'s release binding');
             }
-            await this.completeReleasedRestore(client, resources, erasures, row.id,
-              `${operationId}:erasures`);
+            await this.completeReleasedRestore(client, resources, erasures, coverage, input.sealedCoverage,
+              row.id, `${operationId}:erasures`);
           } else await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
             this.relay, this.environment.lineage, { sealedCoverage: input.sealedCoverage,
               hmacKey: resources.hmacKey,
@@ -311,7 +367,18 @@ export class OwnerOperations {
               accountPool: resources.accountPool,
               contentPool: resources.contentPool, objectStore: resources.objectStore,
               restoredRelayPool: resources.restoredRelayPool,
-              ...(erasures ? { qualification: { resume: Boolean(bindings?.qualification) },
+              ...(erasures ? { qualification: { resume: Boolean(bindings?.qualification),
+                authenticateResume: async (clients) => {
+                  const current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
+                    erasures.authority.hmacKey, 'graph-recovery-coverage');
+                  const record = await readErasuresRecord(clients.relayClient, `${operationId}:erasures`);
+                  if (!record) throw new RestoreLineageConflict('durable erasure qualification is unavailable');
+                  await requireQualification(clients.relayClient, erasures.authority.hmacKey,
+                    row.id, record, clients.fenceGeneration, clients.graphRelease,
+                    current.nativeAccessErasure && input.sealedCoverage !== erasures.authority.sealedCoverage
+                      ? ownerRestoreEvidence(input.sealedCoverage,
+                      erasures.authority.sealedCoverage, current) : undefined);
+                } },
                 releaseErasures: (clients, releaseGraph) => this.releaseRetainedErasures(resources, erasures,
                   coverage, input.sealedCoverage, operationId, row.id, Boolean(bindings?.qualification), clients, releaseGraph) } : {}),
               deletions: { accountPool: resources.accountPool, hmacKey: resources.hmacKey,
@@ -423,45 +490,57 @@ export class OwnerOperations {
     baseEnvelope: string, operationId: string, outerId: string, resume: boolean, clients: RestoredReleaseClients,
     releaseGraph: () => Promise<void>): Promise<void> {
     const { graphRelease } = clients;
-    const restored = this.restoredOwners(resources, erasures, graphRelease, clients.fenceGeneration);
-    let current: RecoveryCoverage;
-    try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
-      erasures.authority.hmacKey, 'graph-recovery-coverage'); }
-    catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
-    if (!current?.relay?.consumer) {
-      throw new RestoreLineageConflict('independently current authority capture is unavailable');
-    }
-    if (current.nativeAccessErasure) {
-      const reference = current.nativeAccessErasure;
-      assertNativeAccessErasureBaseBinding(current, coverage, baseEnvelope);
-      assertRetainedRecoveryRelayCut(coverage,
-        await relayPrefixCoverageOnClient(clients.relayClient, coverage.relay));
-      assertRetainedRecoveryRelayCut(current,
-        await relayCoverageOnClient(clients.relayClient, current.relay.consumer));
-      restored.ownerRestore = { baseCoverageDigest: reference.baseCoverageDigest,
-        currentCoverageDigest: createHash('sha256').update(erasures.authority.sealedCoverage).digest('hex'),
-        nativeAccessDigest: reference.summary.plaintextDigest,
-        baseFenceGeneration: reference.summary.baseFenceGeneration,
-        journal: reference.sourceErasureJournal };
-      if (!resume) {
-        if (!resources.nativeAccessAttachment) throw new RestoreLineageConflict('private native Access custody is unavailable');
-        try {
-          const verifier = await createPublicRevisionJournalDeltaVerifier(clients.relayClient,
-            reference.baseErasureJournal.epoch, reference.sourceErasureJournal.epoch);
-          await importAccessErasureRecoveryAttachment(clients.accessClient,
-            resources.nativeAccessAttachment(reference), reference.summary, verifier.verifyAdmissions);
-          verifier.assertComplete();
-        } catch (error) {
-          throw new RestoreLineageConflict('native Access additions differ from signed current custody', { cause: error });
-        }
-      }
-    }
-    try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
-      current.relay.consumer, erasures.authority, clients.accessClient); }
-    catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
-    const erasuresOperation = `${operationId}:erasures`;
     let committed = resume;
     try {
+      const restored = this.restoredOwners(resources, erasures, graphRelease, clients.fenceGeneration);
+      let current: RecoveryCoverage;
+      try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
+        erasures.authority.hmacKey, 'graph-recovery-coverage'); }
+      catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
+      if (!current?.relay?.consumer) {
+        throw new RestoreLineageConflict('independently current authority capture is unavailable');
+      }
+      if (current.nativeAccessErasure && baseEnvelope !== erasures.authority.sealedCoverage) {
+        const reference = current.nativeAccessErasure;
+        restored.ownerRestore = ownerRestoreEvidence(baseEnvelope, erasures.authority.sealedCoverage, current);
+        await assertRestoreAuthorityBaseline(clients.relayClient, { sealedCoverage: baseEnvelope,
+          retainedAuthorityCoverage: erasures.authority.sealedCoverage, hmacKey: erasures.authority.hmacKey },
+        coverage, { graphRelease, ownerRestore: restored.ownerRestore });
+        let importNeeded = !resume;
+        if (resume) {
+          const record = await readErasuresRecord(clients.relayClient, `${operationId}:erasures`);
+          if (!record) throw new RestoreLineageConflict('durable erasure qualification is unavailable');
+          await requireQualification(clients.relayClient, erasures.authority.hmacKey, outerId,
+            record, clients.fenceGeneration, graphRelease, restored.ownerRestore);
+          const state = await accessStateCoverage(resources.accessPool, clients.accessClient);
+          const outbox = await accessOutboxCoverage(resources.accessPool, clients.accessClient);
+          const equals = (cut: RecoveryCoverage) => state.count === cut.accessStateCount
+            && state.digest === cut.accessStateDigest && outbox.count === cut.accessOutboxCount
+            && outbox.digest === cut.accessOutboxDigest;
+          if (!equals(coverage) && !equals(current)) {
+            throw new RestoreLineageConflict('qualified Access differs from both authenticated cuts');
+          }
+          // Relay qualification can commit before the Access import transaction.
+          // Only an exact C0 rollback is reapplied; arbitrary subsets stay held.
+          importNeeded = equals(coverage);
+        }
+        if (importNeeded) {
+          if (!resources.nativeAccessAttachment) throw new RestoreLineageConflict('private native Access custody is unavailable');
+          try {
+            const verifier = await createPublicRevisionJournalDeltaVerifier(clients.relayClient,
+              reference.baseErasureJournal.epoch, reference.sourceErasureJournal.epoch);
+            await importAccessErasureRecoveryAttachment(clients.accessClient,
+              resources.nativeAccessAttachment(reference), reference.summary, verifier.verifyAdmissions);
+            verifier.assertComplete();
+          } catch (error) {
+            throw new RestoreLineageConflict('native Access additions differ from signed current custody', { cause: error });
+          }
+        }
+      }
+      try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
+        current.relay.consumer, erasures.authority, clients.accessClient); }
+      catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
+      const erasuresOperation = `${operationId}:erasures`;
       if (!resume) {
         const result = await reconcileRestoredErasures(this.relay, restored,
           { operationId: erasuresOperation, consumer: current.relay.consumer,
@@ -475,14 +554,21 @@ export class OwnerOperations {
           throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
         }
         await recordQualification(clients.relayClient, erasures.authority.hmacKey, outerId, record,
-          clients.fenceGeneration, graphRelease);
+          clients.fenceGeneration, graphRelease, restored.ownerRestore);
         await clients.commitQualification();
         committed = true;
       }
       const record = await readErasuresRecord(clients.relayClient, erasuresOperation);
       if (!record) throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
       await requireQualification(clients.relayClient, erasures.authority.hmacKey, outerId, record,
-        clients.fenceGeneration, graphRelease);
+        clients.fenceGeneration, graphRelease, restored.ownerRestore);
+      // Qualification changed both transactions: retake and reauthenticate the
+      // current head/global pointer, full journal and exact Access before release.
+      if (restored.ownerRestore) await assertRestoreAuthorityBaseline(clients.relayClient,
+        { sealedCoverage: baseEnvelope, retainedAuthorityCoverage: erasures.authority.sealedCoverage,
+          hmacKey: erasures.authority.hmacKey }, coverage, { graphRelease, ownerRestore: restored.ownerRestore });
+      await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
+        current.relay.consumer, erasures.authority, clients.accessClient);
       // The signed pre-release Access coverage, pinned on the locked client before the CAS.
       const basis = await captureReleaseBasis(resources.accessPool, clients.accessClient, current);
       await releaseErasureRestoreHold(this.relay, restored, record.id, clients.fenceGeneration,
@@ -492,10 +578,13 @@ export class OwnerOperations {
         clients.fenceGeneration);
       await recordRelease(clients.relayClient, erasures.authority.hmacKey, this.environment.fuseki, outerId, record,
         clients.fenceGeneration, graphRelease, createHash('sha256').update(erasures.authority.sealedCoverage)
-          .digest('hex'), transition);
+          .digest('hex'), transition, restored.ownerRestore);
     } catch (error) {
       // Once the qualification is durable, only a definitive refusal settles
       // the operation as held; an owner interruption leaves it resumable.
+      if (committed && isRelayTransientFailure(error)) {
+        throw new RestoreInterrupted('qualified restore owner connection was interrupted', { cause: error });
+      }
       if (!committed || error instanceof RestoreLineageConflict || error instanceof RestoreInterrupted
         || isDefinitiveRefusal(error)) throw error;
       throw new RestoreInterrupted(`restore release interrupted: ${
@@ -513,7 +602,7 @@ export class OwnerOperations {
    * comment or evidence source, is `assertReleasedErasuresCurrent` below.
    */
   private async completeReleasedRestore(client: PoolClient, resources: RestoreResources,
-    erasures: NonNullable<RestoreResources['erasures']>, outerId: string,
+    erasures: NonNullable<RestoreResources['erasures']>, base: RecoveryCoverage, baseEnvelope: string, outerId: string,
     erasuresOperation: string): Promise<void> {
     let current: RecoveryCoverage;
     try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
@@ -535,16 +624,21 @@ export class OwnerOperations {
       }
       // The opened-phase comparison authenticates this operation's own findings itself.
       const graphRelease = await readRestoredGraphReleaseExpectation(this.environment.fuseki,
-        this.environment.lineage, current);
+        this.environment.lineage, base);
       const captured = (BigInt(fence.generation) - 1n).toString();
       const record = await readErasuresRecord(client, erasuresOperation);
       if (!record) throw new RestoreLineageConflict('restore completion has no retained erasure record');
       const restored = this.restoredOwners(resources, erasures, graphRelease, captured);
+      if (current.nativeAccessErasure && baseEnvelope !== erasures.authority.sealedCoverage)
+        restored.ownerRestore = ownerRestoreEvidence(baseEnvelope,
+        erasures.authority.sealedCoverage, current);
       try {
         // Mandatory: authority, deletion journal and the full erased closure, no bypass.
         await assertReleasedErasuresCurrent(this.relay, restored, record.id, captured, erasures.authority,
           { relayClient: client, accessClient, graphRelease }, outerId);
       } catch (error) {
+        if (isRelayTransientFailure(error)) throw new RestoreInterrupted(
+          'released restore owner comparison was interrupted', { cause: error });
         if (error instanceof RestoreLineageConflict) throw error;
         if (isDefinitiveRefusal(error)) {
           throw new RestoreLineageConflict(error.message, { cause: error });

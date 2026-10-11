@@ -1,4 +1,7 @@
 import { assertRetainedAuthorityCapture } from '../erasure/authority.ts';
+import type { OwnerRestoreEvidence } from '../erasure/reconcile.ts';
+import { readRetainedNativeGraphSuppressionProof } from '../erasure/custody.ts';
+import { GRAPH_ERASURE_KINDS, graphRevisionIds } from '../erasure/revision-kind.ts';
 import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 import { StructureGroupRootStore } from '../structure/group-root.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
@@ -15,7 +18,7 @@ import { exportAccessErasureRecoveryAttachment,
 import { assertErasureJournalCoreCoverage, createPublicRevisionJournalDeltaVerifier,
   captureErasureJournalCoreCoverage,
   type ErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
-import { relayCoverage, relayCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
+import { isRelayTransientFailure, relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -305,7 +308,9 @@ export interface AuthenticatedRecoveryCoverage {
    * Content, object and graph-reference base comparison that replay has since
    * changed is then not repeated.
    */
-  qualification?: { resume: boolean };
+  qualification?: { resume: boolean;
+    /** Authenticate durable qualification before any two-cut base check is skipped. */
+    authenticateResume?: (clients: Omit<RestoredReleaseClients, 'commitQualification'>) => Promise<void> };
 }
 
 export interface RestoredReleaseClients {
@@ -903,8 +908,10 @@ export function assertRetainedRecoveryRelayCut(coverage: RecoveryCoverage, retai
 /** Verify current authority and its signed native-addition relationship to the physical base. */
 export async function assertRestoreAuthorityBaseline(relay: PoolClient,
   evidence: Pick<AuthenticatedRecoveryCoverage, 'sealedCoverage' | 'retainedAuthorityCoverage' | 'hmacKey'>,
-  base: RecoveryCoverage): Promise<void> {
+  base: RecoveryCoverage,
+  release?: { graphRelease: RestoredGraphReleaseExpectation; ownerRestore: OwnerRestoreEvidence }): Promise<void> {
   if (evidence.retainedAuthorityCoverage === undefined) {
+    if (release) throw new RestoreLineageConflict('two-cut release lacks independently current evidence');
     try { await assertCurrentRecoveryCoverageHead(relay, base); }
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
     return;
@@ -917,26 +924,105 @@ export async function assertRestoreAuthorityBaseline(relay: PoolClient,
   } catch (error) {
     throw new RestoreLineageConflict('independently current authority capture is invalid or superseded', { cause: error });
   }
-  if (evidence.retainedAuthorityCoverage === evidence.sealedCoverage) return;
+  if (evidence.retainedAuthorityCoverage === evidence.sealedCoverage) {
+    if (release) throw new RestoreLineageConflict('two-cut release requires a distinct authenticated base');
+    return;
+  }
   // A later WAL floor alone needs no attachment: all captured owner facts and
   // native Access values must still describe the same cut.
   if (!current.nativeAccessErasure) {
+    if (release) throw new RestoreLineageConflict('two-cut release lacks signed native Access custody');
     const ownerFacts = (cut: RecoveryCoverage) => ({ ...cut, accountPg: undefined });
     if (JSON.stringify(ownerFacts(current)) !== JSON.stringify(ownerFacts(base))) {
       throw new RestoreLineageConflict('current authority requires a signed native Access attachment');
     }
     return;
   }
-  assertNativeAccessErasureBaseBinding(current, base, evidence.sealedCoverage);
-  const reference = current.nativeAccessErasure!;
-  const [prefix, journal] = [
-    await captureErasureJournalCoreCoverage(relay, reference.baseErasureJournal.epoch),
-    await captureErasureJournalCoreCoverage(relay),
-  ];
-  if (!sameCoreCoverage(prefix, reference.baseErasureJournal)
-    || !sameCoreCoverage(journal, reference.sourceErasureJournal)) {
-    throw new RestoreLineageConflict('retained erasure journal differs from the signed two-cut relationship');
+  try {
+    assertNativeAccessErasureBaseBinding(current, base, evidence.sealedCoverage);
+    const reference = current.nativeAccessErasure!;
+    const [prefix, journal] = [
+      await captureErasureJournalCoreCoverage(relay, reference.baseErasureJournal.epoch),
+      await captureErasureJournalCoreCoverage(relay),
+    ];
+    if (!sameCoreCoverage(prefix, reference.baseErasureJournal)
+      || !sameCoreCoverage(journal, reference.sourceErasureJournal)) {
+      throw new RestoreLineageConflict('retained erasure journal differs from the signed two-cut relationship');
+    }
+    assertRetainedRecoveryRelayCut(base, await relayPrefixCoverageOnClient(relay, base.relay));
+    assertRetainedRecoveryRelayCut(current, await relayCoverageOnClient(relay, current.relay.consumer));
+    // Every extra native graph command must be the exact retained suppression of
+    // an admitted public revision erasure. Neither cursor is advanced by restore.
+    let mainSequence = BigInt(base.relay.sequence);
+    let graphSequence = BigInt(base.priorSequence);
+    while (mainSequence < BigInt(current.relay.sequence)) {
+      const events = (await relay.query<{ sequence: string; source: string; event_id: string;
+        erasure_id: string | null }>(`SELECT sequence::text, source, event_id,
+          envelope #>> '{data,receipt,systemProof,erasureId}' AS erasure_id
+        FROM relay.delivered_event WHERE stream_scope=$1 AND data_epoch=$2
+          AND sequence > $3::numeric AND sequence <= $4::numeric
+        ORDER BY sequence, event_id LIMIT 100`, [base.relay.streamScope, base.priorDataEpoch,
+        mainSequence.toString(), current.relay.sequence])).rows;
+      if (!events.length) throw new RestoreLineageConflict('current native erasure tail is incomplete');
+      for (const event of events) {
+        const entry = (await relay.query<{ epoch: string; targets: { kind: string; ref: string }[] }>(`SELECT
+            e.erasure_epoch::text AS epoch,
+            jsonb_agg(jsonb_build_object('kind', t.target_kind, 'ref', t.target_ref) ORDER BY t.ordinal) AS targets
+          FROM relay.erasure e JOIN relay.erasure_target t ON t.erasure_id=e.id
+          WHERE e.id::text=$1 AND e.authority='access_admission' AND e.kind='revision'
+            AND e.suppression_status='suppressed' AND e.admission_id IS NOT NULL
+            AND e.erasure_epoch > $2::bigint AND e.erasure_epoch <= $3::bigint
+            AND t.owner='graph' AND t.target_kind=ANY($4::text[])
+          GROUP BY e.id`, [event.erasure_id, reference.baseErasureJournal.epoch ?? '0',
+          reference.sourceErasureJournal.epoch, ['content_revision', ...GRAPH_ERASURE_KINDS]])).rows[0];
+        if (!entry || !event.erasure_id || BigInt(event.sequence) !== mainSequence + 1n) {
+          throw new RestoreLineageConflict('current native tail contains unsupported graph work');
+        }
+        const proof = await readRetainedNativeGraphSuppressionProof(relay, event.erasure_id,
+          entry.epoch, graphRevisionIds(entry.targets));
+        if (event.source !== 'https://rezics.com/services/main'
+          || event.event_id !== `urn:rezics:event:${hash(`${proof.original.receipt}\0event`)}`
+          || proof.original.dataEpoch !== base.priorDataEpoch
+          || BigInt(proof.original.sequence) !== graphSequence + 1n) {
+          throw new RestoreLineageConflict('current native tail differs from its exact suppression originals');
+        }
+        mainSequence++;
+        graphSequence++;
+      }
+    }
+    if (graphSequence !== BigInt(current.priorSequence)) {
+      throw new RestoreLineageConflict('current graph frontier includes unsupported commands');
+    }
+    if (release) {
+      if (JSON.stringify(release.ownerRestore) !== JSON.stringify(ownerRestoreEvidence(
+        evidence.sealedCoverage, evidence.retainedAuthorityCoverage, current))) {
+        throw new RestoreLineageConflict('restore native Access relation differs from authenticated cuts');
+      }
+      const effective = release.graphRelease.effective;
+      const saved = release.graphRelease.saved;
+      if (saved.dataEpoch !== base.priorDataEpoch || saved.graphSequence !== base.priorSequence
+        || effective.dataEpoch !== base.priorDataEpoch || effective.graphSequence !== base.priorSequence
+        || !saved.main || !effective.main
+        || [saved.main, effective.main].some(position => position.streamScope !== base.relay.streamScope
+          || position.dataEpoch !== base.relay.dataEpoch || position.sequence !== base.relay.sequence)) {
+        throw new RestoreLineageConflict('native release differs from the signed physical base');
+      }
+    }
+  } catch (error) {
+    if (error instanceof RestoreLineageConflict) throw error;
+    throw new RestoreLineageConflict('retained two-cut native evidence is unavailable or divergent', { cause: error });
   }
+}
+
+/** Derived owner facts carried by findings, request identity and both HMAC phases. */
+export function ownerRestoreEvidence(baseEnvelope: string, currentEnvelope: string,
+  current: RecoveryCoverage): OwnerRestoreEvidence {
+  const reference = current.nativeAccessErasure;
+  if (!reference) throw new RestoreLineageConflict('native Access relation is unavailable');
+  return { baseCoverageEnvelope: baseEnvelope, baseCoverageDigest: reference.baseCoverageDigest,
+    currentCoverageDigest: createHash('sha256').update(currentEnvelope).digest('hex'),
+    nativeAccessDigest: reference.summary.plaintextDigest,
+    baseFenceGeneration: reference.summary.baseFenceGeneration, journal: reference.sourceErasureJournal };
 }
 
 /** Release only after an independently retained authority/receipt frontier is compared.
@@ -1047,12 +1133,24 @@ export async function releaseRestoredGraphHold(
       || !/^[0-9]+$/.test(fenceGeneration)) {
       throw new RestoreLineageConflict('Access recovery fence is not held');
     }
+    const twoCutResume = evidence.qualification?.resume === true
+      && evidence.retainedAuthorityCoverage !== undefined
+      && evidence.retainedAuthorityCoverage !== evidence.sealedCoverage;
+    if (twoCutResume) {
+      await assertRestoreAuthorityBaseline(relayHeadClient, evidence, coverage);
+      if (!evidence.qualification?.authenticateResume) {
+        throw new RestoreLineageConflict('two-cut resume has no durable qualification verifier');
+      }
+      await evidence.qualification.authenticateResume({ accessClient: client,
+        relayClient: relayHeadClient, fenceGeneration,
+        graphRelease: await readRestoredGraphReleaseExpectation(fuseki, lineage, coverage) });
+    }
     const outbox = await scanAccessOutbox(client);
-    if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
+    if (!twoCutResume && (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest)) {
       throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
     }
     const state = await scanAccessState(client);
-    if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
+    if (!twoCutResume && (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest)) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
     try { await assertCommerceRecoveryCoverageOnClient(client, coverage.commerce); }
@@ -1195,20 +1293,26 @@ export async function releaseRestoredGraphHold(
         }
         await assertBorrowedTransactions();
         // Replay is irreversible, so its record must survive a later failure.
-        await relayHeadClient!.query('COMMIT');
-        await client.query('COMMIT');
-        await relayHeadClient!.query('BEGIN ISOLATION LEVEL READ COMMITTED');
-        await relayHeadClient!.query("SET LOCAL lock_timeout = '5s'");
-        await relayHeadClient!.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-        await client.query("SET LOCAL TIME ZONE 'UTC'");
-        const again = await client.query<{ open: boolean; generation: string }>(
-          'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE');
-        if (again.rows[0]?.open !== false || again.rows[0].generation !== fenceGeneration) {
-          throw new RestoreLineageConflict('captured Access fence changed after qualification');
+        try {
+          await relayHeadClient!.query('COMMIT');
+          await client.query('COMMIT');
+          await relayHeadClient!.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+          await relayHeadClient!.query("SET LOCAL lock_timeout = '5s'");
+          await relayHeadClient!.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await client.query("SET LOCAL TIME ZONE 'UTC'");
+          const again = await client.query<{ open: boolean; generation: string }>(
+            'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE');
+          if (again.rows[0]?.open !== false || again.rows[0].generation !== fenceGeneration) {
+            throw new RestoreLineageConflict('captured Access fence changed after qualification');
+          }
+          await borrowedTransaction('relay', relayHeadClient!, 'read committed');
+          await borrowedTransaction('Access', client, 'repeatable read');
+        } catch (error) {
+          if (isRelayTransientFailure(error)) throw new RestoreInterrupted(
+            'restore qualification commit or owner reacquisition was interrupted', { cause: error });
+          throw error;
         }
-        await borrowedTransaction('relay', relayHeadClient!, 'read committed');
-        await borrowedTransaction('Access', client, 'repeatable read');
       };
       await evidence.releaseErasures({ accessClient: client, relayClient: relayHeadClient,
         fenceGeneration, graphRelease, commitQualification }, releaseGraph);
@@ -1246,6 +1350,9 @@ export async function releaseRestoredGraphHold(
     }
     if (accessClient && !borrowedOwners) {
       try { await accessClient.query('ROLLBACK'); } catch { /* retain original error */ }
+    }
+    if (evidence.qualification?.resume && isRelayTransientFailure(error)) {
+      throw new RestoreInterrupted('qualified restore owner connection was interrupted', { cause: error });
     }
     throw error;
   } finally {

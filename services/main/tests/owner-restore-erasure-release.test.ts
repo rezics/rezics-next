@@ -1162,6 +1162,25 @@ test('an interruption after the durable qualification leaves its record committe
   } finally { run.stop(); }
 });
 
+test('a lost Access commit after durable relay qualification remains resumable with both holds closed', async () => {
+  const run = fixture();
+  run.evidence.qualification = { resume: false };
+  run.evidence.releaseErasures = async clients => { await clients.commitQualification(); };
+  run.access.queryGate = async sql => {
+    if (sql === 'COMMIT') throw Object.assign(new Error('Access connection lost'), { code: '57P01' });
+  };
+  try {
+    await expect(run.release()).rejects.toBeInstanceOf(RestoreInterrupted);
+    expect(run.trace.filter(item => item === 'relay:commit')).toHaveLength(1);
+    expect(run.trace.filter(item => item === 'access:commit')).toHaveLength(0);
+    expect(run.fuseki.held).toBe(true);
+    expect(run.fuseki.commands).toHaveLength(0);
+    expect(run.access.open).toBe(false);
+    expect(run.access.generation).toBe('5');
+    expect(run.access.queries.at(-1)?.sql).toBe('ROLLBACK');
+  } finally { run.stop(); }
+});
+
 test('a resumed qualification skips the replay-sensitive base comparison and continues from the released graph', async () => {
   const run = fixture();
   run.evidence.qualification = { resume: true };
