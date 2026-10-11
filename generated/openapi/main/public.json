@@ -594995,6 +594995,9 @@
                           },
                           "sequence": {
                             "type": "string"
+                          },
+                          "spoiler": {
+                            "type": "boolean"
                           }
                         },
                         "required": [

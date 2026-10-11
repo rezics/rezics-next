@@ -6,7 +6,6 @@ import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { markedSpoiler } from '../feed/discussion.ts';
 import { SpoilerVeil } from '../feed/discussion-card.tsx';
-import { FeedProvider } from '../feed/feed-context.tsx';
 import { messages as defaultFeedMessages, type FeedMessages } from '../feed/messages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { formatDate, mintedAt, paragraphs } from './format.ts';
@@ -30,9 +29,9 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
   realmLabel: (realm: string) => string; realmHref?: (realm: string) => string;
 }) {
   const t = materializeData(messages, { locale });
-  return <FeedProvider locale={locale} messages={feedMessages} now={0} signedIn={false} actingSubject={null}
-    signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={[]}>
-    <ol className="grid gap-3">
+  const feedCopy = materializeData(feedMessages, { locale });
+  const spoilerLabels = { spoilerAnnounced: feedCopy.spoilerAnnounced, showSpoiler: feedCopy.showSpoiler };
+  return <ol className="grid gap-3">
     {items.map(item => {
       const realm = idOf(item.realm);
       const name = realm ? label(realm) : item.realm;
@@ -55,7 +54,7 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
               {formatDate(placed, locale)}</time> : null}
           </header>
           <div className="grid gap-2 text-pretty break-words text-sm/7">
-            {markedSpoiler(item.spoiler) ? <SpoilerVeil>{words}</SpoilerVeil> : words}
+            {markedSpoiler(item.spoiler) ? <SpoilerVeil labels={spoilerLabels}>{words}</SpoilerVeil> : words}
           </div>
           {realm && reply ? <Link href={threadHref(spaceHref(realm, 'community'), reply)} className="inline-flex w-fit items-center
             gap-1.5 font-medium text-primary text-sm underline-offset-4 hover:underline">
@@ -63,8 +62,7 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
         </article>
       </li>;
     })}
-    </ol>
-  </FeedProvider>;
+  </ol>;
 }
 
 /**

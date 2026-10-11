@@ -41,23 +41,49 @@ export interface DiscussionPost {
 }
 
 /** A spoiler the author announced: the words stay out of the page until the reader asks for them. */
-export function SpoilerVeil({ children, className }: { children: ReactNode; className?: string }) {
-  const { t } = useFeed();
+export interface SpoilerLabels {
+  spoilerAnnounced: string;
+  showSpoiler: string;
+}
+
+interface SpoilerVeilProps {
+  children: ReactNode;
+  className?: string;
+  labels?: SpoilerLabels;
+}
+
+function SpoilerVeilContent({ children, className, labels }: Omit<SpoilerVeilProps, 'labels'> & {
+  labels: SpoilerLabels;
+}) {
   const [shown, setShown] = useState(false);
   // The words take the veil's place, so the button controls nothing that stays.
   if (shown) return <div className={className}>{children}</div>;
   // A reply's words are the row link. The reveal control sits above that hit area and keeps the click.
   return <div className={cn('relative z-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm', className)}>
     <EyeOffIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-    <span className="text-muted-foreground">{t.spoilerAnnounced}</span>
+    <span className="text-muted-foreground">{labels.spoilerAnnounced}</span>
     <button type="button" onClick={(event) => {
       event.preventDefault();
       event.stopPropagation();
       setShown(true);
     }}
       className={cn(buttonVariants({ variant: 'outline', size: 'xs', pill: true }), 'h-6')}>
-      <EyeIcon aria-hidden="true" />{t.showSpoiler}</button>
+      <EyeIcon aria-hidden="true" />{labels.showSpoiler}</button>
   </div>;
+}
+
+function FeedSpoilerVeil({ children, className }: Omit<SpoilerVeilProps, 'labels'>) {
+  const { t } = useFeed();
+  return <SpoilerVeilContent className={className} labels={{
+    spoilerAnnounced: t.spoilerAnnounced,
+    showSpoiler: t.showSpoiler,
+  }}>{children}</SpoilerVeilContent>;
+}
+
+export function SpoilerVeil({ children, className, labels }: SpoilerVeilProps) {
+  return labels
+    ? <SpoilerVeilContent className={className} labels={labels}>{children}</SpoilerVeilContent>
+    : <FeedSpoilerVeil className={className}>{children}</FeedSpoilerVeil>;
 }
 
 /** The Spoiler mark, as Reddit tags a spoiler post. */

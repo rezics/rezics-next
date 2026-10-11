@@ -83,7 +83,7 @@ export function excludedFeedSource(source: FeedSource, exclusions: readonly Home
 }
 
 /** A boolean on the exact revision body, or absent. Anything else is corrupt, not unmarked. */
-function declaredSpoiler(body: Record<string, unknown>): boolean | undefined {
+export function declaredSpoiler(body: Record<string, unknown>): boolean | undefined {
   if (!Object.hasOwn(body, 'spoiler') || body.spoiler == null) return undefined;
   if (typeof body.spoiler !== 'boolean') throw new WorkReadUnavailable('Reply spoiler declaration is invalid');
   return body.spoiler;

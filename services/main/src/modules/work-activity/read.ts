@@ -3,6 +3,7 @@ import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { resolveTargets } from '../target/resolve.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit,
   WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { declaredSpoiler } from '../feed/read.ts';
 import { WORK_ACTIVITY_COST } from './read-contract.ts';
 
 type Kind = 'metadata-revision' | 'publication-decision' | 'reply-placement';
@@ -34,14 +35,9 @@ function checkedRows(rows: Record<string, { value: string } | undefined>[]) {
     throw new WorkReadUnavailable('Activity order is ambiguous');
   }
 }
-function declaredReplySpoiler(body: Record<string, unknown>): boolean | undefined {
-  if (!Object.hasOwn(body, 'spoiler') || body.spoiler == null) return undefined;
-  if (typeof body.spoiler !== 'boolean') throw new WorkReadUnavailable('Reply spoiler declaration is invalid');
-  return body.spoiler;
-}
 export function workDiscussionText(body: Record<string, unknown>): { body: string; spoiler?: boolean } {
   if (typeof body.body !== 'string') throw new WorkReadUnavailable('Reply body differs from its identity');
-  const spoiler = declaredReplySpoiler(body);
+  const spoiler = declaredSpoiler(body);
   return { body: body.body, ...(spoiler === undefined ? {} : { spoiler }) };
 }
 function nextCursor(session: WorkReadSession, binding: unknown,
