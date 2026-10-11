@@ -55,9 +55,12 @@ export async function ensureOnboarding(token: string, sessionKey: string,
  * Where a sign-in lands. A new person chooses a public name and a handle, then
  * sets up Home (languages, topics, communities), then reaches where they were
  * going. Without a Person the name comes first, whatever `selectedBefore` says.
+ * When onboarding state is unknown, keep the requested page: it already handles
+ * a missing Agent, and onboarding is offered again once the state is known.
  */
 export function onboardingDestination(outcome: OnboardingOutcome,
   selectedBefore: boolean, next: string, locale: string): string {
+  if (outcome.kind === 'unavailable') return next;
   const returning = selectedBefore || outcome.kind === 'active' && !outcome.firstVisit;
   if (outcome.kind !== 'name-required' && returning) return next;
   const setup = `/${locale}/welcome?next=${encodeURIComponent(next)}`;

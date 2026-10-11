@@ -59,8 +59,7 @@ export async function GET(request: Request) {
       headers: { 'x-session-key': sessionKey, 'idempotency-key': crypto.randomUUID() },
     }).then(result => !result.error).catch(() => false) : false;
   const onboarding = await ensureOnboarding(issued.tokens.accessToken, sessionKey);
-  const destination = onboarding.kind === 'unavailable' && selected ? next
-    : onboardingDestination(onboarding, selected, next, locale);
+  const destination = onboardingDestination(onboarding, selected, next, locale);
   const response = NextResponse.redirect(new URL(destination, url.origin));
   clearCookies(response.cookies, request.url, [...OAUTH_COOKIES, AGENT_COOKIE]);
   writeCookies(response.cookies, sessionCookies(request.url, issued.tokens, user));

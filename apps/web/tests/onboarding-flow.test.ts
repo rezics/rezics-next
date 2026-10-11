@@ -6,24 +6,51 @@ import { changeHandle } from '../features/onboarding/change-handle.ts';
 const person: OnboardingResult = { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
   state: 'active', suggestedHandle: 'ada', sessionAgent: null, replayed: false };
 
+const onboardingPath = (locale: string, next: string) =>
+  `/${locale}/onboarding?next=${encodeURIComponent(`/${locale}/welcome?next=${encodeURIComponent(next)}`)}`;
+
 test('G-431: a new Person Agent chooses a handle, then sets up Home; returning and selected sessions keep their destination', () => {
   const created = { kind: 'active' as const, person, firstVisit: true };
   const destination = onboardingDestination(created, false, '/zh-Hans/studio', 'zh-Hans');
-  expect(destination).toBe(`/zh-Hans/onboarding?next=${encodeURIComponent('/zh-Hans/welcome?next=%2Fzh-Hans%2Fstudio')}`);
+  expect(destination).toBe(onboardingPath('zh-Hans', '/zh-Hans/studio'));
   expect(new URL(destination, 'https://rezics.test').searchParams.get('next')).toBe('/zh-Hans/welcome?next=%2Fzh-Hans%2Fstudio');
   expect(onboardingDestination({ ...created, firstVisit: false }, false, '/en/studio', 'en'))
     .toBe('/en/studio');
   expect(onboardingDestination(created, true, '/en/studio', 'en')).toBe('/en/studio');
-  expect(onboardingDestination({ kind: 'unavailable' }, true, '/en/studio', 'en')).toBe('/en/studio');
+});
+
+// The OAuth callback uses onboardingDestination for its landing choice after Agent selection.
+test('sign-in keeps the requested page when onboarding state is unknown', () => {
+  const next = '/en/studio';
+  const locale = 'en';
+  const firstVisit = { kind: 'active' as const, person, firstVisit: true };
+  const returningVisit = { kind: 'active' as const, person: { ...person, replayed: true }, firstVisit: false };
+  const nameRequired = { kind: 'name-required' as const };
+  const unavailable = { kind: 'unavailable' as const };
+  const setup = onboardingPath(locale, next);
+
+  for (const selected of [false, true]) {
+    // Unknown is not "new": keep next whether Agent selection succeeded or failed.
+    expect(onboardingDestination(unavailable, selected, next, locale)).toBe(next);
+    expect(onboardingDestination(nameRequired, selected, next, locale)).toBe(setup);
+  }
+
+  // New member, first active visit: onboarding then welcome unless selection already marks return.
+  expect(onboardingDestination(firstVisit, false, next, locale)).toBe(setup);
+  expect(onboardingDestination(firstVisit, true, next, locale)).toBe(next);
+
+  // Returning member with an active Person keeps next even when selection fails.
+  expect(onboardingDestination(returningVisit, false, next, locale)).toBe(next);
+  expect(onboardingDestination(returningVisit, true, next, locale)).toBe(next);
 });
 
 test('G-537: without a Person the name comes first, even for a session that already has a choice', () => {
   const noName = { kind: 'name-required' as const };
   expect(onboardingDestination(noName, false, '/en/studio', 'en'))
-    .toBe(`/en/onboarding?next=${encodeURIComponent('/en/welcome?next=%2Fen%2Fstudio')}`);
+    .toBe(onboardingPath('en', '/en/studio'));
   // An Organization held by control may already be the session choice; the Person is still missing.
   expect(onboardingDestination(noName, true, '/en/studio', 'en'))
-    .toBe(`/en/onboarding?next=${encodeURIComponent('/en/welcome?next=%2Fen%2Fstudio')}`);
+    .toBe(onboardingPath('en', '/en/studio'));
 });
 
 test('G-537: Main asking for a public name is an outcome, not a failure, and the typed name is sent once', async () => {
