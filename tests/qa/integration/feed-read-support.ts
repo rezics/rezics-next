@@ -26,7 +26,6 @@ import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { startMediaStack } from './media-support.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
-import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 
 /** The Home reads whose cost the budget and load tests hold. */
@@ -158,7 +157,8 @@ export async function startHomeStack(label: string, options: {
   const structureObjects = stack.objects('feed/structure/');
   await structureObjects.initialize();
   Object.assign(stack.env, { structureObjects });
-  const consumer = `feed-${randomUUID()}`;
+  // A restored corpus keeps its verified relay handoff as well as its indexes.
+  const consumer = options.stableMembers ? 'feed-corpus' : `feed-${randomUUID()}`;
   const feed = new FeedStore(stack.accessPool);
   const deps = { ...stack.composition.dependencies, environment: stack.env, access: stack.access,
     judgments: new AccessJudgments(stack.accessPool),
@@ -188,14 +188,6 @@ export async function startHomeStack(label: string, options: {
   const provision = async (name: string, token: string) => (await json<{ agent: string }>(
     await call('POST', '/v1/agents', { profile: 'agent-provision-v1', kind: 'person', displayName: name }, token), 201)).agent;
   await initializeRelayCheckpoint(relay, consumer, stack.env.lineage.dataEpoch);
-  if (options.projectionStart === 'current') {
-    // The fixture projects its subsequent commands. Both checkpoints start at
-    // the same cut so Feed never asks this relay for preceding files' events.
-    const position = await workRead(deps, new Request('http://main.internal/fixture-position'), {}, session => Promise.resolve(session.position));
-    await relay.query('UPDATE relay.checkpoint SET sequence=$2 WHERE consumer=$1 AND data_epoch=$3',
-      [consumer, position.sequence, position.dataEpoch]);
-    await feed.advance(await feed.initialize(position.dataEpoch), position.sequence, [], new Map());
-  }
   const projectRelay = async () => {
     const batches: MainOutboxBatch[] = [];
     for (let i = 0; i < 400; i++) {
@@ -205,6 +197,14 @@ export async function startHomeStack(label: string, options: {
     }
     throw new Error('Home relay exceeded its fixture budget');
   };
+  if (options.projectionStart === 'current' && !options.stableMembers) {
+    // Only the relay can acknowledge a Main stream position. A graph revision
+    // can have no outbox batch, and cannot initialize either stream cursor.
+    await projectRelay();
+    const position = await deps.relayPosition.read();
+    if (!position) throw new Error('Home relay has no acknowledged Main position');
+    await feed.advance(await feed.initialize(position.dataEpoch), position.sequence, [], new Map());
+  }
   const project = async () => {
     await projectRelay();
     for (let i = 0; i < 400; i++) if (await new FeedRefreshWorker(deps, feed, relay).tick() === 'current') return;
