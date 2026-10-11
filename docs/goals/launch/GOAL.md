@@ -77,8 +77,11 @@ only); fold the change into that document as the work lands.
   settings and modes; saved views; the editor; Realm wikis; developer
   onboarding and extras; worldbuilding; wiki maintenance on new chapters; the
   agent platform; and distribution behind the payment gate.
-- **Real devices early.** Phones and desktops are tested on real devices from
-  the first browser acceptance, not in a final pass.
+- **Phones and desktops in the harness.** Browser journeys run at phone and
+  desktop widths in the test harness from the first browser acceptance. Runs on
+  physical devices are condition C-28 on the maintainer's
+  [external conditions](../../operations/external-conditions.md) list, not
+  launch work (maintainer, 2026-10-11).
 - **Defaults** (maintainer, 2026-10-07): community surfaces may lag (counts,
   ranks, sections show their freshness); moderators and team roles are public;
   member counts are public and member lists visible to the Realm's members (the
@@ -142,6 +145,11 @@ presented as a landed dependency, no stored json-render spec, AI tools registry
 or per-component queries, and no third-party blocks this round.
 
 ## Completion
+
+The finish line is a functionally complete first public scope (maintainer,
+2026-10-11; [program Completion](../program/GOAL.md#completion)): each function
+works end to end and its checks prove it. No brief solves, prepares for or works
+around an item on the external conditions list, and completion waits for none.
 
 Each launch kind and the listed Realm and Zone capabilities pass paired API and
 browser journeys with real data (ambiguous editions, mixed formats, non-UI
