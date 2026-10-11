@@ -63,15 +63,10 @@ const knownNodeTypes = new Set([
   'extensionBlock',
 ]);
 
-/** One bounded fallback for a historical node the reader cannot interpret. */
-function isolatedPlaceholder(
-  shared: ReturnType<typeof common> & { id?: string; 'data-paragraph'?: number },
-  kind: 'unknown' | 'malformed',
-  name: string,
-) {
+/** One bounded fallback; never carries node attributes that could poison the style tree. */
+function isolatedPlaceholder(kind: 'unknown' | 'malformed', name: string) {
   return (
     <div
-      {...shared}
       className="document-component"
       {...(kind === 'unknown' ? { 'data-unknown-node': name } : { 'data-malformed-node': name })}
       role="note"
@@ -79,12 +74,14 @@ function isolatedPlaceholder(
   );
 }
 
-function headingLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | 6 | undefined {
+/** Missing level stays the historical h6 default; only a present value outside 1–6 is malformed. */
+function headingLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | 6 | 'default' | 'malformed' {
+  if (value === undefined) return 'default';
   const level = Number(value);
   if (level === 1 || level === 2 || level === 3 || level === 4 || level === 5 || level === 6) {
     return level;
   }
-  return undefined;
+  return 'malformed';
 }
 
 function marked(
@@ -170,19 +167,19 @@ export function DocumentBody({
   let task = 0;
   function render(node: DocumentNode, revealSpoiler = false): ReactNode {
     const attrs = node.attrs ?? {};
-    const shared = { ...common(node), ...nodeAttributes?.(node) };
-    // Do not walk content of an unknown or unrenderable node: one placeholder only.
+    // Do not walk content or read attrs of an unknown node: one marker-only placeholder.
     if (!knownNodeTypes.has(node.type)) {
-      return isolatedPlaceholder(shared, 'unknown', node.type);
+      return isolatedPlaceholder('unknown', node.type);
     }
     const imageSrc = node.type === 'image' ? safeDocumentUrl(attrs.src, true) : undefined;
     if (node.type === 'image' && !imageSrc) {
-      return isolatedPlaceholder(shared, 'malformed', 'image');
+      return isolatedPlaceholder('malformed', 'image');
     }
     const level = node.type === 'heading' ? headingLevel(attrs.level) : undefined;
-    if (node.type === 'heading' && level === undefined) {
-      return isolatedPlaceholder(shared, 'malformed', 'heading');
+    if (level === 'malformed') {
+      return isolatedPlaceholder('malformed', 'heading');
     }
+    const shared = { ...common(node), ...nodeAttributes?.(node) };
     const children: ReactNode[] = [];
     for (let index = 0; index < (node.content?.length ?? 0); index++) {
       const child = node.content![index]!;
@@ -378,7 +375,7 @@ export function DocumentBody({
           </div>
         );
       default:
-        return isolatedPlaceholder(shared, 'unknown', node.type);
+        return isolatedPlaceholder('unknown', node.type);
     }
   }
   return (

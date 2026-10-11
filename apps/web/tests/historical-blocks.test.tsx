@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { DocumentSnapshot } from '@rezics/document';
+import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { DocumentBody } from '@rezics/ui/document-body';
 
 const markupText = '<script>alert(1)</script><img onerror=alert(1) src=x>';
@@ -34,6 +34,16 @@ function historicalDocument(): DocumentSnapshot {
           type: 'heading',
           attrs: { id: 'bad-heading', level: 9 },
           content: [{ type: 'text', text: 'Level outside the schema' }],
+        },
+        {
+          type: 'heading',
+          attrs: { id: 'h' },
+          content: [{ type: 'text', text: 'Title without a level' }],
+        },
+        {
+          type: 'hostileAlign',
+          // Hostile historical attrs must not reach the DOM style tree via the placeholder.
+          attrs: { textAlign: { toString: null } } as unknown as NonNullable<DocumentNode['attrs']>,
         },
         {
           type: 'paragraph',
@@ -81,7 +91,17 @@ test('VIEW04: malformed and unknown historical blocks render as isolated placeho
 
   const malformedHeading = html.match(/data-malformed-node="heading"/g) ?? [];
   expect(malformedHeading).toHaveLength(1);
-  expect(html).not.toMatch(/<h[1-6][\s>]/i);
+  expect(html).not.toContain('Level outside the schema');
+
+  expect(html).toContain('<h6');
+  expect(html).toContain('Title without a level');
+  expect(html).toMatch(/<h6[^>]*>Title without a level<\/h6>/);
+
+  const hostile = html.match(/data-unknown-node="hostileAlign"/g) ?? [];
+  expect(hostile).toHaveLength(1);
+  expect(html).toContain(
+    '<div class="document-component" data-unknown-node="hostileAlign" role="note"></div>',
+  );
 
   expect(html).toContain('scripted link');
   expect(html).not.toMatch(/href\s*=\s*["']javascript:/i);
