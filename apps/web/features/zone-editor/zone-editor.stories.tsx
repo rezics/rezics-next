@@ -13,7 +13,7 @@ import { ZoneEditorFrame } from './frame.tsx';
 import { messages } from './messages.ts';
 import { authoringModel, type EditorState } from './model.ts';
 import { ZoneNavigationEditor } from './navigation-editor.tsx';
-import type { NavigationState } from './navigation.ts';
+import type { NavigationState, SiteLink } from './navigation.ts';
 import { ZoneDraftPreview } from './preview.tsx';
 
 const zoneId = '00000000-0000-4000-8000-000000000301';
@@ -227,19 +227,37 @@ const charts = 'https://rezics.com/id/00000000-0000-4000-8000-000000000321';
 const tides = 'https://rezics.com/id/00000000-0000-4000-8000-000000000322';
 let navCalls: { name: string; key: string; segment?: string }[] = [];
 
-function navigationClient(calls: { name: string; key: string; segment?: string }[], mode: 'save' | 'stale'): ZoneNavigationClient {
+type NavigationMode = 'save' | 'stale' | 'partial' | 'incomplete';
+const loadedMounts: SiteLink[] = [
+  { id: '00000000-0000-4000-8000-000000000351', occurrence: 'https://rezics.com/id/00000000-0000-4000-8000-000000000351',
+    target: charts, name: 'Harbor charts', segment: 'harbor-charts', disclosure: 'public' },
+  { id: '00000000-0000-4000-8000-000000000352', occurrence: 'https://rezics.com/id/00000000-0000-4000-8000-000000000352',
+    target: tides, name: 'Harbor tides', segment: 'harbor-tides', disclosure: 'public' },
+];
+const unsavedMount: SiteLink = {
+  id: 'new-soundings', occurrence: null, target: 'https://rezics.com/id/00000000-0000-4000-8000-000000000353',
+  name: 'Harbor soundings', segment: 'harbor-soundings', disclosure: 'public',
+};
+const continuedMount: SiteLink = {
+  ...unsavedMount, id: '00000000-0000-4000-8000-000000000354',
+  occurrence: 'https://rezics.com/id/00000000-0000-4000-8000-000000000354',
+};
+
+function navigationClient(calls: { name: string; key: string; segment?: string }[], mode: NavigationMode): ZoneNavigationClient {
   let inserts = 0;
   return {
     async readNavigation() {
       return { ok: true, data: { head: navigation, navigation, links: [], complete: true, after: null, zoneHead: null } };
     },
     async continueNavigation() {
-      return { ok: true, data: { head: navigation, navigation, links: [], complete: true, after: null, zoneHead: null } };
+      calls.push({ name: 'continue', key: '' });
+      return { ok: true, data: { head: navigation, navigation, links: mode === 'incomplete' ? [continuedMount] : [], complete: true, after: null, zoneHead: null } };
     },
     async insertMount(_zone, body, key) {
       calls.push({ name: 'insert', key, segment: body.routeSegment });
       inserts += 1;
       if (mode === 'stale' && inserts === 1) return { ok: false, failure: 'stale', currentHead: null };
+      if (mode === 'partial' && inserts <= 2) return { ok: false, failure: 'unavailable' };
       return {
         ok: true, head: `https://rezics.com/id/00000000-0000-4000-8000-00000000032${inserts}`,
         occurrence: `https://rezics.com/id/00000000-0000-4000-8000-00000000033${inserts}`, replayed: false,
@@ -260,14 +278,22 @@ function navigationClient(calls: { name: string; key: string; segment?: string }
   };
 }
 
-function NavigationPage({ mode }: { mode: 'save' | 'stale' }) {
+function NavigationPage({ mode }: { mode: NavigationMode }) {
   const [calls] = useState(() => { const found: { name: string; key: string; segment?: string }[] = []; navCalls = found; return found; });
   const [api] = useState(() => navigationClient(calls, mode));
   const [authoring] = useState(() => clientOf([], 'save'));
   const [home] = useState(() => opening(fromPlainText('Morning edition of the harbor', 'blocks'), '00000000-0000-4000-8000-000000000311'));
-  const [initial] = useState<NavigationState>(() => ({
-    links: [], saved: [], head: navigation, navigation, complete: true, after: null, notice: { kind: 'idle' },
-  }));
+  const [initial] = useState<NavigationState>(() => {
+    const base: NavigationState = {
+      links: [], saved: [], pending: [], head: navigation, navigation, complete: true, after: null, notice: { kind: 'idle' },
+    };
+    if (mode === 'partial') return {
+      ...base, saved: loadedMounts, links: [loadedMounts[1]!, unsavedMount],
+      pending: [{ kind: 'remove', id: loadedMounts[0]!.id }, { kind: 'add', link: unsavedMount, after: loadedMounts[1]!.id }],
+    };
+    if (mode === 'incomplete') return { ...base, links: loadedMounts, saved: loadedMounts, complete: false, after: 'cursor:2' };
+    return base;
+  });
   return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en" manageMessages={manageMessages}
     sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm}>
     <ZoneNavigationEditor zoneId={zoneId} zoneIri={zoneIri} actingSubject={actor} locale="en" copy={messages.en}
@@ -325,6 +351,63 @@ export const StaleNavigationKeepsTheLinks: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Save my links' }));
     await expect(canvas.getByText('Draft saved.')).toBeVisible();
     await expect(canvas.getByText('Harbor charts')).toBeVisible();
+    await noOverflow();
+  },
+};
+
+/** An acknowledged removal is kept while the unfinished insertion resumes under its original key. */
+export const PartlySavedNavigationResumes: Story = {
+  parameters: { route: { pathname: '/en/manage/z/harbor/navigation' } },
+  render: () => <NavigationPage mode="partial" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Save draft' }));
+    await expect(await canvas.findByText('Changes saved: 1')).toBeVisible();
+    const resume = await canvas.findByRole('button', { name: 'Resume saving' });
+    await expect(resume).toBeEnabled();
+    await expect(canvas.getByText('Some changes are saved. Resume saving to finish the rest before publishing.')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'Remove Harbor tides' })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'Move up Harbor soundings' })).toBeDisabled();
+    await expect(canvas.getByRole('textbox', { name: 'Path Harbor soundings' })).toBeDisabled();
+    await expect(canvas.getByRole('textbox', { name: 'Page' })).toBeDisabled();
+    await expect(navCalls.filter(call => call.name === 'remove')).toHaveLength(1);
+    const firstAttempts = navCalls.filter(call => call.name === 'insert');
+    await expect(firstAttempts).toHaveLength(2);
+    await expect(firstAttempts[0]!.key).toBe(firstAttempts[1]!.key);
+    await userEvent.click(resume);
+    await expect(await canvas.findByText('Draft saved.')).toBeVisible();
+    await expect(navCalls.filter(call => call.name === 'remove')).toHaveLength(1);
+    const allAttempts = navCalls.filter(call => call.name === 'insert');
+    await expect(allAttempts).toHaveLength(3);
+    await expect(allAttempts[2]!.key).toBe(firstAttempts[0]!.key);
+    await expect(canvas.getByRole('button', { name: 'Remove Harbor soundings' })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Publish' })).toBeEnabled();
+    await noOverflow();
+  },
+};
+
+/** Loading the remaining inventory keeps the author's reorder pending until a complete save. */
+export const LoadingMoreKeepsNavigationEdits: Story = {
+  parameters: { route: { pathname: '/en/manage/z/harbor/navigation' } },
+  render: () => <NavigationPage mode="incomplete" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Move up Harbor tides' }));
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: 'Load more links' }));
+    await expect(await canvas.findByText('Harbor soundings')).toBeVisible();
+    const links = within(canvas.getByRole('list', { name: 'Links' }));
+    await expect(links.getAllByRole('button', { name: /^Move up Harbor/ }).map(button => button.getAttribute('aria-label')))
+      .toEqual(['Move up Harbor tides', 'Move up Harbor charts', 'Move up Harbor soundings']);
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: 'Save draft' }));
+    await expect(await canvas.findByText('Draft saved.')).toBeVisible();
+    await expect(navCalls.filter(call => call.name === 'continue')).toHaveLength(1);
+    await expect(navCalls.filter(call => call.name === 'move')).toHaveLength(1);
+    await expect(navCalls.filter(call => call.name === 'remove' || call.name === 'insert')).toHaveLength(0);
     await noOverflow();
   },
 };

@@ -15,7 +15,7 @@ export const NAV_PAGE_SIZE = 50;
  * the batch fills so the author can resume; this is not a permanent inventory ceiling.
  */
 export const NAV_LOAD_BATCH = 40;
-/** Safety bound on commands in one save; a completed plan is success before this refuses. */
+/** Commands per save batch; larger saves continue under a new batch key. */
 export const NAV_COMMAND_LIMIT = NAV_LOAD_BATCH * NAV_PAGE_SIZE;
 
 /** One link in the Zone's navigation. Readers see `name`, which is the page's name. */
@@ -44,6 +44,8 @@ export interface NavigationState {
   links: SiteLink[];
   /** The list the server last confirmed, in its order. */
   saved: SiteLink[];
+  /** Author operations projected over the server baseline, including while loading. */
+  pending: NavigationEdit[];
   /** Navigation Structure revision the next command names. */
   head: string;
   /** Navigation Structure IRI; composition moves name it as parent. */
@@ -55,6 +57,12 @@ export interface NavigationState {
   notice: NavNotice;
 }
 
+export type NavigationEdit =
+  | { kind: 'remove'; id: string }
+  | { kind: 'move'; id: string; after: string | null }
+  | { kind: 'add'; link: SiteLink; after: string | null }
+  | { kind: 'segment'; id: string; segment: string };
+
 export type NavEvent =
   | { type: 'move'; index: number; direction: -1 | 1 }
   | { type: 'add'; link: SiteLink }
@@ -62,9 +70,10 @@ export type NavEvent =
   | { type: 'segment'; id: string; segment: string }
   | { type: 'stale'; currentHead: string | null }
   | { type: 'saved'; links: SiteLink[]; head: string; replayed: boolean }
+  | { type: 'progress'; progress: NavigationSaveProgress }
   | { type: 'loaded'; links: SiteLink[]; head: string; navigation: string; complete: boolean; after: string | null }
   | { type: 'continued'; links: SiteLink[]; complete: boolean; after: string | null }
-  | { type: 'retarget'; head: string; saved: SiteLink[]; links: SiteLink[]; navigation: string; complete: boolean; after: string | null }
+  | { type: 'retarget'; head: string; saved: SiteLink[]; links: SiteLink[]; pending?: NavigationEdit[]; navigation: string; complete: boolean; after: string | null }
   | { type: 'failed'; failure: AuthoringFailure };
 
 /** Live Zone read for the first page; revision-specific read for every later page. */
@@ -122,7 +131,71 @@ export function isSegment(value: string): boolean {
 }
 
 export function isNavigationDirty(state: NavigationState): boolean {
-  return state.complete && signature(state.links) !== signature(state.saved);
+  return state.pending.length > 0;
+}
+
+/** Replay stable identities, never loaded-list indices, over an extended baseline. */
+function applyEdits(saved: readonly SiteLink[], edits: readonly NavigationEdit[]): SiteLink[] {
+  let links = saved.map(link => ({ ...link }));
+  for (const edit of edits) {
+    if (edit.kind === 'remove') links = links.filter(link => link.id !== edit.id);
+    else if (edit.kind === 'segment') links = links.map(link => link.id === edit.id ? { ...link, segment: edit.segment } : link);
+    else {
+      const link = edit.kind === 'add' ? edit.link : links.find(item => item.id === edit.id);
+      if (!link) continue;
+      links = links.filter(item => item.id !== link.id);
+      const anchor = edit.after === null ? -1 : links.findIndex(item => item.id === edit.after);
+      const at = edit.after === null ? 0 : anchor < 0 ? links.length : anchor + 1;
+      links.splice(at, 0, link);
+    }
+  }
+  return links;
+}
+
+/** Keep only the operations needed for the current intent; undoing edits clears dirtiness. */
+function editsBetween(saved: readonly SiteLink[], desired: readonly SiteLink[]): NavigationEdit[] {
+  const wanted = new Set(desired.map(link => link.id));
+  const edits: NavigationEdit[] = saved.filter(link => !wanted.has(link.id)).map(link => ({ kind: 'remove', id: link.id }));
+  const order = saved.filter(link => wanted.has(link.id));
+  for (let index = 0; index < desired.length; index += 1) {
+    const link = desired[index]!;
+    const at = order.findIndex(item => item.id === link.id);
+    const after = index === 0 ? null : desired[index - 1]!.id;
+    if (at < 0) {
+      edits.push({ kind: 'add', link, after });
+      order.splice(index, 0, link);
+    } else {
+      if (order[at]!.segment !== link.segment) edits.push({ kind: 'segment', id: link.id, segment: link.segment });
+      if (at !== index) {
+        edits.push({ kind: 'move', id: link.id, after });
+        order.splice(at, 1);
+        order.splice(index, 0, link);
+      }
+    }
+  }
+  return edits;
+}
+
+function edited(state: NavigationState, links: SiteLink[]): NavigationState {
+  const pending = editsBetween(state.saved, links);
+  return { ...state, pending, links: applyEdits(state.saved, pending), notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
+}
+
+/** Apply only the author's edits to a fresh baseline, including a partial stale reload. */
+export function rebaseNavigationEdits(state: NavigationState, server: readonly SiteLink[]): { links: SiteLink[]; pending: NavigationEdit[] } {
+  const matched = new Map<string, SiteLink>();
+  for (const edit of state.pending) {
+    if (edit.kind !== 'add') continue;
+    const found = server.find(link => link.occurrence && link.target === edit.link.target && link.segment === edit.link.segment);
+    if (found) matched.set(edit.link.id, found);
+  }
+  const identity = (id: string) => matched.get(id)?.id ?? id;
+  const edits = state.pending.map((edit): NavigationEdit => {
+    if (edit.kind === 'add') return { ...edit, link: matched.get(edit.link.id) ?? edit.link, after: edit.after === null ? null : identity(edit.after) };
+    if (edit.kind === 'move') return { ...edit, id: identity(edit.id), after: edit.after === null ? null : identity(edit.after) };
+    return { ...edit, id: identity(edit.id) };
+  });
+  return { links: applyEdits(server, edits), pending: edits };
 }
 
 /** A saved mount's path cannot change without a qualifier update; the editor must not invent one. */
@@ -134,7 +207,7 @@ export function pathEditBlocked(link: SiteLink): boolean {
  * Commands that turn the saved list into the author's list.
  * Removals, then moves that keep occurrence identity, then inserts in author order.
  */
-export function planNavigation(saved: readonly SiteLink[], desired: readonly SiteLink[]): NavigationPlan {
+export function planNavigation(saved: readonly SiteLink[], desired: readonly SiteLink[], firstOnly = false): NavigationPlan {
   const savedByOccurrence = new Map(saved.flatMap(link => link.occurrence ? [[link.occurrence, link] as const] : []));
   for (const link of desired) {
     if (!link.occurrence) continue;
@@ -148,15 +221,20 @@ export function planNavigation(saved: readonly SiteLink[], desired: readonly Sit
       ? [{ kind: 'remove' as const, occurrence: link.occurrence }]
       : []
   ));
+  if (firstOnly && ops.length) return { ok: true, ops: [ops[0]!] };
   let order = saved.flatMap(link => link.occurrence && desiredOccurrences.has(link.occurrence) ? [link.occurrence] : []);
+  const retained = desired.flatMap(link => link.occurrence ? [link.occurrence] : []);
   let previous: string | null = null;
-  for (const link of desired) {
+  // Most resumed insert plans already have the retained mounts in order.
+  const ordered = order.every((occurrence, index) => occurrence === retained[index]);
+  for (const link of ordered ? [] : desired) {
     if (!link.occurrence) continue;
     const at = order.indexOf(link.occurrence);
     const expectedAt = previous === null ? 0 : order.indexOf(previous) + 1;
     if (at < 0) return { ok: false, reason: 'path-edit' };
     if (at !== expectedAt) {
       ops.push({ kind: 'move', occurrence: link.occurrence, position: previous ? { after: previous } : 'first' });
+      if (firstOnly) return { ok: true, ops };
       order.splice(at, 1);
       const insertAt = previous === null ? 0 : order.indexOf(previous) + 1;
       order.splice(insertAt, 0, link.occurrence);
@@ -181,6 +259,7 @@ export function planNavigation(saved: readonly SiteLink[], desired: readonly Sit
     ops.push({
       kind: 'insert', target: link.target, segment: link.segment, disclosure: link.disclosure, position,
     });
+    if (firstOnly) return { ok: true, ops };
   }
   return { ok: true, ops };
 }
@@ -191,47 +270,72 @@ export function navigationOps(saved: readonly SiteLink[], desired: readonly Site
   return plan.ok ? plan.ops : [];
 }
 
+export interface NavigationSaveProgress {
+  key: string;
+  head: string;
+  saved: SiteLink[];
+  links: SiteLink[];
+  /** Acknowledged operations; the next operation keeps its key until acknowledged. */
+  completed: number;
+  replayed: boolean;
+}
+
 /**
- * Apply one save. Each command keeps its own key, derived from the save's key, so a lost
- * response replays the command that already landed and retries only the one that did not.
- * After each write the remaining plan is recomputed so a new occurrence can anchor the next insert.
- * A stale head stops the rest and leaves the author's list in place.
+ * Successive bounded batches have distinct keys. A checkpoint after every acknowledged
+ * operation survives failure (including a thrown transport error), so resume never
+ * replays a confirmed command. Only a response lost before acknowledgement is replayed.
  */
 export async function commitNavigation(
   saved: readonly SiteLink[], desired: readonly SiteLink[], head: string, key: string,
   write: (op: NavOp, key: string, expectedHead: string) => Promise<NavWriteResult | NavWriteFailure>,
+  resume?: NavigationSaveProgress,
+  onProgress?: (progress: NavigationSaveProgress) => void,
 ): Promise<
-  | { ok: true; head: string; links: SiteLink[]; replayed: boolean }
-  | ({ head: string; links: SiteLink[] } & NavWriteFailure)
+  | { ok: true; head: string; links: SiteLink[]; replayed: boolean; progress: NavigationSaveProgress }
+  | ({ head: string; links: SiteLink[]; progress: NavigationSaveProgress } & NavWriteFailure)
 > {
-  let currentSaved = saved.map(link => ({ ...link }));
-  let links = desired.map(link => ({ ...link }));
-  let current = head;
-  let replayed = false;
-  for (let step = 0; ; step += 1) {
-    const plan = planNavigation(currentSaved, links);
-    if (!plan.ok) return { ok: false, failure: 'invalid', head: current, links };
-    // A plan that finished on the last command is success before any limit check.
-    if (!plan.ops.length) return { ok: true, head: current, links, replayed };
-    if (step >= NAV_COMMAND_LIMIT) return { ok: false, failure: 'unavailable', head: current, links };
+  let progress: NavigationSaveProgress = resume ?? {
+    key, head, saved: saved.map(link => ({ ...link })), links: desired.map(link => ({ ...link })), completed: 0, replayed: false,
+  };
+  let currentSaved = progress.saved;
+  let links = progress.links;
+  let current = progress.head;
+  let replayed = progress.replayed;
+  const fail = (failure: NavWriteFailure) => {
+    onProgress?.(progress);
+    return { ...failure, head: current, links, progress };
+  };
+  for (;;) {
+    const plan = planNavigation(currentSaved, links, true);
+    if (!plan.ok) return fail({ ok: false, failure: 'invalid' });
+    if (!plan.ops.length) return { ok: true, head: current, links, replayed, progress };
     const op = plan.ops[0]!;
-    const result = await write(op, step === 0 ? key : `${key}.${step}`, current);
-    if (!result.ok) return { ...result, head: current, links };
-    current = result.head;
-    replayed = replayed || result.replayed;
+    const batch = Math.floor(progress.completed / NAV_COMMAND_LIMIT);
+    const offset = progress.completed % NAV_COMMAND_LIMIT;
+    const batchKey = batch === 0 ? progress.key : `${progress.key}.batch-${batch}`;
+    const commandKey = offset === 0 ? batchKey : `${batchKey}.${offset}`;
+    let result: NavWriteResult | NavWriteFailure;
+    try { result = await write(op, commandKey, current); }
+    catch { return fail({ ok: false, failure: 'unavailable' }); }
+    if (!result.ok) return fail(result);
     if (op.kind === 'remove') {
       currentSaved = currentSaved.filter(link => link.occurrence !== op.occurrence);
-      links = links.map(link => link.occurrence === op.occurrence ? { ...link, occurrence: null } : link);
     } else if (op.kind === 'insert') {
-      if (!result.occurrence) return { ok: false, failure: 'unavailable', head: current, links };
+      // Without an occurrence the acknowledgement cannot safely anchor later inserts.
+      if (!result.occurrence) return fail({ ok: false, failure: 'unavailable' });
       const at = links.findIndex(link => !link.occurrence && link.target === op.target && link.segment === op.segment);
-      if (at < 0) return { ok: false, failure: 'unavailable', head: current, links };
+      if (at < 0) return fail({ ok: false, failure: 'unavailable' });
       const next = { ...links[at]!, occurrence: result.occurrence, id: result.occurrence.slice(-36) };
-      links[at] = next;
+      links = links.map((link, index) => index === at ? next : link);
       currentSaved = placeSaved(currentSaved, next, op.position);
     } else {
       currentSaved = moveSaved(currentSaved, op.occurrence, op.position);
     }
+    current = result.head;
+    replayed = replayed || result.replayed;
+    progress = { key: progress.key, head: current, saved: currentSaved, links, completed: progress.completed + 1, replayed };
+    // Retain every acknowledgement in the caller; rendering can coalesce these updates.
+    onProgress?.(progress);
   }
 }
 
@@ -279,31 +383,30 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
       const links = state.links.slice();
       const [item] = links.splice(event.index, 1);
       links.splice(next, 0, item!);
-      return { ...state, links, notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
+      return edited(state, links);
     }
     case 'add':
       if (state.links.some(link => link.segment === event.link.segment || link.target === event.link.target)) return state;
-      return { ...state, links: [...state.links, event.link], notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
+      return edited(state, [...state.links, event.link]);
     case 'remove':
-      return { ...state, links: state.links.filter(link => link.id !== event.id), notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
+      return edited(state, state.links.filter(link => link.id !== event.id));
     case 'segment': {
       if (pathEditBlocked(state.links.find(link => link.id === event.id) ?? { occurrence: null } as SiteLink)) return state;
       if (!isSegment(event.segment) || state.links.some(link => link.id !== event.id && link.segment === event.segment)) return state;
-      return {
-        ...state,
-        links: state.links.map(link => link.id === event.id ? { ...link, segment: event.segment } : link),
-        notice: clears(state.notice) ? { kind: 'idle' } : state.notice,
-      };
+      return edited(state, state.links.map(link => link.id === event.id ? { ...link, segment: event.segment } : link));
     }
     case 'stale':
       return { ...state, notice: { kind: 'stale', currentHead: event.currentHead } };
     case 'saved':
-      return { ...state, links: event.links, saved: event.links.map(link => ({ ...link })), head: event.head, notice: { kind: 'saved', replayed: event.replayed } };
+      return { ...state, links: event.links, saved: event.links.map(link => ({ ...link })), pending: [], head: event.head, notice: { kind: 'saved', replayed: event.replayed } };
+    case 'progress':
+      return edited({ ...state, saved: event.progress.saved, head: event.progress.head }, event.progress.links);
     case 'loaded':
       return {
         ...state,
         links: event.links,
         saved: event.links.map(link => ({ ...link })),
+        pending: [],
         head: event.head,
         navigation: event.navigation,
         complete: event.complete,
@@ -311,13 +414,13 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         notice: { kind: 'loaded' },
       };
     case 'continued': {
-      const seen = new Set(state.links.flatMap(link => link.occurrence ? [link.occurrence] : []));
+      const seen = new Set(state.saved.flatMap(link => link.occurrence ? [link.occurrence] : []));
       const added = event.links.filter(link => !link.occurrence || !seen.has(link.occurrence));
-      const links = [...state.links, ...added];
+      const saved = [...state.saved, ...added];
       return {
         ...state,
-        links,
-        saved: links.map(link => ({ ...link })),
+        links: applyEdits(saved, state.pending),
+        saved,
         complete: event.complete,
         after: event.after,
         notice: clears(state.notice) ? { kind: 'idle' } : state.notice,
@@ -329,6 +432,7 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         head: event.head,
         saved: event.saved,
         links: event.links,
+        pending: event.pending ?? editsBetween(event.saved, event.links),
         navigation: event.navigation,
         complete: event.complete,
         after: event.after,
@@ -441,12 +545,6 @@ function text(value: unknown): string | null {
     return labels[original].trim();
   }
   return null;
-}
-
-function signature(links: readonly SiteLink[]): string {
-  return JSON.stringify(links.map(link => [
-    link.occurrence, link.target, link.segment, link.disclosure, link.routeKey ?? 'id', link.presentation ?? null,
-  ]));
 }
 
 function clears(notice: NavNotice): boolean {

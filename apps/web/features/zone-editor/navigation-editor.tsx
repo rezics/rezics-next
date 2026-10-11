@@ -18,8 +18,8 @@ import {
   type EditorState, type PublicationChoice,
 } from './model.ts';
 import {
-  alignLinks, commitNavigation, isNavigationDirty, isSegment, pathEditBlocked, reduceNavigation, segmentFor,
-  type NavigationState, type SiteLink,
+  commitNavigation, isNavigationDirty, isSegment, NAV_COMMAND_LIMIT, pathEditBlocked, rebaseNavigationEdits, reduceNavigation, segmentFor,
+  type NavigationSaveProgress, type NavigationState, type SiteLink,
 } from './navigation.ts';
 
 const choiceClass = 'h-auto min-h-9 w-auto whitespace-normal px-3 sm:h-9 sm:whitespace-nowrap';
@@ -56,6 +56,8 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   const [addNotice, setAddNotice] = useState<string | null>(null);
   const [pathLimitId, setPathLimitId] = useState<string | null>(null);
   const [searched, setSearched] = useState<string | null>(null);
+  const [saveCompleted, setSaveCompleted] = useState(0);
+  const saveSession = useRef<{ choice: NavigationState; progress?: NavigationSaveProgress } | null>(null);
   const stateRef = useRef(state);
   const pageRef = useRef(page);
   stateRef.current = state;
@@ -127,6 +129,8 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   function applySave(chosen: NavigationState, round: WriteRound): Promise<WriteResult<SavedLinks>> {
     if (!chosen.complete) return Promise.resolve({ ok: false, failure: 'unavailable' });
     return commitCommand(round, async key => {
+      saveSession.current ??= { choice: chosen };
+      const session = saveSession.current;
       const result = await commitNavigation(chosen.saved, chosen.links, chosen.head, key, (op, opKey, expectedHead) => {
         if (op.kind === 'remove') {
           return client.current!.removeMount(zoneId, op.occurrence.slice(-36), { expectedHead, actingSubject }, opKey);
@@ -139,7 +143,16 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
         return client.current!.insertMount(zoneId, {
           expectedHead, target: op.target, routeSegment: op.segment, disclosure: op.disclosure, position: op.position, actingSubject,
         }, opKey);
+      }, session.progress, progress => {
+        session.progress = progress;
+        if (progress.completed > 0 && progress.completed % NAV_COMMAND_LIMIT === 0) {
+          put({ type: 'progress', progress });
+          setSaveCompleted(progress.completed);
+        }
       });
+      put({ type: 'progress', progress: result.progress });
+      setSaveCompleted(result.ok ? 0 : result.progress.completed);
+      if (result.ok || result.failure !== 'unavailable') saveSession.current = null;
       if (result.ok) return { ok: true, data: { head: result.head, links: result.links, replayed: result.replayed } };
       if (result.failure === 'stale') return { ok: false, failure: 'stale', currentHead: result.currentHead };
       return { ok: false, failure: result.failure };
@@ -157,7 +170,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
 
   function save(next: NavigationState = stateRef.current) {
     if (busy || !next.complete || !isNavigationDirty(next)) return;
-    track('save', saveLane.current!.submit(next, applySave).then(result => {
+    track('save', saveLane.current!.submit(saveSession.current?.choice ?? next, applySave).then(result => {
       if (result.ok) put({ type: 'saved', links: result.data.links, head: result.data.head, replayed: result.data.replayed });
       else if (result.failure === 'stale') put({ type: 'stale', currentHead: result.currentHead });
       else put({ type: 'failed', failure: result.failure });
@@ -166,7 +179,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
 
   function siteChoice(navHead: string): PublicationChoice | null {
     const choice = publicationChoice(pageRef.current, zoneIri);
-    if (!choice || isNavigationDirty(stateRef.current)) return null;
+    if (!choice || !stateRef.current.complete || saveSession.current || isNavigationDirty(stateRef.current)) return null;
     return { ...choice, navigationRevision: navHead, routesRevision: navHead };
   }
 
@@ -183,14 +196,16 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
         put({ type: 'failed', failure: read.failure === 'stale' ? 'conflict' : read.failure });
         return;
       }
-      const links = alignLinks(stateRef.current.links, read.data.links);
+      const { links, pending } = rebaseNavigationEdits(stateRef.current, read.data.links);
+      saveSession.current = null;
+      setSaveCompleted(0);
       const next = reduceNavigation(stateRef.current, {
-        type: 'retarget', head: read.data.head, saved: read.data.links, links,
+        type: 'retarget', head: read.data.head, saved: read.data.links, links, pending,
         navigation: read.data.navigation, complete: read.data.complete, after: read.data.after,
       });
       stateRef.current = next;
       put({
-        type: 'retarget', head: read.data.head, saved: read.data.links, links,
+        type: 'retarget', head: read.data.head, saved: read.data.links, links, pending,
         navigation: read.data.navigation, complete: read.data.complete, after: read.data.after,
       });
       if (!read.data.complete) return;
@@ -214,6 +229,8 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       }
       setPaths({});
       setPathLimitId(null);
+      saveSession.current = null;
+      setSaveCompleted(0);
       put({
         type: 'loaded', links: result.data.links, head: result.data.head,
         navigation: result.data.navigation, complete: result.data.complete, after: result.data.after,
@@ -236,7 +253,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   }
 
   function refreshAndPublish() {
-    if (busy) return;
+    if (busy || !stateRef.current.complete || isNavigationDirty(stateRef.current) || saveSession.current) return;
     track('publish', pages.current!.readHeads(zoneId, actingSubject).then(async heads => {
       if (!heads.ok) {
         put({ type: 'failed', failure: heads.failure === 'stale' ? 'conflict' : heads.failure });
@@ -309,12 +326,14 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
   const savedNotice = state.notice.kind === 'saved' ? copy.navSaved : state.notice.kind === 'loaded' ? copy.navLoaded : null;
   const published = page.notice.kind === 'published' ? (page.notice.replayed ? copy.publishedReplayed : copy.published) : null;
   const publishable = Boolean(siteChoice(state.head));
+  const resumable = !!saveSession.current && !busy;
+  const editingDisabled = !!busy || resumable;
 
   return <section className="grid min-w-0 gap-3" aria-labelledby="zone-navigation-title">
     <div className="min-w-0 space-y-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id="zone-navigation-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.navTitle}</h2>
-        <EditorActions copy={copy} canEdit busy={busy === 'continue' ? null : busy} dirty={dirty}
+        <EditorActions copy={resumable ? { ...copy, save: copy.navResume } : copy} canEdit busy={busy === 'continue' ? null : busy} dirty={dirty}
           saveDisabled={!!busy || !dirty || !state.complete || state.notice.kind === 'stale'}
           publishDisabled={!!busy || !publishable || !state.complete || page.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
@@ -331,6 +350,10 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
         isLoading={busy === 'continue'} onClick={() => continueLoading()}>{copy.navContinue}</Button> : null}
     </Alert> : null}
     {savedNotice ? <p className="text-sm" role="status">{savedNotice}</p> : null}
+    {saveCompleted > 0 && state.notice.kind !== 'saved' ? <div role="status" className="space-y-1 text-sm">
+      <p>{copy.navSaveProgress} {saveCompleted.toLocaleString(locale)}</p>
+      {!busy ? <p className="text-pretty text-muted-foreground">{copy.navSaveRemaining}</p> : null}
+    </div> : null}
     {state.notice.kind === 'saved' ? <p className="text-pretty text-muted-foreground text-sm">{copy.navSavedHint}</p> : null}
     {published ? <p className="text-sm" role="status">{published}</p> : null}
     {dirty ? <p className="text-pretty text-muted-foreground text-sm">{copy.navSaveFirst}</p> : null}
@@ -350,17 +373,17 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
           <label className="grid gap-1 text-sm">
             <span className="text-muted-foreground">{copy.pathLabel}</span>
             <input className={fieldClass} aria-label={`${copy.pathLabel} ${link.name}`} value={typed ?? link.segment}
-              spellCheck={false} onChange={event => onPath(link, event.target.value)} />
+              spellCheck={false} disabled={editingDisabled} onChange={event => onPath(link, event.target.value)} />
           </label>
           {invalid ? <p className="text-destructive text-sm">{copy.pathInvalid}</p> : null}
           {taken ? <p className="text-destructive text-sm">{copy.duplicatePath}</p> : null}
           {pathLimitId === link.id ? <p className="text-pretty text-muted-foreground text-sm">{copy.pathEditLimited}</p> : null}
           <div className="flex flex-wrap gap-1">
-            <Button variant="ghost" size="sm" aria-label={`${copy.moveUp} ${link.name}`} disabled={!!busy || index === 0}
+            <Button variant="ghost" size="sm" aria-label={`${copy.moveUp} ${link.name}`} disabled={editingDisabled || index === 0}
               onClick={() => put({ type: 'move', index, direction: -1 })}>{copy.moveUp}</Button>
-            <Button variant="ghost" size="sm" aria-label={`${copy.moveDown} ${link.name}`} disabled={!!busy || index === state.links.length - 1}
+            <Button variant="ghost" size="sm" aria-label={`${copy.moveDown} ${link.name}`} disabled={editingDisabled || index === state.links.length - 1}
               onClick={() => put({ type: 'move', index, direction: 1 })}>{copy.moveDown}</Button>
-            <Button variant="ghost" size="sm" aria-label={`${copy.removeLink} ${link.name}`} disabled={!!busy}
+            <Button variant="ghost" size="sm" aria-label={`${copy.removeLink} ${link.name}`} disabled={editingDisabled}
               onClick={() => put({ type: 'remove', id: link.id })}>{copy.removeLink}</Button>
           </div>
         </li>;
@@ -370,19 +393,21 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       <label className="grid gap-1 text-sm">
         <span className="font-medium">{copy.addPage}</span>
         <input className={fieldClass} value={query} placeholder={copy.addPagePlaceholder}
+          disabled={editingDisabled}
           onChange={event => { setPicked(null); setAddNotice(null); setQuery(event.target.value); }} />
       </label>
       {searched === query && pageSearchReady(query) && !picked && choices.length === 0 ? <p className="text-muted-foreground text-sm">{copy.noPageMatches}</p> : null}
       {choices.length && !picked ? <ul role="listbox" aria-label={copy.addPage} className="grid rounded-md border border-border/60">
         {choices.map(choice => <li key={choice.target}>
           <button type="button" role="option" aria-selected={false} className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+            disabled={editingDisabled}
             onClick={() => { setPicked(choice); setQuery(choice.name); setChoices([]); setAddNotice(null); }}>
             {choice.name}
           </button>
         </li>)}
       </ul> : null}
       {addNotice ? <p className="text-destructive text-sm">{addNotice}</p> : null}
-      <Button variant="secondary" size="sm" className="justify-self-start" disabled={!picked || !!busy} onClick={addLink}>{copy.addLink}</Button>
+      <Button variant="secondary" size="sm" className="justify-self-start" disabled={!picked || editingDisabled} onClick={addLink}>{copy.addLink}</Button>
     </div>
   </section>;
 }
@@ -406,7 +431,7 @@ function NavNotice({ copy, state, page, busy, signInHref, onSaveOver, onLoad, on
   }
   if (page.notice.kind === 'publish-stale') {
     return <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
-      <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy} onClick={onRefresh}>{copy.refreshAndPublish}</Button>
+      <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy || !state.complete || isNavigationDirty(state)} onClick={onRefresh}>{copy.refreshAndPublish}</Button>
     </NoticeAlert>;
   }
   const failure = failureCopy(copy, state.notice.kind);
