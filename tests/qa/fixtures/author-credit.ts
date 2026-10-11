@@ -14,6 +14,7 @@ import { AccessActingContexts } from '../../../services/main/src/modules/access/
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { ProtectionAdmissionSigner } from '../../../services/main/src/modules/access/protection-admission.ts';
+import { TemplateSeekIndex } from '../../../services/main/src/modules/query/seek-index.ts';
 import { OpenLibraryConversionStore } from '../../../services/main/src/modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
@@ -165,6 +166,8 @@ export async function authorCreditFixture(
     lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
     objectDirectory: apps.MAIN_OBJECT_DIRECTORY ?? objectDirectory,
   };
+  const templateSeek = new TemplateSeekIndex(accessPool, fuseki);
+  await templateSeek.backfill(env.lineage.dataEpoch);
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   // Production composes this too: without it public disclosure is empty, even for relation vocabulary.
   access.configureBaseline(fuseki);
@@ -275,6 +278,7 @@ export async function authorCreditFixture(
     platformAccess: options.platformAccess ?? new AccessExposure(accessPool),
     account: account.verifier,
     access,
+    templateSeek,
     ...(options.readingPositions ? { readingPositions: new ReadingPositionStore(pool) } : {}),
     catalogueIntake,
     actingContexts: new AccessActingContexts(accessPool),
