@@ -409,15 +409,59 @@ test('P5 history inventory plans use owner indexes without sorting and examine o
     };
     const nodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(nodes)];
     const samples: number[][] = [];
-    // Another asset makes a primary-key scan with an asset filter measurably worse
-    // than the owner index. Seed both through owner commands, without planner overrides.
+    // Scale validated owner records without command/encoder latency; every media
+    // constraint and lifecycle trigger remains enabled, with no planner overrides.
+    const seedHistory = async (asset: string, count: number) => {
+      const client = await f.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`CREATE TEMP TABLE inventory_seed ON COMMIT DROP AS
+          SELECT n,gen_random_uuid() AS upload,gen_random_uuid() AS representation,gen_random_uuid() AS revision
+          FROM generate_series(1,$1::int) n`, [count]);
+        await client.query('UPDATE content.owner_control SET sequence=sequence+$1', [count * 2]);
+        await client.query(`INSERT INTO content.receipt
+          SELECT (jsonb_populate_record(NULL::content.receipt,to_jsonb(r) || jsonb_build_object(
+            'operation_id',identity.operation_id,'revision_id',NULL,
+            'sequence',c.sequence-$2::int*2+identity.position))).*
+          FROM inventory_seed i CROSS JOIN content.owner_control c
+          JOIN media.upload u ON u.asset_id=$1 AND u.id=(SELECT id FROM media.upload WHERE asset_id=$1 LIMIT 1)
+          CROSS JOIN LATERAL (VALUES
+            (u.operation_id,'inventory-upload:'||i.upload,i.n*2-1),
+            (u.settle_operation_id,'inventory-settle:'||i.upload,i.n*2))
+            identity(template_operation,operation_id,position)
+          JOIN content.receipt r ON r.operation_id=identity.template_operation`, [asset, count]);
+        await client.query(`INSERT INTO media.upload
+          SELECT (jsonb_populate_record(NULL::media.upload,to_jsonb(u) || jsonb_build_object(
+            'id',i.upload,'operation_id','inventory-upload:'||i.upload,
+            'quarantine_key','media-quarantine/'||i.upload,'status','reserved','reason',NULL,
+            'settle_operation_id',NULL,'settled_at',NULL,'expires_at',clock_timestamp()+interval '1 hour'))).*
+          FROM inventory_seed i CROSS JOIN LATERAL
+            (SELECT * FROM media.upload WHERE asset_id=$1 AND status='activated' LIMIT 1) u`, [asset]);
+        await client.query(`INSERT INTO media.representation
+          SELECT (jsonb_populate_record(NULL::media.representation,to_jsonb(r) || jsonb_build_object(
+            'id',i.representation,'upload_id',i.upload,'operation_id','inventory-settle:'||i.upload))).*
+          FROM inventory_seed i CROSS JOIN LATERAL
+            (SELECT * FROM media.representation WHERE asset_id=$1 AND kind='original' LIMIT 1) r`, [asset]);
+        // Timestamp ties also exercise UUID ordering in the retained-revision index.
+        await client.query(`INSERT INTO content.revision
+          SELECT (jsonb_populate_record(NULL::content.revision,to_jsonb(r) || jsonb_build_object(
+            'id',i.revision,'operation_id','inventory-revision:'||i.revision,'predecessor',r.id))).*
+          FROM inventory_seed i CROSS JOIN LATERAL
+            (SELECT * FROM content.revision WHERE variant_id=$1 LIMIT 1) r`, [assetVariant(asset)]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally { client.release(); }
+    };
+    // Keep unrelated history fixed and large enough that the 100-row sample is
+    // selective too, rather than benchmark the planner's tiny-table fallback.
     const other = await activate(f.store, f.memory, image, null);
+    await seedHistory(other.reserved.asset, 9999);
     let seeded = 1;
     for (const size of [100, 1000]) {
-      for (; seeded < size; seeded++) {
-        await activate(f.store, f.memory, image, reservation.asset);
-        await activate(f.store, f.memory, image, other.reserved.asset);
-      }
+      await seedHistory(reservation.asset, size - seeded);
+      seeded = size;
       await f.pool.query('ANALYZE content.revision; ANALYZE media.representation; ANALYZE media.upload');
       const examined: number[] = [];
       for (const { sql, values } of queries) {
