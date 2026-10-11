@@ -72,7 +72,11 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'g-1032-catalogue-preparation',
     'profile-corpus-restore',
     'work-profile-seed-checkpoints',
+    'library-growth',
+    'recipe-page-growth',
+    'zone-navigation-growth',
   ].map((name) => [`tests/qa/integration/${name}.test.ts`, 'catalogue-disk'] as const),
+  ['tests/qa/fault-recovery/work-profile-seed-build.test.ts', 'catalogue-disk'],
 ]);
 
 export function integrationResourceClass(files: readonly string[]): QaResourceClass {

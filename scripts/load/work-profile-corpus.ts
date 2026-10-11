@@ -12,7 +12,7 @@ const root = resolve(import.meta.dir, '../..');
 
 export const WORK_PROFILE_SCALES = ['small', 'medium', 'large'] as const;
 export type WorkProfileScale = (typeof WORK_PROFILE_SCALES)[number];
-export const WORK_PROFILE_DIMENSIONS = [
+const baseDimensions = [
   'unrelatedWorks',
   'unrelatedPosts',
   'follows',
@@ -21,8 +21,15 @@ export const WORK_PROFILE_DIMENSIONS = [
   'realmSize',
   'conceptVocabulary',
 ] as const;
+const populationDimensions = [
+  'recipeOccurrences', 'zoneNavigationEntries', 'mountedCollectionResources', 'readerShelfEntries',
+] as const;
+export const WORK_PROFILE_DIMENSIONS = [...baseDimensions, ...populationDimensions] as const;
 export type WorkProfileDimension = (typeof WORK_PROFILE_DIMENSIONS)[number];
-export type CorpusDimensions = Record<WorkProfileDimension, number>;
+// Existing scenario recipes can omit axes they do not populate. The owner
+// normalizes those axes to zero; new axes remain a typed, explicit contract.
+export type CorpusDimensions = Record<(typeof baseDimensions)[number], number>
+  & Partial<Record<(typeof populationDimensions)[number], number>>;
 /** Diagnostic sizes, not a qualified capacity claim. Stop at the 600-second setup ceiling. */
 const sizes: Record<WorkProfileDimension, readonly [number, number, number]> = {
   unrelatedWorks: [4, 16, 64],
@@ -32,19 +39,34 @@ const sizes: Record<WorkProfileDimension, readonly [number, number, number]> = {
   historyDepth: [2, 8, 32],
   realmSize: [4, 16, 64],
   conceptVocabulary: [4, 16, 64],
+  recipeOccurrences: [100, 400, 1600],
+  zoneNavigationEntries: [4, 16, 64],
+  mountedCollectionResources: [4, 16, 64],
+  readerShelfEntries: [4, 16, 64],
 };
+export const WORK_PROFILE_POPULATION_UNITS = {
+  recipeOccurrences: { unit: 'active recipe section, ingredient line or step', expected: 'constant per page' },
+  zoneNavigationEntries: { unit: 'public mount with a route segment and Work or Collection target',
+    expected: 'keyed route lookup logarithmic; presentation enumeration linear up to 50 entries' },
+  mountedCollectionResources: { unit: 'public Work in the mounted Collection',
+    expected: 'linear up to the 24-item page cap, then bounded' },
+  readerShelfEntries: { unit: "distinct Work with a reading status row on the reader shelf",
+    expected: 'O(log N + P), with bounded page size P' },
+} as const;
 export function workProfileDimensions(
   dimension: WorkProfileDimension,
   scale: WorkProfileScale,
   fixed: CorpusDimensions,
-): CorpusDimensions {
+): Required<CorpusDimensions> {
   if (
     !WORK_PROFILE_DIMENSIONS.includes(dimension) ||
     !WORK_PROFILE_SCALES.includes(scale) ||
-    WORK_PROFILE_DIMENSIONS.some((key) => !Number.isSafeInteger(fixed[key]) || fixed[key] < 0)
+    baseDimensions.some(key => fixed[key] === undefined) ||
+    WORK_PROFILE_DIMENSIONS.some((key) => !Number.isSafeInteger(fixed[key] ?? 0) || (fixed[key] ?? 0) < 0)
   )
     throw new Error('Invalid work profile corpus dimensions');
-  return { ...fixed, [dimension]: sizes[dimension][WORK_PROFILE_SCALES.indexOf(scale)]! };
+  return { ...Object.fromEntries(WORK_PROFILE_DIMENSIONS.map(key => [key, fixed[key] ?? 0])),
+    [dimension]: sizes[dimension][WORK_PROFILE_SCALES.indexOf(scale)]! } as Required<CorpusDimensions>;
 }
 
 export interface CorpusCommand {
@@ -131,12 +153,19 @@ export interface WorkProfileCorpusRecipe {
   /** Bump when command recipes or verification semantics change, not for code-only edits. */
   version: string;
   fixed: CorpusDimensions;
+  /** Co-grown populations in the same stopped cut; the primary axis is always first. */
+  populations?: readonly WorkProfileDimension[];
   /** Set up the fixed dataset through the public API, returning scenario handles. */
   initialize(api: CorpusApi, key: string): Promise<void>;
   /** One independent entity, relationship or revision. History must run serially. */
   grow(api: CorpusApi, dimension: WorkProfileDimension, index: number, key: string): Promise<void>;
   /** Read back the actual dimensions through public APIs; validate result correctness too. */
   verify(api: CorpusApi): Promise<CorpusDimensions>;
+}
+function checkpointDimensions(recipe: WorkProfileCorpusRecipe, dimension: WorkProfileDimension,
+  scale: WorkProfileScale): CorpusDimensions {
+  return (recipe.populations ?? []).reduce((fixed, axis) => workProfileDimensions(axis, scale, fixed),
+    workProfileDimensions(dimension, scale, recipe.fixed));
 }
 export interface CorpusBackupDriver {
   /** Quiesce writers and retain all owner stores as one stopped backup; never a live volume copy. */
@@ -163,7 +192,7 @@ export function workProfileCorpusId(
 ): string {
   if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(recipe.version))
     throw new Error('Invalid corpus recipe version');
-  const dimensions = workProfileDimensions(dimension, scale, recipe.fixed);
+  const dimensions = checkpointDimensions(recipe, dimension, scale);
   const canonical = WORK_PROFILE_DIMENSIONS.map((key) => [key, dimensions[key]]);
   const digest = createHash('sha256')
     // A retained corpus is a schema/model cut, not just a recipe and size.
@@ -174,7 +203,7 @@ export function workProfileCorpusId(
 }
 function checkDimensions(actual: CorpusDimensions, expected: CorpusDimensions): void {
   for (const key of WORK_PROFILE_DIMENSIONS)
-    if (actual[key] !== expected[key])
+    if ((actual[key] ?? 0) !== (expected[key] ?? 0))
       throw new Error(`Corpus dimension ${key}: ${actual[key]} != ${expected[key]}`);
 }
 
@@ -182,8 +211,9 @@ function checkDimensions(actual: CorpusDimensions, expected: CorpusDimensions): 
  * Stable entity identities belong to the retained backup: restoring it preserves
  * ids; a fresh API build generates new ids. The corpus id identifies the recipe
  * and storage cut, not deterministic entity ids across fresh builds.
- * Scales share command keys, so growing a live source replays earlier commands
- * instead of creating a second population. Readers restore their own copies. */
+ * Scales share command keys. Recipes reuse completed live-source handles or
+ * replay idempotent commands instead of creating another population. Each stage
+ * supplies its own start time and retains one cut of every declared population. */
 export async function prepareWorkProfileCorpus(input: {
   recipe: WorkProfileCorpusRecipe;
   api: CorpusApi;
@@ -195,8 +225,8 @@ export async function prepareWorkProfileCorpus(input: {
 }): Promise<WorkProfileCorpusManifest> {
   const { recipe, dimension, scale } = input;
   const compatibility = loadCompatibility(root);
-  const dimensions = workProfileDimensions(dimension, scale, recipe.fixed);
-  if (dimensions[dimension] < recipe.fixed[dimension])
+  const dimensions = checkpointDimensions(recipe, dimension, scale);
+  if ((dimensions[dimension] ?? 0) < (recipe.fixed[dimension] ?? 0))
     throw new Error('Fixed dimension exceeds the smallest requested scale');
   const id = workProfileCorpusId(recipe, dimension, scale, compatibility);
   // Manifest ids vary by scale; command keys stay stable as the live corpus grows.
@@ -257,16 +287,19 @@ export async function prepareWorkProfileCorpus(input: {
     };
     await recipe.initialize(api, `${buildId}:base`);
     checkBudget();
-    const count = dimensions[dimension] - recipe.fixed[dimension];
-    await runBoundedIndices(
+    for (const axis of new Set([dimension, ...(recipe.populations ?? [])])) {
+      const count = (dimensions[axis] ?? 0) - (recipe.fixed[axis] ?? 0);
+      if (count < 0) throw new Error('Fixed dimension exceeds the requested scale');
+      await runBoundedIndices(
       count,
-      dimension === 'historyDepth' ? 1 : 2,
+      axis === 'historyDepth' || axis === 'recipeOccurrences' ? 1 : 2,
       async (index) => {
         checkBudget();
-        await recipe.grow(api, dimension, index, `${buildId}:${dimension}:${index}`);
+        await recipe.grow(api, axis, index, `${buildId}:${axis}:${index}`);
       },
       () => {},
     );
+    }
     checkDimensions(await recipe.verify(api), dimensions);
     checkBudget();
     const backup = await input.backups.backup(id, signal);

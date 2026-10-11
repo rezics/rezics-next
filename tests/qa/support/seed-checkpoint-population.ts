@@ -74,6 +74,7 @@ export async function growSeedCheckpointPopulation(
   targets: SeedCheckpointPopulationTargets,
 ): Promise<void> {
   const { actor, recipe, collection, zone } = handles;
+  const previousMembers = collection.members.length, previousMounts = zone.mounts.length;
   if (Object.values(targets).some(value => !Number.isSafeInteger(value) || value < 0)
     || targets.readerShelfEntries > works.length || targets.mountedCollectionResources > works.length)
     throw new Error('Checkpoint population targets exceed the available public Works');
@@ -126,6 +127,7 @@ export async function growSeedCheckpointPopulation(
     zone.revision = changed.revision;
     zone.mounts.push({ occurrence: changed.occurrences[0]!, segment, target: collection.id });
   }
+  if (!zone.mounts.length || previousMembers === collection.members.length && previousMounts === zone.mounts.length) return;
   const configuration = await api.read<{ revision: string }>(queryPath(`/v1/zones/${short(zone.id)}/configuration`, { actingSubject: actor }));
   await api.command(`checkpoint:site-publication:${zone.mounts.length}:${collection.members.length}`, {
     method: 'POST', path: `/v1/zones/${short(zone.id)}/site-publications`, body: {

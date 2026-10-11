@@ -47,6 +47,8 @@ schema inputs, migrations and engines; normal restore reads sampled exact state
 and index readiness without a full corpus scan or receipt replay. Exceeding the
 ceiling calls for a setup fix, not a longer timeout.
 
+Build the retained Work-profile checkpoints explicitly with `bun scripts/goal/goalctl.ts test tests/qa/fault-recovery/work-profile-seed-build.test.ts`, selected alone. This preparation command grows one API-built store through 4, 16 and 64 Works, with Recipe occurrences at 100, 400 and 1,600 and shelf entries, Zone mounts and mounted Collection resources at 4, 16 and 64; it retains consistent stopped backups and records startup, build and total time for each stage. Each stage keeps the 600-second ceiling. Routine `work-profile-seed-checkpoints.test.ts` only restores those cuts into isolated copies, each within 600 seconds, and fails with the build command when retained data is absent. BUILD is excluded from routine and affected selections; its exclusive command wall covers the three separately bounded stages.
+
 Use small command fixtures for real authorization and receipts, bulk fixtures
 for background population, and validated chunks/checkpoints for initial import.
 Background rows bypassing commands are not evidence for those commands. Preserve

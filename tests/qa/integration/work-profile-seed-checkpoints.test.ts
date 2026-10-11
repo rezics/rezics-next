@@ -1,30 +1,15 @@
 import { expect, test } from 'bun:test';
-import { Pool } from 'pg';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
-import { readEnv } from '../../../scripts/dev/config.ts';
-import { root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
+import { root, VOLUME_KINDS, stream, dockerEnvironment } from '../../../scripts/fixture/stack.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
-import { createCorpusBackupDriver, type CorpusRestoreSmokeInput,
-  type ManagedCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
-import { prepareWorkProfileCorpus, restoreWorkProfileCorpus, workProfileCorpusApi,
-  workProfileDimensions, WORK_PROFILE_DIMENSIONS, WORK_PROFILE_SCALES,
-  type CorpusApi, type CorpusDimensions, type WorkProfileCorpusManifest,
-  type WorkProfileCorpusRecipe } from '../../../scripts/load/work-profile-corpus.ts';
-import { initializeRelayCheckpoint } from '../../../services/main/src/modules/outbox/relay.ts';
+import { createCorpusBackupDriver, type CorpusRestoreSmokeInput }
+  from '../../../scripts/load/corpus-backup-driver.ts';
+import { restoreWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_DIMENSIONS, WORK_PROFILE_SCALES,
+  type CorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
-
-const fixed: CorpusDimensions = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0,
-  memberships: 0, historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
-const authorName = 'checkpoint-corpus-author';
-const short = (id: string) => id.slice(-36);
-const selection = (id: string): `/v1/${string}` => `/v1/main-versions/${short(id)}/selection?language=en`;
-
-function apiFor(stack: MediaStack, token: string) {
-  return workProfileCorpusApi('http://main.local', token, {
-    fetch: ((input, init) => stack.main.handle(new Request(input, init))) as typeof fetch,
-  });
-}
+import { readRetainedSeed, seedAuthorName, seedApi, seedCensus, seedSelection,
+  type RetainedSeedCut } from '../support/seed-checkpoints.ts';
 
 async function openCopy(input: CorpusRestoreSmokeInput) {
   const env = { ...input.apps, REZICS_QA_RUN_ID: input.runId,
@@ -37,187 +22,81 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
         relay: input.apps.ACCOUNT_RELAY_DATABASE_URL! } });
   } finally {
     for (const [key, value] of previous) {
-      if (value === undefined) delete Bun.env[key];
-      else Bun.env[key] = value;
+      if (value === undefined) delete Bun.env[key]; else Bun.env[key] = value;
     }
   }
 }
 
-test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isolated stores within the deadline', async () => {
-  // All axes use the owner's one scale table. The real restore census below
-  // exercises the Work axis; other scenario recipes retain their own meaning.
-  for (const dimension of WORK_PROFILE_DIMENSIONS) {
+test('retained checkpoints restore exact populations and identities into isolated stores within 600 seconds', async () => {
+  const retained = readRetainedSeed();
+  const fixed = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0, memberships: 0,
+    historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
+  for (const dimension of WORK_PROFILE_DIMENSIONS)
     expect(WORK_PROFILE_SCALES.map(scale => workProfileDimensions(dimension, scale, fixed)[dimension]))
-      .toEqual(dimension === 'historyDepth' ? [2, 8, 32] : [4, 16, 64]);
-  }
-  const sourceRunId = Bun.env.REZICS_QA_RUN_ID;
-  if (!sourceRunId || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL)
-    throw new Error('Run through goalctl integration QA');
-  const compose = readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'compose.env'));
-  expect(compose.REZICS_STACK_STORAGE).toBe('persistent');
-  const directory = join(root, '.temp/work-profiles', `seed-checkpoints-${sourceRunId}`);
-  const qaPreparationStartedAt = Number(Bun.env.REZICS_QA_PREPARATION_STARTED_AT);
-  if (!Number.isSafeInteger(qaPreparationStartedAt) || qaPreparationStartedAt > Date.now())
-    throw new Error('QA must supply the initial stack preparation start time');
-  const stackStartupMs = Date.now() - qaPreparationStartedAt;
-  const sourceStartedAt = performance.now();
-  const buildStartedAt = sourceStartedAt - stackStartupMs;
-  let source = await startMediaStack('seed-checkpoint-source', { library: true });
-  const sourceStartupMs = performance.now() - sourceStartedAt;
-  let sourceStopped = false;
-  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
-  let relayClosed = false;
-  const works: Awaited<ReturnType<typeof seedPublicProfileWork>>[] = [];
-  const checkpoints: WorkProfileCorpusManifest[] = [];
-  const copies = new Map<string, { stack: MediaStack; api: CorpusApi; input: CorpusRestoreSmokeInput }>();
-  const targets: string[] = [];
-  let currentApi: CorpusApi;
-  let actor = '';
-  const seeded = { initialize: 0, works: 0 };
-  let verifying: WorkProfileCorpusManifest | undefined;
-  let driver: ManagedCorpusBackupDriver | undefined;
+      .toEqual(dimension === 'historyDepth' ? [2, 8, 32]
+        : dimension === 'recipeOccurrences' ? [100, 400, 1600] : [4, 16, 64]);
+  const qaRunId = Bun.env.REZICS_QA_RUN_ID;
+  if (!qaRunId) throw new Error('Run through goalctl integration QA');
+  // The harness's empty startup store is unused. Each modest restored copy
+  // runs alone under catalogue-disk, avoiding stacked Docker admission.
+  await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId, '--persistent'], dockerEnvironment());
+  let verifying: RetainedSeedCut;
+  let copy: { stack: MediaStack; api: CorpusApi; input: CorpusRestoreSmokeInput } | undefined;
+  const stores: CorpusRestoreSmokeInput[] = [];
   const evidence: Array<Record<string, unknown>> = [];
+  let isolatedWrite: Awaited<ReturnType<typeof seedPublicProfileWork>> | undefined;
+  const targets: string[] = [];
+  const driver = createCorpusBackupDriver({ sourceRunId: retained.sourceRunId,
+    directory: join(root, '.temp/work-profiles/seed-checkpoints'), resumeSource: false,
+    quiesce: async () => { throw new Error('Routine TEST never builds a checkpoint'); },
+    async smokeRead(input) {
+      const stack = await openCopy(input);
+      try {
+        const client = seedApi(stack, (await stack.member(seedAuthorName, { stable: true, verified: true })).token);
+        expect(await seedCensus(client, verifying)).toEqual(verifying.manifest.dimensions);
+        for (const created of retained.cuts[2]!.works.slice(verifying.works.length))
+          await expect(client.read(seedSelection(created.mainVersion))).rejects.toThrow('HTTP 404');
+        if (isolatedWrite)
+          await expect(client.read(seedSelection(isolatedWrite.mainVersion))).rejects.toThrow('HTTP 404');
+        copy = { stack, api: client, input };
+        stores.push(input);
+        return async () => { copy = undefined; await stack.stop(); };
+      } catch (error) { await stack.stop(); throw error; }
+    },
+  });
   try {
-    currentApi = apiFor(source, (await source.member(authorName, { stable: true, verified: true })).token);
-    await initializeRelayCheckpoint(relay, Bun.env.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
-    const api: CorpusApi = { command: (key, command, signal) => currentApi.command(key, command, signal),
-      read: (path, signal) => currentApi.read(path, signal) };
-    async function census(client: CorpusApi, count: number) {
-      const ids = new Set<string>();
-      for (let index = 0; index < count; index++) {
-        const created = works[index]!;
-        const selected = await client.read<{ work: string; mainVersion: string; contribution: string;
-          selectedDraft: string; body: string }>(selection(created.mainVersion));
-        expect(selected).toMatchObject({ work: created.work, mainVersion: created.mainVersion,
-          contribution: created.contribution, selectedDraft: created.draftRevision,
-          body: `Checkpoint selected text ${index}` });
-        ids.add(selected.work);
-      }
-      expect(ids.size).toBe(count);
-      return { ...fixed, unrelatedWorks: ids.size };
-    }
-    const recipe: WorkProfileCorpusRecipe = {
-      version: 'public-work-checkpoints-v1', fixed,
-      async initialize(client, key) {
-        // The same live source continues after each stopped cut. Scenario
-        // handles already returned by its API remain valid across that restart.
-        if (actor) return;
-        actor = (await client.command<{ agent: string }>(`${key}:author`, { method: 'POST',
-          path: '/v1/agents', body: { profile: 'agent-provision-v1', kind: 'person',
-            displayName: 'Checkpoint corpus author' } })).agent;
-        seeded.initialize++;
-      },
-      async grow(client, dimension, index, key) {
-        expect(dimension).toBe('unrelatedWorks');
-        if (works[index]) return;
-        const created = await seedPublicProfileWork(client, key, { actingSubject: actor,
-          title: `Checkpoint public Work ${index}`, body: `Checkpoint selected text ${index}` });
-        works[index] = created;
-        seeded.works++;
-      },
-      verify: client => census(client, works.length),
-    };
-    function createDriver(resumeSource: boolean) {
-      return createCorpusBackupDriver({ sourceRunId: sourceRunId!, directory: join(directory, 'backups'),
-        resumeSource,
-        async quiesce(signal) {
-          signal.throwIfAborted();
-          if (!relayClosed) { await relay.end(); relayClosed = true; }
-          await source.stop();
-          sourceStopped = true;
-          return async () => {
-            Object.assign(Bun.env, readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'apps.env')));
-            // A stopped server invalidates the client's pooled connection.
-            // Reuse the bucket owner's readiness operation and retry only the
-            // transport failure; permission/configuration errors still fail.
-            for (;;) {
-              signal.throwIfAborted();
-              try { await source.objects('media/').initialize(); break; }
-              catch (error) {
-                if (!(error instanceof Error) || error.message !== 'cannot reach immutable object bucket') throw error;
-                signal.throwIfAborted();
-                await Bun.sleep(100);
-              }
-            }
-            source = await startMediaStack('seed-checkpoint-source', { library: true });
-            sourceStopped = false;
-            currentApi = apiFor(source, (await source.member(authorName, { stable: true, verified: true })).token);
-          };
-        },
-        async smokeRead(input) {
-          const stack = await openCopy(input);
-          try {
-            const client = apiFor(stack, (await stack.member(authorName, { stable: true, verified: true })).token);
-            expect(await census(client, verifying!.dimensions.unrelatedWorks)).toEqual(verifying!.dimensions);
-            // Later checkpoint entities must be absent, not merely omitted from the census.
-            for (const created of works.slice(verifying!.dimensions.unrelatedWorks))
-              await expect(client.read(selection(created.mainVersion))).rejects.toThrow('HTTP 404');
-            copies.set(input.target, { stack, api: client, input });
-            return async () => { copies.delete(input.target); await stack.stop(); };
-          } catch (error) { await stack.stop(); throw error; }
-        },
-      });
-    }
-    for (const scale of WORK_PROFILE_SCALES) {
-      driver = createDriver(scale !== 'large');
-      const input = { recipe, api, backups: driver, dimension: 'unrelatedWorks' as const,
-        scale, directory: join(directory, 'manifests'), startedAt: buildStartedAt };
-      const checkpoint = await prepareWorkProfileCorpus(input);
-      checkpoints.push(checkpoint);
-      expect(await prepareWorkProfileCorpus(input)).toEqual(checkpoint);
-    }
-    expect(works).toHaveLength(64);
-    expect(seeded).toEqual({ initialize: 1, works: 64 });
-    const buildMs = performance.now() - buildStartedAt;
-    expect(buildMs).toBeLessThan(600_000);
-    evidence.push({ stage: 'build', seeded, stackStartupMs, sourceStartupMs, totalMs: buildMs,
-      largestCheckpointPreparationMs: checkpoints[2]!.preparationMs });
-    for (const checkpoint of checkpoints) {
-      verifying = checkpoint;
-      const target = `seed-checkpoint-${checkpoint.scale}`;
+    for (const cut of retained.cuts) {
+      verifying = cut;
+      const target = `seed-${cut.manifest.scale}-${qaRunId}`;
       targets.push(target);
-      const elapsedMs = await restoreWorkProfileCorpus(checkpoint, target, driver!);
-      const timing = driver!.preparation(target)!;
+      const elapsedMs = await restoreWorkProfileCorpus(cut.manifest, target, driver);
+      const timing = driver.preparation(target)!;
       expect(elapsedMs).toBeLessThan(600_000);
       expect(timing.totalMs).toBeLessThan(600_000);
-      expect(timing.restoreMs).toBeGreaterThan(0);
-      expect(timing.startupMs).toBeGreaterThan(0);
-      expect(timing.readinessMs).toBeGreaterThan(0);
+      for (const value of [timing.restoreMs, timing.startupMs, timing.readinessMs]) expect(value).toBeGreaterThan(0);
       expect(timing.restoreMs + timing.startupMs + timing.readinessMs).toBeCloseTo(timing.totalMs, 3);
-      evidence.push({ stage: 'restore', scale: checkpoint.scale, dimensions: checkpoint.dimensions,
-        ...timing });
-      // Keep two smallest copies alive for isolation; the largest is just a census.
-      if (checkpoint.scale === 'large') await driver!.stop(target);
+      evidence.push({ scale: cut.manifest.scale, dimensions: cut.manifest.dimensions, ...timing });
+      if (cut.manifest.scale === 'small') {
+        isolatedWrite = await seedPublicProfileWork(copy!.api, `checkpoint-isolated-${qaRunId}`, {
+          actingSubject: retained.actor, title: 'Checkpoint isolated write', body: 'Only the first copy contains this Work' });
+        expect(await copy!.api.read(seedSelection(isolatedWrite.mainVersion))).toMatchObject({ work: isolatedWrite.work });
+      }
+      await driver.stop(target);
     }
-    const first = copies.get('seed-checkpoint-small')!;
-    const second = copies.get('seed-checkpoint-medium')!;
-    expect(first.input.runId).not.toBe(second.input.runId);
+    const [first, second] = stores;
+    expect(first!.runId).not.toBe(second!.runId);
     for (const kind of VOLUME_KINDS)
-      expect(`rezics-qa-${first.input.runId}_${kind}`).not.toBe(`rezics-qa-${second.input.runId}_${kind}`);
+      expect(`rezics-qa-${first!.runId}_${kind}`).not.toBe(`rezics-qa-${second!.runId}_${kind}`);
     for (const key of ['ACCESS_DATABASE_URL', 'CONTENT_DATABASE_URL', 'ACCOUNT_RELAY_DATABASE_URL',
       'FUSEKI_URL', 'MAIN_S3_ENDPOINT', 'MAIN_OBJECT_DIRECTORY'])
-      expect(first.input.apps[key]).not.toBe(second.input.apps[key]);
-    const created = await seedPublicProfileWork(first.api, 'checkpoint-isolated-write', {
-      actingSubject: actor, title: 'Checkpoint isolated write', body: 'Only the small copy contains this Work' });
-    expect(await first.api.read(selection(created.mainVersion))).toMatchObject({ work: created.work });
-    await expect(second.api.read(selection(created.mainVersion))).rejects.toThrow('HTTP 404');
-    expect(await census(second.api, 16)).toEqual(checkpoints[1]!.dimensions);
+      expect(first!.apps[key]).not.toBe(second!.apps[key]);
   } finally {
-    writeFileSync(join(root, '.temp', `work-profile-seed-checkpoints-${sourceRunId}.json`),
-      JSON.stringify(evidence, null, 2) + '\n');
-    console.log('seed-checkpoint preparation seconds', JSON.stringify(evidence.map(item =>
-      Object.fromEntries(Object.entries(item).map(([key, value]) =>
-        [key.endsWith('Ms') ? key.replace(/Ms$/, 'Seconds') : key,
-          key.endsWith('Ms') && typeof value === 'number' ? value / 1000 : value])))));
+    writeFileSync(join(root, '.temp', `work-profile-seed-restores-${qaRunId}.json`), JSON.stringify(evidence, null, 2) + '\n');
+    console.log('seed checkpoint restore seconds', JSON.stringify(evidence.map(item =>
+      Object.fromEntries(Object.entries(item).map(([key, value]) => [key.endsWith('Ms') ? key.replace(/Ms$/, 'Seconds') : key,
+        key.endsWith('Ms') && typeof value === 'number' ? value / 1000 : value])))));
     const errors: unknown[] = [];
-    for (const target of targets) {
-      try { await driver?.stop(target); } catch (error) { errors.push(error); }
-    }
-    if (!relayClosed) { try { await relay.end(); } catch (error) { errors.push(error); } }
-    if (!sourceStopped) { try { await source.stop(); } catch (error) { errors.push(error); } }
-    if (errors.length) throw new AggregateError(errors, 'Seed checkpoint cleanup failed');
+    for (const target of targets) { try { await driver.stop(target); } catch (error) { errors.push(error); } }
+    if (errors.length) throw new AggregateError(errors, 'Seed restore cleanup failed');
   }
-// One build and three restores each enforce their own 600-second deadline.
-// The QA registry separately limits aggregate active work to 480 seconds;
-// Bun's wall timer must also permit admission waits between those stages.
-}, 4 * 600_000);
+}, 3 * 600_000);

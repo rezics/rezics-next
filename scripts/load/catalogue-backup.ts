@@ -73,6 +73,7 @@ export interface RetainStoppedBackupOptions {
   resumeSource?: boolean;
   signal?: AbortSignal;
   purpose?: 'g1038' | 'work-profile' | 'corpus';
+  onSourceStartup?: (elapsedMs: number) => void;
 }
 
 /** Stop every storage owner before copying; resume the source after the cut by default. */
@@ -168,7 +169,9 @@ export async function retainStoppedOwnerBackup(
   }
   if (downAttempted && (options.resumeSource !== false || failure !== undefined)) {
     try {
+      const startupStartedAt = performance.now();
       await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+      options.onSourceStartup?.(performance.now() - startupStartedAt);
     } catch (error) {
       cleanupErrors.push(error);
     }

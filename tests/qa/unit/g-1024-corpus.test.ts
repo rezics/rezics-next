@@ -53,6 +53,28 @@ test('G1024: each axis grows alone at three strictly increasing scales with stab
   }
 });
 
+test('retained population cuts share one owner and declare every co-grown axis', async () => {
+  const dir = directory();
+  const actual = { ...fixed, recipeOccurrences: 0, readerShelfEntries: 0 };
+  let cuts = 0;
+  const recipe: WorkProfileCorpusRecipe = { version: 'population-cut-v1', fixed,
+    populations: ['recipeOccurrences', 'readerShelfEntries'], initialize: async () => {},
+    async grow(_api, axis, index) { actual[axis as keyof typeof actual] = Math.max(actual[axis as keyof typeof actual] ?? 0, index + 1); },
+    verify: async () => actual };
+  const api = { command: async <T>() => undefined as T, read: async <T>() => undefined as T };
+  const backups = { backup: async () => `cut-${++cuts}`, restore: async () => {} };
+  try {
+    for (const [index, scale] of WORK_PROFILE_SCALES.entries()) {
+      const cut = await prepareWorkProfileCorpus({ recipe, api, backups, dimension: 'unrelatedWorks', scale, directory: dir });
+      expect(cut.dimensions.unrelatedWorks).toBe([4, 16, 64][index]);
+      expect(cut.dimensions.recipeOccurrences).toBe([100, 400, 1600][index]);
+      expect(cut.dimensions.readerShelfEntries).toBe([4, 16, 64][index]);
+      expect(await prepareWorkProfileCorpus({ recipe, api, backups, dimension: 'unrelatedWorks', scale, directory: dir })).toEqual(cut);
+    }
+    expect(cuts).toBe(3);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('G1024: corpus runs public commands with idempotency, verifies dimensions, builds once and restores separately', async () => {
   const dir = directory();
   const commands = new Map<string, string>();

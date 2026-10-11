@@ -23,6 +23,7 @@ export interface CorpusBackupDriverOptions {
   smokeRead(input: CorpusRestoreSmokeInput): Promise<void | (() => Promise<void>)>;
   /** Leave source storage stopped while restored copies run, when requested. */
   resumeSource?: boolean;
+  onSourceStartup?: (elapsedMs: number) => void;
 }
 
 interface RestoredCopy {
@@ -74,6 +75,7 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
           purpose: 'work-profile',
           resumeSource: options.resumeSource,
           signal,
+          onSourceStartup: options.onSourceStartup,
         });
       } catch (error) {
         failed = true;
