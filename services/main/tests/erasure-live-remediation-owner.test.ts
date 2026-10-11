@@ -8,7 +8,7 @@ import { appendContentEvent } from '../../content/src/event-sequencer.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { journalErasure, markErasureBlocked, markErasureSuppressed }
+import { ErasureUnavailable, journalErasure, markErasureBlocked, markErasureSuppressed }
   from '../src/modules/erasure/journal.ts';
 import { completePendingContentErasures, ErasureService, OPEN_SOURCE_PROBE } from '../src/modules/erasure/request.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -297,13 +297,13 @@ test('every non-cleared, non-clean remediation is refused with a typed error, re
     // A wrong-epoch entry without any quote is stale at remediation, so the verifier is never reached.
     await expect(within(ops.reconcileErasure({ erasureId: wrongEpoch.erasureId }, 'wrong-epoch'))).rejects
       .toThrow('stale');
-    // Even called directly, the verifier no longer accepts it: the tombstone's epoch is checked.
-    const direct = await verifyErasure(env.service.relay, { content: env.pool }, wrongEpoch.erasureId, 'direct-wrong-epoch');
-    expect(direct.state).toBe('held');
+    // Direct verification rejects the unfinished stale erasure without recording a result.
+    await expect(verifyErasure(env.service.relay, { content: env.pool }, wrongEpoch.erasureId, 'direct-wrong-epoch'))
+      .rejects.toBeInstanceOf(ErasureUnavailable);
     expect(await env.pool.query(`SELECT disposition FROM relay.owner_reconciliation_item i
       JOIN relay.owner_reconciliation r ON r.id = i.reconciliation_id
       WHERE r.operation_id = 'direct-wrong-epoch' AND i.item_kind = 'revision'`).then(result => result.rows))
-      .toEqual([{ disposition: 'conflict' }]);
+      .toEqual([]);
   } finally { await close(); }
 }, 180_000);
 

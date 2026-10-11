@@ -234,9 +234,13 @@ export class RecoveryBudget {
         this.elapsed() >= RECOVERY_BUDGET_MS
           ? `exceeded its 600-second budget (${failure})`
           : failure;
-      throw new Error(`Recovery phase ${name} failed: ${detail}; serving remains held`, {
-        cause: error,
-      });
+      const message = `Recovery phase ${name} failed: ${detail}; serving remains held`;
+      // Operators and callers classify refusal by code even when phase context
+      // is added; wrapping it in a plain Error loses that contract.
+      if (error instanceof RecoveryRefusal) {
+        throw new RecoveryRefusal(error.code, message, { cause: error });
+      }
+      throw new Error(message, { cause: error });
     } finally {
       this.phases[name] = Math.round(this.now() - at - (this.admissionWaitMs - waiting));
     }

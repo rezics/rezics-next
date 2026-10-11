@@ -414,7 +414,12 @@ test(
                   : field === 'registered_at'
                     ? '2000-01-01T00:00:00.000Z'
                     : field === 'authority_witness'
-                      ? { $rezicsNativeJson: 'value', $value: '{}' }
+                      ? {
+                          $rezicsNativeJson: 'value',
+                          $value: JSON.stringify([
+                            { table: 'permission_grant', id: randomUUID(), generation: '999999' },
+                          ]),
+                        }
                       : '999999';
               if (field === 'id') row.key!.id = row.values!.id as string;
             });
