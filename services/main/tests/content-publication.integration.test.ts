@@ -107,9 +107,22 @@ test('WORK10: partial Content pin and exact graph receipt reconciliation', async
     expect(update).toContain('FILTER(COALESCE(?prior, <urn:rezics:none>) = <urn:rezics:none>)');
     expect(update).toContain(`rv:ownerDataEpoch "${first.input.expectedContentEpoch}"`);
     expect(update).toContain('rv:routingEpoch "routing-a"');
+    const deleteTemplate = update.slice(update.indexOf('DELETE {'), update.indexOf('INSERT {'));
+    expect(deleteTemplate).toContain('GRAPH <urn:rezics:search:public>');
+    expect(deleteTemplate).toContain('?oldUnit ?oldPredicate ?oldValue');
+    expect(update).toContain(`?oldUnit a rv:MatchUnit ; rv:variant <${first.input.variantId}>`);
+    expect(update).toContain(
+      `?oldProjection a rv:ContentProjection ; rv:component <${first.input.variantId}>`,
+    );
+    expect(update).toContain('urn:rezics:content:match-unit:');
+    expect(update).not.toContain('rv:publicSearchEligibilityHead');
     // A committed receipt remains authoritative even when its HTTP response was lost.
     reader.record(firstAdmission, first.input, firstPin, 'active');
-    expect((await reconcilePinnedContentPublication(environment(reader), content, firstAdmission, first.input)).status).toBe('active');
+    const active = await reconcilePinnedContentPublication(environment(reader), content, firstAdmission, first.input);
+    expect(active.status).toBe('active');
+    expect(Object.keys(active).sort()).toEqual([
+      'decision', 'graphDataEpoch', 'graphSequence', 'receipt', 'replayed', 'status',
+    ]);
     expect(await preparationStatus(first.input.preparationId)).toMatchObject({ status: 'active', pin_active: true });
     expect((await reconcilePinnedContentPublication(environment(reader), content, firstAdmission, first.input)).replayed).toBe(true);
 

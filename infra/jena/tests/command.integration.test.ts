@@ -1,10 +1,14 @@
 import { beforeAll, expect, test } from 'bun:test';
 import manifest from '../../../generated/model/manifest.json';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { buildPinnedContentPublicationUpdate, contentPublicationDecisionIri,
+  contentPublicationDigest, contentPublicationReceiptIri,
+  type PublishPinnedContentInput } from '../../../services/main/src/modules/content-publication/publish.ts';
 import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead }
   from '../../../services/main/src/modules/work/edit.ts';
+import type { PublicationPreparation } from '../../../services/content/src/core.ts';
 import { join } from 'node:path';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
@@ -33,6 +37,10 @@ const select = async (sparql: string) => {
   return response.json() as Promise<{ boolean?: boolean; results?: { bindings: Record<string, {value:string}>[] } }>;
 };
 const ask = async (sparql: string) => (await select(sparql)).boolean === true;
+const textUnits = async (word: string) => (await select(`PREFIX text: <http://jena.apache.org/text#>
+  PREFIX rv: <${rv}> SELECT ?unit WHERE { GRAPH <${searchGraph}> {
+    (?unit ?score ?literal) text:query (rv:searchBody ${JSON.stringify(word)} 10) . } }`))
+  .results?.bindings?.flatMap(row => row.unit ? [row.unit.value] : []) ?? [];
 const lineage = async () => {
   const rows = (await select(`PREFIX rv: <${rv}> SELECT ?epoch ?routing ?n WHERE {
     GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ?epoch ; rv:routingEpoch ?routing ; rv:sequence ?n }
@@ -58,13 +66,14 @@ const contentEventOutbox = (receipt: string, epoch: string) => `GRAPH <${graphs.
   <${receipt}:event> a <${rv}ContentPublicationEvent> ; <${rv}ordinal> 0 ;
     <${rv}receipt> <${receipt}> . }`;
 const build = async (receipt: string, options: { data?: string; outbox?: string; receipt?: string;
-  increment?: number; guardEpoch?: boolean; guardRouting?: boolean; control?: string } = {}) => {
+  deletion?: string; increment?: number; guardEpoch?: boolean; guardRouting?: boolean; control?: string } = {}) => {
   const {epoch,routing} = await lineage();
   const guards = [options.guardEpoch === false ? '' : `<${dataset}> rv:dataEpoch ${JSON.stringify(epoch)} .`,
     options.guardRouting === false ? '' : `<${dataset}> rv:routingEpoch ${JSON.stringify(routing)} .`,
     `<${dataset}> rv:sequence ?n .`].join('\n');
   const next = '?next';
-  const update = `PREFIX rv: <${rv}> DELETE { GRAPH <${graphs.control}> { <${dataset}> rv:sequence ?n } }
+  const update = `PREFIX rv: <${rv}> DELETE { GRAPH <${graphs.control}> { <${dataset}> rv:sequence ?n }
+      ${options.deletion ?? ''} }
     INSERT { GRAPH <${graphs.control}> { <${dataset}> rv:sequence ${options.control ?? next} }
       ${options.data ?? ''}
       ${options.receipt ?? receiptTriples(receipt, epoch, next)}
@@ -101,7 +110,7 @@ async function seedContentSearchBase(name: string, withEligibility: boolean, rig
   const {epoch} = await lineage();
   await fixtureUpdate(`PREFIX rv: <${rv}> INSERT DATA {
     GRAPH <${graphs.current}> {
-      <${work}> a <https://schema.org/CreativeWork> .
+      <${work}> a <https://schema.org/CreativeWork> ; rv:head <${id}:main> .
       <${variant}> a rv:ContentVariant ; rv:resource <${work}> ;
         rv:contentPublicationHead <${publication}> ${withEligibility ? `;
         rv:publicSearchEligibilityHead <${eligibility}>` : ''} .
@@ -134,6 +143,111 @@ async function seedContentSearchBase(name: string, withEligibility: boolean, rig
     }
   }`);
   return { id, work, variant, publication, eligibility, epoch };
+}
+
+type ContentSearchFixture = Awaited<ReturnType<typeof seedContentSearchBase>>;
+
+async function publicationWrite(fixture: ContentSearchFixture, expectedHead: string) {
+  const revisionId = crypto.randomUUID();
+  const input: PublishPinnedContentInput = { preparationId: `publish-${nonce}-${crypto.randomUUID()}`,
+    revisionId, expectedDigest: 'd'.repeat(64), expectedContentEpoch: '00000000-0000-4000-8000-000000000002',
+    resourceId: fixture.work, variantId: fixture.variant, expectedPublicationHead: expectedHead };
+  const requestDigest = contentPublicationDigest(input);
+  const admissionId = crypto.randomUUID();
+  const admission = { id: admissionId, principalId: crypto.randomUUID(), actingSubject: 'urn:rezics:test:actor',
+    scope: `content:publish:${fixture.variant}`, action: 'content.publish',
+    idempotencyKey: `publish-${nonce}-${admissionId}`, requestDigest, authorityEpoch: '0',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'registered' as const,
+    dispatchEligible: true, replayed: false };
+  const preparation: PublicationPreparation = { operationId: input.preparationId,
+    reference: { owner: 'content', resourceId: fixture.work, variantId: fixture.variant, revisionId,
+      format: 'rezics-content-json-v1', model: 'plain-text-v1', byteDigest: input.expectedDigest,
+      byteLength: 32, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+      sourceRevision: null, predecessor: null, provenance: { author: 'native integration' } },
+    position: { owner: 'content', dataEpoch: input.expectedContentEpoch, sequence: '9' },
+    status: 'pending', pinActive: true, replayed: false };
+  const decision = contentPublicationDecisionIri(admissionId);
+  const receipt = contentPublicationReceiptIri(admissionId);
+  const update = buildPinnedContentPublicationUpdate({ fuseki: new FusekiClient(base),
+    lineage: { dataEpoch: fixture.epoch, routingEpoch: '0' }, objectDirectory: '.temp/content-publication-test' },
+  admission, input, preparation);
+  const validations = [profileValidation('content-publication-v1', 'variant', fixture.variant, graphs.current),
+    profileValidation('content-publication-v1', 'decision', decision, graphs.revisions)];
+  return { input, requestDigest, decision, receipt, update, validations };
+}
+
+async function projectContentUnit(fixture: ContentSearchFixture,
+  authority: { publication: string; eligibility: string }, name: string, body: string,
+  revision = contentRevision) {
+  const anchor = `urn:rezics:content:projection:${nonce}:${name}`;
+  const unit = `urn:rezics:content:match-unit:${nonce}:${name}`;
+  const receipt = `urn:rezics:p08:${nonce}:${name}:projection-receipt`;
+  const owner = '00000000-0000-4000-8000-000000000002';
+  const data = `GRAPH <${graphs.revisions}> { <${anchor}> a <${rv}ContentProjection>,
+    <${rv}RevisionAnchor> ; <${rv}component> <${fixture.variant}> ; <${rv}resource> <${fixture.work}> ;
+    <${rv}contentRevision> <${revision}> ;
+    <${rv}publicationDecision> <${authority.publication}> ; <${rv}eligibility> <${authority.eligibility}> ;
+    <${rv}matchUnit> <${unit}> ; <${rv}ownerDataEpoch> ${JSON.stringify(owner)} ;
+    <${rv}ownerSequence> "7" ;
+    <${rv}modelRevision> <https://rezics.com/definition/content-match-unit-v1> ;
+    <${rv}shapeRevision> <https://rezics.com/definition/content-match-unit-v1> ;
+    <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(fixture.epoch)} ;
+    <${rv}sequence> ?next . }
+    GRAPH <${searchGraph}> { <${unit}> a <${rv}MatchUnit> ; <${rv}resource> <${fixture.work}> ;
+      <${rv}variant> <${fixture.variant}> ; <${rv}revision> <${revision}> ;
+      <${rv}publicationDecision> <${authority.publication}> ; <${rv}eligibility> <${authority.eligibility}> ;
+      <${rv}projection> <${anchor}> ; <${rv}language> "en" ; <${rv}field> <${rv}Body> ;
+      <${rv}disclosure> <${rv}Public> ; <${rv}searchBody> ${JSON.stringify(body)}@en . }`;
+  const receiptData = `GRAPH <${graphs.receipts}> { <${receipt}> a <${rv}OperationReceipt> ;
+    <${rv}requestDigest> ${JSON.stringify(receipt)} ; <${rv}outcome> <${rv}Succeeded> ;
+    <${rv}resource> <${fixture.work}> ; <${rv}variant> <${fixture.variant}> ;
+    <${rv}ownerDataEpoch> ${JSON.stringify(owner)} ; <${rv}ownerSequence> "7" ;
+    <${rv}contentRevision> <${revision}> ;
+    <${rv}publicationDecision> <${authority.publication}> ; <${rv}eligibility> <${authority.eligibility}> ;
+    <${rv}matchUnit> <${unit}> ; <${rv}projection> <${anchor}> ;
+    <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(fixture.epoch)} ;
+    <${rv}sequence> ?next . }`;
+  const { update } = await build(receipt, { data, receipt: receiptData,
+    outbox: searchOutbox(receipt, fixture.epoch, 'ContentProjectionEvent') });
+  const result = await command(receipt, update, [
+    profileValidation('content-match-unit-v1', 'projection', anchor, graphs.revisions),
+    profileValidation('content-match-unit-v1', 'unit', unit, searchGraph),
+  ]);
+  if (result.status !== 'committed') throw new Error(`Content projection was not admitted: ${JSON.stringify(result)}`);
+  return { anchor, unit, receipt, body };
+}
+
+async function approveContentPublication(fixture: ContentSearchFixture, publication: string, name: string) {
+  const eligibility = `urn:rezics:p08:${nonce}:${name}:eligibility`;
+  const receipt = `urn:rezics:p08:${nonce}:${name}:eligibility-receipt`;
+  const admission = '00000000-0000-4000-8000-000000000003';
+  const fields = `<${rv}variant> <${fixture.variant}> ; <${rv}resource> <${fixture.work}> ;
+    <${rv}publicationDecision> <${publication}> ; <${rv}rightsBasis> <${rv}OriginalContribution> ;
+    <${rv}disclosure> <${rv}Public> ; <${rv}admissionId> ${JSON.stringify(admission)} ;
+    <${rv}authorityEpoch> "0" ;
+    <${rv}admittedScope> ${JSON.stringify(`content:search-eligibility:${fixture.variant}`)} ;
+    <${rv}actingSubject> <urn:rezics:test:actor> ;`;
+  const data = `GRAPH <${graphs.current}> { <${fixture.variant}> <${rv}publicSearchEligibilityHead> <${eligibility}> . }
+    GRAPH <${graphs.revisions}> { <${eligibility}> a <${rv}ContentSearchEligibilityDecision>,
+      <${rv}RevisionAnchor> ; <${rv}component> <${fixture.variant}> ; ${fields}
+      <${rv}modelRevision> <https://rezics.com/definition/content-search-eligibility-v1> ;
+      <${rv}shapeRevision> <https://rezics.com/definition/content-search-eligibility-v1> ;
+      <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(fixture.epoch)} ;
+      <${rv}sequence> ?next . }`;
+  const receiptData = `GRAPH <${graphs.receipts}> { <${receipt}> a <${rv}OperationReceipt> ;
+    <${rv}requestDigest> ${JSON.stringify(receipt)} ; <${rv}outcome> <${rv}Succeeded> ;
+    <${rv}eligibilityDecision> <${eligibility}> ; ${fields}
+    <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(fixture.epoch)} ;
+    <${rv}sequence> ?next . }`;
+  const { update } = await build(receipt, { data, receipt: receiptData,
+    deletion: `GRAPH <${graphs.current}> { <${fixture.variant}> <${rv}publicSearchEligibilityHead> <${fixture.eligibility}> . }`,
+    outbox: searchOutbox(receipt, fixture.epoch, 'ContentSearchEligibilityEvent') });
+  const result = await command(receipt, update, [
+    profileValidation('content-publication-v1', 'variant', fixture.variant, graphs.current),
+    profileValidation('content-search-eligibility-v1', 'decision', eligibility, graphs.revisions),
+  ]);
+  if (result.status !== 'committed') throw new Error(`Content eligibility was not admitted: ${JSON.stringify(result)}`);
+  return eligibility;
 }
 
 beforeAll(async () => {
@@ -633,6 +747,110 @@ test('SYS02/SYS14: native Work edit commits one exact head and resolves competin
   expect(races.filter(result => result.status === 'fulfilled')).toHaveLength(1);
   expect(races.filter(result => result.status === 'rejected'
     && result.reason instanceof StaleWorkHead)).toHaveLength(1);
+});
+
+test('WORK10/SEARCH19: replacement publication removes only obsolete Content body units and replay preserves its successor', async () => {
+  const obsoleteFixture = await seedContentSearchBase(`replacement-old-${nonce}`, true);
+  const otherFixture = await seedContentSearchBase(`replacement-other-${nonce}`, true);
+  const oldBody = `obsoletebody${nonce.replaceAll('-', '')}`;
+  const otherBody = `othervariantbody${nonce.replaceAll('-', '')}`;
+  const oldUnit = await projectContentUnit(obsoleteFixture,
+    { publication: obsoleteFixture.publication, eligibility: obsoleteFixture.eligibility },
+    `replacement-old-${nonce}`, oldBody);
+  const otherUnit = await projectContentUnit(otherFixture,
+    { publication: otherFixture.publication, eligibility: otherFixture.eligibility },
+    `replacement-other-${nonce}`, otherBody);
+  expect(await textUnits(oldBody)).toEqual([oldUnit.unit]);
+  expect(await textUnits(otherBody)).toEqual([otherUnit.unit]);
+
+  const stale = await publicationWrite(obsoleteFixture, `${obsoleteFixture.publication}:stale`);
+  const beforeStale = await lineage();
+  expect((await command(stale.receipt, stale.update, stale.validations, stale.requestDigest)).status)
+    .toBe('guard-unmatched');
+  expect((await lineage()).n).toBe(beforeStale.n);
+  expect(await ask(`ASK { GRAPH <${graphs.current}> { <${obsoleteFixture.variant}>
+    <${rv}contentPublicationHead> <${obsoleteFixture.publication}> } }`)).toBe(true);
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${oldUnit.unit}> ?p ?o } }`)).toBe(true);
+  expect(await textUnits(oldBody)).toEqual([oldUnit.unit]);
+  await absent(stale.receipt);
+
+  const malformedUnit = `urn:rezics:content:match-unit:${nonce}:malformed`;
+  const malformedProjection = `urn:rezics:content:projection:${nonce}:malformed`;
+  await fixtureUpdate(`PREFIX rv: <${rv}> INSERT DATA {
+    GRAPH <${searchGraph}> { <${malformedUnit}> a rv:MatchUnit ; rv:variant <${obsoleteFixture.variant}> ;
+      rv:projection <${malformedProjection}> . }
+    GRAPH <${graphs.revisions}> { <${malformedProjection}> a rv:ContentProjection ;
+      rv:component <${obsoleteFixture.variant}> . }
+  }`);
+  const replacement = await publicationWrite(obsoleteFixture, obsoleteFixture.publication);
+  const beforeMalformed = await lineage();
+  const malformedRefusal = await command(replacement.receipt, replacement.update,
+    replacement.validations, replacement.requestDigest).then(() => '', error => String(error));
+  expect(malformedRefusal).toContain('command HTTP 400');
+  expect(malformedRefusal).toContain('MatchUnit body missing');
+  expect((await lineage()).n).toBe(beforeMalformed.n);
+  expect(await ask(`ASK { GRAPH <${graphs.current}> { <${obsoleteFixture.variant}>
+    <${rv}contentPublicationHead> <${obsoleteFixture.publication}> } }`)).toBe(true);
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${oldUnit.unit}> ?p ?o } }`)).toBe(true);
+  expect(await textUnits(oldBody)).toEqual([oldUnit.unit]);
+  await absent(replacement.receipt);
+  await fixtureUpdate(`DELETE WHERE {
+    GRAPH <${searchGraph}> { <${malformedUnit}> ?p ?o }
+    GRAPH <${graphs.revisions}> { <${malformedProjection}> ?p2 ?o2 }
+  }`);
+
+  // A lost publication response cannot remove the successor projected later.
+  await command(replacement.receipt, replacement.update, replacement.validations, replacement.requestDigest);
+  expect(await ask(`ASK { GRAPH <${graphs.current}> { <${obsoleteFixture.variant}>
+    <${rv}contentPublicationHead> <${replacement.decision}> ;
+      <${rv}publicSearchEligibilityHead> <${obsoleteFixture.eligibility}> } }`)).toBe(true);
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${oldUnit.unit}> ?p ?o } }`)).toBe(false);
+  expect(await ask(`ASK { GRAPH <${graphs.revisions}> { <${oldUnit.anchor}> a <${rv}ContentProjection> } }`)).toBe(true);
+  expect(await textUnits(oldBody)).toEqual([]);
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${otherUnit.unit}> ?p ?o } }`)).toBe(true);
+  expect(await textUnits(otherBody)).toEqual([otherUnit.unit]);
+
+  const nextEligibility = await approveContentPublication(obsoleteFixture, replacement.decision,
+    `replacement-approved-${nonce}`);
+  const nextBody = `replacementbody${nonce.replaceAll('-', '')}`;
+  const nextUnit = await projectContentUnit(obsoleteFixture,
+    { publication: replacement.decision, eligibility: nextEligibility },
+    `replacement-new-${nonce}`, nextBody,
+    `urn:rezics:content:revision:${replacement.input.revisionId}`);
+  expect(await textUnits(nextBody)).toEqual([nextUnit.unit]);
+  expect((await command(replacement.receipt, replacement.update,
+    replacement.validations, replacement.requestDigest)).status).toBe('committed');
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${nextUnit.unit}> ?p ?o } }`)).toBe(true);
+  expect(await textUnits(nextBody)).toEqual([nextUnit.unit]);
+  expect(await textUnits(oldBody)).toEqual([]);
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${otherUnit.unit}> ?p ?o } }`)).toBe(true);
+  expect(await textUnits(otherBody)).toEqual([otherUnit.unit]);
+});
+
+test('SEARCH19: replacement publication refuses Content cleanup above the native delta bound', async () => {
+  const fixture = await seedContentSearchBase(`replacement-overflow-${nonce}`, true);
+  const replacement = await publicationWrite(fixture, fixture.publication);
+  const units = Array.from({ length: 65 }, (_, index) => ({
+    unit: `urn:rezics:content:match-unit:${nonce}:overflow:${index}`,
+    projection: `urn:rezics:content:projection:${nonce}:overflow:${index}`,
+  }));
+  await fixtureUpdate(`PREFIX rv: <${rv}> INSERT DATA {
+    ${units.map(({ unit, projection }) => `GRAPH <${searchGraph}> { <${unit}> a rv:MatchUnit ;
+      rv:variant <${fixture.variant}> ; rv:projection <${projection}> ; rv:searchBody "overflowbody"@en . }
+      GRAPH <${graphs.revisions}> { <${projection}> a rv:ContentProjection ;
+        rv:component <${fixture.variant}> . }`).join('\n')}
+  }`);
+  const before = await lineage();
+  const refusal = await command(replacement.receipt, replacement.update,
+    replacement.validations, replacement.requestDigest).then(() => '', error => String(error));
+  expect(refusal).toContain('command HTTP 400');
+  expect(refusal).toContain('actual Content source delta exceeds 64 units');
+  expect((await lineage()).n).toBe(before.n);
+  expect(await ask(`ASK { GRAPH <${graphs.current}> { <${fixture.variant}>
+    <${rv}contentPublicationHead> <${fixture.publication}> } }`)).toBe(true);
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${units[0]!.unit}> ?p ?o }
+    GRAPH <${searchGraph}> { <${units.at(-1)!.unit}> ?p2 ?o2 } }`)).toBe(true);
+  await absent(replacement.receipt);
 });
 
 test('SYS09: disposable QA Fuseki retains raw fixture updates', async () => {

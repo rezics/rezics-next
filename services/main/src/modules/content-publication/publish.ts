@@ -7,6 +7,7 @@ import { hasDocumentContent } from '@rezics/document';
 import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedConditions,
   publicContentEmbedGuards }
   from './embed-closure.ts';
@@ -186,11 +187,29 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
     ? { type: 'https://schema.org/Organization', zone: null }
     : ref.model === POST_CONTENT_MODEL ? { type: `${RV}Post`, zone: null } : undefined);
   const languageTag = ref.language.kind === 'tag' ? `rv:contentLanguage ${lit(ref.language.tag)} ;` : '';
+  const obsoleteContentUnits = `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+    ?oldUnit ?oldPredicate ?oldValue .
+  }`;
+  const contentUnitInventoryGuard = `FILTER NOT EXISTS {
+    GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+      ?candidateUnit rv:variant ${iri(input.variantId)} .
+      FILTER(STRSTARTS(STR(?candidateUnit), "urn:rezics:content:match-unit:"))
+      FILTER NOT EXISTS {
+        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ?candidateUnit a rv:MatchUnit ; rv:projection ?candidateProjection .
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ?candidateProjection a rv:ContentProjection ; rv:component ${iri(input.variantId)} .
+        }
+      }
+    }
+  }`;
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       ${input.spoiler !== undefined ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} rv:spoiler ?priorSpoiler }` : ''}
+      ${obsoleteContentUnits}
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -236,8 +255,19 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
         OPTIONAL { ${iri(input.variantId)} rv:resource ?registeredResource }
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       }
+      OPTIONAL {
+        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ?oldUnit a rv:MatchUnit ; rv:variant ${iri(input.variantId)} ;
+            rv:projection ?oldProjection ; ?oldPredicate ?oldValue .
+          FILTER(STRSTARTS(STR(?oldUnit), "urn:rezics:content:match-unit:"))
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ?oldProjection a rv:ContentProjection ; rv:component ${iri(input.variantId)} .
+        }
+      }
       FILTER(!BOUND(?registeredResource) || ?registeredResource = ${iri(input.resourceId)})
       FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expectedHeadTerm(input)})
+      ${contentUnitInventoryGuard}
       ${publicContentEmbedGuards(embedded)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
