@@ -37,12 +37,15 @@ function restored(
     graphOpen?: boolean;
     fence?: { open: boolean; generation: string } | null;
     epochFailure?: boolean;
+    lineage?: { dataEpoch: string; routingEpoch: string };
+    ownerLogins?: { role: string; enabled: boolean }[];
     membership?: { statuses?: unknown[]; preparations?: unknown[] };
     afterLogin?: () => void;
   } = {},
 ) {
   const events: string[] = [];
   const preparationCalls: MembershipPreparationInput[] = [];
+  const targetLineage = options.lineage ?? { dataEpoch, routingEpoch };
   const statuses = [
     ...(options.membership?.statuses ?? [{ needsPreparation: true }, { needsPreparation: false }]),
   ];
@@ -54,12 +57,15 @@ function restored(
       sealedCoverage: 'signed-owner-cut',
       sealedDeletionSets: ['signed-deletion-cut'],
     },
-    apps: { MAIN_DATA_EPOCH: dataEpoch, MAIN_ROUTING_EPOCH: routingEpoch },
+    apps: {
+      MAIN_DATA_EPOCH: targetLineage.dataEpoch,
+      MAIN_ROUTING_EPOCH: targetLineage.routingEpoch,
+    },
     fuseki: {
       query: async (query: string) => {
         events.push('graph-release-observation');
-        expect(query).toContain(dataEpoch);
-        expect(query).toContain(routingEpoch);
+        expect(query).toContain(targetLineage.dataEpoch);
+        expect(query).toContain(targetLineage.routingEpoch);
         return { boolean: options.graphOpen ?? true };
       },
       membershipPreparationStatus: async () => {
@@ -97,10 +103,24 @@ function restored(
       } as unknown as Pool,
       account: {
         query: async (query: string) => {
-          expect(query).toContain('ALTER ROLE account LOGIN');
-          events.push('enable-owner-logins');
-          options.afterLogin?.();
-          return { rows: [] };
+          if (query.startsWith('ALTER ROLE')) {
+            expect(query).toContain('ALTER ROLE account LOGIN');
+            events.push('enable-owner-logins');
+            options.afterLogin?.();
+            return { rows: [] };
+          }
+          expect(query).toContain('FROM pg_roles');
+          events.push('observe-owner-logins');
+          return {
+            rows:
+              options.ownerLogins ??
+              ['account', 'access', 'content', 'relay'].map((role) => ({
+                role,
+                enabled: true,
+                rolname: role,
+                rolcanlogin: true,
+              })),
+          };
         },
       } as unknown as Pool,
     },
@@ -136,6 +156,8 @@ function restored(
   const proof: RestoreEvidence = {
     project: 'rezics-qa-erasure-successor',
     state: 'held',
+    reconcileCompleted: false,
+    releaseObserved: false,
     phases: context.budget.phases,
     elapsedMs: 0,
     admissionWaitMs: 0,
@@ -192,11 +214,13 @@ test('full restore verifies serving after release on the same budget before mark
     'membership-status',
     'advance-owner-epochs',
     'enable-owner-logins',
+    'observe-owner-logins',
     'serving-verification',
   ]);
   expect(fixture.proof).toMatchObject({
     state: 'verified',
-    ownerReleaseObserved: true,
+    reconcileCompleted: true,
+    releaseObserved: true,
     ownerLoginsEnabled: true,
   });
   expect(fixture.proof.phases).toHaveProperty('serving-verification');
@@ -210,7 +234,7 @@ test('full restore verifies serving after release on the same budget before mark
   ]);
 });
 
-test('readiness failure leaves released evidence and records successful stop after owner LOGIN', async () => {
+test('readiness failure leaves observed release evidence and records successful target stop', async () => {
   const fixture = restored();
   fixture.checks.verifyServing = async (context) => {
     expect(context).toBe(fixture.context);
@@ -227,18 +251,19 @@ test('readiness failure leaves released evidence and records successful stop aft
   }
   expect(failure).toBeInstanceOf(Error);
   expect((failure as Error).message).toBe(
-    'Full restore serving verification failed after graph and Access release and owner LOGIN were committed: restored target is not ready',
+    'Full restore serving verification failed after graph and Access release and owner LOGIN were observed: restored target is not ready',
   );
   expect(fixture.proof).toMatchObject({
     state: 'released',
-    ownerReleaseObserved: true,
+    reconcileCompleted: true,
+    releaseObserved: true,
     ownerLoginsEnabled: true,
     targetStopped: true,
     failure:
-      'Full restore serving verification failed after graph and Access release and owner LOGIN were committed: restored target is not ready',
+      'Full restore serving verification failed after graph and Access release and owner LOGIN were observed: restored target is not ready',
   });
   expect(fixture.events.slice(-3)).toEqual([
-    'enable-owner-logins',
+    'observe-owner-logins',
     'serving-verification',
     'stop-target',
   ]);
@@ -273,19 +298,20 @@ test.each([
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain('deadline exceeded');
     expect((failure as Error).message).toContain(
-      'graph and Access release and owner LOGIN were committed',
+      'graph and Access release and owner LOGIN were observed',
     );
     expect((failure as Error).message).toContain('600-second budget');
     expect((failure as Error).message).not.toContain('serving remains held');
     expect(fixture.proof).toMatchObject({
       state: 'released',
-      ownerReleaseObserved: true,
+      reconcileCompleted: true,
+      releaseObserved: true,
       ownerLoginsEnabled: true,
       targetStopped,
       failure: (failure as Error).message,
     });
     expect(fixture.proof.state).not.toBe('verified');
-    expect(fixture.events.slice(-2)).toEqual(['enable-owner-logins', 'stop-target']);
+    expect(fixture.events.slice(-2)).toEqual(['observe-owner-logins', 'stop-target']);
     if (cleanupFails) {
       expect(fixture.proof.cleanupFailure).toBe('docker stop failed');
     } else {
@@ -296,7 +322,7 @@ test.each([
   },
 );
 
-test('records committed owner release when reconciliation returns at the deadline before cleanup', async () => {
+test('matched reconciliation at the deadline is completed but release remains unobserved before cleanup', async () => {
   let now = 0;
   const fixture = restored();
   fixture.context.budget = new RecoveryBudget(() => now);
@@ -312,22 +338,21 @@ test('records committed owner release when reconciliation returns at the deadlin
     await fixture.finishAndVerify();
   } catch (error) {
     failure = error;
-    recordRestoreFailure(fixture.proof, error, () => {
-      fixture.events.push('stop-target');
-      throw new Error('docker stop failed; serving remains held');
-    });
+    recordRestoreFailure(fixture.proof, error, () => fixture.events.push('stop-target'));
   }
 
   expect(failure).toBeInstanceOf(Error);
-  expect((failure as Error).message).toBe(
-    'Full restore deadline exceeded after graph and Access release were committed: Recovery exceeded its 600-second budget',
+  expect((failure as Error).message).toContain('600-second budget');
+  expect((failure as Error).message).toContain(
+    'owner reconciliation completed with target release unobserved',
   );
+  expect((failure as Error).message).not.toContain('serving remains held');
   expect(fixture.proof).toMatchObject({
-    state: 'released',
-    ownerReleaseObserved: true,
-    targetStopped: false,
+    state: 'held',
+    reconcileCompleted: true,
+    releaseObserved: false,
+    targetStopped: true,
     failure: (failure as Error).message,
-    cleanupFailure: 'docker stop failed',
   });
   expect(fixture.proof.ownerLoginsEnabled).toBeUndefined();
   expect(fixture.proof.state).not.toBe('verified');
@@ -337,6 +362,83 @@ test('records committed owner release when reconciliation returns at the deadlin
     'authenticated-reconciliation',
     'stop-target',
   ]);
+});
+
+test('a recreated target cannot inherit a prior matched reconciliation release', async () => {
+  const fixture = restored({
+    graphOpen: false,
+    lineage: {
+      dataEpoch: '00000000-0000-4000-8000-000000000061',
+      routingEpoch: '00000000-0000-4000-8000-000000000062',
+    },
+  });
+  fixture.checks.reconcile = async (_context, _body, key) => {
+    expect(key).toBe('recovery-cut-successor');
+    fixture.events.push('replayed-authenticated-reconciliation');
+    return Response.json({
+      state: 'reconciled',
+      disposition: 'matched',
+      replayed: true,
+    });
+  };
+
+  let failure: unknown;
+  try {
+    await fixture.finishAndVerify();
+  } catch (error) {
+    failure = error;
+    recordRestoreFailure(fixture.proof, error, () => fixture.events.push('stop-target'));
+  }
+
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toContain('did not release the restored graph');
+  expect(fixture.proof).toMatchObject({
+    state: 'held',
+    reconcileCompleted: true,
+    releaseObserved: false,
+    targetStopped: true,
+  });
+  expect(fixture.proof.ownerLoginsEnabled).toBeUndefined();
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'replayed-authenticated-reconciliation',
+    'graph-release-observation',
+    'stop-target',
+  ]);
+});
+
+test('owner LOGIN must be observed on the target before release evidence is set', async () => {
+  const fixture = restored({
+    ownerLogins: [
+      { role: 'account', enabled: true },
+      { role: 'access', enabled: true },
+      { role: 'content', enabled: true },
+      { role: 'relay', enabled: false },
+    ].map(({ role, enabled }) => ({
+      role,
+      enabled,
+      rolname: role,
+      rolcanlogin: enabled,
+    })),
+  });
+
+  let failure: unknown;
+  try {
+    await fixture.finishAndVerify();
+  } catch (error) {
+    failure = error;
+    recordRestoreFailure(fixture.proof, error, () => fixture.events.push('stop-target'));
+  }
+
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toContain('owner LOGIN roles were not observed enabled');
+  expect(fixture.proof).toMatchObject({
+    state: 'held',
+    reconcileCompleted: true,
+    releaseObserved: false,
+    targetStopped: true,
+  });
+  expect(fixture.events.slice(-2)).toEqual(['observe-owner-logins', 'stop-target']);
 });
 
 test('serving verification shares the recovery deadline and reports failed target cleanup', async () => {
@@ -360,7 +462,7 @@ test('serving verification shares the recovery deadline and reports failed targe
   }
   expect(failure).toBeInstanceOf(Error);
   expect((failure as Error).message).toBe(
-    'Full restore serving verification failed after graph and Access release and owner LOGIN were committed: Recovery exceeded its 600-second budget',
+    'Full restore serving verification failed after graph and Access release and owner LOGIN were observed: Recovery exceeded its 600-second budget',
   );
   expect(fixture.proof).toMatchObject({
     state: 'released',
@@ -369,7 +471,7 @@ test('serving verification shares the recovery deadline and reports failed targe
   });
   expect(fixture.proof.state).not.toBe('verified');
   expect(fixture.events.slice(-3)).toEqual([
-    'enable-owner-logins',
+    'observe-owner-logins',
     'serving-verification',
     'stop-target',
   ]);
@@ -390,6 +492,7 @@ test('operator finish observes both owner releases before enabling logins, using
     'membership-status',
     'advance-owner-epochs',
     'enable-owner-logins',
+    'observe-owner-logins',
   ]);
   expect(fixture.preparationCalls).toHaveLength(1);
   expect(fixture.preparationCalls[0]).toMatchObject({ dataEpoch, routingEpoch });
@@ -438,6 +541,7 @@ test('operator finish resumes native membership progress across bounded turns', 
     'membership-status',
     'advance-owner-epochs',
     'enable-owner-logins',
+    'observe-owner-logins',
   ]);
   expect(fixture.preparationCalls).toHaveLength(2);
   expect(fixture.preparationCalls.map((call) => [call.dataEpoch, call.routingEpoch])).toEqual([
@@ -460,8 +564,9 @@ test('operator finish completes membership preparation beyond 256 native turns',
   await fixture.finish();
   expect(fixture.preparationCalls).toHaveLength(257);
   expect(new Set(fixture.preparationCalls.map((call) => call.deadline)).size).toBe(1);
-  expect(fixture.events.at(-2)).toBe('advance-owner-epochs');
-  expect(fixture.events.at(-1)).toBe('enable-owner-logins');
+  expect(fixture.events.at(-3)).toBe('advance-owner-epochs');
+  expect(fixture.events.at(-2)).toBe('enable-owner-logins');
+  expect(fixture.events.at(-1)).toBe('observe-owner-logins');
 });
 
 test('operator finish refuses release when membership status still needs preparation', async () => {
@@ -613,6 +718,7 @@ test('lost native acknowledgment keeps logins held and the next finish resumes p
     'membership-status',
     'advance-owner-epochs',
     'enable-owner-logins',
+    'observe-owner-logins',
   ]);
   expect(new Set(fixture.preparationCalls.map((call) => call.requestId)).size).toBe(3);
 });
