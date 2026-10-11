@@ -121,6 +121,57 @@ export interface AssetStateChangeInput {
   lifecycle: 'active' | 'deleted' | 'erased';
 }
 
+export interface LockedMediaAssetState {
+  owner: string;
+  state_head: string;
+  disclosure: 'private' | 'public';
+  lifecycle: string;
+  erasure_epoch: string;
+  moderation: string;
+}
+
+/** The same asset lock fences upload, Content recording and rendition settlement. */
+export async function lockMediaAssetState(client: PoolClient, asset: string): Promise<LockedMediaAssetState> {
+  const row = (await client.query<LockedMediaAssetState>(`SELECT a.owner, a.state_head, s.disclosure,
+    s.lifecycle, s.erasure_epoch::text, s.moderation FROM media.asset a
+    JOIN media.asset_state s ON s.id = a.state_head WHERE a.id = $1 FOR UPDATE OF a`, [asset])).rows[0];
+  if (!row) throw new MediaMissing('media asset is unavailable');
+  return row;
+}
+
+/** Both admitted state changes and journal-bound erasure use this lifecycle owner.
+ * The caller holds the asset lock and its own authorization/preservation fence. */
+export async function settleMediaAssetState(client: PoolClient, row: LockedMediaAssetState,
+  input: AssetStateChangeInput, authority: { actor: string; authorityEpoch: string;
+    operationId: string; requestDigest: string }): Promise<Omit<CommandOutcome, 'position'>> {
+  const { operationId } = authority;
+  const invalid = row.lifecycle === 'erased'
+    || (row.lifecycle === 'deleted' && input.lifecycle === 'deleted');
+  if (row.state_head !== input.expectedState || invalid) {
+    await receipt(client, { operationId, digest: authority.requestDigest,
+      action: 'media.asset.state', outcome: 'stale_head',
+      reason: invalid ? 'lifecycle-terminal' : 'expected state differs',
+      eventType: 'media.asset.state.stale', payload: { asset: input.asset, expected: input.expectedState } });
+    return { outcome: 'stale_head', id: null, predecessor: row.state_head, replayed: false };
+  }
+  const advances = input.lifecycle !== 'active' && input.lifecycle !== row.lifecycle;
+  const epoch = advances ? String(BigInt(row.erasure_epoch) + 1n) : row.erasure_epoch;
+  const id = randomUUID();
+  await receipt(client, { operationId, digest: authority.requestDigest,
+    action: 'media.asset.state', outcome: 'succeeded', eventType: 'media.asset.state.changed',
+    payload: { asset: input.asset, state: id, disclosure: input.disclosure, lifecycle: input.lifecycle } });
+  await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
+    lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+  [id, input.asset, row.state_head, input.disclosure, row.moderation, input.lifecycle, epoch,
+    authority.actor, authority.authorityEpoch, operationId]);
+  if (input.lifecycle === 'erased') {
+    await client.query(`UPDATE media.representation SET availability = 'erased'
+      WHERE asset_id = $1 AND availability = 'available'`, [input.asset]);
+  }
+  return { outcome: 'succeeded', id, predecessor: row.state_head, replayed: false };
+}
+
 export interface AvatarSelectionInput {
   target: string;
   context: string;
@@ -1072,38 +1123,10 @@ export class MediaStore {
         return { outcome: previous.outcome as CommandOutcome['outcome'], id: state.rows[0]?.id ?? null,
           predecessor: state.rows[0]?.predecessor ?? null, replayed: true };
       }
-      const current = await client.query<{ owner: string; state_head: string; lifecycle: string;
-        erasure_epoch: string; moderation: string;
-        }>(`SELECT a.owner, a.state_head, s.lifecycle,
-        s.erasure_epoch::text, s.moderation FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
-        WHERE a.id = $1 FOR UPDATE OF a`, [input.asset]);
-      const row = current.rows[0];
-      if (!row || row.owner !== admission.actingSubject) throw new MediaMissing('media asset is unavailable');
-      const invalid = row.lifecycle === 'erased'
-        || (row.lifecycle === 'deleted' && input.lifecycle === 'deleted');
-      if (row.state_head !== input.expectedState || invalid) {
-        await receipt(client, { operationId, digest: admission.requestDigest,
-          action: 'media.asset.state', outcome: 'stale_head',
-          reason: invalid ? 'lifecycle-terminal' : 'expected state differs',
-          eventType: 'media.asset.state.stale', payload: { asset: input.asset, expected: input.expectedState } });
-        return { outcome: 'stale_head', id: null, predecessor: row.state_head, replayed: false };
-      }
-      const advances = input.lifecycle !== 'active' && input.lifecycle !== row.lifecycle;
-      const epoch = advances ? String(BigInt(row.erasure_epoch) + 1n) : row.erasure_epoch;
-      const id = randomUUID();
-      await receipt(client, { operationId, digest: admission.requestDigest,
-        action: 'media.asset.state', outcome: 'succeeded', eventType: 'media.asset.state.changed',
-        payload: { asset: input.asset, state: id, disclosure: input.disclosure, lifecycle: input.lifecycle } });
-      await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
-        lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, input.asset, row.state_head, input.disclosure, row.moderation, input.lifecycle, epoch,
-        admission.actingSubject, admission.authorityEpoch, operationId]);
-      if (input.lifecycle === 'erased') {
-        await client.query(`UPDATE media.representation SET availability = 'erased'
-          WHERE asset_id = $1 AND availability = 'available'`, [input.asset]);
-      }
-      return { outcome: 'succeeded', id, predecessor: row.state_head, replayed: false };
+      const row = await lockMediaAssetState(client, input.asset);
+      if (row.owner !== admission.actingSubject) throw new MediaMissing('media asset is unavailable');
+      return settleMediaAssetState(client, row, input, { actor: admission.actingSubject,
+        authorityEpoch: admission.authorityEpoch, operationId, requestDigest: admission.requestDigest });
     });
     if (input.lifecycle === 'erased') {
       if (!preservation)
