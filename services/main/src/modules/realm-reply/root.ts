@@ -2,7 +2,84 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { TargetReadSession } from '../target/resolve.ts';
 import type { ResolvedTarget } from '../target/contract.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { WorkReadMissing } from '../work/read-session.ts';
+import { WorkReadMissing, WorkReadMoved } from '../work/read-session.ts';
+
+const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const validatedParent = Symbol('validated canonical reply parent');
+
+/** The opener owner resolves one canonical (Realm, about) key. It never accepts
+ * a reply id from the posting request. */
+export interface CanonicalReplyOpener {
+  realm: string;
+  about: string;
+  reply: string;
+  rootRevision: string;
+  originRealm: string;
+}
+
+/** These owner reads are supplied by the Realm-reply composition. The visible
+ * parent read must return only its exact, current visible placement revision. */
+export interface CanonicalReplyParentReader {
+  opener(realm: string, about: string): Promise<CanonicalReplyOpener | null>;
+  visibleParent(realm: string, reply: string, principal: NonNullable<TargetReadSession['principal']>,
+    actingSubject: string): Promise<{ revisionId: string } | null>;
+}
+
+export interface CanonicalReplyParentRequest {
+  realm: string;
+  about: string;
+  targetRevision: string;
+  originRealm: string;
+}
+
+/** Opaque owner result: callers can consume the selected parent, but cannot
+ * construct one from request fields or substitute another opener. */
+export interface ValidatedCanonicalReplyParent {
+  readonly realm: string;
+  readonly about: string;
+  readonly reply: string;
+  readonly parentRevision: string;
+  readonly rootRevision: string;
+  readonly originRealm: string;
+  readonly [validatedParent]: true;
+}
+
+/** Resolve the opener by its canonical key, then prove the current target and
+ * visible parent in this principal's read session. A missing opener means the
+ * caller may open a thread on the observed current target revision. */
+export async function resolveCanonicalReplyParent(session: TargetReadSession,
+  request: CanonicalReplyParentRequest, principal: NonNullable<TargetReadSession['principal']>,
+  actingSubject: string, reader: CanonicalReplyParentReader): Promise<ValidatedCanonicalReplyParent | null> {
+  if (![request.realm, request.about, request.targetRevision, request.originRealm].every(value => native.test(value))
+    || request.originRealm !== request.realm) throw new WorkReadMissing('Reply parent is unavailable');
+
+  // Resolve disclosure first so the canonical index cannot reveal a hidden
+  // opener for an unavailable target.
+  const target = await loadReplyTarget(session, request.about, request.targetRevision);
+  if (!target) throw new WorkReadMissing('Reply target is unavailable');
+  if (target.revision !== request.targetRevision) throw new WorkReadMoved('Reply target changed');
+
+  const opener = await reader.opener(request.realm, request.about);
+  if (!opener) {
+    if (!await retainedReplyRoot(session, target, request.targetRevision)
+      || !await replyRootRevision(session, target, request.targetRevision)) {
+      throw new WorkReadMissing('Reply target is unavailable');
+    }
+    return null;
+  }
+  if (opener.realm !== request.realm || opener.about !== request.about
+    || opener.originRealm !== request.originRealm || !native.test(opener.reply)
+    || !native.test(opener.rootRevision)) throw new WorkReadMissing('Reply parent is unavailable');
+  if (!await retainedReplyRoot(session, target, opener.rootRevision)) {
+    throw new WorkReadMissing('Reply parent is unavailable');
+  }
+  const parent = await reader.visibleParent(request.realm, opener.reply, principal, actingSubject);
+  if (!parent || !uuid.test(parent.revisionId)) throw new WorkReadMissing('Reply parent is unavailable');
+  return Object.freeze({ realm: opener.realm, about: opener.about, reply: opener.reply,
+    parentRevision: parent.revisionId, rootRevision: opener.rootRevision,
+    originRealm: opener.originRealm, [validatedParent]: true as const });
+}
 
 /** One target resolution shared by the retained-root and current-root probes. */
 async function loadReplyTarget(session: TargetReadSession, resource: string, revision: string,
