@@ -3134,12 +3134,15 @@ ${edit}
     const plan = (changed: string[]) => planAffected({
       base: 'main', changed, graph: [], sources: new Map(),
       exists: path => path === nativeUnionTest,
-      nativeUnionDockerfile: 'FROM eclipse-temurin:21\n',
+      nativeModuleDockerfile: 'FROM eclipse-temurin:21\n',
     });
-    expect(plan(own).nativeUnion).toBe('not selected');
+    expect(plan(own).nativeModuleCopySelection).toBe('not selected');
     expect(plan(own).tests.unit).not.toContain(nativeUnionTest);
-    expect(plan([...own, 'infra/jena/Dockerfile']).nativeUnion).toBe('selected');
-    expect(plan([...own, 'infra/jena/Dockerfile']).tests.unit).toContain(nativeUnionTest);
+    const imageChange = plan([...own, 'infra/jena/Dockerfile']);
+    expect(imageChange.nativeModuleCopySelection).toBe('selected');
+    expect(imageChange.widened.map(item => item.tier)).toContain('model');
+    expect(imageChange.tests.unit).not.toContain(nativeUnionTest);
+    expect(imageChange.tests.owner).toContain(nativeUnionTest);
     expect(streamUnitBaseline([{ before: 'first-main', after: 'merged', goal: 'alpha', taskIds: ['stream'], at: 't0' },
       { before: 'later-main', after: 'merged-2', goal: 'alpha', taskIds: ['stream'], at: 't1' }], ['stream'], 'current'))
       .toBe('current');

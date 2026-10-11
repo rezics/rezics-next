@@ -62,8 +62,8 @@ export interface AffectedPlan {
   widened: { tier: AffectedTier; because: string }[];
   deferred: { file: string; reason: string }[];
   ignored: { path: string; reason: string }[];
-  /** Set when the Dockerfile text is available: whether an input-selected native file was selected. */
-  nativeUnion?: 'selected' | 'not selected' | 'unsupported COPY syntax, selected';
+  /** Set when the Dockerfile text is available: whether module COPY inputs selected native proofs. */
+  nativeModuleCopySelection?: 'selected' | 'not selected' | 'unsupported COPY syntax, selected';
 }
 
 const codeFile = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
@@ -72,16 +72,20 @@ const stackTiers: AffectedTier[] = ['model', 'integration', 'fault/recovery'];
 // Inputs staged or read by jena-cli.ts, including the pinned image definition.
 const jenaCheckInput = /^infra\/jena\/|^(?:model\/definitions|generated\/model\/shapes)\/.*\.ttl$|^tests\/fixtures\/jena-cli\/scratch\.trig$|^services\/main\/src\/modules\/query\/templates\/work-versions\.(?:rq|fixture\.json)$|^scripts\/qa\/jena-cli\.ts$|^infra\/dev\/compose\.yaml$/;
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
-// Docker/Maven tests whose inputs are the module-stage COPY set, not the unit tier.
-// Shell and HTTP checks under infra/jena/tests stay on the ordinary unit tier.
+// Docker/Maven proofs selected from the module-stage COPY set. Shell and HTTP
+// checks under infra/jena/tests stay on the ordinary unit tier.
+export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
+export const erasureCampaignNativeTest = 'infra/jena/tests/erasure-campaign-native.test.ts';
+export const nativeIntegerPreservationTest = 'infra/jena/tests/native-integer-preservation.test.ts';
+export const workNameScopeBasisTest = 'infra/jena/tests/work-name-scope-basis.test.ts';
 export const inputSelectedNativeTests = [
-  'infra/jena/tests/semantic-source-readiness-union.test.ts',
-  'infra/jena/tests/erasure-campaign-native.test.ts',
+  nativeUnionTest,
+  erasureCampaignNativeTest,
+  nativeIntegerPreservationTest,
+  workNameScopeBasisTest,
 ] as const;
-export const nativeUnionTest = inputSelectedNativeTests[0];
-export const erasureCampaignNativeTest = inputSelectedNativeTests[1];
-export const nativeUnionDockerfile = 'infra/jena/Dockerfile';
-/** Shown on the affected plan so a gate can see why these unit files were or were not chosen. */
+export const nativeModuleDockerfile = 'infra/jena/Dockerfile';
+/** Shown on the affected plan so a gate can see why native proof files were or were not selected. */
 export const nativeModuleCopyInputs = 'native module COPY inputs';
 const inputSelectedNative = new Set<string>(inputSelectedNativeTests);
 
@@ -90,7 +94,7 @@ export interface NativeModuleCopy {
   destination: string;
 }
 
-/** First Dockerfile stage: the native module build the union test reproduces. */
+/** First Dockerfile stage: the native module build used by input-selected proofs. */
 export function nativeModuleStage(dockerfile: string): string {
   return dockerfile.split(/\nFROM /, 1)[0] ?? '';
 }
@@ -117,7 +121,7 @@ function copySourceCovers(path: string, copies: readonly NativeModuleCopy[]): bo
 /** Each registry file uses the module-stage COPY set. A change to one file selects only that file. */
 function nativeFilesTouchedBy(path: string, copies: readonly NativeModuleCopy[]): readonly string[] {
   if (inputSelectedNative.has(path)) return [path];
-  if (path === nativeUnionDockerfile || copySourceCovers(path, copies)) return inputSelectedNativeTests;
+  if (path === nativeModuleDockerfile || copySourceCovers(path, copies)) return inputSelectedNativeTests;
   return [];
 }
 
@@ -291,8 +295,8 @@ export function planAffected(input: {
   sources: Map<string, string>;
   exists: (path: string) => boolean;
   scriptOnlyManifests?: ReadonlySet<string>;
-  /** Dockerfile text. When present, the native union test follows its module-stage COPY inputs. */
-  nativeUnionDockerfile?: string;
+  /** Dockerfile text. When present, native proofs follow its module-stage COPY inputs. */
+  nativeModuleDockerfile?: string;
 }): AffectedPlan {
   const reverse = new Map<string, Set<string>>();
   const unresolvedImporters = new Map<string, Set<string>>();
@@ -331,13 +335,13 @@ export function planAffected(input: {
   // Stack-tier widening for infra/jena stays in place. An unreadable COPY line
   // fails closed by selecting every registry file, so planning itself still finishes.
   let nativeCopies: readonly NativeModuleCopy[] | undefined;
-  let nativeUnionUnsupported = false;
-  if (input.nativeUnionDockerfile !== undefined) {
+  let nativeModuleCopyUnsupported = false;
+  if (input.nativeModuleDockerfile !== undefined) {
     try {
-      nativeCopies = nativeModuleCopies(input.nativeUnionDockerfile);
+      nativeCopies = nativeModuleCopies(input.nativeModuleDockerfile);
     } catch (error) {
       if (!(error instanceof Error) || !error.message.startsWith('unsupported native module COPY:')) throw error;
-      nativeUnionUnsupported = true;
+      nativeModuleCopyUnsupported = true;
     }
   }
   const matchedNative = new Set<string>();
@@ -398,7 +402,7 @@ export function planAffected(input: {
     }
     for (const source of references) seeds.add(source);
   }
-  if (nativeUnionUnsupported) for (const file of inputSelectedNativeTests) matchedNative.add(file);
+  if (nativeModuleCopyUnsupported) for (const file of inputSelectedNativeTests) matchedNative.add(file);
   for (const file of matchedNative) if (input.exists(file)) seeds.add(file);
   const affected = new Set<string>();
   const queue = [...seeds];
@@ -410,8 +414,8 @@ export function planAffected(input: {
       if (!affected.has(importer)) queue.push(importer);
   }
   if (nativeCopies) for (const file of inputSelectedNativeTests) if (!matchedNative.has(file)) affected.delete(file);
-  if (input.nativeUnionDockerfile !== undefined) {
-    plan.nativeUnion = nativeUnionUnsupported
+  if (input.nativeModuleDockerfile !== undefined) {
+    plan.nativeModuleCopySelection = nativeModuleCopyUnsupported
       ? 'unsupported COPY syntax, selected'
       : [...matchedNative].some((file) => input.exists(file)) ? 'selected' : 'not selected';
   }
@@ -601,7 +605,7 @@ export function affectedPlanForChanges(root: string, base: string, changed: read
     if (codeFile.test(module.source) && existsSync(path))
       sources.set(module.source, readFileSync(path, 'utf8'));
   }
-  const dockerfile = join(root, nativeUnionDockerfile);
+  const dockerfile = join(root, nativeModuleDockerfile);
   return planAffected({
     base,
     changed: files,
@@ -609,7 +613,7 @@ export function affectedPlanForChanges(root: string, base: string, changed: read
     sources,
     exists: (path) => existsSync(resolve(root, path)),
     scriptOnlyManifests: manifests,
-    nativeUnionDockerfile: existsSync(dockerfile) ? readFileSync(dockerfile, 'utf8') : '',
+    nativeModuleDockerfile: existsSync(dockerfile) ? readFileSync(dockerfile, 'utf8') : '',
   });
 }
 
@@ -622,7 +626,7 @@ export function affectedPlan(root: string, ref?: string): AffectedPlan {
 export function formatPlan(plan: AffectedPlan): string {
   const lines = [`Affected since ${plan.base.slice(0, 12)}: ${plan.changed.length} changed paths`];
   for (const { task, because } of plan.tasks) lines.push(`  task ${task} (${because})`);
-  if (plan.nativeUnion) lines.push(`  ${nativeModuleCopyInputs}: ${plan.nativeUnion}`);
+  if (plan.nativeModuleCopySelection) lines.push(`  ${nativeModuleCopyInputs}: ${plan.nativeModuleCopySelection}`);
   for (const { tier, because } of plan.widened) {
     // The merge gate expands `unit: whole tier` through every registered unit file.
     // Listing the tier's files here keeps that expansion from picking up registry

@@ -234,9 +234,16 @@ const retainedUnitOwners = new Set([
   'services/main/tests/vote-schema-commands.test.ts',
   'services/main/tests/work-command.test.ts',
 ]);
+export const nativeProofOwnerFiles = [
+  'infra/jena/tests/native-integer-preservation.test.ts',
+  'infra/jena/tests/semantic-source-readiness-union.test.ts',
+  'infra/jena/tests/work-name-scope-basis.test.ts',
+] as const;
+const nativeProofOwnerFileSet: ReadonlySet<string> = new Set(nativeProofOwnerFiles);
 export function isQaOwnerPath(path: string): boolean {
   return /\.test\.tsx?$/.test(path) && !retainedUnitOwners.has(path) && !modelGateFiles.some(file => file === path)
-    && (path.startsWith('scripts/') || path.startsWith('packages/') || path.startsWith('services/'));
+    && (nativeProofOwnerFileSet.has(path)
+      || path.startsWith('scripts/') || path.startsWith('packages/') || path.startsWith('services/'));
 }
 export function unitOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
   return bunOwnerFiles(root).filter(file => !isQaOwnerPath(file));

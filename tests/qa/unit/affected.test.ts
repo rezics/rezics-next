@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { testArgs } from '../../../scripts/qa/acceptance.ts';
-import { classify, erasureCampaignNativeTest, formatPlan, inputSelectedNativeTests, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, type GraphModule } from '../../../scripts/qa/affected.ts';
-import { mergeUnitFiles, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
+import { classify, erasureCampaignNativeTest, formatPlan, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
+import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -26,6 +26,7 @@ const sources = new Map<string, string>([
   ['tests/qa/unit/rebuild.test.ts', "Bun.spawn(['bun', 'scripts/operations/rebuild.ts'])"],
 ]);
 const files = new Set([...graph.map(module => module.source), 'scripts/operations/rebuild.ts']);
+const nativeProofs = [nativeIntegerPreservationTest, nativeUnionTest, workNameScopeBasisTest];
 const plan = (changed: string[], extra: Partial<Parameters<typeof planAffected>[0]> = {}) =>
   planAffected({ base: 'abc', changed, graph, sources, exists: path => files.has(path), ...extra });
 
@@ -305,7 +306,7 @@ FROM maven:pinned AS distribution
 COPY infra/jena/fuseki-text-qa.ttl /opt/qa.ttl
 `.trim();
 
-test('the native union test follows the Dockerfile module-stage COPY inputs', () => {
+test('native module proofs follow the Dockerfile COPY inputs into the owner tier', () => {
   const real = readFileSync(new URL('../../../infra/jena/Dockerfile', import.meta.url), 'utf8');
   const copied = nativeModuleCopies(real).map(copy => copy.source);
   expect(copied).toContain('infra/jena/command-module/src');
@@ -317,7 +318,7 @@ test('the native union test follows the Dockerfile module-stage COPY inputs', ()
   expect(unionSource).toContain('/^COPY (\\S+) (\\/build\\/\\S+)$/');
   const exists = (path: string) => files.has(path) || (inputSelectedNativeTests as readonly string[]).includes(path);
   const imported = plan(['services/main/src/access.ts', 'services/main/src/rating.ts'], {
-    nativeUnionDockerfile: nativeDockerfile,
+    nativeModuleDockerfile: nativeDockerfile,
     graph: [...graph, { source: nativeUnionTest, dependencies: [edge('services/main/src/access.ts')] }],
     sources: new Map([...sources, [nativeUnionTest, "readFileSync(join(root, 'services/main/src/access.ts'))"]]),
     exists,
@@ -332,22 +333,34 @@ test('the native union test follows the Dockerfile module-stage COPY inputs', ()
     'infra/jena/command-module/src/main/java/com/rezics/jena/SemanticSourceBasis.java',
     'services/main/src/modules/query/templates/work-versions.schema.ts',
     'generated/model/shapes/entity.ttl']) {
-    const result = plan([path], { nativeUnionDockerfile: nativeDockerfile, exists });
-    expect(result.tests.unit, path).toEqual([erasureCampaignNativeTest, nativeUnionTest]);
-    expect(result.nativeUnion, path).toBe('selected');
+    const result = plan([path], { nativeModuleDockerfile: nativeDockerfile, exists });
+    expect(result.nativeModuleCopySelection, path).toBe('selected');
+    expect(result.tests.unit, path).toEqual([erasureCampaignNativeTest]);
+    expect(result.tests.owner, path).toEqual(nativeProofs);
     expect(formatPlan(result)).toContain(`${nativeModuleCopyInputs}: selected`);
   }
-  const ownFile = plan([nativeUnionTest], { nativeUnionDockerfile: nativeDockerfile, exists });
-  expect(ownFile.tests.unit).toEqual([nativeUnionTest]);
-  expect(ownFile.nativeUnion).toBe('selected');
-  const erasureOwn = plan([erasureCampaignNativeTest], { nativeUnionDockerfile: nativeDockerfile, exists });
+  for (const file of nativeProofs) {
+    const ownFile = plan([file], { nativeModuleDockerfile: nativeDockerfile, exists });
+    expect(routeTest(file)).toEqual({ tier: 'owner' });
+    expect(ownFile.tests.owner).toEqual([file]);
+    expect(ownFile.tests.unit).toEqual([]);
+    expect(unitFilesFromPlan('.', ownFile)).not.toContain(file);
+    expect(ownerFilesFromPlan('.', ownFile)).toContain(file);
+  }
+  const erasureOwn = plan([erasureCampaignNativeTest], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(erasureOwn.tests.unit).toEqual([erasureCampaignNativeTest]);
-  const laterStage = plan(['infra/jena/fuseki-text-qa.ttl'], { nativeUnionDockerfile: nativeDockerfile, exists });
+  const laterStage = plan(['infra/jena/fuseki-text-qa.ttl'], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(laterStage.tests.unit).not.toContain(nativeUnionTest);
   expect(laterStage.tests.unit).not.toContain(erasureCampaignNativeTest);
   expect(laterStage.widened.map(item => item.tier)).toEqual(['model', 'integration', 'fault/recovery']);
-  const dockerfile = plan(['infra/jena/Dockerfile'], { nativeUnionDockerfile: nativeDockerfile, exists });
+  const dockerfile = plan(['infra/jena/Dockerfile'], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(dockerfile.widened.map(item => item.tier)).toEqual(['model', 'integration', 'fault/recovery']);
+  expect(affectedCommands(dockerfile).find(item => item.label === 'model (whole tier)')!.command)
+    .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'model']]);
+  expect(dockerfile.tests.owner).toEqual(nativeProofs);
+  expect(affectedCommands(dockerfile).find(item => item.label === 'owner (3 files)')!.command[1])
+    .toEqual(['scripts/qa/cli.ts', '--tier', 'owner', ...nativeProofs.flatMap(file => ['--file', file])]);
+  expect(testArgs('owner')).toEqual(expect.arrayContaining(nativeProofs));
   expect(dockerfile.tasks[0]!.task).toBe('jena:check');
 });
 
@@ -355,27 +368,32 @@ test('an unsupported module-stage COPY selects the native union test without bre
   const dockerfile = 'FROM maven AS module\nCOPY --chmod=0755 x /build/x\n';
   expect(() => nativeModuleCopies(dockerfile)).toThrow('unsupported native module COPY:');
   const exists = (path: string) => files.has(path) || (inputSelectedNativeTests as readonly string[]).includes(path);
-  const result = plan(['services/main/src/access.ts'], { nativeUnionDockerfile: dockerfile, exists });
-  expect(result.tests.unit).toEqual([erasureCampaignNativeTest, nativeUnionTest]);
-  expect(result.nativeUnion).toBe('unsupported COPY syntax, selected');
+  const result = plan(['services/main/src/access.ts'], { nativeModuleDockerfile: dockerfile, exists });
+  expect(result.tests.unit).toEqual([erasureCampaignNativeTest]);
+  expect(result.tests.owner).toEqual([nativeIntegerPreservationTest, nativeUnionTest, workNameScopeBasisTest]);
+  expect(result.nativeModuleCopySelection).toBe('unsupported COPY syntax, selected');
   expect(formatPlan(result)).toContain(`${nativeModuleCopyInputs}: unsupported COPY syntax, selected`);
 });
 
 test('a widened unit tier omits input-selected native files unless their COPY rule matched', () => {
   const exists = (path: string) => files.has(path) || (inputSelectedNativeTests as readonly string[]).includes(path);
-  const lock = plan(['yarn.lock'], { nativeUnionDockerfile: nativeDockerfile, exists });
+  const lock = plan(['yarn.lock'], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(lock.widened.map(item => item.tier)).toContain('unit');
-  expect(lock.nativeUnion).toBe('not selected');
+  expect(lock.nativeModuleCopySelection).toBe('not selected');
   expect(lock.tests.unit).toEqual([]);
   const lockPlan = formatPlan(lock);
   expect(lockPlan).toContain('unit: tests/qa/unit');
   expect(lockPlan).not.toContain('unit: whole tier');
   expect(lockPlan).not.toContain(nativeUnionTest);
   expect(lockPlan).not.toContain(erasureCampaignNativeTest);
+  expect(lockPlan).not.toContain(nativeIntegerPreservationTest);
+  expect(lockPlan).not.toContain(workNameScopeBasisTest);
   const lockCommand = affectedCommands(lock).find(item => item.label === 'unit (whole tier)')!.command[1];
   expect(lockCommand.slice(0, 3)).toEqual(['scripts/qa/cli.ts', '--tier', 'unit']);
   expect(lockCommand).not.toContain(nativeUnionTest);
   expect(lockCommand).not.toContain(erasureCampaignNativeTest);
+  expect(lockCommand).not.toContain(nativeIntegerPreservationTest);
+  expect(lockCommand).not.toContain(workNameScopeBasisTest);
   const directory = mkdtempSync(join(tmpdir(), 'unit-native-omit-'));
   try {
     const listed = [...lockPlan.matchAll(/^  unit: (\S+)$/gm)].map(match => match[1]!);
@@ -397,35 +415,47 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
     expect(unitFilesFromPlan(directory, lock)).toEqual(selected);
     expect(selected).not.toContain(nativeUnionTest);
     expect(selected).not.toContain(erasureCampaignNativeTest);
+    expect(selected).not.toContain(nativeIntegerPreservationTest);
+    expect(selected).not.toContain(workNameScopeBasisTest);
     expect(selected).toContain('tests/qa/unit/nested/behavior.test.ts');
     expect(selected).toContain('tests/qa/g-955-harness.test.ts');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-  const image = plan(['infra/jena/Dockerfile'], { nativeUnionDockerfile: nativeDockerfile, exists });
-  expect(image.tests.unit).toEqual([erasureCampaignNativeTest, nativeUnionTest]);
+  const image = plan(['infra/jena/Dockerfile'], { nativeModuleDockerfile: nativeDockerfile, exists });
+  expect(image.tests.unit).toEqual([erasureCampaignNativeTest]);
+  expect(image.tests.owner).toEqual(nativeProofs);
   const imageDirectory = mkdtempSync(join(tmpdir(), 'unit-native-select-'));
   try {
     for (const file of inputSelectedNativeTests) {
       mkdirSync(dirname(join(imageDirectory, file)), { recursive: true });
       writeFileSync(join(imageDirectory, file), '');
     }
-    expect(mergeUnitFiles(imageDirectory, formatPlan(image))).toEqual([...inputSelectedNativeTests].sort());
-    expect(unitFilesFromPlan(imageDirectory, image)).toEqual([...inputSelectedNativeTests].sort());
+    expect(mergeUnitFiles(imageDirectory, formatPlan(image))).toEqual([erasureCampaignNativeTest]);
+    expect(unitFilesFromPlan(imageDirectory, image)).toEqual([erasureCampaignNativeTest]);
+    expect(ownerFilesFromPlan(imageDirectory, image)).toEqual(nativeProofs);
   } finally {
     rmSync(imageDirectory, { recursive: true, force: true });
   }
-  const widenedImage = plan(['yarn.lock', 'infra/jena/Dockerfile'], { nativeUnionDockerfile: nativeDockerfile, exists });
-  expect(widenedImage.tests.unit).toEqual([erasureCampaignNativeTest, nativeUnionTest]);
-  expect(formatPlan(widenedImage)).toContain(`unit: ${nativeUnionTest}`);
+  const widenedImage = plan(['yarn.lock', 'infra/jena/Dockerfile'], { nativeModuleDockerfile: nativeDockerfile, exists });
+  expect(widenedImage.tests.unit).toEqual([erasureCampaignNativeTest]);
+  expect(widenedImage.tests.owner).toEqual([]);
   expect(formatPlan(widenedImage)).toContain(`unit: ${erasureCampaignNativeTest}`);
   const widenedCommands = affectedCommands(widenedImage);
   const widenedCommand = widenedCommands.find(item => item.label === 'unit (whole tier)')!.command[1];
   expect(widenedCommand).not.toContain(nativeUnionTest);
   expect(widenedCommand).not.toContain(erasureCampaignNativeTest);
-  expect(widenedCommands.some(item => item.command[1].includes(`./${nativeUnionTest}`)
+  expect(widenedCommand).not.toContain(nativeIntegerPreservationTest);
+  expect(widenedCommand).not.toContain(workNameScopeBasisTest);
+  expect(widenedCommands.some(item => item.label === 'model (whole tier)')).toBe(true);
+  expect(widenedCommands.some(item => item.label === 'owner (whole tier)')).toBe(true);
+  expect(widenedCommands.some(item => item.label === 'unit (1 files)'
     && item.command[1].includes(`./${erasureCampaignNativeTest}`))).toBe(true);
-  expect(testArgs('unit')).toEqual(expect.arrayContaining([...inputSelectedNativeTests]));
+  expect(testArgs('unit')).toContain(erasureCampaignNativeTest);
+  for (const file of [nativeIntegerPreservationTest, nativeUnionTest, workNameScopeBasisTest])
+    expect(testArgs('unit')).not.toContain(file);
+  expect(testArgs('owner')).toEqual(expect.arrayContaining([nativeIntegerPreservationTest,
+    nativeUnionTest, workNameScopeBasisTest]));
 });
 
 test('affected selection defers the explicitly excluded live browser fixture', () => {

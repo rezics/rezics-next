@@ -112,6 +112,19 @@ test('QA10/MODEL17: native model matrix selects the isolated strict model tier',
       'infra/jena/tests/command.integration.test.ts', '--id', 'MODEL17']]);
 });
 
+test('Docker and Maven proof tests use the owner QA tier', () => {
+  const proofs = [
+    'infra/jena/tests/native-integer-preservation.test.ts',
+    'infra/jena/tests/semantic-source-readiness-union.test.ts',
+    'infra/jena/tests/work-name-scope-basis.test.ts',
+  ];
+  expect(testArgs('owner')).toEqual(expect.arrayContaining(proofs));
+  for (const file of proofs) {
+    expect(testArgs('unit')).not.toContain(file);
+    expect(selectTestCommand([file])).toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file', file]]);
+  }
+});
+
 test('QA10: registered integration paths and acceptance IDs select shared QA setup', () => {
   expect(selectTestCommand(['services/main/tests/acting-context.integration.test.ts', '-t', 'IAM03']))
     .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'integration', '--file',
