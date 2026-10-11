@@ -54,7 +54,7 @@ export function Highlighted({ text, phrase }: { text: string; phrase: string }) 
     {text.slice(at, at + phrase.length)}</mark>{text.slice(at + phrase.length)}</>;
 }
 
-const composingKey = (event: KeyboardEvent<HTMLInputElement>) =>
+const composingKey = (event: KeyboardEvent) =>
   // Safari reports the Enter that commits a composition with isComposing false but keyCode 229.
   event.nativeEvent.isComposing || event.keyCode === 229;
 
@@ -115,8 +115,18 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
     }, 150);
   }
   function choose(item: TypeaheadItem) {
-    setOpen(false);
+    dismiss();
     router.push(localizedPath(suggestionHref(item), locale));
+  }
+
+  function cancelSuggestions() {
+    clearTimeout(timer.current);
+    asked.current++;
+  }
+  function dismiss() {
+    cancelSuggestions();
+    setOpen(false);
+    setActive(-1);
   }
 
   function keyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -132,18 +142,33 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
         event.preventDefault();
         choose(items[active]);
         return;
-      } else if (event.key === 'Escape' && open) {
-        event.preventDefault();
-        setOpen(false);
-        setActive(-1);
-      } else if (event.key === 'Tab') setOpen(false);
+      } else if (event.key === 'Tab' && !event.shiftKey && open && active >= 0) {
+        const source = document.getElementById(`${listId}-${active}`)
+          ?.querySelector<HTMLAnchorElement>('[data-cover-credit] a[href]');
+        if (source) {
+          event.preventDefault();
+          source.focus();
+        }
+      }
     }
     onKeyDown?.(event);
   }
 
   const current = open && active >= 0 ? `${listId}-${active}` : undefined;
-  return <div className="relative w-full">
-    <Input {...props} ref={ref} role="combobox" aria-autocomplete="list" aria-expanded={open}
+  return <div className="relative w-full"
+    onBlur={event => {
+      // Tab can enter a source credit; dismiss only after focus leaves the whole popup.
+      if (!event.currentTarget.contains(event.relatedTarget)) dismiss();
+    }}
+    onKeyDown={event => {
+      if (event.key !== 'Escape' || !open || event.defaultPrevented || composing.current || composingKey(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      // Return focus before unmounting the focused source link.
+      event.currentTarget.querySelector<HTMLInputElement>('input')?.focus();
+      dismiss();
+    }}>
+    <Input {...props} ref={ref} role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-expanded={open}
       aria-controls={open ? listId : undefined} aria-activedescendant={current} className={className}
       onKeyDown={keyDown}
       onInput={(event: InputEvent<HTMLInputElement>) => {
@@ -161,15 +186,15 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
       }}
       onFocus={(event: FocusEvent<HTMLInputElement>) => {
         onFocus?.(event);
-        if (items.length && typeaheadPrefix(event.currentTarget.value)) setOpen(true);
+        if (items.length && typeaheadPrefix(event.currentTarget.value)) suggest(event.currentTarget.value);
       }}
       onBlur={(event: FocusEvent<HTMLInputElement>) => {
         onBlur?.(event);
-        // A source link must stay mounted between receiving focus and its click.
-        if (event.relatedTarget && event.currentTarget.parentElement?.contains(event.relatedTarget)) return;
-        setOpen(false);
+        // A pending prefix must not replace a source link while it has keyboard focus.
+        if (event.currentTarget.parentElement?.contains(event.relatedTarget)) cancelSuggestions();
       }} />
-    {open ? <ul id={listId} role="listbox" aria-label={t.suggestions}
+    {/* A grid permits the source control beside each suggestion; a listbox does not. */}
+    {open ? <div id={listId} role="grid" aria-label={t.suggestions}
       className="absolute inset-x-0 top-full z-50 mt-2 grid max-h-[min(26rem,60dvh)] overflow-y-auto overscroll-contain
         rounded-2xl border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-(--aura-shadow-card)">
       {items.map((item, index) => {
@@ -179,34 +204,36 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
         const credit = item.matchedField === 'credit' && !authors.includes(item.matchedText) ? item.matchedText : null;
         const byline = [...authors.slice(0, 2), ...credit ? [credit] : []];
         const also = item.matchedField === 'title' && item.matchedText !== item.title.value ? item.matchedText : null;
-        return <li key={`${item.work}-${item.matchedField}-${item.matchedText}`} role="presentation">
-          <div id={`${listId}-${index}`} role="option"
-          aria-selected={index === active}
-          // Keep focus in the box, so the list stays open until the click chooses.
-          onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}
-          onMouseMove={() => setActive(index)}
-          className={cn('flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-start',
-            'aria-selected:bg-accent aria-selected:text-accent-foreground')}>
-          <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors: authors.map(name => ({ name, href: null })) }} size="xs" />
-          <span className="grid min-w-0">
-            <span lang={item.title.language} dir={item.title.direction}
-              className="truncate font-medium font-work-title text-[0.9375rem]">
-              <Highlighted text={item.title.value} phrase={phrase} /></span>
-            {type || byline.length ? <span className="truncate text-muted-foreground text-xs">
-              {type}{type && byline.length ? ' · ' : null}
-              {byline.length ? <Highlighted text={t.byAuthor({ name: byline.join(authorSeparator(byline)) })}
-                phrase={item.matchedField === 'credit' ? phrase : ''} />
-                : null}</span> : null}
-            {also ? <span lang={item.matchedLanguage ?? undefined} className="truncate text-muted-foreground text-xs">
-              <Highlighted text={t.alsoTitled({ title: also })} phrase={phrase} /></span> : null}
-          </span>
+        return <div key={`${item.work}-${item.matchedField}-${item.matchedText}`} role="row"
+          id={`${listId}-${index}`} aria-selected={index === active} onFocus={() => setActive(index)}>
+          <div role="gridcell">
+            <button type="button" tabIndex={-1}
+              // Keep focus in the box, so the list stays open until the click chooses.
+              onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}
+              onMouseMove={() => setActive(index)}
+              className={cn('flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-start',
+                index === active && 'bg-accent text-accent-foreground')}>
+              <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
+                authors: authors.map(name => ({ name, href: null })) }} size="xs" />
+              <span className="grid min-w-0">
+                <span lang={item.title.language} dir={item.title.direction}
+                  className="truncate font-medium font-work-title text-[0.9375rem]">
+                  <Highlighted text={item.title.value} phrase={phrase} /></span>
+                {type || byline.length ? <span className="truncate text-muted-foreground text-xs">
+                  {type}{type && byline.length ? ' · ' : null}
+                  {byline.length ? <Highlighted text={t.byAuthor({ name: byline.join(authorSeparator(byline)) })}
+                    phrase={item.matchedField === 'credit' ? phrase : ''} />
+                    : null}</span> : null}
+                {also ? <span lang={item.matchedLanguage ?? undefined} className="truncate text-muted-foreground text-xs">
+                  <Highlighted text={t.alsoTitled({ title: also })} phrase={phrase} /></span> : null}
+              </span>
+            </button>
+            <CatalogueCoverCredit work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
+              authors: authors.map(name => ({ name, href: null })) }} locale={locale} className="px-2 pb-1.5" />
           </div>
-          <CatalogueCoverCredit work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors: authors.map(name => ({ name, href: null })) }} locale={locale} className="px-2 pb-1.5" />
-        </li>;
+        </div>;
       })}
-    </ul> : null}
+    </div> : null}
     <span role="status" className="sr-only">{open ? t.found(items.length) : ''}</span>
   </div>;
 }

@@ -10,6 +10,9 @@ import { SearchPage } from './search-page.tsx';
 import { searchHref, type SearchState } from './state.ts';
 import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from './types.ts';
 import { chooseOption } from '../stories/choose-option.ts';
+import { MediaImageProvider, mediaImageKey } from '@rezics/ui/media-image';
+import { knownCoverCredit } from '../rights-mark/fixtures.ts';
+import type { TypeaheadItem } from './suggest.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-4b5a-4c6d-8e7f-9a0b1c2d3e4f`;
 const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
@@ -259,9 +262,9 @@ export const TypeaheadSuggestsTitles: Story = {
     const canvas = within(canvasElement);
     const box = canvas.getByRole('combobox', { name: 'Search phrase' });
     await userEvent.type(box, 'pri');
-    const list = await canvas.findByRole('listbox', { name: 'Suggested works' });
+    const list = await canvas.findByRole('grid', { name: 'Suggested works' });
     await expect(box).toHaveAttribute('aria-expanded', 'true');
-    const options = within(list).getAllByRole('option');
+    const options = within(list).getAllByRole('row');
     await expect(options).toHaveLength(3);
     // Each suggestion says what the Work is and who wrote it, with the typed part marked.
     await expect(options[0]).toHaveTextContent('Pride and PrejudiceBook · by Jane Austen');
@@ -271,14 +274,114 @@ export const TypeaheadSuggestsTitles: Story = {
     await expect(options[2]).toHaveTextContent('Guide · by Pride Reading Circle');
     await expect(options[2]!.querySelector('mark')).toHaveTextContent('Pri');
     await userEvent.keyboard('{ArrowDown}{ArrowDown}');
-    const second = within(list).getAllByRole('option')[1]!;
+    const second = within(list).getAllByRole('row')[1]!;
     await expect(second).toHaveAttribute('aria-selected', 'true');
     await expect(box).toHaveAttribute('aria-activedescendant', second.id);
     await userEvent.keyboard('{ArrowUp}{ArrowUp}');
-    await expect(within(list).getAllByRole('option')[2]).toHaveAttribute('aria-selected', 'true');
+    await expect(within(list).getAllByRole('row')[2]).toHaveAttribute('aria-selected', 'true');
     await userEvent.keyboard('{Escape}');
-    await expect(canvas.queryByRole('listbox')).toBeNull();
+    await expect(canvas.queryByRole('grid')).toBeNull();
     await expect(box).toHaveAttribute('aria-expanded', 'false');
+  },
+};
+
+const importedCoverReference = { representationId: '00000000-0000-4000-8000-000000001201' };
+const importedCoverSrc = URL.createObjectURL(new Blob([
+  '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><rect width="300" height="450" fill="#234a62"/><text x="150" y="225" fill="#f4d997" text-anchor="middle" font-size="24">Example cover</text></svg>',
+], { type: 'image/svg+xml' }));
+const importedSuggestion = { ...suggestion(1, 'Pride and Prejudice'), cover: {
+  kind: 'image' as const, selection: importedCoverReference.representationId,
+  url: `/v1/media/representations/${importedCoverReference.representationId}/bytes`,
+  mediaType: 'image/svg+xml', width: 300, height: 450, crop: null,
+  basis: { policy: 'story', context: 'story' }, coverCredit: knownCoverCredit,
+} };
+
+export const TypeaheadImportedCoverKeyboard: Story = {
+  args: { parsed: state(''), initial: null, suggest: async () => [
+    { ...importedSuggestion, work: id(3), title: name('Pride and Prejudice (Chinese reading)'),
+      matchedText: 'Pride and Prejudice (Chinese reading)' }, importedSuggestion] },
+  decorators: [Story => <MediaImageProvider viewer={{ ready: true, signedIn: false, age: 'unknown',
+    optIns: { general: true, r15: false, sexual: false, grotesque: false } }} images={{
+    [mediaImageKey(importedCoverReference)]: { ...importedCoverReference, src: importedCoverSrc, nsfw: 'sfw',
+      ageRating: { status: 'unassessed' }, coverCredit: knownCoverCredit },
+  }}><Story /></MediaImageProvider>],
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const box = canvas.getByRole('combobox', { name: 'Search phrase' });
+    const selectedSource = () => within(canvas.getAllByRole('row')[1]!)
+      .getByRole('link', { name: knownCoverCredit.source.name });
+    await userEvent.type(box, 'pri');
+    const list = await canvas.findByRole('grid', { name: 'Suggested works' });
+    await expect(box).toHaveAttribute('aria-haspopup', 'grid');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    await expect(within(list).getAllByRole('row')[1]).toHaveAttribute('aria-selected', 'true');
+    await userEvent.tab();
+    const source = selectedSource();
+    await expect(source).toHaveFocus();
+    await expect(source.closest('button')).toBeNull();
+    await expect(source).toHaveAttribute('href', knownCoverCredit.source.href);
+    await expect(box).toHaveAttribute('aria-expanded', 'true');
+    // Observe the native keyboard activation without navigating the story away.
+    const activated = fn((event: Event) => event.preventDefault());
+    source.addEventListener('click', activated);
+    try {
+      await userEvent.keyboard('{Enter}');
+      await expect(activated).toHaveBeenCalledTimes(1);
+      await expect(source).toHaveFocus();
+    } finally { source.removeEventListener('click', activated); }
+    await userEvent.keyboard('{Escape}');
+    await expect(canvas.queryByRole('grid')).toBeNull();
+    await expect(box).toHaveFocus();
+    await expect(box).toHaveAttribute('aria-expanded', 'false');
+    await expect(box).not.toHaveAttribute('aria-activedescendant');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    await userEvent.tab();
+    await expect(selectedSource()).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Search' })).toHaveFocus();
+    await expect(canvas.queryByRole('grid')).toBeNull();
+    // Leave the popup open with the keyboard focus ring for visual review.
+    await userEvent.tab({ shift: true });
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    await userEvent.tab();
+    await expect(selectedSource()).toHaveFocus();
+  },
+};
+
+let completePendingSuggestions: ((items: TypeaheadItem[]) => void) | undefined;
+export const TypeaheadPendingCoverKeyboard: Story = {
+  args: { parsed: state(''), initial: null, suggest: async prefix => prefix === 'pri'
+    ? [importedSuggestion] : new Promise<TypeaheadItem[]>(resolve => { completePendingSuggestions = resolve; }) },
+  decorators: TypeaheadImportedCoverKeyboard.decorators,
+  beforeEach() { completePendingSuggestions = undefined; },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const box = canvas.getByRole('combobox', { name: 'Search phrase' });
+    await userEvent.type(box, 'pri');
+    await canvas.findByRole('grid', { name: 'Suggested works' });
+    await userEvent.type(box, 'x');
+    await waitFor(() => expect(typeof completePendingSuggestions).toBe('function'));
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.tab();
+    const source = canvas.getByRole('link', { name: knownCoverCredit.source.name });
+    await expect(source).toHaveFocus();
+    const activated = fn((event: Event) => event.preventDefault());
+    source.addEventListener('click', activated);
+    try {
+      completePendingSuggestions!([{ ...importedSuggestion, work: id(4), title: name('A newer result'),
+        matchedText: 'A newer result' }]);
+      await userEvent.keyboard('{Enter}');
+      await expect(activated).toHaveBeenCalledTimes(1);
+      await expect(source).toHaveFocus();
+      await expect(canvas.queryByText('A newer result')).toBeNull();
+      await expect(box).toHaveAttribute('aria-expanded', 'true');
+    } finally { source.removeEventListener('click', activated); }
+    await userEvent.keyboard('{Escape}');
+    await expect(canvas.queryByRole('grid')).toBeNull();
+    await expect(box).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.tab();
+    await expect(canvas.getByRole('link', { name: knownCoverCredit.source.name })).toHaveFocus();
   },
 };
 
@@ -294,12 +397,12 @@ export const TypeaheadWaitsForComposition: Story = {
     box.value = 'xi';
     box.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true }));
     await new Promise(resolve => setTimeout(resolve, 300));
-    await expect(canvas.queryByRole('listbox')).toBeNull();
+    await expect(canvas.queryByRole('grid')).toBeNull();
     box.value = '西';
     box.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '西' }));
-    const list = await canvas.findByRole('listbox', { name: 'Suggested works' });
+    const list = await canvas.findByRole('grid', { name: 'Suggested works' });
     // A suggestion is read out with what it is and who wrote it.
-    await expect(within(list).getByRole('option', { name: '西游记 Book · by 吴承恩' })).toBeVisible();
+    await expect(within(list).getByRole('row', { name: '西游记 Book · by 吴承恩' })).toBeVisible();
   },
 };
 
