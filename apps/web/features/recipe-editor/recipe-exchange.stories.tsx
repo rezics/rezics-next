@@ -219,12 +219,20 @@ export const ImportStaleHead: Story = {
 /** An access refusal is clear and does not offer a retry that cannot succeed. */
 export const ImportDenied: Story = {
   args: { outcome: 'success', importOutcome: 'denied' },
-  async play({ canvasElement }) {
+  async play({ canvasElement, args }) {
     exchangeCalls = [];
+    const copy = copyOf(args.locale ?? 'en');
     const canvas = within(canvasElement);
-    await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
-    await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').importDenied);
+    await userEvent.upload(canvas.getByLabelText(copy.importAction, { selector: 'input' }), file());
+    await expect(canvas.getByRole('alert')).toHaveTextContent(copy.importDenied);
   },
+};
+
+export const ImportDeniedPhoneChinese: Story = {
+  ...ImportDenied,
+  args: { ...ImportDenied.args, locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  parameters: { route: { pathname: localizedPath(recipeEditHref(structure), 'zh-Hans') } },
 };
 
 /** An uncertain response can be retried with the identical file, head and idempotency key. */
