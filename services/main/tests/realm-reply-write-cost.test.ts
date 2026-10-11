@@ -1,17 +1,32 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
-import { foregroundCounted, meterPool, meterFuseki } from '../../../tests/qa/integration/support/query-cost-meter.ts';
-import { createAccountApp } from '../../account/src/app.ts';
-import { createAccountAuth } from '../../account/src/auth.ts';
-import { composeMain } from '../src/composition.ts';
-import { mainConfig } from '../src/config.ts';
+import { startTelemetry, flushTelemetryTraces, shutdownTelemetry, instrumentFetch } from '@rezics/observability/runtime';
+import { profileRequest, startWorkProfileSink, type WorkProfile, type WorkSpan } from '../../../tests/qa/support/work-profile.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { RealmReplyDenied } from '../src/modules/realm-reply/content-store.ts';
-import { TargetUnavailable } from '../src/modules/target/resolve.ts';
-import { WorkReadMissing } from '../src/modules/work/read-session.ts';
-import { growRealmThreads } from './g-1034-fixture.ts';
-import { realmVisibilityFixture } from './realm-visibility-fixture.ts';
+
+// pg hooks must precede owner imports, and each SDK/sink needs a fresh process.
+const costProfileChild = Bun.env.REALM_REPLY_COST_PROFILE_CHILD === '1';
+const sink = costProfileChild ? startWorkProfileSink({ settleMs: 25 }) : undefined;
+const nativeFetch = globalThis.fetch;
+if (sink) startTelemetry('realm-reply-write-cost', { ...process.env, ...sink.env,
+  OTEL_SERVICE_NAME: 'realm-reply-write-cost', OTEL_TRACES_SAMPLER_ARG: '0' });
+const { foregroundCounted, meterPool, meterFuseki } = await import('../../../tests/qa/integration/support/query-cost-meter.ts');
+const { createAccountApp } = await import('../../account/src/app.ts');
+const { createAccountAuth } = await import('../../account/src/auth.ts');
+const { composeMain } = await import('../src/composition.ts');
+const { mainConfig } = await import('../src/config.ts');
+const { RealmReplyDenied } = await import('../src/modules/realm-reply/content-store.ts');
+const { TargetUnavailable } = await import('../src/modules/target/resolve.ts');
+const { WorkReadMissing } = await import('../src/modules/work/read-session.ts');
+const { growRealmThreads } = await import('./g-1034-fixture.ts');
+const { realmVisibilityFixture } = await import('./realm-visibility-fixture.ts');
+
+afterAll(async () => {
+  if (!sink) return;
+  try { await shutdownTelemetry(); }
+  finally { await sink.stop(); }
+});
 
 /** Deterministic counts per owner and command reject growth and omitted owner checks.
  * SQL shares are Content persistence, Access authority/disclosure, and Account live verification.
@@ -28,7 +43,95 @@ const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
 type Command = keyof typeof REALM_REPLY_WRITE_COST;
 type Count = Record<keyof (typeof REALM_REPLY_WRITE_COST)['draft'], number>;
-type ReplyCost = Count & { ms: number; commands: Record<Command, Count & { ms: number }> };
+type Timing = { requestMs: number; accountMs: number; accessMs: number; accountShare: number; accessShare: number };
+type CallbackAudit = { countedStatements: number; uncountedStatements: number; issuers: { callsite: string; counted: boolean; statements: number }[] };
+type CommandCost = Count & { ms: number; timings: Timing; callbacks: Record<'content' | 'access' | 'account', CallbackAudit> };
+type ReplyCost = Count & { ms: number; timings: Timing; commands: Record<Command, CommandCost> };
+
+/** Observe raw callback clients without changing the shared meter. pool.query's
+ * internal callback dispatch is already metered; only explicit checkout queries bypass it. */
+function auditCallbackCheckouts(pool: Pool) {
+  let poolQueryDepth = 0;
+  const query = pool.query.bind(pool) as (...args: unknown[]) => unknown;
+  const connect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+  const issuers = new Map<string, CallbackAudit['issuers'][number]>();
+  pool.query = ((...args: unknown[]) => {
+    poolQueryDepth++;
+    try { return query(...args); }
+    finally { poolQueryDepth--; }
+  }) as Pool['query'];
+  pool.connect = ((...args: unknown[]) => {
+    if (typeof args[0] !== 'function') return connect(...args);
+    // Pool.query dispatches connect synchronously. An async query completion
+    // may itself open an explicit callback checkout, which is a different path.
+    const counted = poolQueryDepth > 0;
+    const callsite = (new Error().stack ?? '').split('\n').find(line =>
+      line.includes('/services/') && !line.includes('/tests/'))?.trim() || 'pg-pool Pool.query';
+    const callback = args[0] as (error: Error | undefined, client: PoolClient, done: () => void) => void;
+    return connect((error: Error | undefined, client: PoolClient, done: () => void) => {
+      if (!client) return callback(error, client, done);
+      const observed = new Proxy(client, { get(target, property) {
+        if (property === 'query') return (...values: unknown[]) => {
+          if (foregroundCounted()) {
+            const key = `${counted}:${callsite}`;
+            const entry = issuers.get(key) ?? { callsite, counted, statements: 0 };
+            entry.statements++;
+            issuers.set(key, entry);
+          }
+          return (target.query as (...rest: unknown[]) => unknown).apply(target, values);
+        };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+      return callback(error, observed, done);
+    });
+  }) as Pool['connect'];
+  return {
+    reset: () => issuers.clear(),
+    read: (): CallbackAudit => ({
+      countedStatements: [...issuers.values()].filter(entry => entry.counted).reduce((sum, entry) => sum + entry.statements, 0),
+      uncountedStatements: [...issuers.values()].filter(entry => !entry.counted).reduce((sum, entry) => sum + entry.statements, 0),
+      issuers: [...issuers.values()].map(entry => ({ ...entry })),
+    }),
+  };
+}
+
+/** Interval unions avoid counting parallel owner calls twice. Account is the
+ * HTTP wait (including its SQL); Access is SQL wait, not all Main computation.
+ * Shares are diagnostic fractions of request server time, never cost caps. */
+function ownerTiming(profile: WorkProfile, accessDatabase: string): Timing {
+  const ids = new Set(profile.spans.map(span => span.spanId));
+  const root = profile.spans.find(span => span.kind === 1 && !ids.has(span.parentSpanId))!;
+  const unionMs = (spans: WorkSpan[]) => {
+    const intervals = spans.map((span): [number, number] =>
+      [Math.max(span.startMs, root.startMs), Math.min(span.endMs, root.endMs)])
+      .filter(([start, end]) => end > start).sort((a, b) => a[0] - b[0]);
+    let total = 0, end = root.startMs;
+    for (const [start, nextEnd] of intervals) {
+      total += Math.max(0, nextEnd - Math.max(start, end));
+      end = Math.max(end, nextEnd);
+    }
+    return total;
+  };
+  const accountMs = unionMs(profile.spans.filter(span => span.kind === 2 && span.attributes['rezics.peer.service'] === 'account'));
+  const accessMs = unionMs(profile.spans.filter(span => span.kind === 2 &&
+    span.attributes['db.system.name'] === 'postgresql' && span.attributes['db.namespace'] === accessDatabase));
+  return { requestMs: profile.serverLatencyMs, accountMs, accessMs,
+    accountShare: accountMs / profile.serverLatencyMs, accessShare: accessMs / profile.serverLatencyMs };
+}
+
+async function runCostProfileChild() {
+  const child = Bun.spawn([process.execPath, 'test', import.meta.filename,
+    '--test-name-pattern', '^one reply costs the same per command and owner'], {
+    cwd: process.cwd(), env: { ...process.env, REALM_REPLY_COST_PROFILE_CHILD: '1' }, stdout: 'pipe', stderr: 'pipe',
+  });
+  const timer = setTimeout(() => child.kill(), 360_000);
+  try {
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    console.log(stdout);
+    expect(code, stderr).toBe(0);
+  } finally { clearTimeout(timer); }
+}
 
 function tallyFuseki(fuseki: FusekiClient) {
   let count = 0;
@@ -46,7 +149,10 @@ async function completeOwnerFixture() {
   const fx = await realmVisibilityFixture();
   let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let composition: Awaited<ReturnType<typeof composeMain>> | undefined;
+  let restoreFetch: (() => void) | undefined;
   try {
+    const callbacks = { content: auditCallbackCheckouts(fx.contentPool),
+      access: auditCallbackCheckouts(fx.accessPool), account: auditCallbackCheckouts(fx.accountPool) };
     const contentPool = meterPool(fx.contentPool);
     const accessPool = meterPool(fx.accessPool);
     const accountPool = meterPool(fx.accountPool);
@@ -59,6 +165,15 @@ async function completeOwnerFixture() {
       resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: new Set() });
     accountApp = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1',
       port: Number(new URL(fx.base).port) });
+    // The issuer is only known after provisioning. Reconfigure the same production
+    // fetch instrumentation with its origin, using native fetch to avoid nested wrappers.
+    if (sink) {
+      const startupFetch = globalThis.fetch;
+      globalThis.fetch = nativeFetch;
+      const undo = instrumentFetch(new Set([fx.base, new URL(Bun.env.FUSEKI_URL!).origin]), sink.url,
+        new Map([[fx.base, 'account'], [new URL(Bun.env.FUSEKI_URL!).origin, 'fuseki']]));
+      restoreFetch = () => { undo(); globalThis.fetch = startupFetch; };
+    }
     composition = await composeMain({ config: mainConfig({ ...Bun.env,
       MAIN_OBJECT_DIRECTORY: fx.env.objectDirectory,
       ACCOUNT_ISSUER: `${fx.base}/api/auth`, ACCOUNT_JWKS_URL: `${fx.base}/api/auth/jwks`,
@@ -67,10 +182,12 @@ async function completeOwnerFixture() {
       ACCOUNT_MAIN_CLIENT_SECRET: fx.verifierClient.client_secret!,
     }), fuseki, accessPool, contentPool });
     const app = composition.app;
-    const call: typeof fx.call = async (method, path, body, actor = fx.actor, key = randomUUID()) => {
+    const call = async (method: string, path: string, body?: object, actor: string | null = fx.actor,
+      key = randomUUID(), traceHeaders?: Headers) => {
       const url = new URL(`http://main.local${path}`);
       if (method === 'GET' && actor) url.searchParams.set('actingSubject', actor);
       const response = await app.handle(new Request(url, { method, headers: {
+        ...Object.fromEntries(traceHeaders ?? []),
         ...(actor ? { authorization: `Bearer ${fx.token}` } : {}),
         'content-type': 'application/json', 'idempotency-key': key,
       }, body: body ? JSON.stringify(body) : undefined }));
@@ -78,19 +195,19 @@ async function completeOwnerFixture() {
         body: await response.json() as Record<string, any> };
     };
     return { ...fx, app, call, env: composition.environment, access: composition.access,
-      content: composition.content, contentPool, accessPool, accountPool, guard, fuseki,
+      content: composition.content, contentPool, accessPool, accountPool, guard, fuseki, callbacks,
       close: async () => {
         try { await app.stop(); }
         finally {
           try { await accountApp!.stop(); }
-          finally { await fx.close(); }
+          finally { restoreFetch?.(); await fx.close(); }
         }
       } };
   } catch (error) {
     try { await composition?.app.stop(); }
     finally {
       try { await accountApp?.stop(); }
-      finally { await fx.close(); }
+      finally { restoreFetch?.(); await fx.close(); }
     }
     throw error;
   }
@@ -101,10 +218,27 @@ async function completeOwnerFixture() {
 // 900 of those do not fit a test. This proves the Postgres side of a reply stays flat as the Realm
 // grows. The graph side at size is proven on the Realm ranking corpus, built once through the product.
 test('one reply costs the same per command and owner at 100 and 1,000 threads of owner rows', async () => {
+  if (!costProfileChild) return runCostProfileChild();
   const fx = await completeOwnerFixture();
   try {
+    // A positive control proves the diagnostic sees the shared meter's gap;
+    // pool.query's own callback dispatch remains counted exactly once.
+    fx.contentPool.reset(); fx.callbacks.content.reset();
+    await new Promise<void>((resolve, reject) => fx.contentPool.connect((error, client, release) => {
+      if (error || !client) return reject(error ?? new Error('callback checkout returned no client'));
+      client.query('SELECT 1', queryError => {
+        release();
+        if (queryError) reject(queryError); else resolve();
+      });
+    }));
+    expect(fx.contentPool.queries).toBe(0);
+    expect(fx.callbacks.content.read().uncountedStatements).toBe(1);
+    await fx.contentPool.query('SELECT 1');
+    expect(fx.contentPool.queries).toBe(1);
+    expect(fx.callbacks.content.read().countedStatements).toBe(1);
     await fx.grant(fx.actor, `review:decide:${fx.realm}`, 'review.decide');
     await fx.grant(fx.actor, `reply:place:${fx.realm}`, 'reply.place');
+    const accessDatabase = (await fx.accessPool.query<{ database: string }>('SELECT current_database() AS database')).rows[0]!.database;
     const read = (): Count => ({
       statements: fx.contentPool.queries + fx.accessPool.queries + fx.accountPool.queries,
       fusekiReads: fx.fuseki.queries, guardCalls: fx.guard.count,
@@ -112,17 +246,37 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads of
     });
     const reset = () => {
       fx.contentPool.reset(); fx.accessPool.reset(); fx.accountPool.reset(); fx.fuseki.reset(); fx.guard.reset();
+      for (const audit of Object.values(fx.callbacks)) audit.reset();
     };
-    const postReply = async (): Promise<{ reply: string; cost: ReplyCost }> => {
+    const postReply = async (measured = false): Promise<{ reply: string; cost: ReplyCost }> => {
       const input = fx.draftInput();
       const commands = {} as ReplyCost['commands'];
-      const started = Date.now();
       const step = async (name: Command, path: string, body: object) => {
         reset();
-        const at = Date.now();
-        const response = await fx.call('POST', path, body);
-        commands[name] = { ...read(), ms: Date.now() - at };
+        const { result: response, profile } = await profileRequest(sink!, headers =>
+          fx.call('POST', path, body, fx.actor, randomUUID(), headers), { flush: flushTelemetryTraces });
+        const callbacks = { content: fx.callbacks.content.read(), access: fx.callbacks.access.read(), account: fx.callbacks.account.read() };
+        const counted = read();
+        commands[name] = { ...counted, ms: profile.totalLatencyMs, timings: ownerTiming(profile, accessDatabase), callbacks };
         expect(response.status, `${name} ${JSON.stringify(response.body)}`).toBe(201);
+        if (profile.postgresStatements !== counted.statements) {
+          const sqlByDatabase: Record<string, number> = {};
+          for (const span of profile.spans.filter(span => span.kind === 2 && span.attributes['db.system.name'] === 'postgresql')) {
+            const database = String(span.attributes['db.namespace']);
+            sqlByDatabase[database] = (sqlByDatabase[database] ?? 0) + 1;
+          }
+          await Bun.write('.temp/realm-reply-trace-diagnostic.json', JSON.stringify({ name, counted, callbacks, sqlByDatabase, profile }, null, 2));
+        }
+        if (measured) {
+          // Cold startup ticks can inherit the request trace while the shared
+          // meter excludes them. Only the warmed, reported replies must agree.
+          expect(profile.postgresStatements, `${name}: owner SQL trace is incomplete`).toBe(counted.statements);
+          expect(profile.spans.filter(span => span.kind === 2 && span.attributes['db.system.name'] === 'postgresql' &&
+            span.attributes['db.namespace'] === accessDatabase).length, `${name}: Access timing spans are incomplete`).toBe(counted.access);
+        }
+        expect(profile.accountCalls, `${name}: Account timing spans are missing`).toBeGreaterThan(0);
+        for (const [owner, audit] of Object.entries(callbacks))
+          expect(audit.uncountedStatements, `${name} ${owner}: ${JSON.stringify(audit.issuers)}`).toBe(0);
         return response.body;
       };
       const draft = await step('draft', '/v1/member-reply-drafts', input);
@@ -142,6 +296,11 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads of
         revisionId: draft.revisionId, revisionDigest: draft.revisionDigest,
         reviewDecisionId: review.decisionId, expectedHead: null, actingSubject: fx.actor,
       });
+      const timingTotals = Object.values(commands).reduce((sum, command) => ({
+        requestMs: sum.requestMs + command.timings.requestMs,
+        accountMs: sum.accountMs + command.timings.accountMs,
+        accessMs: sum.accessMs + command.timings.accessMs,
+      }), { requestMs: 0, accountMs: 0, accessMs: 0 });
       const cost = {
         statements: Object.values(commands).reduce((sum, command) => sum + command.statements, 0),
         fusekiReads: Object.values(commands).reduce((sum, command) => sum + command.fusekiReads, 0),
@@ -149,7 +308,9 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads of
         content: Object.values(commands).reduce((sum, command) => sum + command.content, 0),
         access: Object.values(commands).reduce((sum, command) => sum + command.access, 0),
         account: Object.values(commands).reduce((sum, command) => sum + command.account, 0),
-        ms: Date.now() - started, commands,
+        ms: Object.values(commands).reduce((sum, command) => sum + command.ms, 0), commands,
+        timings: { ...timingTotals, accountShare: timingTotals.accountMs / timingTotals.requestMs,
+          accessShare: timingTotals.accessMs / timingTotals.requestMs },
       };
       return { reply: identity.reply as string, cost };
     };
@@ -157,10 +318,10 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads of
     const source = await postReply();
     await growRealmThreads(fx.contentPool, fx.accessPool, fx.env, fx.realm, source.reply, 0, 99, undefined, false);
     await postReply();
-    const at100 = (await postReply()).cost;
+    const at100 = (await postReply(true)).cost;
     await growRealmThreads(fx.contentPool, fx.accessPool, fx.env, fx.realm, source.reply, 99, 899, undefined, false);
     await postReply();
-    const at1000 = (await postReply()).cost;
+    const at1000 = (await postReply(true)).cost;
     console.log(JSON.stringify({ realmReplyWriteCost: { at100, at1000 } }));
     const counted = (cost: ReplyCost) => ({
       statements: cost.statements, fusekiReads: cost.fusekiReads, guardCalls: cost.guardCalls,
