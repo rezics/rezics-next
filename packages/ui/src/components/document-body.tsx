@@ -38,6 +38,55 @@ function common(node: DocumentNode) {
   };
 }
 
+const knownNodeTypes = new Set([
+  'doc',
+  'text',
+  'paragraph',
+  'heading',
+  'blockquote',
+  'codeBlock',
+  'hardBreak',
+  'horizontalRule',
+  'bulletList',
+  'orderedList',
+  'listItem',
+  'taskList',
+  'taskItem',
+  'table',
+  'tableRow',
+  'tableCell',
+  'tableHeader',
+  'ruby',
+  'image',
+  'media',
+  'extensionInline',
+  'extensionBlock',
+]);
+
+/** One bounded fallback for a historical node the reader cannot interpret. */
+function isolatedPlaceholder(
+  shared: ReturnType<typeof common> & { id?: string; 'data-paragraph'?: number },
+  kind: 'unknown' | 'malformed',
+  name: string,
+) {
+  return (
+    <div
+      {...shared}
+      className="document-component"
+      {...(kind === 'unknown' ? { 'data-unknown-node': name } : { 'data-malformed-node': name })}
+      role="note"
+    />
+  );
+}
+
+function headingLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | 6 | undefined {
+  const level = Number(value);
+  if (level === 1 || level === 2 || level === 3 || level === 4 || level === 5 || level === 6) {
+    return level;
+  }
+  return undefined;
+}
+
 function marked(
   node: DocumentNode,
   spoilerLabel: string,
@@ -121,6 +170,19 @@ export function DocumentBody({
   let task = 0;
   function render(node: DocumentNode, revealSpoiler = false): ReactNode {
     const attrs = node.attrs ?? {};
+    const shared = { ...common(node), ...nodeAttributes?.(node) };
+    // Do not walk content of an unknown or unrenderable node: one placeholder only.
+    if (!knownNodeTypes.has(node.type)) {
+      return isolatedPlaceholder(shared, 'unknown', node.type);
+    }
+    const imageSrc = node.type === 'image' ? safeDocumentUrl(attrs.src, true) : undefined;
+    if (node.type === 'image' && !imageSrc) {
+      return isolatedPlaceholder(shared, 'malformed', 'image');
+    }
+    const level = node.type === 'heading' ? headingLevel(attrs.level) : undefined;
+    if (node.type === 'heading' && level === undefined) {
+      return isolatedPlaceholder(shared, 'malformed', 'heading');
+    }
     const children: ReactNode[] = [];
     for (let index = 0; index < (node.content?.length ?? 0); index++) {
       const child = node.content![index]!;
@@ -146,7 +208,6 @@ export function DocumentBody({
         index = end - 1;
       } else children.push(<Fragment key={key}>{render(child, revealSpoiler)}</Fragment>);
     }
-    const shared = { ...common(node), ...nodeAttributes?.(node) };
     switch (node.type) {
       case 'doc':
         return children;
@@ -161,7 +222,6 @@ export function DocumentBody({
         );
       }
       case 'heading': {
-        const level = Number(attrs.level);
         if (level === 1) return <h1 {...shared}>{children}</h1>;
         if (level === 2) return <h2 {...shared}>{children}</h2>;
         if (level === 3) return <h3 {...shared}>{children}</h3>;
@@ -262,25 +322,20 @@ export function DocumentBody({
           revealSpoiler,
         );
       case 'image': {
-        const src = safeDocumentUrl(attrs.src, true);
         return (
           <figure {...shared}>
-            {src ? (
-              <MediaImage
-                src={src}
-                representationId={string(attrs.representationId)}
-                mediaUseId={string(attrs.mediaUseId)}
-                conceal={attrs.conceal === true}
-                alt={string(attrs.alt) ?? ''}
-                title={string(attrs.title)}
-                width={typeof attrs.width === 'number' ? attrs.width : undefined}
-                height={typeof attrs.height === 'number' ? attrs.height : undefined}
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <figcaption>{string(attrs.alt) ?? string(attrs.title)}</figcaption>
-            )}
+            <MediaImage
+              src={imageSrc!}
+              representationId={string(attrs.representationId)}
+              mediaUseId={string(attrs.mediaUseId)}
+              conceal={attrs.conceal === true}
+              alt={string(attrs.alt) ?? ''}
+              title={string(attrs.title)}
+              width={typeof attrs.width === 'number' ? attrs.width : undefined}
+              height={typeof attrs.height === 'number' ? attrs.height : undefined}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
           </figure>
         );
       }
@@ -323,7 +378,7 @@ export function DocumentBody({
           </div>
         );
       default:
-        return <span data-unknown-node={node.type}>{children}</span>;
+        return isolatedPlaceholder(shared, 'unknown', node.type);
     }
   }
   return (
