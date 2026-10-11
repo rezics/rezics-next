@@ -7,6 +7,11 @@ export default {
   editRecipe: 'Editar receta',
   editorView: 'Vista del editor', viewEdit: 'Editar', viewPreview: 'Vista previa',
   saving: 'Guardando…', allSaved: 'Todos los cambios guardados', stateDraft: 'Borrador', statePublished: 'Publicada',
+  exportAction: 'Descargar JSON de Schema.org', exporting: 'Preparando la descarga…',
+  exportedRevision: insert('Se descargó la revisión {{revision}}.', { revision: String }),
+  exportDenied: 'No tienes acceso de lectura a esta receta, así que no se pudo exportar.',
+  exportTooLargeFallback: 'Esta receta es demasiado grande para exportarla en Schema.org.',
+  exportUnavailable: 'No se pudo exportar la receta. Inténtalo de nuevo.',
 
   detailsHeading: 'Sobre esta receta',
   title: 'Título', description: 'Descripción',

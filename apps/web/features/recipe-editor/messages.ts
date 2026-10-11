@@ -15,6 +15,11 @@ const en = {
   editRecipe: 'Edit recipe',
   editorView: 'Editor view', viewEdit: 'Edit', viewPreview: 'Preview',
   saving: 'Saving…', allSaved: 'All changes saved', stateDraft: 'Draft', statePublished: 'Published',
+  exportAction: 'Download Schema.org JSON', exporting: 'Preparing download…',
+  exportedRevision: insert('Downloaded revision {{revision}}.', { revision: String }),
+  exportDenied: 'You no longer have access to read this recipe, so it could not be exported.',
+  exportTooLargeFallback: 'This recipe is too large to export as Schema.org JSON.',
+  exportUnavailable: 'The recipe could not be exported. Try again.',
 
   detailsHeading: 'About this recipe',
   title: 'Title', description: 'Description',

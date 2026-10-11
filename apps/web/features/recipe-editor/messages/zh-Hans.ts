@@ -7,6 +7,11 @@ export default {
   editRecipe: '编辑食谱',
   editorView: '编辑器视图', viewEdit: '编辑', viewPreview: '预览',
   saving: '保存中…', allSaved: '所有更改都已保存', stateDraft: '草稿', statePublished: '已发布',
+  exportAction: '下载 Schema.org JSON', exporting: '正在准备下载…',
+  exportedRevision: insert('已下载修订版 {{revision}}。', { revision: String }),
+  exportDenied: '你没有权限读取这道食谱，因此无法导出。',
+  exportTooLargeFallback: '这道食谱过大，无法导出为 Schema.org 格式。',
+  exportUnavailable: '无法导出这道食谱，请重试。',
 
   detailsHeading: '关于这道食谱',
   title: '标题', description: '简介',

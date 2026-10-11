@@ -7,6 +7,11 @@ export default {
   editRecipe: '레시피 편집',
   editorView: '편집기 보기', viewEdit: '편집', viewPreview: '미리보기',
   saving: '저장 중…', allSaved: '모든 변경 사항을 저장했습니다', stateDraft: '초안', statePublished: '게시됨',
+  exportAction: 'Schema.org JSON 다운로드', exporting: '다운로드 준비 중…',
+  exportedRevision: insert('리비전 {{revision}}을 다운로드했습니다.', { revision: String }),
+  exportDenied: '이 레시피를 읽을 권한이 없어 내보낼 수 없습니다.',
+  exportTooLargeFallback: '이 레시피는 Schema.org 형식으로 내보내기에는 너무 큽니다.',
+  exportUnavailable: '레시피를 내보내지 못했습니다. 다시 시도해 주세요.',
 
   detailsHeading: '이 레시피 소개',
   title: '제목', description: '설명',

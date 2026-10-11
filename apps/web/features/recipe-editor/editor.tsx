@@ -22,6 +22,8 @@ import { readRecipe } from './api.ts';
 import { Preview } from './preview.tsx';
 import { missingBeforePublishing, PublishBar } from './publish.tsx';
 import { publishWhenSettled } from './publish-settled.ts';
+import { mainRecipeExportApi } from './export-api.ts';
+import { RecipeExchange } from './recipe-exchange.tsx';
 import { createDetailsSaver, createNotesWriter, entryOf, type NotesState } from './saves.ts';
 import { createRecipeStore } from './store.ts';
 import { materializeData } from 'native-i18n';
@@ -48,6 +50,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const client = main ?? browserMain;
   const [store] = useState(() => createRecipeStore({ work, mainVersion, actingSubject, initial: initial.recipe, main: client,
     loading: Boolean(initial.next) }));
+  const exportApi = useMemo(() => mainRecipeExportApi(client), [client]);
   const [loaded, setLoaded] = useState(initial.recipe.nodes.length);
   const [attempt, setAttempt] = useState(0);
   const [details] = useState(() => createDetailsSaver({ main: client, actingSubject, work, language, initial: initial.details }));
@@ -106,12 +109,16 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
         <Link href={workHref} aria-disabled={saving || undefined} onClick={event => { if (saving) event.preventDefault(); }}
           className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'pointer-coarse:h-11' })}>
           <ArrowLeftIcon aria-hidden="true" />{t.backToRecipe}</Link>
-        <p role="status" aria-live="polite" className="flex items-center gap-1.5 text-muted-foreground text-sm">
-          {recipe.loading ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.loadingRest}</>
-            : saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
-            : recipe.loadFailure ? <span>{loadMessage}</span>
-            : accessRemoved ? (denialAlert ? null : <span>{t.failDenied}</span>)
-            : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <RecipeExchange structure={state.structure} revision={state.head} actingSubject={actingSubject} locale={locale}
+            messages={catalog} disabled={recipe.busy || recipe.loading || accessRemoved} api={exportApi} />
+          <p role="status" aria-live="polite" className="flex items-center gap-1.5 text-muted-foreground text-sm">
+            {recipe.loading ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.loadingRest}</>
+              : saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
+              : recipe.loadFailure ? <span>{loadMessage}</span>
+              : accessRemoved ? (denialAlert ? null : <span>{t.failDenied}</span>)
+              : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
+        </div>
       </div>
       <PublishBar snapshot={written} missing={missing} pending={saving || held} held={held} closed={accessRemoved}
         onPublish={() => void publish()} workHref={workHref} t={t} />

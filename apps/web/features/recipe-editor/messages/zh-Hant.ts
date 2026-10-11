@@ -7,6 +7,11 @@ export default {
   editRecipe: '編輯食譜',
   editorView: '編輯器檢視', viewEdit: '編輯', viewPreview: '預覽',
   saving: '儲存中…', allSaved: '所有變更都已儲存', stateDraft: '草稿', statePublished: '已發布',
+  exportAction: '下載 Schema.org JSON', exporting: '正在準備下載…',
+  exportedRevision: insert('已下載修訂版 {{revision}}。', { revision: String }),
+  exportDenied: '你沒有權限讀取這道食譜，因此無法匯出。',
+  exportTooLargeFallback: '這道食譜太大，無法匯出為 Schema.org 格式。',
+  exportUnavailable: '無法匯出這道食譜，請再試一次。',
 
   detailsHeading: '關於這道食譜',
   title: '標題', description: '簡介',

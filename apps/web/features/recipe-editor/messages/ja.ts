@@ -7,6 +7,11 @@ export default {
   editRecipe: 'レシピを編集',
   editorView: 'エディターの表示', viewEdit: '編集', viewPreview: 'プレビュー',
   saving: '保存中…', allSaved: 'すべての変更を保存しました', stateDraft: '下書き', statePublished: '公開済み',
+  exportAction: 'Schema.org JSONをダウンロード', exporting: 'ダウンロードを準備しています…',
+  exportedRevision: insert('リビジョン{{revision}}をダウンロードしました。', { revision: String }),
+  exportDenied: 'このレシピを読む権限がないため、エクスポートできませんでした。',
+  exportTooLargeFallback: 'このレシピは大きすぎるため、Schema.org形式でエクスポートできません。',
+  exportUnavailable: 'レシピをエクスポートできませんでした。もう一度お試しください。',
 
   detailsHeading: 'このレシピについて',
   title: 'タイトル', description: '説明',
