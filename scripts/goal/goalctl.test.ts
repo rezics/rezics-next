@@ -3739,6 +3739,7 @@ process.exit(0);
       const before = r.git('rev-parse', 'main');
       const result = r.run(['merge', task.id], {
         GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '2', GOAL_UNIT_GATE_BUDGET_MS: '1000',
+        GOAL_UNIT_GATE_CEILING_MS: '60000',
       }, 40_000);
       expect(result.status).toBe(1);
       expect(result.stdout).toContain('slowest budget 1000ms');
@@ -3788,8 +3789,10 @@ process.exit(0);
       const plan = join(r.dir, '.temp/unit-plan');
       writeFileSync(plan, [slow, ...later].map(file => `  unit: ${file}`).join('\n') + '\n');
       const log = join(r.dir, '.temp/unit-log');
+      // Reaping has its own grace period; it must not consume the continuation's whole-gate ceiling.
       const result = r.run(['merge', task.id], {
         GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1', GOAL_UNIT_GATE_BUDGET_MS: '1000',
+        GOAL_UNIT_GATE_CEILING_MS: '60000',
       }, 40_000);
       expect(result.stderr).not.toContain('inconclusive');
       expect(result.status).toBe(0);
