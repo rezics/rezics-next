@@ -306,7 +306,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
           dataEpoch: cut.sourceCut.relay.dataEpoch, sequence: cut.sourceCut.relay.sequence } });
       expect(graphRelease.effective).toEqual(graphRelease.saved);
       const receiptCustody = new ReceiptCustody(new PostgresReceiptCustodyStore(restored.access),
-        candidateObjects, candidateGraph.fuseki, compose.FUSEKI_TITLE_ADMISSION_KEY!,
+        candidateObjects.workObjects, candidateGraph.fuseki, compose.FUSEKI_TITLE_ADMISSION_KEY!,
         proofRetirementSender(candidateGraph.url, compose.FUSEKI_COMMAND_TOKEN!));
       const graph: RestoredGraphCustody = {
         fuseki: candidateGraph.fuseki,
@@ -322,7 +322,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         },
       };
       return { ...candidate, restoredFence: cut.restoredFence, restored: { ...restored, graph,
-        objects: { directory: candidateObjects.directory, workObjects: candidateObjects } }, receiptCustody };
+        objects: candidateObjects }, receiptCustody };
     };
     const readFindings = async (reconciliationId: string) => (await relay.query<{
       owner: string; item_kind: string; item_ref: string; disposition: string; evidence_digest: string;
@@ -364,7 +364,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         fuseki: candidate.candidateGraph.fuseki,
         lineage: candidate.candidateGraph.lineage,
         objectDirectory: candidate.candidateObjects.directory,
-        workObjects: candidate.candidateObjects,
+        workObjects: candidate.candidateObjects.workObjects,
         receiptCustody: candidate.receiptCustody,
       };
       return new OwnerOperations(relay, environment, {
@@ -375,8 +375,8 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         hmacKey: recoveryKey,
         objectStore: {
           directory: candidate.candidateObjects.directory,
-          workObjects: candidate.candidateObjects,
-          structureObjects: candidate.candidateObjects,
+          workObjects: candidate.candidateObjects.workObjects,
+          structureObjects: candidate.candidateObjects.workObjects,
         },
         erasures: {
           authority: cut.authority,
@@ -447,8 +447,9 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     // Save the exact original owner bytes before the real Main erasure for the later corruption probe.
     const originalPayload = (await contentPool.query<{ serialized_bytes: Buffer; body: object }>(
       'SELECT serialized_bytes, body FROM content.revision WHERE id = $1', [payload])).rows[0]!;
-    expect((await exact(contentPool, payload)).serializedJson)
-      .toBe(JSON.stringify({ body: payloadBody }));
+    const originalExact = await exact(contentPool, payload);
+    if (originalExact.status !== 'available') throw new Error('original Content payload is unavailable');
+    expect(originalExact.serializedJson).toBe(JSON.stringify({ body: payloadBody }));
 
     // OPS12: this Access closure is absent from backup 2. Main then admits the
     // initial Content erasure before the final authority capture.
@@ -654,7 +655,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     const offline = (candidate: Awaited<ReturnType<typeof bindCandidate>>) => createMainApp(
       candidate.candidateGraph.fuseki, { environment: { fuseki: candidate.candidateGraph.fuseki,
         lineage: candidate.candidateGraph.lineage, objectDirectory: candidate.candidateObjects.directory,
-        workObjects: candidate.candidateObjects, receiptCustody: candidate.receiptCustody }, account: verifier,
+        workObjects: candidate.candidateObjects.workObjects, receiptCustody: candidate.receiptCustody }, account: verifier,
       access: new AccessAdmissionRegistry(candidate.restored.access),
       erasures: new ErasureService(relay, candidate.restored.content, candidate.restored.access) });
     const readJournal = (mainApp: ReturnType<typeof offline>) => mainApp.handle(new Request(

@@ -47,9 +47,13 @@ export class DirectoryObjects implements ImmutableObjects {
 
 type SourceOwners = { account: Pool; access: Pool; content: Pool; relay: Pool };
 type RestoredOwnerPools = SourceOwners & { port: number };
+type CandidateObjectRecoveryStore = ObjectRecoveryStore & {
+  directory: string;
+  workObjects: DirectoryObjects;
+};
 type RecoveryCandidate = RestoredOwnerPools & {
   graph: { url: string; fuseki: FusekiClient; lineage: { dataEpoch: string; routingEpoch: string } };
-  objects: ObjectRecoveryStore;
+  objects: CandidateObjectRecoveryStore;
   dispose: () => Promise<void>;
 };
 
@@ -105,7 +109,7 @@ export interface RetainedErasureRecoveryCut {
   nativeSnapshot: RetainedErasureNativeSnapshot;
   coverage: RecoveryCoverage;
   sourceCut: Awaited<ReturnType<typeof readGraphRecoverySource>>;
-  coveredEpoch: string;
+  coveredEpoch: string | null;
   consumer: string;
   deletionSet: string | null;
   authority: { sealedCoverage: string; hmacKey: string };
@@ -113,7 +117,7 @@ export interface RetainedErasureRecoveryCut {
   restore: () => Promise<{
     restored: RestoredOwnerPools;
     candidateGraph: RecoveryCandidate['graph'];
-    candidateObjects: ObjectRecoveryStore;
+    candidateObjects: CandidateObjectRecoveryStore;
     dispose: () => Promise<void>;
   }>;
 }
@@ -416,6 +420,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
         accountQuiesced = true;
         fenceGeneration = await engageAccessRecoveryFence(options.source.access);
       });
+      if (!fenceGeneration) throw new Error('source Access recovery fence is unavailable');
       const capture = await phase('capture.signed-owner-coverage', async () => {
         const sourceCut = await readGraphRecoverySource(options.fuseki);
         if (input.reuseNativeSnapshot)
