@@ -34,9 +34,10 @@ export function captureFusekiPlan(
   )
     throw new Error('Invalid Fuseki plan input');
   const directory = resolve(options.directory ?? join(root, '.temp/work-profiles/plans'));
-  const local = relative(root, directory);
-  if (local.startsWith('..') && directory !== '/tmp' && !directory.startsWith('/tmp/'))
-    throw new Error('Plan artifacts must stay in this checkout or /tmp');
+  // A regression run keeps QA artifacts outside its disposable checkout.
+  const allowed = [root, process.env.REZICS_QA_ARTIFACT_ROOT, '/tmp'].filter((base): base is string => !!base);
+  if (!allowed.some(base => !relative(resolve(base), directory).startsWith('..')))
+    throw new Error('Plan artifacts must stay in this checkout, the QA artifact root or /tmp');
   mkdirSync(directory, { recursive: true });
   const image =
     options.image ??

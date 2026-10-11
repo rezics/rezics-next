@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   prepareWorkProfileCorpus,
@@ -275,6 +276,29 @@ test('G1024: a blocking preparation callback cannot publish a manifest after the
     expect(backups).toBe(0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('G1024: plan artifacts stay in the checkout, the QA artifact root or /tmp', () => {
+  const outside = mkdtempSync(join(homedir(), '.cache/g-1024-plan-'));
+  const previous = process.env.REZICS_QA_ARTIFACT_ROOT;
+  const capture = (directory: string) => captureFusekiPlan('SELECT ?x WHERE { VALUES ?x { 1 } }', {
+    label: 'placement',
+    directory,
+    image: { image: 'rezics/fuseki:6.2.0-cmd0.5.36', jenaVersion: '6.2.0' },
+    run: () => ({ status: 0, stdout: '(table)', stderr: '' }),
+  });
+  try {
+    delete process.env.REZICS_QA_ARTIFACT_ROOT;
+    expect(() => capture(join(outside, 'qa/plans'))).toThrow('Plan artifacts must stay');
+    process.env.REZICS_QA_ARTIFACT_ROOT = join(outside, 'qa');
+    expect(capture(join(outside, 'qa/plans')).planFile).toEndWith('.plan.txt');
+    expect(() => capture(join(outside, 'elsewhere'))).toThrow('Plan artifacts must stay');
+    expect(() => capture(join(outside, 'qa-sibling'))).toThrow('Plan artifacts must stay');
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_QA_ARTIFACT_ROOT;
+    else process.env.REZICS_QA_ARTIFACT_ROOT = previous;
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 
