@@ -106,14 +106,17 @@ reported candidates, including any probe cap, rather than native Lucene visits.
 The meter retains that response only when explicit query capture is enabled.
 
 [`work-profile-corpus`](../../scripts/load/work-profile-corpus.ts) defines three
-diagnostic scales for unrelated Works, unrelated posts, follows, memberships,
-history depth, Realm size and Concept vocabulary. Change one dimension and hold
+diagnostic scales (4/16/64) for unrelated Works, unrelated posts, follows,
+memberships, Realm size and Concept vocabulary, and 2/8/32 for history depth. Change one dimension and hold
 the others fixed.
 Scenario owners supply their existing public command flows and read-back
 verification, including publication, membership consent and expected heads.
 History revisions run serially; independent entities use two seed workers.
-Stable dataset identities include the recipe version and every dimension;
+Corpus identities include the recipe version and every dimension;
 retained manifests also check the existing load model/schema/engine compatibility.
+Stable entity ids belong to the retained backup: restoring that checkpoint
+preserves them, while a fresh API build generates new ids. The
+[seed owner contract](../../scripts/load/README.md) distinguishes those identities.
 Preparation verifies all dimensions before retaining a stopped backup; later
 runs restore distinct writable copies. Bind the backup driver to the existing
 fixture/load backup and restore workflow, never copy live storage. Include
