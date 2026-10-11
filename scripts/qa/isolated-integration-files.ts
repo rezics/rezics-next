@@ -180,6 +180,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-693-wiki-delta.test.ts',
   // Reply write cost compares two Realm sizes exactly. Other suites on the same database move that count.
   'services/main/tests/realm-reply-write-cost.test.ts',
+  // Post lifecycle leaves a retained synthetic migration graph and an invalidated membership completion proof (65 legacy Works without a publisher), so a later file on the same database is refused as populated without prepared membership.
+  'tests/qa/integration/post-lifecycle.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
