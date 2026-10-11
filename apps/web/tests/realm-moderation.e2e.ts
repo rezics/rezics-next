@@ -255,7 +255,9 @@ test('a moderator bans a member through Manage and restores their posting access
     const postAlert = member.page.getByRole('alert');
     await expect(postAlert).toBeVisible({ timeout: 60_000 });
     await expect(postAlert).toHaveText('You are banned from this community and cannot post. Your draft is still here.');
-    await info.attach('banned-composer', { body: await member.page.screenshot({ fullPage: true }), contentType: 'image/png' });
+    const bannedScreenshot = info.outputPath('banned-composer.png');
+    await member.page.screenshot({ path: bannedScreenshot, fullPage: true });
+    await info.attach('banned-composer', { path: bannedScreenshot, contentType: 'image/png' });
     await expect.poll(() => composerResponses.some(response =>
       response.startsWith('403 /api/main/v1/member-reply-drafts:')), { timeout: 10_000 }).toBe(true);
     await expect(member.page).toHaveURL(composerUrl);
@@ -281,7 +283,9 @@ test('a moderator bans a member through Manage and restores their posting access
       throw new Error(`${error instanceof Error ? error.message : String(error)}\nComposer API responses:\n${composerResponses.join('\n')}`);
     }
     await expect(member.page.getByRole('heading', { name: postTitle, exact: true })).toBeVisible({ timeout: 60_000 });
-    await info.attach('restored-post', { body: await member.page.screenshot({ fullPage: true }), contentType: 'image/png' });
+    const restoredScreenshot = info.outputPath('restored-post.png');
+    await member.page.screenshot({ path: restoredScreenshot, fullPage: true });
+    await info.attach('restored-post', { path: restoredScreenshot, contentType: 'image/png' });
   } finally {
     await member.close();
   }
