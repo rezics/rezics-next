@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { expect, test } from 'bun:test';
-import { launchCoverage, type Proof } from '../../../scripts/qa/cases/launch-coverage.ts';
+import { launchCoverage, type JourneyProof, type Proof } from '../../../scripts/qa/cases/launch-coverage.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const kinds = ['books', 'recipes', 'visual-novels', 'anime', 'manga', 'games', 'realm', 'zone'] as const;
@@ -27,6 +27,15 @@ const missingItems = new Set([
   'L26',
   'gap',
 ]);
+const requiredHardCaseRows = [
+  { kind: 'books', hardCase: 'two-device-progress' },
+  { kind: 'visual-novels', hardCase: 'two-device-progress' },
+  { kind: 'anime', hardCase: 'two-device-progress' },
+  { kind: 'manga', hardCase: 'two-device-progress' },
+  { kind: 'games', hardCase: 'two-device-progress' },
+  { kind: 'books', hardCase: 'thousand-chapters' },
+  { kind: 'anime', hardCase: 'thousand-chapters' },
+] as const;
 
 function escaped(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -34,21 +43,29 @@ function escaped(value: string): string {
 
 function namedTestExists(source: string, title: string): boolean {
   const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
-  for (const match of source.matchAll(declaration)) {
-    // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon); the registry names
-    // the title after it, so no task identifier is copied into the registry.
-    const rawTitle = match[2]!.replace(/^G-?\d+: /, '');
-    const pattern = rawTitle
-      .split(/(\$\{[^}]+\})/g)
-      .map((part) => (part.startsWith('${') ? '.*' : escaped(part)))
-      .join('');
-    if (new RegExp(`^${pattern}$`).test(title)) return true;
-  }
-  return false;
+  return [...source.matchAll(declaration)].some((match) => match[2] === title);
 }
 
 function proofMissing(proof: Proof): proof is Extract<Proof, { missing: string }> {
   return 'missing' in proof;
+}
+
+function journeyProof(proof: Proof): proof is JourneyProof {
+  return 'journey' in proof;
+}
+
+function journeyRegistered(wrapper: string, moduleSpecifier: string): boolean {
+  const imports = /\bimport\s*\{([^}]*)\}\s*from\s*(['"])([^'"]+)\2/g;
+  for (const match of wrapper.matchAll(imports)) {
+    if (match[3] !== moduleSpecifier) continue;
+    for (const binding of match[1]!.split(',')) {
+      const names = binding.trim().match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/);
+      if (!names) continue;
+      const localName = names[2] ?? names[1]!;
+      if (new RegExp(`\\b${escaped(localName)}\\s*\\(`).test(wrapper)) return true;
+    }
+  }
+  return false;
 }
 
 function rowLabel(row: (typeof launchCoverage)[number]): string {
@@ -96,7 +113,24 @@ test('launch coverage names existing tests and reports remaining rows', () => {
         continue;
       }
       const source = readFileSync(filePath, 'utf8');
-      if (!namedTestExists(source, proof.test)) errors.push(`${rowLabel(row)}: test not found in ${proof.file}: ${proof.test}`);
+      if (journeyProof(proof)) {
+        const journeyPath = resolve(repositoryRoot, proof.journey);
+        if (!existsSync(journeyPath)) {
+          errors.push(`${rowLabel(row)}: missing journey module ${proof.journey}`);
+          continue;
+        }
+        const moduleSpecifier = relative(dirname(proof.file), proof.journey).split(sep).join('/');
+        const relativeModule = moduleSpecifier.startsWith('.') ? moduleSpecifier : `./${moduleSpecifier}`;
+        if (!journeyRegistered(source, relativeModule)) {
+          errors.push(`${rowLabel(row)}: ${proof.file} does not register ${proof.journey}`);
+        }
+        const journeySource = readFileSync(journeyPath, 'utf8');
+        if (!namedTestExists(journeySource, proof.test)) {
+          errors.push(`${rowLabel(row)}: test not found in journey ${proof.journey}: ${proof.test}`);
+        }
+      } else if (!namedTestExists(source, proof.test)) {
+        errors.push(`${rowLabel(row)}: test not found in ${proof.file}: ${proof.test}`);
+      }
     }
 
     for (const item of new Set(missingForRow(row))) {
@@ -109,7 +143,7 @@ test('launch coverage names existing tests and reports remaining rows', () => {
     : '- none';
   const byItem = [...missingCounts.entries()].sort(([left], [right]) => left.localeCompare(right));
   console.log(
-    `Launch coverage: ${provedPairs.length}/${launchCoverage.length} proved pairs; ${missingRows.length} rows still missing.\n` +
+    `Launch coverage: ${launchCoverage.length} rows; ${provedPairs.length} proved pairs; ${missingRows.length} rows still missing.\n` +
       `Missing rows per item: ${byItem.map(([item, count]) => `${item} ${count}`).join(', ') || 'none'}\n` +
       remaining,
   );
@@ -121,5 +155,8 @@ test('every launch kind and hard case has a coverage row', () => {
   for (const kind of kinds) expect(launchCoverage.some((row) => row.kind === kind), `${kind} has a row`).toBe(true);
   for (const hardCase of hardCases) {
     expect(launchCoverage.some((row) => row.hardCase === hardCase), `${hardCase} has a row`).toBe(true);
+  }
+  for (const { kind, hardCase } of requiredHardCaseRows) {
+    expect(launchCoverage.some((row) => row.kind === kind && row.hardCase === hardCase), `${kind} ${hardCase} has a row`).toBe(true);
   }
 });

@@ -1,4 +1,7 @@
-export type Proof = { file: string; test: string } | { missing: string };
+export type NamedProof = { file: string; test: string };
+export type JourneyProof = { file: string; journey: string; test: string };
+export type Proof = NamedProof | JourneyProof | { missing: string };
+type ApiProof = NamedProof | { missing: string };
 
 export interface LaunchCoverage {
   kind: 'books' | 'recipes' | 'visual-novels' | 'anime' | 'manga' | 'games' | 'realm' | 'zone';
@@ -12,20 +15,21 @@ export interface LaunchCoverage {
     | 'interrupted-exports'
     | 'two-device-progress'
     | 'expired-loans';
-  api: Proof;
+  api: ApiProof;
   browser: Proof;
 }
 
-const api = (file: string, test: string): Proof => ({ file, test });
+const api = (file: string, test: string): ApiProof => ({ file, test });
 const browser = api;
+const journeyBrowser = (file: string, journey: string, test: string): JourneyProof => ({ file, journey, test });
 const missing = (item: string): Proof => ({ missing: item });
 
 export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'books',
     capability: 'Work hub and edition choice',
-    api: api('tests/qa/integration/g-851-release-query.test.ts',
-      'one usable release supplies every condition and every explanation; denied releases supply neither'),
+    api: api('tests/qa/integration/g-835-series.test.ts',
+      'G-835: Index reference API, distinct omnibus coverage, preference races, pinned revisions, privacy and bounded continuation'),
     browser: browser('apps/web/tests/g-743-hub.e2e.ts',
       'work-hub: a reader chooses an edition with the keyboard alone, under reduced motion, in the Latin locale'),
   },
@@ -33,14 +37,14 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'books',
     capability: 'Catalogue browse and search in its Zone',
     api: api('tests/qa/integration/g-828-zone-browse.test.ts',
-      'HTTP traverses 1,000 adopted Works in every sort and Condition; public counts, relay, backfill and serial recovery'),
+      'G828: HTTP traverses 1,000 adopted Works in every sort and Condition; public counts, relay, backfill and serial recovery'),
     browser: missing('L21'),
   },
   {
     kind: 'books',
     capability: 'Collection tracking and progress',
-    api: api('tests/qa/integration/g-892-collection-grain.test.ts',
-      'SAO Collection selects series or volumes, traverses all cursors and never discloses releases/private members'),
+    api: api('tests/qa/integration/g-552-library-foundation.test.ts',
+      'G-552: SQL totals cover 1,000 status rows and 2,601 completions; a Work ranked 500th resumes independently'),
     browser: browser('apps/web/tests/work-page.e2e.ts',
       'a signed-in reader shelves and rates a Work, sees their rating in Mine and continues from saved progress'),
   },
@@ -48,9 +52,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'books',
     capability: 'Library import',
     api: api('tests/qa/integration/g-854-library-bundle.test.ts',
-      'API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
+      'G-854: API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
     browser: browser('apps/web/tests/library-import.e2e.ts',
-      'a reader imports a Goodreads file, then a 200-row export, and Main reports every row'),
+      'G428: a reader imports a Goodreads file, then a 200-row export, and Main reports every row'),
   },
   {
     kind: 'books',
@@ -98,7 +102,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'recipes',
     capability: 'Read a recipe',
     api: api('tests/qa/integration/recipe-work-page.test.ts',
-      'a visible Recipe Work page scales the pinned ingredient revision and fences private reads'),
+      'G-415: a visible Recipe Work page scales the pinned ingredient revision and fences private reads'),
     browser: browser('apps/web/tests/recipe-authoring.e2e.ts',
       'a cook writes a recipe with sections and linked steps, edits it from two tabs, publishes it and reads it back'),
   },
@@ -112,22 +116,23 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'visual-novels',
     capability: 'Work hub and edition choice',
-    api: api('tests/qa/integration/g-851-release-query.test.ts',
-      'one usable release supplies every condition and every explanation; denied releases supply neither'),
+    api: missing('L21'),
     browser: missing('L21'),
   },
   {
     kind: 'visual-novels',
     capability: 'Catalogue browse and search in its Zone',
     api: api('tests/qa/integration/g-852-zones.test.ts',
-      'two Zones share one catalogue Work and one usable visual-novel release'),
+      'G852: two Zones share one catalogue Work and one usable visual-novel release'),
     browser: missing('L21'),
   },
   {
     kind: 'visual-novels',
     capability: 'Collection tracking and progress',
-    api: missing('L21'),
-    browser: missing('L21'),
+    api: api('tests/qa/integration/partless-progress.test.ts',
+      'a partless Work is marked on one device and read, undone and refused when stale on another'),
+    browser: browser('apps/web/tests/partless-progress.e2e.ts',
+      'a visual novel with no parts is marked on one phone and seen on the other'),
   },
   {
     kind: 'anime',
@@ -141,14 +146,15 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/anime-manga-zones.test.ts',
       'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first'),
     browser: browser('apps/web/tests/anime-manga-zones.e2e.ts',
-      'en at 390px: filter the long anime and manga by format and year'),
+      '${locale} at ${viewport.width}px: filter the long anime and manga by format and year'),
   },
   {
     kind: 'anime',
     capability: 'Collection tracking and progress',
     api: api('tests/qa/integration/long-series-progress.test.ts',
       'a thousand grouped Episode occurrences resume with bounded disclosed progress and explicit unavailable number seek'),
-    browser: missing('L21'),
+    browser: browser('apps/web/tests/episode-progress.e2e.ts',
+      'episodes marked on one device resume on another, with specials kept apart'),
   },
   {
     kind: 'manga',
@@ -162,13 +168,14 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/anime-manga-zones.test.ts',
       'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first'),
     browser: browser('apps/web/tests/anime-manga-zones.e2e.ts',
-      'en at 390px: filter the long anime and manga by format and year'),
+      '${locale} at ${viewport.width}px: filter the long anime and manga by format and year'),
   },
   {
     kind: 'manga',
     capability: 'Collection tracking and progress',
     api: missing('L19'),
-    browser: missing('L19'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'a manga chapter marked on a phone resumes on the desktop, including from an omnibus, and a simultaneous mark keeps both versions'),
   },
   {
     kind: 'games',
@@ -186,7 +193,8 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'games',
     capability: 'Collection tracking and progress',
     api: missing('L19'),
-    browser: missing('L19'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'a game marked completed on one device is completed on the other'),
   },
   {
     kind: 'realm',
@@ -200,7 +208,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'realm',
     capability: 'Membership and admission',
     api: api('tests/qa/integration/g-946-join-requests.test.ts',
-      'requests stay immutable, have one pending episode, paginate, withdraw, decline and accept exactly once without consent'),
+      'G-946: requests stay immutable, have one pending episode, paginate, withdraw, decline and accept exactly once without consent'),
     browser: missing('gap'),
   },
   {
@@ -234,7 +242,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'realm',
     capability: 'Ranking',
     api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
-      'complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history'),
+      'G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history'),
     browser: missing('gap'),
   },
   {
@@ -273,7 +281,8 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     capability: 'A Zone without a Realm',
     api: api('tests/qa/integration/zone-document-home.test.ts',
       'Realm-less site binds exact revisions; drafts stay outside and republishing moves public membership'),
-    browser: missing('L17'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      'an author writes, previews and publishes a zone home page, and a second tab keeps a stale draft'),
   },
   {
     kind: 'zone',
@@ -286,7 +295,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     capability: 'Disambiguate imported editions',
     hardCase: 'ambiguous-editions',
     api: api('tests/qa/integration/g-854-library-bundle.test.ts',
-      'API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
+      'G-854: API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
     browser: browser('apps/web/tests/g-743-library.e2e.ts',
       'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale'),
   },
@@ -294,8 +303,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'books',
     capability: 'Choose among mixed formats',
     hardCase: 'mixed-formats',
-    api: api('tests/qa/integration/g-851-release-query.test.ts',
-      'one usable release supplies every condition and every explanation; denied releases supply neither'),
+    api: missing('L21'),
     browser: browser('apps/web/tests/g-743-hub.e2e.ts',
       'work-hub: a reader chooses an edition with the keyboard alone, under reduced motion, in the Latin locale'),
   },
@@ -305,15 +313,14 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     hardCase: 'non-ui-languages',
     api: api('tests/qa/integration/g-704-contribution-loop.test.ts',
       'CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted'),
-    browser: browser('apps/web/tests/g-841-q10-translations.e2e.ts',
-      'query 10: translations name their source continuity and language; unverified ones stay unverified'),
+    browser: missing('L21'),
   },
   {
     kind: 'books',
     capability: 'Navigate a thousand-chapter inventory',
     hardCase: 'thousand-chapters',
     api: api('tests/qa/integration/g-954-reading-position.test.ts',
-      '1000-chapter chooser searches CJK and chapter numbers before paging and keeps disclosure and cursor fences'),
+      'G954: 1000-chapter chooser searches CJK and chapter numbers before paging and keeps disclosure and cursor fences'),
     browser: missing('L21'),
   },
   {
@@ -330,14 +337,16 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     hardCase: 'interrupted-exports',
     api: api('tests/qa/integration/library-export-resume.test.ts',
       'a 1,200-record library export resumes after a dropped page and a new export repeats it'),
-    browser: missing('gap'),
+    browser: journeyBrowser('apps/web/tests/g-855-library-export.e2e.ts',
+      'apps/web/tests/journeys/library-export.ts',
+      '${viewport.width}: a download interrupted by a reload resumes where it stopped and saves one complete file'),
   },
   {
     kind: 'books',
     capability: 'Continue progress across devices',
     hardCase: 'two-device-progress',
-    api: api('tests/qa/integration/partless-progress.test.ts',
-      'a partless Work is marked on one device and read, undone and refused when stale on another'),
+    api: api('tests/qa/integration/long-series-progress.test.ts',
+      'a chapter inside a volume resumes and discloses across the series, and a deeper nest is refused'),
     browser: browser('apps/web/tests/g-743-library.e2e.ts',
       'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale'),
   },
@@ -349,5 +358,48 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'a loan past its due date reads as overdue, an extension clears that, and returning ends the hold'),
     browser: browser('apps/web/tests/library-loans.e2e.ts',
       'a reader owns a copy, lends it overdue, extends it and returns it'),
+  },
+  {
+    kind: 'visual-novels',
+    capability: 'Continue progress across devices',
+    hardCase: 'two-device-progress',
+    api: api('tests/qa/integration/partless-progress.test.ts',
+      'a partless Work is marked on one device and read, undone and refused when stale on another'),
+    browser: browser('apps/web/tests/partless-progress.e2e.ts',
+      'a visual novel with no parts is marked on one phone and seen on the other'),
+  },
+  {
+    kind: 'anime',
+    capability: 'Continue progress across devices',
+    hardCase: 'two-device-progress',
+    api: api('tests/qa/integration/long-series-progress.test.ts',
+      'a thousand grouped Episode occurrences resume with bounded disclosed progress and explicit unavailable number seek'),
+    browser: browser('apps/web/tests/episode-progress.e2e.ts',
+      'episodes marked on one device resume on another, with specials kept apart'),
+  },
+  {
+    kind: 'manga',
+    capability: 'Continue progress across devices',
+    hardCase: 'two-device-progress',
+    api: missing('L19'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'a manga chapter marked on a phone resumes on the desktop, including from an omnibus, and a simultaneous mark keeps both versions'),
+  },
+  {
+    kind: 'games',
+    capability: 'Continue progress across devices',
+    hardCase: 'two-device-progress',
+    api: missing('L19'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'a game marked completed on one device is completed on the other'),
+  },
+  {
+    kind: 'anime',
+    capability: 'Navigate a thousand-episode inventory',
+    hardCase: 'thousand-chapters',
+    api: api('tests/qa/integration/long-series-progress.test.ts',
+      'a thousand grouped Episode occurrences resume with bounded disclosed progress and explicit unavailable number seek'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'episode 1001 of a real series is watched on another device, and episode 1002 is the next one'),
   },
 ];
