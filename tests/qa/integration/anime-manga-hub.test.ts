@@ -107,7 +107,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         await grant(`semantic:read:${definition.component}`, 'semantic.read', person);
       },
       currentDefinition: async (key: string) => {
-        const response = await call('GET', `/v1/lexicon/definitions/${key}`);
+        const response = await call('GET', `/v1/lexicon/definitions/${key}?actingSubject=${encodeURIComponent(person)}`);
         if (response.status === 404) return null;
         const current = await json<{ kind: string; definition: string; revision: string; lifecycle: string;
           roles: unknown[] }>(response);

@@ -44,7 +44,7 @@ function loadSeed(): Seeded {
   const path = seedPath();
   if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8')) as Seeded;
 
-  const result = spawnSync('bun', ['apps/web/tests/anime-manga-zones-seed.ts'], {
+  const result = spawnSync('bun', ['apps/web/tests/anime-manga-zones-seed.ts', '--work-hub'], {
     cwd: process.cwd(),
     env: process.env,
     encoding: 'utf8',

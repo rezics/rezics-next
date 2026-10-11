@@ -8,8 +8,10 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { applyAnimeMangaZones, type CatalogueZoneRecord, type CatalogueWorkRecord }
   from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
+import { seedKey } from '../../../scripts/dev/seed/plan.ts';
 import { officialTheme } from '../../../scripts/dev/seed/official-plan.ts';
 import { approveOfficialPackage } from '../../../scripts/dev/seed/official-theme-step.ts';
+import { stableId } from '../../../scripts/dev/seed/state.ts';
 import type { SeedPort } from '../../../scripts/dev/seed/vn-catalogue-step.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
@@ -17,11 +19,16 @@ import { platformAdministratorSession } from '../../../tests/qa/fixtures/platfor
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { catalogueCountProperty } from '../features/zones/catalogue-count.ts';
 import { openActorPlatformGroup } from './g-838-catalogue.ts';
+import { DATE_PUBLISHED_PREDICATE } from '../../../services/main/src/modules/statement/qualification.ts';
 
 const QUERY = 'https://rezics.com/query/work-publication-years';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
   throw new Error('The anime and manga Zone seed writes only into an isolated QA run');
+}
+const workHubOnly = process.argv.includes('--work-hub');
+if (process.argv.slice(2).some(argument => argument !== '--work-hub')) {
+  throw new Error('Unknown anime and manga seed option');
 }
 const objectDirectory = process.env.MAIN_OBJECT_DIRECTORY;
 if (!objectDirectory || !process.env.REZICS_WEB_AUTH_PRIVATE_PATH || !process.env.ACCOUNT_RELAY_DATABASE_URL) {
@@ -35,6 +42,8 @@ interface SeededZone {
   zone: string;
   longWork: string;
   title: string;
+  undatedWork: string;
+  undatedTitle: string;
 }
 interface Seeded {
   anime: SeededZone;
@@ -59,9 +68,44 @@ function parsed(text: string): unknown {
   try { return text ? JSON.parse(text) as unknown : null; } catch { return text; }
 }
 
+async function addEditionChoices(request: SeedPort['request'], actor: string, work: CatalogueWorkRecord,
+  choices: readonly [{ key: string; title: string; platform: string; year: number },
+    { key: string; title: string; platform: string; year: number }]): Promise<void> {
+  const realization = `https://rezics.com/id/${stableId(`anime-manga-hub:${work.work}:realization`)}`;
+  const realizationResult = await seedJson<{ revision: string }>(request, 'PUT',
+    `/v1/works/${work.work.slice(-36)}/realizations/${realization.slice(-36)}`, {
+      profile: 'realization-v1', id: realization, expectedHead: null, actingSubject: actor,
+      language: 'ja', kind: 'original', translators: [], publishers: [],
+      source: { kind: 'unresolved', work: work.work }, status: 'official', verification: 'verified',
+      evidence: 'https://example.com/anime-manga-hub-original',
+    }, seedKey('anime-manga-hub-realization', work.work));
+
+  for (const choice of choices) {
+    const release = `https://rezics.com/id/${stableId(`anime-manga-hub:${work.work}:${choice.key}`)}`;
+    await seedJson(request, 'PUT', `/v1/works/${work.work.slice(-36)}/releases/${release.slice(-36)}`, {
+      profile: 'release-v2', id: release, expectedHead: null, actingSubject: actor,
+      kind: 'formal', status: 'official', titleLanguage: 'en', tracklistLanguage: null,
+      title: { value: choice.title, language: 'en' }, editionStatement: null,
+      publisher: 'REZICS Catalogue', publicationYear: choice.year, isbn13: null,
+      originalUrl: null, fixedRelease: null, evidence: null, identifiers: [],
+      platform: choice.platform, territory: null,
+      coverage: [{ realization, revision: realizationResult.revision, completeness: 'complete' }],
+    }, seedKey('anime-manga-hub-release', `${work.work}:${choice.key}`));
+  }
+}
+
+async function seedJson<T = unknown>(request: SeedPort['request'], method: 'GET' | 'POST' | 'PUT', path: string,
+  body: unknown, key: string): Promise<T> {
+  const result = await request(method, path, body, key);
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(`${method} ${path} failed (${result.status}): ${JSON.stringify(result.body)}`);
+  }
+  return result.body as T;
+}
+
 try {
   const editor = await stack.member('catalogue-editor');
-  const reviewer = await stack.member('theme-reviewer');
+  const reviewer = workHubOnly ? null : await stack.member('theme-reviewer');
   // Theme activation answers 202 until the command settles. Poll the same key the way the
   // official-package journey does, and return the finished response.
   const send = async (token: string, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, key?: string) => {
@@ -78,44 +122,61 @@ try {
     throw new Error(`${method} ${path} stayed pending`);
   };
   const request: SeedPort['request'] = (method, path, body, key) => send(editor.token, method, path, body, key);
-  const review: SeedPort['request'] = (method, path, body, key) => send(reviewer.token, method, path, body, key);
+  const review: SeedPort['request'] = (method, path, body, key) => send(reviewer!.token, method, path, body, key);
   const port: SeedPort = {
     actingSubject: editor.actor,
     request,
     grant: async (scope, action) => { await editor.grant(scope, action); },
   };
   const created = await applyAnimeMangaZones(port);
-  await openActorPlatformGroup(editor.principalId, 'executable-themes');
-  await openActorPlatformGroup(reviewer.principalId, 'executable-themes');
-  for (const zone of created.zones) {
-    const theme = officialTheme(zone.id).slice(-36);
-    for (const [scope, action] of [
-      ['theme:create:root', 'theme.create'],
-      [`theme:revise:${theme}`, 'theme.revise'],
-      [`theme:activate:${theme}`, 'theme.activate'],
-    ] as const) await editor.grant(scope, action);
-    await reviewer.grant(`theme:review:${theme}`, 'theme.review');
-    await approveOfficialPackage({
-      slug: zone.id, zone: zone.zone, owner: editor.actor, reviewer: reviewer.actor, request, review,
-    });
+  if (!workHubOnly) {
+    await openActorPlatformGroup(editor.principalId, 'executable-themes');
+    await openActorPlatformGroup(reviewer!.principalId, 'executable-themes');
+    for (const zone of created.zones) {
+      const theme = officialTheme(zone.id).slice(-36);
+      for (const [scope, action] of [
+        ['theme:create:root', 'theme.create'],
+        [`theme:revise:${theme}`, 'theme.revise'],
+        [`theme:activate:${theme}`, 'theme.activate'],
+      ] as const) await editor.grant(scope, action);
+      await reviewer!.grant(`theme:review:${theme}`, 'theme.review');
+      await approveOfficialPackage({
+        slug: zone.id, zone: zone.zone, owner: editor.actor, reviewer: reviewer!.actor, request, review,
+      });
+    }
   }
   const longTv = workOf(created.works, 'long-tv');
   const longManga = workOf(created.works, 'long-manga');
-  await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
-  const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
-  await projection.backfill();
-  const admin = await platformAdministratorSession(process.env, 'openid access:grant work:read');
-  // Discovery routes admit the platform administrator. A realm generation also
-  // requires the recommendation-management grant on that same Agent.
-  await grantRecommendationManagement(admin.principalId, admin.actingSubject);
-  for (const zone of created.zones) await buildRealmDiscovery(admin.mainOrigin, admin.token, admin.actingSubject, zone.realm);
-  await expectYear(admin.mainOrigin, 1980, longTv.work);
-  await expectYear(admin.mainOrigin, 1995, longManga.work);
-  // Cards read accepted statements. That read stays unavailable until the statement index
-  // has caught the graph head, so wait for the long series before the browser opens.
-  await waitForCatalogueRead(admin.mainOrigin, longTv.work, '1155', 'episode-count');
-  await waitForCatalogueRead(admin.mainOrigin, longManga.work, '21', 'volume-count');
-  const seeded = record(created.zones, longTv, longManga);
+  const undatedTv = workOf(created.works, 'tv-3');
+  const undatedManga = workOf(created.works, 'manga-3');
+  await addEditionChoices(request, editor.actor, longTv, [
+    { key: 'broadcast', title: 'Long TV broadcast edition', platform: 'television', year: 1980 },
+    { key: 'disc', title: 'Long TV collector edition', platform: 'blu-ray', year: 1980 },
+  ]);
+  await addEditionChoices(request, editor.actor, longManga, [
+    { key: 'tankobon', title: 'Long Manga tankōbon', platform: 'paperback', year: 1995 },
+    { key: 'omnibus', title: 'Long Manga omnibus', platform: 'ebook', year: 1995 },
+  ]);
+  if (workHubOnly) {
+    await waitForPublicationRead(request, longTv.work, '1980-01-01');
+    await waitForPublicationRead(request, longManga.work, '1995-01-01');
+  } else {
+    await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
+    const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
+    await projection.backfill();
+    const admin = await platformAdministratorSession(process.env, 'openid access:grant work:read');
+    // Discovery routes admit the platform administrator. A realm generation also
+    // requires the recommendation-management grant on that same Agent.
+    await grantRecommendationManagement(admin.principalId, admin.actingSubject);
+    for (const zone of created.zones) await buildRealmDiscovery(admin.mainOrigin, admin.token, admin.actingSubject, zone.realm);
+    await expectYear(admin.mainOrigin, 1980, longTv.work);
+    await expectYear(admin.mainOrigin, 1995, longManga.work);
+    // Cards read accepted statements. That read stays unavailable until the statement index
+    // has caught the graph head, so wait for the long series before the browser opens.
+    await waitForCatalogueRead(admin.mainOrigin, longTv.work, '1155', 'episode-count');
+    await waitForCatalogueRead(admin.mainOrigin, longManga.work, '21', 'volume-count');
+  }
+  const seeded = record(created.zones, longTv, longManga, undatedTv, undatedManga);
   writeFileSync(resolve(directory, 'seed.json'), JSON.stringify(seeded));
   console.log(JSON.stringify(seeded));
 } finally {
@@ -129,13 +190,15 @@ function workOf(works: CatalogueWorkRecord[], key: string): CatalogueWorkRecord 
   return found;
 }
 
-function record(zones: CatalogueZoneRecord[], longTv: CatalogueWorkRecord, longManga: CatalogueWorkRecord): Seeded {
-  const zone = (id: 'anime' | 'manga', work: CatalogueWorkRecord): SeededZone => {
+function record(zones: CatalogueZoneRecord[], longTv: CatalogueWorkRecord, longManga: CatalogueWorkRecord,
+  undatedTv: CatalogueWorkRecord, undatedManga: CatalogueWorkRecord): Seeded {
+  const zone = (id: 'anime' | 'manga', work: CatalogueWorkRecord, undated: CatalogueWorkRecord): SeededZone => {
     const found = zones.find(item => item.id === id);
     if (!found) throw new Error(`${id} Zone was not created`);
-    return { handle: id, space: found.space, realm: found.realm, zone: found.zone, longWork: work.work, title: work.title };
+    return { handle: id, space: found.space, realm: found.realm, zone: found.zone,
+      longWork: work.work, title: work.title, undatedWork: undated.work, undatedTitle: undated.title };
   };
-  return { anime: zone('anime', longTv), manga: zone('manga', longManga) };
+  return { anime: zone('anime', longTv, undatedTv), manga: zone('manga', longManga, undatedManga) };
 }
 
 interface DiscoveryView {
@@ -243,6 +306,26 @@ async function waitForCatalogueRead(origin: string, work: string, lexical: strin
     await new Promise(done => setTimeout(done, 1000));
   }
   throw new Error(`Catalogue facts for ${work} stayed unreadable: ${detail}`);
+}
+
+async function waitForPublicationRead(request: SeedPort['request'], work: string, lexical: string): Promise<void> {
+  const path = `/v1/resources/${work.slice(-36)}/statements`;
+  let detail = '';
+  for (let attempt = 0; attempt < 45; attempt++) {
+    while (await stack.statementSeek.projectOnce()) { /* index accepted publication dates for the Work page */ }
+    const result = await request('GET', path);
+    const page = result.body as { groups?: Array<{ predicate?: string; items?: Array<{
+      kind?: string; value?: { kind?: string; lexical?: string };
+    }> }> };
+    const dates = page.groups?.flatMap(group => group.predicate === DATE_PUBLISHED_PREDICATE
+      ? group.items?.filter(item => item.kind === 'statement' && item.value?.kind === 'literal')
+        .map(item => item.value?.lexical) ?? []
+      : []) ?? [];
+    detail = `statements ${result.status}; dates ${dates.join(', ')}`;
+    if (result.status === 200 && dates.includes(lexical)) return;
+    await new Promise(done => setTimeout(done, 1000));
+  }
+  throw new Error(`Publication date ${lexical} for ${work} stayed unreadable: ${detail}`);
 }
 
 async function expectYear(origin: string, year: number, work: string): Promise<void> {
