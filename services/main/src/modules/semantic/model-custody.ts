@@ -1,6 +1,7 @@
 import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectReadBudgetExceeded, ObjectUnavailable,
+  type ImmutableObjects, withoutVerifiedImmutableObjectCache } from '../../infrastructure/immutable-objects.ts';
 import { COMMAND_MODULE_VERSION } from '../../infrastructure/profile.ts';
 import { GRAPHS, RV, hash, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readWorkComponentState, RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../work/history.ts';
@@ -87,8 +88,19 @@ class DirectoryModelObjects implements ImmutableObjects {
   async get(digest: string): Promise<Uint8Array> {
     if (!/^[0-9a-f]{64}$/.test(digest)) throw new ObjectIntegrityError('invalid model object digest');
     let bytes: Uint8Array;
-    try { bytes = readFileSync(join(this.directory, digest)); }
-    catch { throw new ObjectUnavailable('committed model artifact is unavailable'); }
+    try {
+      const path = join(this.directory, digest);
+      if (statSync(path).size > MODEL_CUSTODY_BACKFILL_COST.artifactBytes) {
+        throw new ObjectReadBudgetExceeded('model artifact exceeds its byte bound');
+      }
+      bytes = readFileSync(path);
+    } catch (error) {
+      if (error instanceof ObjectReadBudgetExceeded) throw error;
+      throw new ObjectUnavailable('committed model artifact is unavailable');
+    }
+    if (bytes.byteLength > MODEL_CUSTODY_BACKFILL_COST.artifactBytes) {
+      throw new ObjectReadBudgetExceeded('model artifact exceeds its byte bound');
+    }
     if (hash(bytes) !== digest) throw new ObjectIntegrityError('model artifact digest differs');
     return bytes;
   }
@@ -100,12 +112,18 @@ function modelObjects(env: WorkActivationEnvironment): ImmutableObjects {
 
 async function exactObject(objects: ImmutableObjects, digest: string): Promise<Uint8Array> {
   try {
-    const bytes = await objects.get(digest);
+    const bytes = await withoutVerifiedImmutableObjectCache(
+      () => objects.get(digest, MODEL_CUSTODY_BACKFILL_COST.artifactBytes),
+    );
+    if (bytes.byteLength > MODEL_CUSTODY_BACKFILL_COST.artifactBytes) {
+      throw new ObjectReadBudgetExceeded('model artifact exceeds its byte bound');
+    }
     if (hash(bytes) !== digest) throw new RevisionCorrupt('model artifact digest differs');
     return bytes;
   } catch (error) {
     if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
     if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
+    if (error instanceof ObjectReadBudgetExceeded) throw new RevisionCorrupt(error.message);
     throw error;
   }
 }
@@ -126,7 +144,11 @@ async function retainedModelState(env: WorkActivationEnvironment, generation: st
     }
     anchor = { manifest: row.manifest.value, commandModule: row.commandModule.value };
   }
-  const state = await readWorkComponentState(env, anchor.manifest, generation, PROFILES.generation);
+  // The selected store is authoritative when present. Keep its read uncached
+  // while retaining readWorkComponentState's verified local fallback on absence.
+  const state = await withoutVerifiedImmutableObjectCache(
+    () => readWorkComponentState(env, anchor.manifest, generation, PROFILES.generation),
+  );
   if (state.modelManifestSha256 !== digest || state.commandModule !== anchor.commandModule || state.entailment !== 'none') {
     throw new RevisionCorrupt('model generation state differs from its anchor');
   }
