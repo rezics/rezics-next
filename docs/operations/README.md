@@ -16,6 +16,7 @@ for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 - [Security](security.md): private service access, admission and disclosure.
 - [Trust and safety](trust-and-safety.md): launch restrictions, public intake, responders and urgent-harm procedures.
 - [Launch market gates](market-gates.md): six-market decisions, implemented controls, accepted risk and missing operator inputs.
+- [External conditions](external-conditions.md): what going live needs from outside the repository; the maintainer's list, not Goal work.
 - [Erasure](erasure.md): current RDF, revision payloads, indexes and retained copies.
 - [Executable theme review and incident response](custom-theme-review-and-incident-response.md).
 

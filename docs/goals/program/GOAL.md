@@ -133,6 +133,14 @@ periodic run adds breadth, not the first line of defence.
 
 ## Completion
 
+**Finish line (maintainer, 2026-10-11).** "所有这些约束都列出来，不在goal考虑解决方案，goal应当进行功能完善，就是功能上做到完整的能够上线."
+The delivery Goals close on a functionally complete first public scope: each
+function works end to end and its checks prove it. What going live needs from
+outside the repository (hosts, hostnames, providers, registrations, legal facts,
+named people) is a list the maintainer holds:
+[external conditions](../../operations/external-conditions.md). It is not Goal work: no brief solves, prepares for or works
+around an item on it, and no Goal's completion waits for one.
+
 The program ends after the three delivery Goals close: it folds the remaining
 design record into owner documents, removes its row from the root GOAL.md and
 closes itself. Capacity qualification at 300 million and 500 million business
