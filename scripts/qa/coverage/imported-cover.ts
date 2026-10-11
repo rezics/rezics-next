@@ -1,9 +1,9 @@
 import type { CaseDeclarations } from './declaration.ts';
 
 /**
- * GOV24 and GOV25 already have complete-case owners in gov-rights.ts (G-1868).
- * coverage.ts rejects duplicate case keys, so the manager must merge these
- * identities into that declaration after the sibling claim is complete.
+ * The GOV24 and GOV25 declarations for this case merge into gov-rights.ts once
+ * its current owner releases that file. Keeping them here avoids conflicting
+ * edits while that ownership is still active.
  */
 export const importedCoverLifecycleCoverage: CaseDeclarations = {
   GOV24: [{ tier: 'integration', file: 'tests/qa/integration/imported-cover-lifecycle.test.ts',
