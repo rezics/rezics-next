@@ -11,11 +11,39 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 
 type MediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif' | 'image/gif';
 
+export interface ImportedCoverProvenance {
+  format: 'media-imported-cover-v1';
+  source: {
+    record: string;
+    component: string | null;
+    observation: string;
+    provider: string;
+    namespace: string;
+    externalId: string;
+    sourceRevision: string | null;
+    observationDigest: string;
+    datasetSnapshotDigest: string;
+    recordDigest: string;
+    fieldLocator: string;
+    displayName: string;
+    href: string;
+  };
+  image: {
+    captureUrl: string;
+    captureDigest: string;
+    byteLength: number;
+    mediaType: MediaType;
+  };
+  originalDigest: string;
+  holderEvidence: { name: string; fieldLocator: string } | null;
+}
+
 const asset = media.table('asset', {
   id: uuid('id').primaryKey(),
   variantId: text('variant_id').notNull(),
   owner: text('owner').notNull(),
   mediaKind: text('media_kind').$type<'image'>().notNull(),
+  coverOnly: boolean('cover_only').notNull().default(false),
   objectNamespace: text('object_namespace').notNull(),
   stateHead: uuid('state_head').notNull(),
   operationId: text('operation_id').notNull(),
@@ -48,6 +76,7 @@ const upload = media.table('upload', {
   declaredMediaType: text('declared_media_type').$type<MediaType>().notNull(),
   declaredByteLength: integer('declared_byte_length').notNull(),
   declaredDigest: text('declared_digest'),
+  importedCoverIntent: jsonb('imported_cover_intent').$type<ImportedCoverProvenance>(),
   quarantineKey: text('quarantine_key').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   status: text('status').$type<'reserved' | 'activated' | 'rejected' | 'expired'>().notNull().default('reserved'),
@@ -190,7 +219,22 @@ const suppressionLift = media.table('suppression_lift', {
   liftedAt: timestamp('lifted_at', { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
 });
 
+const importedCoverRevision = media.table('imported_cover_revision', {
+  assetRevisionId: uuid('asset_revision_id').primaryKey(),
+  assetId: uuid('asset_id').notNull(),
+  originalRepresentationId: uuid('original_representation_id').notNull(),
+  originalDigest: text('original_digest').notNull(),
+  sourceRecordId: uuid('source_record_id').notNull(),
+  sourceComponent: text('source_component'),
+  observationId: uuid('observation_id').notNull(),
+  observationDigest: text('observation_digest').notNull(),
+  provider: text('provider').notNull(),
+  namespace: text('namespace').notNull(),
+  externalId: text('external_id').notNull(),
+  createdAt: createdAt(),
+});
+
 /** Every media owner table, for typed queries and the schema conformance test. */
 export const mediaTables = { asset, assetState, upload, representation, transformJob, use,
   selectionSlot, selectionRevision, screenResult, screenReview, clearanceDecision, suppressedDigest,
-  suppressionLift,fieldSlot,fieldRevision,inferenceObservation } as const;
+  suppressionLift, fieldSlot, fieldRevision, inferenceObservation, importedCoverRevision } as const;

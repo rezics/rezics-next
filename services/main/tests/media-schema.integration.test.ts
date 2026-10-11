@@ -393,6 +393,7 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
       'clearance_decision',
       'field_revision',
       'field_slot',
+      'imported_cover_revision',
       'inference_observation',
       'representation',
       'screen_result',

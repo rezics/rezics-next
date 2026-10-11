@@ -2,6 +2,7 @@ import { withPreservationFence, type PreservationFence } from '../public-report/
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
+import type { ImportedCoverProvenance } from './typed-schema.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import { MediaPresentationStore } from './presentation.ts';
 import { MediaRenditionStore } from '../media-rendition/store.ts';
@@ -13,7 +14,7 @@ import type { ImageNsfw } from './presentation.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
 import { AVATAR_POLICY, DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaFenced, MediaInvalid,
-  MediaMissing, MediaStale } from './contract.ts';
+  MediaMissing, MediaStale, MediaUnavailable } from './contract.ts';
 export { AVATAR_POLICY, DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaFenced, MediaInvalid,
   MediaMissing, MediaStale, MediaUnavailable } from './contract.ts';
 
@@ -57,6 +58,19 @@ export interface ReserveUploadInput {
   byteLength: number;
   sha256: string;
   disclosure: 'private' | 'public';
+  importedCover?: ImportedCoverProvenance | null;
+}
+
+export interface ImportedCoverRevision {
+  assetRevision: string;
+  asset: string;
+  originalRepresentation: string;
+  originalDigest: string;
+  sourceRecord: string;
+  sourceComponent: string | null;
+  observation: string;
+  observationDigest: string;
+  provenance: ImportedCoverProvenance;
 }
 
 export interface UploadReservation {
@@ -257,13 +271,174 @@ export function assetIri(asset: string): string { return `${ID}${asset}`; }
 export function assetVariant(asset: string): string { return `urn:rezics:variant:${asset}`; }
 export function assetNamespace(asset: string): string { return `media/asset/${asset}/`; }
 
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+  return value as Record<string, unknown>;
+}
+
+function keys(value: Record<string, unknown>, expected: readonly string[]): void {
+  if (Object.keys(value).some(key => !expected.includes(key))
+    || expected.some(key => !Object.hasOwn(value, key))) {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+}
+
+function textField(value: unknown, maximum: number): string {
+  if (typeof value !== 'string' || value.length < 1 || value.length > maximum
+    || value.trim() !== value || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+  return value;
+}
+
+function checkedWebUrl(value: unknown, httpsOnly = false): string {
+  const result = textField(value, 2048);
+  try {
+    const url = new URL(result);
+    if ((url.protocol !== 'https:' && (httpsOnly || url.protocol !== 'http:'))
+      || url.username || url.password || url.hash) throw new Error('invalid URL');
+  } catch {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+  return result;
+}
+
+/** The Media-owned shape and exact-byte binding for a verified source-cover admission. */
+export function validateImportedCoverProvenance(value: unknown, expectedBytes?: {
+  sha256: string;
+  byteLength: number;
+  mediaType: string;
+}): ImportedCoverProvenance {
+  const root = object(value);
+  keys(root, ['format', 'source', 'image', 'originalDigest', 'holderEvidence']);
+  if (root.format !== 'media-imported-cover-v1') throw new MediaInvalid('imported cover provenance is invalid');
+
+  const source = object(root.source);
+  keys(source, ['record', 'component', 'observation', 'provider', 'namespace', 'externalId',
+    'sourceRevision', 'observationDigest', 'datasetSnapshotDigest', 'recordDigest', 'fieldLocator',
+    'displayName', 'href']);
+  const record = textField(source.record, 80);
+  const observation = textField(source.observation, 80);
+  if (!nativeId.test(record) || !nativeId.test(observation)) {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+  const component = source.component === null ? null : textField(source.component, 80);
+  if (component !== null && !nativeId.test(component)) throw new MediaInvalid('imported cover provenance is invalid');
+  const sourceRevision = source.sourceRevision === null ? null : textField(source.sourceRevision, 200);
+  const observationDigest = textField(source.observationDigest, 64);
+  const datasetSnapshotDigest = textField(source.datasetSnapshotDigest, 64);
+  const recordDigest = textField(source.recordDigest, 64);
+  if (![observationDigest, datasetSnapshotDigest, recordDigest].every(digest => sha.test(digest))) {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+  const normalizedSource: ImportedCoverProvenance['source'] = {
+    record,
+    component,
+    observation,
+    provider: textField(source.provider, 100),
+    namespace: textField(source.namespace, 100),
+    externalId: textField(source.externalId, 500),
+    sourceRevision,
+    observationDigest,
+    datasetSnapshotDigest,
+    recordDigest,
+    fieldLocator: textField(source.fieldLocator, 500),
+    displayName: textField(source.displayName, 200),
+    href: checkedWebUrl(source.href, true),
+  };
+
+  const image = object(root.image);
+  keys(image, ['captureUrl', 'captureDigest', 'byteLength', 'mediaType']);
+  const captureDigest = textField(image.captureDigest, 64);
+  const byteLength = image.byteLength;
+  const mediaType = image.mediaType;
+  if (!sha.test(captureDigest) || typeof byteLength !== 'number' || !Number.isSafeInteger(byteLength) || byteLength < 1
+    || byteLength > MAX_UPLOAD_BYTES || typeof mediaType !== 'string'
+    || !MEDIA_TYPES.includes(mediaType as MediaType)) {
+    throw new MediaInvalid('imported cover provenance is invalid');
+  }
+  const originalDigest = textField(root.originalDigest, 64);
+  if (!sha.test(originalDigest) || originalDigest !== captureDigest) {
+    throw new MediaInvalid('imported cover provenance does not bind the captured bytes');
+  }
+  const normalizedImage: ImportedCoverProvenance['image'] = {
+    captureUrl: checkedWebUrl(image.captureUrl),
+    captureDigest,
+    byteLength,
+    mediaType: mediaType as MediaType,
+  };
+  if (expectedBytes && (expectedBytes.sha256 !== originalDigest
+    || expectedBytes.byteLength !== normalizedImage.byteLength
+    || expectedBytes.mediaType !== normalizedImage.mediaType)) {
+    throw new MediaInvalid('imported cover provenance does not match uploaded bytes');
+  }
+
+  let holderEvidence: ImportedCoverProvenance['holderEvidence'];
+  if (root.holderEvidence === null) holderEvidence = null;
+  else {
+    const holder = object(root.holderEvidence);
+    keys(holder, ['name', 'fieldLocator']);
+    holderEvidence = { name: textField(holder.name, 200), fieldLocator: textField(holder.fieldLocator, 500) };
+  }
+
+  return { format: 'media-imported-cover-v1', source: normalizedSource, image: normalizedImage,
+    originalDigest, holderEvidence };
+}
+
+function manifestProvenance(value: unknown): ImportedCoverProvenance | null {
+  try {
+    const body = object(value);
+    const hasProvenance = Object.hasOwn(body, 'importedCover');
+    if (!hasProvenance && body.coverOnly !== true) return null;
+    if (!hasProvenance || body.coverOnly !== true) throw new MediaInvalid('cover manifest is incomplete');
+    return validateImportedCoverProvenance(body.importedCover);
+  } catch {
+    throw new MediaUnavailable('imported cover manifest is unavailable');
+  }
+}
+
 /** One manifest per asset revision. Its exact bytes are the Content revision body. */
 export function assetManifest(asset: string, representation: { id: string; sha256: string;
-  byteLength: number; mediaType: string; width: number; height: number }): string {
-  return JSON.stringify({ profile: 'media-asset-v1', asset: assetIri(asset), mediaKind: 'image',
+  byteLength: number; mediaType: string; width: number; height: number }, importedCover?: unknown): string {
+  const base = { profile: 'media-asset-v1', asset: assetIri(asset), mediaKind: 'image',
     representations: [{ id: representation.id, role: 'original', sha256: representation.sha256,
       byteLength: representation.byteLength, mediaType: representation.mediaType,
-      width: representation.width, height: representation.height }] });
+      width: representation.width, height: representation.height }] };
+  if (importedCover === undefined || importedCover === null) return JSON.stringify(base);
+  const provenance = validateImportedCoverProvenance(importedCover, { sha256: representation.sha256,
+    byteLength: representation.byteLength, mediaType: representation.mediaType });
+  return JSON.stringify({ ...base, coverOnly: true, importedCover: provenance });
+}
+
+async function verifyImportedCoverEvidence(client: Pick<PoolClient, 'query'>,
+  provenance: ImportedCoverProvenance): Promise<void> {
+  const recordId = provenance.source.record.slice(ID.length);
+  const observationId = provenance.source.observation.slice(ID.length);
+  const result = await client.query<{ provider: string; namespace: string; external_id: string;
+    record_id: string; source_revision: string | null; retention: string; byte_digest: string | null;
+    raw_bytes: Buffer | null }>(`SELECT r.id AS record_id,r.provider,r.namespace,r.external_id,
+      o.source_revision,o.retention,o.byte_digest,o.raw_bytes
+    FROM source.record r JOIN source.observation o ON o.record_id=r.id
+    WHERE r.id=$1 AND o.id=$2`, [recordId, observationId]);
+  const row = result.rows[0];
+  if (!row || row.provider !== provenance.source.provider || row.namespace !== provenance.source.namespace
+    || row.external_id !== provenance.source.externalId || row.record_id !== recordId
+    || row.source_revision !== provenance.source.sourceRevision || row.retention !== 'retained'
+    || !row.raw_bytes || row.byte_digest !== provenance.source.observationDigest
+    || createHash('sha256').update(row.raw_bytes).digest('hex') !== provenance.source.observationDigest) {
+    throw new MediaUnavailable('verified imported cover evidence is unavailable');
+  }
+}
+
+function projectionFromProvenance(assetRevisionId: string, assetId: string,
+  originalRepresentationId: string, provenance: ImportedCoverProvenance): ImportedCoverRevision {
+  return { assetRevision: assetRevisionId, asset: assetId,
+    originalRepresentation: originalRepresentationId, originalDigest: provenance.originalDigest,
+    sourceRecord: provenance.source.record, sourceComponent: provenance.source.component,
+    observation: provenance.source.observation, observationDigest: provenance.source.observationDigest,
+    provenance };
 }
 
 export class MediaStore {
@@ -320,6 +495,8 @@ export class MediaStore {
       || !['private', 'public'].includes(input.disclosure)) {
       throw new MediaInvalid('upload reservation is invalid');
     }
+    const importedCover = input.importedCover == null ? null
+      : validateImportedCoverProvenance(input.importedCover, input);
     const operationId = `media-upload:${admission.admissionId}`;
     return this.positioned(operationId, await transaction(this.pool, async (client):
       Promise<Omit<UploadReservation, 'position'>> => {
@@ -340,24 +517,30 @@ export class MediaStore {
       let stateHead: string;
       if (input.asset) {
         const current = await client.query<{ owner: string; state_head: string; lifecycle: string;
-          erasure_epoch: string }>(`SELECT a.owner, a.state_head, s.lifecycle, s.erasure_epoch::text
+          erasure_epoch: string; cover_only: boolean }>(`SELECT a.owner, a.state_head, a.cover_only,
+          s.lifecycle, s.erasure_epoch::text
           FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head WHERE a.id = $1
           FOR SHARE OF a`, [asset]);
         const row = current.rows[0];
         if (!row || row.owner !== admission.actingSubject) throw new MediaMissing('media asset is unavailable');
         if (row.lifecycle !== 'active') throw new MediaStale('media asset is not active');
+        if (row.cover_only !== (importedCover !== null)) {
+          throw new MediaInvalid('cover-only asset replacements require imported cover provenance');
+        }
         epoch = row.erasure_epoch;
         stateHead = row.state_head;
       } else {
         stateHead = randomUUID();
       }
+      if (importedCover) await verifyImportedCoverEvidence(client, importedCover);
       await receipt(client, { operationId, digest: admission.requestDigest,
         action: 'media.upload.reserve', outcome: 'succeeded', eventType: 'media.upload.reserved',
         payload: { asset, upload, created: !input.asset } });
       if (!input.asset) {
-        await client.query(`INSERT INTO media.asset (id, variant_id, owner, media_kind, object_namespace,
-          state_head, operation_id) VALUES ($1,$2,$3,'image',$4,$5,$6)`,
-        [asset, assetVariant(asset), admission.actingSubject, assetNamespace(asset), stateHead, operationId]);
+        await client.query(`INSERT INTO media.asset (id, variant_id, owner, media_kind, cover_only,
+          object_namespace, state_head, operation_id) VALUES ($1,$2,$3,'image',$4,$5,$6,$7)`,
+        [asset, assetVariant(asset), admission.actingSubject, importedCover !== null,
+          assetNamespace(asset), stateHead, operationId]);
         await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure,
           moderation, lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
           VALUES ($1,$2,NULL,$3,'none','active',0,$4,$5,$6)`,
@@ -365,11 +548,11 @@ export class MediaStore {
       }
       const reserved = await client.query<{ expires_at: Date }>(`INSERT INTO media.upload (id, asset_id,
         principal_id, operation_id, erasure_epoch, declared_media_type, declared_byte_length,
-        declared_digest, quarantine_key, expires_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, clock_timestamp() + interval '1 hour')
+        declared_digest, imported_cover_intent, quarantine_key, expires_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10, clock_timestamp() + interval '1 hour')
         RETURNING expires_at`,
       [upload, asset, admission.principalId, operationId, epoch, input.mediaType, input.byteLength,
-        input.sha256, `media-quarantine/${upload}`]);
+        input.sha256, importedCover ? JSON.stringify(importedCover) : null, `media-quarantine/${upload}`]);
       return { asset, upload, quarantineKey: `media-quarantine/${upload}`,
         objectNamespace: assetNamespace(asset), expiresAt: reserved.rows[0]!.expires_at.toISOString(),
         stateHead, replayed: false };
@@ -468,13 +651,24 @@ export class MediaStore {
    * Retried with the latest head, so it is also the reconciliation path. */
   async recordAssetRevision(upload: string): Promise<{ revision: string; replayed: boolean }> {
     const row = (await this.pool.query<{ asset_id: string; id: string; byte_digest: string;
-      byte_length: number; media_type: string; pixel_width: number; pixel_height: number }>(
-      `SELECT r.asset_id, r.id, r.byte_digest, r.byte_length, r.media_type, r.pixel_width, r.pixel_height
-       FROM media.representation r WHERE r.upload_id = $1 AND r.kind = 'original'`, [upload])).rows[0];
+      byte_length: number; media_type: string; pixel_width: number; pixel_height: number;
+      cover_only: boolean; imported_cover_intent: unknown }>(
+      `SELECT r.asset_id,r.id,r.byte_digest,r.byte_length,r.media_type,r.pixel_width,r.pixel_height,
+        a.cover_only,u.imported_cover_intent FROM media.representation r
+        JOIN media.asset a ON a.id=r.asset_id JOIN media.upload u ON u.id=r.upload_id
+       WHERE r.upload_id = $1 AND r.kind = 'original'`, [upload])).rows[0];
     if (!row) throw new MediaMissing('activated original is unavailable');
+    const importedCover = row.imported_cover_intent == null ? null
+      : validateImportedCoverProvenance(row.imported_cover_intent, { sha256: row.byte_digest,
+        byteLength: row.byte_length, mediaType: row.media_type });
+    if (row.cover_only !== (importedCover !== null)) {
+      throw new MediaUnavailable('imported cover intent is unavailable');
+    }
+    if (importedCover) await verifyImportedCoverEvidence(this.pool, importedCover);
     const operationId = `media-asset-revision:${upload}`;
     const manifest = assetManifest(row.asset_id, { id: row.id, sha256: row.byte_digest,
-      byteLength: row.byte_length, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height });
+      byteLength: row.byte_length, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height },
+    importedCover);
     const attempts = [0, 1, 2, 3].map(attempt => attempt ? `${operationId}:${attempt}` : operationId);
     for (;;) {
       // A stale attempt keeps its receipt; each retry uses the next derived operation.
@@ -482,7 +676,10 @@ export class MediaStore {
         `SELECT operation_id, outcome, revision_id FROM content.receipt
          WHERE operation_id = ANY($1::text[]) AND action = 'draft.save'`, [attempts]);
       const done = receipts.rows.find(receipt => receipt.outcome === 'succeeded' && receipt.revision_id);
-      if (done) return { revision: done.revision_id!, replayed: true };
+      if (done) {
+        await this.repairImportedCoverProjection(done.revision_id!);
+        return { revision: done.revision_id!, replayed: true };
+      }
       const next = attempts.find(id => !receipts.rows.some(receipt => receipt.operation_id === id));
       if (!next) break;
       const head = (await this.pool.query<{ draft_head: string | null }>(
@@ -493,9 +690,134 @@ export class MediaStore {
         expectedHead: head?.draft_head ?? null, model: 'media-asset-v1', sourceRevision: null,
         provenance: { kind: 'media-upload-activation-v1', upload, representation: row.id },
         serializedJson: manifest });
-      if (saved.outcome === 'succeeded' && saved.revisionId) return { revision: saved.revisionId, replayed: saved.replayed };
+      if (saved.outcome === 'succeeded' && saved.revisionId) {
+        await this.repairImportedCoverProjection(saved.revisionId);
+        return { revision: saved.revisionId, replayed: saved.replayed };
+      }
     }
     throw new MediaStale('asset head kept moving');
+  }
+
+  /** Rebuild the derived source lookup only from a sealed, available owner manifest. */
+  async repairImportedCoverProjection(assetRevision: string): Promise<boolean> {
+    if (!uuid.test(assetRevision)) throw new MediaInvalid('invalid asset revision id');
+    return transaction(this.pool, async client => {
+      const result = await client.query<{ model: string; availability: string; body: unknown;
+        asset_id: string; cover_only: boolean; lifecycle: string; representation_id: string | null;
+        original_digest: string | null; original_length: number | null; original_media_type: string | null;
+        representation_availability: string | null; imported_cover_intent: unknown }>(`
+        SELECT v.model,v.availability,v.body,a.id AS asset_id,a.cover_only,s.lifecycle,
+          p.id AS representation_id,p.byte_digest AS original_digest,p.byte_length AS original_length,
+          p.media_type AS original_media_type,p.availability AS representation_availability,
+          u.imported_cover_intent
+        FROM content.revision v JOIN media.asset a ON a.variant_id=v.variant_id
+        JOIN media.asset_state s ON s.id=a.state_head
+        LEFT JOIN media.representation p ON p.asset_id=a.id AND p.kind='original'
+          AND p.id::text=v.body->'representations'->0->>'id'
+        LEFT JOIN media.upload u ON u.id=p.upload_id
+        WHERE v.id=$1`, [assetRevision]);
+      const row = result.rows[0];
+      if (!row) throw new MediaUnavailable('asset revision is unavailable');
+      if (row.availability !== 'available' || row.lifecycle === 'erased'
+        || row.representation_availability === 'erased') {
+        await client.query('DELETE FROM media.imported_cover_revision WHERE asset_revision_id=$1', [assetRevision]);
+        return false;
+      }
+      if (row.model !== 'media-asset-v1' || !row.representation_id || row.representation_availability !== 'available'
+        || !row.original_digest || row.original_length === null || !row.original_media_type) {
+        throw new MediaUnavailable('asset revision manifest is unavailable');
+      }
+      const body = object(row.body);
+      if (body.profile !== 'media-asset-v1' || body.asset !== assetIri(row.asset_id)
+        || !Array.isArray(body.representations) || body.representations.length !== 1) {
+        throw new MediaUnavailable('asset revision manifest is unavailable');
+      }
+      const manifestRepresentation = object(body.representations[0]);
+      if (manifestRepresentation.id !== row.representation_id || manifestRepresentation.role !== 'original'
+        || manifestRepresentation.sha256 !== row.original_digest
+        || manifestRepresentation.byteLength !== row.original_length
+        || manifestRepresentation.mediaType !== row.original_media_type) {
+        throw new MediaUnavailable('asset revision manifest does not bind its original');
+      }
+      const importedCover = manifestProvenance(body);
+      if (!importedCover) {
+        if (row.cover_only || row.imported_cover_intent != null) {
+          throw new MediaUnavailable('cover-only asset revision lacks provenance');
+        }
+        await client.query('DELETE FROM media.imported_cover_revision WHERE asset_revision_id=$1', [assetRevision]);
+        return false;
+      }
+      const uploadIntent = validateImportedCoverProvenance(row.imported_cover_intent, {
+        sha256: row.original_digest, byteLength: row.original_length, mediaType: row.original_media_type,
+      });
+      if (!row.cover_only || JSON.stringify(uploadIntent) !== JSON.stringify(importedCover)) {
+        throw new MediaUnavailable('cover-only asset revision does not match its upload intent');
+      }
+      await verifyImportedCoverEvidence(client, importedCover);
+      const expected = projectionFromProvenance(assetRevision, row.asset_id, row.representation_id, importedCover);
+      await client.query(`INSERT INTO media.imported_cover_revision (asset_revision_id,asset_id,
+        original_representation_id,original_digest,source_record_id,source_component,observation_id,
+        observation_digest,provider,namespace,external_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (asset_revision_id) DO NOTHING`,
+      [expected.assetRevision, expected.asset, expected.originalRepresentation, expected.originalDigest,
+        importedCover.source.record.slice(ID.length), importedCover.source.component,
+        importedCover.source.observation.slice(ID.length), importedCover.source.observationDigest,
+        importedCover.source.provider, importedCover.source.namespace, importedCover.source.externalId]);
+      const indexed = (await client.query<{ asset_revision_id: string; asset_id: string;
+        original_representation_id: string; original_digest: string; source_record_id: string;
+        source_component: string | null; observation_id: string; observation_digest: string;
+        provider: string; namespace: string; external_id: string }>(`SELECT asset_revision_id::text,
+          asset_id::text,original_representation_id::text,original_digest,source_record_id::text,
+          source_component,observation_id::text,observation_digest,provider,namespace,external_id
+        FROM media.imported_cover_revision WHERE asset_revision_id=$1`, [assetRevision])).rows[0];
+      if (!indexed || indexed.asset_revision_id !== expected.assetRevision || indexed.asset_id !== expected.asset
+        || indexed.original_representation_id !== expected.originalRepresentation
+        || indexed.original_digest !== expected.originalDigest
+        || indexed.source_record_id !== importedCover.source.record.slice(ID.length)
+        || indexed.source_component !== importedCover.source.component
+        || indexed.observation_id !== importedCover.source.observation.slice(ID.length)
+        || indexed.observation_digest !== importedCover.source.observationDigest
+        || indexed.provider !== importedCover.source.provider || indexed.namespace !== importedCover.source.namespace
+        || indexed.external_id !== importedCover.source.externalId) {
+        throw new MediaUnavailable('imported cover projection is unavailable');
+      }
+      return true;
+    });
+  }
+
+  /** A missing or mismatched derived index is unavailable until manifest repair succeeds. */
+  async readImportedCoverRevision(assetRevision: string): Promise<ImportedCoverRevision | null> {
+    if (!uuid.test(assetRevision)) throw new MediaInvalid('invalid asset revision id');
+    const row = (await this.pool.query<{ asset_revision_id: string; asset_id: string;
+      original_representation_id: string; original_digest: string; source_record_id: string;
+      source_component: string | null; observation_id: string; observation_digest: string;
+      provider: string; namespace: string; external_id: string; body: unknown;
+      availability: string; asset_cover_only: boolean; lifecycle: string; representation_availability: string }>(`
+      SELECT m.asset_revision_id::text,m.asset_id::text,m.original_representation_id::text,m.original_digest,
+        m.source_record_id::text,m.source_component,m.observation_id::text,m.observation_digest,
+        m.provider,m.namespace,m.external_id,v.body,v.availability,a.cover_only AS asset_cover_only,
+        s.lifecycle,p.availability AS representation_availability
+      FROM media.imported_cover_revision m JOIN content.revision v ON v.id=m.asset_revision_id
+      JOIN media.asset a ON a.id=m.asset_id JOIN media.asset_state s ON s.id=a.state_head
+      JOIN media.representation p ON p.id=m.original_representation_id AND p.asset_id=m.asset_id
+      WHERE m.asset_revision_id=$1`, [assetRevision])).rows[0];
+    if (!row) return null;
+    if (row.availability !== 'available' || !row.asset_cover_only || row.lifecycle === 'erased'
+      || row.representation_availability !== 'available') return null;
+    let provenance: ImportedCoverProvenance | null;
+    try { provenance = manifestProvenance(row.body); }
+    catch { return null; }
+    if (!provenance || provenance.originalDigest !== row.original_digest
+      || provenance.source.record.slice(ID.length) !== row.source_record_id
+      || provenance.source.component !== row.source_component
+      || provenance.source.observation.slice(ID.length) !== row.observation_id
+      || provenance.source.observationDigest !== row.observation_digest
+      || provenance.source.provider !== row.provider || provenance.source.namespace !== row.namespace
+      || provenance.source.externalId !== row.external_id) return null;
+    try { await verifyImportedCoverEvidence(this.pool, provenance); }
+    catch { return null; }
+    return projectionFromProvenance(row.asset_revision_id, row.asset_id,
+      row.original_representation_id, provenance);
   }
 
   /** Activated originals whose asset revision was never recorded (lost second stage). */
