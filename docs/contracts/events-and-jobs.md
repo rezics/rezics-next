@@ -16,6 +16,19 @@ dataset and epoch. Each sequenced RDF mutation has one bounded batch header,
 including zero-event batches. Stable event IDs and ordinals identify members;
 independent owners have no shared total order.
 
+**Slim commands are the exception to "one physical header".** A slim command
+keeps the graph small: its commit writes the receipt, the stream position and a
+compact commit proof, but NOT the full physical batch header and its event
+envelopes; the batch is reconstructed from the owner's durable receipt custody
+(`receipt-custody.ts`), and the graph proof retires only after that durable
+receipt, the exact payload object and reconciliation. The stream position is
+still allocated in the same Fuseki transaction, so numbering stays contiguous.
+A reader of batches MUST therefore read through the custody the way the Main
+relay does (`ownerOutbox` of `relayMainOutboxOnce`); a reader that asks the
+graph for a physical header only will report a slim command's batch as
+missing. A real hole is a position with neither a physical header nor a custody
+record.
+
 An event envelope carries event/operation ID, versioned type, owner and target,
 aggregate revision, source position, routing fence and causation/correlation,
 with bounded data or a manifest pointer. Private principal or credential data
