@@ -4,6 +4,7 @@ import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } 
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import { AUTHOR_NEWS_KINDS, feedWorkAuthors, followIdentities } from './presentation.ts';
+import { compareMainFeedPosition, requireMainFeedCoverage } from './frame.ts';
 
 export const HEAD_COST = { candidates: 20 } as const;
 /** The head probe reports only currently admitted public references. When the
@@ -14,6 +15,9 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
   if (!feed || !follows) throw new WorkReadUnavailable('Feed is unavailable');
   if (scope !== 'all' && !reader) throw new WorkReadInvalid('Authentication is required');
   const checkpoint = await feed.checkpoint(session.position.dataEpoch);
+  const coverage = requireMainFeedCoverage(await session.deps.relayPosition?.read(), checkpoint.data_epoch);
+  const checkpointOrder = compareMainFeedPosition(checkpoint.data_epoch, checkpoint.sequence, coverage);
+  if (checkpointOrder > 0) throw new WorkReadUnavailable('Feed exceeds relay');
   if (BigInt(afterSequence) > BigInt(checkpoint.sequence)) throw new WorkReadMoved('Feed position moved');
   const realm = scope.startsWith('realm:') ? scope.slice(6) : undefined;
   const personal = reader && homePersonal ? await homePersonal.read(reader.principal, reader.agent) : null;
@@ -64,7 +68,7 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
   const reviewPending = await feed.reviewPending(checkpoint.review_sequence);
   return { profile: 'home-feed-head-v1' as const, scope, afterSequence,
     newPosts: { value: count, kind: complete ? 'exact' as const : 'lower-bound' as const },
-    state: checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff' && !reviewPending
+    state: checkpointOrder === 0 && checkpoint.after_id === '\uffff' && !reviewPending
       && !checkpoint.rebuild_epoch ? complete ? 'current' as const : 'more' as const : 'projecting' as const,
     projection: { sequence: checkpoint.sequence, reviewSequence: checkpoint.review_sequence,
       dataEpoch: checkpoint.data_epoch } };

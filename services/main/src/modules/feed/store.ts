@@ -11,9 +11,10 @@ import { activityTime, bestKey, FEED_RANKING, rankCandidates } from './ranking.t
 import type { FeedSource, FeedReference } from './source.ts';
 import type { ReviewEvent } from '../review/store.ts';
 import { reviewActivityId } from './source.ts';
-import { FeedReadFrame } from './frame.ts';
+import { compareMainFeedPosition, FeedReadFrame, requireMainFeedCoverage } from './frame.ts';
 import { FeedTargetIndex } from './target-index.ts';
 import { RealmThreadRankingProjection } from '../rankings/realm-threads.ts';
+import type { RelayHandoffPosition } from '../outbox/relay-position.ts';
 
 /** `revision` changes with the projection's population (ingested items and
  * their groups, reviews, restore copies), never with a score or a position
@@ -67,7 +68,7 @@ export class FeedStore {
   }
 
   /** Constant-size status probes; no payloads, inventory walks or refresh writes. */
-  async readiness(position: ReadPosition) {
+  async readiness(position: ReadPosition, coverage: RelayHandoffPosition | null | undefined) {
     return controlRead(this.pool, async client => {
       const row = (await client.query<{ checkpoint: FeedCheckpoint | null; target_sequence: string | null;
         target_complete: boolean; pending_reviews: boolean }>(`SELECT
@@ -80,10 +81,16 @@ export class FeedStore {
         FROM (SELECT 1) root LEFT JOIN access.feed_checkpoint c ON c.id
         LEFT JOIN access.feed_target_checkpoint t ON t.data_epoch=c.data_epoch`)).rows[0]!;
       const c = row.checkpoint;
-      if (!c || c.data_epoch !== position.dataEpoch || BigInt(c.sequence) > BigInt(position.sequence))
+      if (!c || c.data_epoch !== position.dataEpoch)
         throw new WorkReadUnavailable('Feed projection is recovering');
-      const targetsCurrent = row.target_complete && row.target_sequence === position.sequence;
-      const current = c.sequence === position.sequence && c.after_id === '\uffff'
+      const relay = requireMainFeedCoverage(coverage, c.data_epoch);
+      const feedOrder = compareMainFeedPosition(c.data_epoch, c.sequence, relay);
+      if (feedOrder > 0) throw new WorkReadUnavailable('Feed exceeds relay');
+      const targetOrder = row.target_sequence === null ? -1
+        : compareMainFeedPosition(c.data_epoch, row.target_sequence, relay);
+      if (targetOrder > 0) throw new WorkReadUnavailable('Feed target exceeds relay');
+      const targetsCurrent = row.target_complete && targetOrder === 0;
+      const current = feedOrder === 0 && c.after_id === '\uffff'
         && !c.rebuild_epoch && !row.pending_reviews && targetsCurrent;
       return { status: current ? 'ready' as const : 'indexing' as const, sourcePosition: position,
         projection: { sequence: c.sequence, reviewSequence: c.review_sequence },

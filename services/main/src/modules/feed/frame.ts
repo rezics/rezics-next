@@ -7,6 +7,7 @@ import { DEFAULT_PERSON_CHOICES, type PersonPreferences } from '../preferences/s
 import { PRIMARY_READING_PERSON_SQL } from '../preferences/languages.ts';
 import { defaultPreferences, HOME_COST, type HomeExclusion, type HomePreferences } from './personal.ts';
 import type { FeedCheckpoint } from './store.ts';
+import { compareRelayPositions, MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
 
 interface ActorState { id: string; generation: string; handle: string | null;
@@ -18,6 +19,28 @@ interface ReaderRow { checkpoint: FeedCheckpoint | null; revision: string | null
   watermark: { data_epoch: string; sequence: string; updated_at: string } | null;
   actors: ActorState[]; pending_reviews: boolean; index_sequence: string | null;
   index_revision: string | null; index_complete: boolean; recovery_generation: string }
+
+/** Feed projection coordinates are owned by the fixed Main relay stream. */
+export function mainFeedPosition(dataEpoch: string, sequence: string): RelayHandoffPosition {
+  return { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch, sequence };
+}
+
+/** Validate relay coverage before comparing it with any Feed checkpoint. */
+export function requireMainFeedCoverage(coverage: RelayHandoffPosition | null | undefined,
+  dataEpoch: string): RelayHandoffPosition {
+  if (!coverage) throw new WorkReadUnavailable('Main feed stream position is unavailable');
+  try {
+    compareRelayPositions(mainFeedPosition(dataEpoch, '0'), coverage);
+  } catch (error) {
+    throw new WorkReadUnavailable('Main feed stream position is unavailable', { cause: error });
+  }
+  return coverage;
+}
+
+export function compareMainFeedPosition(dataEpoch: string, sequence: string,
+  coverage: RelayHandoffPosition): number {
+  return compareRelayPositions(mainFeedPosition(dataEpoch, sequence), coverage);
+}
 
 const actorRows = `SELECT s.id, s.generation::text, n.key AS handle,
   COALESCE(p.profile_visibility,'public') AS profile_visibility,
@@ -107,9 +130,9 @@ export class FeedReadFrame {
     this.usedTargetIndex = true;
   }
   get followingIndexRevision() { return this.opening.index_revision; }
-  followingIndexCurrent(sequence: string) {
+  followingIndexCurrent(coverage: RelayHandoffPosition) {
     return this.opening.index_complete && this.opening.index_sequence !== null
-      && BigInt(this.opening.index_sequence) >= BigInt(sequence);
+      && compareMainFeedPosition(this.checkpoint.data_epoch, this.opening.index_sequence, coverage) === 0;
   }
 
   /** Actor state and all follow reasons share one MVCC statement snapshot. */

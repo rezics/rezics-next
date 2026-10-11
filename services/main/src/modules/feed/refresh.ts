@@ -4,7 +4,9 @@ import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { runWorkerTick } from '../../worker-tick.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { workRead, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { FEED_COST } from './contract.ts';
+import { compareMainFeedPosition, requireMainFeedCoverage } from './frame.ts';
 import { feedReferences, feedReviewSources, feedSources, reviewActivityId } from './source.ts';
 import type { FeedStore } from './store.ts';
 
@@ -19,13 +21,18 @@ export class FeedRefreshWorker {
 
   async tick(): Promise<'relay-behind' | 'current' | 'advanced'> {
     return workRead(this.deps, new Request('http://main.internal/feed-refresh'), {}, async session => {
-      const relay = await this.deps.relayPosition?.read();
-      if (!relay || relay.dataEpoch !== session.position.dataEpoch) return 'relay-behind';
-      if (BigInt(relay.sequence) > BigInt(session.position.sequence)) throw new WorkReadUnavailable('Relay exceeds graph');
+      const relayPosition = await this.deps.relayPosition?.read();
+      let relay: RelayHandoffPosition;
+      try { relay = requireMainFeedCoverage(relayPosition, session.position.dataEpoch); }
+      catch (error) {
+        if (error instanceof WorkReadUnavailable) return 'relay-behind';
+        throw error;
+      }
       const checkpoint = await this.store.initialize(session.position.dataEpoch);
       if (checkpoint.rebuild_epoch) { await this.store.copyRetained(checkpoint); return 'advanced'; }
-      if (BigInt(checkpoint.sequence) > BigInt(relay.sequence)) throw new WorkReadUnavailable('Feed exceeds relay');
-      if (checkpoint.sequence !== relay.sequence || checkpoint.after_id !== '\uffff') {
+      const checkpointOrder = compareMainFeedPosition(checkpoint.data_epoch, checkpoint.sequence, relay);
+      if (checkpointOrder > 0) throw new WorkReadUnavailable('Feed exceeds relay');
+      if (checkpointOrder !== 0 || checkpoint.after_id !== '\uffff') {
         const sources = await feedReferences(session, { epoch: relay.dataEpoch, through: relay.sequence,
           afterSequence: checkpoint.sequence, afterId: checkpoint.after_id });
         // Group only currently admitted activity identities. Hidden references still
@@ -42,7 +49,8 @@ export class FeedRefreshWorker {
         // Legacy events without UUIDv7 time use the acknowledged relay timestamp.
         const times = await this.relay.query<{ sequence: string; delivered_at: Date }>(`SELECT s.sequence::text, e.delivered_at
           FROM unnest($2::numeric[]) s(sequence) CROSS JOIN LATERAL (
-            SELECT delivered_at FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = s.sequence LIMIT 1
+            SELECT delivered_at FROM relay.delivered_event WHERE stream_scope='${MAIN_RELAY_STREAM_SCOPE}'
+              AND data_epoch = $1 AND sequence = s.sequence LIMIT 1
           ) e`, [relay.dataEpoch, [...new Set(sources.slice(0, FEED_COST.refreshItems).map(source => source.sequence))]]);
         await this.store.advance(checkpoint, relay.sequence, grouped, new Map(times.rows.map(row => [row.sequence, row.delivered_at])));
         return 'advanced';

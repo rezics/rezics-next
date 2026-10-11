@@ -26,6 +26,7 @@ import { inOrder, settle, unwrap, type Settled } from './settled.ts';
 import { clip, discussionParts } from '../realm-reply/discussion-text.ts';
 import { feedCompositions } from './compositions.ts';
 import { retainedMembershipBasis } from '../read-basis/membership.ts';
+import { compareMainFeedPosition, requireMainFeedCoverage } from './frame.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 /** Keep the candidate's place without retaining any author, words or image. */
@@ -466,6 +467,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (query.scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
   const frame = await store.openFrame(session.position.dataEpoch, reader);
   const personal = frame.personal, checkpoint = frame.checkpoint, personSettings = frame.personSettings;
+  const coverage = requireMainFeedCoverage(await session.deps.relayPosition?.read(), checkpoint.data_epoch);
+  const checkpointOrder = compareMainFeedPosition(checkpoint.data_epoch, checkpoint.sequence, coverage);
+  if (checkpointOrder > 0) throw new WorkReadUnavailable('Feed exceeds relay');
   // Saved preferences remain distinct from request filters: only the latter
   // exclude a post whose language has not been recorded.
   if (personal) session.readingLanguages = personal.preferences.contentLanguages;
@@ -787,7 +791,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       if (item.card.kind === 'prompt') item.card = { kind: 'prompt' };
     }
   }
-  const projected = checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff'
+  const projected = checkpointOrder === 0 && checkpoint.after_id === '\uffff'
     && !checkpoint.rebuild_epoch;
   const content = new Map([...sources.flatMap(source => source.publishedContent ? [[source.publishedContent.revisionId,source.publishedContent.reference.byteDigest] as const] : []),
     ...[...cardParts.hubs.values()].map(hub => [hub.exact.revisionId,hub.exact.reference.byteDigest] as const)]);
@@ -807,7 +811,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   retained.assertLive();
   const last = page.at(-1);
   const current = projected && !pending && (scope !== 'following' || sort !== 'new'
-    || frame.followingIndexCurrent(session.position.sequence));
+    || frame.followingIndexCurrent(coverage));
   return { profile: 'home-feed-v1' as const, scope, sort, window, ranking: FEED_RANKING,
     caughtUp: scope === 'following' && sort === 'new' ? { asOf: new Date(asOf).toISOString(),
       lastVisitedAt: watermark?.data_epoch === session.position.dataEpoch
