@@ -5,6 +5,7 @@ import { Value } from 'typebox/value';
 import { loadScopedSubjects, type ScopedSubjectManifest } from '../../../scripts/dev/seed/scoped-subjects.ts';
 import { scopedSubjectLocales, scopedSubjectQuestions } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
 import { entityPage, subjectStatementPage, resourceRelationPage } from '../../../services/main/src/modules/entity-page/contract.ts';
+import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { scopedSubjectsFixture } from './scoped-subjects-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
@@ -21,6 +22,7 @@ interface Rollup { formula: string; value: number | null; valueWithheld: string 
 let h: Awaited<ReturnType<typeof scopedSubjectsFixture>>;
 let data: ScopedSubjectManifest;
 let readers: Awaited<ReturnType<typeof h.person>>[];
+let projectionReader: Awaited<ReturnType<typeof h.person>>;
 const subject = (id: string) => data.subjects[id]!;
 const projection = (id: string) => data.projections[id]!;
 const api = () => h.api(null);
@@ -52,6 +54,25 @@ const contexts = (target: string, language = 'en') => api().get<{ items: { conte
   `/v1/resources/${short(target)}/rating-contexts?scope=global&languages=${language}`);
 const projectAgain = (on: string, frames: string[]) => h.api(h.owner).post<{ projection: { id: string; subject: string } }>(
   '/v1/projections', { subject: on, frames, actingSubject: h.owner.actor }, randomUUID());
+const projectionPagePath = (ref = projection('misaka-episode'), signedIn = true) =>
+  `/v1/resources/${short(ref)}/page?position=all${signedIn ? `&actingSubject=${encodeURIComponent(projectionReader.actor)}` : ''}`;
+const assertProjectionPage = (read: Static<typeof entityPage>) => {
+  expect(Value.Check(entityPage, read)).toBe(true);
+  expect(read.target.resource).toBe(projection('misaka-episode'));
+  expect(read.projection!.subject.reference).toBe(subject('misaka'));
+  expect(read.projection!.frames.map(frame => frame.reference)).toEqual([data.positions['railgun-episode']!.occurrence]);
+  const fact = read.projection!.statements.groups.flatMap(group => group.items)
+    .find(item => item.kind === 'statement' && item.statement === data.statements['misaka-ability']);
+  expect(fact).toMatchObject({ kind: 'statement', statement: data.statements['misaka-ability'],
+    predicate: data.definitions.ability, value: { kind: 'literal', lexical: 'Electromaster' } });
+};
+const assertUnavailableProjection = async (response: Response) => {
+  const body = await response.text();
+  expect(response.status, body).toBe(404);
+  for (const secret of [projection('misaka-episode'), subject('misaka'),
+    data.positions['railgun-episode']!.occurrence, 'Misaka', 'Electromaster']) expect(body).not.toContain(secret);
+  return JSON.parse(body) as { code: string; title: string; status: number; type: string };
+};
 
 beforeAll(async () => {
   h = await scopedSubjectsFixture();
@@ -62,6 +83,23 @@ beforeAll(async () => {
   data = await loadScopedSubjects({ api: h.api(h.owner), actor: h.owner.actor, namespace: `scoped-${randomUUID().slice(0, 8)}`,
     authorize: h.authorize, findDefinition: h.findDefinition,
     raters: readers.map(reader => ({ actor: reader.actor, api: h.api(reader) })) });
+  projectionReader = await h.person('Scoped projection reader');
+  // Match the browser journey's read grants, with the reader's own representation.
+  // The seed writer's platform grants and rating permissions are not needed to read.
+  const readGrants = [
+    ...[...Object.values(data.subjects), ...Object.values(data.relations).map(relation => relation.occurrence),
+      ...Object.values(data.definitions), data.variantKind].map(ref => ({ scope: `semantic:read:${ref}`, action: 'semantic.read' })),
+    ...Object.values(data.works).map(work => ({ scope: `work:read:${work.work}`, action: 'work.read' })),
+  ];
+  for (const { scope, action } of readGrants) {
+    await h.stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+    await h.stack.accessPool.query(`INSERT INTO access.representation
+      (id,principal_id,subject_id,action,valid_until) VALUES ($1,$2,$3,$4,now()+interval '1 hour')`,
+    [randomUUID(), projectionReader.principalId, projectionReader.actor, action]);
+    await h.stack.accessPool.query(`INSERT INTO access.permission_grant
+      (id,issuer_subject,recipient_subject,scope_id,action,valid_until) VALUES ($1,$2,$2,$3,$4,now()+interval '1 hour')`,
+    [randomUUID(), projectionReader.actor, scope, action]);
+  }
   // Statement and page reads refuse an index behind this seed's graph.
   while (await h.stack.statementSeek.projectOnce()) { /* bounded outbox batches */ }
   if (!(await h.stack.statementSeek.coverage())?.complete) await h.stack.statementSeek.rebuild();
@@ -75,16 +113,83 @@ beforeAll(async () => {
 }, 600_000);
 afterAll(async () => { await h?.stop(); });
 
+test('a separately granted reader completes the public projection page within the whole request graph budget', async () => {
+  await catchStatementIndex();
+  const before = h.stack.fuseki.queries;
+  const response = await h.call(projectionReader, 'GET', projectionPagePath());
+  const graphCalls = h.stack.fuseki.queries - before;
+  const body = await response.text();
+  expect(response.status, body).toBe(200);
+  assertProjectionPage(JSON.parse(body) as Static<typeof entityPage>);
+  expect(graphCalls).toBeGreaterThan(0);
+  expect(graphCalls).toBeLessThanOrEqual(WORK_READ_COST.graphCalls);
+});
+
+test('anonymous projection readers see the same public subject, episode and covered fact', async () => {
+  await catchStatementIndex();
+  const response = await h.call(null, 'GET', projectionPagePath(undefined, false));
+  const body = await response.text();
+  expect(response.status, body).toBe(200);
+  assertProjectionPage(JSON.parse(body) as Static<typeof entityPage>);
+});
+
+test('hidden and absent projection pages are indistinct for signed-in and anonymous readers', async () => {
+  const scope = `work:read:${data.works.railgun!.work}`;
+  const absent = `https://rezics.com/id/${randomUUID()}`;
+  for (const person of [projectionReader, null]) {
+    const missing = await assertUnavailableProjection(await h.call(person, 'GET', projectionPagePath(absent, person !== null)));
+    await h.stack.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [scope]);
+    try {
+      const hidden = await assertUnavailableProjection(await h.call(person, 'GET', projectionPagePath(undefined, person !== null)));
+      expect(hidden).toEqual(missing);
+    } finally { await h.stack.accessPool.query('UPDATE access.scope_gate SET open=true WHERE id=$1', [scope]); }
+  }
+});
+
+test('the projection page final target fence observes revocation after page hydration', async () => {
+  await catchStatementIndex();
+  const scope = `work:read:${data.works.railgun!.work}`;
+  const missing = await assertUnavailableProjection(await h.call(projectionReader, 'GET',
+    projectionPagePath(`https://rezics.com/id/${randomUUID()}`)));
+  const fuseki = h.stack.fuseki;
+  const query = fuseki.query;
+  let projectionReads = 0, revoked = false;
+  fuseki.query = async (sparql, maxBytes) => {
+    const result = await query.call(fuseki, sparql, maxBytes);
+    if (!fuseki.isBackgroundContext && sparql.includes('SELECT ?epoch ?sequence ?hold ?r ?type')
+      && sparql.includes(`VALUES ?r { <${projection('misaka-episode')}> }`) && ++projectionReads === 3) {
+      // Opening target, page summary, then closing target. Revoke only once the
+      // complete subject/frame/statement/relation hydration has already finished.
+      await h.stack.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [scope]);
+      revoked = true;
+    }
+    return result;
+  };
+  try {
+    const fenced = await assertUnavailableProjection(await h.call(projectionReader, 'GET', projectionPagePath()));
+    expect(revoked).toBe(true);
+    expect(projectionReads).toBe(3);
+    expect(fenced).toEqual(missing);
+  } finally {
+    fuseki.query = query;
+    await h.stack.accessPool.query('UPDATE access.scope_gate SET open=true WHERE id=$1', [scope]);
+  }
+  assertProjectionPage(await h.json<Static<typeof entityPage>>(
+    await h.call(projectionReader, 'GET', projectionPagePath())));
+});
+
 test('the scoped-subject seed grants do not open Event creation to its readers', async () => {
-  const response = await h.call(readers[1]!, 'POST', '/v1/semantic/changes', {
-    profile: 'semantic-change-v1', expectedHead: null,
-    actingSubject: readers[1]!.actor,
-    state: { component: 'resource', types: ['https://schema.org/Event'],
-      properties: [{ predicate: 'https://schema.org/name',
-        value: { kind: 'language-string', lexical: 'Unadmitted event', language: 'en' } }] },
-  });
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+  for (const reader of [readers[1]!, projectionReader]) {
+    const response = await h.call(reader, 'POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null,
+      actingSubject: reader.actor,
+      state: { component: 'resource', types: ['https://schema.org/Event'],
+        properties: [{ predicate: 'https://schema.org/name',
+          value: { kind: 'language-string', lexical: 'Unadmitted event', language: 'en' } }] },
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+  }
 });
 
 test('Misaka keeps one Character across two Works; episode ratings and covered facts belong to the projection', async () => {

@@ -3,10 +3,14 @@ import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AdmissionUnavailable } from '../src/modules/access/admission.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { resolveSummary, visibleResourceReferences } from '../src/modules/entity-page/read.ts';
+import { readPageRelations } from '../src/modules/entity-page/relations.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
+import { readReadingComposition } from '../src/modules/reading-position/boundary.ts';
+import { SemanticTargetUnavailable } from '../src/modules/semantic/command.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
-import { WorkReadUnavailable, workRead } from '../src/modules/work/read-session.ts';
+import { WorkReadMissing, WorkReadSession, WorkReadUnavailable, workRead } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { recoveryAccess } from './support/recovery-access.ts';
 
@@ -16,6 +20,7 @@ const uri = (value: string) => ({ type: 'uri', value });
 const agent = id(1);
 const untyped = id(2);
 const work = id(3);
+const absent = id(4);
 const privateName = 'Hidden Pen';
 const publicTitle = 'Open Title';
 
@@ -23,7 +28,7 @@ function iris(query: string) {
   return [...query.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
 }
 
-test('community summaries still probe an Agent and an untyped row, and withhold a private Agent name', async () => {
+function summaryFixture() {
   const graphCalls: string[] = [];
   const graph = new FusekiClient('http://community-read-guards.invalid');
   graph.query = async query => {
@@ -33,11 +38,15 @@ test('community summaries still probe an Agent and an untyped row, and withhold 
     if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) {
       const control = { epoch: term('epoch'), sequence: term('7') };
       return { results: { bindings: [
-        { ...control, r: uri(agent), type: term('agent'), public: term('true'), head: uri(id(11)),
-          label: term(privateName) },
-        { ...control, r: uri(untyped) },
-        { ...control, r: uri(work), type: term('work'), work: uri(work), head: uri(id(13)),
-          public: term('true'), label: { ...term(publicTitle), 'xml:lang': 'en' } },
+        ...refs('r').flatMap(reference => {
+          if (reference === agent) return [{ ...control, r: uri(agent), type: term('agent'),
+            public: term('true'), head: uri(id(11)), label: term(privateName) }];
+          if (reference === untyped) return [{ ...control, r: uri(untyped) }];
+          if (reference === work) return [{ ...control, r: uri(work), type: term('work'), work: uri(work),
+            head: uri(id(13)), public: term('true'), label: { ...term(publicTitle), 'xml:lang': 'en' } }];
+          return [];
+        }),
+        control,
       ] } };
     }
     if (query.includes('SELECT ?work ?head ?nameOwner')) {
@@ -53,6 +62,12 @@ test('community summaries still probe an Agent and an untyped row, and withhold 
         ...(reference === work ? { head: uri(id(13)), owningWork: uri(work), owningHead: uri(id(13)) } : {}),
       })) } };
     }
+    if (query.includes('SELECT ?epoch ?sequence')) {
+      return { results: { bindings: [{ epoch: term('epoch'), sequence: term('7') }] } };
+    }
+    if (query.includes('SELECT DISTINCT ?relation ?kind ?key') || query.includes('rv:OccurrencePlacement')) {
+      return { results: { bindings: [] } };
+    }
     throw new Error(`Unexpected summary query: ${query.slice(0, 180)}`);
   };
   const pool = { query: async (sql: string, args: unknown[]) => {
@@ -66,8 +81,16 @@ test('community summaries still probe an Agent and an untyped row, and withhold 
   const environment = { fuseki: graph, objectDirectory: '.temp/community-read-guards',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
+  const session = new WorkReadSession({ environment, account: {} as never,
+    access: recoveryAccess() as never }, new Request('http://main.test/v1/resources?position=all'),
+  {}, { dataEpoch: 'epoch', sequence: '7' });
+  return { environment, session, graphCalls };
+}
+
+test('community summaries still probe an Agent, absent identity and untyped row, and withhold a private Agent name', async () => {
+  const { environment, graphCalls } = summaryFixture();
   const result = await readResourceSummaries(environment, undefined, { viewer: ANONYMOUS_VIEWER }, {
-    resources: [agent, untyped, work], context: DEFAULT_MEDIA_CONTEXT, language: null,
+    resources: [agent, untyped, absent, work], context: DEFAULT_MEDIA_CONTEXT, language: null,
     settleNonAgentNameOwners: true,
   });
   const probes = graphCalls.filter(query => query.includes('SELECT ?work ?head ?nameOwner'));
@@ -75,13 +98,65 @@ test('community summaries still probe an Agent and an untyped row, and withhold 
   const probed = new Set(iris(probes[0]!));
   expect(probed.has(agent)).toBe(true);
   expect(probed.has(untyped)).toBe(true);
+  expect(probed.has(absent)).toBe(true);
   expect(probed.has(work)).toBe(false);
   expect(result.summaries).toEqual([
     { reference: agent, status: 'unavailable' },
     { reference: untyped, status: 'unavailable' },
+    { reference: absent, status: 'unavailable' },
     expect.objectContaining({ reference: work, status: 'available', name: expect.objectContaining({ value: publicTitle }) }),
   ]);
   expect(JSON.stringify(result)).not.toContain(privateName);
+});
+
+const summaryAdapters = [
+  { name: 'page summary', read: async (session: WorkReadSession, resource: string) => {
+    try { return await resolveSummary(session, resource); }
+    catch (error) { if (error instanceof WorkReadMissing) return null; throw error; }
+  } },
+  { name: 'page references', read: async (session: WorkReadSession, resource: string) =>
+    (await visibleResourceReferences(session, [resource])).has(resource) ? resource : null },
+  { name: 'page relations', read: async (session: WorkReadSession, resource: string) => {
+    try { return await readPageRelations(session, resource); }
+    catch (error) {
+      if (error instanceof SemanticTargetUnavailable) return null;
+      throw error;
+    }
+  } },
+  { name: 'reading boundary', read: async (session: WorkReadSession, resource: string) => {
+    try { return await readReadingComposition(session, resource); }
+    catch (error) { if (error instanceof WorkReadMissing) return null; throw error; }
+  } },
+];
+
+for (const adapter of summaryAdapters) {
+  test(`${adapter.name} settles a freshly loaded non-Agent name owner`, async () => {
+    const { session, graphCalls } = summaryFixture();
+    expect(await adapter.read(session, work)).not.toBeNull();
+    expect(graphCalls.some(query => query.includes('SELECT ?work ?head ?nameOwner'))).toBe(false);
+  });
+  test(`${adapter.name} probes private Agents and unresolved identities without disclosing them`, async () => {
+    const outputs = [];
+    for (const resource of [agent, untyped, absent]) {
+      const { session, graphCalls } = summaryFixture();
+      outputs.push(await adapter.read(session, resource));
+      const probes = graphCalls.filter(query => query.includes('SELECT ?work ?head ?nameOwner'));
+      expect(probes.length).toBeGreaterThan(0);
+      expect(probes.every(query => iris(query).includes(resource))).toBe(true);
+    }
+    expect(outputs).toEqual([null, null, null]);
+    expect(JSON.stringify(outputs)).not.toContain(privateName);
+  });
+}
+
+test('page reference batches settle only known non-Agents in a mixed inventory', async () => {
+  const { session, graphCalls } = summaryFixture();
+  expect(await visibleResourceReferences(session, [work, agent, absent, untyped, work])).toEqual(new Set([work]));
+  const probes = graphCalls.filter(query => query.includes('SELECT ?work ?head ?nameOwner'));
+  expect(probes).toHaveLength(1);
+  const probed = new Set(iris(probes[0]!));
+  expect(probed.has(work)).toBe(false);
+  for (const resource of [agent, absent, untyped]) expect(probed.has(resource)).toBe(true);
 });
 
 test('a local summary re-read keeps the same dependency token when name owners stay settled', async () => {

@@ -39,7 +39,8 @@ export async function scopedSubjectsFixture() {
     const principal = { ...person.principal, emailVerified: true };
     return { ...principal, currentAssertion: async () => principal };
   } };
-  const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, account,
+  const app = createMainApp(stack.fuseki, { ...stack.composition.dependencies,
+    environment: stack.env, access: stack.access, account,
     // Fixture commands prove their own grants even when the surrounding QA stack opens groups.
     platformAccess: new AccessExposure(stack.accessPool, { ...process.env, REZICS_PLATFORM_OPEN_GROUPS: '' }),
     content: stack.content, contentAuthoring: stack.content, media: stack.media, mediaAccess: stack.mediaAccess,
