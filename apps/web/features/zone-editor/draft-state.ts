@@ -6,6 +6,27 @@ export interface DraftStorage {
   removeItem(key: string): void;
 }
 
+/** The mounted route owns author choices; browser storage is only a full-page fallback. */
+export function createZoneEditorDraftStore() {
+  const values = new Map<string, unknown>();
+  return {
+    read<T>(storage: DraftStorage | undefined, key: string, accepts: (value: unknown) => value is T): T | null {
+      if (values.has(key)) {
+        const value = values.get(key);
+        return accepts(value) ? value : null;
+      }
+      const value = storage ? readZoneEditorDraft(storage, key, accepts) : null;
+      if (value !== null) values.set(key, value);
+      return value;
+    },
+    write(storage: DraftStorage | undefined, key: string, value: unknown, dirty: boolean): void {
+      // A clean marker prevents a failed storage removal from restoring an acknowledged edit.
+      values.set(key, dirty ? value : null);
+      if (storage) writeZoneEditorDraft(storage, key, value, dirty);
+    },
+  };
+}
+
 /** A session-scoped key keeps one author's unsaved work attached to the Zone they opened. */
 export function zoneEditorDraftKey(zoneId: string, actingSubject: string, section: ZoneEditorSection): string {
   return `rezics:zone-editor:draft:${encodeURIComponent(zoneId)}:${encodeURIComponent(actingSubject)}:${section}`;
@@ -26,6 +47,6 @@ export function writeZoneEditorDraft(storage: DraftStorage, key: string, value: 
     if (dirty) storage.setItem(key, JSON.stringify(value));
     else storage.removeItem(key);
   } catch {
-    // Storage can be disabled or full. The mounted editor still keeps its state.
+    // The route's in-memory draft remains authoritative when storage is disabled or full.
   }
 }
