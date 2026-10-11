@@ -91,9 +91,12 @@ function sourceEvent(event: RetainedContentEligibilityEnvelope):
 function checkedBatch(batch: RetainedRelayBatch, graphDataEpoch: string): { header: Omit<EligibilityDeliveryBatch, 'events'>;
   eligible: Array<{ event: Omit<EligibilityDeliverySourceEvent, 'publication'>; envelope: RetainedContentEligibilityEnvelope }> } {
   if (batch.streamScope !== MAIN_RELAY_STREAM_SCOPE || !DECIMAL.test(batch.sequence)
-    || !batch.batchId || !batch.routingEpoch || !Array.isArray(batch.events) || batch.events.length === 0) {
+    || !batch.batchId || !batch.routingEpoch || !Array.isArray(batch.events)) {
     throw new ContentEligibilityStateUnavailable('retained Main batch is incomplete');
   }
+  // The verified retained range proves the header's exact event count. Native
+  // maintenance may retain a zero-count batch; it still advances delivery
+  // custody, without asserting eligibility or appending any Content body work.
   const events = batch.events.map(value => envelope(value, batch, graphDataEpoch));
   if (events.some((event, ordinal) => event.data.ordinal !== ordinal)) {
     throw new ContentEligibilityStateUnavailable('retained Main batch event order is incomplete');

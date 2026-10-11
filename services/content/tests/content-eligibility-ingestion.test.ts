@@ -163,6 +163,46 @@ test('Content appends bounded eligibility batches once and advances only contigu
     expect((await pool.query(`SELECT count(*)::int AS count FROM content.eligibility_delivery_source
       WHERE content_data_epoch = $1 AND source_event_id = $2`,
     [concurrentPin.contentDataEpoch, concurrentEvent.id])).rows[0]?.count).toBe(1);
+
+    // Verified maintenance advances only the retained Main cursor. An all-empty
+    // page creates neither an approval delivery nor a Content owner position.
+    const ownerBeforeEmpty = await core.ownerPosition();
+    const outboxBeforeEmpty = (await pool.query('SELECT count(*)::int AS count FROM content.outbox')).rows[0]!.count;
+    const emptyExpected = { ...expected, sequence: '2' };
+    const emptyPage = page(emptyExpected, batch('3', []), batch('4', []));
+    const emptyResults = await Promise.all([
+      core.ingestEligibilityDeliveryPage(emptyPage), core.ingestEligibilityDeliveryPage(emptyPage),
+    ]);
+    expect(emptyResults.map(value => value.replayed).sort()).toEqual([false, true]);
+    for (const result of emptyResults) {
+      expect(result.progress).toEqual({ ...expected, sequence: '4' });
+      expect(result.events).toEqual([]);
+    }
+    expect(await core.ownerPosition()).toEqual(ownerBeforeEmpty);
+    expect((await pool.query('SELECT count(*)::int AS count FROM content.outbox')).rows[0]!.count).toBe(outboxBeforeEmpty);
+    const retainedEmpty = await pool.query(`SELECT sequence::text, batch_id, source_digest, selected_events
+      FROM content.eligibility_delivery_batch WHERE stream_scope=$1 AND graph_data_epoch=$2
+        AND content_data_epoch=$3 AND sequence IN (3,4) ORDER BY sequence`,
+    [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch]);
+    expect(retainedEmpty.rows.map(row => [row.sequence, row.selected_events])).toEqual([['3', 0], ['4', 0]]);
+    await expect(core.ingestEligibilityDeliveryPage(page(emptyExpected,
+      { ...batch('3', []), digest: digest('changed empty custody') }, batch('4', []))))
+      .rejects.toBeInstanceOf(ContentConflict);
+    await expect(core.ingestEligibilityDeliveryPage(page(emptyExpected,
+      batch('3', [], 'changed-empty-id'), batch('4', []))))
+      .rejects.toBeInstanceOf(ContentConflict);
+    await expect(core.ingestEligibilityDeliveryPage(page({ ...expected, sequence: '4' }, batch('6', []))))
+      .rejects.toBeInstanceOf(ContentConflict);
+    await expect(core.ingestEligibilityDeliveryPage(page({ ...emptyExpected, contentDataEpoch: randomUUID() },
+      batch('3', []), batch('4', []))))
+      .rejects.toBeInstanceOf(ContentConflict);
+    expect(await core.readEligibilityDeliveryProgress(expected.streamScope, expected.graphDataEpoch))
+      .toEqual({ ...expected, sequence: '4' });
+    expect((await pool.query(`SELECT sequence::text, batch_id, source_digest, selected_events
+      FROM content.eligibility_delivery_batch WHERE stream_scope=$1 AND graph_data_epoch=$2
+        AND content_data_epoch=$3 AND sequence IN (3,4) ORDER BY sequence`,
+    [expected.streamScope, expected.graphDataEpoch, expected.contentDataEpoch])).rows).toEqual(retainedEmpty.rows);
+    expect(await core.ownerPosition()).toEqual(ownerBeforeEmpty);
   } finally { await stop(); }
 }, 60_000);
 

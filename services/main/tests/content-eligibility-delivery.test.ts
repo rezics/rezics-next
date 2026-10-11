@@ -126,40 +126,56 @@ test('SEARCH19: retained delivery stops at the largest whole-batch prefix within
 
 test('SEARCH20/OPS16: rebuild delivery commits only its frozen retained Main prefix', async () => {
   const f = fixture();
-  configureRange([batch('1', [retainedEvent('1', 0)]), batch('2', [retainedEvent('2', 0)])]);
+  configureRange([batch('1', []), batch('2', [retainedEvent('2', 0)]), batch('3', [])]);
   proofMock.mockImplementation(async () => proof);
-  expect((await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '1'))
-    ?.sequence).toBe('1');
+  expect((await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '2'))
+    ?.sequence).toBe('2');
   expect(f.pages).toHaveLength(1);
-  expect(f.pages[0]!.batches).toHaveLength(1);
+  expect(f.pages[0]!.batches.map(value => value.events.length)).toEqual([0, 1]);
+  expect(f.pages[0]!.batches[0]!.digest).toMatch(/^[0-9a-f]{64}$/);
   expect(proofMock).toHaveBeenCalledTimes(1);
   rangeMock.mockClear();
-  expect(await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '1')).toBeNull();
+  expect(await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '2')).toBeNull();
   expect(rangeMock).not.toHaveBeenCalled();
+  const empty = fixture();
+  configureRange([batch('1', []), batch('2', []), batch('3', [retainedEvent('3', 0)])]);
+  proofMock.mockClear();
+  expect((await deliverRetainedContentEligibilityOnce(empty.env, empty.content, noRelayPool, 'empty-frozen-test', '2'))
+    ?.sequence).toBe('2');
+  expect(empty.pages[0]!.batches.map(value => value.events)).toEqual([[], []]);
+  expect(proofMock).not.toHaveBeenCalled();
+  expect(await deliverRetainedContentEligibilityOnce(empty.env, empty.content, noRelayPool, 'empty-frozen-test', '2')).toBeNull();
+  expect(empty.pages).toHaveLength(1);
   await expect(deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '0'))
     .rejects.toThrow('delivery cursor exceeds frozen Main frontier');
 });
 
 test('SEARCH19: Content commit followed by a lost bridge response resumes after its durable cursor', async () => {
   const f = fixture();
-  configureRange([batch('1', [retainedEvent('1', 0)])]);
+  configureRange([batch('1', []), batch('2', [retainedEvent('2', 0)]), batch('3', [])]);
   proofMock.mockImplementation(async () => proof);
   f.content.loseNextAcknowledgement();
 
   await expect(deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'restart-test'))
     .rejects.toThrow('response lost after Content commit');
-  expect(f.progress.sequence).toBe('1');
+  expect(f.progress.sequence).toBe('3');
+  expect(f.pages[0]!.batches.map(value => value.events.length)).toEqual([0, 1, 0]);
+  expect(proofMock).toHaveBeenCalledTimes(1);
   readRange = async (consumer, _after, _limit) => ({ coverage: { streamScope: MAIN_RELAY_STREAM_SCOPE,
-    consumer, dataEpoch: GRAPH_EPOCH, sequence: '1' }, batches: [] });
+    consumer, dataEpoch: GRAPH_EPOCH, sequence: '3' }, batches: [] });
   expect(await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'restart-test')).toBeNull();
   expect(f.pages).toHaveLength(1);
-  expect(rangeMock).toHaveBeenLastCalledWith(noRelayPool, 'restart-test', '1', 100);
+  expect(rangeMock).toHaveBeenLastCalledWith(noRelayPool, 'restart-test', '3', 100);
 });
 
 test('SEARCH19: foreign coverage, damaged positions and unproven receipts never advance Content progress', async () => {
   const f = fixture();
-  configureRange([batch('1', [retainedEvent('1', 0)])], '1', '00000000-0000-4000-8000-000000000999');
+  configureRange([batch('1', [])], '1', '00000000-0000-4000-8000-000000000999');
   await expect(deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'foreign-test'))
+    .rejects.toBeInstanceOf(ContentEligibilityStateUnavailable);
+
+  configureRange([{ ...batch('1', []), batchId: '' }]);
+  await expect(deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'empty-header-test'))
     .rejects.toBeInstanceOf(ContentEligibilityStateUnavailable);
 
   const damaged = retainedEvent('1', 0);
