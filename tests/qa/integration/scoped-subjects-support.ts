@@ -41,7 +41,7 @@ export async function scopedSubjectsFixture() {
   } };
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, account,
     // Fixture commands prove their own grants even when the surrounding QA stack opens groups.
-    platformAccess: new AccessExposure(stack.accessPool, { REZICS_PLATFORM_OPEN_GROUPS: '' }),
+    platformAccess: new AccessExposure(stack.accessPool, { ...process.env, REZICS_PLATFORM_OPEN_GROUPS: '' }),
     content: stack.content, contentAuthoring: stack.content, media: stack.media, mediaAccess: stack.mediaAccess,
     structureObjects, catalogueIntake: new CatalogueIntakeStore(stack.accessPool, stack.env),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
