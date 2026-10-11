@@ -4,7 +4,7 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent, type WorkActivationEnvironment } from '../work/activate.ts';
 import { unerased } from '../work/public-patterns.ts';
 import { acknowledgeSubmission, readSubmissionReceipt } from './graph.ts';
-import { WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
 import { SubmissionUnavailable, type ResourceSubmissionInput } from './schema.ts';
 
 export const RESOURCE_SUBMISSION_PROFILE = 'https://rezics.com/definition/realm-submission-selection-v1';
@@ -46,7 +46,7 @@ export function resourceCandidatePattern(realm: string, target: ResourceSubmissi
 export async function requireResourceCandidate(env: WorkActivationEnvironment, realm: string,
   target: ResourceSubmissionInput) {
   if ((await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${resourceCandidatePattern(realm, target)} }`, 1024)).boolean !== true) {
-    throw new WorkReadUnavailable('Exact Work or public Content publication is unavailable');
+    throw new WorkReadMissing('Exact Work or public Content publication is unavailable');
   }
 }
 

@@ -14,7 +14,9 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * A hidden target and an absent one stay the same answer, including retry.
  *
  * Command-path audit. TargetUnavailable stays a WorkReadMissing: hidden and
- * absent share one answer, so the hierarchy is unchanged. "Sealed" means a
+ * absent share one answer, so the hierarchy is unchanged. The status follows
+ * the outcome (404 for hidden or absent); whether a key is sealed is the
+ * module's decision on the error class, never the status. "Sealed" means a
  * terminal receipt or a consumed key is recorded on that outcome.
  *
  * follows homeError (routes/follows.ts): sealed no, listed. The target is
@@ -22,11 +24,11 @@ const receiptWrite = /sealTerminal|sealMetadataWorkEditAdmission|sealContentDraf
  * ratings ratingError (routes/ratings.ts): sealed no, fixed. RatingCurrentVisibility
  * is rethrown from the admitted writers; other observation failures still seal.
  * realm submissions errorResponse (routes/realm-submissions.ts): sealed no, fixed.
- * A candidate that is not public is WorkReadUnavailable (503) and is not in the
+ * A candidate that is not public is WorkReadMissing (404) and is not in the
  * terminal cancellation list.
  * semantic semanticError (routes/semantic.ts) and admitted/change: sealed no,
  * fixed. A reference that is not in the graph throws SemanticTargetUnavailable
- * (503) before a rejection receipt. A taken definition key still seals.
+ * (404) before a rejection receipt. A taken definition key still seals.
  * context runAdmittedCommand (modules/context/command.ts): sealed no, fixed.
  * ContextCurrentVisibility is rethrown. Other ContextCommandUnavailable values
  * still seal; those are stale or ambiguous heads, not current visibility.
@@ -309,6 +311,6 @@ test('a realm submission candidate miss is not in the terminal cancellation list
   const cancellation = source.slice(source.indexOf('Only definite pre-commit'), source.indexOf('throw error;', source.indexOf('Only definite pre-commit')));
   expect(cancellation).not.toContain('WorkReadMissing');
   expect(cancellation).not.toContain('WorkReadUnavailable');
-  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/graph.ts'), 'utf8')).toContain("throw new WorkReadUnavailable('Exact public candidate is unavailable')");
-  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/resource.ts'), 'utf8')).toContain("throw new WorkReadUnavailable('Exact Work or public Content publication is unavailable')");
+  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/graph.ts'), 'utf8')).toContain("throw new WorkReadMissing('Exact public candidate is unavailable')");
+  expect(readFileSync(join(sourceRoot, 'modules/realm-submission/resource.ts'), 'utf8')).toContain("throw new WorkReadMissing('Exact Work or public Content publication is unavailable')");
 });

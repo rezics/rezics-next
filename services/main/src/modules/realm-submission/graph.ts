@@ -3,7 +3,7 @@ import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import { receiptFamilyFor } from '../access/receipt-families.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { realmSelectionSlotIri } from '../work/select-realm.ts';
-import { WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
 import { SUBMISSION_COST, SubmissionUnavailable, type SubmissionInput } from './schema.ts';
 
 /** Submission eligibility is public publication, not Main Version selection. A
@@ -29,9 +29,9 @@ export async function requireCandidate(env: WorkActivationEnvironment, realm: st
     }
   } LIMIT ${SUBMISSION_COST.candidateRows}`, SUBMISSION_COST.candidateBytes)).results?.bindings;
   if (!rows) throw new SubmissionUnavailable('Candidate owner is unavailable');
-  // The admission is already claimed. A candidate that is not public yet is the
-  // same refusal as one that is absent, and the key stays unsealed for a retry.
-  if (rows.length !== 1) throw new WorkReadUnavailable('Exact public candidate is unavailable');
+  // A candidate that is not public yet is the same refusal as one that is
+  // absent: 404, and not a terminal cancellation, so a retry is re-evaluated.
+  if (rows.length !== 1) throw new WorkReadMissing('Exact public candidate is unavailable');
 }
 
 function receiptIri(admission: RegisteredAdmission) {

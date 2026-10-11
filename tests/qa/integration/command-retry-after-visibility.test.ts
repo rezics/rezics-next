@@ -149,13 +149,13 @@ async function retrySubmission(stack: MediaStack, member: Member) {
   const key = randomUUID();
   const hidden = await member.send('POST', `/v1/realms/${realm.slice(-36)}/submissions`, body, key);
   const hiddenText = await hidden.text();
-  expect(hidden.status, hiddenText).toBe(503);
+  expect(hidden.status, hiddenText).toBe(404);
   const open = await admissions(stack, member, key);
   expect(open.rows).toHaveLength(1);
   expect(open.rows[0]!.graph_outcome).toBeNull();
   const again = await member.send('POST', `/v1/realms/${realm.slice(-36)}/submissions`, body, key);
   const againText = await again.text();
-  expect(again.status, againText).toBe(503);
+  expect(again.status, againText).toBe(404);
   const still = await admissions(stack, member, key);
   expect(still.rows).toHaveLength(1);
   expect(still.rows[0]!.graph_outcome).toBeNull();

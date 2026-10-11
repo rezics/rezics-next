@@ -109,7 +109,7 @@ export async function createNativeCredit(deps: MainWorkDependencies, request: Re
         if (result.status === 'guard-unmatched') {
           // The key is already claimed. Losing the Agent inside the write stays
           // unsealed, so the same key is re-evaluated once the Agent is public.
-          if (!await creditedAgentVisible(env, input.agent)) throw new WorkReadUnavailable('Agent unavailable');
+          if (!await creditedAgentVisible(env, input.agent)) throw new WorkReadMissing('Agent unavailable');
           await sealMetadataWorkEditAdmission(env, admission);
         }
       } catch (error) {
