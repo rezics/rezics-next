@@ -388,6 +388,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const decisionReceipt = await completed.json() as { decisionId: string; operation: { status: string } };
       expect(completed.status).toBe(200);
       expect(decisionReceipt.operation.status).toBe('completed');
+      await catchUpContentProjection(stack);
 
       const replayNotice = await govern('POST', '/v1/public-reports', reportInput, undefined, reportKey);
       expect(replayNotice.status).toBe(200);
