@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
+import { httpTelemetry } from '@rezics/observability/elysia';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { rateLimitBudgets, rateLimitFamily, principalClasses } from '../src/modules/rate-limit/budgets.ts';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
@@ -401,7 +402,7 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     const expiredProbe = '0'.repeat(64);
     await pool.query(`INSERT INTO access.rate_limit_v1(key,family,count,expires_at)
       VALUES ($1,'provider',1,now() - interval '1 day')`, [expiredProbe]);
-    const network = new Elysia().use(rateLimitHook(account, { store, options, budgets }))
+    const network = new Elysia().use(httpTelemetry()).use(rateLimitHook(account, { store, options, budgets }))
       .post('/v1/claims', () => Response.json({ accepted: true }))
       .listen({ hostname: '127.0.0.1', port: 0 });
     try {
