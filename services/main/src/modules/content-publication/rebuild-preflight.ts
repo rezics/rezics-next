@@ -39,7 +39,8 @@ export function contentRebuildDelivery(env: WorkActivationEnvironment,
       }
       return at.sequence;
     },
-    relayOnce: async () => (await relayMainOutboxOnce(env.fuseki, pool, consumer))?.sequence ?? null,
+    relayOnce: async () => (await relayMainOutboxOnce(env.fuseki, pool, consumer,
+      { ownerOutbox: env.receiptCustody }))?.sequence ?? null,
     deliveryPosition: async () => (await content.readEligibilityDeliveryProgress(
       MAIN_RELAY_STREAM_SCOPE, env.lineage.dataEpoch)).sequence,
     deliverOnce: async through => (await deliverRetainedContentEligibilityOnce(
