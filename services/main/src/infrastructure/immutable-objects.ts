@@ -45,8 +45,19 @@ interface VerifiedObjectCacheMetrics {
   misses: number;
 }
 
+interface CacheReadGeneration {
+  generation: number;
+  activeReads: number;
+}
+
+interface CacheReadToken {
+  state: CacheReadGeneration;
+  generation: number;
+}
+
 class VerifiedObjectCache {
   private readonly entries = new Map<string, VerifiedCacheEntry>();
+  private readonly activeReads = new Map<string, CacheReadGeneration>();
   private totalBytes = 0;
   hits = 0;
   misses = 0;
@@ -81,11 +92,36 @@ class VerifiedObjectCache {
     this.totalBytes += copy.byteLength;
   }
 
+  beginRead(digest: string): CacheReadToken {
+    let state = this.activeReads.get(digest);
+    if (!state) {
+      state = { generation: 0, activeReads: 0 };
+      this.activeReads.set(digest, state);
+    }
+    state.activeReads++;
+    return { state, generation: state.generation };
+  }
+
+  rememberRead(digest: string, bytes: Uint8Array, token: CacheReadToken): boolean {
+    if (this.activeReads.get(digest) !== token.state || token.state.generation !== token.generation) return false;
+    this.remember(digest, bytes);
+    return true;
+  }
+
+  endRead(digest: string, token: CacheReadToken): void {
+    if (this.activeReads.get(digest) !== token.state) return;
+    token.state.activeReads--;
+    if (token.state.activeReads === 0) this.activeReads.delete(digest);
+  }
+
   evict(digest: string): void {
+    const active = this.activeReads.get(digest);
+    if (active) active.generation++;
     this.remove(digest);
   }
 
   clear(): void {
+    for (const active of this.activeReads.values()) active.generation++;
     this.entries.clear();
     this.totalBytes = 0;
     this.hits = 0;
@@ -168,6 +204,8 @@ function whenNotAborted(signal: AbortSignal | undefined, work: Promise<Uint8Arra
 }
 
 export class ObjectUnavailable extends Error {}
+/** The exact immutable key is absent; permission, timeout and service failures never use this error. */
+export class ObjectNotFound extends ObjectUnavailable {}
 export class ObjectIntegrityError extends Error {}
 export class ObjectReadBudgetExceeded extends Error {}
 
@@ -176,8 +214,12 @@ export interface ImmutableObjects {
   put(bytes: Uint8Array): Promise<string>;
   /** A missing object is unavailable; bytes with the wrong digest are corrupt. */
   get(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array>;
+  /** Probe one exact key; only a 404 is reported as {@link ObjectNotFound}. */
+  probe?(digest: string, signal?: AbortSignal): Promise<void>;
+  /** Remove one exact digest and prove it is absent with an uncached read-back. */
+  deleteAndVerifyAbsent?(digest: string, signal?: AbortSignal): Promise<void>;
   /** Remove a known-unpublished staging candidate when the backend supports it. */
-  discard?(digest: string): Promise<void>;
+  discard?(digest: string, signal?: AbortSignal): Promise<void>;
 }
 
 export interface S3ObjectOptions {
@@ -277,8 +319,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     // read-back skips the cache: a hit is not proof this namespace stored them.
     for (let attempt = 0; attempt < 8; attempt++) {
       try {
-        const visible = await this.readStore(digest);
-        rememberVerifiedImmutableObject(digest, visible);
+        await this.readStoreAndRemember(digest);
         return digest;
       } catch (error) {
         if (!(error instanceof ObjectUnavailable) || attempt === 7) throw error;
@@ -310,12 +351,22 @@ export class S3ImmutableObjects implements ImmutableObjects {
     verifiedObjectCache.misses++;
     const bytes = maxBytes === undefined
       ? await this.joinRead(digest, signal)
-      : await this.readStore(digest, maxBytes, signal);
-    if (maxBytes !== undefined) rememberVerifiedImmutableObject(digest, bytes);
+      : await this.readStoreAndRemember(digest, maxBytes, signal);
     if (signal?.aborted) throw new ObjectUnavailable('committed immutable object is unavailable');
     if (maxBytes !== undefined && bytes.byteLength > maxBytes)
       throw new ObjectReadBudgetExceeded('immutable object exceeds its read budget');
     return new Uint8Array(bytes);
+  }
+
+  /** Probe the exact key with HEAD; access and service failures never prove absence. */
+  async probe(digest: string, signal?: AbortSignal): Promise<void> {
+    const key = this.key(digest);
+    let response: Response;
+    try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
+      { method: 'HEAD', signal: signal ?? this.readSignal?.() }); }
+    catch { throw new ObjectUnavailable('committed immutable object probe is unavailable'); }
+    if (response.status === 404) throw new ObjectNotFound('committed immutable object was not found (404)');
+    if (!response.ok) throw new ObjectUnavailable(`committed immutable object probe is unavailable (${response.status})`);
   }
 
   /** Concurrent unbounded reads of one digest share the store fetch. A caller's abort does not cancel it. */
@@ -326,15 +377,25 @@ export class S3ImmutableObjects implements ImmutableObjects {
   }
 
   private startRead(digest: string): Promise<Uint8Array> {
-    const shared = this.readStore(digest, undefined, this.readSignal?.()).then(bytes => {
-      rememberVerifiedImmutableObject(digest, bytes);
-      return bytes;
-    });
+    const shared = this.readStoreAndRemember(digest, undefined, this.readSignal?.());
     const tracked = shared.finally(() => {
       if (this.inflight.get(digest) === tracked) this.inflight.delete(digest);
     });
     this.inflight.set(digest, tracked);
     return tracked;
+  }
+
+  private async readStoreAndRemember(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array> {
+    const token = verifiedObjectCache.beginRead(digest);
+    try {
+      const bytes = await this.readStore(digest, maxBytes, signal);
+      if (!verifiedObjectCache.rememberRead(digest, bytes, token)) {
+        throw new ObjectUnavailable('immutable object read became stale during deletion');
+      }
+      return bytes;
+    } finally {
+      verifiedObjectCache.endRead(digest, token);
+    }
   }
 
   private async readStore(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array> {
@@ -344,6 +405,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
       { method: 'GET', signal: signal ?? this.readSignal?.(),
         ...(maxBytes === undefined ? {} : { headers: { range: `bytes=0-${maxBytes}` } }) }); }
     catch { throw new ObjectUnavailable('committed immutable object is unavailable'); }
+    if (response.status === 404) throw new ObjectNotFound('committed immutable object was not found (404)');
     if (!response.ok) throw new ObjectUnavailable(`committed immutable object is unavailable (${response.status})`);
     let bytes: Uint8Array;
     try {
@@ -382,15 +444,33 @@ export class S3ImmutableObjects implements ImmutableObjects {
     return bytes;
   }
 
-  /** Idempotently remove one object after its owner proved the candidate unpublished. */
-  async discard(digest: string): Promise<void> {
+  /** Delete one exact key and verify absence without trusting cached bytes. */
+  async deleteAndVerifyAbsent(digest: string, signal?: AbortSignal): Promise<void> {
     const key = this.key(digest);
-    let response: Response;
-    try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`, { method: 'DELETE' }); }
-    catch { throw new ObjectUnavailable('immutable object discard response is unavailable'); }
-    if (!response.ok && response.status !== 404) {
-      throw new ObjectUnavailable(`immutable object discard failed (${response.status})`);
-    }
     evictVerifiedImmutableObject(digest);
+    try {
+      let response: Response;
+      try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
+        { method: 'DELETE', signal: signal ?? this.readSignal?.() }); }
+      catch { throw new ObjectUnavailable('immutable object delete response is unavailable'); }
+      if (!response.ok && response.status !== 404) {
+        throw new ObjectUnavailable(`immutable object delete failed (${response.status})`);
+      }
+      try {
+        await this.probe(digest, signal);
+      } catch (error) {
+        if (error instanceof ObjectNotFound) return;
+        throw error;
+      }
+      throw new ObjectUnavailable('immutable object remains after delete');
+    } finally {
+      // Invalidate reads that began while DELETE and its read-back were in flight.
+      evictVerifiedImmutableObject(digest);
+    }
+  }
+
+  /** Idempotently remove one object after its owner proved the candidate unpublished. */
+  async discard(digest: string, signal?: AbortSignal): Promise<void> {
+    await this.deleteAndVerifyAbsent(digest, signal);
   }
 }

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   clearVerifiedImmutableObjectCache, configureVerifiedImmutableObjectCache, evictVerifiedImmutableObject,
-  ObjectIntegrityError, ObjectReadBudgetExceeded, ObjectUnavailable, rememberVerifiedImmutableObject,
+  ObjectIntegrityError, ObjectNotFound, ObjectReadBudgetExceeded, ObjectUnavailable, rememberVerifiedImmutableObject,
   S3ImmutableObjects, VERIFIED_OBJECT_CACHE_DEFAULTS, verifiedImmutableObjectCacheMetrics,
 } from '../src/infrastructure/immutable-objects.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -43,6 +43,7 @@ function fakeS3(options: { corrupt?: boolean } = {}) {
       data.delete(key);
       return new Response(null, { status: 204 });
     }
+    if (request.method === 'HEAD') return new Response(null, { status: data.has(key) ? 200 : 404 });
     if (request.method === 'GET') {
       counts.gets++;
       if (options.corrupt) return new Response(Buffer.from('tampered'), { status: 200 });
@@ -203,6 +204,54 @@ test('discard and explicit eviction both drop the digest', async () => {
   const afterDiscard = counts.gets;
   await expect(store.get(digest)).rejects.toBeInstanceOf(ObjectUnavailable);
   expect(counts.gets).toBe(afterDiscard + 1);
+});
+
+test('a read that finishes after deletion cannot return or refill the cache', async () => {
+  const bytes = Buffer.from('late response body');
+  const expected = digestOf(bytes);
+  const key = `semantic/work/sha256/${expected}`;
+  const data = new Map<string, Uint8Array>([[key, bytes]]);
+  let gets = 0;
+  let heads = 0;
+  let firstReadStarted!: () => void;
+  const started = new Promise<void>(resolve => { firstReadStarted = resolve; });
+  let releaseFirstRead!: () => void;
+  const firstReadGate = new Promise<void>(resolve => { releaseFirstRead = resolve; });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    const requestKey = decodeURIComponent(new URL(request.url).pathname.slice('/rezics-semantic/'.length));
+    if (request.method === 'DELETE') {
+      data.delete(requestKey);
+      return new Response(null, { status: 204 });
+    }
+    if (request.method === 'HEAD') {
+      heads++;
+      return new Response(null, { status: data.has(requestKey) ? 200 : 404 });
+    }
+    if (request.method === 'GET') {
+      gets++;
+      if (gets === 1) {
+        firstReadStarted();
+        await firstReadGate;
+        return new Response(Buffer.from(bytes), { status: 200 });
+      }
+      const stored = data.get(requestKey);
+      return stored ? new Response(Buffer.from(stored), { status: 200 }) : new Response(null, { status: 404 });
+    }
+    return new Response(null, { status: 405 });
+  } });
+  servers.push(server);
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+    prefix: 'semantic/work/' });
+
+  const lateRead = store.get(expected);
+  await started;
+  await store.deleteAndVerifyAbsent(expected);
+  releaseFirstRead();
+  await expect(lateRead).rejects.toBeInstanceOf(ObjectUnavailable);
+  await expect(store.get(expected)).rejects.toBeInstanceOf(ObjectNotFound);
+  expect(gets).toBe(2);
+  expect(heads).toBe(1);
 });
 
 test('a cached object still refuses a tighter read budget without a store call', async () => {

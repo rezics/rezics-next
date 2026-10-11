@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { clearVerifiedImmutableObjectCache, evictVerifiedImmutableObject, ObjectIntegrityError,
-  ObjectReadBudgetExceeded, S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+  ObjectNotFound, ObjectReadBudgetExceeded, ObjectUnavailable, S3ImmutableObjects }
+  from '../src/infrastructure/immutable-objects.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { prepareComponent, prepareWorkComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { readWorkComponentState, RevisionCorrupt } from '../src/modules/work/history.ts';
@@ -20,7 +21,8 @@ function digest(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function fakeS3() {
+function fakeS3(options: { getStatus?: number; headStatus?: number; deleteStatus?: number;
+  retainAfterDelete?: boolean } = {}) {
   const data = new Map<string, Uint8Array>();
   const puts: { key: string; signedHeaders: string; checksum: string }[] = [];
   let bucketCreates = 0;
@@ -50,7 +52,17 @@ function fakeS3() {
       data.set(key, bytes);
       return new Response(null, { status: 200 });
     }
+    if (request.method === 'DELETE') {
+      if (options.deleteStatus !== undefined) return new Response(null, { status: options.deleteStatus });
+      if (!options.retainAfterDelete) data.delete(key);
+      return new Response(null, { status: 204 });
+    }
+    if (request.method === 'HEAD') {
+      if (options.headStatus !== undefined) return new Response(null, { status: options.headStatus });
+      return new Response(null, { status: data.has(key) ? 200 : 404 });
+    }
     if (request.method === 'GET') {
+      if (options.getStatus !== undefined) return new Response(null, { status: options.getStatus });
       const bytes = data.get(key);
       return bytes ? new Response(Buffer.from(bytes), { status: 200 }) : new Response(null, { status: 404 });
     }
@@ -63,6 +75,83 @@ function fakeS3() {
   return { store: storeFor('semantic/work/'), storeFor, data, puts,
     get bucketCreates() { return bucketCreates; } };
 }
+
+test('only an exact 404 proves an immutable object is missing', async () => {
+  const absent = fakeS3();
+  const missingDigest = digest(Buffer.from('missing object'));
+  await expect(absent.store.probe(missingDigest)).rejects.toBeInstanceOf(ObjectNotFound);
+  await expect(absent.store.get(missingDigest)).rejects.toBeInstanceOf(ObjectNotFound);
+
+  for (const status of [403, 503]) {
+    const unavailable = fakeS3({ getStatus: status, headStatus: status });
+    for (const operation of [unavailable.store.probe(missingDigest), unavailable.store.get(missingDigest)]) {
+      const error = await operation.then(() => undefined, caught => caught);
+      expect(error).toBeInstanceOf(ObjectUnavailable);
+      expect(error).not.toBeInstanceOf(ObjectNotFound);
+    }
+  }
+});
+
+test('a timed out immutable read is unavailable rather than absent', async () => {
+  let requestStarted!: () => void;
+  const started = new Promise<void>(resolve => { requestStarted = resolve; });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+    if (request.method === 'HEAD' || request.method === 'GET') {
+      requestStarted();
+      return new Promise<Response>(() => {});
+    }
+    return new Response(null, { status: 404 });
+  } });
+  servers.push(server);
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+    prefix: 'semantic/work/', readSignal: () => AbortSignal.timeout(25) });
+  const missingDigest = digest(Buffer.from('timed out object'));
+  const pendingProbe = store.probe(missingDigest).then(() => undefined, error => error);
+  await started;
+  const probeError = await pendingProbe;
+  expect(probeError).toBeInstanceOf(ObjectUnavailable);
+  expect(probeError).not.toBeInstanceOf(ObjectNotFound);
+  const readError = await store.get(missingDigest).then(() => undefined, error => error);
+  expect(readError).toBeInstanceOf(ObjectUnavailable);
+  expect(readError).not.toBeInstanceOf(ObjectNotFound);
+});
+
+test('a timed out delete is not reported as verified absence', async () => {
+  let requestStarted!: () => void;
+  const started = new Promise<void>(resolve => { requestStarted = resolve; });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+    if (request.method === 'DELETE') {
+      requestStarted();
+      return new Promise<Response>(() => {});
+    }
+    return new Response(null, { status: 404 });
+  } });
+  servers.push(server);
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+    prefix: 'semantic/work/' });
+  const missingDigest = digest(Buffer.from('timed out delete'));
+  const pending = store.deleteAndVerifyAbsent(missingDigest, AbortSignal.timeout(25))
+    .then(() => undefined, error => error);
+  await started;
+  const error = await pending;
+  expect(error).toBeInstanceOf(ObjectUnavailable);
+  expect(error).not.toBeInstanceOf(ObjectNotFound);
+});
+
+test('delete-and-readback proves absence and refuses a successful DELETE that leaves bytes', async () => {
+  const removed = fakeS3();
+  const bytes = Buffer.from('remove this object');
+  const digestValue = await removed.store.put(bytes);
+  await removed.store.deleteAndVerifyAbsent(digestValue);
+  await expect(removed.store.get(digestValue)).rejects.toBeInstanceOf(ObjectNotFound);
+
+  const retained = fakeS3({ retainAfterDelete: true });
+  const retainedDigest = await retained.store.put(bytes);
+  await expect(retained.store.deleteAndVerifyAbsent(retainedDigest)).rejects.toBeInstanceOf(ObjectUnavailable);
+  expect(retained.data.has(`semantic/work/sha256/${retainedDigest}`)).toBe(true);
+});
 
 test('P0.5 signed conditional create verifies bytes before publishing a Work manifest', async () => {
   const { store, data, puts } = fakeS3();
