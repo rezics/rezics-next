@@ -424,6 +424,7 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
           ? await decideAfterLostEffectAcknowledgement(f, input, gaps)
           : await decideThroughCompletion(f, input, item === cases[1]);
         expect(decided.outcome).toBe('interim_restrict');
+        await f.claim(item.receipt);
         const stale = await f.decide({ ...input, idempotencyKey: `stale-${randomUUID()}` });
         expect(stale.status).toBe(409);
         const affected = await affectedCredential(f, maintainer, item.receipt.caseId, decided.decisionId);
