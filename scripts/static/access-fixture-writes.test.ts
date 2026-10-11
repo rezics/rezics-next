@@ -33,6 +33,18 @@ test('finds direct access writes, ignores an interpolated table name, and allows
   expect(scanAccessFixtureWriteText(readFixture('grant-authority.fixture'), 'grant-authority.fixture')).toEqual([]);
 });
 
+test('surrounding syntax cannot hide a plainly written statement', () => {
+  const insert = ['INSERT INTO', 'access.permission_grant', '(id) VALUES ($1)'].join(' ');
+  const afterRegex = `if (ready) /'/.test(value); await db.query('${insert}');`;
+  const afterJsx = `const view = <div>don't</div>; await db.query('${insert}');`;
+  const acrossLines = "await db.query(`\n  DELETE\n  FROM access.scope_gate\n  WHERE id = $1`);";
+  for (const source of [afterRegex, afterJsx]) {
+    expect(scanAccessFixtureWriteText(source, 'hidden.fixture').map(finding => finding.table)).toEqual(['access.permission_grant']);
+  }
+  expect(scanAccessFixtureWriteText(acrossLines, 'lines.fixture').map(finding => finding.table)).toEqual(['access.scope_gate']);
+  expect(scanAccessFixtureWriteText("const q = 'UPDATE access.representation_archive SET x = 1';", 'other.fixture')).toEqual([]);
+});
+
 test('scans TypeScript below directories named migrations and excludes only the access module', () => {
   const temporaryBase = resolve(import.meta.dir, '../../.temp');
   mkdirSync(temporaryBase, { recursive: true });
