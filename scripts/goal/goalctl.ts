@@ -17,7 +17,7 @@ import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { qaArtifactDirectory, tierBunTestArgs } from '../qa/core.ts';
 import { parseAffectedArgs, testCommands } from '../qa/test.ts';
-import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
+import { appendInbox, inboxEntries, parseRegressArgs, provideGoalctl, runRegression, type MergeEvent } from './regress.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { land, type LandScope } from './land.ts';
@@ -6099,6 +6099,7 @@ async function main(argv: string[]): Promise<number> {
     case 'regress': {
       // Worktree smoke runs can keep reports/inboxes in their writable checkout; QA still uses the shared host lock.
       const regressionState = process.env.GOAL_REGRESS_STATE_DIR ? resolve(process.env.GOAL_REGRESS_STATE_DIR) : stateDir;
+      provideGoalctl({ declaredTestTimeout, planUnitGateShards, heavyQaStatus });
       const manifest = await runRegression({ ...parseRegressArgs(rest), repo: process.cwd(), stateDir: regressionState,
         route: entry => regressionState === stateDir ? withLedger(() => appendInbox(stateDir, entry))
           : Promise.resolve(appendInbox(regressionState, entry)) });

@@ -12,7 +12,7 @@ import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
-import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
+import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
@@ -178,6 +178,35 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       expect(batches.flatMap(batch => batch.files)).toEqual(r.files.filter(file => file.tier === 'owner').map(file => file.file));
       expect(batches.map(batch => batch.budgetMs)).toEqual([600_000, 600_000, 600_000]);
     } finally { r.cleanup(); }
+  });
+
+  test('the owner deadline planner comes from the entry module when it hands itself over', async () => {
+    const r = repo();
+    const planned: string[] = [];
+    try {
+      r.commit();
+      provideGoalctl({ declaredTestTimeout: goalctl.declaredTestTimeout, heavyQaStatus: goalctl.heavyQaStatus,
+        planUnitGateShards: (entries, shards, budget) => {
+          planned.push(...entries.map(entry => entry.file));
+          return goalctl.planUnitGateShards(entries, shards, budget);
+        } });
+      const result = await r.run({ runId: 'entry-planner', only: ['owner'] });
+      const owner = r.files.filter(file => file.tier === 'owner').map(file => file.file);
+      expect(planned.sort()).toEqual([...owner].sort());
+      expect(result.batches.filter(batch => batch.tier === 'owner').every(batch => batch.budgetMs !== undefined)).toBe(true);
+    } finally { provideGoalctl(undefined); r.cleanup(); }
+  });
+
+  test('the command entry hands itself to the regression and the regression never imports it unprovided', () => {
+    // goalctl awaits the regression at its top level; an import of goalctl from the regression while it runs never settles.
+    const entry = readFileSync(join(import.meta.dir, 'goalctl.ts'), 'utf8');
+    const start = entry.indexOf("case 'regress': {");
+    expect(start).toBeGreaterThan(-1);
+    const body = entry.slice(start, entry.indexOf('runRegression(', start));
+    expect(body).toContain('provideGoalctl({ declaredTestTimeout, planUnitGateShards, heavyQaStatus })');
+    const regression = readFileSync(join(import.meta.dir, 'regress.ts'), 'utf8');
+    expect(regression.match(/import\('\.\/goalctl\.ts'\)/g)).toHaveLength(2);
+    expect(regression).toContain("providedGoalctl ?? await import('./goalctl.ts')");
   });
 
   test('an unparseable owner timeout is reported and falls back to the ordinary batch deadline', async () => {

@@ -92,13 +92,20 @@ export interface RegressionTurnOptions {
   announce?: (message: string) => void;
 }
 
+type RegressionGoalctl = Pick<typeof import('./goalctl.ts'), 'declaredTestTimeout' | 'planUnitGateShards' | 'heavyQaStatus'>;
+let providedGoalctl: RegressionGoalctl | undefined;
+/** goalctl is the command's entry module and awaits the regression at its top level. Importing it from here
+ * while it runs never settles: the first real run after such an import spun for 45 minutes without a batch.
+ * The entry hands its functions over instead; a caller that is not goalctl falls back to the import. */
+export function provideGoalctl(module: RegressionGoalctl | undefined): void { providedGoalctl = module; }
+const loadGoalctl = async (): Promise<RegressionGoalctl> => providedGoalctl ?? await import('./goalctl.ts');
+
 /** Explicit maintenance barrier. Normal browser runs join the shared fair queue without waiting for it to drain. */
 export async function waitForRegressionTurn(lockDir?: string, interrupted: () => boolean = () => false,
   options: RegressionTurnOptions = {}): Promise<void> {
-  // goalctl imports this module; loading its status reader only at runtime avoids a static import cycle.
   let status = options.status;
   if (!status) {
-    const { heavyQaStatus } = await import('./goalctl.ts');
+    const { heavyQaStatus } = await loadGoalctl();
     status = () => heavyQaStatus(lockDir);
   }
   const now = options.now ?? Date.now;
@@ -477,8 +484,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
 }
 
 async function ownerFileBudgets(checkout: string, files: readonly string[], defaultBudgetMs: number): Promise<Map<string, number>> {
-  // goalctl imports the regression; load its planner after the QA module graph has initialized.
-  const { declaredTestTimeout, planUnitGateShards } = await import('./goalctl.ts');
+  const { declaredTestTimeout, planUnitGateShards } = await loadGoalctl();
   return new Map(files.map(file => {
     let timeout: DeclaredTestTimeout = { unparseable: false };
     try {
