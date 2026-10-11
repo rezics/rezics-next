@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   appendFileSync,
@@ -1523,6 +1523,26 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             accessPool: owners.access,
             contentPool: owners.content,
             restoredRelayPool: owners.relay,
+            ...(nativeAccessAttachment && attachmentCustody ? {
+              nativeAccessAttachment: async function* (reference) {
+                const attachment = nativeAccessAttachment!;
+                if (reference.ciphertextDigest !== attachment.ciphertextDigest
+                  || reference.ciphertextBytes !== attachment.ciphertextBytes
+                  || reference.recipientFingerprint !== attachment.recipientFingerprint)
+                  throw new Error('private native Access attachment reference differs');
+                const child = spawn('gpg', ['--batch', '--decrypt', attachment.path], {
+                  env: attachmentCustody!.offhost, stdio: ['ignore', 'pipe', 'ignore'],
+                });
+                const exited = new Promise<number | null>((resolveExit, reject) => {
+                  child.once('error', reject);
+                  child.once('close', resolveExit);
+                });
+                try {
+                  for await (const chunk of child.stdout) yield chunk as Uint8Array;
+                  if (await exited !== 0) throw new Error('native Access attachment decryption failed');
+                } finally { child.kill(); }
+              },
+            } : {}),
             hmacKey: restoreKey,
             objectStore: {
               directory: restoredDirectory,

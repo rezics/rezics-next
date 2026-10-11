@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ERASURE_JOURNAL_EPOCH } from '../../../services/main/src/modules/erasure/journal.ts';
+import { probeContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
 import {
   accessOutboxCoverage,
   accessStateCoverage,
@@ -199,24 +200,6 @@ test(
         expect((await outerOperation(copy, sameCutKey)).hold_reason)
           .toBe('signed recovery coverage is not the retained current capture');
 
-        const twoCutKey = 'later-admission-two-cut-baseline';
-        const twoCut = await copy.request(twoCutKey, undefined, body);
-        expect(twoCut.status).toBe(201);
-        expect(await twoCut.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
-        const held = await outerOperation(copy, twoCutKey);
-        // The full C0 owner baseline and authenticated C1/C0/D/J1 gate passed.
-        // Native additions/release are subsequent steps, so replay cannot run yet.
-        expect(held.hold_reason).toBe('Access differs from independently current authority');
-        expect(held.erasures).toBeUndefined();
-        expect(held.qualifications).toEqual([]);
-        expect(held.releases).toEqual([]);
-        expect(await graphReleased(copy)).toBe(false);
-        expect(await accessStateCoverage(copy.owners.access)).toEqual(baseState);
-        expect(await accessOutboxCoverage(copy.owners.access)).toEqual(baseOutbox);
-        expect((await copy.ready()).status).toBe(503);
-        expect((await copy.request(twoCutKey, undefined, body)).status).toBe(200);
-        expect((await copy.request(twoCutKey)).status).toBe(409);
-
         const wrongBase = JSON.stringify(sealRecoveryPayload({
           ...fixture.baseCoverage, accessStateDigest: '0'.repeat(64),
         }, fixture.baseAuthority.hmacKey, 'graph-recovery-coverage'));
@@ -235,6 +218,24 @@ test(
         expect(await invalidCurrent.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
         expect((await outerOperation(copy, invalidCurrentKey)).hold_reason)
           .toBe('independently current authority capture is invalid or superseded');
+
+        const twoCutKey = 'later-admission-two-cut-replay';
+        const twoCut = await copy.request(twoCutKey, undefined, body);
+        expect(twoCut.status).toBe(201);
+        expect(await twoCut.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+        const held = await outerOperation(copy, twoCutKey);
+        expect(held.hold_reason).toBe('retained erasure reconciliation failed: native release cut differs from signed current authority');
+        expect(held.erasures?.state).toBe('reconciled');
+        expect(held.qualifications).toHaveLength(1);
+        expect(held.releases).toEqual([]);
+        expect(await graphReleased(copy)).toBe(false);
+        expect(await accessStateCoverage(copy.owners.access)).toEqual(currentState);
+        expect(await accessOutboxCoverage(copy.owners.access)).toEqual(currentOutbox);
+        expect((await probeContentErasure(copy.owners.content, later.erasureId,
+          [fixture.revisionId], later.erasureEpoch)).get(fixture.revisionId)).toBe('erased');
+        expect((await copy.ready()).status).toBe(503);
+        expect((await copy.request(twoCutKey, undefined, body)).status).toBe(200);
+        expect((await copy.request(twoCutKey)).status).toBe(409);
       } finally {
         await copy.dispose();
       }

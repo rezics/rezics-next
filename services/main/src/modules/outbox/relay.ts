@@ -8,7 +8,7 @@ import { ownerOutboxEventHandler, type OwnerCloudEvent,
   type OwnerOutboxEventHandler } from './event-handlers.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from '../rating/target-context-authority.ts';
-import { MAIN_RELAY_STREAM_SCOPE } from './relay-position.ts';
+import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from './relay-position.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 
@@ -59,18 +59,26 @@ interface CoverageScan {
 }
 
 async function scanRelayCoverage(client: PoolClient, consumer: string,
-  targetSequence?: string): Promise<CoverageScan> {
+  targetSequence?: string, prefix?: RelayHandoffPosition): Promise<CoverageScan> {
   const checkpoint = await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
     'SELECT stream_scope, data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
   const row = checkpoint.rows[0];
   if (!row) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
   if (row.stream_scope !== MAIN_RELAY_STREAM_SCOPE) throw new RelayCheckpointConflict('relay checkpoint stream differs');
-  const uncheckpointed = await client.query(
-    `SELECT 1 FROM relay.delivered_event WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2
-     UNION ALL SELECT 1 FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2 LIMIT 1`,
-    [row.data_epoch, row.sequence]);
-  if (uncheckpointed.rowCount) {
-    throw new RelayCheckpointConflict('delivered handoff exceeds relay checkpoint');
+  if (prefix && (prefix.streamScope !== row.stream_scope || prefix.dataEpoch !== row.data_epoch
+    || !/^(0|[1-9][0-9]{0,99})$/.test(prefix.sequence)
+    || BigInt(prefix.sequence) > BigInt(row.sequence))) {
+    throw new RelayCheckpointConflict('retained prefix differs from relay checkpoint');
+  }
+  const throughSequence = prefix?.sequence ?? row.sequence;
+  if (!prefix) {
+    const uncheckpointed = await client.query(
+      `SELECT 1 FROM relay.delivered_event WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2
+       UNION ALL SELECT 1 FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2 LIMIT 1`,
+      [row.data_epoch, row.sequence]);
+    if (uncheckpointed.rowCount) {
+      throw new RelayCheckpointConflict('delivered handoff exceeds relay checkpoint');
+    }
   }
   const batchDigest = createHash('sha256');
   let batchCount = 0n;
@@ -84,7 +92,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
        FROM relay.delivered_batch AS batch
        WHERE batch.stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND batch.data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
        ORDER BY batch.sequence LIMIT 1000`,
-      [row.data_epoch, batchCount.toString(), row.sequence]);
+      [row.data_epoch, batchCount.toString(), throughSequence]);
     for (const batch of page.rows) {
       if (BigInt(batch.sequence) !== batchCount + 1n
         || batch.actual_count !== String(batch.event_count)) {
@@ -101,7 +109,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     }
     if (page.rows.length < 1000) break;
   }
-  if (batchCount !== BigInt(row.sequence)) {
+  if (batchCount !== BigInt(throughSequence)) {
     throw new RelayCheckpointConflict('retained batch coverage is incomplete');
   }
   const digest = createHash('sha256');
@@ -116,7 +124,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
        FROM relay.delivered_event AS event WHERE event.stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND event.data_epoch = $1 AND event.sequence <= $2
          AND (event.sequence, event.event_id) > ($3::numeric, $4)
        ORDER BY event.sequence, event.event_id LIMIT 1000`,
-      [row.data_epoch, row.sequence, afterSequence, afterEventId]);
+      [row.data_epoch, throughSequence, afterSequence, afterEventId]);
     for (const event of page.rows) {
       digest.update(JSON.stringify([event.source, event.event_id, event.sequence, event.body]));
       digest.update('\n');
@@ -129,7 +137,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     }
     if (page.rows.length < 1000) break;
   }
-  return { coverage: { consumer, streamScope: row.stream_scope, dataEpoch: row.data_epoch, sequence: row.sequence,
+  return { coverage: { consumer, streamScope: row.stream_scope, dataEpoch: row.data_epoch, sequence: throughSequence,
     batchCount: batchCount.toString(), batchDigest: batchDigest.digest('hex'),
     eventCount: count.toString(), eventDigest: digest.digest('hex') },
     batch: selectedBatch, events: selectedEvents };
@@ -159,6 +167,13 @@ export async function relayCoverage(pool: Pool, consumer: string, client?: PoolC
  * The caller owns its snapshot, locks and every lifecycle operation. */
 export async function relayCoverageOnClient(client: PoolClient, consumer: string): Promise<RelayCoverage> {
   return (await scanRelayCoverage(client,consumer)).coverage;
+}
+
+/** Verify only the acknowledged prefix at a prior cut in the caller's snapshot.
+ * Later retained rows do not contribute to either digest or completeness proof. */
+export async function relayPrefixCoverageOnClient(client: PoolClient,
+  expected: RelayHandoffPosition & { consumer: string }): Promise<RelayCoverage> {
+  return (await scanRelayCoverage(client, expected.consumer, undefined, expected)).coverage;
 }
 
 /** Verify the full captured handoff and take one event/header from those same rows. */

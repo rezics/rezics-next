@@ -189,6 +189,16 @@ export interface RestoredOwners {
   content: Pool; access: Pool; account: Pool;
   graph?: RestoredGraphCustody;
   objects?: ObjectRecoveryStore;
+  /** Owner-authenticated relation to the immutable physical cut, never a public override. */
+  ownerRestore?: OwnerRestoreEvidence;
+}
+
+export interface OwnerRestoreEvidence {
+  baseCoverageDigest: string;
+  currentCoverageDigest: string;
+  nativeAccessDigest: string;
+  baseFenceGeneration: string;
+  journal: { epoch: string | null; count: string; digest: string };
 }
 
 export interface BorrowedRestoreClients {
@@ -330,9 +340,15 @@ function sameProof(left: GraphSuppressionProof, right: GraphSuppressionProof): b
   return left.receipt === right.receipt && left.dataEpoch === right.dataEpoch && left.sequence === right.sequence;
 }
 
-function restoreRequestDigest(consumer: string, replay: boolean,
-  authority: RetainedAuthorityCoverage): string {
-  return sha256(`${consumer}\0${replay}\0${sha256(authority.sealedCoverage)}`);
+export function restoreRequestDigest(consumer: string, replay: boolean,
+  authority: RetainedAuthorityCoverage, ownerRestore?: OwnerRestoreEvidence): string {
+  const legacy = `${consumer}\0${replay}\0${sha256(authority.sealedCoverage)}`;
+  return sha256(ownerRestore ? `${legacy}\0${JSON.stringify(ownerRestore)}` : legacy);
+}
+
+function ownerRestoreItem(ownerRestore: OwnerRestoreEvidence): Item {
+  return { owner: 'access', kind: 'authority_fence', disposition: 'matched',
+    ref: `restore-native-access:${sha256(JSON.stringify(ownerRestore))}` };
 }
 
 function graphRestoreBinding(restored: RestoredOwners): Item | null {
@@ -416,7 +432,7 @@ async function authenticateRestoreReconciliation(relay: PoolClient, restored: Re
     || !/^[0-9a-f]{64}$/.test(record.outcome_digest)) {
     throw new ErasureRestoreHold('restore is not reconciled with the retained journal');
   }
-  if (![false, true].some(replay => restoreRequestDigest(record.consumer!, replay, authority) === record.request_digest)) {
+  if (![false, true].some(replay => restoreRequestDigest(record.consumer!, replay, authority, restored.ownerRestore) === record.request_digest)) {
     throw new ErasureRestoreHold('restore authority capture differs from reconciliation');
   }
   const { head, journal } = await journalFrontier(relay, record.consumer);
@@ -486,6 +502,7 @@ async function authenticateRestoreReconciliation(relay: PoolClient, restored: Re
     requestDigest: record.request_digest, consumer: record.consumer,
     coverageGeneration: record.coverage_generation, erasureEpoch: record.erasure_epoch }));
   await requireRecordedItem(relay, id, graphRestoreBinding(restored)!);
+  if (restored.ownerRestore) await requireRecordedItem(relay, id, ownerRestoreItem(restored.ownerRestore));
   try { await assertRetainedAuthorityCoverage(relay, restored.access, record.consumer, authority, accessClient,
     released ? { graphRelease: released.expectation, fuseki: restored.graph!.fuseki,
       capturedGeneration: fenceGeneration, ...(outerReconciliationId ? { binding: {
@@ -520,7 +537,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   const operationId = input.operationId.endsWith(':erasures') ? input.operationId : `${input.operationId}:erasures`;
   if (!input.operationId || operationId.length > 200) throw new ErasureRestoreHold('erasure reconciliation identity is invalid');
   const prior = await summary(relayClient, operationId);
-  const requestDigest = restoreRequestDigest(input.consumer, input.replay, input.authority);
+  const requestDigest = restoreRequestDigest(input.consumer, input.replay, input.authority, restored.ownerRestore);
   if (prior) {
     const recorded = (await relayClient.query<{ request_digest: string }>(
       'SELECT request_digest FROM relay.owner_reconciliation WHERE operation_id = $1',
@@ -732,7 +749,8 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     if (graphSequence === null) graph.push({ owner: 'graph', kind: 'authority_fence',
       ref: 'restored-graph-lineage', disposition: 'conflict' });
   }
-  const accessItems = [authority, currentAuthority, accessGeneration];
+  const accessItems = [authority, currentAuthority, accessGeneration,
+    ...(restored.ownerRestore ? [ownerRestoreItem(restored.ownerRestore)] : [])];
   const items = [...content, ...graph, ...objects, ...account, ...accessItems,
     reconciliationIdentityItem({ operationId, requestDigest, consumer: input.consumer,
       coverageGeneration: head?.generation ?? null, erasureEpoch: journal })];

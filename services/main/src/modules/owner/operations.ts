@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { importAccessErasureRecoveryAttachment } from '../access/erasure-recovery.ts';
+import { createPublicRevisionJournalDeltaVerifier } from '../erasure/core-journal-coverage.ts';
+import { relayCoverageOnClient, relayPrefixCoverageOnClient } from '../outbox/relay.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
@@ -25,7 +28,8 @@ import { StructureGroupRootStore } from '../structure/group-root.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable }
   from '../work/history.ts';
-import { readRestoredGraphReleaseExpectation, releaseRestoredGraphHold, RestoreInterrupted,
+import { assertNativeAccessErasureBaseBinding, assertRetainedRecoveryRelayCut,
+  readRestoredGraphReleaseExpectation, releaseRestoredGraphHold, RestoreInterrupted,
   RestoreLineageConflict, type RecoveryCoverage, type RestoredGraphReleaseExpectation,
   type RestoredReleaseClients }
   from '../work/restore-lineage.ts';
@@ -91,6 +95,8 @@ export interface RestoreResources {
   objectStore: ObjectRecoveryStore;
   /** Captured handoff rows in the isolated restored copy, never current authority. */
   restoredRelayPool?: Pool;
+  /** Private custody configured by the service, resolved from a signed reference only. */
+  nativeAccessAttachment?: (reference: NonNullable<RecoveryCoverage['nativeAccessErasure']>) => AsyncIterable<Uint8Array | string>;
   /** External retained owner evidence and the existing held native capability. */
   erasures?: {
     authority: RetainedAuthorityCoverage;
@@ -307,7 +313,7 @@ export class OwnerOperations {
               restoredRelayPool: resources.restoredRelayPool,
               ...(erasures ? { qualification: { resume: Boolean(bindings?.qualification) },
                 releaseErasures: (clients, releaseGraph) => this.releaseRetainedErasures(resources, erasures,
-                  coverage, operationId, row.id, Boolean(bindings?.qualification), clients, releaseGraph) } : {}),
+                  coverage, input.sealedCoverage, operationId, row.id, Boolean(bindings?.qualification), clients, releaseGraph) } : {}),
               deletions: { accountPool: resources.accountPool, hmacKey: resources.hmacKey,
                 sealedSets: input.sealedDeletionSets } }, client);
         } catch (error) {
@@ -414,7 +420,7 @@ export class OwnerOperations {
    */
   private async releaseRetainedErasures(resources: RestoreResources,
     erasures: NonNullable<RestoreResources['erasures']>, coverage: RecoveryCoverage,
-    operationId: string, outerId: string, resume: boolean, clients: RestoredReleaseClients,
+    baseEnvelope: string, operationId: string, outerId: string, resume: boolean, clients: RestoredReleaseClients,
     releaseGraph: () => Promise<void>): Promise<void> {
     const { graphRelease } = clients;
     const restored = this.restoredOwners(resources, erasures, graphRelease, clients.fenceGeneration);
@@ -424,6 +430,31 @@ export class OwnerOperations {
     catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
     if (!current?.relay?.consumer) {
       throw new RestoreLineageConflict('independently current authority capture is unavailable');
+    }
+    if (current.nativeAccessErasure) {
+      const reference = current.nativeAccessErasure;
+      assertNativeAccessErasureBaseBinding(current, coverage, baseEnvelope);
+      assertRetainedRecoveryRelayCut(coverage,
+        await relayPrefixCoverageOnClient(clients.relayClient, coverage.relay));
+      assertRetainedRecoveryRelayCut(current,
+        await relayCoverageOnClient(clients.relayClient, current.relay.consumer));
+      restored.ownerRestore = { baseCoverageDigest: reference.baseCoverageDigest,
+        currentCoverageDigest: createHash('sha256').update(erasures.authority.sealedCoverage).digest('hex'),
+        nativeAccessDigest: reference.summary.plaintextDigest,
+        baseFenceGeneration: reference.summary.baseFenceGeneration,
+        journal: reference.sourceErasureJournal };
+      if (!resume) {
+        if (!resources.nativeAccessAttachment) throw new RestoreLineageConflict('private native Access custody is unavailable');
+        try {
+          const verifier = await createPublicRevisionJournalDeltaVerifier(clients.relayClient,
+            reference.baseErasureJournal.epoch, reference.sourceErasureJournal.epoch);
+          await importAccessErasureRecoveryAttachment(clients.accessClient,
+            resources.nativeAccessAttachment(reference), reference.summary, verifier.verifyAdmissions);
+          verifier.assertComplete();
+        } catch (error) {
+          throw new RestoreLineageConflict('native Access additions differ from signed current custody', { cause: error });
+        }
+      }
     }
     try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
       current.relay.consumer, erasures.authority, clients.accessClient); }

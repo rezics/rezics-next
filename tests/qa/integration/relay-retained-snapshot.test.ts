@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { relayCoverage, RelayCheckpointConflict, relayRetainedEventAt }
+import { relayCoverage, RelayCheckpointConflict, relayPrefixCoverageOnClient, relayRetainedEventAt }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 
@@ -18,6 +18,16 @@ test('SYS12/OPS03: retained relay proof crosses an ordered PostgreSQL page bound
   const batchPrefix = `urn:rezics:test-batch:${randomUUID()}:`;
   const crossEventId = `urn:rezics:test-event:${randomUUID()}`;
   const crossBatchId = `urn:rezics:test-batch:${randomUUID()}`;
+  const prefixPosition = { consumer, streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch, sequence: '1000' };
+  const readPrefix = async (position = prefixPosition) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      return await relayPrefixCoverageOnClient(client, position);
+    } finally {
+      try { await client.query('ROLLBACK'); } finally { client.release(); }
+    }
+  };
   try {
     await pool.query(`INSERT INTO relay.checkpoint
       (consumer, stream_scope, data_epoch, sequence) VALUES ($1, $2, $3, 1001)`,
@@ -43,12 +53,40 @@ test('SYS12/OPS03: retained relay proof crosses an ordered PostgreSQL page bound
     const coverage = await relayCoverage(pool, consumer);
     expect(coverage).toMatchObject({ streamScope: MAIN_RELAY_STREAM_SCOPE,
       sequence: '1001', batchCount: '1001', eventCount: '1001' });
+    expect(await readPrefix({ ...prefixPosition, sequence: '1001' })).toEqual(coverage);
+    const prefix = await readPrefix();
+    expect(prefix).toMatchObject({ ...prefixPosition, batchCount: '1000', eventCount: '1000' });
+    expect(prefix.batchDigest).not.toBe(coverage.batchDigest);
+    expect(prefix.eventDigest).not.toBe(coverage.eventDigest);
+    for (const position of [
+      { ...prefixPosition, streamScope: crossStreamScope },
+      { ...prefixPosition, dataEpoch: randomUUID() },
+      { ...prefixPosition, sequence: '1002' },
+      { ...prefixPosition, sequence: '-1' },
+    ]) {
+      await expect(readPrefix(position)).rejects.toBeInstanceOf(RelayCheckpointConflict);
+    }
     const retained = await relayRetainedEventAt(pool, coverage, '1001');
     expect(retained).toMatchObject({ eventId: `${eventPrefix}1001`,
       envelope: { id: `${eventPrefix}1001` },
       batch: { batchId: `${batchPrefix}1001`, routingEpoch: '1', eventCount: 1 } });
     expect(retained.envelope.data.relayPosition).toEqual({ streamScope: MAIN_RELAY_STREAM_SCOPE,
       dataEpoch, sequence: '1001' });
+
+    await pool.query(`UPDATE relay.delivered_batch SET batch_id = $1
+      WHERE stream_scope = $3 AND data_epoch = $2 AND sequence = 1001`,
+    [`changed-${randomUUID()}`, dataEpoch, MAIN_RELAY_STREAM_SCOPE]);
+    await pool.query(`UPDATE relay.delivered_event SET envelope =
+      jsonb_set(envelope, '{data,marker}', '"changed"'::jsonb)
+      WHERE stream_scope = $2 AND data_epoch = $1 AND sequence = 1001`, [dataEpoch, MAIN_RELAY_STREAM_SCOPE]);
+    expect(await readPrefix()).toEqual(prefix);
+    await expect(relayRetainedEventAt(pool, coverage, '1'))
+      .rejects.toBeInstanceOf(RelayCheckpointConflict);
+    await pool.query(`UPDATE relay.delivered_batch SET batch_id = $1
+      WHERE stream_scope = $3 AND data_epoch = $2 AND sequence = 1001`,
+    [`${batchPrefix}1001`, dataEpoch, MAIN_RELAY_STREAM_SCOPE]);
+    await pool.query(`UPDATE relay.delivered_event SET envelope = envelope #- '{data,marker}'
+      WHERE stream_scope = $2 AND data_epoch = $1 AND sequence = 1001`, [dataEpoch, MAIN_RELAY_STREAM_SCOPE]);
 
     await pool.query(`UPDATE relay.delivered_batch SET batch_id = $1
       WHERE stream_scope = $3 AND data_epoch = $2 AND sequence = 1000`,
@@ -86,6 +124,11 @@ test('SYS12/OPS03: retained relay proof crosses an ordered PostgreSQL page bound
       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = 1001`,
     [MAIN_RELAY_STREAM_SCOPE, dataEpoch]);
     await expect(relayCoverage(pool, consumer)).rejects.toBeInstanceOf(RelayCheckpointConflict);
+    expect(await readPrefix()).toEqual(prefix);
+    await pool.query(`DELETE FROM relay.delivered_event
+      WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = 1000`,
+    [MAIN_RELAY_STREAM_SCOPE, dataEpoch]);
+    await expect(readPrefix()).rejects.toBeInstanceOf(RelayCheckpointConflict);
   } finally {
     try {
       await pool.query('DELETE FROM relay.delivered_event WHERE stream_scope IN ($1, $2) AND data_epoch = $3',
