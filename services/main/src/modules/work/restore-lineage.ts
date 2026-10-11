@@ -5,9 +5,15 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { restoreCutoverCrashArmed, type RestoreCutoverCrashPoint }
   from '../../infrastructure/restore-cutover-crash.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
+import { exportAccessErasureRecoveryAttachment,
+  type AccessErasureRecoverySummary, type NativeAccessErasureAdmission } from '../access/erasure-recovery.ts';
+import { assertErasureJournalCoreCoverage, assertExactPublicRevisionJournalDelta,
+  captureErasureJournalCoreCoverage, verifyPublicRevisionErasureAdmissions,
+  type ErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
 import { relayCoverage, relayCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
@@ -22,7 +28,7 @@ import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.t
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
   type AccountRecoveryCoverage } from '../../../../account/src/recovery-coverage.ts';
 import { advancePgRecoveryFrontier, assertPgRecoveryFrontier, capturePgRecoveryFrontier,
-  type PgRecoveryFrontier } from './pg-recovery-frontier.ts';
+  type PgRecoveryFrontier, type RowCoverage } from './pg-recovery-frontier.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   graphContentReferences, type ContentRecoveryCoverage, type ContentRecoveryProofContext } from './content-recovery-coverage.ts';
 import { assertCommerceRecoveryCoverageOnClient, captureCommerceRecoveryCoverage,
@@ -227,10 +233,42 @@ export interface RecoveryCoverage {
   accessOutboxDigest: string;
   accessStateCount: string;
   accessStateDigest: string;
+  /** Optional on old signed captures; current captures always include both fields. */
+  accessFenceGeneration?: string;
+  erasureJournal?: ErasureJournalCoreCoverage;
+  nativeAccessErasure?: NativeAccessErasureReference;
   relay: RelayCoverage;
   content?: ContentRecoveryCoverage;
   commerce: CommerceRecoveryCoverage;
   objects?: ObjectRecoveryCoverage;
+}
+
+export interface NativeAccessErasureReference {
+  profile: 'rezics-native-access-erasure-reference-v1';
+  version: 1;
+  baseCoverageDigest: string;
+  sourceDataEpoch: string;
+  consumer: string;
+  baseErasureJournal: ErasureJournalCoreCoverage;
+  sourceErasureJournal: ErasureJournalCoreCoverage;
+  summary: AccessErasureRecoverySummary;
+  ciphertextDigest: string;
+  ciphertextBytes: string;
+  recipientFingerprint: string;
+}
+
+export interface NativeAccessCustodyCapture {
+  baseCoverage: RecoveryCoverage;
+  baseCoverageEnvelope: string;
+  baseCoverageHmacKey: string;
+  baseAccessPool: Pool;
+  baseRelayPool: Pool;
+  encryptAttachment: (produce: (write: (chunk: Uint8Array) => Promise<void>) =>
+    Promise<AccessErasureRecoverySummary>) => Promise<{ value: AccessErasureRecoverySummary;
+      ciphertextDigest: string;
+      ciphertextBytes: string;
+      recipientFingerprint: string;
+    }>;
 }
 
 export interface DeletionReleaseEvidence {
@@ -325,19 +363,168 @@ export function assertGraphRecoveryRelayCut(source: GraphRecoverySource, relay: 
   }
 }
 
+function sameCoverage(left: RowCoverage, right: RowCoverage): boolean {
+  return left.count === right.count && left.digest === right.digest;
+}
+
+function rowCoverage(count: string, digest: string): RowCoverage { return { count, digest }; }
+
+function sameCoreCoverage(left: ErasureJournalCoreCoverage, right: ErasureJournalCoreCoverage): boolean {
+  return left.version === right.version && left.epoch === right.epoch
+    && left.count === right.count && left.digest === right.digest;
+}
+
+async function readClosedAccessFence(client: PoolClient): Promise<{ generation: string }> {
+  const row = (await client.query<{ open: boolean; generation: string }>(
+    'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
+  if (!row || row.open || !/^(0|[1-9][0-9]*)$/.test(row.generation)) {
+    throw new RestoreLineageConflict('Access recovery fence must be closed and versioned');
+  }
+  return { generation: row.generation };
+}
+
+async function captureNativeAccessErasureReference(
+  accessPool: Pool,
+  relayPool: Pool,
+  consumer: string,
+  currentCoverage: RecoveryCoverage,
+  custody: NativeAccessCustodyCapture,
+  borrowedRelayClient?: PoolClient,
+): Promise<NativeAccessErasureReference | undefined> {
+  let signedBase: RecoveryCoverage;
+  try {
+    signedBase = openRecoveryPayload<RecoveryCoverage>(
+      custody.baseCoverageEnvelope, custody.baseCoverageHmacKey, 'graph-recovery-coverage');
+  } catch (error) {
+    throw new RestoreLineageConflict('base signed coverage envelope is invalid', { cause: error });
+  }
+  if (JSON.stringify(signedBase) !== JSON.stringify(custody.baseCoverage)) {
+    throw new RestoreLineageConflict('base coverage input differs from its signed C0 envelope');
+  }
+  custody = { ...custody, baseCoverage: signedBase };
+  assertRecoveryCoverage(custody.baseCoverage);
+  if (!custody.baseCoverage.accessFenceGeneration || !custody.baseCoverage.erasureJournal) {
+    throw new RestoreLineageConflict('base signed coverage predates native Access erasure custody');
+  }
+  if (custody.baseCoverage.relay.consumer !== consumer || currentCoverage.relay.consumer !== consumer
+    || custody.baseCoverage.priorDataEpoch !== currentCoverage.priorDataEpoch) {
+    throw new RestoreLineageConflict('base and current signed coverage identify different graph or relay cuts');
+  }
+  const baseDigest = createHash('sha256').update(custody.baseCoverageEnvelope, 'utf8').digest('hex');
+  const baseAccess = await custody.baseAccessPool.connect();
+  const sourceAccess = await accessPool.connect();
+  const baseRelay = await custody.baseRelayPool.connect();
+  const sourceRelay = borrowedRelayClient ?? await relayPool.connect();
+  const ownsSourceRelay = borrowedRelayClient === undefined;
+  const clients = [baseAccess, sourceAccess, baseRelay, ...(ownsSourceRelay ? [sourceRelay] : [])];
+  try {
+    for (const client of clients) await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    if (!ownsSourceRelay) {
+      const isolation = (await sourceRelay.query<{ value: string }>(
+        "SELECT current_setting('transaction_isolation') AS value")).rows[0]?.value;
+      if (isolation !== 'repeatable read' && isolation !== 'read committed') {
+        throw new RestoreLineageConflict('borrowed relay capture transaction has an unsupported isolation level');
+      }
+    }
+
+    const [baseFence, sourceFence] = await Promise.all([
+      readClosedAccessFence(baseAccess), readClosedAccessFence(sourceAccess),
+    ]);
+    const baseState = await scanAccessState(baseAccess);
+    const baseOutbox = await scanAccessOutbox(baseAccess);
+    const sourceState = await scanAccessState(sourceAccess);
+    const sourceOutbox = await scanAccessOutbox(sourceAccess);
+    if (baseFence.generation !== custody.baseCoverage.accessFenceGeneration
+      || !sameCoverage(baseState, rowCoverage(custody.baseCoverage.accessStateCount,
+        custody.baseCoverage.accessStateDigest))
+      || !sameCoverage(baseOutbox, rowCoverage(custody.baseCoverage.accessOutboxCount,
+        custody.baseCoverage.accessOutboxDigest))) {
+      throw new RestoreLineageConflict('base Access state or fence differs from signed C0 coverage');
+    }
+    if (sourceFence.generation !== currentCoverage.accessFenceGeneration
+      || !sameCoverage(sourceState, rowCoverage(currentCoverage.accessStateCount, currentCoverage.accessStateDigest))
+      || !sameCoverage(sourceOutbox, rowCoverage(currentCoverage.accessOutboxCount,
+        currentCoverage.accessOutboxDigest))) {
+      throw new RestoreLineageConflict('current Access state or fence differs from signed C1 coverage');
+    }
+
+    const baseJournal = await captureErasureJournalCoreCoverage(baseRelay);
+    const sourceJournal = await captureErasureJournalCoreCoverage(sourceRelay);
+    assertErasureJournalCoreCoverage(custody.baseCoverage.erasureJournal);
+    assertErasureJournalCoreCoverage(currentCoverage.erasureJournal);
+    if (!sameCoreCoverage(baseJournal, custody.baseCoverage.erasureJournal)
+      || !sameCoreCoverage(sourceJournal, currentCoverage.erasureJournal)) {
+      throw new RestoreLineageConflict('base or current relay journal differs from its signed core coverage');
+    }
+    const currentBasePrefix = await captureErasureJournalCoreCoverage(sourceRelay, baseJournal.epoch);
+    if (!sameCoreCoverage(currentBasePrefix, baseJournal)) {
+      throw new RestoreLineageConflict('current relay journal prefix differs from signed C0 history');
+    }
+
+    const admissionIds = new Set<string>();
+    const verifyAdmissions = async (admissions: readonly NativeAccessErasureAdmission[]) => {
+      for (const admission of admissions) admissionIds.add(admission.id);
+      await verifyPublicRevisionErasureAdmissions(sourceRelay, admissions, baseJournal.epoch, sourceJournal.epoch);
+    };
+    const exportAttachment = (write: (chunk: Uint8Array) => Promise<void>) =>
+      exportAccessErasureRecoveryAttachment(baseAccess, sourceAccess, write, verifyAdmissions);
+    const summary = await exportAttachment(async () => {});
+    if (!sameCoverage(summary.baseState, rowCoverage(custody.baseCoverage.accessStateCount,
+      custody.baseCoverage.accessStateDigest))
+      || !sameCoverage(summary.baseOutbox, rowCoverage(custody.baseCoverage.accessOutboxCount,
+        custody.baseCoverage.accessOutboxDigest))
+      || !sameCoverage(summary.sourceState, rowCoverage(currentCoverage.accessStateCount,
+        currentCoverage.accessStateDigest))
+      || !sameCoverage(summary.sourceOutbox, rowCoverage(currentCoverage.accessOutboxCount,
+        currentCoverage.accessOutboxDigest))
+      || summary.baseFenceGeneration !== baseFence.generation
+      || summary.sourceFenceGeneration !== sourceFence.generation) {
+      throw new RestoreLineageConflict('native Access attachment does not bind the signed base and current cuts');
+    }
+    await assertExactPublicRevisionJournalDelta(sourceRelay, baseJournal.epoch, sourceJournal.epoch, admissionIds);
+    if (summary.rowCount === '0') return undefined;
+    const encrypted = await custody.encryptAttachment(exportAttachment);
+    if (JSON.stringify(encrypted.value) !== JSON.stringify(summary)) {
+      throw new RestoreLineageConflict('encrypted native Access attachment changed inside its held source snapshot');
+    }
+    if (!/^[0-9a-f]{64}$/.test(encrypted.ciphertextDigest)
+      || !/^(0|[1-9][0-9]*)$/.test(encrypted.ciphertextBytes) || BigInt(encrypted.ciphertextBytes) < 1n
+      || !/^[0-9A-F]{40}(?:[0-9A-F]{24})?$/.test(encrypted.recipientFingerprint)) {
+      throw new RestoreLineageConflict('encrypted native Access attachment receipt is invalid');
+    }
+    return { profile: 'rezics-native-access-erasure-reference-v1', version: 1,
+      baseCoverageDigest: baseDigest, sourceDataEpoch: currentCoverage.priorDataEpoch,
+      consumer, baseErasureJournal: baseJournal, sourceErasureJournal: sourceJournal,
+      summary, ciphertextDigest: encrypted.ciphertextDigest,
+      ciphertextBytes: encrypted.ciphertextBytes, recipientFingerprint: encrypted.recipientFingerprint };
+  } catch (error) {
+    throw error instanceof RestoreLineageConflict ? error
+      : new RestoreLineageConflict('native Access erasure attachment capture failed', { cause: error });
+  } finally {
+    for (const client of clients) {
+      try { await client.query('ROLLBACK'); } catch { /* read-only snapshot cleanup */ }
+    }
+    baseAccess.release();
+    sourceAccess.release();
+    baseRelay.release();
+    if (ownsSourceRelay) sourceRelay.release();
+  }
+}
+
 /** Capture only after Account, graph and relay writers are externally quiesced. */
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
   relayPool: Pool, consumer: string, contentPool: Pool,
   objectStore?: ObjectRecoveryStore, contentProof?: ContentRecoveryProofContext,
+  nativeAccessCustody?: NativeAccessCustodyCapture,
 ): Promise<RecoveryCoverage> {
   if (!contentPool) throw new RestoreLineageConflict('Content owner is required for recovery coverage');
   if (objectStore?.structureObjects) objectStore = { ...objectStore,
     structureGroupRoots: new StructureGroupRootStore(contentPool, objectStore.structureObjects),
     structureQualifierRoots: new StructureQualifierRootStore(contentPool, objectStore.structureObjects) };
-  const fence = await accessPool.query<{ open: boolean }>(
-    'SELECT open FROM access.recovery_fence WHERE id = true');
-  if (fence.rows[0]?.open !== false) {
+  const fence = await accessPool.query<{ open: boolean; generation: string }>(
+    'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true');
+  if (fence.rows[0]?.open !== false || !/^(0|[1-9][0-9]*)$/.test(fence.rows[0]?.generation ?? '')) {
     throw new RestoreLineageConflict('Access recovery fence must be held for capture');
   }
   const before = await readGraphRecoverySource(fuseki);
@@ -354,6 +541,9 @@ export async function captureGraphRecoveryCoverage(
   const account = await accountRecoveryCoverage(accountPool);
   const relay = contentProof ? await relayCoverageOnClient(contentProof.relayClient, consumer)
     : await relayCoverage(relayPool, consumer);
+  const erasureJournal = contentProof
+    ? await captureErasureJournalCoreCoverage(contentProof.relayClient)
+    : await captureErasureJournalCoreCoverage(relayPool);
   await assertAccountSubjectDeletionsAbsent(accountPool, relayPool, contentProof?.relayClient);
   await assertAccountDeletionJournalCoverage(accessPool, relayPool, undefined, contentProof?.relayClient);
   const after = await readGraphRecoverySource(fuseki);
@@ -369,6 +559,9 @@ export async function captureGraphRecoveryCoverage(
     (async () => [await capturePgRecoveryFrontier(accountPool), await accountRecoveryCoverage(accountPool)] as const)(),
     contentProof ? relayCoverageOnClient(contentProof.relayClient, consumer) : relayCoverage(relayPool, consumer),
   ]);
+  const erasureJournalAfter = contentProof
+    ? await captureErasureJournalCoreCoverage(contentProof.relayClient)
+    : await captureErasureJournalCoreCoverage(relayPool);
   const final = await readGraphRecoverySource(fuseki);
   const graphReferencesAfter = await graphContentReferences(fuseki);
   const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter, contentProof ? { ...contentProof, fuseki } : undefined);
@@ -380,10 +573,11 @@ export async function captureGraphRecoveryCoverage(
   // https://www.postgresql.org/docs/18/runtime-config-wal.html#GUC-WAL-LOG-HINTS
   const retainedPg = advancePgRecoveryFrontier(
     advancePgRecoveryFrontier(accountPg, accountPgAfter), await capturePgRecoveryFrontier(accountPool));
-  const fenceAfter = await accessPool.query<{ open: boolean }>(
-    'SELECT open FROM access.recovery_fence WHERE id = true');
+  const fenceAfter = await accessPool.query<{ open: boolean; generation: string }>(
+    'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true');
   const moved = [
-    fenceAfter.rows[0]?.open !== false ? 'Access fence' : null,
+    fenceAfter.rows[0]?.open !== false || fenceAfter.rows[0]?.generation !== fence.rows[0]?.generation
+      ? 'Access fence' : null,
     before.dataEpoch !== final.dataEpoch || before.routingEpoch !== final.routingEpoch
       || before.sequence !== final.sequence || before.relay.sequence !== final.relay.sequence ? 'graph control' : null,
     outbox.count !== outboxAfter.count || outbox.digest !== outboxAfter.digest
@@ -393,6 +587,7 @@ export async function captureGraphRecoveryCoverage(
     account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
       ? 'Account rows' : null,
     JSON.stringify(relay) !== JSON.stringify(relayAfter) ? 'relay' : null,
+    !sameCoreCoverage(erasureJournal, erasureJournalAfter) ? 'erasure journal' : null,
     JSON.stringify(graphReferences) !== JSON.stringify(graphReferencesAfter)
       ? 'graph Content references' : null,
     JSON.stringify(content) !== JSON.stringify(contentAfter) ? 'Content owner' : null,
@@ -402,11 +597,22 @@ export async function captureGraphRecoveryCoverage(
   if (moved.length) {
     throw new RestoreLineageConflict(`owner or graph moved during recovery capture: ${moved.join(', ')}`);
   }
-  return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
+  const coverage: RecoveryCoverage = { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
     accountPg: retainedPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
-    accessStateCount: state.count, accessStateDigest: state.digest, relay,
+    accessStateCount: state.count, accessStateDigest: state.digest,
+    accessFenceGeneration: fence.rows[0]!.generation, erasureJournal, relay,
     content, commerce, ...(objects ? { objects } : {}) };
+  if (nativeAccessCustody) {
+    coverage.nativeAccessErasure = await captureNativeAccessErasureReference(
+      accessPool, relayPool, consumer, coverage, nativeAccessCustody, contentProof?.relayClient);
+    if (coverage.nativeAccessErasure) {
+      assertNativeAccessErasureBaseBinding(
+        coverage, nativeAccessCustody.baseCoverage, nativeAccessCustody.baseCoverageEnvelope);
+    }
+  }
+  assertRecoveryCoverage(coverage);
+  return coverage;
 }
 
 /**
@@ -574,6 +780,73 @@ export async function cutoverRestoredGraphLineage(
 }
 
 /** Signed coverage retains independent diagnostic and scoped relay cuts. */
+function assertNativeAccessErasureReference(coverage: RecoveryCoverage): void {
+  const reference = coverage.nativeAccessErasure;
+  if (!reference) return;
+  const summary = reference.summary;
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    throw new RestoreLineageConflict('native Access erasure attachment summary is invalid');
+  }
+  const canonicalDecimal = (value: string | undefined): boolean => /^(0|[1-9][0-9]*)$/.test(value ?? '');
+  const validRows = (value: RowCoverage | undefined): boolean => canonicalDecimal(value?.count)
+    && /^[0-9a-f]{64}$/.test(value?.digest ?? '');
+  try { assertErasureJournalCoreCoverage(reference.baseErasureJournal); }
+  catch { throw new RestoreLineageConflict('native Access base journal reference is invalid'); }
+  try { assertErasureJournalCoreCoverage(reference.sourceErasureJournal); }
+  catch { throw new RestoreLineageConflict('native Access source journal reference is invalid'); }
+  const baseGeneration = summary?.baseFenceGeneration;
+  const sourceGeneration = summary?.sourceFenceGeneration;
+  const sameGeneration = canonicalDecimal(baseGeneration) && baseGeneration === sourceGeneration;
+  const reopened = canonicalDecimal(baseGeneration) && canonicalDecimal(sourceGeneration)
+    && BigInt(sourceGeneration!) === BigInt(baseGeneration!) + 2n;
+  const validSummary = summary?.profile === 'rezics-access-erasure-recovery-v1' && summary.version === 1
+    && /^[0-9a-f]{64}$/.test(summary.catalogDigest ?? '')
+    && validRows(summary.baseState) && validRows(summary.sourceState)
+    && validRows(summary.baseOutbox) && validRows(summary.sourceOutbox)
+    && canonicalDecimal(summary.rowCount) && BigInt(summary.rowCount ?? '0') > 0n
+    && /^[0-9a-f]{64}$/.test(summary.rowDigest ?? '')
+    && canonicalDecimal(summary.plaintextBytes) && BigInt(summary.plaintextBytes ?? '0') > 0n
+    && /^[0-9a-f]{64}$/.test(summary.plaintextDigest ?? '')
+    && (sameGeneration || reopened);
+  if (reference.profile !== 'rezics-native-access-erasure-reference-v1' || reference.version !== 1
+    || !/^[0-9a-f]{64}$/.test(reference.baseCoverageDigest ?? '')
+    || reference.sourceDataEpoch !== coverage.priorDataEpoch
+    || reference.consumer !== coverage.relay.consumer
+    || !validSummary
+    || !/^[0-9a-f]{64}$/.test(reference.ciphertextDigest ?? '')
+    || !canonicalDecimal(reference.ciphertextBytes) || BigInt(reference.ciphertextBytes ?? '0') < 1n
+    || !/^[0-9A-F]{40}(?:[0-9A-F]{24})?$/.test(reference.recipientFingerprint ?? '')
+    || coverage.accessFenceGeneration !== sourceGeneration
+    || !coverage.erasureJournal || !sameCoreCoverage(reference.sourceErasureJournal, coverage.erasureJournal)
+    || !sameCoverage(summary.sourceState, rowCoverage(coverage.accessStateCount, coverage.accessStateDigest))
+    || !sameCoverage(summary.sourceOutbox, rowCoverage(coverage.accessOutboxCount, coverage.accessOutboxDigest))
+    || (reference.baseErasureJournal.epoch !== null
+      && (reference.sourceErasureJournal.epoch === null
+        || BigInt(reference.sourceErasureJournal.epoch) < BigInt(reference.baseErasureJournal.epoch)))) {
+    throw new RestoreLineageConflict('native Access erasure reference is invalid or differs from C1');
+  }
+}
+
+/** Verify a signed C1 attachment reference against its immutable signed C0 envelope. */
+export function assertNativeAccessErasureBaseBinding(
+  current: RecoveryCoverage,
+  base: RecoveryCoverage,
+  baseCoverageEnvelope: string,
+): void {
+  assertRecoveryCoverage(current);
+  assertRecoveryCoverage(base);
+  const reference = current.nativeAccessErasure;
+  if (!reference || !base.accessFenceGeneration || !base.erasureJournal
+    || reference.baseCoverageDigest !== createHash('sha256').update(baseCoverageEnvelope, 'utf8').digest('hex')
+    || reference.consumer !== base.relay.consumer || reference.sourceDataEpoch !== base.priorDataEpoch
+    || reference.summary.baseFenceGeneration !== base.accessFenceGeneration
+    || !sameCoreCoverage(reference.baseErasureJournal, base.erasureJournal)
+    || !sameCoverage(reference.summary.baseState, rowCoverage(base.accessStateCount, base.accessStateDigest))
+    || !sameCoverage(reference.summary.baseOutbox, rowCoverage(base.accessOutboxCount, base.accessOutboxDigest))) {
+    throw new RestoreLineageConflict('native Access erasure reference is not bound to signed C0');
+  }
+}
+
 export function assertRecoveryCoverage(coverage: RecoveryCoverage): void {
   if (!coverage || !/^[0-9]+$/.test(coverage.priorSequence)
     || !/^[0-9]+$/.test(coverage.accountPg?.systemIdentifier ?? '')
@@ -585,10 +858,16 @@ export function assertRecoveryCoverage(coverage: RecoveryCoverage): void {
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
     || !/^[0-9]+$/.test(coverage.accessStateCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessStateDigest)
+    || coverage.accessFenceGeneration !== undefined && !/^(0|[1-9][0-9]*)$/.test(coverage.accessFenceGeneration)
     || !coverage.commerce || coverage.commerce.version !== 1
     || !validRecoveryRelayCut(coverage.relay, coverage.priorDataEpoch)) {
     throw new RestoreLineageConflict('invalid recovery coverage');
   }
+  if (coverage.erasureJournal) {
+    try { assertErasureJournalCoreCoverage(coverage.erasureJournal); }
+    catch { throw new RestoreLineageConflict('invalid recovery erasure journal coverage'); }
+  }
+  if (coverage.nativeAccessErasure) assertNativeAccessErasureReference(coverage);
 }
 
 export function assertRetainedRecoveryRelayCut(coverage: RecoveryCoverage, retained: RelayCoverage): void {

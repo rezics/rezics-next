@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { scanErasureJournalCore } from './core-journal-coverage.ts';
 import type { Pool, PoolClient } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
@@ -382,22 +383,10 @@ async function journalFrontier(relay: Pool | PoolClient, consumer: string) {
 async function journalEvidenceDigest(relay: PoolClient, consumer: string): Promise<string> {
   const { head, journal } = await journalFrontier(relay, consumer);
   const hash = createHash('sha256').update(JSON.stringify([consumer, head, journal]));
-  let after = '0';
-  for (;;) {
-    const entries = (await relay.query<{ epoch: string; facts: unknown }>(`SELECT
-      e.erasure_epoch::text AS epoch, jsonb_build_array(e.id, e.erasure_epoch::text,
-        e.operation_id, e.request_digest, e.kind, e.authority, e.principal_id,
-        e.admission_id, e.authority_epoch::text, e.account_issuer, e.account_subject, e.deleted_principal_id,
-        e.suppression_status, extract(epoch FROM e.requested_at)::text,
-        extract(epoch FROM e.suppressed_at)::text,
-        COALESCE((SELECT jsonb_agg(jsonb_build_array(t.ordinal, t.owner, t.target_kind, t.target_ref)
-          ORDER BY t.ordinal) FROM relay.erasure_target t WHERE t.erasure_id = e.id), '[]'::jsonb)) AS facts
-      FROM relay.erasure e WHERE e.erasure_epoch > $1::bigint
-      ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
-    for (const entry of entries) hash.update('\n').update(JSON.stringify(entry.facts));
-    if (entries.length < JOURNAL_PAGE) return hash.digest('hex');
-    after = entries[entries.length - 1]!.epoch;
+  for await (const entry of scanErasureJournalCore(relay, journal)) {
+    hash.update('\n').update(JSON.stringify(entry.facts));
   }
+  return hash.digest('hex');
 }
 
 async function requireRecordedItem(relay: PoolClient, id: string, item: Item): Promise<void> {

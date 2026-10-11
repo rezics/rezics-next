@@ -2,13 +2,18 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   createReadStream,
+  createWriteStream,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { PassThrough, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
@@ -263,6 +268,129 @@ export async function fileDigest(path: string): Promise<string> {
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest('hex');
 }
+
+export interface EncryptedRecoveryAttachment<T> {
+  value: T;
+  path: string;
+  ciphertextDigest: string;
+  ciphertextBytes: string;
+  recipientFingerprint: string;
+}
+
+export type RecoveryAttachmentProducer<T> = (write: (chunk: Uint8Array) => Promise<void>) => Promise<T>;
+
+/** Use the backup recipient policy: full public fingerprint and no local secret copy. */
+export function assertRecoveryRecipient(recipient: string, environment: NodeJS.ProcessEnv = process.env): void {
+  if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(recipient)) {
+    throw new Error('Use the full off-host recipient fingerprint');
+  }
+  const keys = spawnSync('gpg', ['--batch', '--with-colons', '--list-keys', recipient], {
+    env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
+  });
+  if (keys.error || keys.status !== 0 || !keys.stdout.includes(`:${recipient.toUpperCase()}:`)) {
+    throw new Error('Recovery attachment recipient public key is unavailable');
+  }
+  const secrets = spawnSync('gpg', ['--batch', '--with-colons', '--list-secret-keys'], {
+    env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024,
+  });
+  if (secrets.error || secrets.status !== 0) throw new Error('Recovery attachment secret-key check failed');
+  if (secrets.stdout.includes(`:${recipient.toUpperCase()}:`)) {
+    throw new Error('Recovery attachment recipient private key must live off-host');
+  }
+}
+
+/** Stream plaintext directly into GPG, then atomically publish a private content-addressed ciphertext. */
+export async function encryptRecoveryAttachment<T>(
+  recipient: string,
+  directory: string,
+  produce: RecoveryAttachmentProducer<T>,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<EncryptedRecoveryAttachment<T>> {
+  assertRecoveryRecipient(recipient, environment);
+  const root = resolve(directory);
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  const rootStat = lstatSync(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || (rootStat.mode & 0o077) !== 0) {
+    throw new Error('Recovery attachment directory must be a private, non-symlink directory');
+  }
+  const partial = join(root, `.${randomUUID()}.partial`);
+  const child = spawn('gpg', ['--batch', '--no-tty', '--trust-model', 'always', '--recipient', recipient,
+    '--output', '-', '--encrypt'], { env: environment, stdio: ['pipe', 'pipe', 'ignore'] });
+  const input = new PassThrough();
+  const output = createWriteStream(partial, { flags: 'wx', mode: 0o600 });
+  const hash = createHash('sha256');
+  let encryptedBytes = 0n;
+  const hashedOutput = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      hash.update(chunk);
+      encryptedBytes += BigInt(chunk.byteLength);
+      callback(null, chunk);
+    },
+  });
+  const outputDone = pipeline(child.stdout, hashedOutput, output);
+  const inputDone = pipeline(input, child.stdin);
+  const exited = new Promise<number>((resolveExit, rejectExit) => {
+    child.once('error', rejectExit);
+    child.once('close', (code, signal) => signal
+      ? rejectExit(new Error('Recovery attachment encryption process was interrupted'))
+      : resolveExit(code ?? -1));
+  });
+  try {
+    const value = await produce(async chunk => {
+      if (!input.write(chunk)) {
+        await new Promise<void>((resolveDrain, rejectDrain) => {
+          input.once('drain', resolveDrain);
+          input.once('error', rejectDrain);
+        });
+      }
+    });
+    input.end();
+    const [exitCode] = await Promise.all([exited, inputDone, outputDone]);
+    if (exitCode !== 0 || encryptedBytes === 0n) {
+      throw new Error('Recovery attachment encryption failed');
+    }
+    const ciphertextDigest = hash.digest('hex');
+    const path = join(root, `${ciphertextDigest}.gpg`);
+    let existing = false;
+    try {
+      const existingStat = lstatSync(path);
+      if (!existingStat.isFile() || existingStat.isSymbolicLink() || existingStat.size !== Number(encryptedBytes)
+        || await fileDigest(path) !== ciphertextDigest) {
+        throw new Error('Content-addressed recovery attachment conflicts with retained bytes');
+      }
+      existing = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (existing) rmSync(partial, { force: true });
+    else {
+      try { linkSync(partial, path); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const existingStat = lstatSync(path);
+        if (!existingStat.isFile() || existingStat.isSymbolicLink() || existingStat.size !== Number(encryptedBytes)
+          || await fileDigest(path) !== ciphertextDigest) {
+          throw new Error('Content-addressed recovery attachment conflicts with retained bytes');
+        }
+      }
+      rmSync(partial, { force: true });
+    }
+    const finalStat = lstatSync(path);
+    if (!finalStat.isFile() || finalStat.isSymbolicLink() || (finalStat.mode & 0o077) !== 0) {
+      throw new Error('Recovery attachment was not retained as a private regular file');
+    }
+    return { value, path, ciphertextDigest, ciphertextBytes: encryptedBytes.toString(),
+      recipientFingerprint: recipient.toUpperCase() };
+  } catch (error) {
+    input.destroy();
+    child.kill();
+    output.destroy();
+    await Promise.allSettled([exited, inputDone, outputDone]);
+    rmSync(partial, { force: true });
+    throw error;
+  }
+}
+
 export function valueDigest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
