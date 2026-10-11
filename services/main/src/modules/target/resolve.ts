@@ -237,7 +237,7 @@ export async function targetSummaries(session: TargetReadSession, resources: rea
       targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
         resolveMerges: options.resolveMerges ?? false, includeCollections: options.includeCollections,
         language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages,
-        settleNonAgentNameOwners: true });
+        settleNonAgentNameOwners: 'includingAbsent' });
   } catch (error) {
     if (error instanceof SummaryGraphMoved) throw new WorkReadMoved(error.message);
     throw error;

@@ -227,7 +227,7 @@ export class WorkReadSession {
     } : undefined;
     const summaryInput = (localBasis: boolean) => ({
       resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-      languages: this.displayLanguages, localBasis, settleNonAgentNameOwners: true,
+      languages: this.displayLanguages, localBasis, settleNonAgentNameOwners: 'includingAbsent' as const,
     });
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(!!this.options.localBasis));
     const rememberWorkRevisions = (revisions: ReadonlyMap<string, string>) => {

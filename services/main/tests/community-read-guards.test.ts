@@ -14,7 +14,7 @@ import { WorkReadMissing, WorkReadSession, WorkReadUnavailable, workRead } from 
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { recoveryAccess } from './support/recovery-access.ts';
 import { targetSummaries } from '../src/modules/target/resolve.ts';
-import { assertHiddenIdEquality, HiddenIdDifference, type HiddenIdCounters } from '../../../tests/qa/support/hidden-id-equality.ts';
+import { assertHiddenIdEquality, type HiddenIdCounters } from '../../../tests/qa/support/hidden-id-equality.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const term = (value: string) => ({ type: 'literal', value });
@@ -149,15 +149,15 @@ const summaryAdapters = [
 ];
 
 const equalityAdapters = [...summaryAdapters,
-  { name: 'WorkReadSession.summaries', inherited: true, read: (session: WorkReadSession, resource: string) => session.summaries([resource]) },
-  { name: 'targetSummaries', inherited: true, read: async (session: WorkReadSession, resource: string) => {
+  { name: 'WorkReadSession.summaries', read: (session: WorkReadSession, resource: string) => session.summaries([resource]) },
+  { name: 'targetSummaries', read: async (session: WorkReadSession, resource: string) => {
     const batch = await targetSummaries(session, [resource]);
     return { summaries: batch.summaries, cost: batch.cost };
   } },
 ];
 
 for (const adapter of equalityAdapters) {
-  test(`${adapter.name} ${'inherited' in adapter ? 'records the inherited trust-ops cost difference' : 'gives hidden and absent ids the same response and read cost'}`, async () => {
+  test(`${adapter.name} gives hidden and absent ids the same response and read cost`, async () => {
     const fixture = summaryFixture();
     const observations: Array<{ id: string; counters: HiddenIdCounters }> = [];
     try {
@@ -166,6 +166,9 @@ for (const adapter of equalityAdapters) {
         call: async resource => {
           const before = fixture.counters();
           const result = await adapter.read(fixture.session, resource);
+          if (adapter.name === 'targetSummaries') expect(result).toMatchObject({
+            cost: { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 1 },
+          });
           const response = await fixture.countResponse(Response.json(result));
           const after = fixture.counters();
           observations.push({ id: resource, counters: {
@@ -176,13 +179,37 @@ for (const adapter of equalityAdapters) {
           return response;
         },
       });
-      // These consumers already selected the existing-only optimization. Keep
-      // their observed mismatch as a trust-ops finding, outside this page fix.
-      if ('inherited' in adapter) await expect(compare()).rejects.toBeInstanceOf(HiddenIdDifference);
-      else await compare();
-      expect(observations.map(row => row.counters.graphCalls)).toEqual('inherited' in adapter ? [2, 3] : [2, 2]);
+      await compare();
+      expect(observations.map(row => row.counters.graphCalls)).toEqual([2, 2]);
       expect(observations.map(row => row.counters.sqlStatements)).toEqual([1, 1]);
     } finally { console.log(`${adapter.name} hidden/absent ${JSON.stringify(observations.map(row => row.counters))}`); }
+  });
+}
+
+for (const adapter of [
+  { name: 'WorkReadSession.summaries', read: (session: WorkReadSession, resources: string[]) => session.summaries(resources) },
+  { name: 'targetSummaries', read: async (session: WorkReadSession, resources: string[]) =>
+    (await targetSummaries(session, resources)).summaries },
+]) {
+  test(`${adapter.name} keeps Agent and untyped probes while settling a mixed batch's proven absence`, async () => {
+    const { session, graphCalls } = summaryFixture();
+    const resources = [work, agent, privateAgent, untyped, absent];
+    const summaries = await adapter.read(session, resources);
+    expect(summaries[0]).toMatchObject({ reference: work, status: 'available' });
+    expect(summaries.slice(1)).toEqual(resources.slice(1).map(reference => ({ reference, status: 'unavailable' })));
+    const probes = graphCalls.filter(query => query.includes('SELECT ?work ?head ?nameOwner'));
+    expect(probes).toHaveLength(1);
+    const probed = new Set(iris(probes[0]!));
+    expect(probed.has(work)).toBe(false);
+    expect(probed.has(absent)).toBe(false);
+    for (const resource of [agent, privateAgent, untyped]) expect(probed.has(resource)).toBe(true);
+  });
+  test(`${adapter.name} retains its probe if absence evidence is missing`, async () => {
+    for (const evidence of [true, false]) {
+      const { session, graphCalls } = summaryFixture(evidence);
+      expect(await adapter.read(session, [absent])).toEqual([{ reference: absent, status: 'unavailable' }]);
+      expect(graphCalls.some(query => query.includes('SELECT ?work ?head ?nameOwner'))).toBe(!evidence);
+    }
   });
 }
 
