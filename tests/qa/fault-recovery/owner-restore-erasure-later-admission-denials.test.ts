@@ -665,36 +665,6 @@ test(
                 ),
             );
           }
-          for (const kind of ['search', 'download'] as const) {
-            const original = admission.lockAccessRecoveryFenceForRelease;
-            let spy: ReturnType<typeof spyOn> | undefined;
-            let inserted = false;
-            await controlled(
-              `delivering-${kind}-lease`,
-              () => {
-                spy = spyOn(admission, 'lockAccessRecoveryFenceForRelease').mockImplementation(
-                  async (client, generation) => {
-                    await original(client, generation);
-                    const table =
-                      kind === 'search' ? 'access.search_read_lease' : 'access.download_read_lease';
-                    await client.query(
-                      `INSERT INTO ${table} SELECT cloned.* FROM ${table} template
-                CROSS JOIN LATERAL jsonb_populate_record(NULL::${table},to_jsonb(template) ||
-                  jsonb_build_object('id',$1::text,'recovery_generation',$2::text,'created_at',clock_timestamp(),
-                    'expires_at',clock_timestamp()+interval '1 minute','state','delivering',
-                    'delivery_started_at',clock_timestamp(),'finished_at',NULL)) cloned WHERE template.id=$3::uuid`,
-                      [randomUUID(), generation, fixture.leaseTemplates[kind]],
-                    );
-                    inserted = true;
-                  },
-                );
-              },
-              () => {
-                spy!.mockRestore();
-                expect(inserted).toBe(true);
-              },
-            );
-          }
           // A borrowed client never lets a caller bypass transaction ownership.
           const relayClient = await copy.retainedRelay.connect();
           const accessClient = await copy.owners.access.connect();
@@ -796,6 +766,102 @@ test(
             'reconciliation_id=$1',
             [qualified.id],
           );
+          // Delivery leases appear on the fresh release transaction, after the
+          // durable qualification. Keep the exact qualified owners between faults;
+          // the earlier controlled cases continue to prove zero qualification.
+          const qualifiedState = await accessStateCoverage(copy.owners.access);
+          const qualifiedOutbox = await accessOutboxCoverage(copy.owners.access);
+          const qualifiedContent = await copy.owners.content.query(
+            'SELECT to_jsonb(r) AS row FROM content.revision r WHERE id=ANY($1::uuid[]) ORDER BY id',
+            [[fixture.revisionId, fixture.laterRevisionId]],
+          );
+          for (const kind of ['search', 'download'] as const) {
+            const lock = admission.lockAccessRecoveryFenceForRelease;
+            let inserted = 0;
+            maintenance.mockClear();
+            commands.mockClear();
+            const spy = spyOn(admission, 'lockAccessRecoveryFenceForRelease').mockImplementation(
+              async (client, generation) => {
+                await lock(client, generation);
+                const table =
+                  kind === 'search' ? 'access.search_read_lease' : 'access.download_read_lease';
+                const result = await client.query(
+                  `INSERT INTO ${table} SELECT cloned.* FROM ${table} template
+                CROSS JOIN LATERAL jsonb_populate_record(NULL::${table},to_jsonb(template) ||
+                  jsonb_build_object('id',$1::text,'recovery_generation',$2::text,'created_at',clock_timestamp(),
+                    'expires_at',clock_timestamp()+interval '1 minute','state','delivering',
+                    'delivery_started_at',clock_timestamp(),'finished_at',NULL)) cloned WHERE template.id=$3::uuid`,
+                  [randomUUID(), generation, fixture.leaseTemplates[kind]],
+                );
+                expect(result.rowCount).toBe(1);
+                inserted++;
+                // Prove the real target CAS veto, then allow the release owner to
+                // detect the same lease in its full C1 closure authentication.
+                await expect(
+                  admission.releaseAccessRecoveryFence(client, generation),
+                ).rejects.toThrow('Access recovery fence changed');
+                expect(
+                  (
+                    await client.query(
+                      'SELECT open,generation::text AS generation FROM access.recovery_fence WHERE id=true',
+                    )
+                  ).rows,
+                ).toEqual([{ open: false, generation: fixture.generation }]);
+              },
+            );
+            try {
+              const response = await copy.request(gapKey, undefined, body);
+              expect(response.status).toBe(201);
+              expect(await response.json()).toMatchObject({ state: 'held' });
+              const held = await outerOperation(copy, gapKey);
+              expect(held.qualifications).toEqual(qualified.qualifications);
+              expect(held.erasures).toEqual(qualified.erasures);
+              expect(held.releases).toHaveLength(0);
+              expect(held.hold_reason).toContain(
+                'restored Access differs from current retained authority',
+              );
+              await expect(attempt(copy, gapKey)).rejects.toBeInstanceOf(RecoveryRefusal);
+              expect(inserted).toBe(1);
+              expect(maintenance).not.toHaveBeenCalled();
+              expect(commands).not.toHaveBeenCalled();
+              expect(await outerOperation(copy, gapKey)).toEqual(held);
+              expect(await accessStateCoverage(copy.owners.access)).toEqual(qualifiedState);
+              expect(await accessOutboxCoverage(copy.owners.access)).toEqual(qualifiedOutbox);
+              expect(
+                (
+                  await copy.owners.content.query(
+                    'SELECT to_jsonb(r) AS row FROM content.revision r WHERE id=ANY($1::uuid[]) ORDER BY id',
+                    [[fixture.revisionId, fixture.laterRevisionId]],
+                  )
+                ).rows,
+              ).toEqual(qualifiedContent.rows);
+              expect(await graphReleased(copy)).toBe(false);
+              expect(await accessFence(copy)).toEqual([
+                { open: false, generation: fixture.generation },
+              ]);
+              expect((await copy.ready()).status).toBe(503);
+              expect((await ownerLogins(copy)).map((row) => row.rolcanlogin)).toEqual([
+                false,
+                false,
+                false,
+                false,
+              ]);
+              await expect(
+                new admission.AccessAdmissionRegistry(copy.owners.access).activePrincipalId(
+                  fixture.principal,
+                ),
+              ).rejects.toBeInstanceOf(admission.AdmissionUnavailable);
+              console.info('later admission delivery lease denial gates', {
+                kind,
+                casGate: 'Access recovery fence changed',
+                ownerGate: held.hold_reason,
+              });
+            } finally {
+              spy.mockRestore();
+              await restoreGapOuter();
+              await restoreGapItems();
+            }
+          }
           for (const fault of ['new-journal', 'new-head'] as const) {
             try {
               if (fault === 'new-journal')
