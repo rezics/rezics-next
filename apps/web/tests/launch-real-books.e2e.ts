@@ -22,7 +22,7 @@ let reader: Reader;
 const uuid = (iri: string) => iri.slice(-36);
 
 test.use({ actionTimeout: 15_000 });
-test.beforeAll(() => {
+test.beforeAll(async () => {
   test.setTimeout(600_000);
   // The QA launcher owns the browser's stack. This preparation writes the real
   // pinned records through its APIs; restored-stack qualification is separate.
@@ -38,6 +38,18 @@ test.beforeAll(() => {
   const credentials = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
   if (!credentials) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must identify the isolated QA reader');
   reader = JSON.parse(readFileSync(credentials, 'utf8')) as Reader;
+  // The seed's outbox continues moving the public read basis after the last
+  // command. Start the reader journey once that shared projection has settled.
+  let last = '';
+  let still = 0;
+  for (const deadline = Date.now() + 90_000; Date.now() < deadline && still < 4;) {
+    const response = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(prepared.corpus.work)}`).catch(() => null);
+    const position = response?.ok ? JSON.stringify((await response.json() as { sourcePosition: unknown }).sourcePosition) : '';
+    still = position && position === last ? still + 1 : 0;
+    last = position;
+    await new Promise(done => setTimeout(done, 500));
+  }
+  if (still < 4) throw new Error('Main’s graph kept moving for 90 seconds after the books seed');
 });
 
 /** Reach the control through tab order, then select through the list's own keyboard navigation. */
