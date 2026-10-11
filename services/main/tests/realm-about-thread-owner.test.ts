@@ -188,6 +188,95 @@ test('terminal opener cancellation releases only the reservation and fences its 
     rootRevision: fresh.rootRevision, revisionId: winner.saved.revisionId });
 });
 
+test('definite pre-dispatch refusals release selected drafted and identified openers without erasing owner effects', async () => {
+  for (const phase of ['selected', 'drafted', 'identified'] as const) {
+    const input = intent(), selected = await about.reserve(input);
+    const pendingInput = intent({ realm: input.realm, about: input.about });
+    const pending = await about.reserve(pendingInput);
+    if (phase === 'drafted') {
+      const saved = await draft(selected);
+      await about.recordDraft(selected.id, saved.operationId);
+    } else if (phase === 'identified') await identify(selected);
+    const before = await about.resume(selected.id);
+    expect(before.phase).toBe(phase);
+    expect(await about.refuseBeforeDispatch(selected.id)).toBe(true);
+    expect(await about.refuseBeforeDispatch(selected.id)).toBe(true);
+    expect(await about.readThread(input.realm, input.about)).toBeNull();
+    const retained = (await pool.query(`SELECT phase,terminal_refusal,draft_operation_id,identity_operation_id
+      FROM content.realm_about_post_operation WHERE id=$1`, [selected.id])).rows[0];
+    expect(retained).toEqual({ phase, terminal_refusal: true,
+      draft_operation_id: before.draftOperationId, identity_operation_id: before.identityOperationId });
+    await expect(about.reserve(input)).rejects.toBeInstanceOf(RealmReplyStale);
+    await expect(about.resume(selected.id)).rejects.toBeInstanceOf(RealmReplyStale);
+    await expect(about.resume(pending.id)).rejects.toBeInstanceOf(RealmReplyStale);
+    await expect(pool.query('UPDATE content.realm_about_post_operation SET terminal_refusal=false WHERE id=$1',
+      [selected.id])).rejects.toThrow();
+    if (phase === 'drafted') {
+      await expect(identities.createReply(admission(before, 'reply.create', `reply:create:${before.about}`),
+        identity(before))).rejects.toThrow();
+      expect(await identities.readReply(selected.reply)).toBeNull();
+    }
+    if (phase === 'identified') expect(await identities.readReply(selected.reply)).not.toBeNull();
+    const fresh = await about.reserve(intent({ realm: input.realm, about: input.about }));
+    expect(fresh.parentReply).toBeNull();
+    expect(fresh.reply).not.toBe(selected.reply);
+  }
+});
+
+test('pre-dispatch refusal serializes with dispatch and fences an admission whose register response was lost', async () => {
+  const basis = { zone: nativeId(), zoneRevision: nativeId(), routeRevision: nativeId() };
+  const refused = (await identify(await about.reserve(intent()))).operation;
+  const lostAdmission = admission(refused, 'reply.place', `reply:place:${refused.realm}`);
+  expect(await about.refuseBeforeDispatch(refused.id)).toBe(true);
+  await expect(about.recordDispatch(refused.id, lostAdmission.id, basis)).rejects.toBeInstanceOf(RealmReplyStale);
+  const dispatched = (await identify(await about.reserve(intent()))).operation;
+  const dispatchAdmission = admission(dispatched, 'reply.place', `reply:place:${dispatched.realm}`);
+  await about.recordDispatch(dispatched.id, dispatchAdmission.id, basis);
+  expect(await about.refuseBeforeDispatch(dispatched.id)).toBe(false);
+  expect(await about.readThread(dispatched.realm, dispatched.about)).toMatchObject({ openerReply: dispatched.reply });
+  const racing = (await identify(await about.reserve(intent()))).operation;
+  const racingAdmission = admission(racing, 'reply.place', `reply:place:${racing.realm}`);
+  const [release, dispatch] = await Promise.allSettled([
+    about.refuseBeforeDispatch(racing.id), about.recordDispatch(racing.id, racingAdmission.id, basis),
+  ]);
+  expect(release.status).toBe('fulfilled');
+  if (release.status !== 'fulfilled') throw release.reason;
+  const row = (await pool.query(`SELECT terminal_refusal,placement_admission_id
+    FROM content.realm_about_post_operation WHERE id=$1`, [racing.id])).rows[0];
+  if (release.value) {
+    expect(dispatch.status).toBe('rejected');
+    if (dispatch.status === 'rejected') expect(dispatch.reason).toBeInstanceOf(RealmReplyStale);
+    expect(row).toEqual({ terminal_refusal: true, placement_admission_id: null });
+    expect(await about.readThread(racing.realm, racing.about)).toBeNull();
+  } else {
+    expect(dispatch.status).toBe('fulfilled');
+    expect(row).toEqual({ terminal_refusal: false, placement_admission_id: racingAdmission.id });
+    expect(await about.readThread(racing.realm, racing.about)).not.toBeNull();
+  }
+});
+
+test('a refused child and posted intent retain the activated canonical key', async () => {
+  const opener = await about.reserve(intent()), winner = await post(opener);
+  expect(await about.refuseBeforeDispatch(opener.id)).toBe(false);
+  const child = await about.reserve(intent({ realm: opener.realm, about: opener.about }));
+  expect(await about.refuseBeforeDispatch(child.id)).toBe(true);
+  await expect(about.resume(child.id)).rejects.toBeInstanceOf(RealmReplyStale);
+  expect(await about.readThread(opener.realm, opener.about)).toMatchObject({ state: 'active',
+    openerReply: opener.reply, revisionId: winner.saved.revisionId });
+  const fresh = await about.reserve(intent({ realm: opener.realm, about: opener.about }));
+  expect(fresh.parentReply).toBe(opener.reply);
+});
+
+test('draft cancellation proof binds the exact owner admission and digest and never treats absence as refusal', async () => {
+  const admissionId = randomUUID(), requestDigest = digest(randomUUID());
+  expect(await about.draftWasCancelled(admissionId, requestDigest)).toBe(false);
+  await content.cancelDraft(admissionId, requestDigest);
+  expect(await about.draftWasCancelled(admissionId, requestDigest)).toBe(true);
+  expect(await about.draftWasCancelled(admissionId, digest('another request'))).toBe(false);
+  const selected = await about.reserve(intent()), saved = await draft(selected);
+  expect(await about.draftWasCancelled(saved.operationId.slice('content-draft:'.length), requestDigest)).toBe(false);
+});
+
 test('about-post language syntax and operation length bounds refuse before any canonical reservation', async () => {
   const input = intent();
   // Invalid input never reaches another owner. The real Content pool proves

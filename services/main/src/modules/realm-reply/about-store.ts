@@ -25,7 +25,7 @@ export interface AboutPostOperation extends Omit<AboutPostIntent, 'rootRevision'
   revisionId: string | null; draftOperationId: string | null;
   identityOperationId: string | null; placementOperationId: string | null;
   placementReceipt: string | null; pending: boolean; replayed: boolean;
-  placementAdmissionId: string | null; dispatchBasis: RealmReplyDispatchBasis | null;
+  terminalRefusal: boolean; placementAdmissionId: string | null; dispatchBasis: RealmReplyDispatchBasis | null;
 }
 interface OperationRow {
   id: string; realm: string; about: string; actor: string; intent_key: string; intent_digest: string;
@@ -34,7 +34,7 @@ interface OperationRow {
   parent_reply: string | null; parent_revision: string | null;
   phase: AboutPostOperation['phase']; revision_id: string | null; draft_operation_id: string | null;
   identity_operation_id: string | null; placement_operation_id: string | null; placement_receipt: string | null;
-  placement_admission_id: string | null; dispatch_zone: string | null;
+  terminal_refusal: boolean; placement_admission_id: string | null; dispatch_zone: string | null;
   dispatch_zone_revision: string | null; dispatch_route_revision: string | null;
 }
 function operation(row: OperationRow, replayed: boolean): AboutPostOperation {
@@ -45,7 +45,7 @@ function operation(row: OperationRow, replayed: boolean): AboutPostOperation {
     revisionId: row.revision_id, draftOperationId: row.draft_operation_id,
     identityOperationId: row.identity_operation_id, placementOperationId: row.placement_operation_id,
     placementReceipt: row.placement_receipt,
-    placementAdmissionId: row.placement_admission_id,
+    terminalRefusal: row.terminal_refusal, placementAdmissionId: row.placement_admission_id,
     dispatchBasis: row.dispatch_zone ? { zone: row.dispatch_zone,
       zoneRevision: row.dispatch_zone_revision!, routeRevision: row.dispatch_route_revision! } : null,
     pending: row.parent_reply !== null && row.parent_revision === null, replayed };
@@ -87,6 +87,7 @@ export class RealmAboutThreadStore {
   }
 
   private async resolve(client: PoolClient, row: OperationRow): Promise<OperationRow> {
+    if (row.terminal_refusal) throw new RealmReplyStale('Discussion intent was refused before placement');
     const canonical = (await client.query<{ opener_reply: string }>(
       'SELECT opener_reply FROM content.realm_about_thread WHERE realm=$1 AND about=$2 FOR SHARE',
       [row.realm, row.about])).rows[0];
@@ -175,6 +176,41 @@ export class RealmAboutThreadStore {
     return rows[0]!.placement_admission_id;
   }
 
+  /** Read the exact cancellation emitted by the existing draft bridge. A
+   * receipt for another request or a missing receipt is not a refusal proof. */
+  async draftWasCancelled(admissionId: string, requestDigest: string): Promise<boolean> {
+    const rows = (await this.pool.query<{ action: string; outcome: string; request_digest: string }>(
+      'SELECT action,outcome,request_digest FROM content.receipt WHERE operation_id=$1 LIMIT 2',
+      [`content-draft:${admissionId}`])).rows;
+    if (rows.length > 1) throw new RealmReplyUnavailable('discussion draft cancellation is ambiguous');
+    return rows.length === 1 && rows[0]!.action === 'draft.save'
+      && rows[0]!.request_digest === requestDigest && rows[0]!.outcome === 'rejected';
+  }
+
+  /** Record a definite pre-dispatch refusal, preserving all owner effects.
+   * The operation lock orders this with recordDispatch, including a registered
+   * admission whose response was lost. Once dispatch is recorded, only its
+   * graph cancellation can release the reservation. */
+  async refuseBeforeDispatch(id: string): Promise<boolean> {
+    assertOperationId(id);
+    return this.transaction(async client => {
+      const row = await this.selected(client, id);
+      if (row.terminal_refusal) return true;
+      if (row.placement_admission_id || row.phase === 'posted') return false;
+      const canonical = (await client.query<{ opener_reply: string }>(
+        'SELECT opener_reply FROM content.realm_about_thread WHERE realm=$1 AND about=$2 FOR UPDATE',
+        [row.realm, row.about])).rows[0];
+      if (!canonical || canonical.opener_reply !== row.opener_reply) return false;
+      await client.query('UPDATE content.realm_about_post_operation SET terminal_refusal=true WHERE id=$1', [id]);
+      // A failed child retains the active opener. Only this selected opener
+      // can relinquish an unactivated reservation.
+      await client.query(`DELETE FROM content.realm_about_thread
+        WHERE realm=$1 AND about=$2 AND opener_reply=$3 AND state='reserved'`,
+      [row.realm, row.about, row.reply]);
+      return true;
+    });
+  }
+
   /** Consume the placement owner's terminal cancellation, never its absence
    * or a caller's inference of expiry. Historical intent selections remain
    * immutable; activated keys are retained even when their opener is hidden. */
@@ -195,7 +231,7 @@ export class RealmAboutThreadStore {
 
   /** Owner lookup includes reservations and hidden openers. Disclosure belongs
    * to the later lookup command; an activated key is never reallocated. Only
-   * the placement owner's terminal cancellation can release a reservation. */
+   * a definite pre-dispatch refusal or owner cancellation can release a reservation. */
   async readThread(realm: string, about: string): Promise<AboutThread | null> {
     if (![realm, about].every(value => native.test(value))) throw new RealmReplyInvalid('invalid discussion key');
     const rows = (await this.pool.query<{ realm: string | null; about: string | null; opener_reply: string | null;
@@ -238,7 +274,7 @@ export class RealmAboutThreadStore {
           AND a.root_target = $5 AND a.root_revision = $6 AND a.origin_realm = $7
           AND r.availability = 'available' AND r.model = 'member-reply-v1'`,
       [draftOperationId, row.variant_id, row.reply, row.actor, row.about, row.root_revision, row.realm])).rows[0];
-      if (!draft) throw new RealmReplyStale('discussion draft receipt is missing or differs');
+      if (!draft) throw new RealmReplyUnavailable('discussion draft receipt is missing or differs');
       const saved = (await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
         SET phase = 'drafted', draft_operation_id = $2, revision_id = $3 WHERE id = $1 RETURNING *`,
       [id, draftOperationId, draft.revision_id])).rows[0]!;
@@ -286,6 +322,7 @@ export class RealmAboutThreadStore {
         }
         return operation(row, true);
       }
+      await this.resolve(client, row);
       if (row.phase !== 'identified') throw new RealmReplyStale('discussion identity is pending');
       return operation((await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
         SET placement_admission_id=$2,dispatch_zone=$3,dispatch_zone_revision=$4,dispatch_route_revision=$5
@@ -314,7 +351,7 @@ export class RealmAboutThreadStore {
       const preparation = await client.query(`SELECT 1 FROM content.realm_placement_preparation
         WHERE operation_id = $1 AND realm = $2 AND variant_id = $3 AND revision_id = $4`,
       [placementOperationId, row.realm, row.variant_id, row.revision_id]);
-      if (!preparation.rowCount) throw new RealmReplyStale('discussion placement preparation differs');
+      if (!preparation.rowCount) throw new RealmReplyUnavailable('discussion placement preparation differs');
       const saved = (await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
         SET phase = 'posted', placement_operation_id = $2, placement_receipt = $3 WHERE id = $1 RETURNING *`,
       [id, placementOperationId, placementReceipt])).rows[0]!;

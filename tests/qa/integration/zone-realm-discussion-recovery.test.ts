@@ -1,9 +1,15 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { RealmReplyContentStore, RealmReplyUnavailable } from '../../../services/main/src/modules/realm-reply/content-store.ts';
+import { RealmReplyConflict, RealmReplyContentStore, RealmReplyUnavailable } from '../../../services/main/src/modules/realm-reply/content-store.ts';
+import { ContentConflict } from '../../../services/content/src/core.ts';
+import { WorkReadLimit } from '../../../services/main/src/modules/work/read-session.ts';
+import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import type { TitleControlState } from '../../../services/main/src/modules/work/title-control.ts';
+import { RealmAboutThreadStore } from '../../../services/main/src/modules/realm-reply/about-store.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { startHomeStack, type HomeStack } from './feed-read-support.ts';
-import { arrange, type Page, type Posted } from './zone-realm-discussion-support.ts';
+import { arrange, local, type Page, type Posted } from './zone-realm-discussion-support.ts';
 
 type Interruption = 'draft' | 'identity' | 'preparation' | 'graph' | 'settlement';
 const interruption = () => new RealmReplyUnavailable('Interrupted owner response');
@@ -70,8 +76,8 @@ function interruptAfter(home: HomeStack, point: Interruption) {
 
 async function operation(home: HomeStack, realm: string, about: string) {
   const found = await home.stack.contentPool.query<{ id: string; reply: string; variant_id: string; phase: string;
-    draft_operation_id: string | null; identity_operation_id: string | null; placement_admission_id: string | null }>(
-    `SELECT id,reply,variant_id,phase,draft_operation_id,identity_operation_id,placement_admission_id
+    draft_operation_id: string | null; identity_operation_id: string | null; placement_admission_id: string | null; terminal_refusal: boolean }>(
+    `SELECT id,reply,variant_id,phase,draft_operation_id,identity_operation_id,placement_admission_id,terminal_refusal
       FROM content.realm_about_post_operation WHERE realm=$1 AND about=$2`, [realm, about]);
   expect(found.rowCount).toBe(1);
   return found.rows[0]!;
@@ -281,5 +287,259 @@ test('a graph-committed first post survives withdrawal and revocation during los
       FROM content.publication_preparation p JOIN content.realm_placement_preparation r ON r.operation_id=p.operation_id
       WHERE r.variant_id=$1`, [selected.variant_id]);
     expect(preparation.rows).toEqual([{ status: 'active', pin_active: true }]);
+  } finally { await home.stop(); }
+}, 300_000);
+
+
+async function editPage(home: HomeStack, a: Awaited<ReturnType<typeof arrange>>, page: Page): Promise<Page> {
+  await grantFixtureAuthority(home.stack.accessPool, { scope: `work:edit:${page.about}`, requireDispatch: true,
+    representations: [{ principalId: home.author.principalId, actor: a.author, action: 'work.edit', lifetime: '8 hours' }],
+    grant: { actor: a.author, action: 'work.edit', lifetime: '8 hours' } });
+  const basis = await home.json<TitleControlState>(await home.call('GET',
+    `/v1/works/${local(page.about)}/title-control?${new URLSearchParams({ actingSubject: a.author })}`,
+    undefined, home.author.token));
+  await home.json(await home.call('POST', '/v1/content-edits', {
+    profile: 'metadata-only-v1', work: page.about, expectedHead: basis.contentHead,
+    titleControl: basis.basis, title: 'A revised discussion page', actingSubject: a.author,
+  }, home.author.token));
+  return { ...page, routeRevision: (await a.route(page.path)).revision,
+    targetRevision: await a.targetRevision(page.about) };
+}
+
+test('stale pre-placement bases release retained draft and identity intents so a corrected post opens the discussion', async () => {
+  const home = await startHomeStack('zone-realm-discussion-stale-recovery');
+  try {
+    const a = await arrange(home);
+    for (const point of ['draft', 'identity'] as const) {
+      const page = await a.page(`stale-${point}`), key = randomUUID(), text = `Retained ${point} words`;
+      const fault = interruptAfter(home, point);
+      try {
+        const response = await a.post(page, a.author, text, home.author.token, key);
+        expect(response.status, await response.text()).toBe(503);
+        expect(fault.fired()).toBe(true);
+      } finally { fault.restore(); }
+      const before = await operation(home, a.realm.realm, page.about);
+      const current = await editPage(home, a, page);
+      const retry = await a.post(page, a.author, text, home.author.token, key);
+      expect(retry.status, await retry.text()).toBe(409);
+      const failed = await operation(home, a.realm.realm, page.about);
+      expect(failed).toEqual({ ...before, terminal_refusal: true });
+      expect((await a.effects(page.about)).threads).toBe(0);
+      await noOrphanPublicReply(home, a.realm.realm, failed.reply);
+      const winner = await home.json<Posted>(await a.post(current, a.reader,
+        'Corrected post on the current page', home.reader.token), 201);
+      expect(winner.reply).not.toBe(failed.reply);
+      expect((await a.rows(page.about)).find(row => row.reply === winner.reply)).toMatchObject({
+        parent_reply: null, root_revision: current.targetRevision, author: a.reader });
+      const sameKey = await a.post(page, a.author, text, home.author.token, key);
+      expect(sameKey.status, await sameKey.text()).toBe(409);
+      expect(await acceptedPlacements(home, a.realm.realm, failed.reply)).toHaveLength(0);
+    }
+    const page = await a.page('changed-after-draft'), key = randomUUID();
+    const owner = RealmAboutThreadStore.prototype, original = owner.recordDraftRevision;
+    let edited: Page | undefined;
+    owner.recordDraftRevision = async function (...args) {
+      const saved = await original.apply(this, args);
+      if (!edited) edited = await editPage(home, a, page);
+      return saved;
+    };
+    try {
+      const refused = await a.post(page, a.author, 'Words drafted before the page edit', home.author.token, key);
+      expect(refused.status, await refused.text()).toBe(409);
+    } finally { owner.recordDraftRevision = original; }
+    const failed = await operation(home, a.realm.realm, page.about);
+    expect(failed).toMatchObject({ phase: 'drafted', terminal_refusal: true, placement_admission_id: null });
+    expect((await a.effects(page.about)).threads).toBe(0);
+    if (!edited) throw new Error('Expected the native page edit');
+    const winner = await home.json<Posted>(await a.post(edited, a.reader, 'Fresh corrected words', home.reader.token), 201);
+    expect(winner.reply).not.toBe(failed.reply);
+  } finally { await home.stop(); }
+}, 300_000);
+
+test('exact Content draft refusal and identity admission refusal release their unsuccessful opener selections', async () => {
+  const home = await startHomeStack('zone-realm-discussion-owner-refusals');
+  try {
+    const a = await arrange(home), page = await a.page('content-refusal'), key = randomUUID();
+    const input = { ...a.input(page, a.author, 'Words retained after Content refusal'), language: 'x-rezics' };
+    const endpoint = `/v1/realms/${local(a.realm.realm)}/about-posts`;
+    const refused = await home.call('POST', endpoint, input, home.author.token, key);
+    expect(refused.status, await refused.text()).toBe(409);
+    const failed = await operation(home, a.realm.realm, page.about);
+    expect(failed).toMatchObject({ phase: 'selected', terminal_refusal: true, placement_admission_id: null });
+    expect((await a.effects(page.about)).threads).toBe(0);
+    // Content cancellation is addressed by the native draft admission, whose
+    // key is retained by Access. These are reads of owner evidence only.
+    const draftAdmission = (await home.stack.accessPool.query<{ id: string }>(
+      'SELECT id FROM access.admission WHERE idempotency_key=$1', [`about-post:${failed.id}:draft`])).rows[0];
+    expect(draftAdmission).toBeTruthy();
+    const terminal = await home.stack.content.readDraftReceipt(`content-draft:${draftAdmission!.id}`);
+    expect(terminal?.outcome).toBe('cancelled');
+    const oldRetry = await home.call('POST', endpoint, input, home.author.token, key);
+    expect(oldRetry.status, await oldRetry.text()).toBe(409);
+    const fresh = await home.json<Posted>(await a.post(page, a.reader, 'A supported-language opener', home.reader.token), 201);
+    expect(fresh.reply).not.toBe(failed.reply);
+
+    const identityPage = await a.page('identity-refusal'), identityKey = randomUUID();
+    const replies = home.deps.realmReplies, original = replies.create;
+    let edited: Page | undefined;
+    replies.create = async function (...args) {
+      if (!edited) edited = await editPage(home, a, identityPage);
+      return original.apply(this, args);
+    };
+    try {
+      const response = await a.post(identityPage, a.author, 'Drafted before identity refusal', home.author.token, identityKey);
+      expect([403, 409], await response.text()).toContain(response.status);
+    } finally { replies.create = original; }
+    const identityFailed = await operation(home, a.realm.realm, identityPage.about);
+    expect(identityFailed).toMatchObject({ phase: 'drafted', terminal_refusal: true, placement_admission_id: null });
+    expect((await a.effects(identityPage.about)).threads).toBe(0);
+    await noOrphanPublicReply(home, a.realm.realm, identityFailed.reply);
+    if (!edited) throw new Error('Expected the native identity basis edit');
+    const winner = await home.json<Posted>(await a.post(edited, a.reader, 'Current identity basis', home.reader.token), 201);
+    expect(winner.reply).not.toBe(identityFailed.reply);
+  } finally { await home.stop(); }
+}, 300_000);
+
+test('prepared-only dispatch recovers native cancellation after the attachment changes instead of stranding its key', async () => {
+  const home = await startHomeStack('zone-realm-discussion-prepared-stale');
+  try {
+    const a = await arrange(home), page = await a.page('prepared-stale'), key = randomUUID();
+    const fault = interruptAfter(home, 'preparation');
+    try {
+      const response = await a.post(page, a.author, 'Prepared on the old attachment', home.author.token, key);
+      expect(response.status, await response.text()).toBe(503);
+    } finally { fault.restore(); }
+    const failed = await operation(home, a.realm.realm, page.about);
+    expect(failed.placement_admission_id).toBeTruthy();
+    await withdraw(home, a);
+    await a.configure({ defaultRealm: a.realm.realm });
+    const current = { ...page, routeRevision: (await a.route(page.path)).revision };
+    const retry = await a.post(page, a.author, 'Prepared on the old attachment', home.author.token, key);
+    expect([403, 409], await retry.text()).toContain(retry.status);
+    expect((await a.effects(page.about)).threads).toBe(0);
+    await noOrphanPublicReply(home, a.realm.realm, failed.reply);
+    const prep = await home.stack.contentPool.query('SELECT status,pin_active FROM content.publication_preparation WHERE operation_id=$1',
+      [failed.placement_admission_id]);
+    expect(prep.rows).toEqual([{ status: 'rejected', pin_active: false }]);
+    const winner = await home.json<Posted>(await a.post(current, a.reader, 'Fresh attachment basis', home.reader.token), 201);
+    expect(winner.reply).not.toBe(failed.reply);
+  } finally { await home.stop(); }
+}, 300_000);
+
+test('a refusal response after a graph winner retains recoverable intent and replays the committed post', async () => {
+  const home = await startHomeStack('zone-realm-discussion-winner-refusal');
+  try {
+    const a = await arrange(home), page = await a.page('winner-refusal'), key = randomUUID();
+    const replies = home.deps.realmReplies, original = replies.place;
+    let fired = false;
+    replies.place = async function (...args) {
+      const result = await original.apply(this, args);
+      if (!fired) { fired = true; throw new AdmissionDenied('Lost settlement acknowledgement'); }
+      return result;
+    };
+    try {
+      const response = await a.post(page, a.author, 'The graph owns this winner', home.author.token, key);
+      expect(response.status, await response.text()).toBe(503);
+      expect(fired).toBe(true);
+    } finally { replies.place = original; }
+    const selected = await operation(home, a.realm.realm, page.about);
+    expect(selected.terminal_refusal).toBe(false);
+    expect((await a.effects(page.about)).threads).toBe(1);
+    expect(await acceptedPlacements(home, a.realm.realm, selected.reply)).toHaveLength(1);
+    const winner = await home.json<Posted>(await a.post(page, a.author, 'The graph owns this winner', home.author.token, key), 200);
+    expect(winner.reply).toBe(selected.reply);
+    expect(await home.json(await a.post(page, a.author, 'The graph owns this winner', home.author.token, key), 200)).toEqual(winner);
+    expect((await a.effects(page.about)).replies).toBe(1);
+  } finally { await home.stop(); }
+}, 300_000);
+
+
+test('native placement registration refusal releases before dispatch while uncertain owner outcomes retain the same intent', async () => {
+  const home = await startHomeStack('zone-realm-discussion-admission-refusal');
+  try {
+    const a = await arrange(home), page = await a.page('admission-refusal'), key = randomUUID();
+    const owner = home.stack.access, original = owner.register;
+    let revoked = false;
+    owner.register = async function (request, ...rest) {
+      if (!revoked && request.action === 'reply.place') {
+        revoked = true;
+        await a.policy(a.realm.realm, 'mandatory');
+      }
+      return original.call(this, request, ...rest);
+    };
+    try {
+      const response = await a.post(page, a.reader, 'Refused native registration', home.reader.token, key);
+      expect(response.status, await response.text()).toBe(403);
+      expect(revoked).toBe(true);
+    } finally { owner.register = original; }
+    const refused = await operation(home, a.realm.realm, page.about);
+    expect(refused).toMatchObject({ phase: 'identified', terminal_refusal: true, placement_admission_id: null });
+    expect((await a.effects(page.about)).threads).toBe(0);
+    await noOrphanPublicReply(home, a.realm.realm, refused.reply);
+    await a.policy(a.realm.realm, 'open');
+    const current = { ...page, routeRevision: (await a.route(page.path)).revision };
+    const winner = await home.json<Posted>(await a.post(current, a.author, 'After registration refusal', home.author.token), 201);
+    expect(winner.reply).not.toBe(refused.reply);
+
+    for (const failure of [new AdmissionUnavailable('Owner unavailable'), new AdmissionConflict('Receipt differs'),
+      new WorkReadLimit('Owner budget exhausted')]) {
+      const pendingPage = await a.page(`uncertain-${randomUUID().slice(0, 8)}`), pendingKey = randomUUID();
+      let fired = false;
+      owner.register = async function (request, ...rest) {
+        if (!fired && request.action === 'reply.place') { fired = true; throw failure; }
+        return original.call(this, request, ...rest);
+      };
+      try {
+        const response = await a.post(pendingPage, a.author, 'The same retained intent', home.author.token, pendingKey);
+        expect(response.status, await response.text()).toBe(503);
+      } finally { owner.register = original; }
+      const retained = await operation(home, a.realm.realm, pendingPage.about);
+      expect(retained).toMatchObject({ phase: 'identified', terminal_refusal: false, placement_admission_id: null });
+      expect((await a.effects(pendingPage.about)).threads).toBe(1);
+      const conflict = await a.post(pendingPage, a.author, 'Changed intent input', home.author.token, pendingKey);
+      expect(conflict.status, await conflict.text()).toBe(409);
+      expect((await operation(home, a.realm.realm, pendingPage.about)).terminal_refusal).toBe(false);
+      const recoveredPost = await home.json<Posted>(await a.post(pendingPage, a.author,
+        'The same retained intent', home.author.token, pendingKey), 201);
+      expect(recoveredPost.reply).toBe(retained.reply);
+      expect((await a.effects(pendingPage.about)).replies).toBe(1);
+    }
+
+    const corruptPage = await a.page('uncertain-draft-receipt'), corruptKey = randomUUID();
+    const content = home.stack.content, read = content.readDraftReceipt;
+    let corrupt = false;
+    content.readDraftReceipt = async function (...args) {
+      if (!corrupt) { corrupt = true; throw new ContentConflict('Unproved draft receipt conflict'); }
+      return read.apply(this, args);
+    };
+    try {
+      const response = await a.post(corruptPage, a.author, 'Retained after receipt conflict', home.author.token, corruptKey);
+      expect(response.status, await response.text()).toBe(503);
+      expect(corrupt).toBe(true);
+    } finally { content.readDraftReceipt = read; }
+    const retainedDraft = await operation(home, a.realm.realm, corruptPage.about);
+    expect(retainedDraft).toMatchObject({ phase: 'selected', terminal_refusal: false });
+    const draftWinner = await home.json<Posted>(await a.post(corruptPage, a.author,
+      'Retained after receipt conflict', home.author.token, corruptKey), 201);
+    expect(draftWinner.reply).toBe(retainedDraft.reply);
+
+    const identityPage = await a.page('uncertain-identity-receipt'), identityKey = randomUUID();
+    const replies = home.deps.realmReplies, create = replies.create;
+    let identityConflict = false;
+    replies.create = async function (...args) {
+      const result = await create.apply(this, args);
+      if (!identityConflict) { identityConflict = true; throw new RealmReplyConflict('Unproved identity receipt conflict'); }
+      return result;
+    };
+    try {
+      const response = await a.post(identityPage, a.author, 'Retained identity result', home.author.token, identityKey);
+      expect(response.status, await response.text()).toBe(503);
+    } finally { replies.create = create; }
+    const retainedIdentity = await operation(home, a.realm.realm, identityPage.about);
+    expect(retainedIdentity).toMatchObject({ phase: 'identified', terminal_refusal: false });
+    const identityWinner = await home.json<Posted>(await a.post(identityPage, a.author,
+      'Retained identity result', home.author.token, identityKey), 201);
+    expect(identityWinner.reply).toBe(retainedIdentity.reply);
+    expect((await a.effects(identityPage.about)).replies).toBe(1);
   } finally { await home.stop(); }
 }, 300_000);
