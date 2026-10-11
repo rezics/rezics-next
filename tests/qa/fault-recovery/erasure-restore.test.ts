@@ -5,11 +5,10 @@ import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { copyRecoveryTree } from '../support/recovery-copy.ts';
-import { startPostgresCluster, startPreparedPostgresCluster, type PostgresCluster }
+import { startPostgresCluster, type PostgresCluster }
   from '../support/postgres-cluster.ts';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
@@ -22,24 +21,22 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
-  releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, AdmissionUnavailable }
+  from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accountCredentialsPresent, settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
 import { ensureRetentionDomain, readErasure, retireRetentionDomain } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
-  retainErasureCoverage, verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
+  verifyErasure } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { mirrorAccountDeletionIntent, mirrorAccountDeletionIntents } from
   '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
-import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
-import { initializeRelayCheckpoint } from '../../../services/main/src/modules/outbox/relay.ts';
-import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
-import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage,
-  releaseRestoredGraphHold } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { initializeFreshGraph, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { ensureModelGeneration } from '../../../services/main/src/modules/semantic/command.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { createRetainedErasureRecoveryFixture, DirectoryObjects } from './retained-erasure-recovery-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'c5'.repeat(32);
@@ -75,17 +72,18 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
 test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and credentials offline until the retained erasure journal reconciles', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
-  const stackArgs = ['--profile', 'qa', '--run-id', runId];
+  const stackArgs = ['--profile', 'qa', '--run-id', runId, '--persistent'];
   const state = join(root, '.temp', `erasure-restore-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const pools: Pool[] = [];
   const replayClusters: PostgresCluster[] = [];
   let app: ReturnType<typeof createAccountApp> | undefined;
+  let recoveryFixture: ReturnType<typeof createRetainedErasureRecoveryFixture> | undefined;
   let started = false;
   try {
     started = true;
     await rootCommand(['stack:up', ...stackArgs], 180_000);
-    const stack = stackDirectory(root, { profile: 'qa', runId });
+    const stack = stackDirectory(root, { profile: 'qa', runId, persistent: true });
     const apps = readEnv(join(stack, 'apps.env'));
     const compose = readEnv(join(stack, 'compose.env'));
     const account = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
@@ -186,72 +184,30 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     let lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     await initializeFreshGraph(fuseki, lineage);
+    const objects = new DirectoryObjects(join(state, 'objects'));
+    const workEnvironment: WorkActivationEnvironment = { fuseki, lineage,
+      objectDirectory: objects.directory, workObjects: objects };
+    await ensureModelGeneration(workEnvironment);
+    recoveryFixture = createRetainedErasureRecoveryFixture({
+      runId, state, source: { account, access, content: contentPool, relay }, accountOwner, fuseki,
+      recoveryKey, objects,
+      quiesceAccount: async () => { await app?.stop(); app = undefined; },
+      resumeAccount: async () => {
+        if (!app) app = createAccountApp(auth, account).listen({ hostname: '127.0.0.1', port });
+      },
+    });
     const captureAndBackup = async (name: string) => {
-      const consumer = `erasure-restore-${randomUUID()}`;
-      await initializeRelayCheckpoint(relay, consumer, lineage.dataEpoch);
-      const fence = await engageAccessRecoveryFence(access);
-      let coverage: Awaited<ReturnType<typeof captureGraphRecoveryCoverage>> | undefined;
-      for (let attempt = 0; attempt < 5 && !coverage; attempt++) {
-        try { coverage = await captureGraphRecoveryCoverage(fuseki, accountOwner, access, relay, consumer, contentPool); }
-        catch (error) {
-          if (attempt === 4 || !String(error).includes('Account WAL frontier')) throw error;
-          await Bun.sleep(200);
-        }
-      }
-      if (!coverage) throw new Error('recovery coverage did not stabilize');
-      const deletionSet = name !== 'before'
-        ? JSON.stringify(sealRecoveryPayload(await captureDeletionRecoverySet(
-          accountOwner, access, issuer, erased.id), recoveryKey, 'deletion-recovery-set'))
-        : null;
-      const sealedCoverage = JSON.stringify(sealRecoveryPayload(coverage,
-        recoveryKey, 'graph-recovery-coverage'));
-      await retainRecoveryCoverageHead(relay, sealedCoverage, recoveryKey);
-      const coveredEpoch = await retainErasureCoverage(relay, consumer);
-      const next = { dataEpoch: randomUUID(), routingEpoch:
-        (BigInt(lineage.routingEpoch) + 1n).toString() };
-      await cutoverRestoredGraphLineage(fuseki, {
-        prior: { ...lineage, sequence: '0' }, next });
-      const backup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
-      execFileSync('pg_verifybackup', ['--no-parse-wal', backup], { cwd: state, timeout: 15_000 });
-      const restored = await restore(backup, name);
-      await releaseRestoredGraphHold(fuseki, restored.access, relay, next,
-        { sealedCoverage, hmacKey: recoveryKey, accountPool: restored.account,
-          contentPool: restored.content,
-          ...(deletionSet ? { deletions: { accountPool: restored.account,
-            hmacKey: recoveryKey, sealedSets: [deletionSet] } } : {}) });
-      // Keep the restored cut offline until erasure reconciliation. Reopening
-      // and closing it would advance derived-source fences beyond the signed cut.
-      const restoredFence = await engageAccessRecoveryFence(restored.access);
-      expect(restoredFence).toBe(fence);
-      await releaseAccessRecoveryFence(access, fence);
-      lineage = next;
+      const captured = await recoveryFixture!.captureAndRestore(name, {
+        ...(name === 'before' ? {} : { captureDeletionSet: async () => JSON.stringify(sealRecoveryPayload(
+          await captureDeletionRecoverySet(accountOwner, access, issuer, erased.id),
+          recoveryKey, 'deletion-recovery-set')) }),
+      });
       const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60_000);
       for (const owner of ['account', 'content'] as const) {
         await ensureRetentionDomain(relay, { label: `${owner}:backup:${name}:${runId}`, owner,
           store: 'postgresql', custody: 'backup', expiresAt });
       }
-      return { backup, restored, restoredFence, coveredEpoch, expiresAt, consumer,
-        authority: { sealedCoverage, hmacKey: recoveryKey } };
-    };
-    const restore = async (backup: string, name: string) => {
-      const data = join(state, name);
-      copyRecoveryTree(backup, data);
-      appendFileSync(join(data, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
-      writeFileSync(join(data, 'recovery.signal'), '');
-      const restoredCluster = await startPreparedPostgresCluster(data, { role: 'postgres' });
-      replayClusters.push(restoredCluster);
-      const restored = (database: string) => new Pool({ host: '127.0.0.1', port: restoredCluster.port, database,
-        user: 'postgres', password: compose.POSTGRES_PASSWORD! });
-      const owners = { account: restored('account'), access: restored('access'), content: restored('content') };
-      pools.push(owners.account, owners.access, owners.content);
-      let recovering = true;
-      for (let attempt = 0; attempt < 100 && recovering; attempt += 1) {
-        recovering = (await owners.account.query<{ recovering: boolean }>(
-          'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering ?? true;
-        if (recovering) await Bun.sleep(100);
-      }
-      expect(recovering).toBe(false);
-      return { ...owners, port: restoredCluster.port };
+      return { ...captured, expiresAt };
     };
     const credentials = async (pool: Pool, subject: string) => (await pool.query<{ users: string;
       passwords: string; sessions: string }>(`SELECT (SELECT count(*) FROM "user" WHERE id = $1)::text AS users,
@@ -294,20 +250,26 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         receipt: `urn:rezics:receipt:active:${randomUUID()}`,
         dataEpoch: lineage.dataEpoch, sequence: '1' });
     const third = await captureAndBackup('after-authority');
-    expect((await second.restored.access.query<{ open: boolean }>(
+    const [secondCandidate, thirdCandidate] = await Promise.all([second.restore(), third.restore()]);
+    const secondRestored = secondCandidate.restored;
+    const thirdRestored = thirdCandidate.restored;
+    expect((await secondRestored.access.query<{ open: boolean }>(
       'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(true);
-    const staleAuthority = await reconcileRestoredErasures(relay, second.restored, {
+    const staleAuthority = await reconcileRestoredErasures(relay, secondRestored, {
       operationId: `restore-stale-authority-${runId}`, consumer: second.consumer,
       replay: false, authority: second.authority,
     });
     expect(staleAuthority).toMatchObject({ state: 'held', counts: { conflict: 1 } });
-    await expect(releaseErasureRestoreHold(relay, second.restored, staleAuthority.reconciliationId,
+    await expect(releaseErasureRestoreHold(relay, secondRestored, staleAuthority.reconciliationId,
       second.restoredFence, second.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
-    expect((await third.restored.access.query<{ open: boolean }>(
+    expect((await thirdRestored.access.query<{ open: boolean }>(
       'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(false);
 
     // OPS11: Content erasure through Main; retention of both earlier backups is explicit.
-    const main = createMainApp(fuseki, { environment: { fuseki, lineage, objectDirectory: join(state, 'objects') },
+    const firstCandidateReady = first.restore();
+    void firstCandidateReady.catch(() => undefined);
+    const main = createMainApp(fuseki, { environment: { ...workEnvironment, fuseki, lineage,
+      objectDirectory: objects.directory, workObjects: objects },
       account: verifier, access: registry, erasures: new ErasureService(relay, contentPool, access) });
     const erase = async (revisionIds: string[]) => {
       const response = await main.handle(new Request('http://main.local/v1/erasures', { method: 'POST',
@@ -347,7 +309,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       `http://main.local/v1/erasures/${contentErasure.erasureId}`, { headers: { authorization: `Bearer ${token}` } }));
 
     // Backup 1 still holds the erased payload and the erased member's credentials.
-    const older = first.restored;
+    const older = (await firstCandidateReady).restored;
     expect(await exact(older.content, payload)).toMatchObject({ status: 'available',
       serializedJson: JSON.stringify({ body: payloadBody }) });
     expect(await credentials(older.account, erased.id)).toEqual({ users: '1', passwords: '1', sessions: '1' });
@@ -372,7 +334,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     expect(await credentials(older.account, erased.id)).toMatchObject({ users: '1' });
 
     // Backup 3 includes current Access authority but lacks the later Content erasure.
-    const current = third.restored;
+    const current = thirdRestored;
     expect(await credentials(current.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
     expect(await accountCredentialsPresent(current.account, [erased.id])).toEqual(new Set());
     expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
@@ -567,13 +529,17 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       }
     }
   } finally {
-    await app?.stop();
-    await Promise.allSettled(pools.map(pool => pool.end()));
     try {
-      for (const cluster of replayClusters) cluster.remove();
+      await recoveryFixture?.dispose();
     } finally {
-      try { if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000); }
-      finally { rmSync(state, { recursive: true, force: true }); }
+      try {
+        await app?.stop();
+        await Promise.allSettled(pools.map(pool => pool.end()));
+        for (const cluster of replayClusters) cluster.remove();
+      } finally {
+        try { if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000); }
+        finally { rmSync(state, { recursive: true, force: true }); }
+      }
     }
   }
 }, qaStartupTestTimeout(420_000));
