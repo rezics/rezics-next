@@ -86,7 +86,7 @@ test('books / An exact pinned edition choice persists on an isolated restored co
       try {
         const importer = await stack.member('launch-books-importer', { stable: true, verified: true });
         const api = apiFor(stack, importer.token);
-        const page = await api.read<ReleasePage>(`/v1/works/${short(corpus.work)}/releases`);
+        const page = await api.read<ReleasePage>(`/v1/works/${short(corpus.work)}/releases?actingSubject=${encodeURIComponent(importer.actor)}`);
         expect(page.nextCursor).toBeNull();
         expect(new Set(page.items.map(item => item.id))).toEqual(new Set(corpus.editions.map(item => item.release)));
         // Owner startup, migrations and the actual public reads are included in restoreMs.
@@ -144,7 +144,7 @@ test('books / An exact pinned edition choice persists on an isolated restored co
     };
     const reader = await readerFor(first);
     const isolatedReader = await readerFor(second);
-    const page = await reader.api.read<ReleasePage>(`/v1/works/${short(corpus.work)}/releases`);
+    const page = await reader.api.read<ReleasePage>(`/v1/works/${short(corpus.work)}/releases?actingSubject=${encodeURIComponent(reader.agent)}`);
     expect(page.items).toHaveLength(6);
     expect(page.items.map(item => item.publisher)).toContain('Dell Publishing Co. Inc.');
     expect(page.items.map(item => item.publisher)).toContain('Cambridge University Press');

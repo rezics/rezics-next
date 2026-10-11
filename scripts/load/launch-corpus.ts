@@ -187,7 +187,7 @@ export async function prepareLaunchBooksCorpus(input: {
   try {
     const built = await buildBooks(input.api, input.actor, id, input.authorize, signal);
     const listed = await input.api.read<{ items: { id: string; revision: string }[]; nextCursor: string | null }>(
-      `/v1/works/${short(built.work)}/releases`, signal);
+      `/v1/works/${short(built.work)}/releases?actingSubject=${encodeURIComponent(input.actor)}`, signal);
     if (listed.nextCursor || listed.items.length !== 6 || built.editions.some(edition =>
       !listed.items.some(item => item.id === edition.release && item.revision === edition.revision)))
       throw new Error('Launch corpus release verification differs');
@@ -254,7 +254,7 @@ async function prepareBrowserBooks() {
   const built = await buildBooks(api, editor.actor, `browser-books:${runId}`,
     work => editor.grant(`work:edit:${work}`, 'work.edit').then(() => {}), signal);
   const listed = await api.read<{ items: { id: string; revision: string; platform: string | null }[]; nextCursor: string | null }>(
-    `/v1/works/${short(built.work)}/releases`, signal);
+    `/v1/works/${short(built.work)}/releases?actingSubject=${encodeURIComponent(editor.actor)}`, signal);
   if (listed.nextCursor || listed.items.length !== built.editions.length || built.editions.some(edition =>
     !listed.items.some(item => item.id === edition.release && item.revision === edition.revision && item.platform === edition.platform)))
     throw new Error('Browser books release read differs from API build');
