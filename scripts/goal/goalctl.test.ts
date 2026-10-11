@@ -2591,6 +2591,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(result.status).toBe(0);
       const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (!existsSync(join(ready, id)) && Date.now() < deadline) await Bun.sleep(20);
+      if (!existsSync(join(ready, id))) throw new Error(`dispatch ${id} did not become ready within ${CLI_SPAWN_DEADLINE_MS}ms`);
       const pids = JSON.parse(readFileSync(join(ready, id), 'utf8')) as { worker: number; child: number };
       workers.set(id, pids);
       return ledger().tasks[id]!;
@@ -2601,6 +2602,8 @@ child.on('close', code => process.exit(code ?? 1));
       for (const pid of [pids.worker, pids.child]) { try { process.kill(pid, 'SIGTERM'); } catch { /* exited */ } }
       const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while ([pids.worker, pids.child].some(alive) && Date.now() < deadline) await Bun.sleep(20);
+      const surviving = [pids.worker, pids.child].filter(alive);
+      if (surviving.length) throw new Error(`fixture ${id} did not stop within ${CLI_SPAWN_DEADLINE_MS}ms; live PIDs: ${surviving.join(', ')}`);
       const value = ledger();
       value.tasks[id]!.state = 'exited';
       save(value);
@@ -4190,7 +4193,9 @@ process.exit(0);
       const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (r.workers.get('G-001')!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number }).worker
         && Date.now() < deadline) await Bun.sleep(20);
-      r.workers.set('G-001', JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number; child: number });
+      const pids = JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number; child: number };
+      if (pids.worker === r.workers.get('G-001')!.worker) throw new Error(`resume G-001 did not become ready within ${CLI_SPAWN_DEADLINE_MS}ms`);
+      r.workers.set('G-001', pids);
       expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(2);
     } finally { r.cleanup(); }
   });
@@ -4220,7 +4225,9 @@ process.exit(0);
       const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (r.workers.get(task.id)!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number }).worker
         && Date.now() < deadline) await Bun.sleep(20);
-      r.workers.set(task.id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number; child: number });
+      const pids = JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number; child: number };
+      if (pids.worker === r.workers.get(task.id)!.worker) throw new Error(`resume ${task.id} did not become ready within ${CLI_SPAWN_DEADLINE_MS}ms`);
+      r.workers.set(task.id, pids);
       expect(r.ledger().tasks[task.id]!.state).toBe('running');
       expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
     } finally { r.cleanup(); }
