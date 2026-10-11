@@ -65,8 +65,11 @@ export function qaStackEnvironment(
   };
 }
 
-/** One assembler serves the whole stack. Raw SPARQL, or a persistent raw-update
- * overlay, closes the exclusive-writer startup path. */
+/** One assembler serves a stack, so the planner must keep raw-update callers
+ * together and apart from product-assembler files. */
 export function integrationStackAdmitsWorkScope(files: readonly string[], rawUpdate: boolean): boolean {
-  return !rawUpdate && files.every((file) => !rawSparqlIntegrationFiles.has(file));
+  const hasRawSparql = files.some((file) => rawSparqlIntegrationFiles.has(file));
+  if (hasRawSparql && files.some((file) => !rawSparqlIntegrationFiles.has(file)))
+    throw new Error('Integration shard mixes raw-SPARQL and product-assembler files');
+  return !rawUpdate && !hasRawSparql;
 }

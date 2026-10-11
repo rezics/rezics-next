@@ -1,3 +1,7 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { integrationGateFiles } from './integration-gate-files.ts';
+
 // Integration files that need their own bootstrapped QA project (they replace
 // dataset heads, replay outboxes from zero or need a fresh graph). Parallel Goal
 // branches append entries; git's union merge driver keeps both sides (see
@@ -198,116 +202,324 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/title-candidate-original-custody.test.ts',
 ]);
 
-/** These files post raw SPARQL. That endpoint keeps the service from admitting the Work-name writer, so their stack keeps the fixture assembler. */
-export const rawSparqlIntegrationFiles: ReadonlySet<string> = new Set([
-  'tests/qa/integration/access-author.test.ts',
-  'tests/qa/integration/access-avatar.test.ts',
-  'tests/qa/integration/access-baseline.test.ts',
-  'tests/qa/integration/access-managed-organization-api.test.ts',
-  'tests/qa/integration/agent-profile.test.ts',
-  'tests/qa/integration/catalog-descriptions.test.ts',
-  'tests/qa/integration/classification-bootstrap.test.ts',
-  'tests/qa/integration/concept-page.test.ts',
-  'tests/qa/integration/content-search-public-title-native.test.ts',
-  'tests/qa/integration/content-zone-page.test.ts',
-  'tests/qa/integration/content-zone-revision-delivery.test.ts',
-  'tests/qa/integration/context-statement-cases.test.ts',
-  'tests/qa/integration/discovery-continuous-writes.test.ts',
-  'tests/qa/integration/discovery-projection-fixture.ts',
-  'tests/qa/integration/discovery-projection.test.ts',
-  'tests/qa/integration/discovery-rating-context-fixture.ts',
-  'tests/qa/integration/discovery-rating-effects.test.ts',
-  'tests/qa/integration/discovery-refresh.test.ts',
-  'tests/qa/integration/erasure-source-reconcile.test.ts',
-  'tests/qa/integration/event-query-bounds.test.ts',
-  'tests/qa/integration/event-time.test.ts',
-  'tests/qa/integration/export-api.test.ts',
-  'tests/qa/integration/export-scoped-dependencies.test.ts',
-  'tests/qa/integration/export-scoped-erased-rating.test.ts',
-  'tests/qa/integration/feed-group-votes.test.ts',
-  'tests/qa/integration/feed-home.test.ts',
-  'tests/qa/integration/feed-read-stability.test.ts',
-  'tests/qa/integration/follows-authors.test.ts',
-  'tests/qa/integration/g-1001-work-cards.test.ts',
-  'tests/qa/integration/g-1016-discovery-refresh.test.ts',
-  'tests/qa/integration/g-1019-unnamed-agent.test.ts',
-  'tests/qa/integration/g-1033-discovery-refresh.test.ts',
-  'tests/qa/integration/g-1042-ranking-followups.test.ts',
-  'tests/qa/integration/g-1063-cost.test.ts',
-  'tests/qa/integration/g-508-role-matrix.test.ts',
-  'tests/qa/integration/g-509-suitability.test.ts',
-  'tests/qa/integration/g-539-semantic-disclosure.test.ts',
-  'tests/qa/integration/g-571-screen-support.ts',
-  'tests/qa/integration/g-629-statement-context.test.ts',
-  'tests/qa/integration/g-630-zone-routes.test.ts',
-  'tests/qa/integration/g-650-resource-targets.test.ts',
-  'tests/qa/integration/g-652-target-reviews.test.ts',
-  'tests/qa/integration/g-693-wiki-journey.ts',
-  'tests/qa/integration/g-704-contribution-loop.test.ts',
-  'tests/qa/integration/g-824-library-traversal.test.ts',
-  'tests/qa/integration/g-828-zone-browse.test.ts',
-  'tests/qa/integration/g-829-public-reads.test.ts',
-  'tests/qa/integration/g-833-realizations.test.ts',
-  'tests/qa/integration/g-851-release-query.test.ts',
-  'tests/qa/integration/g-892-collection-grain.test.ts',
-  'tests/qa/integration/g-911-catalogue-names.test.ts',
-  'tests/qa/integration/g-920-wiki-readers.test.ts',
-  'tests/qa/integration/g-929-wiki-disclosure.test.ts',
-  'tests/qa/integration/g-930-merge-authority.test.ts',
-  'tests/qa/integration/g-935-rating-language.test.ts',
-  'tests/qa/integration/g-991-owner-migrations.test.ts',
-  'tests/qa/integration/hub-api.test.ts',
-  'tests/qa/integration/library-copies-loans.test.ts',
-  'tests/qa/integration/library-status.test.ts',
-  'tests/qa/integration/main-selection-languages.test.ts',
-  'tests/qa/integration/media-summary-disclosure-release.test.ts',
-  'tests/qa/integration/member-reply-api.test.ts',
-  'tests/qa/integration/membership-seek.test.ts',
-  'tests/qa/integration/model-custody-backfill.test.ts',
-  'tests/qa/integration/onboarding-concepts.test.ts',
-  'tests/qa/integration/owner-operations.test.ts',
-  'tests/qa/integration/owner-outbox-recovery.test.ts',
-  'tests/qa/integration/owner-relay-gap.test.ts',
-  'tests/qa/integration/post-author-notes-custody.test.ts',
-  'tests/qa/integration/post-lifecycle.test.ts',
-  'tests/qa/integration/post-search-disclosure.test.ts',
-  'tests/qa/integration/private-original-source.test.ts',
-  'tests/qa/integration/proposal-execution.test.ts',
-  'tests/qa/integration/publication-selection-members.test.ts',
-  'tests/qa/integration/query-templates.test.ts',
-  'tests/qa/integration/ranking-progress.test.ts',
-  'tests/qa/integration/rating-components.test.ts',
-  'tests/qa/integration/rating-own-target.test.ts',
-  'tests/qa/integration/rating-question-presentation-retire.test.ts',
-  'tests/qa/integration/rating-question-presentation.test.ts',
-  'tests/qa/integration/read-stability.test.ts',
-  'tests/qa/integration/realm-create.test.ts',
-  'tests/qa/integration/realm-directory.test.ts',
-  'tests/qa/integration/realm-module.test.ts',
-  'tests/qa/integration/realm-profile.test.ts',
-  'tests/qa/integration/realm-submission-targets.test.ts',
-  'tests/qa/integration/scoped-judgments.test.ts',
-  'tests/qa/integration/search-card-fields.test.ts',
-  'tests/qa/integration/search-card-rich.test.ts',
-  'tests/qa/integration/search-chapter-book.test.ts',
-  'tests/qa/integration/search-graph-sentinel.test.ts',
-  'tests/qa/integration/search-source-title.test.ts',
-  'tests/qa/integration/search-studio-chapter-content.test.ts',
-  'tests/qa/integration/statement-disclosure.test.ts',
-  'tests/qa/integration/structure-qualifier-root.test.ts',
-  'tests/qa/integration/sys-receipt-relay-gap.test.ts',
-  'tests/qa/integration/tag-proposal-api.test.ts',
-  'tests/qa/integration/translated-work-links.test.ts',
-  'tests/qa/integration/typeahead-cards.test.ts',
-  'tests/qa/integration/validation-cross-profile.test.ts',
-  'tests/qa/integration/work-continuities.test.ts',
-  'tests/qa/integration/work-derivation.test.ts',
-  'tests/qa/integration/work-serial-projection.test.ts',
-  'tests/qa/integration/year-fact-read.test.ts',
-  'tests/qa/integration/zone-document-home.test.ts',
-  'tests/qa/integration/zone-presentation.test.ts',
-  'tests/qa/integration/zone-published-metadata.test.ts',
-  'tests/qa/integration/zone-realm-attachment.test.ts',
-  'tests/qa/integration/zone-route-keyed.test.ts',
-  'tests/qa/integration/zone-showcase-disclosure.test.ts',
-]);
+export interface RawSparqlIntegrationScan {
+  roots: readonly string[];
+  files: ReadonlySet<string>;
+  sites: ReadonlyMap<string, readonly string[]>;
+}
+
+interface SourceToken {
+  kind: 'identifier' | 'string' | 'template' | 'punctuation';
+  value: string;
+  line: number;
+}
+
+interface ImportReference {
+  value?: string;
+  line: number;
+  unresolved?: string;
+}
+
+const rawUpdatePrefixes = /^(?:BASE|PREFIX|INSERT|DELETE|WITH|USING|LOAD|CLEAR|CREATE|DROP|COPY|MOVE|ADD)\b/i;
+
+function tokensOf(source: string): SourceToken[] {
+  const tokens: SourceToken[] = [];
+  let offset = 0;
+  let line = 1;
+  const recordLine = (start: number, end: number) => {
+    line += source.slice(start, end).match(/\n/g)?.length ?? 0;
+  };
+  const skipString = (start: number, quote: string): number => {
+    let cursor = start + 1;
+    while (cursor < source.length) {
+      if (source[cursor] === '\\') { cursor += 2; continue; }
+      if (source[cursor] === quote) return cursor + 1;
+      cursor++;
+    }
+    return source.length;
+  };
+  const skipTemplate = (start: number): number => {
+    let cursor = start + 1;
+    let expressionDepth = 0;
+    while (cursor < source.length) {
+      const character = source[cursor]!;
+      if (character === '\\') { cursor += 2; continue; }
+      if (expressionDepth === 0 && character === '`') return cursor + 1;
+      if (expressionDepth === 0 && character === '$' && source[cursor + 1] === '{') {
+        expressionDepth = 1;
+        cursor += 2;
+        continue;
+      }
+      if (expressionDepth > 0 && (character === '"' || character === "'")) {
+        cursor = skipString(cursor, character);
+        continue;
+      }
+      if (expressionDepth > 0 && character === '`') {
+        cursor = skipTemplate(cursor);
+        continue;
+      }
+      if (expressionDepth > 0 && character === '/' && source[cursor + 1] === '/') {
+        const end = source.indexOf('\n', cursor + 2);
+        cursor = end < 0 ? source.length : end + 1;
+        continue;
+      }
+      if (expressionDepth > 0 && character === '/' && source[cursor + 1] === '*') {
+        const end = source.indexOf('*/', cursor + 2);
+        cursor = end < 0 ? source.length : end + 2;
+        continue;
+      }
+      if (expressionDepth > 0 && character === '{') expressionDepth++;
+      else if (expressionDepth > 0 && character === '}') expressionDepth--;
+      cursor++;
+    }
+    return source.length;
+  };
+
+  while (offset < source.length) {
+    const start = offset;
+    const character = source[offset]!;
+    if (/\s/.test(character)) { offset++; if (character === '\n') line++; continue; }
+    if (character === '/' && source[offset + 1] === '/') {
+      const end = source.indexOf('\n', offset + 2);
+      offset = end < 0 ? source.length : end + 1;
+      if (end >= 0) line++;
+      continue;
+    }
+    if (character === '/' && source[offset + 1] === '*') {
+      const end = source.indexOf('*/', offset + 2);
+      offset = end < 0 ? source.length : end + 2;
+      recordLine(start, offset);
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      offset = skipString(start, character);
+      const raw = source.slice(start + 1, offset - 1).replace(/\\([\\'"`])/g, '$1');
+      tokens.push({ kind: 'string', value: raw, line });
+      recordLine(start, offset);
+      continue;
+    }
+    if (character === '`') {
+      offset = skipTemplate(start);
+      tokens.push({ kind: 'template', value: source.slice(start + 1, offset - 1), line });
+      recordLine(start, offset);
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(character)) {
+      offset++;
+      while (offset < source.length && /[A-Za-z0-9_$]/.test(source[offset]!)) offset++;
+      tokens.push({ kind: 'identifier', value: source.slice(start, offset), line });
+      continue;
+    }
+    tokens.push({ kind: 'punctuation', value: character, line });
+    offset++;
+  }
+  return tokens;
+}
+
+function importReferences(tokens: readonly SourceToken[]): ImportReference[] {
+  const variables = new Map<string, string[]>();
+  for (let index = 0; index < tokens.length - 3; index++) {
+    if (!['const', 'let', 'var'].includes(tokens[index]!.value)) continue;
+    const name = tokens[index + 1];
+    if (name?.kind !== 'identifier' || tokens[index + 2]?.value !== '=') continue;
+    const initializer = tokens[index + 3]!;
+    if (initializer.kind === 'string' || initializer.kind === 'template') {
+      variables.set(name.value, [initializer.value]);
+      continue;
+    }
+    if (initializer.value !== '[') continue;
+    const values: string[] = [];
+    let cursor = index + 4;
+    let onlyStrings = true;
+    while (cursor < tokens.length && tokens[cursor]!.value !== ']') {
+      const item = tokens[cursor]!;
+      if (item.value !== ',' && item.kind !== 'string') onlyStrings = false;
+      if (item.kind === 'string') values.push(item.value);
+      cursor++;
+    }
+    if (onlyStrings && tokens[cursor]?.value === ']') variables.set(name.value, values);
+  }
+  for (let index = 0; index < tokens.length - 4; index++) {
+    if (!['const', 'let', 'var'].includes(tokens[index]!.value) || tokens[index + 2]?.value !== 'of') continue;
+    const name = tokens[index + 1];
+    const collection = tokens[index + 3];
+    if (name?.kind === 'identifier' && collection?.kind === 'identifier' && variables.has(collection.value))
+      variables.set(name.value, variables.get(collection.value)!);
+  }
+
+  const references: ImportReference[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    if (token.value === 'import' && tokens[index + 1]?.value === '(') {
+      const argument = tokens[index + 2];
+      if (argument?.kind === 'string' || argument?.kind === 'template') {
+        references.push({ value: argument.value, line: token.line });
+      } else if (argument?.kind === 'identifier' && variables.has(argument.value)) {
+        for (const value of variables.get(argument.value)!) references.push({ value, line: token.line });
+      } else if (argument) {
+        references.push({ line: token.line, unresolved: argument.value });
+      }
+      continue;
+    }
+    if (token.value !== 'import' && token.value !== 'export') continue;
+    if (token.value === 'import' && tokens[index + 1]?.value === '.') continue;
+    if (token.value === 'export' && !['*', '{', 'type'].includes(tokens[index + 1]?.value ?? '')) continue;
+    if (tokens[index + 1]?.kind === 'string') {
+      references.push({ value: tokens[index + 1]!.value, line: token.line });
+      continue;
+    }
+    for (let cursor = index + 1; cursor < tokens.length; cursor++) {
+      if (tokens[cursor]!.value === ';') break;
+      if (tokens[cursor]!.value === 'from' && tokens[cursor + 1]?.kind === 'string') {
+        references.push({ value: tokens[cursor + 1]!.value, line: token.line });
+        break;
+      }
+    }
+  }
+  return references;
+}
+
+function sourcePath(root: string, file: string): string {
+  return relative(root, file).split(sep).join('/');
+}
+
+function sourceFileForImport(root: string, importer: string, specifier: string): string | undefined {
+  const candidate = specifier.startsWith('/') ? resolve(specifier) : resolve(dirname(importer), specifier);
+  const candidates = extname(candidate)
+    ? [candidate, candidate.replace(/\.js$/i, '.ts'), candidate.replace(/\.mjs$/i, '.mts')]
+    : ['.ts', '.tsx', '.mts', '.cts', '.js'].map(extension => `${candidate}${extension}`)
+      .concat(['.ts', '.tsx', '.mts', '.cts', '.js'].map(extension => join(candidate, `index${extension}`)));
+  return candidates.find(path => existsSync(path) && !relative(root, path).startsWith(`..${sep}`));
+}
+
+function isSupportSource(root: string, file: string): boolean {
+  const path = sourcePath(root, file);
+  return path.startsWith('tests/') || path.startsWith('scripts/qa/')
+    || path.startsWith('scripts/fixture/') || path.startsWith('scripts/dev/');
+}
+
+function rawUpdateCallSites(tokens: readonly SourceToken[]): string[] {
+  const sites: string[] = [];
+  const fusekiBindings = new Set<string>();
+  for (let index = 0; index < tokens.length - 2; index++) {
+    const token = tokens[index]!;
+    if (!['const', 'let', 'var'].includes(token.value) || tokens[index + 1]?.kind !== 'identifier') continue;
+    const name = tokens[index + 1]!.value;
+    let end = index + 2;
+    while (end < tokens.length && !['=', ';', ')', ','].includes(tokens[end]!.value)) end++;
+    const declaration = tokens.slice(index, Math.min(tokens.length, end + 5)).map(item => item.value).join(' ');
+    if (/\bFusekiClient\b/.test(declaration) || /\bnew\s+FusekiClient\b/.test(declaration)) fusekiBindings.add(name);
+  }
+  for (let index = 0; index < tokens.length - 2; index++) {
+    const name = tokens[index];
+    if (name?.kind !== 'identifier' || tokens[index + 1]?.value !== ':') continue;
+    const annotation = tokens.slice(index + 2, index + 10).map(token => token.value).join(' ');
+    if (/\bFusekiClient\b/.test(annotation)) fusekiBindings.add(name.value);
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    for (let index = 0; index < tokens.length - 3; index++) {
+      if (!['const', 'let', 'var'].includes(tokens[index]!.value) || tokens[index + 1]?.kind !== 'identifier') continue;
+      const name = tokens[index + 1]!.value;
+      let equals = index + 2;
+      while (equals < tokens.length && !['=', ';'].includes(tokens[equals]!.value)) equals++;
+      if (tokens[equals]?.value !== '=') continue;
+      const initializer: string[] = [];
+      for (let cursor = equals + 1; cursor < tokens.length; cursor++) {
+        const token = tokens[cursor]!;
+        if (token.kind === 'identifier' || token.value === '.') initializer.push(token.value);
+        else break;
+      }
+      const identifiers = initializer.filter(value => value !== '.');
+      if (identifiers.some(value => /^(?:native)?fuseki$/i.test(value) || fusekiBindings.has(value)))
+        fusekiBindings.add(name);
+    }
+  }
+  const isRawQuery = (token: SourceToken | undefined) =>
+    (token?.kind === 'string' || token?.kind === 'template') && rawUpdatePrefixes.test(token.value.trimStart());
+  for (let index = 2; index < tokens.length - 2; index++) {
+    const method = tokens[index]!;
+    if (method.value !== 'update' || tokens[index - 1]?.value !== '.' || tokens[index + 1]?.value !== '(') continue;
+    let start = index - 2;
+    while (start >= 2 && tokens[start - 1]?.value === '.' && tokens[start - 2]?.kind === 'identifier') start -= 2;
+    const receiver = tokens.slice(start, index - 1).map(item => item.value).join('');
+    const identifiers = receiver.split('.');
+    const knownFuseki = identifiers.some(name => /^(?:native)?fuseki$/i.test(name) || fusekiBindings.has(name));
+    const graphClient = identifiers.some(name => /^(?:graph|client)$/i.test(name) || fusekiBindings.has(name));
+    if (knownFuseki || graphClient && isRawQuery(tokens[index + 2])) sites.push(`${method.line}: ${receiver}.update()`);
+  }
+
+  const privateProductIngressProbe = tokens.some((token, index) => token.value === 'FUSEKI_URL'
+    && tokens[index - 1]?.value === '.' && tokens[index - 2]?.value === 'apps')
+    && (tokens.some(token => token.value === 'qaStack')
+      || tokens.some(token => token.value === 'stack:up' || token.value === 'stack:reset'));
+  const updateEndpoints = tokens.filter((token, index) => {
+    if (token.kind !== 'string' && token.kind !== 'template') return false;
+    if (/\/update(?:[/?#]|$)/i.test(token.value)) return true;
+    return token.value === 'update' && tokens[index - 1]?.value === '(' && tokens[index - 2]?.value === 'URL'
+      && tokens[index - 3]?.value === 'new';
+  });
+  const sparqlUpdateContentTypes = tokens.filter(token => (token.kind === 'string' || token.kind === 'template')
+    && /application\/sparql-update/i.test(token.value));
+  const hasHttpRequest = tokens.some((token, index) => ['fetch', 'Request'].includes(token.value)
+    && tokens[index + 1]?.value === '(');
+  if (hasHttpRequest && !privateProductIngressProbe) {
+    for (const token of updateEndpoints) sites.push(`${token.line}: raw /update request`);
+    for (const token of sparqlUpdateContentTypes) sites.push(`${token.line}: application/sparql-update`);
+  }
+  return [...new Set(sites)];
+}
+
+/** Scan registered integration roots and their local test/fixture support imports.
+ * Product-ingress probes that start their own product stack do not select this shard's assembler. */
+export function scanRawSparqlIntegrationFiles(root = resolve(import.meta.dir, '../..')): RawSparqlIntegrationScan {
+  const roots = new Set<string>();
+  const walk = (directory: string) => {
+    const absolute = join(root, directory);
+    if (!existsSync(absolute)) return;
+    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) walk(path);
+      else if (entry.isFile() && /\.test\.tsx?$/.test(entry.name)) roots.add(path);
+    }
+  };
+  walk('tests/qa/integration');
+  for (const file of integrationGateFiles) {
+    if (existsSync(join(root, file)) && /\.test\.tsx?$/.test(file)) roots.add(file);
+  }
+
+  const files = new Set<string>();
+  const sites = new Map<string, readonly string[]>();
+  for (const rootFile of [...roots].sort()) {
+    const visited = new Set<string>();
+    const pending = [resolve(root, rootFile)];
+    const rootSites: string[] = [];
+    while (pending.length) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const source = readFileSync(file, 'utf8');
+      const tokens = tokensOf(source);
+      rootSites.push(...rawUpdateCallSites(tokens).map(site => `${sourcePath(root, file)}:${site}`));
+      for (const reference of importReferences(tokens)) {
+        if (reference.unresolved) {
+          throw new Error(`Cannot resolve imported test helper at ${sourcePath(root, file)}:${reference.line}: ${reference.unresolved}`);
+        }
+        const specifier = reference.value!;
+        if (!specifier.startsWith('.') && !specifier.startsWith('/')) continue;
+        const dependency = sourceFileForImport(root, file, specifier);
+        if (!dependency) {
+          throw new Error(`Cannot resolve local integration import at ${sourcePath(root, file)}:${reference.line}: ${specifier}`);
+        }
+        if (isSupportSource(root, dependency)) pending.push(dependency);
+      }
+    }
+    if (rootSites.length) {
+      files.add(rootFile);
+      sites.set(rootFile, [...new Set(rootSites)].sort());
+    }
+  }
+  return { roots: [...roots].sort(), files, sites };
+}
+
+export const rawSparqlIntegrationScan = scanRawSparqlIntegrationFiles();
+export const rawSparqlIntegrationFiles = rawSparqlIntegrationScan.files;
