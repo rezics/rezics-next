@@ -314,6 +314,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
 
       const privateWork = await stack.privateWork(owner.actor, `Private Work cover ${randomUUID()}`);
       const privateWorkUpload = await owner.upload(await image({ r: 8, g: 160, b: 141 }), 'public');
+      await owner.grant(`work:read:${privateWork.work}`, 'work.read');
       const privateWorkUse = await selectAvatar(stack, owner, privateWork.work, privateWorkUpload.asset, null);
       const hiddenWork = await govern('POST', '/v1/public-reports', copyrightNotice(privateWork.work,
         privateWorkUse.use, privateWorkUse.revision, 'A private Work cover is concealed.'), undefined,
