@@ -43,6 +43,17 @@ export function coverCreditFromProvenance(value: unknown): CoverCredit | null {
     !sourceRecord.href
   )
     return null;
+  let sourceUrl: URL;
+  try {
+    sourceUrl = new URL(sourceRecord.href);
+  } catch {
+    return null;
+  }
+  if (
+    /^\s|[\u0000-\u001f\u007f-\u009f]/u.test(sourceRecord.href) ||
+    (sourceUrl.protocol !== 'http:' && sourceUrl.protocol !== 'https:')
+  )
+    return null;
   let holder: string | null = null;
   if (holderEvidence !== null) {
     if (!holderEvidence || typeof holderEvidence !== 'object' || Array.isArray(holderEvidence))

@@ -35,6 +35,35 @@ test('VIEW07/VIEW08: summary schema rejects hidden fields and malformed media in
 });
 
 test('SOURCE-COVER-READ: copyright mark comes only from revision source and holder evidence', () => {
+  const hrefCases = [
+    { href: 'https://bgm.tv/subject/1', accepted: true },
+    { href: 'http://bgm.tv/subject/1', accepted: true },
+    { href: 'HtTpS://bgm.tv/subject/1', accepted: true },
+    { href: 'javascript:alert(1)', accepted: false },
+    { href: 'JaVaScRiPt:alert(1)', accepted: false },
+    { href: 'data:text/html,cover', accepted: false },
+    { href: 'file:///tmp/cover.png', accepted: false },
+    { href: 'vbscript:msgbox(1)', accepted: false },
+    { href: 'blob:https://bgm.tv/cover', accepted: false },
+    { href: '/covers/original.jpg', accepted: false },
+    { href: 'not a URL', accepted: false },
+    { href: 'https://[broken', accepted: false },
+    { href: ' https://bgm.tv/subject/1', accepted: false },
+    { href: '\nhttps://bgm.tv/subject/1', accepted: false },
+    { href: 'java\nscript:alert(1)', accepted: false },
+  ] as const;
+  for (const { href, accepted } of hrefCases) {
+    const credit = coverCreditFromProvenance({
+      source: { displayName: 'Bangumi', href },
+      holderEvidence: null,
+    });
+    if (!accepted) {
+      expect(credit).toBeNull();
+      continue;
+    }
+    expect(credit).toMatchObject({ source: { href } });
+  }
+
   const source = { displayName: 'Bangumi', href: 'https://bgm.tv/subject/1' };
   expect(coverCreditFromProvenance({ source, holderEvidence: null })).toEqual({
     kind: 'copyright',
