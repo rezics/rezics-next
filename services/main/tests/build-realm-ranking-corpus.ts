@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -19,6 +19,7 @@ import {
   writeRealmRankingManifest,
   writeRealmRankingProgress,
   type RealmRankingIdentity,
+  type RealmRankingReplyIdentity,
   type RealmRankingScale,
 } from './realm-ranking-corpus.ts';
 
@@ -103,6 +104,7 @@ console.log(
 const { startHomeStack } = await import('../../../tests/qa/integration/feed-read-support.ts');
 const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
 const { workProfileCorpusApi } = await import('../../../scripts/load/work-profile-corpus.ts');
+const { relayContentProjectionOnce } = await import('../src/modules/content-publication/relay.ts');
 
 const openHome = () =>
   startHomeStack(`realm-ranking-corpus-${randomUUID()}`, {
@@ -136,6 +138,23 @@ const backupDriver = createRealmRankingCorpusDriver({
 
 const project = async () =>
   timeRealmRankingStage('build-projection', async () => {
+    // Retain the real Content consumer at its owner head as well as the ranking
+    // consumers, so restored runs spend their budget on live assertions.
+    const projection = stack.composition;
+    const head = BigInt((await stack.content.ownerPosition()).sequence);
+    let checkpoint = await projection.cursor.read(projection.consumer);
+    for (let events = 0; BigInt(checkpoint.sequence) < head; events++) {
+      if (events >= 20_000)
+        throw new Error('Realm corpus Content projection exceeded its event budget');
+      const event = await relayContentProjectionOnce(
+        stack.env,
+        projection.content,
+        projection.cursor,
+        projection.consumer,
+      );
+      if (!event) throw new Error('Realm corpus Content projection stopped before its owner head');
+      checkpoint = await projection.cursor.read(projection.consumer);
+    }
     for (let wave = 0; wave < 500; wave++) {
       try {
         await home.project();
@@ -182,12 +201,23 @@ const command = async <T>(key: string, init: Parameters<typeof api.command>[1]) 
   throw new Error(`Realm ranking command ${key} was not admitted`);
 };
 
-const post = async (key: string, parent?: { reply: string; revision: string }) =>
+// A crash between a command and its progress record must replay the same body.
+const commandId = (key: string, kind: string) => {
+  const hex = createHash('sha256')
+    .update(`${REALM_RANKING_BUILD_RUN}:${key}:${kind}`)
+    .digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+const post = async (
+  key: string,
+  parent?: { reply: string; revision: string },
+  target: Pick<RealmRankingIdentity, 'realm' | 'work' | 'draftRevision'> = progress!.identity,
+): Promise<RealmRankingReplyIdentity> =>
   timeRealmRankingStage(
     'build-reply',
     async () => {
-      const reply = `https://rezics.com/id/${randomUUID()}`;
-      const variantId = `urn:rezics:variant:${randomUUID()}`;
+      const reply = `https://rezics.com/id/${commandId(key, 'reply')}`;
+      const variantId = `urn:rezics:variant:${commandId(key, 'variant')}`;
       const draft = await command<{ revisionId: string; revisionDigest: string }>(`${key}:draft`, {
         method: 'POST',
         path: '/v1/member-reply-drafts',
@@ -195,8 +225,8 @@ const post = async (key: string, parent?: { reply: string; revision: string }) =
           profile: 'member-reply-draft-v1',
           reply,
           variantId,
-          rootTarget: progress!.identity.work,
-          rootRevision: progress!.identity.draftRevision,
+          rootTarget: target.work,
+          rootRevision: target.draftRevision,
           language: 'en',
           direction: 'ltr',
           expectedHead: null,
@@ -213,8 +243,8 @@ const post = async (key: string, parent?: { reply: string; revision: string }) =
           variantId,
           revisionId: draft.revisionId,
           author: actor,
-          rootTarget: progress!.identity.work,
-          rootRevision: progress!.identity.draftRevision,
+          rootTarget: target.work,
+          rootRevision: target.draftRevision,
           parentReply: parent?.reply ?? null,
           parentRevision: parent?.revision ?? null,
           contextRevision: null,
@@ -225,7 +255,7 @@ const post = async (key: string, parent?: { reply: string; revision: string }) =
         path: '/v1/realm-reply-reviews',
         body: {
           profile: 'realm-reply-review-v1',
-          realm: progress!.identity.realm,
+          realm: target.realm,
           reply,
           revisionId: draft.revisionId,
           revisionDigest: draft.revisionDigest,
@@ -244,7 +274,7 @@ const post = async (key: string, parent?: { reply: string; revision: string }) =
         path: '/v1/realm-reply-placements',
         body: {
           profile: 'realm-reply-placement-v1',
-          realm: progress!.identity.realm,
+          realm: target.realm,
           reply,
           revisionId: draft.revisionId,
           revisionDigest: draft.revisionDigest,
@@ -269,15 +299,26 @@ const savedFillers = async () =>
   Number(
     (
       await stack.contentPool.query<{ count: string }>(
-        'SELECT count(*)::text AS count FROM content.reply WHERE root_target=$1',
+        'SELECT count(*)::text AS count FROM content.reply WHERE root_target=$1 AND parent_reply IS NULL',
         [progress!.identity.work],
       )
     ).rows[0]?.count ?? '0',
   ) - 2;
 
+const emptyReply = (): RealmRankingReplyIdentity => ({
+  reply: '',
+  revision: '',
+  placement: '',
+  digest: '',
+  review: '',
+});
 let built = false;
 try {
-  if (!progress || (await savedFillers().catch(() => -1)) < 0) {
+  if (!progress) {
+    if (REALM_RANKING_SCALES.some((size) => existsSync(realmRankingBackupPath(size))))
+      throw new Error(
+        'Retained Realm ranking cuts have no matching source progress; rebuild every cut together',
+      );
     const provision = async (token: string, key: string, name: string) =>
       (
         await workProfileCorpusApi('http://main.local', token, {
@@ -329,20 +370,107 @@ try {
         reader,
         work: work.work,
         draftRevision: work.draftRevision,
-        opening: { reply: '', revision: '', placement: '', digest: '', review: '' },
+        opening: emptyReply(),
+        second: emptyReply(),
+        deepChain: [],
+        followups: null,
         winner: { reply: '', placement: '' },
       },
     };
-    const opening = await post('realm-rank:opening');
-    await post('realm-rank:second');
-    progress.identity.opening = opening;
     writeRealmRankingProgress(progress);
-    console.log(JSON.stringify({ realmRankingCorpus: 'roots', elapsedMs: Date.now() - startedAt }));
   }
   actor = progress!.identity.author;
   const identity: RealmRankingIdentity = progress.identity;
-  let fillers = Math.max(0, await savedFillers());
-  progress.fillers = fillers;
+  if (identity.dataEpoch !== stack.env.lineage.dataEpoch)
+    throw new Error(
+      'Realm ranking progress belongs to a different source lineage; rebuild every cut together',
+    );
+  for (const [scope, action] of [
+    [`review:decide:${identity.realm}`, 'review.decide'],
+    [`reply:place:${identity.realm}`, 'reply.place'],
+    [`realm:profile:${identity.realm}`, 'realm.profile.publish'],
+    [`governance:realm:${identity.realm}`, 'governance.rule.publish'],
+  ] as const)
+    await grant(scope, action);
+  if (!identity.opening.reply) {
+    identity.opening = await post('realm-rank:opening');
+    writeRealmRankingProgress(progress);
+  }
+  if (!identity.second.reply) {
+    identity.second = await post('realm-rank:second');
+    writeRealmRankingProgress(progress);
+  }
+  if ((await savedFillers()) < progress.fillers)
+    throw new Error('Realm ranking source is missing acknowledged root replies');
+  let fillers = progress.fillers;
+  const buildFollowups = async () =>
+    timeRealmRankingStage('build-followups', async () => {
+      if (!identity.followups) {
+        const realm = (
+          await command<{ realm: string }>('realm-followup:realm', {
+            method: 'POST',
+            path: '/v1/spaces',
+            body: {
+              profile: 'space-realm-v1',
+              name: 'Thread boundaries',
+              capabilities: ['realm'],
+              actingSubject: actor,
+            },
+          })
+        ).realm;
+        const work = await seedPublicProfileWork(api, 'realm-followup:work', {
+          actingSubject: actor,
+          title: 'Thread boundaries',
+          body: 'Independent thread shapes',
+        });
+        identity.followups = {
+          realm,
+          work: work.work,
+          draftRevision: work.draftRevision,
+          clean: emptyReply(),
+          chainRoot: emptyReply(),
+          chain: [],
+          wideRoot: emptyReply(),
+          wide: [],
+        };
+        writeRealmRankingProgress(progress!);
+      }
+      const followups = identity.followups;
+      for (const [scope, action] of [
+        [`review:decide:${followups.realm}`, 'review.decide'],
+        [`reply:place:${followups.realm}`, 'reply.place'],
+        [`governance:realm:${followups.realm}`, 'governance.rule.publish'],
+        [`governance:realm:${followups.realm}`, 'realm.owner'],
+      ] as const)
+        await grant(scope, action);
+      for (const name of ['clean', 'chainRoot', 'wideRoot'] as const) {
+        if (!followups[name].reply) {
+          followups[name] = await post(`realm-followup:${name}`, undefined, followups);
+          writeRealmRankingProgress(progress!);
+        }
+      }
+      while (followups.chain.length < 34) {
+        const parent = followups.chain.at(-1) ?? followups.chainRoot;
+        followups.chain.push(
+          await post(`realm-followup:chain:${followups.chain.length}`, parent, followups),
+        );
+        writeRealmRankingProgress(progress!);
+      }
+      while (followups.wide.length < 193) {
+        followups.wide.push(
+          await post(`realm-followup:wide:${followups.wide.length}`, followups.wideRoot, followups),
+        );
+        writeRealmRankingProgress(progress!);
+      }
+    });
+  const buildDeepChain = async () =>
+    timeRealmRankingStage('build-deep-chain', async () => {
+      while (identity.deepChain.length < 40) {
+        const parent = identity.deepChain.at(-1) ?? identity.second;
+        identity.deepChain.push(await post(`realm-rank:deep:${identity.deepChain.length}`, parent));
+        writeRealmRankingProgress(progress!);
+      }
+    });
   const vote = async (key: string, placement: string) =>
     api.command(key, {
       method: 'POST',
@@ -357,35 +485,33 @@ try {
   const retainThrough = async (size: RealmRankingScale) => {
     const needed = size - 2;
     if (fillers < needed) {
-      const grown = await growRealmThreads(post, needed - fillers, {
-        keyPrefix: 'realm-rank:fill',
-        startIndex: fillers,
-      });
-      fillers += grown.length;
-      progress!.fillers = fillers;
-      writeRealmRankingProgress(progress!);
-    }
-    await project();
-    // A refused review can leave a Content reply that never becomes a root.
-    // Replace it so the cut still has exactly this many placed threads.
-    let extra = 0;
-    for (;;) {
-      const roots = Number(
-        (
-          await stack.accessPool.query<{ count: string }>(
-            `SELECT count(*)::text AS count FROM access.realm_thread_reference
-         WHERE data_epoch=$1 AND realm=$2 AND parent IS NULL`,
-            [identity.dataEpoch, identity.realm],
-          )
-        ).rows[0]?.count ?? '0',
+      await growRealmThreads(
+        async (key) => {
+          const reply = await post(key);
+          progress!.fillers = ++fillers;
+          writeRealmRankingProgress(progress!);
+          return reply;
+        },
+        needed - fillers,
+        {
+          keyPrefix: 'realm-rank:fill',
+          startIndex: fillers,
+        },
       );
-      if (roots >= size) break;
-      if (extra >= 32) throw new Error(`Realm ranking cut ${size} has ${roots} roots`);
-      const missing = size - roots;
-      await growRealmThreads(post, missing, { keyPrefix: 'realm-rank:extra', startIndex: extra });
-      extra += missing;
-      await project();
     }
+    if (size === 400) await buildFollowups();
+    if (size === 1600) await buildDeepChain();
+    await project();
+    const roots = Number(
+      (
+        await stack.accessPool.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM access.realm_thread_reference
+         WHERE data_epoch=$1 AND realm=$2 AND parent IS NULL`,
+          [identity.dataEpoch, identity.realm],
+        )
+      ).rows[0]?.count ?? '0',
+    );
+    if (roots !== size) throw new Error(`Realm ranking cut ${size} has ${roots} placed roots`);
     if (size === 100 && !identity.winner.reply) {
       const row = (
         await stack.accessPool.query<{ reply: string; placement: string }>(

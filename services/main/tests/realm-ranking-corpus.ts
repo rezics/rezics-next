@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -60,11 +61,30 @@ export async function timeRealmRankingStage<T>(
 }
 
 /** Bump when the reply recipe or the retained cuts change, not for unrelated code edits. */
-export const REALM_RANKING_CORPUS_VERSION = 'realm-ranking-commands-v2';
+export const REALM_RANKING_CORPUS_VERSION = 'realm-ranking-commands-v3';
 export const REALM_RANKING_SCALES = [100, 400, 1600] as const;
 export type RealmRankingScale = (typeof REALM_RANKING_SCALES)[number];
 export const REALM_RANKING_FILLERS = 1_598;
-export const REALM_RANKING_BUILD_RUN = 'realmrankbuild';
+export const REALM_RANKING_BUILD_RUN = `realmrank-${realmRankingCorpusKey().slice(-16)}`;
+
+export interface RealmRankingReplyIdentity {
+  reply: string;
+  revision: string;
+  placement: string;
+  digest: string;
+  review: string;
+}
+
+export interface RealmRankingFollowups {
+  realm: string;
+  work: string;
+  draftRevision: string;
+  clean: RealmRankingReplyIdentity;
+  chainRoot: RealmRankingReplyIdentity;
+  chain: RealmRankingReplyIdentity[];
+  wideRoot: RealmRankingReplyIdentity;
+  wide: RealmRankingReplyIdentity[];
+}
 
 export interface RealmRankingIdentity {
   dataEpoch: string;
@@ -74,13 +94,12 @@ export interface RealmRankingIdentity {
   reader: string;
   work: string;
   draftRevision: string;
-  opening: {
-    reply: string;
-    revision: string;
-    placement: string;
-    digest: string;
-    review: string;
-  };
+  opening: RealmRankingReplyIdentity;
+  second: RealmRankingReplyIdentity;
+  /** Descendants of the second root, leaving the opening's reply count at zero. */
+  deepChain: RealmRankingReplyIdentity[];
+  /** Independent clean, deep and wide roots, retained from the 400-thread cut. */
+  followups: RealmRankingFollowups | null;
   winner: { reply: string; placement: string };
 }
 
@@ -122,7 +141,7 @@ export function realmRankingCorpusInstructions(
   return (
     `Realm ranking corpus ${REALM_RANKING_CORPUS_VERSION} (${key}) cannot be restored: ${reason}. ` +
     `Build it once, outside the 600s preparation budget, with \`${realmRankingBuildCommand()}\`. ` +
-    `That posts ${REALM_RANKING_FILLERS} Realm replies through the product commands and retains ` +
+    `That posts ${REALM_RANKING_FILLERS} root fillers and the deep/wide followups through the product commands and retains ` +
     `stopped copies at ${REALM_RANKING_SCALES.join(', ')} root threads.`
   );
 }
@@ -144,6 +163,13 @@ export function readRealmRankingCorpus(): RealmRankingCorpusManifest | undefined
     manifest.format !== 'realm-ranking-corpus-v1' ||
     manifest.version !== REALM_RANKING_CORPUS_VERSION ||
     manifest.fillers !== REALM_RANKING_FILLERS ||
+    !manifest.identity.second?.reply ||
+    manifest.identity.deepChain?.length !== 40 ||
+    !manifest.identity.followups?.clean.reply ||
+    !manifest.identity.followups.chainRoot.reply ||
+    manifest.identity.followups.chain.length !== 34 ||
+    !manifest.identity.followups.wideRoot.reply ||
+    manifest.identity.followups.wide.length !== 193 ||
     !compatibleLoadStorage(manifest.compatibility, loadCompatibility(root)) ||
     REALM_RANKING_SCALES.some((size) => !manifest.scales.includes(size) || !cutReady(size))
   ) {
@@ -189,9 +215,11 @@ export function readRealmRankingProgress(): RealmRankingProgress | undefined {
 export function writeRealmRankingProgress(progress: RealmRankingProgress): void {
   const directory = realmRankingCorpusRoot();
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(join(directory, 'progress.json'), JSON.stringify(progress, null, 2) + '\n', {
+  const pending = join(directory, 'progress.pending.json');
+  writeFileSync(pending, JSON.stringify(progress, null, 2) + '\n', {
     mode: 0o600,
   });
+  renameSync(pending, join(directory, 'progress.json'));
 }
 
 export function writeRealmRankingManifest(manifest: RealmRankingCorpusManifest): void {
@@ -321,7 +349,14 @@ export async function restoreRealmRankingCorpus(
         timeRealmRankingStage('cleanup', () => driver.stop(target), { threads: size, target }),
     };
   } catch (error) {
-    home = undefined;
+    try {
+      await driver.stop(target);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Realm ranking restore failed and cleanup was incomplete',
+      );
+    }
     throw error;
   }
 }
