@@ -43,9 +43,9 @@ function escaped(value: string): string {
 
 function namedTestExists(source: string, title: string): boolean {
   const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
-  // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon); the registry names the
+  // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon or space); the registry names the
   // exact source title after it, so no task identifier is copied into the registry.
-  return [...source.matchAll(declaration)].some((match) => match[2]!.replace(/^G-?\d+: /, '') === title);
+  return [...source.matchAll(declaration)].some((match) => match[2]!.replace(/^G-?\d+(?::\s*|\s+)/, '') === title);
 }
 
 function proofMissing(proof: Proof): proof is Extract<Proof, { missing: string }> {
@@ -109,6 +109,13 @@ test('launch coverage names existing tests and reports remaining rows', () => {
         continue;
       }
 
+      if (/^G-?\d+(?::|\s)/.test(proof.test)) {
+        errors.push(`${rowLabel(row)}: test title must omit its leading task tag`);
+      }
+      if (proof.evidence !== undefined && (!proof.evidence.trim() || /[\r\n]/.test(proof.evidence))) {
+        errors.push(`${rowLabel(row)}: evidence must be one nonempty line`);
+      }
+
       const filePath = resolve(repositoryRoot, proof.file);
       if (!existsSync(filePath)) {
         errors.push(`${rowLabel(row)}: missing file ${proof.file}`);
@@ -151,6 +158,16 @@ test('launch coverage names existing tests and reports remaining rows', () => {
   );
 
   expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('proof titles preserve the exact title after a leading task tag', () => {
+  for (const tag of ['G123: ', 'G-123: ', 'G123 ', 'G-123 ']) {
+    const source = 'test(`' + tag + '${viewport.width}: choose the last chapter`, async () => {});';
+    expect(namedTestExists(source, '${viewport.width}: choose the last chapter')).toBe(true);
+    expect(namedTestExists(source, 'choose the last chapter')).toBe(false);
+    expect(namedTestExists(source, tag + '${viewport.width}: choose the last chapter')).toBe(false);
+  }
+  expect(namedTestExists("test('a reader saves a choice', () => {});", 'a reader saves a choice')).toBe(true);
 });
 
 test('every launch kind and hard case has a coverage row', () => {
