@@ -460,7 +460,7 @@ export async function ownerRestoreErasureFixture() {
         image: image,
         volume: liveVolume,
         secrets: fusekiSecrets(qa.composeEnv),
-      }, { onCreated: graphResources.registerContainer }),
+      }, { onAllocated: graphResources.registerContainer }),
     );
     const native = new FusekiClient(
       live.url,
@@ -1105,7 +1105,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             image: image,
             volume: restoredVolume,
             secrets: fusekiSecrets(qa.composeEnv),
-          }, { onCreated: graphResources.registerContainer });
+          }, { onAllocated: graphResources.registerContainer });
         },
         ordinal,
       );

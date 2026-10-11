@@ -92,7 +92,7 @@ test('final cleanup owns a graph created before readiness fails and retries chec
     waitForReady: async () => {
       throw new Error('readiness fault');
     },
-    onCreated: resources.registerContainer,
+    onAllocated: resources.registerContainer,
   })).rejects.toThrow('readiness fault');
 
   expect(resources.containers.map(({ name }) => name)).toEqual([input.name]);
@@ -132,6 +132,81 @@ test('final cleanup owns a graph created before readiness fails and retries chec
   expect(state).toMatchObject({ sourceCut: true, immutableRelayTemplate: true, siblingCopy: true });
   expect(removalAttempts).toBe(2);
   expect(calls.filter(([command]) => command === 'ps')).toEqual([]);
+});
+
+test('final fixture cleanup removes a graph allocated before Docker run fails', async () => {
+  const resources = createRestoreGraphResourceOwner();
+  const input = {
+    name: 'restore-copy-run-fault',
+    image: 'fuseki:test',
+    volume: 'restore-copy-run-fault-volume',
+    secrets: { FUSEKI_COMMAND_TOKEN: 'unit-secret-token-value' },
+  };
+  const state = {
+    candidateGraph: false,
+    candidateVolume: false,
+    sourceCut: true,
+    immutableRelayTemplate: true,
+    siblingCopy: true,
+  };
+  const calls: string[][] = [];
+  const docker = (args: string[]): StandaloneDockerResult => {
+    calls.push(args);
+    if (args[0] === 'run') {
+      expect(resources.containers.map(({ name }) => name)).toEqual([input.name]);
+      state.candidateGraph = true;
+      return { status: 1, stdout: '', stderr: 'container started before Docker run failed' };
+    }
+    if (args[0] === 'rm') {
+      expect(state.candidateGraph).toBe(true);
+      state.candidateGraph = false;
+      return { status: 0, stdout: '', stderr: '' };
+    }
+    if (args[0] === 'inspect')
+      return { status: 0, stdout: state.candidateGraph ? 'container-id' : '', stderr: '' };
+    if (args[0] === 'volume' && args[1] === 'create') {
+      state.candidateVolume = true;
+      return { status: 0, stdout: input.volume, stderr: '' };
+    }
+    if (args[0] === 'volume' && args[1] === 'rm') {
+      state.candidateVolume = false;
+      return { status: 0, stdout: input.volume, stderr: '' };
+    }
+    throw new Error(`unexpected Docker command: ${args[0]}`);
+  };
+  const env = { DOCKER_HOST: 'unix:///qa/docker.sock' };
+
+  resources.registerVolume(input.volume);
+  docker(['volume', 'create', input.volume]);
+  await expect(standaloneFuseki(env, input, {
+    docker: (args) => docker(args),
+    onAllocated: resources.registerContainer,
+  })).rejects.toThrow('docker run failed');
+
+  expect(resources.containers.map(({ name }) => name)).toEqual([input.name]);
+  expect(resources.volumes).toEqual([input.volume]);
+  expect(state.candidateGraph).toBe(true);
+  expect(state.candidateVolume).toBe(true);
+
+  const removeVolume = (name: string) => {
+    const result = docker(['volume', 'rm', '-f', name]);
+    if (result.status !== 0) throw new Error('Docker volume removal failed');
+    resources.unregisterVolume(name);
+  };
+  const close = () => attemptRestoreCleanup([
+    ...resources.containerCleanupActions(),
+    ...resources.volumeCleanupActions(removeVolume),
+  ]);
+  const failures = await close();
+
+  expect(failures).toEqual([]);
+  expect(resources.containers).toEqual([]);
+  expect(resources.volumes).toEqual([]);
+  expect(state.candidateGraph).toBe(false);
+  expect(state.candidateVolume).toBe(false);
+  expect(state).toMatchObject({ sourceCut: true, immutableRelayTemplate: true, siblingCopy: true });
+  expect(calls).toContainEqual(['rm', '-f', input.name]);
+  expect(calls).toContainEqual(['volume', 'rm', '-f', input.volume]);
 });
 
 test('partial disposal reports failures and retries only resources still owned', async () => {

@@ -191,7 +191,7 @@ export type StandaloneDockerExecutor = (args: string[], env: NodeJS.ProcessEnv,
 export interface StandaloneFusekiDependencies {
   docker?: StandaloneDockerExecutor;
   waitForReady?: (url: string) => Promise<void>;
-  onCreated?: (container: StandaloneFuseki) => void;
+  onAllocated?: (container: StandaloneFuseki) => void;
   artifactDir?: string;
   now?: () => number;
 }
@@ -297,12 +297,6 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
   const now = dependencies.now ?? (() => performance.now());
   const artifacts = dependencies.artifactDir ?? process.env.REZICS_QA_ARTIFACT_DIR;
   const secrets = Object.values(input.secrets);
-  dockerOutput(execute, ['run', '-d', '--name', input.name, '--stop-timeout=60',
-    '--publish', `127.0.0.1:${port}:3030`,
-    '--volume', `${input.volume}:/fuseki/databases`,
-    ...(input.mounts ?? []).flatMap(mount => ['--volume', mount]),
-    ...Object.entries(input.secrets).flatMap(([key, value]) => ['--env', `${key}=${value}`]),
-    input.image, ...(input.command ?? [])], owned, 60_000);
   const container: StandaloneFuseki = { name: input.name, url,
     runner: {
       exec: script => dockerOutput(execute, ['exec', input.name, 'sh', '-ec', script], owned, 120_000),
@@ -343,7 +337,13 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
       }
     },
   };
-  dependencies.onCreated?.(container);
+  dependencies.onAllocated?.(container);
+  dockerOutput(execute, ['run', '-d', '--name', input.name, '--stop-timeout=60',
+    '--publish', `127.0.0.1:${port}:3030`,
+    '--volume', `${input.volume}:/fuseki/databases`,
+    ...(input.mounts ?? []).flatMap(mount => ['--volume', mount]),
+    ...Object.entries(input.secrets).flatMap(([key, value]) => ['--env', `${key}=${value}`]),
+    input.image, ...(input.command ?? [])], owned, 60_000);
   await waitForReady(url);
   return container;
 }
