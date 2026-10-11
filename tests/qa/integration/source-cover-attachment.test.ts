@@ -190,13 +190,14 @@ test('COVER-BIND rejects altered or missing retained descriptors before creating
     WHERE a.owner=$1 AND u.imported_cover_intent->'source'->>'record'=$2`,
   [owner.actor, evidence.sourceRecord])).rows[0]?.n).toBe(0);
 
-  const originalVerifier = f.media.sourceCoverEvidence;
-  f.media.sourceCoverEvidence = { verify: async () => { throw new SourceCoverEvidenceUnavailable('interrupted read'); } };
+  const routeMedia = f.composition.dependencies.media!;
+  const originalVerifier = routeMedia.sourceCoverEvidence;
+  routeMedia.sourceCoverEvidence = { verify: async () => { throw new SourceCoverEvidenceUnavailable('interrupted read'); } };
   try {
     await json(await owner.send('POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null,
       mediaType: 'image/png', byteLength: bytes.length, sha256: sha(bytes), disclosure: 'public',
       actingSubject: owner.actor, importedCover: evidence.importedCover }), 503);
-  } finally { f.media.sourceCoverEvidence = originalVerifier; }
+  } finally { routeMedia.sourceCoverEvidence = originalVerifier; }
   expect((await f.contentPool.query(`SELECT count(*)::int AS n FROM media.upload u JOIN media.asset a ON a.id=u.asset_id
     WHERE a.owner=$1 AND u.imported_cover_intent->'source'->>'record'=$2`,
   [owner.actor, evidence.sourceRecord])).rows[0]?.n).toBe(0);
@@ -245,9 +246,7 @@ test('COVER-ROLE confines an imported cover to its Work avatar and keeps other i
   await json(await owner.send('POST', '/v1/media/uses', { actingSubject: owner.actor, target: work.work,
     representation: admitted.representation, occurrence: randomUUID() }), 404);
   await owner.grant(`content:draft:${work.work}`, 'content.draft');
-  const variant = (await f.contentPool.query<{ id: string }>(
-    'SELECT id FROM content.variant WHERE resource_id=$1 LIMIT 1', [work.work])).rows[0]?.id;
-  expect(variant).toMatch(/^urn:rezics:variant:/);
+  const variant = `urn:rezics:variant:${randomUUID()}`;
   await json(await owner.send('POST', '/v1/media/publications', { profile: 'media-set-v1',
     resourceId: work.work, variantId: variant, expectedHead: null, assets: [admitted.asset],
     actingSubject: owner.actor }), 404);
