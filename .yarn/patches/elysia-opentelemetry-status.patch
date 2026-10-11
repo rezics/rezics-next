@@ -1,6 +1,19 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -217,9 +217,9 @@
+-		return (request) => {
+-			if (!(checkIfShouldTrace ? checkIfShouldTrace(request) : true)) return fn(request);
++		return (request, server) => {
++			if (!(checkIfShouldTrace ? checkIfShouldTrace(request) : true)) return fn(request, server);
+ 			const headers = headerHasToJSON ? request.headers.toJSON() : Object.fromEntries(request.headers.entries());
+ 			const ctx = propagation.extract(context.active(), headers);
+ 			return tracer.startActiveSpan("Root", { kind: SpanKind.SERVER }, ctx, (rootSpan) => {
+ 				const spanContext = trace$1.setSpan(ctx, rootSpan);
+-				return context.with(spanContext, () => fn(request));
++				return context.with(spanContext, () => fn(request, server));
+ 			});
+ 		};
 @@ -337,7 +337,6 @@
  					else if (typeof status !== "number" && typeof error?.status === "number") status = error.status;
  					if (typeof status === "number") {
@@ -38,6 +51,19 @@ diff --git a/dist/index.mjs b/dist/index.mjs
 diff --git a/dist/index.js b/dist/index.js
 --- a/dist/index.js
 +++ b/dist/index.js
+@@ -218,9 +218,9 @@
+-		return (request) => {
+-			if (!(checkIfShouldTrace ? checkIfShouldTrace(request) : true)) return fn(request);
++		return (request, server) => {
++			if (!(checkIfShouldTrace ? checkIfShouldTrace(request) : true)) return fn(request, server);
+ 			const headers = headerHasToJSON ? request.headers.toJSON() : Object.fromEntries(request.headers.entries());
+ 			const ctx = _opentelemetry_api.propagation.extract(_opentelemetry_api.context.active(), headers);
+ 			return tracer.startActiveSpan("Root", { kind: _opentelemetry_api.SpanKind.SERVER }, ctx, (rootSpan) => {
+ 				const spanContext = _opentelemetry_api.trace.setSpan(ctx, rootSpan);
+-				return _opentelemetry_api.context.with(spanContext, () => fn(request));
++				return _opentelemetry_api.context.with(spanContext, () => fn(request, server));
+ 			});
+ 		};
 @@ -338,7 +338,6 @@
  					else if (typeof status !== "number" && typeof error?.status === "number") status = error.status;
  					if (typeof status === "number") {

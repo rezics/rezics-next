@@ -1016,7 +1016,7 @@ __metadata:
 
 "@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.1#./.yarn/patches/elysia-opentelemetry-status.patch::locator=rezics%40workspace%3A.":
   version: 2.0.0-beta.1
-  resolution: "@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.1#./.yarn/patches/elysia-opentelemetry-status.patch::version=2.0.0-beta.1&hash=186eb1&locator=rezics%40workspace%3A."
+  resolution: "@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.1#./.yarn/patches/elysia-opentelemetry-status.patch::version=2.0.0-beta.1&hash=7c131c&locator=rezics%40workspace%3A."
   dependencies:
     "@opentelemetry/api": "npm:^1.9.0"
     "@opentelemetry/instrumentation": "npm:^0.200.0"
@@ -1028,7 +1028,7 @@ __metadata:
       optional: true
     graphql-yoga:
       optional: true
-  checksum: 10c0/99277c9a40f8084a1017409a2b0b2599a011bb2a22e9e209e65cf63e6e53347db1265c4bf753428cf97b7676bcb902b578ee6da4d1eb97936575b9fc4c2d3fd0
+  checksum: 10c0/c75886f267b4587a9ada2e5cb5d725c9a901d84ca00b28ab84d5dc792115623eb842ba6392501cf5a17e3a7650c9bf4672960989a507547a65de440ad478cba9
   languageName: node
   linkType: hard
 
