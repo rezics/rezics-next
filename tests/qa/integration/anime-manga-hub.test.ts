@@ -43,6 +43,12 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
   try {
     const a = await stack.member('anime-manga-reader');
     const b = await stack.member('anime-manga-other-reader');
+    const person = (await json<{ agent: string }>(await a.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Anime manga reader',
+    }), 201)).agent;
+    const other = (await json<{ agent: string }>(await b.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Other anime manga reader',
+    }), 201)).agent;
     await ensureGlobalClassificationContext(stack.env);
     const library = new ReaderLibraryStatusStore(stack.contentPool);
     const preferences = new EditionPreferenceStore(stack.contentPool);
@@ -84,9 +90,6 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
         throw error;
       } finally { client.release(); }
     };
-    const person = a.actor;
-    const other = b.actor;
-
     await grant('work:create:root', 'work.create', person);
     await grant('semantic:create:root', 'semantic.change', person);
     await grant(`statement:speak:${person}`, 'statement.record', person);

@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
-import { applyAnimeMangaZones, type CatalogueZoneRecord, type CatalogueWorkRecord }
+import { animeMangaSamplePlan, applyAnimeMangaZones, type CatalogueZoneRecord, type CatalogueWorkRecord }
   from '../../../scripts/dev/seed/anime-manga-zones-step.ts';
 import { seedKey } from '../../../scripts/dev/seed/plan.ts';
 import { officialTheme } from '../../../scripts/dev/seed/official-plan.ts';
@@ -128,7 +128,10 @@ try {
     request,
     grant: async (scope, action) => { await editor.grant(scope, action); },
   };
-  const created = await applyAnimeMangaZones(port);
+  const hubSamples = workHubOnly
+    ? animeMangaSamplePlan().filter(sample => ['long-tv', 'long-manga', 'tv-3', 'manga-3'].includes(sample.key))
+    : undefined;
+  const created = await applyAnimeMangaZones(port, hubSamples);
   if (!workHubOnly) {
     await openActorPlatformGroup(editor.principalId, 'executable-themes');
     await openActorPlatformGroup(reviewer!.principalId, 'executable-themes');
