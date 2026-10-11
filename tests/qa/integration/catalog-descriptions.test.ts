@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { catalogDescriptionVariantId } from '../../../services/main/src/modules/catalog/commands.ts';
 import { MANAGED_ORG_ACTION } from '../../../services/main/src/modules/access/managed-org-authority.ts';
+import { CONTENT_TARGET_COST } from '../../../services/main/src/modules/content-publication/draft.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
@@ -96,7 +97,8 @@ test('IAM37: a Realm content editor publishes an Organization description withou
   const graphCallsBeforeEdit = fuseki.queries;
   const savedResponse = await realmEditor.send('PATCH', path, draftInput, 'iam37-description-edit');
   expect(savedResponse.status).toBe(201);
-  expect(fuseki.queries - graphCallsBeforeEdit).toBe(2);
+  // One owner-target resolution plus the two freshness guards.
+  expect(fuseki.queries - graphCallsBeforeEdit).toBe(2 + CONTENT_TARGET_COST.graphReads);
   const saved = await savedResponse.json() as { resourceId: string; variantId: string; revisionId: string;
     sourcePosition: { dataEpoch: string } };
   expect(saved).toMatchObject({ resourceId: organization, variantId });
