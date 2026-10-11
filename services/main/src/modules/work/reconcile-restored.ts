@@ -200,8 +200,8 @@ export async function reconcileRetainedEmptyBatch(
     const readBatch = async () => {
       const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?batch ?count ?event WHERE {
         GRAPH ${iri(GRAPHS.outbox)} {
-          ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} ; rv:eventCount ?count .
+          ?batch rv:sequence ${sequence} .
+          ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:eventCount ?count .
           OPTIONAL { ?batch rv:event ?event }
         }
       }`);

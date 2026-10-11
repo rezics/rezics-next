@@ -69,7 +69,7 @@ async function subjectNeighbourhood(session: WorkReadSession, resource: string,
         && STR(?statement) > ${lit(after.statementId)}))))))` : '';
   const limit = SUBJECT_STATEMENT_COST.candidates;
   const rows = await session.query(`SELECT ?statement ?predicate ?key ?neighbourScore WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
+    GRAPH ${iri(GRAPHS.current)} { ?statement rdf:subject ${iri(resource)} ; a rdf:Statement ;
       rv:statementState rv:Active ; rdf:predicate ?predicate ; rv:meaningKey ?key . }
     ${frame ? frame.filter : ''}
     BIND(${score} AS ?neighbourScore)
@@ -124,8 +124,8 @@ export function acceptedStatementPattern(context: string, inherit: boolean): str
       inherit
         ? `UNION { ${slot('global', GLOBAL_CLASSIFICATION_CONTEXT)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ?blockingSlot a rv:DecisionSlot ; rv:decisionTarget ?decisionTarget ; rv:targetKind ?targetKind ;
-          rv:acceptanceContext ${reference(context)} .
+        ?blockingSlot rv:decisionTarget ?decisionTarget ; rv:acceptanceContext ${reference(context)} ;
+          rv:targetKind ?targetKind ; a rv:DecisionSlot .
         FILTER NOT EXISTS { ?blockingSlot rv:decisionHead ?withdrawnDecision .
           GRAPH ${iri(GRAPHS.revisions)} { ?withdrawnDecision a rv:StatementDecision ;
             rv:component ?blockingSlot ; rv:outcome rv:Withdrawn } } } }

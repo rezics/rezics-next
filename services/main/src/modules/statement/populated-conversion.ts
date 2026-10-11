@@ -218,9 +218,9 @@ export async function convertPopulatedStatements(env: WorkActivationEnvironment,
       const covered = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement ?revision ?decision WHERE {
         GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(application)} ;
           rv:meaningKey ${iri(prepared.meaningKey)} ; rv:speaker ${iri(value.proposer!.value)} . }
-        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:StatementRevision ; rv:component ?statement .
+        GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ?statement ; a rv:StatementRevision .
           FILTER NOT EXISTS { ?revision rv:predecessor ?previousRevision }
-          ?decision a rv:StatementDecision ; rv:component ${iri(prepared.slot)} ; rv:convertedFrom ${iri(head)} ; rv:support ?statement }
+          ?decision rv:convertedFrom ${iri(head)} ; rv:component ${iri(prepared.slot)} ; a rv:StatementDecision ; rv:support ?statement }
       } LIMIT 2`)).results?.bindings ?? [];
       if (covered.length > 1) throw new Error('Retained conversion identity is ambiguous');
       const proof = covered[0] ? {statement: covered[0].statement!.value,revision: covered[0].revision!.value,

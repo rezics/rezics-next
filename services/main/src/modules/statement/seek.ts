@@ -391,6 +391,8 @@ export class StatementSeek {
       const through = BigInt(position) < BigInt(prior.through_sequence)+BigInt(STATEMENT_SEEK_COST.projectionSequences)
         ? BigInt(position) : BigInt(prior.through_sequence)+BigInt(STATEMENT_SEEK_COST.projectionSequences);
       const sequences = Array.from({length: Number(through-BigInt(prior.through_sequence))},(_,i) => BigInt(prior.through_sequence)+BigInt(i+1));
+      // Start each VALUES binding at the sequence index; type-first visits the
+      // entire write history, even when this projection turn requests one batch.
       const batches = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence ?batch WHERE {
         VALUES ?sequence { ${sequences.join(' ')} } GRAPH ${iri(GRAPHS.outbox)} {
           ?batch rv:sequence ?sequence . ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(epoch)} } }`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
