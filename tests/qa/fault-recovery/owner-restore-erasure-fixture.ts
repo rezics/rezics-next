@@ -115,6 +115,7 @@ import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
 import { ratingAccount } from '../../../tests/qa/support/rating-account.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
+import { deliverRetainedContentEligibilityOnce } from '../../../services/main/src/modules/content-publication/eligibility-delivery.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { copyRecoveryTree } from '../../../tests/qa/support/recovery-copy.ts';
@@ -663,6 +664,25 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
         throw new Error('Content fixture save failed');
       return saved.revisionId;
     };
+    // Reuse C6's stopped disposable source cut: subsequent positions are
+    // allocated by real native commands, with diagnostic and Main cuts unequal.
+    // Reset before publication so its retained approval stream survives.
+    live.runner.stop();
+    live.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
+flock -n 9
+cat > /tmp/owner-erasure-source.ru <<'OWNER_ERASURE_SOURCE'
+PREFIX rv: <https://rezics.com/vocab/>
+CLEAR GRAPH <urn:rezics:graph:outbox> ;
+DELETE { GRAPH <urn:rezics:graph:control> {
+  <urn:rezics:dataset:product> rv:sequence ?old . <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } }
+INSERT { GRAPH <urn:rezics:graph:control> {
+  <urn:rezics:dataset:product> rv:sequence 896 .
+  <${MAIN_RELAY_STREAM_SCOPE}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:streamSequence 0 ; rv:legacyThroughSequence 0 } }
+WHERE { GRAPH <urn:rezics:graph:control> {
+  <urn:rezics:dataset:product> rv:sequence ?old . OPTIONAL { <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } } }
+OWNER_ERASURE_SOURCE
+java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/owner-erasure-source.ru`);
+    await live.runner.start();
     const published = await seedContent(
       env,
       source.content,
@@ -670,10 +690,24 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
       created.work,
       'erased native HTTP fixture payload',
     );
+    const consumer = `owner-erasure-restore:${suffix}`;
+    await initializeRelayCheckpoint(source.relay, consumer, lineage.dataEpoch);
+    const drain = async (relay: Pool, relayConsumer = consumer) => {
+      for (let batch = 0; batch < 32; batch++) {
+        if (!(await relayMainOutboxOnce(native, relay, relayConsumer, { ownerOutbox: custody })))
+          return;
+      }
+      throw new Error('fixture relay handoff exceeded its bound');
+    };
     const revisionId = published.revisionId;
     const cursor = new ContentProjectionCursor(source.content);
     const projectionConsumer = `owner-erasure-${suffix}`;
     await cursor.initialize(projectionConsumer);
+    await drain(source.relay);
+    for (let page = 0; page < 32; page++) {
+      if (!(await deliverRetainedContentEligibilityOnce(env, core, source.relay, consumer))) break;
+      if (page === 31) throw new Error('fixture eligibility handoff exceeded its bound');
+    }
     const high = await core.ownerPosition();
     for (
       let event = 0;
@@ -694,24 +728,6 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
       ).boolean,
     ).toBe(true);
     const laterRevisionId = await save('later retained journal fixture payload');
-    // Reuse C6's stopped disposable source cut: subsequent positions are
-    // allocated by real native commands, with diagnostic and Main cuts unequal.
-    live.runner.stop();
-    live.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
-flock -n 9
-cat > /tmp/owner-erasure-source.ru <<'OWNER_ERASURE_SOURCE'
-PREFIX rv: <https://rezics.com/vocab/>
-CLEAR GRAPH <urn:rezics:graph:outbox> ;
-DELETE { GRAPH <urn:rezics:graph:control> {
-  <urn:rezics:dataset:product> rv:sequence ?old . <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } }
-INSERT { GRAPH <urn:rezics:graph:control> {
-  <urn:rezics:dataset:product> rv:sequence 896 .
-  <${MAIN_RELAY_STREAM_SCOPE}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:streamSequence 0 ; rv:legacyThroughSequence 0 } }
-WHERE { GRAPH <urn:rezics:graph:control> {
-  <urn:rezics:dataset:product> rv:sequence ?old . OPTIONAL { <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } } }
-OWNER_ERASURE_SOURCE
-java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/owner-erasure-source.ru`);
-    await live.runner.start();
     const component = `https://rezics.com/id/${randomUUID()}`;
     const edition = (title: string) =>
       checkedMetadataState({
@@ -766,15 +782,6 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       GRAPH <urn:rezics:graph:receipts> { <${command.receipt}> a rv:CommitProof } }`)
       ).boolean,
     ).toBe(false);
-    const consumer = `owner-erasure-restore:${suffix}`;
-    await initializeRelayCheckpoint(source.relay, consumer, lineage.dataEpoch);
-    const drain = async (relay: Pool, relayConsumer = consumer) => {
-      for (let batch = 0; batch < 32; batch++) {
-        if (!(await relayMainOutboxOnce(native, relay, relayConsumer, { ownerOutbox: custody })))
-          return;
-      }
-      throw new Error('fixture relay handoff exceeded its bound');
-    };
     let beforeCutMembershipProof: MembershipCompletionProof | undefined;
     if (options.beforeCutApiSeed) {
       await provisionFixtureAuthor(env, actor);
