@@ -29,7 +29,9 @@ test('IAM07: private media download is admitted, bounded, and drained by strong 
     const downloadPath = `/v1/media/assets/${asset.asset}/bytes?target=${encodeURIComponent(work.work)}`
       + `&actingSubject=${encodeURIComponent(owner.actor)}`;
     const denied = await h.call('GET', downloadPath, { token: outsider.token });
-    expect(denied.status).toBe(403);
+    expect(denied.status).toBe(404);
+    expect((await h.accessPool.query<{ count: number }>(`SELECT count(*)::int AS count
+      FROM access.download_read_lease WHERE asset_id = $1`, [asset.asset])).rows[0]?.count).toBe(0);
 
     const [first, second] = await Promise.all([
       h.call('GET', downloadPath, { token: owner.token }),
