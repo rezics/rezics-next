@@ -247,9 +247,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/realm-admin-api.test.ts',
       'Realm roles: exact impact matches enforced grants; retries, stale and concurrent changes stay atomic',
       'Creates a Realm role, assigns and removes a team member through Main and checks enforced grants, stale impact and concurrent edits.'),
-    browser: browser('apps/web/tests/realm-community.e2e.ts',
-      'a manager creates a role, assigns it to a member, and sees the public team after reload',
-      'Creates and assigns a moderator role in Manage, then reloads both the member roster and the opted-in public Realm team.'),
+    browser: missing('gap'),
   },
   {
     kind: 'realm',
@@ -281,9 +279,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
       'complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history',
       'Reads Realm Best and Top through Main at 100, 1000 and 10000 real threads and checks ordering, disclosure and bounded hydration.'),
-    browser: browser('apps/web/tests/realm-community.e2e.ts',
-      'Best, Top and New reorder every Realm discussion after a reader votes',
-      'Seeds three threads through Main, votes in the product, and checks complete Best, New and Top orders.'),
+    browser: missing('gap'),
   },
   {
     kind: 'realm',

@@ -349,8 +349,12 @@ async function visibleThreadTitles(page: Page): Promise<string[]> {
 }
 
 async function chooseSort(page: Page, current: 'Best' | 'New' | 'Top', next: 'Best' | 'New' | 'Top') {
-  await page.getByRole('button', { name: `Sort: ${current}`, exact: true }).click();
-  await page.getByRole('menuitemradio', { name: new RegExp(`^${next}\\b`) }).click();
+  const trigger = page.getByRole('button', { name: `Sort: ${current}`, exact: true });
+  await waitForReactHandler(trigger);
+  await trigger.click();
+  const choice = page.getByRole('menuitemradio', { name: new RegExp(`^${next}\\b`) });
+  await waitForReactHandler(choice);
+  await choice.click();
   await expect(page.getByRole('button', { name: `Sort: ${next}`, exact: true })).toBeVisible();
 }
 
@@ -385,7 +389,9 @@ test('a manager creates a role, assigns it to a member, and sees the public team
 
   await page.goto(localizedPath(manageHref(realm.id, 'roles'), 'en'));
   await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'New role', exact: true }).click();
+  const newRole = page.getByRole('button', { name: 'New role', exact: true });
+  await waitForReactHandler(newRole);
+  await newRole.click();
   const roleDialog = page.getByRole('dialog');
   await expect(roleDialog.getByRole('heading', { name: 'New role', exact: true })).toBeVisible();
   await roleDialog.getByRole('textbox', { name: 'Role name' }).fill(roleName);
