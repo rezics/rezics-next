@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   readdirSync,
+  rmSync,
 } from 'node:fs';
 import { isAbsolute, join, relative, resolve, win32 } from 'node:path';
 import { Pool } from 'pg';
@@ -155,6 +156,392 @@ export type ImportedCurrentRelay = Readonly<{
   }>;
   close: () => Promise<void>;
 }>;
+
+export type IsolationMount = Readonly<{
+  type: string;
+  name?: string;
+  source: string;
+  destination: string;
+}>;
+
+export type IsolationContainer = Readonly<{
+  id: string;
+  name: string;
+  state: string;
+  project: string;
+  service: string;
+  mounts: readonly IsolationMount[];
+  networkIds: readonly string[];
+}>;
+
+export type IsolationNetwork = Readonly<{
+  id: string;
+  name: string;
+  containerIds: readonly string[];
+}>;
+
+export type IndependentRestoreSourceInventory = Readonly<{
+  project: string;
+  containers: readonly Pick<IsolationContainer, 'id' | 'name' | 'state'>[];
+  volumes: readonly string[];
+  networks: readonly Pick<IsolationNetwork, 'id' | 'name'>[];
+  stackDirectory: string;
+  objectDirectory: string;
+  bindMounts: readonly Readonly<{ source: string; destination: string }>[];
+}>;
+
+export interface IsolationInspector {
+  projectContainers(project: string): readonly IsolationContainer[];
+  projectVolumes(project: string): readonly string[];
+  projectNetworks(project: string): readonly IsolationNetwork[];
+  containerPresent(idOrName: string): boolean;
+  volumePresent(name: string): boolean;
+  networkPresent(idOrName: string): boolean;
+}
+
+export interface IndependentRestoreStackOwner {
+  compose(args: string[]): unknown;
+}
+
+function exactUnique(values: readonly string[], label: string): string[] {
+  const result = [...new Set(values)].sort();
+  if (result.length !== values.length || result.some((value) => value.length === 0)) {
+    throw new Error(`${label} inventory is incomplete or duplicated`);
+  }
+  return result;
+}
+
+function pathContains(parent: string, candidate: string): boolean {
+  const back = relative(resolve(parent), resolve(candidate));
+  return back === '' ||
+    (back !== '..' && !back.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(back));
+}
+
+function assertPrivateSourceDirectory(path: string, root: string, label: string): string {
+  const full = resolve(path);
+  const rootStats = lstatSync(root);
+  const stats = lstatSync(full);
+  if (
+    rootStats.isSymbolicLink() ||
+    !rootStats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    !stats.isDirectory() ||
+    !pathContains(root, full) ||
+    full === resolve(root)
+  ) {
+    throw new Error(`${label} must be a real directory under the source stack`);
+  }
+  const realRoot = realpathSync(root);
+  const realFull = realpathSync(full);
+  if (!pathContains(realRoot, realFull) || realFull === realRoot) {
+    throw new Error(`${label} resolves outside the source stack`);
+  }
+  return realFull;
+}
+
+/** Capture the QA harness's exact source resources before its existing stack owner disposes them. */
+export function recordIndependentRestoreSourceInventory(
+  project: string,
+  stackDirectory: string,
+  objectDirectory: string,
+  inspector: IsolationInspector,
+): IndependentRestoreSourceInventory {
+  if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(project)) {
+    throw new Error('Source inventory requires an isolated QA project');
+  }
+  const expectedDirectory = join(repositoryRoot, '.temp', 'stack', project);
+  if (resolve(stackDirectory) !== resolve(expectedDirectory)) {
+    throw new Error('Source inventory directory does not belong to its QA project');
+  }
+  const sourceDirectory = assertPrivateSourceDirectory(stackDirectory, join(repositoryRoot, '.temp', 'stack'), 'Source stack');
+  const sourceObjects = assertPrivateSourceDirectory(objectDirectory, sourceDirectory, 'Source object store');
+  const containers = inspector.projectContainers(project);
+  if (
+    containers.length === 0 ||
+    containers.some((container) => container.project !== project || !container.id || !container.name || !container.state)
+  ) {
+    throw new Error('Source container inventory is empty or belongs to another project');
+  }
+  exactUnique(containers.map((container) => container.id), 'Source container ID');
+  exactUnique(containers.map((container) => container.name), 'Source container name');
+  for (const service of ['postgres', 'fuseki', 'rustfs']) {
+    if (!containers.some((container) => container.service === service)) {
+      throw new Error(`Source ${service} container is missing from the inventory`);
+    }
+  }
+  const volumes = exactUnique(inspector.projectVolumes(project), 'Source volume');
+  const requiredVolumes = ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => `${project}_${kind}`);
+  if (requiredVolumes.some((name) => !volumes.includes(name)) || volumes.some((name) => !name.startsWith(`${project}_`))) {
+    throw new Error('Source volume inventory is incomplete or belongs to another project');
+  }
+  const networks = inspector.projectNetworks(project);
+  exactUnique(networks.map((network) => network.id), 'Source network ID');
+  exactUnique(networks.map((network) => network.name), 'Source network name');
+  if (!networks.some((network) => network.name === `${project}_default`)) {
+    throw new Error('Source project network is missing from the inventory');
+  }
+  const bindMounts = containers.flatMap((container) => container.mounts
+    .filter((mount) => mount.type === 'bind')
+    .map((mount) => ({ source: resolve(mount.source), destination: mount.destination })))
+    .sort((left, right) => left.source.localeCompare(right.source) || left.destination.localeCompare(right.destination));
+  return {
+    project,
+    containers: containers.map(({ id, name, state }) => ({ id, name, state }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    volumes,
+    networks: networks.map(({ id, name }) => ({ id, name }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    stackDirectory: sourceDirectory,
+    objectDirectory: sourceObjects,
+    bindMounts,
+  };
+}
+
+function assertIndependentRestoreSourceInventoryCurrent(
+  inventory: IndependentRestoreSourceInventory,
+  inspector: IsolationInspector,
+): void {
+  const containers = inspector.projectContainers(inventory.project)
+    .map(({ id, name }) => `${id}\0${name}`).sort();
+  const recordedContainers = inventory.containers
+    .map(({ id, name }) => `${id}\0${name}`).sort();
+  const volumes = exactUnique(inspector.projectVolumes(inventory.project), 'Current source volume');
+  const networks = inspector.projectNetworks(inventory.project)
+    .map(({ id, name }) => `${id}\0${name}`).sort();
+  const recordedNetworks = inventory.networks.map(({ id, name }) => `${id}\0${name}`).sort();
+  if (
+    JSON.stringify(containers) !== JSON.stringify(recordedContainers) ||
+    JSON.stringify(volumes) !== JSON.stringify(inventory.volumes) ||
+    JSON.stringify(networks) !== JSON.stringify(recordedNetworks) ||
+    !existsSync(inventory.stackDirectory) ||
+    !existsSync(inventory.objectDirectory)
+  ) {
+    throw new Error('Source inventory changed before disposal');
+  }
+}
+
+function assertIndependentRestoreSourceDockerAbsent(
+  inventory: IndependentRestoreSourceInventory,
+  inspector: IsolationInspector,
+): void {
+  for (const container of inventory.containers) {
+    if (inspector.containerPresent(container.id) || inspector.containerPresent(container.name)) {
+      throw new Error(`Recorded source container remains: ${container.name}`);
+    }
+  }
+  for (const volume of inventory.volumes) {
+    if (inspector.volumePresent(volume)) throw new Error(`Recorded source volume remains: ${volume}`);
+  }
+  for (const network of inventory.networks) {
+    if (inspector.networkPresent(network.id) || inspector.networkPresent(network.name)) {
+      throw new Error(`Recorded source network remains: ${network.name}`);
+    }
+  }
+  if (
+    inspector.projectContainers(inventory.project).length > 0 ||
+    inspector.projectVolumes(inventory.project).length > 0 ||
+    inspector.projectNetworks(inventory.project).length > 0
+  ) {
+    throw new Error('Unrecorded source project resources remain');
+  }
+}
+
+/** Fail while any recorded source identity or source-local path still exists. */
+export function assertIndependentRestoreSourceAbsent(
+  inventory: IndependentRestoreSourceInventory,
+  inspector: IsolationInspector,
+): void {
+  assertIndependentRestoreSourceDockerAbsent(inventory, inspector);
+  for (const path of [inventory.objectDirectory, inventory.stackDirectory]) {
+    if (existsSync(path)) throw new Error(`Recorded source directory remains: ${path}`);
+  }
+}
+
+/** Use the source stack's Compose owner, then require complete removal before target creation. */
+export function disposeIndependentRestoreSource(
+  inventory: IndependentRestoreSourceInventory,
+  owner: IndependentRestoreStackOwner,
+  inspector: IsolationInspector,
+): void {
+  assertIndependentRestoreSourceInventoryCurrent(inventory, inspector);
+  owner.compose(['down', '--volumes', '--remove-orphans']);
+  assertIndependentRestoreSourceDockerAbsent(inventory, inspector);
+  for (const path of [inventory.objectDirectory, inventory.stackDirectory]) {
+    if (existsSync(path)) rmSync(path, { recursive: true });
+  }
+  assertIndependentRestoreSourceAbsent(inventory, inspector);
+}
+
+function isolationDockerOutput(args: string[], environment: NodeJS.ProcessEnv): string {
+  try {
+    return execFileSync('docker', args, {
+      cwd: repositoryRoot,
+      env: environment,
+      encoding: 'utf8',
+      timeout: 60_000,
+      maxBuffer: 16 * 1024 * 1024,
+    }).trim();
+  } catch (error) {
+    throw new Error(`Docker isolation inspection failed (${args[0] ?? 'command'})`, { cause: error });
+  }
+}
+
+/** Read only Compose project identities needed by the independent restore isolation proof. */
+export function createIsolationInspector(environment: NodeJS.ProcessEnv = process.env): IsolationInspector {
+  const inspectContainer = (id: string): IsolationContainer => {
+    const raw = JSON.parse(isolationDockerOutput(['inspect', id], environment))[0] as {
+      Id: string;
+      Name: string;
+      State: { Status: string };
+      Config: { Labels: Record<string, string> };
+      Mounts: { Type: string; Name?: string; Source: string; Destination: string }[];
+      NetworkSettings: { Networks: Record<string, { NetworkID: string }> };
+    } | undefined;
+    if (!raw) throw new Error('Docker returned no container identity');
+    return {
+      id: raw.Id,
+      name: raw.Name.startsWith('/') ? raw.Name.slice(1) : raw.Name,
+      state: raw.State.Status,
+      project: raw.Config.Labels['com.docker.compose.project'] ?? '',
+      service: raw.Config.Labels['com.docker.compose.service'] ?? '',
+      mounts: raw.Mounts.map((mount) => ({
+        type: mount.Type,
+        ...(mount.Name ? { name: mount.Name } : {}),
+        source: mount.Source,
+        destination: mount.Destination,
+      })),
+      networkIds: Object.values(raw.NetworkSettings.Networks ?? {}).map((network) => network.NetworkID),
+    };
+  };
+  const projectContainers = (project: string) => {
+    const ids = isolationDockerOutput([
+      'ps', '--all', '--quiet', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
+    ], environment).split(/\r?\n/).filter(Boolean);
+    return ids.map(inspectContainer);
+  };
+  const projectVolumes = (project: string) => isolationDockerOutput([
+    'volume', 'ls', '--quiet', '--filter', `label=com.docker.compose.project=${project}`,
+  ], environment).split(/\r?\n/).filter(Boolean);
+  const projectNetworks = (project: string): IsolationNetwork[] => {
+    const ids = isolationDockerOutput([
+      'network', 'ls', '--quiet', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
+    ], environment).split(/\r?\n/).filter(Boolean);
+    if (ids.length === 0) return [];
+    const raw = JSON.parse(isolationDockerOutput(['network', 'inspect', ...ids], environment)) as {
+      Id: string;
+      Name: string;
+      Containers?: Record<string, unknown> | null;
+    }[];
+    return raw.map((network) => ({
+      id: network.Id,
+      name: network.Name,
+      containerIds: Object.keys(network.Containers ?? {}),
+    }));
+  };
+  const containerPresent = (idOrName: string) => {
+    const filter = /^[0-9a-f]{12,64}$/.test(idOrName)
+      ? `id=${idOrName}`
+      : `name=^/${idOrName}$`;
+    return isolationDockerOutput(['ps', '--all', '--quiet', '--no-trunc', '--filter', filter], environment) !== '';
+  };
+  const volumePresent = (name: string) => isolationDockerOutput([
+    'volume', 'ls', '--format', '{{.Name}}', '--filter', `name=${name}`,
+  ], environment).split(/\r?\n/).some((candidate) => candidate === name);
+  const networkPresent = (idOrName: string) => {
+    const filter = /^[0-9a-f]{12,64}$/.test(idOrName)
+      ? `id=${idOrName}`
+      : `name=${idOrName}`;
+    return isolationDockerOutput(['network', 'ls', '--no-trunc', '--format', '{{.ID}}\t{{.Name}}', '--filter', filter], environment)
+      .split(/\r?\n/).some((line) => line.split('\t').some((candidate) => candidate === idOrName));
+  };
+  return { projectContainers, projectVolumes, projectNetworks, containerPresent, volumePresent, networkPresent };
+}
+
+/** Assert that the target storage containers use new volumes and an isolated project network. */
+export function assertIndependentRestoreTargetIdentity(
+  targetProject: string,
+  source: IndependentRestoreSourceInventory,
+  containers: readonly IsolationContainer[],
+  network: IsolationNetwork,
+): void {
+  if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(targetProject)) {
+    throw new Error('Target inspection requires an isolated QA project');
+  }
+  const services = new Map(containers.map((container) => [container.service, container]));
+  if (
+    containers.length !== 3 ||
+    services.size !== 3 ||
+    containers.some((container) => container.project !== targetProject) ||
+    ['postgres', 'fuseki', 'rustfs'].some((service) => !services.has(service))
+  ) {
+    throw new Error('Target storage container inventory is incomplete or mixed with another project');
+  }
+  const targetContainers = [...services.values()];
+  const sourceVolumes = new Set(source.volumes);
+  const sourceBinds = source.bindMounts;
+  for (const [service, kind, destination] of [
+    ['postgres', 'postgres_data', '/var/lib/postgresql'],
+    ['fuseki', 'fuseki_data', '/fuseki/databases'],
+    ['rustfs', 'rustfs_data', '/data'],
+  ] as const) {
+    const container = services.get(service)!;
+    for (const mount of container.mounts) {
+      if (mount.type === 'volume' && mount.name && sourceVolumes.has(mount.name)) {
+        throw new Error(`Target ${service} aliases recorded source volume ${mount.name}`);
+      }
+      if (mount.type === 'bind') {
+        const aliasesRecordedBind = sourceBinds.some((sourceBind) => {
+          const isSharedBootstrapBind =
+            resolve(sourceBind.source) === resolve(mount.source) &&
+            sourceBind.destination === mount.destination &&
+            service === 'postgres' &&
+            mount.destination === '/docker-entrypoint-initdb.d/00-owners.sh';
+          return resolve(sourceBind.source) === resolve(mount.source) && !isSharedBootstrapBind;
+        });
+        if (pathContains(source.stackDirectory, mount.source) || aliasesRecordedBind) {
+          throw new Error(`Target ${service} aliases a source bind path`);
+        }
+      }
+    }
+    const expectedName = `${targetProject}_${kind}`;
+    if (!container.mounts.some((mount) =>
+      mount.type === 'volume' && mount.name === expectedName && mount.destination === destination)) {
+      throw new Error(`Target ${service} does not mount its expected new volume`);
+    }
+    if (!container.networkIds.includes(network.id)) {
+      throw new Error(`Target ${service} is outside its isolated project network`);
+    }
+  }
+  if (network.name !== `${targetProject}_default`) {
+    throw new Error('Target project network identity is invalid');
+  }
+  if (source.networks.some((sourceNetwork) =>
+    sourceNetwork.id === network.id || sourceNetwork.name === network.name)) {
+    throw new Error('Target project reuses a recorded source network');
+  }
+  if (source.containers.some((container) => network.containerIds.includes(container.id))) {
+    throw new Error('Target project network includes a recorded source peer');
+  }
+  if (targetContainers.some((container) => !network.containerIds.includes(container.id))) {
+    throw new Error('Target project network omits a storage container');
+  }
+}
+
+/** Inspect the three storage containers and one local Compose network after restore. */
+export function inspectIndependentRestoreTarget(
+  targetProject: string,
+  source: IndependentRestoreSourceInventory,
+  inspector: IsolationInspector,
+): void {
+  if (!/^rezics-qa-[a-z0-9][a-z0-9-]{0,30}$/.test(targetProject)) {
+    throw new Error('Target inspection requires an isolated QA project');
+  }
+  const containers = inspector.projectContainers(targetProject);
+  const networks = inspector.projectNetworks(targetProject);
+  const network = networks.find((candidate) => candidate.name === `${targetProject}_default`);
+  if (!network) throw new Error('Target project network is unavailable for local inspection');
+  assertIndependentRestoreTargetIdentity(targetProject, source, containers, network);
+}
 
 function parseExpectations(value: unknown): IndependentRestoreExpectations {
   const data = record(value, 'Expectations');
