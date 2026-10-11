@@ -1,7 +1,7 @@
 import type { WriteRound } from '../api/command.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { settle } from '../manage/read.ts';
-import { problemCode, type MainClient } from '../manage/types.ts';
+import { problemCode, type Loaded, type MainClient } from '../manage/types.ts';
 import { isWideText } from '../search/suggest.ts';
 import { normalizePhrase, PHRASE } from '../search/state.ts';
 import {
@@ -249,7 +249,7 @@ export async function loadZoneNavigation(
   main: MainClient,
   zoneId: string,
   actingSubject: string,
-): Promise<{ ok: true; data: NavigationSnapshot } | { ok: false; failure: string }> {
+): Promise<Loaded<NavigationSnapshot>> {
   const pages: NonNullable<ReturnType<typeof zoneMountPage>>[] = [];
   let after: string | undefined;
   for (let page = 0; page < NAV_PAGE_CAP; page += 1) {

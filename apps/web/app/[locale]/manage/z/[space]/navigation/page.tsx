@@ -9,7 +9,6 @@ import { loadZoneAuthoring } from '../../../../../../features/zone-editor/read.t
 import { zoneNavigationPath } from '../../../../../../features/zone-editor/routes.ts';
 import { ZoneAuthoringFailure } from '../../../../../../features/zone-editor/states.tsx';
 import { requestLocale } from '../../../../../../i18n/server.ts';
-import type { AuthoringFailure } from '../../../../../../features/zone-editor/model.ts';
 import type { EditorState } from '../../../../../../features/zone-editor/model.ts';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,7 +24,7 @@ export default async function ZoneNavigationPage({ params }: { params: Promise<{
   if (loaded.kind === 'missing') notFound();
   if (loaded.kind === 'failure') return <ZoneAuthoringFailure failure={loaded.failure} copy={copy} />;
   const read = await loadZoneNavigation(main, loaded.model.zoneId, actingSubject);
-  if (!read.ok) return <ZoneAuthoringFailure failure={authoringFailure(read.failure)} copy={copy} />;
+  if (!read.ok) return <ZoneAuthoringFailure failure={read.failure} copy={copy} />;
   const { links, head, navigation, complete, zoneHead } = read.data;
   const initial: NavigationState = {
     links, saved: links.map(link => ({ ...link })), head, navigation, complete, notice: { kind: 'idle' },
@@ -39,12 +38,4 @@ export default async function ZoneNavigationPage({ params }: { params: Promise<{
   return <ZoneNavigationEditor zoneId={model.zoneId} zoneIri={model.zoneIri} actingSubject={actingSubject} locale={locale}
     copy={copy} initial={initial} home={home} previewHref={previewPath} siteHref={sitePath}
     signInHref={signInHref} />;
-}
-
-function authoringFailure(failure: string): AuthoringFailure {
-  if (failure === 'sign-in' || failure === 'denied' || failure === 'unavailable' || failure === 'invalid' || failure === 'conflict') {
-    return failure;
-  }
-  if (failure === 'missing') return 'denied';
-  return 'unavailable';
 }

@@ -74,6 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: '非公開',
   pathInvalid: '小文字、数字、ハイフンだけの短いパスにしてください。',
   duplicatePath: 'そのパスはすでにリンクです。',
+  navIncomplete: 'すべてのリンクがまだ読み込まれていません。一覧が揃うまで保存はできません。',
+  pathEditLimited: '保存済みリンクのパスは、ここではまだ変更できません。このパスのままにするか、リンクを削除して追加し直してください。',
   // Machine-drafted; needs native review.
   sectionRealm: 'コミュニティ',
   realmTitle: 'コミュニティ',

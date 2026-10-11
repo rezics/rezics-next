@@ -74,6 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: '不公开',
   pathInvalid: '请使用由小写字母、数字和连字符组成的短路径。',
   duplicatePath: '这个路径已经是一个链接。',
+  navIncomplete: '尚未加载全部链接。完整列表就绪前无法保存。',
+  pathEditLimited: '已保存链接的路径暂时无法在此更改。请保留当前路径，或移除该链接后重新添加。',
   // Machine-drafted; needs native review.
   sectionRealm: '社区',
   realmTitle: '社区',
