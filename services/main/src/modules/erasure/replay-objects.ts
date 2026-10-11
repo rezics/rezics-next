@@ -137,7 +137,10 @@ export async function replayObjectErasure(store: ObjectRecoveryStore, ref: strin
   let absent: boolean;
   try { absent = await addressAbsent(store, address); }
   catch { return 'conflict'; }
-  if (absent) return 'erased';
+  if (absent) {
+    evictVerifiedImmutableObject(address.digest);
+    return 'erased';
+  }
   if (!replay) return 'conflict';
   return deleteObjectAddress(store, address);
 }
@@ -152,7 +155,10 @@ export async function applyLiveObjectErasure(store: ObjectRecoveryStore, ref: st
   let absent: boolean;
   try { absent = await addressAbsent(store, address); }
   catch { return 'conflict'; }
-  if (absent) return 'erased';
+  if (absent) {
+    evictVerifiedImmutableObject(address.digest);
+    return 'erased';
+  }
   if (!replay) return 'conflict';
   return deleteObjectAddress(store, address);
 }

@@ -1,17 +1,22 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ObjectIntegrityError, ObjectNotFound, ObjectUnavailable, type ImmutableObjects }
+import { clearVerifiedImmutableObjectCache, evictVerifiedImmutableObject,
+  ObjectIntegrityError, ObjectNotFound, ObjectUnavailable, S3ImmutableObjects, type ImmutableObjects }
   from '../src/infrastructure/immutable-objects.ts';
 import { applyLiveObjectErasure, ObjectErasureConflict, objectErasureAbsent,
   replayObjectErasure } from '../src/modules/erasure/replay-objects.ts';
 import type { ObjectRecoveryStore } from '../src/modules/owner/object-coverage.ts';
 
 const directories: string[] = [];
+const servers: ReturnType<typeof Bun.serve>[] = [];
 const assetId = '019f0000-0000-7000-8000-000000000011';
 const uploadId = '019f0000-0000-7000-8000-000000000012';
 
-afterEach(() => {
+beforeEach(() => clearVerifiedImmutableObjectCache());
+afterEach(async () => {
+  clearVerifiedImmutableObjectCache();
+  await Promise.all(servers.splice(0).map(server => server.stop(true)));
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
@@ -24,6 +29,37 @@ function objectDirectory(): string {
 
 function digest(bytes: Uint8Array): string {
   return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
+}
+
+function cachedS3(options: { holdFirstGet?: boolean } = {}) {
+  const data = new Map<string, Uint8Array>();
+  let gets = 0;
+  let firstGetStarted!: () => void;
+  let releaseFirstGet!: () => void;
+  const firstGet = new Promise<void>(resolve => { firstGetStarted = resolve; });
+  const firstGetGate = new Promise<void>(resolve => { releaseFirstGet = resolve; });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    const pathname = decodeURIComponent(new URL(request.url).pathname);
+    const key = pathname.slice('/erasure-test/'.length);
+    if (!pathname.startsWith('/erasure-test/')) return new Response(null, { status: 404 });
+    if (request.method === 'HEAD') return new Response(null, { status: data.has(key) ? 200 : 404 });
+    if (request.method === 'GET') {
+      gets++;
+      const stored = data.get(key);
+      if (!stored) return new Response(null, { status: 404 });
+      const bytes = new Uint8Array(stored);
+      if (options.holdFirstGet && gets === 1) {
+        firstGetStarted();
+        await firstGetGate;
+      }
+      return new Response(bytes, { status: 200 });
+    }
+    return new Response(null, { status: 405 });
+  } });
+  servers.push(server);
+  const objects = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'erasure-test', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret', prefix: 'work/' });
+  return { objects, data, firstGet, releaseFirstGet, get gets() { return gets; } };
 }
 
 class MemoryObjects implements ImmutableObjects {
@@ -107,6 +143,40 @@ test('a failure in one backend leaves the target conflicted and a retry finishes
   expect(await applyLiveObjectErasure(store, `sha256:${value}`, emptyLiveProtection, true)).toBe('replayed');
   expect(remote.data.has(value)).toBe(false);
   expect(remote.deletes).toEqual([value, value]);
+});
+
+test('an already absent local and remote target evicts cached payload bytes', async () => {
+  const directory = objectDirectory();
+  const remote = cachedS3();
+  const bytes = Buffer.from('cached payload after physical removal');
+  const value = digest(bytes);
+  remote.data.set(`work/sha256/${value}`, bytes);
+  expect(Buffer.from(await remote.objects.get(value))).toEqual(bytes);
+
+  remote.data.delete(`work/sha256/${value}`);
+  expect(await applyLiveObjectErasure({ directory, workObjects: remote.objects }, `sha256:${value}`,
+    emptyLiveProtection, true)).toBe('erased');
+  await expect(remote.objects.get(value)).rejects.toBeInstanceOf(ObjectNotFound);
+});
+
+test('an in-flight remote read racing an already absent erasure cannot refill the cache', async () => {
+  const directory = objectDirectory();
+  const remote = cachedS3({ holdFirstGet: true });
+  const bytes = Buffer.from('late private payload');
+  const value = digest(bytes);
+  remote.data.set(`work/sha256/${value}`, bytes);
+  evictVerifiedImmutableObject(value);
+
+  const lateRead = remote.objects.get(value);
+  await remote.firstGet;
+  remote.data.delete(`work/sha256/${value}`);
+  expect(await applyLiveObjectErasure({ directory, workObjects: remote.objects }, `sha256:${value}`,
+    emptyLiveProtection, true)).toBe('erased');
+  remote.releaseFirstGet();
+
+  await expect(lateRead).rejects.toBeInstanceOf(ObjectUnavailable);
+  await expect(remote.objects.get(value)).rejects.toBeInstanceOf(ObjectNotFound);
+  expect(remote.gets).toBe(2);
 });
 
 test('remote probe outages are not treated as object absence', async () => {
