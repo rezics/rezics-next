@@ -1,5 +1,6 @@
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { grantRecordedPlatformUse } from './platform-grant.ts';
