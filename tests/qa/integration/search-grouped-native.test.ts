@@ -72,6 +72,13 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
     const semantic = async (state: object) => f.json<{ component: string; revision: string }>(
       await f.call('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1',
         actingSubject: f.actorA, expectedHead: null, state }), 201);
+    const propertyDefinition = async () => {
+      const definition = await semantic({ component: 'definition', kind: 'property', lifecycle: 'active',
+        successor: null, roles: [] });
+      await f.grant(`semantic:read:${definition.component}`, 'semantic.read');
+      await f.grant(`semantic:read:${definition.component}`, 'semantic.read', f.actorB, f.principalB);
+      return definition;
+    };
     const resource = async (type = 'https://schema.org/Person') => {
       const result = await semantic({ component: 'resource', types: [type], properties: [] });
       await f.grant(`semantic:read:${result.component}`, 'semantic.read');
@@ -104,10 +111,12 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
     const occurrence = await makeOccurrence(lead, scope);
     const overlappingOccurrence = await makeOccurrence(lead, scope);
     await makeOccurrence(supporting, scope);
-    const hair = 'https://rezics.com/vocab/hairColor';
-    const gender = 'https://rezics.com/vocab/gender';
-    const hairRelation = 'https://rezics.com/definition/hair-color-v1';
-    const genderRelation = 'https://rezics.com/definition/gender-v1';
+    const hairProperty = await propertyDefinition();
+    const genderProperty = await propertyDefinition();
+    const hair = hairProperty.component;
+    const gender = genderProperty.component;
+    const hairRelation = hairProperty.revision;
+    const genderRelation = genderProperty.revision;
     const hairDefinition = nativeId(), genderDefinition = nativeId(), blueDefinition = nativeId();
     const greenDefinition = nativeId();
     const context = await f.json<{ context: string; semanticRevision: string }>(await f.call('POST',
@@ -174,7 +183,10 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
       if (property === 'query') return async (...args: Parameters<typeof nativeFuseki.query>) => {
         if (foregroundCounted() && args[0].includes('VALUES ?statement {')) statementBatches++;
         if (foregroundCounted() && args[0].includes('VALUES ?resource') && args[0].includes('rv:semanticHead')) disclosureBatches++;
-        if (foregroundCounted() && args[0].includes('VALUES (?statement ?wantedGlobalSlot')) acceptanceBatches++;
+        if (foregroundCounted()
+          && args[0].includes('VALUES (?statement ?wantedKind ?wantedGlobalSlot ?wantedLocalSlot)')) {
+          acceptanceBatches++;
+        }
         if (foregroundCounted() && args[0].includes('SELECT ?epoch ?sequence ?context ?policy WHERE')) acceptanceScopes++;
         return target.query(...args);
       };
@@ -190,9 +202,9 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
     expect(disclosureBatches).toBe(1);
     expect(acceptanceBatches).toBe(1);
     expect(acceptanceScopes).toBe(1);
-    // Three native health requests also consume the route budget: 17 + 3 = 20,
-    // independent of the 11 references and 12 distinct Statements on this page.
-    expect(f.queries()).toBeLessThanOrEqual(17);
+    // Two explicit Context criteria each require a pinned-hop read; the remaining
+    // bound stays independent of the 11 references and 12 distinct Statements.
+    expect(f.queries()).toBeLessThanOrEqual(19);
     const first = await f.json<{ total: number; groupGeneration: string;
       results: Array<{ work: string; participant: string; occurrence: string; score: number;
         facts: Array<{ supportingStatements: string[] }> }>; facets: Array<{ mode: string }> }>(
@@ -534,6 +546,13 @@ test('SEARCH01/SEARCH04: one Chinese text-rating-Statement join keeps overlappin
     const semantic = async (state: object) => f.json<{ component: string; revision: string }>(
       await f.call('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1',
         actingSubject: f.actorA, expectedHead: null, state }), 201);
+    const propertyDefinition = async () => {
+      const definition = await semantic({ component: 'definition', kind: 'property', lifecycle: 'active',
+        successor: null, roles: [] });
+      await f.grant(`semantic:read:${definition.component}`, 'semantic.read');
+      await f.grant(`semantic:read:${definition.component}`, 'semantic.read', f.actorB, f.principalB);
+      return definition;
+    };
     const resource = async () => {
       const result = await semantic({ component: 'resource', types: ['https://schema.org/Person'],
         properties: [] });
@@ -560,10 +579,12 @@ test('SEARCH01/SEARCH04: one Chinese text-rating-Statement join keeps overlappin
     const firstPath = await occurrence(firstWork.work, firstLead);
     const secondPath = await occurrence(firstWork.work, firstLead);
     const thirdPath = await occurrence(secondWork.work, secondLead);
-    const hair = 'https://rezics.com/vocab/hairColor';
-    const gender = 'https://rezics.com/vocab/gender';
-    const hairRelation = 'https://rezics.com/definition/hair-color-v1';
-    const genderRelation = 'https://rezics.com/definition/gender-v1';
+    const hairProperty = await propertyDefinition();
+    const genderProperty = await propertyDefinition();
+    const hair = hairProperty.component;
+    const gender = genderProperty.component;
+    const hairRelation = hairProperty.revision;
+    const genderRelation = genderProperty.revision;
     const sharedDefinition = nativeId(), separateDefinition = nativeId(), femaleDefinition = nativeId();
     const context = async (hairDefinition: string) => f.json<{
       context: string; semanticRevision: string }>(await f.call('POST', '/v1/contexts', {

@@ -10,11 +10,12 @@ import { AccessAdmissionRegistry, type RegisteredAdmission }
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { classificationContextDigest, createClassificationContext }
   from '../../../services/main/src/modules/classification/context.ts';
-import { classificationPropositionDigest, createClassificationProposition }
+import { CLASSIFICATION_PROPOSITION_PROFILE, classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
+import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
@@ -42,35 +43,36 @@ export async function contextFixture(apps: Record<string, string>) {
   let statementReadFault: 'missing-pin-context' | 'missing-head' | null = null;
   let queries = 0;
   const fuseki = new Proxy(native, { get(target, property) {
-    if (property === 'query') return async (text: string) => {
-      if (!foregroundCounted()) return target.query(text);
+    if (property === 'query') return async (text: string, maxResponseBytes?: number) => {
+      if (!foregroundCounted()) return target.query(text, maxResponseBytes);
       queries++;
       if (localDecisionReadFault && text.includes('SELECT ?epoch ?sequence ?localSlot')) {
         const fault = localDecisionReadFault;
         localDecisionReadFault = null;
         if (fault === 'failed-read') throw new Error('injected local decision read failure');
-        const result = await target.query(text);
+        const result = await target.query(text, maxResponseBytes);
         for (const row of result.results?.bindings ?? []) delete row.localOutcome;
         return result;
       }
-      if (missingContextRevision && text.includes('rv:baseRevision*')) {
-        const missing = missingContextRevision;
+      if (missingContextRevision && text.includes('SELECT ?revision ?base ?depth')
+        && text.includes(`BIND(<${missingContextRevision}> AS ?revision)`)) {
+        const requestedRevision = missingContextRevision;
         missingContextRevision = null;
-        const result = await target.query(text);
-        return { ...result, results: { bindings: (result.results?.bindings ?? [])
-          .filter(row => row.revision?.value !== missing) } };
+        const result = await target.query(text, maxResponseBytes);
+        return { ...result, results: { ...result.results, bindings: (result.results?.bindings ?? [])
+          .filter(row => row.revision?.value !== requestedRevision) } };
       }
       if (statementReadFault && text.includes('SELECT ?epoch ?sequence ?subject ?predicate ?object')) {
         const fault = statementReadFault;
         statementReadFault = null;
-        const result = await target.query(text);
+        const result = await target.query(text, maxResponseBytes);
         for (const row of result.results?.bindings ?? []) {
           if (fault === 'missing-pin-context') delete row.context;
           else delete row.headRevision;
         }
         return result;
       }
-      return target.query(text);
+      return target.query(text, maxResponseBytes);
     };
     if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
       const result = await target.commandWithReceipt(envelope);
@@ -94,6 +96,13 @@ export async function contextFixture(apps: Record<string, string>) {
     account: account.verifier, access, accessPolicy: new AccessPolicyOwner(accessPool),
     contextSelections: selections, judgments: new AccessJudgments(accessPool) };
   const app = createMainApp(fuseki, dependencies);
+  const classificationContexts = new Map<string, {
+    concept: string; senseRevision: string; context: string; semanticRevision: string }>();
+  const classificationStatements = new Map<string, {
+    concept: string; senseRevision: string; statement: string; meaningKey: string }>();
+  const classificationDecisionGrants = new Set<string>();
+  let classificationContextCreateGranted = false;
+  let classificationStatementRecordGranted = false;
 
   const principalA = randomUUID();
   const principalB = randomUUID();
@@ -161,8 +170,69 @@ export async function contextFixture(apps: Record<string, string>) {
       'classification.proposition.define', classificationPropositionDigest(input)), input);
     if (created.outcome !== 'succeeded') throw new Error('Global acceptance scope failed');
   };
+  const decideClassification = async (input: { mainVersion: string; sense: string;
+    senseRevision: string; concept: string; acceptance: { kind: 'global' } | { kind: 'realm'; realm: string };
+    expectedDecisionHead: string | null; outcome: 'accepted' | 'rejected' }) => {
+    let interpretation = classificationContexts.get(input.sense);
+    if (interpretation && (interpretation.concept !== input.concept
+      || interpretation.senseRevision !== input.senseRevision)) {
+      throw new Error('classification sense changed its retained meaning');
+    }
+    if (!interpretation) {
+      if (!classificationContextCreateGranted) {
+        await grant('context:create:root', 'context.create');
+        classificationContextCreateGranted = true;
+      }
+      const created = await json<{ context: string; semanticRevision: string }>(await call('POST',
+        '/v1/contexts', { profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
+          entries: [{ target: input.concept, relation: CLASSIFIED_AS, state: 'defined',
+            definition: input.senseRevision, applicability: [] }], actingSubject: actorA }), 201);
+      interpretation = { concept: input.concept, senseRevision: input.senseRevision,
+        context: created.context, semanticRevision: created.semanticRevision };
+      classificationContexts.set(input.sense, interpretation);
+    }
+
+    const supportKey = `${input.mainVersion}\0${input.sense}`;
+    let support = classificationStatements.get(supportKey);
+    if (support && (support.concept !== input.concept || support.senseRevision !== input.senseRevision)) {
+      throw new Error('classification support changed its retained meaning');
+    }
+    if (!support) {
+      if (!classificationStatementRecordGranted) {
+        await grant(`statement:speak:${actorA}`, 'statement.record');
+        classificationStatementRecordGranted = true;
+      }
+      const written = await json<{ statement: string; meaningKey: string }>(await call('POST', '/v1/statements', {
+        profile: 'statement-v1', speaker: { kind: 'personal' }, subject: input.mainVersion,
+        predicate: CLASSIFIED_AS, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+        value: { kind: 'resource', iri: input.concept }, applicability: [],
+        interpretation: { kind: 'explicit', context: interpretation.context,
+          semanticRevision: interpretation.semanticRevision }, evidence: [], actingSubject: actorA,
+      }), 201);
+      support = { concept: input.concept, senseRevision: input.senseRevision,
+        statement: written.statement, meaningKey: written.meaningKey };
+      classificationStatements.set(supportKey, support);
+    }
+
+    const scope = input.acceptance.kind === 'global' ? 'classification:decide:global'
+      : `classification:decide:${input.acceptance.realm}`;
+    await accessPool.query(`INSERT INTO access.judgment_aggregate
+      (statement, context_key, spoiler_none) VALUES ($1, $2, 8)
+      ON CONFLICT (statement, context_key) DO NOTHING`, [support.statement,
+        input.acceptance.kind === 'global' ? 'global' : input.acceptance.realm]);
+    if (!classificationDecisionGrants.has(scope)) {
+      await grant(scope, 'statement.decide');
+      classificationDecisionGrants.add(scope);
+    }
+    return json<{ decision: string }>(await call('POST', '/v1/statement-decisions', {
+      profile: 'statement-decision-v1',
+      target: { kind: 'qualified-fact', meaningKey: support.meaningKey, support: [support.statement] },
+      acceptance: input.acceptance, expectedDecisionHead: input.expectedDecisionHead,
+      outcome: input.outcome, actingSubject: actorA,
+    }), 201);
+  };
   return { account, access, accessPool, env, app, selections, principalA, principalB, actorA, actorB,
-    admission, grant, revoke,
+    admission, grant, revoke, decideClassification,
     call, json, realm, work, globalAcceptance,
     queries: () => queries, resetQueries: () => { queries = 0; },
     loseNextResponse: (marker: string) => { loseResponse = marker; },

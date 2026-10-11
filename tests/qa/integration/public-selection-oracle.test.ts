@@ -4,14 +4,16 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { createClassificationContext, classificationContextDigest }
   from '../../../services/main/src/modules/classification/context.ts';
-import { setClassificationDecision, classificationDecisionDigest, classificationDecisionScope,
-  type ClassificationDecisionContext } from '../../../services/main/src/modules/classification/decision.ts';
+import type { ClassificationDecisionContext }
+  from '../../../services/main/src/modules/classification/decision.ts';
 import { createClassificationProposition, classificationPropositionDigest }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { activateTextContribution, textContributionDigest }
@@ -30,6 +32,7 @@ import { selectRealmLocal, realmSelectionDigest, StaleRealmSelection }
   from '../../../services/main/src/modules/work/select-realm.ts';
 import { expectedPublicPhraseRows, type SelectedText, type WorkPublication }
   from '../oracles/public-selection.ts';
+import { contextFixture } from './context-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -50,9 +53,14 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     objectDirectory: join(state, 'objects'),
   };
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const judgments = new AccessJudgments(accessPool);
   const app = createMainApp(env.fuseki, { environment: env,
     account: { verify: async () => { throw new Error('no authority request in this query test'); } },
-    access: new AccessAdmissionRegistry(accessPool) });
+    access: new AccessAdmissionRegistry(accessPool), judgments,
+    accessPolicy: new AccessPolicyOwner(accessPool) });
+  const classificationFixture = await contextFixture(Bun.env as Record<string, string>);
+  const classificationObjectDirectory = classificationFixture.env.objectDirectory;
+  classificationFixture.env.objectDirectory = env.objectDirectory;
 
   function admission(scope: string, action: string, requestDigest: string,
     actingSubject = actor): RegisteredAdmission {
@@ -179,7 +187,9 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }));
-    expect(response.status).toBe(200);
+    if (response.status !== 200) {
+      throw new Error(`classified query returned ${response.status}: ${await response.text()}`);
+    }
     const actual = await response.json() as { complete: boolean; total: number;
       results: Array<{ work: string; matchUnit: string;
         classification: { decision: string; source: string } }> };
@@ -199,17 +209,15 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
       decision: string | null }>;
   }
 
-  async function decision(work: WorkPublication, sense: string,
+  async function decision(work: WorkPublication, sense: string, senseRevision: string,
+    concept: string,
     context: ClassificationDecisionContext, outcome: 'accepted' | 'rejected',
     expectedDecisionHead: string | null = null) {
-    const input = { context, work: work.work, mainVersion: work.mainVersion,
-      sense, expectedDecisionHead, outcome, actingSubject: actor };
-    const result = await setClassificationDecision(env,
-      admission(classificationDecisionScope(context), 'classification.decision.set',
-        classificationDecisionDigest(input)), input);
-    if (result.outcome !== 'succeeded' || !result.decision) {
-      throw new Error('Classification decision failed');
-    }
+    const result = await classificationFixture.decideClassification({
+      mainVersion: work.mainVersion, sense, senseRevision, concept,
+      acceptance: context.kind === 'global' ? { kind: 'global' } : { kind: 'realm', realm: context.id },
+      expectedDecisionHead, outcome,
+    });
     return result.decision;
   }
 
@@ -240,12 +248,15 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     const proposition = await createClassificationProposition(env,
       admission('classification:define:global', 'classification.proposition.define',
         classificationPropositionDigest(propositionInput)), propositionInput);
-    if (proposition.outcome !== 'succeeded' || !proposition.definitions?.sense) {
+    if (proposition.outcome !== 'succeeded' || !proposition.definitions?.sense
+      || !proposition.definitions.concept || !proposition.revision) {
       throw new Error('Classification proposition failed');
     }
     const sense = proposition.definitions.sense;
+    const senseRevision = proposition.revision;
+    const concept = proposition.definitions.concept;
     expect(await classified('main', sense)).toEqual([]);
-    const globalA = await decision(workA, sense, { kind: 'global' }, 'accepted');
+    const globalA = await decision(workA, sense, senseRevision, concept, { kind: 'global' }, 'accepted');
     expect(await classified('main', sense)).toMatchObject([{ work: workA.work,
       matchUnit: workA.main!.matchUnit,
       classification: { decision: globalA, source: 'global' } }]);
@@ -255,7 +266,7 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect(await resolution(workA, sense,
       { kind: 'realm-classification', id: realmA })).toMatchObject({
       state: 'accepted', source: 'inherited-global', decision: globalA });
-    const rejectedA = await decision(workA, sense,
+    const rejectedA = await decision(workA, sense, senseRevision, concept,
       { kind: 'realm-classification', id: realmA }, 'rejected');
     expect(await classified('realm', sense, realmA)).toEqual([]);
     expect(await resolution(workA, sense,
@@ -270,7 +281,8 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
       let faultHits = 0;
       faultyFuseki.query = async (sparql, maxResponseBytes) => {
         if (!foregroundCounted()
-          || !sparql.includes('?localApplication ?localDecision ?localOutcome')
+          || (!sparql.includes('?localApplication ?localDecision ?localOutcome')
+            && !sparql.includes('?localFound ?localDecision ?localOutcome'))
           || !sparql.includes(workA.mainVersion)) {
           return genuineQuery(sparql, maxResponseBytes);
         }
@@ -280,11 +292,12 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
         }
         const result = await genuineQuery(sparql, maxResponseBytes);
         const rows = result.results?.bindings;
-        if (!rows?.some(row => row.localApplication?.value)) {
+        if (!rows?.some(row => row.localApplication?.value || row.localFound?.value)) {
           throw new Error('fixture did not expose its real local application');
         }
         return { ...result, results: { bindings: rows.map(row => {
-          if (!row.localApplication || (row.main && row.main.value !== workA.mainVersion)) {
+          if (!(row.localApplication || row.localFound)
+            || (row.main && row.main.value !== workA.mainVersion)) {
             return row;
           }
           const { localDecision: _decision, localOutcome: _outcome, ...incomplete } = row;
@@ -315,7 +328,7 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
       expect(faultHits).toBe(2);
     }
 
-    const localB = await decision(workB, sense,
+    const localB = await decision(workB, sense, senseRevision, concept,
       { kind: 'realm-classification', id: realmA }, 'accepted');
     expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workB.work,
       matchUnit: workB.main!.matchUnit,
@@ -323,7 +336,7 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect(await classified('main', sense)).toMatchObject([{ work: workA.work,
       matchUnit: workA.main!.matchUnit,
       classification: { decision: globalA, source: 'global' } }]);
-    await decision(workB, sense, { kind: 'realm-classification', id: realmA },
+    await decision(workB, sense, senseRevision, concept, { kind: 'realm-classification', id: realmA },
       'rejected', localB);
     expect(await classified('realm', sense, realmA)).toEqual([]);
     expect(await searchTriples(workA.work)).toEqual(originalUnitsA);
@@ -359,7 +372,7 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect((await compare(works, 'realm', realmA, otherAuthor)).map(row => row.work))
       .toEqual([workA.work]);
     expect(await compare(works, 'realm', realmB, otherAuthor)).toEqual([]);
-    const acceptedA = await decision(workA, sense,
+    const acceptedA = await decision(workA, sense, senseRevision, concept,
       { kind: 'realm-classification', id: realmA }, 'accepted', rejectedA);
     expect(await classified('realm', sense, realmA, otherAuthor)).toMatchObject([{
       work: workA.work, matchUnit: adopted.matchUnit,
@@ -434,6 +447,8 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect(await contributorState(replacement.contribution)).toEqual(replacementOwner);
   } finally {
     await accessPool.end();
+    await classificationFixture.close();
     rmSync(state, { recursive: true, force: true });
+    rmSync(classificationObjectDirectory, { recursive: true, force: true });
   }
 }, 120_000);
