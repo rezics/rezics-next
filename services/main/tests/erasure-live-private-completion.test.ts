@@ -309,6 +309,33 @@ test('P4 a foreign Content tombstone refuses journal replay before object deleti
   });
 });
 
+test('P4 pending recovery finishes sealing and inventory after all target flags committed', async () => {
+  await fixture(async f => {
+    const owner = resource(), revision = await f.draft(owner), contribution = f.contribution(owner);
+    const input = f.input(owner, [revision, contribution.id]);
+    const record = f.access.recordGraphOutcome;
+    f.access.recordGraphOutcome = async () => { throw new Error('lost Access seal response'); };
+    await expect(f.call(input)).rejects.toThrow('lost Access seal response');
+    const entry = (await f.pool.query<{ id: string }>('SELECT id FROM relay.erasure')).rows[0]!;
+    const interrupted = await readErasure(f.pool, entry.id);
+    expect(interrupted.targets.every(target => target.completionState === 'completed')).toBe(true);
+    expect(interrupted.stage).toBe('deleting');
+    expect(interrupted.dispositions).toEqual([]);
+    const deletes = f.objects.deletes.length;
+    f.access.recordGraphOutcome = record;
+    expect(await completePendingContentErasures(f.service, f.env, f.access as never))
+      .toEqual({ completed: 1, failed: [], continuation: false });
+    const recovered = await readErasure(f.pool, entry.id);
+    expect(recovered.stage).toBe('reconciling');
+    expect(recovered.erasureEpoch).toBe(interrupted.erasureEpoch);
+    expect(recovered.dispositions.length).toBeGreaterThan(0);
+    expect(f.outcomes).toEqual(['succeeded']);
+    expect(f.objects.deletes).toHaveLength(deletes);
+    expect(await completePendingContentErasures(f.service, f.env, f.access as never))
+      .toEqual({ completed: 0, failed: [], continuation: false });
+  });
+});
+
 test('P4 one pending tick attempts sixteen objects, includes deleting entries and reports continuation', async () => {
   await fixture(async f => {
     const owner = resource(), revision = await f.draft(owner), input = f.input(owner, [revision]);

@@ -247,7 +247,9 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
       AND NOT EXISTS (SELECT 1 FROM content.comment c WHERE c.revision_id = wanted.id
         AND (c.exact IS NOT NULL OR c.prefix IS NOT NULL OR c.suffix IS NOT NULL))
       AND NOT EXISTS (SELECT 1 FROM verification.evidence_item i WHERE i.content_revision_id = wanted.id
-        AND verification.evidence_selector_has_source(i.selector))) AS payload_absent,
+        AND NOT i.source_terminal AND verification.evidence_selector_has_source(i.selector))
+      AND NOT EXISTS (SELECT 1 FROM verification.evidence_item i WHERE i.content_revision_id = wanted.id
+        AND i.source_terminal AND verification.evidence_selector_has_source(i.selector))) AS payload_absent,
     t.erasure_id, t.erasure_epoch::text AS erasure_epoch
     FROM unnest($1::uuid[]) AS wanted(id)
     LEFT JOIN content.revision r ON r.id = wanted.id

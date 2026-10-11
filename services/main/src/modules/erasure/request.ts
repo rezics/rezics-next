@@ -111,7 +111,7 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
       }
       await markErasureSuppressed(service.relay, erasureId);
       // Disclosure is suppressed even while physical objects await retry.
-      await completeLiveTargets(service, graph, journaled, accessClient);
+      return completeLiveTargets(service, graph, journaled, accessClient);
     });
   if (guarded.held) {
     if (journaled.stage !== 'requested') throw new ContentErasureStale('Content erasure is deferred');
@@ -148,6 +148,10 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
   await recordErasureInventory(service.relay, erasureId,
     { owners: hasCustody ? ['content', 'graph', 'access'] : ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
       liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
+  // Target flags can commit before sealing or inventory. Only this last marker
+  // lets the bounded pending worker skip a fully completed live transaction.
+  if (guarded.value) await service.relay.query(`UPDATE relay.erasure SET stage = 'reconciling'
+    WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`, [erasureId]);
 }
 
 /** The Access transaction holds the existing preservation fence. Bounded reads
@@ -202,7 +206,7 @@ function deadlineObjects(objects: ImmutableObjects | undefined, signal: AbortSig
 }
 
 async function completeLiveTargets(service: ErasureService, graph: WorkActivationEnvironment,
-  report: ErasureReport, accessClient: PoolClient): Promise<void> {
+  report: ErasureReport, accessClient: PoolClient): Promise<boolean> {
   const signal = AbortSignal.timeout(10_000);
   const objects: ObjectRecoveryStore = { directory: graph.objectDirectory,
     workObjects: deadlineObjects(graph.workObjects, signal),
@@ -272,12 +276,13 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
   const refreshed = await readErasure(service.relay, report.erasureId);
   const complete = objectTargets.every(target => absent.get(target.ordinal) === true)
     && refreshed.targets.every(target => target.completionState === 'completed');
-  await service.relay.query(`UPDATE relay.erasure SET stage = $2
+  await service.relay.query(`UPDATE relay.erasure SET stage = 'deleting'
     WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`,
-  [report.erasureId, complete ? 'reconciling' : 'deleting']);
+  [report.erasureId]);
   if (!complete && objectTargets.some(target => target.completionState === 'completed' && !absent.get(target.ordinal))) {
     throw new ErasureUnavailable('completed object erasure differs from live storage');
   }
+  return complete;
 }
 function completionEvidence(report: ErasureReport, target: ErasureReport['targets'][number]): string {
   return sha256(canonical({ erasureId: report.erasureId, erasureEpoch: report.erasureEpoch,
@@ -424,9 +429,8 @@ export async function readRequestedErasure(service: ErasureService,
 }
 
 /**
- * Operator reconciler for journaled Content erasures left `requested` by a lost
- * response or crash. It completes them and never cancels journaled intent; an
- * entry that cannot complete stays `requested` and is returned for escalation.
+ * Operator reconciler for unfinished live erasures after a lost response or
+ * crash. Each tick handles one exact retained intent, with one lookahead.
  */
 export async function completePendingContentErasures(service: ErasureService,
   graph: WorkActivationEnvironment, access: ErasureAccess,
@@ -436,7 +440,7 @@ export async function completePendingContentErasures(service: ErasureService,
     id: string; admission_id: string; request_digest: string; authority_epoch: string }>(
     `SELECT id, admission_id, request_digest, authority_epoch::text AS authority_epoch
      FROM relay.erasure WHERE stage IN ('requested', 'fenced', 'inventory_complete', 'deleting', 'reconciling')
-       AND kind = 'revision' AND (stage = 'requested' OR EXISTS (
+       AND kind = 'revision' AND (stage <> 'reconciling' OR EXISTS (
          SELECT 1 FROM relay.erasure_target t WHERE t.erasure_id = relay.erasure.id
            AND t.completion_state IS DISTINCT FROM 'completed'))
      ORDER BY erasure_epoch LIMIT 2`)).rows);
@@ -457,7 +461,8 @@ export async function completePendingContentErasures(service: ErasureService,
       await completeContentErasure(service, graph, access, { ...admitted, state: 'sealed',
         dispatchEligible: false, replayed: true }, row.id);
       const report = await readErasure(service.relay, row.id);
-      if (report.stage === 'blocked' || report.targets.every(target => target.completionState === 'completed')) completed++;
+      if (report.stage === 'blocked' || report.stage === 'reconciling'
+        && report.targets.every(target => target.completionState === 'completed')) completed++;
       else continuation = true;
     } catch (error) {
       if (!(error instanceof Error)) throw error;
