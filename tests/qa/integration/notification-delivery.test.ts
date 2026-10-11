@@ -140,7 +140,7 @@ async function notificationStack(name: string) {
       variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: `https://rezics.com/id/${randomUUID()}`,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
-      provenance: { fixture: 'notification-subject' }, serializedJson: JSON.stringify({ title }) });
+      provenance: { fixture: 'notification-subject' }, serializedJson: JSON.stringify({ title, body: title }) });
     if (saved.outcome !== 'succeeded' || !saved.revisionId) throw new Error('Content owner rejected fixture');
     return saved.revisionId;
   };
