@@ -118,6 +118,23 @@ test('original SQL-issued human title candidate reaches native acceptance and re
       262144)).results?.bindings ?? []).map(binding => `${binding.g!.value} ${binding.p!.value} ${binding.o!.value}`);
     const receiptTerminal = async (receipt: string) => (await stack.fuseki.query(
       `ASK { GRAPH ${iri(RECEIPTS)} { ${iri(receipt)} ?p ?o } }`)).boolean;
+    async function setFixtureCustodyPayload(receipt: string, payload: Buffer): Promise<void> {
+      const client = await stack.accessPool.connect();
+      try {
+        await client.query('BEGIN');
+        try {
+          await client.query('ALTER TABLE access.command_custody DISABLE TRIGGER command_custody_erasure_guard');
+          const updated = await client.query(
+            'UPDATE access.command_custody SET payload = $2 WHERE receipt = $1', [receipt, payload]);
+          expect(updated.rowCount).toBe(1);
+          await client.query('ALTER TABLE access.command_custody ENABLE TRIGGER command_custody_erasure_guard');
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      } finally { client.release(); }
+    }
     const sendCommand = (envelope: TitleCandidateCommandEnvelope, mode: 'accept' | 'lookup' = envelope.titleCandidate.mode) =>
       stack.fuseki.commandTitleCandidate({ ...envelope, titleCandidate: { ...envelope.titleCandidate, mode } });
     const refused = async (envelope: TitleCandidateCommandEnvelope, label: string) => {
@@ -166,7 +183,9 @@ test('original SQL-issued human title candidate reaches native acceptance and re
       }
       await client.query('BEGIN');
       try {
+        await client.query('ALTER TABLE access.command_custody DISABLE TRIGGER command_custody_erasure_guard');
         await client.query('UPDATE access.command_custody SET payload = $2 WHERE receipt = $1', [frame.receipt, Buffer.from('{}')]);
+        await client.query('ALTER TABLE access.command_custody ENABLE TRIGGER command_custody_erasure_guard');
         await expect(issueTitleCandidateAdmission(client, verified, key)).rejects.toBeInstanceOf(AdmissionDenied);
       } finally { await client.query('ROLLBACK'); }
     });
@@ -231,13 +250,13 @@ test('original SQL-issued human title candidate reaches native acceptance and re
       return realFetch(url, init);
     }) as typeof fetch);
     restores.push(() => guard.mockRestore());
-    await stack.accessPool.query('UPDATE access.command_custody SET payload = $2 WHERE receipt = $1', [unaccepted.frame.receipt, Buffer.from('{}')]);
     try {
+      await setFixtureCustodyPayload(unaccepted.frame.receipt, Buffer.from('{}'));
       await expect(acceptHumanTitleCandidate(env, account, registry, request, adapterInput('title-candidate-expiring-unaccepted')))
         .rejects.toBeInstanceOf(ObjectIntegrityError);
     } finally {
-      await stack.accessPool.query('UPDATE access.command_custody SET payload = $2 WHERE receipt = $1', [unaccepted.frame.receipt, originalPayload]);
-      guard.mockRestore();
+      try { await setFixtureCustodyPayload(unaccepted.frame.receipt, originalPayload); }
+      finally { guard.mockRestore(); }
     }
     expect(await retained(unaccepted.frame.receipt)).toEqual([]);
     const lastExpiry = Math.max(Date.parse(accepted.claimed.expiresAt), Date.parse(unaccepted.claimed.expiresAt));
