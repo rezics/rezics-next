@@ -499,8 +499,8 @@ export class AccessAdmissionRegistry {
           this.canReadWork(principal, actingSubject, work, client),
         canReadSemanticResource: (_principal: VerifiedPrincipal | null, _actor: string | null,
           semanticResource: string, semanticRevision?: string) => this.canReadSemanticResource(
-          principal, actingSubject, semanticResource,
-          semanticResource === resource ? revision : semanticRevision, graph, client),
+          principal, actingSubject, semanticResource, semanticRevision, graph, client),
+        client,
       };
       try {
         return await readableReplyRoot(environment, resource, revision, readers, principal, actingSubject);
@@ -508,10 +508,10 @@ export class AccessAdmissionRegistry {
         if (error instanceof WorkReadMoved || error instanceof SummaryGraphMoved
           || error instanceof AdmissionDenied || error instanceof AdmissionConflict
           || error instanceof AdmissionUnavailable || error instanceof AdmissionExpired) throw error;
-        if (error && typeof error === 'object' && 'code' in error) throw error;
         if (error instanceof WorkReadUnavailable) {
           throw new AdmissionUnavailable('authenticated reply root owner is unavailable');
         }
+        if (error && typeof error === 'object' && 'code' in error) throw error;
         throw new AdmissionUnavailable('authenticated reply root owner is unavailable');
       }
     };

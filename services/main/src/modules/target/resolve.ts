@@ -1,4 +1,5 @@
 import { Value } from 'typebox/value';
+import type { PoolClient } from 'pg';
 import { MAX_WORK_REDIRECT_HOPS } from '../address/contract.ts';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
@@ -46,7 +47,7 @@ export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' 
     & Partial<Pick<WorkReadSession['deps'], 'account' | 'governance'
       | 'media' | 'mediaAccess' | 'contextSelections'>>
     & { access?: Partial<Pick<WorkReadSession['deps']['access'], 'realmReadProof'
-      | 'canReadWork' | 'canReadSemanticResource'>> };
+      | 'canReadWork' | 'canReadSemanticResource'>> & { client?: PoolClient } };
 };
 
 /** Four common graph probes per exact target, including the read envelope's
@@ -237,7 +238,7 @@ export async function targetSummaries(session: TargetReadSession, resources: rea
       targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
         resolveMerges: options.resolveMerges ?? false, includeCollections: options.includeCollections,
         language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages,
-        settleNonAgentNameOwners: 'includingAbsent' });
+        settleNonAgentNameOwners: 'includingAbsent' }, session.deps.access?.client);
   } catch (error) {
     if (error instanceof SummaryGraphMoved) throw new WorkReadMoved(error.message);
     throw error;

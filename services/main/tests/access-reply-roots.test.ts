@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, mock, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { AdmissionRequest, VerifiedPrincipal } from '../src/modules/access/admission.ts';
@@ -9,6 +9,10 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 
 const replyRoot = await import('../src/modules/realm-reply/root.ts');
+// A unique module specifier keeps another test file's module mock from
+// replacing this integration's real root reader.
+const actualReadableReplyRoot = (await import(
+  `${import.meta.dir}/../src/modules/realm-reply/root.ts?live-root`)).readableReplyRoot;
 type ReadableReplyRootArgs = Parameters<typeof replyRoot.readableReplyRoot>;
 let rootDecision: (...args: ReadableReplyRootArgs) => Promise<boolean> = async () => true;
 let publicRootDecision: (...args: Parameters<typeof replyRoot.publicReplyRoot>) => Promise<boolean> =
@@ -34,12 +38,14 @@ await mock.module('../src/modules/realm-reply/root.ts', () => ({
   publicReplyRoot: (...args: Parameters<typeof replyRoot.publicReplyRoot>) => publicRootDecision(...args),
 }));
 
-const { AccessAdmissionRegistry, AdmissionConflict, AdmissionUnavailable } =
+const { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionUnavailable } =
   await import('../src/modules/access/admission.ts');
 const replyContentStore = await import('../src/modules/realm-reply/content-store.ts');
 const realmReplyStore = await import('../src/modules/realm-reply/store.ts');
 const spacePolicy = await import('../src/modules/space/policy.ts');
 const { WorkReadMoved, WorkReadUnavailable } = await import('../src/modules/work/read-session.ts');
+const { prepareComponent } = await import('../src/modules/work/activate.ts');
+const { PROFILES } = await import('../src/modules/semantic/schema.ts');
 const root = resolve(import.meta.dir, '../../..');
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -225,6 +231,120 @@ test('reply root environment and unavailable owners fail as unavailable; graph m
     await expect(author.access.register(replyDraft(supplied, author.actingSubject, rootTarget, rootRevision)))
       .rejects.toBeInstanceOf(WorkReadMoved);
   } finally { rootDecision = savedDecision; }
+});
+
+test('retained semantic reply roots use live disclosure through the held Access client', async () => {
+  const { supplied } = principal();
+  const author = await person(supplied);
+  const resource = nativeId();
+  const savedRoot = nativeId();
+  const objectDirectory = mkdtempSync(join(root, '.temp', 'reply-root-semantic-'));
+  const manifest = `urn:rezics:sha256:${prepareComponent(objectDirectory, resource,
+    { component: 'resource', lifecycle: 'active', types: [], properties: [] }, PROFILES.resource)}`;
+  let semanticHead = nativeId();
+  let liveReadable = true;
+  const semanticQueries: string[] = [];
+  const retainedRootQueries: string[] = [];
+  const resolvedHeads: string[] = [];
+  const term = (value: string) => ({ type: 'uri', value });
+  const literal = (value: string) => ({ type: 'literal', value });
+  const graph = { query: async (query: string) => {
+    if (query.includes('SELECT ?epoch ?sequence WHERE')) {
+      return { results: { bindings: [{ epoch: literal('reply-root-test'), sequence: literal('1') }] } };
+    }
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
+      return { results: { bindings: [{ epoch: literal('reply-root-test'), sequence: literal('1'),
+        r: term(resource), type: literal('resource'), public: literal('false') }] } };
+    }
+    if (query.includes('SELECT ?resource WHERE') && query.includes('rv:semanticHead')) {
+      semanticQueries.push(query);
+      return { results: { bindings: liveReadable ? [{ resource: term(resource) }] : [] } };
+    }
+    if (query.includes('SELECT ?resource ?manifest WHERE')) {
+      return { results: { bindings: [{ resource: term(resource), manifest: term(manifest) }] } };
+    }
+    if (query.includes('SELECT ?epoch ?sequence ?r ?revision ?type ?mergedInto')) {
+      resolvedHeads.push(semanticHead);
+      return { results: { bindings: [{ epoch: literal('reply-root-test'), sequence: literal('1'),
+        r: term(resource), revision: term(semanticHead), type: term('https://rezics.com/vocab/Resource') }] } };
+    }
+    if (query.includes('SELECT ?root WHERE')) {
+      retainedRootQueries.push(query);
+      return { results: { bindings: [{ root: term(savedRoot) }] } };
+    }
+    return { results: { bindings: [] } };
+  } };
+  const localEnvironment = { fuseki: graph, objectDirectory,
+    lineage: { dataEpoch: 'reply-root-test', routingEpoch: 'reply-root-routing' } } as unknown as WorkActivationEnvironment;
+  const singleConnectionPool = new Pool({ ...cluster!.connection, max: 1, connectionTimeoutMillis: 1000 });
+  const checkouts = spyOn(singleConnectionPool, 'connect');
+  const access = new AccessAdmissionRegistry(singleConnectionPool);
+  access.configureBaseline(graph as never);
+  disclosure.configureDisclosure(localEnvironment, new disclosure.DisclosureStore(singleConnectionPool));
+  const savedDecision = rootDecision;
+  rootDecision = (...args) => actualReadableReplyRoot(...args);
+  try {
+    const original = replyDraft(supplied, author.actingSubject, resource, savedRoot);
+    const concurrent = replyDraft(supplied, author.actingSubject, resource, savedRoot);
+    const [registered, concurrentAdmission] = await Promise.all([
+      access.register(original), access.register(concurrent),
+    ]);
+    expect(registered.dispatchEligible).toBe(true);
+    expect(concurrentAdmission.dispatchEligible).toBe(true);
+    // Both concurrent admissions complete with one checkout each. A nested
+    // DisclosureStore pool query would wait on this size-one pool.
+    expect(checkouts).toHaveBeenCalledTimes(2);
+    expect(retainedRootQueries.length).toBeGreaterThan(0);
+    expect(retainedRootQueries.every(query => query.includes(`<${savedRoot}>`))).toBe(true);
+
+    semanticHead = nativeId();
+    expect(semanticHead).not.toBe(savedRoot);
+    expect(await access.register(original)).toMatchObject({ id: registered.id,
+      dispatchEligible: true, replayed: true });
+    expect(checkouts).toHaveBeenCalledTimes(3);
+    expect(await access.claim(registered.id, original.requestDigest, supplied)).toMatchObject({
+      id: registered.id, state: 'claimed',
+    });
+    expect(checkouts).toHaveBeenCalledTimes(4);
+    expect(resolvedHeads).toContain(semanticHead);
+    const fence = await singleConnectionPool.connect();
+    expect(checkouts).toHaveBeenCalledTimes(5);
+    try {
+      await fence.query('BEGIN');
+      expect(await access.fenceClaim(fence, registered.id, original.requestDigest, supplied))
+        .toMatchObject({ id: registered.id, state: 'claimed' });
+      expect(checkouts).toHaveBeenCalledTimes(5);
+      await fence.query('COMMIT');
+    } catch (error) {
+      await fence.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally { fence.release(); }
+
+    const edit = replyDraft(supplied, author.actingSubject, resource, savedRoot);
+    expect((await access.register(edit)).dispatchEligible).toBe(true);
+    expect(checkouts).toHaveBeenCalledTimes(6);
+    const revokedBeforeClaim = replyDraft(supplied, author.actingSubject, resource, savedRoot);
+    const pending = await access.register(revokedBeforeClaim);
+    expect(pending.dispatchEligible).toBe(true);
+    expect(checkouts).toHaveBeenCalledTimes(7);
+
+    liveReadable = false;
+    await expect(access.claim(pending.id, revokedBeforeClaim.requestDigest, supplied))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect(checkouts).toHaveBeenCalledTimes(8);
+    await expect(access.register(replyDraft(supplied, author.actingSubject, resource, savedRoot)))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect(checkouts).toHaveBeenCalledTimes(9);
+
+    expect(semanticQueries.length).toBeGreaterThan(0);
+    expect(semanticQueries.every(query => !query.includes(`FILTER(?head = <${savedRoot}>)`))).toBe(true);
+  } finally {
+    rootDecision = savedDecision;
+    checkouts.mockRestore();
+    disclosure.configureDisclosure(localEnvironment, null);
+    rmSync(objectDirectory, { recursive: true, force: true });
+    await singleConnectionPool.end();
+  }
 });
 
 test('anonymous reply notifications consult only the public root decision', async () => {
