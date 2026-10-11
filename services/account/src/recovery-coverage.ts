@@ -17,7 +17,7 @@ export const ACCOUNT_RECOVERY_USAGE_EXCLUSIONS = {
     rezics_account_grant: ['last_used_at'],
   },
   // Rate-limit rows enforce admission policy and remain covered. No table
-  // exclusion is justified by the measured later-erasure transition.
+  // exclusion is approved for the later-erasure transition.
   tables: [],
 } as const;
 

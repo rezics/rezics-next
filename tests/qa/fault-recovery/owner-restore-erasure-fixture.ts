@@ -179,7 +179,7 @@ async function accountRows(pool: Pool): Promise<AccountRows> {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query("SET LOCAL TIME ZONE 'UTC'");
     const catalog = await client.query<{ table_name: string; keys: string[] }>(
-      `SELECT c.relname AS table_name, array_agg(a.attname ORDER BY k.ordinality) AS keys
+      `SELECT c.relname AS table_name, array_agg(a.attname::text ORDER BY k.ordinality) AS keys
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        JOIN pg_index i ON i.indrelid=c.oid AND i.indisprimary
        CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ordinality)
