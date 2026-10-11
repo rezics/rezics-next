@@ -15,15 +15,15 @@ const runId = Bun.env.REZICS_S3_GATE_PROJECT;
 const rustfsGate = runId ? test : test.skip;
 
 function listingXml(options: { bucket?: string; prefix: string; maxKeys: string; keys?: string[];
-  truncated?: string; reportedPrefix?: string; keyCount?: string }) {
+  truncated?: string; reportedPrefix?: string; keyCount?: string | null }) {
   const keys = options.keys ?? [];
   const contents = keys.map(key => `<Contents><Key>${key.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}`
     + `</Key><Size>1</Size></Contents>`).join('');
+  const keyCount = options.keyCount === null ? '' : `<KeyCount>${options.keyCount ?? String(keys.length)}</KeyCount>`;
   return `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">`
     + `<Name>${options.bucket ?? 'rezics-semantic'}</Name>`
     + `<Prefix>${options.reportedPrefix ?? options.prefix}</Prefix><MaxKeys>${options.maxKeys}</MaxKeys>`
-    + `<KeyCount>${options.keyCount ?? String(keys.length)}</KeyCount>`
-    + `<IsTruncated>${options.truncated ?? 'false'}</IsTruncated>${contents}</ListBucketResult>`;
+    + `${keyCount}<IsTruncated>${options.truncated ?? 'false'}</IsTruncated>${contents}</ListBucketResult>`;
 }
 
 function namespaceFixture(options: { versioning?: string; listing?: (url: URL) => string;
@@ -112,7 +112,21 @@ test('S3 namespace listing refuses truncation, false metadata and lookahead over
       build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: keys.slice(0, 2), truncated: 'true' }) },
     { name: 'wrong reported prefix', expected: ObjectListingUnavailable,
       build: (maxKeys: string) => listingXml({ prefix, maxKeys, reportedPrefix: 'semantic/work-other/', keys: [] }) },
-    { name: 'wrong key count', expected: ObjectListingUnavailable,
+    { name: 'blank key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: '' }) },
+    { name: 'whitespace key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: ' \t ' }) },
+    { name: 'missing key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: null }) },
+    { name: 'non-numeric key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: 'abc' }) },
+    { name: 'negative key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: '-1' }) },
+    { name: 'fractional key count', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: '1.5' }) },
+    { name: 'key count beyond requested maximum', expected: ObjectListingUnavailable,
+      build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [], keyCount: '999' }) },
+    { name: 'key count disagrees with contents', expected: ObjectListingUnavailable,
       build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys: [keys[0]!], keyCount: '2' }) },
     { name: 'lookahead entry', expected: ObjectReadBudgetExceeded,
       build: (maxKeys: string) => listingXml({ prefix, maxKeys, keys }) },

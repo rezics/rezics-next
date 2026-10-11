@@ -286,6 +286,24 @@ function xmlText(element: Element, name: string): string {
   return children[0]!.textContent?.trim() ?? '';
 }
 
+function xmlBoundedDecimal(element: Element, name: string, max: number): number {
+  const children = xmlChildren(element, name);
+  if (children.length !== 1 || xmlChildren(children[0]!).length > 0) {
+    throw new ObjectListingUnavailable('immutable object listing count is not authoritative');
+  }
+  const decimal = children[0]!.textContent?.trim() ?? '';
+  if (!/^\d+$/.test(decimal)) {
+    throw new ObjectListingUnavailable('immutable object listing count is not authoritative');
+  }
+  const normalized = decimal.replace(/^0+(?=\d)/, '');
+  const maximum = String(max);
+  if (normalized.length > maximum.length
+    || (normalized.length === maximum.length && normalized > maximum)) {
+    throw new ObjectListingUnavailable('immutable object listing count is not authoritative');
+  }
+  return Number(normalized);
+}
+
 function xmlRawText(element: Element, name: string): string {
   const children = xmlChildren(element, name);
   if (children.length !== 1 || xmlChildren(children[0]!).length > 0) {
@@ -574,9 +592,9 @@ export class S3ImmutableObjects implements ImmutableObjects {
       throw new ObjectListingUnavailable('immutable object listing uses unsupported request parameters');
     }
 
+    const keyCount = xmlBoundedDecimal(root, 'KeyCount', requestedMaxKeys);
     const contents = xmlChildren(root, 'Contents');
-    const keyCount = Number(xmlText(root, 'KeyCount'));
-    if (!Number.isSafeInteger(keyCount) || keyCount !== contents.length) {
+    if (keyCount !== contents.length) {
       throw new ObjectListingUnavailable('immutable object listing count is not authoritative');
     }
     if (contents.length > maxEntries) {
