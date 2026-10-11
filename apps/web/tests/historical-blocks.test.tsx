@@ -100,7 +100,7 @@ test('VIEW04: malformed and unknown historical blocks render as isolated placeho
   const hostile = html.match(/data-unknown-node="hostileAlign"/g) ?? [];
   expect(hostile).toHaveLength(1);
   expect(html).toContain(
-    '<div class="document-component" data-unknown-node="hostileAlign" role="note"></div>',
+    '<span class=\"document-component\" data-unknown-node="hostileAlign" role="note"></span>',
   );
 
   expect(html).toContain('scripted link');
@@ -197,6 +197,8 @@ function assertSafeAttributes(document: DocumentSnapshot): string {
   expect(html).toContain('<p>After hostile attributes.</p>');
   expect(html).not.toMatch(/<script\b|<[a-z][^>]*\sonerror\s*=|href\s*=\s*["']javascript:/i);
   expect(html).not.toContain('[object Object]');
+  // An HTML parser closes a paragraph at a div, so a placeholder inside a paragraph must not be one.
+  expect(html).not.toMatch(/<p\b[^>]*>(?:(?!<\/p>)[\s\S])*<div\b/);
   expect(html).not.toContain('nested-hostile-value');
   expect(document).toEqual(original);
   return html;
@@ -221,7 +223,7 @@ function assertHistoricalAttributes() {
       ) {
         expect(html.match(new RegExp(`data-malformed-node="${type}"`, 'g'))).toHaveLength(1);
         expect(html).toContain(
-          `<div class="document-component" data-malformed-node="${type}" role="note"></div>`,
+          `<span class="document-component" data-malformed-node="${type}" role="note"></span>`,
         );
       }
       if (attr === 'checked') expect(html).toContain('aria-checked="false"');

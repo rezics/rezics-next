@@ -94,10 +94,11 @@ const knownNodeTypes = new Set([
   'extensionBlock',
 ]);
 
-/** One bounded fallback; never carries node attributes that could poison the style tree. */
+/** One bounded fallback; never carries node attributes that could poison the style tree. A span is valid both
+ * between blocks and inside a paragraph, so an inline node (ruby, an inline image) cannot split its paragraph. */
 function isolatedPlaceholder(kind: 'unknown' | 'malformed', name: string) {
   return (
-    <div
+    <span
       className="document-component"
       {...(kind === 'unknown' ? { 'data-unknown-node': name } : { 'data-malformed-node': name })}
       role="note"
