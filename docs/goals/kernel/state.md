@@ -47,6 +47,14 @@ Landed directly on main from regression run 9 (no worker needed): the recipe rea
 
 Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recipe export paging (limit kept, typed); cover rights mark (M, needs media stack and rights takedown; contract in source-lifecycle); board tags and primary board as Statements with a filtered thread read (M, needs G-1618 and G-1591). G-1593, G-1618 and G-1591 are A (public API shape before opening, no compatibility layer).
 
+## Specifications (read-only analyses, 2026-10-11)
+
+- [Search cluster and idle deadline](reports/G-1632-specification.md): causes of the red SEARCH IDs and the evidence plan for the idle deadline.
+- [Recipe refusal after earlier files](reports/G-1637-specification.md): the missing membership preparation proof, the operator restore gap.
+- [Graph, claim and model cluster](reports/G-1639-specification.md): two product fixes, six fixture corrections, three deferred.
+- [Structure and discovery cluster](reports/G-1640-specification.md): fixture and harness repairs, two evidence investigations.
+- [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
+
 ## Open
 
 - Rights T2, T3a, T3b, T4, T5: send each diff to Trust-ops before landing. The Statement create has no licence field (`importBangumiWorkFacts` gap), flagged for T4.
