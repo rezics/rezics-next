@@ -9,6 +9,7 @@ import { compareRelayPositions, MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPositi
 
 export const ZONE_BROWSE_PROJECTION_COST = {
   batch: 64, relayEvents: 64, relayBatches: 16, pollMs: 500, recoveryPageMs: 5_000,
+  recoveryPassPages: 128, recoveryPassMs: 30_000,
 } as const;
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAIN_RELAY_SOURCE = 'https://rezics.com/services/main';
@@ -46,7 +47,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = runWorkerTick('main.zone-browse.projection', () => withWorkerTelemetry<number | void>('main.zone-browse.projection', async () => this.ready ? this.catchUp() : this.backfill(), count => ({
+      this.running = runWorkerTick('main.zone-browse.projection', () => withWorkerTelemetry<number | void>('main.zone-browse.projection', async () => this.ready ? this.catchUp() : this.reconcilePage(), count => ({
         outcome: count === undefined ? 'completed' : count ? 'worked' : 'idle',
         ...(count === undefined ? {} : { processed: count, unit: 'event' as const }),
       })))
@@ -156,10 +157,23 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     return examined;
   }
 
+  /** Explicit preparation waits for a complete reconciliation, or refuses at
+   * its budget. A later call resumes; the worker never drains in one poll. */
+  async backfill(): Promise<void> {
+    this.ready = false;
+    const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPassMs;
+    for (let page = 0; page < ZONE_BROWSE_PROJECTION_COST.recoveryPassPages; page++) {
+      this.checkDeadline(deadline);
+      await this.reconcilePage();
+      if (this.ready) return;
+    }
+    throw new WorkReadUnavailable('Zone browse reconciliation exceeded its preparation page budget');
+  }
+
   /** One bounded reconciliation page per poll, also used after a relay gap.
    * A stable graph cut proves all pages describe the same authoritative state.
    * Partial pages remain unreadable and never move the relay checkpoint. */
-  async backfill(): Promise<void> {
+  private async reconcilePage(): Promise<void> {
     this.ready = false;
     const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPageMs;
     await fusekiReadBudget.run({ signal: AbortSignal.timeout(ZONE_BROWSE_PROJECTION_COST.recoveryPageMs),
@@ -280,7 +294,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   }
 
   async tick(): Promise<number> {
-    if (!this.ready) { await this.backfill(); return 0; }
+    if (!this.ready) { await this.reconcilePage(); return 0; }
     const coverage = await this.mainStreamCoverage();
     let covered: number;
     try { covered = compareRelayPositions(this.checkpoint, coverage); }

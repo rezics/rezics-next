@@ -135,6 +135,18 @@ function fixture(count = 65) {
     afterPage: (run: () => void) => { afterPage = run; } };
 }
 
+test('explicit backfill waits for all pages and remains idempotent for preparation callers', async () => {
+  const f = fixture(130);
+  await f.instance.backfill();
+  expect(f.state.ready).toBe(true);
+  expect(await f.current()).toBe(true);
+  expect(f.candidates().size).toBe(130);
+  expect(f.state.checkpoint.sequence).toBe('5');
+  await f.instance.backfill();
+  expect(f.candidates().size).toBe(130);
+  expect(await f.current()).toBe(true);
+});
+
 test('a missing header that never arrives recovers all authoritative candidates in bounded pages', async () => {
   const f = fixture(130);
   await f.gap();
