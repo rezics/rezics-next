@@ -29,7 +29,6 @@ import { accessOutboxCoverage, accessStateCoverage,
   RecoveryHold, RestoreLineageConflict, type RecoveryCoverage,
   type DeletionReleaseEvidence } from '../../main/src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules/outbox/relay.ts';
-import { MAIN_RELAY_STREAM_SCOPE } from '../../main/src/modules/outbox/relay-position.ts';
 import { captureCommerceRecoveryCoverage } from '../../main/src/modules/commerce/recovery-coverage.ts';
 import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
   mirrorAccountDeletionIntents } from
@@ -170,6 +169,14 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     execFileSync('pg_basebackup', ['-D', owner.backup, '-Fp', '-Xs', '--checkpoint=fast',
       '-h', '127.0.0.1', '-p', String(owner.port), '-U', process.env.USER ?? 'edge'], { cwd: state });
     execFileSync('pg_verifybackup', ['--no-parse-wal', owner.backup], { cwd: state });
+  };
+  const copyRelayForRecovery = async (source: Owner): Promise<Owner> => {
+    const data = join(state, 'relay-restored-handoff');
+    execFileSync('pg_basebackup', ['-D', data, '-Fp', '-Xs', '--checkpoint=fast',
+      '-h', '127.0.0.1', '-p', String(source.port), '-U', process.env.USER ?? 'edge'], { cwd: state });
+    const restored = await start('relay-restored-handoff', data);
+    recovered.push(restored);
+    return restored;
   };
   const archive = async (owner: Owner, requiredWal: string) => {
     await owner.pool.query('SELECT pg_switch_wal()');
@@ -375,6 +382,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const accountFull = await restore(account, true, retained.account.pg.walFile);
     const accessOlder = await restore(access, false, retained.access.pg.walFile);
     const accessFull = await restore(access, true, retained.access.pg.walFile);
+    const restoredRelay = await copyRelayForRecovery(relay);
     await expect(assertAccountSubjectDeletionsAbsent(accountOlder.pool, relay.pool))
       .rejects.toThrow('retained Account deletion subject exists in restored Account');
     await expect(assertAccountSubjectDeletionsAbsent(accountFull.pool, relay.pool))
@@ -385,12 +393,15 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       deletions?: DeletionReleaseEvidence,
       accountPool: Pool = accountFull.pool,
     ): Promise<void> => {
+      const currentCoverage: RecoveryCoverage = { ...coverage,
+        accountPg: retained.account.pg, account: retained.account.rows };
+      const sealedCoverage = JSON.stringify(sealRecoveryPayload(
+        currentCoverage, coverageKey, 'graph-recovery-coverage'));
+      await retainRecoveryCoverageHead(relayPool, sealedCoverage, coverageKey);
       await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
-        sealedCoverage: JSON.stringify(sealRecoveryPayload(
-          { ...coverage, accountPg: retained.account.pg,
-            account: retained.account.rows }, coverageKey,
-          'graph-recovery-coverage')),
-        hmacKey: coverageKey, accountPool, deletions,
+        sealedCoverage, hmacKey: coverageKey, accountPool, deletions,
+        restoredRelayPool: restoredRelay.pool,
+        releaseErasures: async (_clients, releaseGraph) => releaseGraph(),
       });
     };
     await expect(assertAccountDeletionJournalCoverage(accessOlder.pool, relay.pool))
@@ -408,7 +419,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessStateCount: oldState.count, accessStateDigest: oldState.digest,
         commerce: await captureCommerceRecoveryCoverage(accessOlder.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
-      })).rejects.toThrow('retained erasure reconciliation lacks the retained current capture');
+      })).rejects.toThrow('retained Account deletion journal differs from Access');
     await releaseAccessRecoveryFence(accessOlder.pool, olderFence);
     const fullOutbox = await accessOutboxCoverage(accessFull.pool);
     const fullState = await accessStateCoverage(accessFull.pool);
@@ -420,7 +431,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessStateCount: fullState.count, accessStateDigest: fullState.digest,
         commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
-      }, undefined, accountOlder.pool)).rejects.toThrow('retained erasure reconciliation lacks the retained current capture');
+      }, undefined, accountOlder.pool)).rejects.toThrow('Account WAL differs from recovery coverage');
     expect((await accountOlder.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(1);
     expect((await accessOlder.pool.query<{ active: boolean }>(
@@ -446,20 +457,17 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await expect(assertGraphDeletionEvidence(accessFull.pool, {
       accountPool: accountFull.pool, hmacKey: manifestKey, sealedSets: [captured],
     })).resolves.toBeUndefined();
-    const graphEpoch = Bun.randomUUIDv7();
     await expect(releaseGraphHold(
       new FusekiClient('http://127.0.0.1:1/rezics'), accessFull.pool, relay.pool,
-      { dataEpoch: graphEpoch, routingEpoch: '2' }, {
-        priorDataEpoch: graphEpoch, priorSequence: '0',
+      { dataEpoch: priorLineage.dataEpoch, routingEpoch: '2' }, {
+        priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
         accessOutboxCount: retained.access.outbox.count,
         accessOutboxDigest: retained.access.outbox.digest,
         accessStateCount: retained.access.state.count,
         accessStateDigest: retained.access.state.digest,
         commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
-        relay: { consumer: 'held-graph', streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: graphEpoch, sequence: '0',
-          batchCount: '0', batchDigest: '0'.repeat(64),
-          eventCount: '0', eventDigest: '0'.repeat(64) },
-      })).rejects.toThrow('retained erasure reconciliation lacks the retained current capture');
+        relay: await relayCoverage(relay.pool, 'deleted-member-release'),
+      })).rejects.toThrow('Account deletion recovery evidence is incomplete');
     if (graphEnabled) {
       const graphBase = join(state, 'graph-restored');
       cpSync(join(state, 'graph-saved'), graphBase, { recursive: true });
