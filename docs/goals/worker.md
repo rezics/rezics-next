@@ -62,7 +62,7 @@ task goal -- test <your test files>        # one QA slot, including files from s
 task <workspace>:typecheck                 # waits for host memory on a local Goal run
 node_modules/.bin/oxlint --type-aware <changed directories>
 task ast-grep -- scan <changed files>
-task goal -- test --affected --list        # lists what else your change reaches; do not run it
+task goal -- test --affected --list | tail -n 40   # what else your change reaches; do not run it
 ```
 
 List affected tests outside your claim in the handoff; the manager and the
@@ -72,6 +72,13 @@ Frontend work checks changed screens with one dev server at a time against the
 shared backend (`task web:dev`, `task urls`) and stops it before handoff. In a
 shared worktree, start nothing; use what `.temp/goal/shared.md` lists and commit
 only your paths with `git commit --only`.
+
+## Tokens
+
+Every model call resends your whole context, so a session's cost grows with the
+square of its length. Read several files in one command. Bound what a command
+prints (`rg -m`, `sed -n` ranges, `| tail -n 40`); never print a whole log or
+list. Do not read again what you already have.
 
 ## Handoff
 

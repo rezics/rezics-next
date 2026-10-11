@@ -195,21 +195,31 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
 
   Cheap engine plus Sol review works. Give the cheap engine checks that touch
   the real thing (real endpoints, real tool output), not only mocks.
-- **Analysis first, cheap implementation** (maintainer, 2026-10-11: "token
-  效率不高，任务安排不合理，luna max 用起来 … 6.1 sol 可以更多的用来进行分析，找到架构问题").
-  Measured over 1,014 Codex attempts on 519 tasks up to 2026-10-10: the 46
-  tasks that took four or more attempts used 63% of the tokens, two of the
-  three largest were later cancelled, and Luna ran 6% of the attempts.
-  - Sol analyses: the cause, the architecture defect behind it, and the exact
-    change with the tests that prove it; read-only where it can be.
-  - Luna at `max` implements from that specification in one session, and Sol
-    reviews the landing.
-  - A brief names the acceptance IDs or test files it turns green and fits one
-    session.
-  - A task that has not landed after three attempts stops. It goes back to
-    analysis and is split, re-specified or cancelled; it is not resumed a
-    fourth time.
-  - Sessions start fresh with a short note of the state.
+- **Token efficiency** (maintainer, 2026-10-11: "token 效率不高，任务安排不合理 …
+  luna max 实现只不过成本低了，不一定能降低 token 效率，你得想办法提高效率"). A cheaper
+  model lowers the price of a token, not the number spent. Measured over 949
+  Codex attempts on 519 tasks up to 2026-10-10 (26 billion input tokens):
+  - **Context size.** Every model call resends the whole context. A resumed
+    session averaged 780,000 tokens a call and a fresh one 116,000; the 39% of
+    attempts that resumed a session took 73% of the input. `goalctl` now compacts
+    a Codex worker at 200,000 tokens (`GOAL_CODEX_COMPACT_TOKENS`), so resuming
+    for a review fix is affordable again; start fresh when the task changes
+    direction.
+  - **Cancelled work.** 29% of the input went to tasks that were later
+    cancelled, and the 46 tasks with four or more attempts took 63%. A task
+    that has not landed after three attempts stops: it goes back to analysis and
+    is split, re-specified or cancelled. Attempts lost to a dropped session or
+    a quota pause do not count.
+  - **Session length.** Context grows with every call, so cost grows with the
+    square of a session's length (88 calls on average, half of them searching
+    and reading). A brief names the files and lines to change and the tests that
+    prove it, and fits one session; when the cause is unknown, a read-only
+    analysis writes that specification first.
+  - **Engine.** Choose the one that lands the task in the fewest tokens: Luna
+    at `max` for bounded mechanical work, Sol for analysis, architecture
+    defects, review and implementation that needs judgment.
+  Watch tokens per landed task and average context per call, not attempts or
+  price.
 - **Host memory.** A worker process is cheap; QA stacks, browsers, Storybook
   and type checkers are not. Those wait for measured memory (`scripts/qa/host-admission.ts`)
   and the heavy lock, so width comes from workers, and test scheduling is the
