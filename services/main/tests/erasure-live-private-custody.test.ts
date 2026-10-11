@@ -78,6 +78,21 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
       await client.query('DROP TRIGGER zz_fixture_reject_custody_clear ON access.command_custody');
       await client.query('DROP FUNCTION access.reject_fixture_custody_clear()');
 
+      await client.query('CREATE TEMP TABLE custody_caller_transaction_probe (marker text) ON COMMIT PRESERVE ROWS');
+      await client.query('BEGIN');
+      try {
+        await client.query("INSERT INTO custody_caller_transaction_probe VALUES ('caller write')");
+        await store.withReceipt(receipt, session => clearPayload(session, erasure), client);
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      expect((await client.query('SELECT marker FROM custody_caller_transaction_probe')).rows).toEqual([]);
+      const callerRollback = (await client.query(`SELECT payload,payload_erasure_id,payload_erasure_epoch
+        FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0]!;
+      expect(callerRollback.payload).toEqual(payload);
+      expect(callerRollback.payload_erasure_id).toBeNull();
+      expect(callerRollback.payload_erasure_epoch).toBeNull();
+
       await store.withReceipt(receipt, async session => {
         expect(session.client).toBe(client);
         await clearPayload(session, erasure);

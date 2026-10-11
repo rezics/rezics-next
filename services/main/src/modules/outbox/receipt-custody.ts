@@ -146,6 +146,9 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
       await held.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [`command-custody:${receipt}`]);
       locked = true;
       const durable = async <T>(write: () => Promise<T>): Promise<T> => {
+        // A borrowed client belongs to its caller, including its transaction
+        // boundary. Only a session we checked out can make this write durable.
+        if (!owned) return write();
         await held.query('BEGIN');
         try {
           await held.query('SET LOCAL synchronous_commit = on');

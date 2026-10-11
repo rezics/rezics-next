@@ -153,7 +153,9 @@ test('private human title custody signs actual claimed SQL actor on a max-one re
       }
       await sessionClient.query('BEGIN');
       try {
+        await sessionClient.query('ALTER TABLE access.command_custody DISABLE TRIGGER command_custody_erasure_guard');
         await sessionClient.query('UPDATE access.command_custody SET payload=$2 WHERE receipt=$1', [frame.receipt, Buffer.from('{}')]);
+        await sessionClient.query('ALTER TABLE access.command_custody ENABLE TRIGGER command_custody_erasure_guard');
         await expect(issueTitleCandidateAdmission(sessionClient, verified, key)).rejects.toBeInstanceOf(AdmissionDenied);
       } finally { await sessionClient.query('ROLLBACK'); }
       return issued;
