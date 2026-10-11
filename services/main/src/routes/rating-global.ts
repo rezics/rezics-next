@@ -93,8 +93,9 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
         if (!(error instanceof StaleRatingObservation)) return commandError(error);
         try {
           const principal = await work.account.verify(request, ['rating:submit']);
-          // Global opinion slots belong to the authenticated principal. Return
-          // only that principal's head after the admitted write reports it stale.
+          if (!await work.access.canReadAsBaselineMember?.(principal, body.actingSubject)) {
+            return problem(403, 'authority_denied', 'Authority is not admitted');
+          }
           const principalId = await work.access.activePrincipalId(principal);
           if (!principalId) return problem(403, 'authority_denied', 'Authority is not admitted');
           const slot = standingRatingSlotIri(principalId, body.context, body.mainVersion);

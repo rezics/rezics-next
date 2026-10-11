@@ -1,5 +1,4 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
@@ -10,14 +9,17 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { GLOBAL_CONTEXT_SCOPE, GLOBAL_RATING_POPULATION_OWNER }
   from '../../../services/main/src/modules/rating/global.ts';
+import { readStandingRatingReceipt } from '../../../services/main/src/modules/rating/observation.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-interface Opinion { observation: string; observationRevision: string; predecessor: string | null; value: number | null }
+interface Opinion { observation: string; observationRevision: string; predecessor: string | null; value: number | null;
+  sourcePosition: { datasetId: string; dataEpoch: string; sequence: string } }
 interface Component { context: string; populationOwner: string; count: number; population: number; withdrawnCount: number;
   mean: number | null; scale: { min: number; max: number }; unitMean: { numerator: string; denominator: string } | null }
 interface Synthesis { status: string; missing: string[]; value: { numerator: string; denominator: string } | null;
@@ -33,11 +35,13 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
   const state = join(root, '.temp', `rating-global-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
+  const accountPool = new Pool({ connectionString: databases.urls.account, max: 2 });
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 5 });
   let identity: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   try {
     identity = await ratingAccount({ ACCOUNT_DATABASE_URL: databases.urls.account,
-      ACCOUNT_SECRET: Bun.env.ACCOUNT_SECRET, ACCOUNT_MAIN_RESOURCE: Bun.env.ACCOUNT_MAIN_RESOURCE });
+      ACCOUNT_SECRET: Bun.env.ACCOUNT_SECRET, ACCOUNT_MAIN_RESOURCE: Bun.env.ACCOUNT_MAIN_RESOURCE },
+    'openid work:create work:edit work:read space:create rating:configure rating:submit rating:read agent:create');
     // A third private rater through the same real Account owner.
     const base = identity.issuer.replace(/\/api\/auth$/, '');
     const third = { email: `rating-c-${randomUUID()}@example.test`, password: randomBytes(24).toString('base64url') };
@@ -47,15 +51,31 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     expect(signUp.status).toBe(200);
     const thirdId = (await signUp.json() as { user: { id: string } }).user.id;
     const tokenC = await identity.tokenFor(third);
+    for (const userId of [identity.a.id, identity.b.id, thirdId]) {
+      expect((await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [userId])).rowCount)
+        .toBe(1);
+    }
     const principals = { a: randomUUID(), b: randomUUID(), c: randomUUID() };
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $4, $5), ($2, $4, $6), ($3, $4, $7)`,
     [principals.a, principals.b, principals.c, identity.issuer, identity.a.id, identity.b.id, thirdId]);
-    const persona = { a: `https://rezics.com/id/${randomUUID()}`, a2: `https://rezics.com/id/${randomUUID()}`,
-      b: `https://rezics.com/id/${randomUUID()}`, c: `https://rezics.com/id/${randomUUID()}` };
-    for (const actor of Object.values(persona)) {
-      await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
-    }
+    const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
+    const environment = { fuseki, objectDirectory: join(state, 'objects'),
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
+    const provisioning = new AgentProvisioning(accessPool, environment);
+    const bearerRequest = (token: string) => new Request('http://main.local', {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const agentA = await provisioning.provision(identity.verifier, bearerRequest(identity.tokenA),
+      { kind: 'person', displayName: 'Rating owner a' }, randomUUID());
+    const agentB = await provisioning.provision(identity.verifier, bearerRequest(identity.tokenB),
+      { kind: 'person', displayName: 'Rating owner b' }, randomUUID());
+    const agentC = await provisioning.provision(identity.verifier, bearerRequest(tokenC),
+      { kind: 'person', displayName: 'Rating owner c' }, randomUUID());
+    expect([agentA.state, agentB.state, agentC.state]).toEqual(['active', 'active', 'active']);
+    const persona = { a: agentA.agent, a2: `https://rezics.com/id/${randomUUID()}`,
+      b: agentB.agent, c: agentC.agent };
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [persona.a2]);
     const owner = { a: principals.a, a2: principals.a, b: principals.b, c: principals.c } as const;
     async function grant(scope: string, action: string, who: keyof typeof persona = 'a') {
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
@@ -65,11 +85,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
         VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`, [randomUUID(), persona[who], scope, action]);
     }
-    const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
-    const environment = { fuseki, objectDirectory: join(state, 'objects'),
-      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
     const access = new AccessAdmissionRegistry(accessPool);
-    await provisionFixtureAuthor(environment, persona.a);
     const main = createMainApp(fuseki, { environment, account: identity.verifier, access });
     const token = { a: identity.tokenA, a2: identity.tokenA, b: identity.tokenB, c: tokenC };
     const post = (path: string, body: object, who: keyof typeof persona = 'a', key = randomUUID(), bearer = token[who]) =>
@@ -161,8 +177,27 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     expect(await success<Opinion & { replayed: boolean }>(await globalSet('a', 5, null, aKey), 200))
       .toMatchObject({ ...a, replayed: true });
     expect((await globalSet('a', 4, null, aKey)).status).toBe(409);
-    // Another persona of the same private principal cannot add a second Global opinion.
-    expect(await (await globalSet('a2', 1)).json()).toMatchObject({ code: 'stale_head' });
+    // An alternate persona may write only if it has separate baseline custody;
+    // its denied stale response cannot disclose the existing private head.
+    const a2Key = randomUUID();
+    const a2Response = await globalSet('a2', 1, null, a2Key);
+    expect(a2Response.status).toBe(403);
+    const a2Problem = await a2Response.json();
+    expect(a2Problem).toMatchObject({ status: 403, code: 'authority_denied' });
+    expect(a2Problem).not.toHaveProperty('currentHead');
+    expect(a2Problem).not.toHaveProperty('sourcePosition');
+    const a2Admission = await accessPool.query<{ id: string; state: string; graph_outcome: string }>(`SELECT id, state, graph_outcome
+      FROM access.admission WHERE principal_id = $1 AND action = 'rating.observation.set' AND idempotency_key = $2`,
+    [principals.a, a2Key]);
+    expect(a2Admission.rows).toMatchObject([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+    expect(await readStandingRatingReceipt(environment, a2Admission.rows[0]!.id))
+      .toMatchObject({ outcome: 'cancelled', reason: 'stale-head' });
+    expect(await success<Opinion & { replayed: boolean }>(await globalSet('a', 5, null, aKey), 200))
+      .toMatchObject({ ...a, replayed: true });
+    const authorizedStale = await globalSet('a', 1, null);
+    expect(authorizedStale.status).toBe(409);
+    expect(await authorizedStale.json()).toMatchObject({ code: 'stale_head',
+      currentHead: a.observationRevision, sourcePosition: a.sourcePosition });
     const b = await success<Opinion>(await globalSet('b', 3));
     // Concurrent first writes by one principal: one winner, one terminal stale loser.
     // A loser may still be reconciling; the same body and key must settle to 409.
@@ -264,6 +299,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     expect(a.observation).not.toBe(b.observation);
   } finally {
     await identity?.close();
+    await accountPool.end();
     await accessPool.end();
     await databases.close();
     rmSync(state, { recursive: true, force: true });
