@@ -10,7 +10,8 @@ directions and resources, and workers follow the [worker protocol](worker.md).
 ## Worker processes
 
 Launch's [Realm ranking SQL ceiling attribution](launch/reports/realm-ranking-sql-ceiling.md)
-records the owner decision required by its qualification evidence.
+and [review-revocation feed cut](launch/reports/realm-ranking-projection-refusal.md)
+record the owner decisions required by its qualification evidence.
 
 Workers are separate headless CLI processes in bypass mode, not in-session
 subagents. Each runs in its own worktree under `.temp/worktrees/` on a

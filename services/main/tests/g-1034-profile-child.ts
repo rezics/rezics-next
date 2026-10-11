@@ -1017,7 +1017,74 @@ try {
       actingSubject: actor,
     },
   });
-  await project();
+  try {
+    await project();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === 'Main feed graph reference cut is unavailable'
+    ) {
+      // Kernel's gated-reads-design.md names this feed-cut case separately from
+      // Realm's epoch-wide admission gate. Retain batch and event custody at
+      // both cut positions; a legal zero-event batch cannot supply an event row.
+      try {
+        const after = (
+          await stack.accessPool.query<{
+            data_epoch: string;
+            sequence: string;
+            after_id: string;
+          }>(`SELECT data_epoch,sequence::text,after_id FROM access.feed_checkpoint WHERE id`)
+        ).rows[0];
+        const through = await home.deps.relayPosition!.read();
+        if (!through)
+          throw new Error('Main Relay checkpoint is unavailable for projection diagnosis');
+        const sequences = [
+          ...new Set(
+            [after?.sequence, through.sequence].filter(
+              (sequence): sequence is string => !!sequence,
+            ),
+          ),
+        ];
+        const batches = (
+          await home.relay.query(
+            `SELECT stream_scope,data_epoch,
+          sequence::text,batch_id,routing_epoch,event_count FROM relay.delivered_batch
+          WHERE stream_scope=$1 AND data_epoch=$2 AND sequence=ANY($3::numeric[])
+          ORDER BY sequence LIMIT 4`,
+            [through.streamScope, through.dataEpoch, sequences],
+          )
+        ).rows;
+        const events = (
+          await home.relay.query(
+            `SELECT DISTINCT sequence::text AS stream_sequence,
+          envelope->>'type' AS event_type,
+          envelope #>> '{data,sourcePosition,datasetId}' AS dataset_id,
+          envelope #>> '{data,sourcePosition,dataEpoch}' AS graph_epoch,
+          envelope #>> '{data,sourcePosition,sequence}' AS graph_sequence,
+          envelope #>> '{data,relayPosition,streamScope}' AS relay_scope,
+          envelope #>> '{data,relayPosition,dataEpoch}' AS relay_epoch,
+          envelope #>> '{data,relayPosition,sequence}' AS envelope_stream_sequence
+          FROM relay.delivered_event WHERE stream_scope=$1 AND data_epoch=$2
+          AND sequence=ANY($3::numeric[]) LIMIT 4`,
+            [through.streamScope, through.dataEpoch, sequences],
+          )
+        ).rows;
+        evidence.push({
+          reviewRevocationProjectionRefusal: {
+            message: error.message,
+            predicate: 'services/main/src/modules/feed/source.ts:115-118',
+            after,
+            through,
+            batches,
+            events,
+          },
+        });
+      } catch (diagnosticError) {
+        evidence.push({ reviewRevocationProjectionDiagnosticError: String(diagnosticError) });
+      }
+    }
+    throw error;
+  }
   assert.equal(
     (
       await stack.accessPool.query(
