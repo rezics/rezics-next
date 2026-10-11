@@ -196,7 +196,7 @@ test('a published Zone page opens one canonical discussion and preserves indepen
 }, 300_000);
 
 test('stale page bases, policy refusal and ended attachments create no discussion contributions', async () => {
-  const home = await startHomeStack('zone-realm-discussion-refused', { projectionStart: 'current' });
+  const home = await startHomeStack('zone-realm-discussion-refused');
   try {
     const a = await arrange(home);
     const page = await a.page('refusal');

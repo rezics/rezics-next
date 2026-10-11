@@ -47,7 +47,9 @@ async function hideBody(home: HomeStack, actor: string, reply: string, revision:
 const ownResultKeys = ['about', 'author', 'placement', 'profile', 'realm', 'reply', 'revisionId'];
 
 test('hidden and absent openers give ordinary own-post responses with equal owner costs; unavailable targets give equal 404s', async () => {
-  const home = await startHomeStack('zone-realm-discussion-equality', { projectionStart: 'current' });
+  // These commands do not project Feed. Leave its shared checkpoint untouched;
+  // a graph cut is not a position in the acknowledged Main stream.
+  const home = await startHomeStack('zone-realm-discussion-equality');
   const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
   const originalQuery = prototype.query;
   let statements = 0, measuring = false;

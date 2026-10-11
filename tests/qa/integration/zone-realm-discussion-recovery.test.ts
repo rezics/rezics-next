@@ -102,7 +102,7 @@ async function recovered(home: HomeStack, response: Response): Promise<Posted> {
 }
 
 test('lost about-post responses after each durable owner phase resume one opener and preserve a pending child', async () => {
-  const home = await startHomeStack('zone-realm-discussion-recovery', { projectionStart: 'current' });
+  const home = await startHomeStack('zone-realm-discussion-recovery');
   try {
     const a = await arrange(home);
     for (const point of ['draft', 'identity', 'preparation', 'graph', 'settlement'] as const) {
@@ -166,7 +166,7 @@ test('lost about-post responses after each durable owner phase resume one opener
 }, 300_000);
 
 test('revoke or attachment withdrawal winning before dispatch leaves no public orphan or replacement opener', async () => {
-  const home = await startHomeStack('zone-realm-discussion-dispatch-races', { projectionStart: 'current' });
+  const home = await startHomeStack('zone-realm-discussion-dispatch-races');
   try {
     const a = await arrange(home);
     const revokedPage = await a.page('revoked-dispatch'), revokeKey = randomUUID();
@@ -249,7 +249,7 @@ test('revoke or attachment withdrawal winning before dispatch leaves no public o
 }, 300_000);
 
 test('a graph-committed first post survives withdrawal and revocation during lost-response recovery', async () => {
-  const home = await startHomeStack('zone-realm-discussion-committed-recovery', { projectionStart: 'current' });
+  const home = await startHomeStack('zone-realm-discussion-committed-recovery');
   try {
     const a = await arrange(home), page: Page = await a.page('committed-winner'), key = randomUUID();
     const fault = interruptAfter(home, 'graph');
