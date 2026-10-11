@@ -457,10 +457,11 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
   const unselected = await summaries(owner, 'ja');
   expect(unselected[2]!.name!.value).toContain('Relation definition');
   const image = await owner.upload(png(80, 80), 'public');
+  const contextImage = await owner.upload(png(80, 80), 'public');
   await owner.grant(`media:avatar:${character}`, 'media.avatar');
   await owner.grant(`media:avatar:${shared}`, 'media.avatar');
   const characterSelection = await selectAvatar(owner, character, image.asset, null);
-  const contextSelection = await selectAvatar(owner, shared, image.asset, null);
+  const contextSelection = await selectAvatar(owner, shared, contextImage.asset, null);
   const contextualWork = await publicWork(owner.actor);
   await owner.grant(`media:avatar:${contextualWork.work}`, 'media.avatar');
   const hiddenSelection = await selectAvatar(owner, contextualWork.work, image.asset, null, hidden);
