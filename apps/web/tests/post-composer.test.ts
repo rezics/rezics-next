@@ -42,7 +42,7 @@ type WriteOptions = { headers: { 'idempotency-key': string } };
 function unplacedReplyMain(
   options: {
     failStep?: PostingStep;
-    failure?: 'lost' | 'denied' | 'unavailable';
+    failure?: 'lost' | 'denied' | 'cancelled' | 'unavailable' | 'pending';
     ban?: object | null;
     banReadFails?: boolean;
     draftRevision?: string;
@@ -52,13 +52,24 @@ function unplacedReplyMain(
   const banReads: Array<{ realm: string; query: { actingSubject: string } }> = [];
   let publicReads = 0;
   let failed = false;
+  const cancelledKeys = new Map<string, { status: number; value: { code: string } }>();
   let ban = options.ban ?? null;
   const write = async (step: PostingStep, body: Record<string, unknown>, request: WriteOptions) => {
     calls.push({ step, key: request.headers['idempotency-key'], body });
-    if (!failed && options.failStep === step) {
+    // Owner receipts permanently replay a cancelled operation, even after an unban.
+    const cancelled = cancelledKeys.get(request.headers['idempotency-key']);
+    if (cancelled) return { data: null, error: cancelled };
+    if (options.failStep === step && (!failed || (options.failure === 'denied' && ban))) {
       failed = true;
       if (options.failure === 'lost') throw new Error('Response lost after the write');
-      return { data: null, error: { status: options.failure === 'unavailable' ? 503 : 403 } };
+      if (options.failure === 'unavailable') return { data: null, error: { status: 503 } };
+      if (options.failure === 'pending') return { data: null, error: { status: 202 } };
+      const error =
+        options.failure === 'cancelled'
+          ? { status: 409, value: { code: step === 'draft' ? 'stale_head' : 'realm_reply_stale' } }
+          : { status: 403, value: { code: 'authority_denied' } };
+      cancelledKeys.set(request.headers['idempotency-key'], error);
+      return { data: null, error };
     }
     return {
       data:
@@ -207,7 +218,7 @@ test.each(['draft', 'identity', 'place'] as const)(
 );
 
 test.each(['draft', 'identity', 'place'] as const)(
-  'a ban denied at %s retains the reply for a successful retry after unban',
+  'a ban denied at %s retires the cancelled key and retains the reply after unban',
   async (step) => {
     const api = unplacedReplyMain({ failStep: step, failure: 'denied', ban: activeBan });
     const original = newPostProgress();
@@ -218,19 +229,113 @@ test.each(['draft', 'identity', 'place'] as const)(
       key: original.key,
       reply: original.reply,
       variantId: original.variantId,
+      restartRequired: true,
     });
     expect(api.calls.some((call) => call.body.body === null)).toBe(false);
     expect(api.banReads).toEqual([
       { realm: postIntent.realm.slice(-36), query: { actingSubject: postIntent.actingSubject } },
     ]);
     api.liftBan();
+    const saved = JSON.parse(JSON.stringify(first.progress)) as PostProgress;
+    const recovery: PostProgress[] = [];
+    expect(
+      await submitPost(postIntent, saved, (progress) => recovery.push(progress), api.main),
+    ).toEqual({
+      kind: 'posted',
+      reply: original.reply,
+    });
+    const attempts = api.calls.filter((call) => call.step === step);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]!.key).not.toBe(attempts[0]!.key);
+    const restarted = { ...first.progress, key: attempts[1]!.key.split(':')[0]! };
+    delete restarted.restartRequired;
+    expect(recovery[0]).toEqual(restarted);
+    expect(saved).toEqual(first.progress);
+    expect(api.calls.every((call) => call.body.reply === original.reply)).toBe(true);
+    if (step === 'draft') {
+      expect(documentText(attempts[1]!.body.document as DocumentSnapshot)).toBe(
+        documentText(attempts[0]!.body.document as DocumentSnapshot),
+      );
+      expect(attempts[1]!.body).toMatchObject({
+        variantId: original.variantId,
+        language: postIntent.language,
+        spoiler: postIntent.spoiler,
+        rootRevision: postIntent.revision,
+      });
+    } else {
+      expect(attempts[1]!.body).toEqual(attempts[0]!.body);
+      expect(api.calls.filter((call) => call.step === 'draft')).toHaveLength(1);
+    }
+    expect(api.publicReads()).toBe(0);
+  },
+);
+
+test.each(['draft', 'identity', 'place'] as const)(
+  'a cancelled %s operation retires its key without discarding successful steps',
+  async (step) => {
+    const api = unplacedReplyMain({ failStep: step, failure: 'cancelled' });
+    const original = newPostProgress();
+    const first = await submitPost(postIntent, original, () => undefined, api.main);
+    if (first.kind !== 'failed') throw new Error('A cancelled operation needs another attempt');
+    expect(first.progress.restartRequired).toBe(true);
+    expect(await submitPost(postIntent, first.progress, () => undefined, api.main)).toEqual({
+      kind: 'posted',
+      reply: original.reply,
+    });
+    const attempts = api.calls.filter((call) => call.step === step);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]!.key).not.toBe(attempts[0]!.key);
+    expect(api.calls.filter((call) => call.step === 'draft')).toHaveLength(
+      step === 'draft' ? 2 : 1,
+    );
+    expect(api.calls.some((call) => call.body.body === null)).toBe(false);
+  },
+);
+
+test('older saved progress replays a cancelled draft denial after unban, then retires its key', async () => {
+  const api = unplacedReplyMain({ failStep: 'draft', failure: 'denied', ban: activeBan });
+  const original = newPostProgress();
+  const denied = await submitPost(postIntent, original, () => undefined, api.main);
+  if (denied.kind !== 'banned') throw new Error('The draft must initially be banned');
+  const older = { ...denied.progress };
+  delete older.restartRequired;
+  api.liftBan();
+  const replay = await submitPost(postIntent, older, () => undefined, api.main);
+  if (replay.kind !== 'failed') throw new Error('The cancelled key must stay denied after unban');
+  expect(replay.progress).toMatchObject({ key: original.key, restartRequired: true });
+  expect(await submitPost(postIntent, replay.progress, () => undefined, api.main)).toEqual({
+    kind: 'posted',
+    reply: original.reply,
+  });
+  const attempts = api.calls.filter((call) => call.step === 'draft');
+  expect(attempts).toHaveLength(3);
+  expect(attempts[1]!.key).toBe(attempts[0]!.key);
+  expect(attempts[2]!.key).not.toBe(attempts[0]!.key);
+});
+
+test.each([
+  ['draft', 'unavailable'],
+  ['draft', 'pending'],
+  ['identity', 'unavailable'],
+  ['identity', 'pending'],
+  ['place', 'unavailable'],
+  ['place', 'pending'],
+] as const)(
+  'a %s operation that is %s retains the same key for its retry',
+  async (step, failure) => {
+    const api = unplacedReplyMain({ failStep: step, failure });
+    const original = newPostProgress();
+    const first = await submitPost(postIntent, original, () => undefined, api.main);
+    if (first.kind !== 'failed')
+      throw new Error('An unfinished operation must retain retry progress');
+    expect(first.progress.restartRequired).toBeUndefined();
     expect(await submitPost(postIntent, first.progress, () => undefined, api.main)).toEqual({
       kind: 'posted',
       reply: original.reply,
     });
     const attempts = api.calls.filter((call) => call.step === step);
     expect(attempts[1]).toEqual(attempts[0]);
-    expect(api.publicReads()).toBe(0);
+    expect(api.banReads).toHaveLength(0);
   },
 );
 
@@ -241,6 +346,15 @@ test.each(['draft', 'identity', 'place'] as const)(
     const result = await submitPost(postIntent, newPostProgress(), () => undefined, api.main);
     expect(result.kind).toBe(step === 'place' ? 'refused' : 'failed');
     expect(api.calls.some((call) => call.body.body === null)).toBe(step === 'place');
+    if (result.kind === 'failed') {
+      expect(result.progress.restartRequired).toBe(true);
+      expect(await submitPost(postIntent, result.progress, () => undefined, api.main)).toEqual({
+        kind: 'posted',
+        reply: result.progress.reply,
+      });
+      const attempts = api.calls.filter((call) => call.step === step);
+      expect(attempts[1]!.key).not.toBe(attempts[0]!.key);
+    }
   },
 );
 

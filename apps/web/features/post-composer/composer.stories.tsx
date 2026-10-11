@@ -74,11 +74,21 @@ export const BannedMember: Story = {
       canvas.getByRole('textbox', { name: postText.body[args.locale] }),
       'What did you think of the ending?',
     );
+    const body = canvas.getByRole('textbox', { name: postText.body[args.locale] });
+    const bodyBeforeBan = body.textContent;
     await userEvent.click(canvas.getByRole('button', { name: postText.post[args.locale] }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(postText.banned[args.locale]);
     await expect(
       canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }),
     ).toHaveValue('A letter worth discussing');
+    const progress = JSON.parse(localStorage.getItem(draftKey)!).progress;
+    await expect(progress.restartRequired).toBe(true);
+    const title = canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] });
+    await expect(title).not.toHaveAttribute('readonly');
+    await userEvent.type(title, ' (revised)');
+    await expect(title).toHaveValue('A letter worth discussing (revised)');
+    await expect(JSON.parse(localStorage.getItem(draftKey)!).progress).toBeNull();
+    await expect(body.textContent).toBe(bodyBeforeBan);
   },
 };
 

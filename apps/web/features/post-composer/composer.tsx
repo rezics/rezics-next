@@ -88,7 +88,9 @@ export function PostComposer({
   const [joined, setJoined] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'failed' | 'refused' | 'banned' | null>(null);
-  const locked = Boolean(draft.progress);
+  const locked = Boolean(
+    draft.progress && (busy || draft.progress.revisionId || !draft.progress.restartRequired),
+  );
   const reading = useReadingLanguages(actingSubject);
   const language = writingLanguage({ chosen: draft.language, reading });
   const written = textAttributes(language, bodyText(draft.body));
@@ -147,8 +149,13 @@ export function PostComposer({
             setCommunityState('failed');
             return;
           }
-          setCommunities(data.items.map((item) => ({ id: item.id, name: item.name.value,
-            address: 'address' in item ? item.address as AddressTarget : undefined })));
+          setCommunities(
+            data.items.map((item) => ({
+              id: item.id,
+              name: item.name.value,
+              address: 'address' in item ? (item.address as AddressTarget) : undefined,
+            })),
+          );
           setCommunityState('idle');
         } catch {
           if (current) setCommunityState('failed');
@@ -235,7 +242,12 @@ export function PostComposer({
 
   function change(patch: Partial<Draft>) {
     if (locked) return;
-    setDraft((before) => ({ ...before, ...patch }));
+    setDraft((before) => ({
+      ...before,
+      ...patch,
+      // A refused draft has no durable revision; editing starts another intent.
+      progress: before.progress?.restartRequired ? null : before.progress,
+    }));
   }
   function saveProgress(progress: PostProgress) {
     setDraft((before) => {

@@ -34,6 +34,8 @@ export interface PostProgress {
   revisionId?: string;
   identified?: boolean;
   digest?: string;
+  /** A confirmed refusal seals this attempt. The next Post needs a new operation key. */
+  restartRequired?: true;
 }
 export type PostOutcome =
   | { kind: 'posted'; reply: string }
@@ -92,7 +94,28 @@ export async function submitPost(
   main = browserMainApi(),
 ): Promise<PostOutcome> {
   const step = { ...original };
+  if (step.restartRequired) {
+    step.key = crypto.randomUUID();
+    delete step.restartRequired;
+    onProgress({ ...step });
+  }
   const keyed = (suffix: string) => ({ headers: { 'idempotency-key': `${step.key}:${suffix}` } });
+  const refuseAttempt = () => {
+    step.restartRequired = true;
+    onProgress({ ...step });
+  };
+  const terminalRefusal = (error: { status?: number; value?: unknown } | undefined) => {
+    if (error?.status === 403) return true;
+    const value = error?.value;
+    return (
+      error?.status === 409 &&
+      typeof value === 'object' &&
+      value !== null &&
+      'code' in value &&
+      typeof value.code === 'string' &&
+      ['stale_head', 'content_conflict', 'realm_reply_stale'].includes(value.code)
+    );
+  };
   const banned = async (status: number | undefined): Promise<boolean> => {
     if (status !== 403) return false;
     // A generic denial does not identify its cause. Only the member's own ban read can.
@@ -146,8 +169,12 @@ export async function submitPost(
     if (!step.revisionId || !step.digest) {
       // Replay also recovers older saved progress that retained the revision without its digest.
       const { data, error } = await draft(false, null, 'draft');
-      if (!data)
+      if (!data) {
+        // A denied new draft can be sealed as cancelled. A known successful revision
+        // still needs its original receipt when recovering a missing digest.
+        if (terminalRefusal(error) && !step.revisionId) refuseAttempt();
         return { kind: (await banned(error?.status)) ? 'banned' : 'failed', progress: step };
+      }
       if (step.revisionId && step.revisionId !== data.revisionId)
         return { kind: 'failed', progress: step };
       step.revisionId = data.revisionId;
@@ -171,8 +198,10 @@ export async function submitPost(
         },
         keyed('identity'),
       );
-      if (!data)
+      if (!data) {
+        if (terminalRefusal(error)) refuseAttempt();
         return { kind: (await banned(error?.status)) ? 'banned' : 'failed', progress: step };
+      }
       step.identified = true;
       onProgress({ ...step });
     }
@@ -190,6 +219,7 @@ export async function submitPost(
       keyed('place'),
     );
     if (data) return { kind: 'posted', reply: data.reply };
+    if (terminalRefusal(error)) refuseAttempt();
     if (await banned(error?.status)) return { kind: 'banned', progress: step };
     if (error?.status !== 403) return { kind: 'failed', progress: step };
     // A refused root must not linger as a published reply to its Work.
