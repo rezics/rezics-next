@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { meterStatements } from './feed-read-support.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import {
   retireRealmPopulation,
@@ -15,7 +14,7 @@ import {
   timeRealmRankingStage,
 } from '../../../services/main/tests/realm-ranking-corpus.ts';
 
-test('G1042: depth, row and ancestor caps report partial results; retired cuts and deleted references drain through invalidation', async () => {
+test('G1042: depth, row and ancestor caps report partial results; retired cuts and reply tombstones drain through invalidation', async () => {
   const restoreStarted = performance.now();
   const restored = await restoreRealmRankingCorpus(400);
   const home = restored.home;
@@ -248,25 +247,85 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     expect(await count('realm_thread_private_order')).toBe(0);
     expect(await count('realm_thread_population_job')).toBe(0);
 
-    // Deleting a thread invalidates descendants and removes exact-key jobs too.
-    await stack.accessPool.query(
-      `INSERT INTO access.realm_thread_population(data_epoch,realm,population,floor_epoch,floor_sequence)
-      VALUES($1,$2,$3,$1,0)`,
-      [epoch, realm, population],
+    type RankedItem = { reply: string; replies: { kind: string; value: number } };
+    type RankedPage = { items: RankedItem[]; nextCursor: string | null };
+    const rankings = new Map<'best' | 'top', { before: RankedPage; cursor: string }>();
+    const readRanking = async (sort: 'best' | 'top', cursor?: string, limit = 20) =>
+      timeRealmRankingStage(
+        'followup-ranking',
+        async () => {
+          const query = new URLSearchParams({ sort, limit: String(limit) });
+          if (cursor) query.set('cursor', cursor);
+          return home.json<RankedPage>(await home.call('GET', `${root}/threads?${query}`));
+        },
+        { sort },
+      );
+    const assertRemainingCounts = (items: RankedItem[]) => {
+      for (const item of items) {
+        if (item.reply === clean.reply) {
+          expect(item.replies.value).toBe(0);
+        } else {
+          expect(item.reply).toBe(wideRoot.reply);
+          expect(item.replies.kind).toBe('lower-bound');
+          expect(item.replies.value).toBeGreaterThan(0);
+          expect(item.replies.value).toBeLessThanOrEqual(followups.wide.length);
+        }
+      }
+    };
+    for (const sort of ['best', 'top'] as const) {
+      const before = await readRanking(sort);
+      expect(before.items.map((item) => item.reply).sort()).toEqual(
+        [clean.reply, chainRoot.reply, wideRoot.reply].sort(),
+      );
+      const first = await readRanking(sort, undefined, 1);
+      expect(first.nextCursor).toBeString();
+      rankings.set(sort, { before, cursor: first.nextCursor! });
+    }
+    // The author command writes an immutable Content tombstone. Its outbox
+    // invalidates the ranking and descendants without a graph update fixture.
+    const memberPath = `/v1/member-replies/${chainRoot.reply.slice(-36)}`;
+    const existing = await home.json<{
+      variantId: string;
+      revisionId: string;
+      rootTarget: string;
+      rootRevision: string;
+      author: string;
+    }>(await home.call('GET', memberPath));
+    expect(existing.revisionId).toBe(chainRoot.revision);
+    expect(existing.author).toBe(restored.manifest.identity.author);
+    const tombstone = await timeRealmRankingStage('followup-reply-deletion', async () =>
+      home.json<{ deleted: boolean; predecessor: string }>(
+        await home.call(
+          'POST',
+          '/v1/member-reply-drafts',
+          {
+            profile: 'member-reply-draft-v1',
+            reply: chainRoot.reply,
+            variantId: existing.variantId,
+            rootTarget: existing.rootTarget,
+            rootRevision: existing.rootRevision,
+            language: 'en',
+            direction: 'ltr',
+            expectedHead: existing.revisionId,
+            body: null,
+            actingSubject: existing.author,
+          },
+          home.author.token,
+        ),
+        201,
+      ),
     );
-    await stack.accessPool.query(
-      `INSERT INTO access.realm_thread_population_job VALUES($1,$2,$3,$4)`,
-      [epoch, realm, population, chainRoot.reply],
-    );
-    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?slot rv:reply ${iri(chainRoot.reply)} ; rv:replyPlacementHead ?head } }`);
-    await stack.accessPool.query(
-      `INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource) VALUES($1,'reply',$2)
-      ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=''`,
-      [epoch, chainRoot.reply],
-    );
+    expect(tombstone).toMatchObject({ deleted: true, predecessor: chainRoot.revision });
     await catchUp();
-    expect(await count('realm_thread_reference', `AND reply='${chainRoot.reply}'`)).toBe(0);
+    expect((await home.call('GET', memberPath)).status).toBe(404);
+    expect((await home.call('GET', `${root}/threads/${chainRoot.reply.slice(-36)}`)).status).toBe(
+      404,
+    );
+    // Historical placement references remain; none may be actively ranked.
+    expect(await count('realm_thread_reference', `AND reply='${chainRoot.reply}' AND active`)).toBe(
+      0,
+    );
+    expect(await count('realm_thread_order', `AND reply='${chainRoot.reply}'`)).toBe(0);
     expect(await count('realm_thread_population_job', `AND reply='${chainRoot.reply}'`)).toBe(0);
     expect(
       await count('realm_thread_reference', `AND parent='${chainRoot.reply}' AND active`),
@@ -282,49 +341,38 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
         ).rows[0]!.count,
       ),
     ).toBe(0);
-    // A retired Realm (and one whose graph identity was deleted) retires all its indexes.
-    for (const state of ['Retired', 'deleted']) {
-      await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} rv:realmState rv:Active } }`);
-      await stack.accessPool.query(
-        `UPDATE access.feed_item SET realm_thread_indexed=false
-        WHERE data_epoch=$1 AND realm=$2`,
-        [epoch, realm],
+    for (const [sort, { before, cursor }] of rankings) {
+      const stale = await home.json<{ code: string }>(
+        await home.call(
+          'GET',
+          `${root}/threads?${new URLSearchParams({ sort, limit: '1', cursor })}`,
+        ),
+        409,
       );
-      await threads.historyPopulation(epoch, realm, floor);
-      if (state === 'Retired') {
-        await stack.accessPool.query(
-          `UPDATE access.membership SET state='joined',generation=generation+1 WHERE id=$1`,
-          [membership],
-        );
-        await stack.accessPool.query(
-          `INSERT INTO access.realm_history_admission(kind,membership_id,generation,data_epoch,sequence)
-          VALUES('agent',$1,5,$2,0)`,
-          [membership, epoch],
-        );
+      expect(stale.code).toBe('read_basis_changed');
+      const remaining = before.items.filter((item) => item.reply !== chainRoot.reply);
+      const restarted = await readRanking(sort);
+      expect(restarted.items.map((item) => item.reply).sort()).toEqual(
+        remaining.map((item) => item.reply).sort(),
+      );
+      // Counts share a bounded walk across listed roots. Removing a root changes
+      // that budget, so the remaining lower bounds can change while staying valid.
+      assertRemainingCounts(restarted.items);
+      const reached: RankedItem[] = [];
+      let next: string | undefined;
+      for (let page = 0; page < 3; page++) {
+        const result = await readRanking(sort, next, 1);
+        reached.push(...result.items);
+        if (!result.nextCursor) break;
+        next = result.nextCursor;
       }
-      await catchUp();
-      expect(await count('realm_thread_reference')).toBeGreaterThan(0);
-      expect(await count('realm_thread_population')).toBe(1);
-      await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE WHERE {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} rv:realmState ?state } }`);
-      if (state !== 'deleted')
-        await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} rv:realmState rv:${state} } }`);
-      else
-        await stack.fuseki.update(`DELETE WHERE {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} ?predicate ?object } }`);
-      await stack.accessPool.query(
-        `INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource) VALUES($1,'realm',$2)
-        ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=''`,
-        [epoch, realm],
+      expect(reached.map((item) => item.reply).sort()).toEqual(
+        [clean.reply, wideRoot.reply].sort(),
       );
-      await catchUp();
-      expect(await count('realm_thread_reference')).toBe(0);
-      expect(await count('realm_thread_order')).toBe(0);
-      expect(await count('realm_thread_population')).toBe(0);
-      expect(await count('realm_thread_private_order')).toBe(0);
+      assertRemainingCounts(reached);
     }
+    // Population retirement above remains covered by its owner. Realm identity
+    // retirement has no product command, so it cannot be a graph fault fixture.
     expect(realmHistoryPopulation(floor)).toBe(population);
   } finally {
     try {
