@@ -531,9 +531,8 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       relay: { dataEpoch: lineage.dataEpoch } });
 
     // The recovery fault injections use the established owner chain only after
-    // the final signed authority cut. No Access admission may be added afterward.
-    await app?.stop();
-    app = undefined;
+    // the final signed authority cut. Access stays fenced against new admissions
+    // while the live Account owner continues token introspection for protected reads.
     const sourceRecoveryGeneration = await engageAccessRecoveryFence(access);
     const fence = (await access.query<{ open: boolean; generation: string }>(
       'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
@@ -658,8 +657,14 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         workObjects: candidate.candidateObjects.workObjects, receiptCustody: candidate.receiptCustody }, account: verifier,
       access: new AccessAdmissionRegistry(candidate.restored.access),
       erasures: new ErasureService(relay, candidate.restored.content, candidate.restored.access) });
-    const readJournal = (mainApp: ReturnType<typeof offline>) => mainApp.handle(new Request(
-      `http://main.local/v1/erasures/${contentErasure.erasureId}`, { headers: { authorization: `Bearer ${token}` } }));
+    const readJournal = async (mainApp: ReturnType<typeof offline>) => {
+      const request = new Request(`http://main.local/v1/erasures/${contentErasure.erasureId}`,
+        { headers: { authorization: `Bearer ${token}` } });
+      // A held read's 503 must come from the restore fence, not unavailable Account enforcement.
+      expect(await verifier.verify(request, ['access:manage']))
+        .toMatchObject({ issuer, subject: operator.id, accountScopes: expect.arrayContaining(['access:manage']) });
+      return mainApp.handle(request);
+    };
 
     // Backup 1 still holds the erased payload and the erased member's credentials.
     const older = firstCandidate.restored;
