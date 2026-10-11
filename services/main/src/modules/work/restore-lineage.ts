@@ -972,9 +972,10 @@ export async function assertRestoreAuthorityBaseline(relay: PoolClient,
           WHERE e.id::text=$1 AND e.authority='access_admission' AND e.kind='revision'
             AND e.suppression_status='suppressed' AND e.admission_id IS NOT NULL
             AND e.erasure_epoch > $2::bigint AND e.erasure_epoch <= $3::bigint
-            AND t.owner='graph' AND t.target_kind=ANY($4::text[])
+            AND ((t.owner='content' AND t.target_kind='content_revision')
+              OR (t.owner='graph' AND t.target_kind=ANY($4::text[])))
           GROUP BY e.id`, [event.erasure_id, reference.baseErasureJournal.epoch ?? '0',
-          reference.sourceErasureJournal.epoch, ['content_revision', ...GRAPH_ERASURE_KINDS]])).rows[0];
+          reference.sourceErasureJournal.epoch, GRAPH_ERASURE_KINDS])).rows[0];
         if (!entry || !event.erasure_id || BigInt(event.sequence) !== mainSequence + 1n) {
           throw new RestoreLineageConflict('current native tail contains unsupported graph work');
         }
