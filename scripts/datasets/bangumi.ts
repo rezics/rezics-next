@@ -7,7 +7,7 @@ import { InvalidSemanticValue, temporalParts } from '../../services/main/src/mod
 import type { SerialStatus } from '../../services/main/src/modules/work/metadata-schema.ts';
 import { MissingRemote, type Acquisition } from './network.ts';
 import { blobPath, canonical, sha256 } from './store.ts';
-import type { DatasetEdge, DatasetRecord, DatasetSource } from './types.ts';
+import type { DatasetEdge, DatasetImage, DatasetRecord, DatasetSource } from './types.ts';
 
 type Row = Record<string, unknown>;
 export type BangumiFamily = 'one-piece' | 're-zero' | 'toaru';
@@ -271,6 +271,39 @@ export function bangumiSourceUrl(kind: 'subject' | 'character', id: string | num
   return `https://bgm.tv/${kind}/${id}`;
 }
 
+function bangumiCoverCandidate(
+  row: Row,
+  canonicalId: number,
+  captureUrl: string,
+  recordDigest: string | undefined,
+): DatasetImage | undefined {
+  const imageSet = row.images;
+  if (!imageSet || typeof imageSet !== 'object' || Array.isArray(imageSet)) return undefined;
+  const url = (imageSet as Row).large;
+  if (url === undefined || url === null || url === '') return undefined;
+  if (typeof url !== 'string' || url !== url.trim() || !url.startsWith('https://'))
+    throw new Error(`Bangumi subject ${canonicalId} has an invalid large cover URL`);
+  if (!recordDigest || !/^[a-f0-9]{64}$/.test(recordDigest))
+    throw new Error(`Bangumi subject ${canonicalId} cover lacks captured source evidence`);
+  return {
+    record: key('subject', canonicalId),
+    role: 'cover',
+    url,
+    sourceEvidence: {
+      provider: 'bangumi',
+      namespace: 'subject',
+      externalId: String(canonicalId),
+      revision: null,
+      captureUrl,
+      recordDigest,
+      field: 'images.large',
+      sourceName: 'Bangumi',
+      sourceUrl: bangumiSourceUrl('subject', canonicalId),
+      holder: null,
+    },
+  };
+}
+
 /** Page URL stored on a statement as rv:evidence. Licence and credit are not Bangumi fields. */
 export function bangumiStatementEvidence(kind: 'subject' | 'character', id: string | number): string[] {
   return [bangumiSourceUrl(kind, id)];
@@ -310,9 +343,9 @@ function record(
 
 /** The archive intentionally contains a tag subset. Acquire every elected
  * subject's current public API response to retain API-exposed tags while
- * preserving the archive fields. Covers, other images and user posts are
- * omitted here, not hidden later. This accepts an already captured source so
- * resumptions need not rescan the dump. */
+ * preserving the archive fields. Extract only the elected large cover before
+ * recursive image and user-post omission. This accepts an already captured
+ * source so resumptions need not rescan the dump. */
 export async function enrichBangumiSubjects(
   acquisition: Acquisition,
   source: DatasetSource,
@@ -336,6 +369,7 @@ export async function enrichBangumiSubjects(
   }
   const observations: Row[] = [],
     timestamps: string[] = [];
+  const coverCandidates = new Map<string, DatasetImage>();
   const apiRedirects: { from: string; to: string; url: string }[] = [];
   const priorCoverage = source.scope.subjectApiCoverage as Row | undefined;
   const apiBoundary: string[] = Array.isArray(priorCoverage?.boundaryRecords)
@@ -407,6 +441,20 @@ export async function enrichBangumiSubjects(
         });
       }
     }
+    const cover = bangumiCoverCandidate(row, canonicalId, url, captured?.digest);
+    if (cover) {
+      const prior = coverCandidates.get(cover.record);
+      const currentCapture = cover.sourceEvidence!.captureUrl;
+      const priorCapture = prior?.sourceEvidence?.captureUrl;
+      const currentIsCanonical = canonicalId === externalId;
+      const priorIsCanonical = priorCapture === `https://api.bgm.tv/v0/subjects/${canonicalId}`;
+      if (
+        !prior ||
+        (currentIsCanonical && !priorIsCanonical) ||
+        (currentIsCanonical === priorIsCanonical && currentCapture < priorCapture!)
+      )
+        coverCandidates.set(cover.record, cover);
+    }
     for (const field of ['tags', 'meta_tags'] as const) {
       for (const entry of row[field] as unknown[]) {
         const item: Row =
@@ -476,13 +524,17 @@ export async function enrichBangumiSubjects(
     ...source,
     records,
     edges,
-    images: [],
+    images: [...coverCandidates.values()].sort((left, right) =>
+      canonical([left.record, left.role, left.url, left.sourceEvidence]).localeCompare(
+        canonical([right.record, right.role, right.url, right.sourceEvidence]),
+      ),
+    ),
     scope: {
       ...source.scope,
       surfaces: [
         ...new Set([
           ...(Array.isArray(source.scope.surfaces) ? (source.scope.surfaces as string[]) : []),
-          'public v0 subject JSON for every elected family subject, without images or user posts',
+          'public v0 subject JSON for every elected family subject; its large cover is extracted separately, while other images and user posts are omitted',
           'all API-exposed tags and counts',
         ]),
       ],
@@ -495,15 +547,18 @@ export async function enrichBangumiSubjects(
         redirects: apiRedirects,
         boundaryRecords: apiBoundary,
         fields:
-          'Every public v0 subject response is retained in data.api_subject except image and user-post fields; every API-exposed community tag, its full counts and managed tags are represented. Covers and other images are omitted.',
+          'Every public v0 subject response is retained in data.api_subject except image and user-post fields; the elected large cover is retained separately with its captured record digest and field locator. Every API-exposed community tag, its full counts and managed tags are represented.',
         tagCoverage:
           'Union of archive tags and every tag exposed by the official subject API. API exposure is not a claim to unexposed private or deleted tag assignments.',
       },
       sourceLimitations: [
         ...sourceLimitations.filter(
-          (item) => !item.startsWith('Archive exports only a subset of community tags'),
+          (item) =>
+            !item.startsWith('Archive exports only a subset of community tags') &&
+            !item.startsWith('Covers and other images are not imported'),
         ),
         'Archive community tag subsets are supplemented with all tags exposed by the official subject API; tags unexposed by both sources remain outside observable coverage.',
+        'Portraits, screenshots, other images and user posts are not imported. The captured API does not evidence a cover rights holder, so holder identity remains unknown.',
       ],
     },
   };
@@ -811,11 +866,11 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
       supplements,
       redirects,
       consistency:
-        'Base wiki and relationship rows share one official archive snapshot; dangling endpoint supplements and redirects are captured later through current official API endpoints. Image bytes are not captured.',
+        'Base wiki and relationship rows share one official archive snapshot; dangling endpoint supplements and redirects are captured later through current official API endpoints. Subject cover bytes are captured later by the image snapshot phase.',
       sourceLimitations: [
         'Archive exports only a subset of community tags, as documented upstream.',
         'Comments, reviews, user posts and collection text are not imported; the copyright page leaves them with their authors.',
-        'Covers and other images are not imported; publishers own the art.',
+        'Covers and other images in the archive are not retained; the current public subject API supplies the elected cover candidate separately.',
       ],
     },
   });

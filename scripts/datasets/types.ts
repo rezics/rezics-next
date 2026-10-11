@@ -29,10 +29,25 @@ export interface DatasetEdge {
   kind: string;
   data: Record<string, unknown>;
 }
+export interface DatasetCoverEvidence {
+  /** Normalized source identity. The source may not have a reviewed version yet. */
+  provider: string;
+  namespace: string;
+  externalId: string;
+  revision: string | null;
+  captureUrl: string;
+  recordDigest: string;
+  field: string;
+  sourceName: string;
+  sourceUrl: string;
+  holder: { name: string; field: string } | null;
+}
 export interface DatasetImage {
   record: string;
+  /** Provider supplied role, retained for audit. */
   role: string;
   url: string;
+  sourceEvidence?: DatasetCoverEvidence;
 }
 export interface DatasetSource {
   provider: Provider;
@@ -44,6 +59,8 @@ export interface DatasetSource {
   scope: Record<string, unknown>;
 }
 export interface StoredImage extends DatasetImage {
+  /** Normalized role for capture admission; `all` never promotes an image. */
+  captureRole?: 'cover' | 'other';
   capture: Capture | null;
   missing: boolean;
   unavailable?: { status: number };

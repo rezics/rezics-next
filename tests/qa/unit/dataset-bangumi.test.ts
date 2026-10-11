@@ -275,7 +275,7 @@ test('Bangumi acquisition keeps episodes of all types, repeat staff jobs, voice 
   }
 });
 
-test('Bangumi enrichment keeps licensed archive and API fields, unions tag counts, and omits images and user posts', async () => {
+test('Bangumi enrichment keeps licensed archive and API fields, unions tag counts, and extracts one cover', async () => {
   const oldTagKey = `bangumi:tag:${sha256('Old')}`;
   const source: DatasetSource = {
     provider: 'bangumi',
@@ -312,13 +312,7 @@ test('Bangumi enrichment keeps licensed archive and API fields, unions tag count
     edges: [
       { from: 'bangumi:subject:1', to: oldTagKey, kind: 'tag', data: { name: 'Old', count: 2 } },
     ],
-    images: [
-      {
-        record: 'bangumi:subject:1',
-        role: 'cover',
-        url: 'https://api.bgm.tv/v0/subjects/1/image?type=large',
-      },
-    ],
+    images: [],
     scope: {
       familySubjectIds: [1, 2, 3],
       sourceLimitations: [
@@ -395,7 +389,25 @@ test('Bangumi enrichment keeps licensed archive and API fields, unions tag count
     enriched.edges.find((edge) => edge.from === subject.key && edge.kind === 'meta-tag')?.data
       .api_tag,
   ).toEqual({ name: 'Public taxonomy' });
-  expect(enriched.images).toEqual([]);
+  expect(enriched.images).toEqual([
+    {
+      record: 'bangumi:subject:1',
+      role: 'cover',
+      url: 'https://lain.bgm.tv/cover-large.png',
+      sourceEvidence: {
+        provider: 'bangumi',
+        namespace: 'subject',
+        externalId: '1',
+        revision: null,
+        captureUrl: 'https://api.bgm.tv/v0/subjects/1',
+        recordDigest: 'a'.repeat(64),
+        field: 'images.large',
+        sourceName: 'Bangumi',
+        sourceUrl: 'https://bgm.tv/subject/1',
+        holder: null,
+      },
+    },
+  ]);
   expect(enriched.scope.subjectApiCoverage).toMatchObject({
     requested: 3,
     successful: 2,
@@ -416,6 +428,144 @@ test('Bangumi enrichment keeps licensed archive and API fields, unions tag count
   expect(replay.records).toEqual(enriched.records);
   expect(replay.edges).toEqual(enriched.edges);
   expect(replay.images).toEqual(enriched.images);
+});
+
+test('Bangumi cover binds the elected captured subject and source page', async () => {
+  const requestedUrl = 'https://api.bgm.tv/v0/subjects/975';
+  const capture = {
+    url: requestedUrl,
+    digest: 'b'.repeat(64),
+    bytes: 120,
+    mediaType: 'application/json',
+    fetchedAt: '2026-10-02T00:00:00Z',
+    etag: null,
+    lastModified: null,
+  };
+  const response = {
+    id: 976,
+    name: 'Canonical subject',
+    tags: [],
+    meta_tags: [],
+    images: { large: 'https://lain.bgm.tv/canonical-cover.jpg' },
+    publisher: 'A studio named in a source field',
+    uploader: 'A community account',
+  };
+  const source: DatasetSource = {
+    provider: 'bangumi',
+    roots: ['bangumi:subject:975'],
+    records: [
+      {
+        key: 'bangumi:subject:975',
+        provider: 'bangumi',
+        kind: 'subject',
+        externalId: '975',
+        title: 'Redirected subject',
+        language: 'ja',
+        sourceUrl: 'https://bgm.tv/subject/975',
+        data: { id: 975 },
+        native: 'work',
+      },
+    ],
+    edges: [],
+    images: [],
+    scope: { familySubjectIds: [975] },
+  };
+  const acquisition = {
+    captures: new Map([[sha256(canonical([requestedUrl, null])), capture]]),
+    json: async () => response,
+  } as unknown as Acquisition;
+
+  const enriched = await enrichBangumiSubjects(acquisition, source);
+  expect(enriched.images).toHaveLength(1);
+  expect(enriched.images[0]).toMatchObject({
+    record: 'bangumi:subject:976',
+    role: 'cover',
+    url: 'https://lain.bgm.tv/canonical-cover.jpg',
+    sourceEvidence: {
+      provider: 'bangumi',
+      namespace: 'subject',
+      externalId: '976',
+      revision: null,
+      captureUrl: requestedUrl,
+      recordDigest: capture.digest,
+      field: 'images.large',
+      sourceName: 'Bangumi',
+      sourceUrl: 'https://bgm.tv/subject/976',
+      holder: null,
+    },
+  });
+  expect(enriched.records.find((row) => row.key === 'bangumi:subject:976')).toMatchObject({
+    sourceUrl: 'https://bgm.tv/subject/976',
+    native: 'source-only',
+  });
+  expect(enriched.images[0]?.sourceEvidence?.holder).toBeNull();
+});
+
+test('cover extraction keeps nested image and user-post exclusions', async () => {
+  const requestedUrl = 'https://api.bgm.tv/v0/subjects/42';
+  const response = {
+    id: 42,
+    name: 'Elected subject',
+    tags: [],
+    meta_tags: [],
+    images: { large: 'https://lain.bgm.tv/cover.jpg', medium: 'https://lain.bgm.tv/medium.jpg' },
+    comment: 'user comment',
+    review: 'user review',
+    nested: {
+      image: 'https://lain.bgm.tv/avatar.jpg',
+      images: { small: 'https://lain.bgm.tv/nested.jpg' },
+      blogs: [{ text: 'user blog' }],
+      publisher: 'Not holder evidence',
+    },
+  };
+  const capture = {
+    url: requestedUrl,
+    digest: 'c'.repeat(64),
+    bytes: 200,
+    mediaType: 'application/json',
+    fetchedAt: '2026-10-02T00:00:00Z',
+    etag: null,
+    lastModified: null,
+  };
+  const source: DatasetSource = {
+    provider: 'bangumi',
+    roots: ['bangumi:subject:42'],
+    records: [
+      {
+        key: 'bangumi:subject:42',
+        provider: 'bangumi',
+        kind: 'subject',
+        externalId: '42',
+        title: 'Elected subject',
+        language: 'ja',
+        sourceUrl: 'https://bgm.tv/subject/42',
+        data: { id: 42, summary: 'Licensed subject summary' },
+        native: 'work',
+      },
+    ],
+    edges: [],
+    images: [],
+    scope: { familySubjectIds: [42] },
+  };
+  const acquisition = {
+    captures: new Map([[sha256(canonical([requestedUrl, null])), capture]]),
+    json: async () => response,
+  } as unknown as Acquisition;
+
+  const enriched = await enrichBangumiSubjects(acquisition, source);
+  const subject = enriched.records[0]!;
+  const apiSubject = subject.data.api_subject;
+  expect(enriched.images).toMatchObject([
+    {
+      record: 'bangumi:subject:42',
+      role: 'cover',
+      url: 'https://lain.bgm.tv/cover.jpg',
+      sourceEvidence: { field: 'images.large', recordDigest: capture.digest, holder: null },
+    },
+  ]);
+  expect(keyNames(apiSubject).filter((name) => omitted.has(name))).toEqual([]);
+  expect((apiSubject as Record<string, unknown>).summary).toBeUndefined();
+  expect((apiSubject as Record<string, unknown>).nested).toEqual({ publisher: 'Not holder evidence' });
 });
 
 const omitted = new Set<string>([...BANGUMI_USER_POST_FIELDS, ...BANGUMI_IMAGE_FIELDS]);
