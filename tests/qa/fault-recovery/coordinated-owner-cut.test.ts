@@ -33,8 +33,9 @@ import { GoSumdbTrustStore }
   from '../../../services/main/src/modules/package/go-sumdb-trust.ts';
 import { CargoResolutionStore }
   from '../../../services/main/src/modules/package/cargo-resolution.ts';
-import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence }
+import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
+import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { publishAdmittedContent }
   from '../../../services/main/src/modules/content-publication/publish-admitted.ts';
@@ -416,11 +417,6 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       { headers: { authorization: bearer } }));
     expect(heldRead.status).toBe(503);
     expect((await heldRead.json() as { code: string }).code).toBe('recovery_hold');
-    await expect(releaseRestoredGraphHold(fuseki, accessPool, relayPool,
-      nextLineage, { sealedCoverage, hmacKey: recoveryKey,
-        accountPool: accountFrontierPool, contentPool }))
-      .rejects.toThrow('Account WAL differs from recovery coverage');
-
     // The source remains fenced. Backup runs through the project's container
     // loopback replication rule, without opening host-bridge replication access.
     const baseBackup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
@@ -506,21 +502,33 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     }
     const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
       accountPool: restoredAccount, contentPool: restoredContent,
-      objectStore: { directory: env.objectDirectory } };
-    const restoreOperations = new OwnerOperations(restoredRelay, heldEnv, {
+      restoredRelayPool: restoredRelay,
+      objectStore: { directory: env.objectDirectory },
+      // These probes must refuse their mismatched owner before any release effect.
+      releaseErasures: async () => { throw new Error('mismatched owner reached erasure release'); } };
+    await expect(releaseRestoredGraphHold(fuseki, accessPool, relayPool,
+      nextLineage, { ...restoredEvidence, accountPool: accountFrontierPool, contentPool }))
+      .rejects.toThrow('Account WAL differs from recovery coverage');
+    const restoreOperations = new OwnerOperations(relayPool, heldEnv, {
       accountPool: restoredAccount, accessPool: restoredAccess, contentPool: restoredContent,
-      hmacKey: recoveryKey, objectStore: { directory: env.objectDirectory } });
+      restoredRelayPool: restoredRelay,
+      hmacKey: recoveryKey, objectStore: { directory: env.objectDirectory },
+      erasures: { authority: { sealedCoverage, hmacKey: recoveryKey },
+        signingKey: compose.FUSEKI_TITLE_ADMISSION_KEY!,
+        maintenance: heldErasureMaintenanceClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!),
+        originalSource: 'retained-native-event' } });
     const restoreApp = createMainApp(fuseki, { environment: heldEnv, account,
       access: new AccessAdmissionRegistry(restoredAccess),
       content: new ContentCore(restoredContent),
       contentAuthoring: new ContentCore(restoredContent), ownerOperations: restoreOperations });
     const restoreRequest = (key: string, token = bearer, sealed = sealedCoverage,
-      sealedDeletionSets: string[] = []) =>
+      sealedDeletionSets: string[] = [], retainedAuthorityCoverage?: string) =>
       restoreApp.handle(new Request('http://localhost/v1/owners/reconciliations', {
         method: 'POST', headers: { authorization: token,
           'content-type': 'application/json', 'idempotency-key': key },
         body: JSON.stringify({ profile: 'owner-reconciliation-v1',
-          kind: 'restore', sealedCoverage: sealed, sealedDeletionSets }) }));
+          kind: 'restore', sealedCoverage: sealed, sealedDeletionSets,
+          ...(retainedAuthorityCoverage === undefined ? {} : { retainedAuthorityCoverage }) }) }));
     expect((await restoreRequest(`denied-${randomUUID()}`, 'Bearer denied')).status).toBe(401);
     const extraSetKey = `extra-deletion-set-${randomUUID()}`;
     const extraSet = await restoreRequest(extraSetKey, bearer, sealedCoverage, ['not-a-sealed-set']);
@@ -528,6 +536,20 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(await extraSet.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
     expect((await restoreRequest(extraSetKey)).status).toBe(409);
     expect((await accessStateTables(restoredAccess)).tables).toEqual(capturedAccess.tables);
+    const malformedCurrentKey = `malformed-current-${randomUUID()}`;
+    const malformedCurrent = await restoreRequest(malformedCurrentKey, bearer,
+      sealedCoverage, [], 'not-a-signed-current-envelope');
+    expect(malformedCurrent.status).toBe(201);
+    const malformedCurrentResult = await malformedCurrent.json() as { id: string };
+    expect(malformedCurrentResult).toMatchObject({ kind: 'restore', state: 'held', disposition: 'conflict' });
+    expect((await relayPool.query<{ hold_reason: string }>(
+      'SELECT hold_reason FROM relay.owner_reconciliation WHERE id = $1',
+      [malformedCurrentResult.id])).rows[0]?.hold_reason)
+      .toBe('independently current authority capture is invalid or superseded');
+    // Current authority participates in idempotency even when the signed base is unchanged.
+    expect((await restoreRequest(malformedCurrentKey)).status).toBe(409);
+    expect((await accessStateTables(restoredAccess)).tables).toEqual(capturedAccess.tables);
+    expect((await restoreApp.handle(new Request('http://localhost/health/ready'))).status).toBe(503);
 
     // Each mismatch is committed in the disposable replay copy, then reversed
     // before the successful release. The source primary and its fences stay put.
@@ -536,7 +558,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       'SELECT coalesce(max(id), 0)::text AS id FROM access.also_enjoyed_source_change')).rows[0]!.id;
     await restoredAccess.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')",
       [extraSubject]);
-    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
       nextLineage, restoredEvidence)).rejects.toThrow('Access state differs from recovery coverage');
     await restoredAccess.query('DELETE FROM access.authority_subject WHERE id = $1', [extraSubject]);
     // Inserting and deleting the fault also invalidates recommendations. Remove
@@ -548,7 +570,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     if (!originalName) throw new Error('restored Account user is absent');
     await restoredAccount.query('UPDATE public."user" SET name = $1 WHERE id = $2',
       ['Wrong recovery cut', member.id]);
-    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
       nextLineage, restoredEvidence)).rejects.toThrow('Account rows differ from recovery coverage');
     await restoredAccount.query('UPDATE public."user" SET name = $1 WHERE id = $2',
       [originalName, member.id]);
@@ -556,7 +578,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     await restoredContent.query(`INSERT INTO content.projection_checkpoint
       (consumer, data_epoch, sequence) VALUES ($1, $2, 0)`,
     [extraCheckpoint, saved.position.dataEpoch]);
-    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
       nextLineage, restoredEvidence)).rejects.toThrow(
       'Content owner or graph references differ from recovery coverage');
     await restoredContent.query('DELETE FROM content.projection_checkpoint WHERE consumer = $1',
@@ -567,7 +589,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     if (!trustedNote) throw new Error('restored Go checksum checkpoint is absent');
     await restoredContent.query("UPDATE pkg.go_sumdb_head SET signed_note = $1 WHERE server = 'sum.golang.org'",
       [Buffer.from('mixed package cut')]);
-    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
       nextLineage, restoredEvidence)).rejects.toThrow(
       'Content owner or graph references differ from recovery coverage');
     await restoredContent.query("UPDATE pkg.go_sumdb_head SET signed_note = $1 WHERE server = 'sum.golang.org'",
@@ -578,7 +600,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
         [npmId, JSON.stringify({ ...npmReceipt.outcome, edges: [] })]);
       await expect(restoredNpm.read(principalId, npmId)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
-      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
         nextLineage, restoredEvidence)).rejects.toThrow(
         'Content owner or graph references differ from recovery coverage');
       await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
@@ -587,7 +609,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
         await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
           [id, JSON.stringify({ ...receipt.outcome, omittedInstances: [] })]);
         await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
-        await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
           nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
         await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
           [id, JSON.stringify(receipt.outcome)]);
@@ -600,7 +622,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
             : !hasWorkspace && node.path === 'node_modules/renamed' ? { ...node, name: 'wrong-package' } : node) };
         await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(corrupted)]);
         await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
-        await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
           nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
         await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(receipt.outcome)]);
       }
@@ -617,7 +639,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
         for (const corrupted of corruptions) {
           await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(corrupted)]);
           await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
-          await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+          await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
             nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
           await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(receipt.outcome)]);
         }
@@ -635,7 +657,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
         ]) {
           await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(corrupted)]);
           await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
-          await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+          await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
             nextLineage, restoredEvidence)).rejects.toThrow('Content owner or graph references differ from recovery coverage');
           await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(originalOutcome)]);
         }
@@ -651,9 +673,11 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     await restoredRelay.query('DELETE FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 2',
       [lineage.dataEpoch]);
     try {
-      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
-        nextLineage, restoredEvidence)).rejects.toThrow(
-          'relay checkpoint or delivered events are unavailable');
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
+        nextLineage, restoredEvidence)).rejects.toMatchObject({
+          message: 'captured relay handoff is unavailable',
+          cause: expect.objectContaining({ message: 'retained batch coverage is incomplete' }),
+        });
     } finally {
       await restoredRelay.query(`INSERT INTO relay.delivered_batch
         (data_epoch, sequence, batch_id, routing_epoch, event_count) VALUES ($1,2,$2,$3,$4)`,
@@ -668,7 +692,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       GRAPH <urn:rezics:graph:revisions> {
         <${retainedReference.subject}> rv:manifest <${retainedManifest}> . } }`);
     try {
-      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
         nextLineage, restoredEvidence)).rejects.toThrow(
           'graph or immutable objects differ from recovery coverage');
     } finally {
@@ -680,15 +704,27 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     const originalObject = readFileSync(objectPath);
     try {
       rmSync(objectPath);
-      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
         nextLineage, restoredEvidence)).rejects.toThrow(
           'graph or immutable objects differ from recovery coverage');
       const held = await restoreRequest(`mixed-object-${randomUUID()}`);
       expect(held.status).toBe(201);
       expect(await held.json()).toMatchObject({ kind: 'restore', state: 'held',
         disposition: 'unavailable' });
+      // An explicit same-cut current envelope passes authority authentication
+      // and reaches the same immutable-object refusal as the omitted-field caller.
+      const explicitCurrent = await restoreRequest(`same-cut-current-${randomUUID()}`,
+        bearer, sealedCoverage, [], sealedCoverage);
+      expect(explicitCurrent.status).toBe(201);
+      const explicitCurrentResult = await explicitCurrent.json() as { id: string };
+      expect(explicitCurrentResult).toMatchObject({ kind: 'restore', state: 'held',
+        disposition: 'unavailable' });
+      expect((await relayPool.query<{ hold_reason: string }>(
+        'SELECT hold_reason FROM relay.owner_reconciliation WHERE id = $1',
+        [explicitCurrentResult.id])).rows[0]?.hold_reason)
+        .toContain('graph or immutable objects differ from recovery coverage');
       writeFileSync(objectPath, Buffer.from('mixed object cut'));
-      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, relayPool,
         nextLineage, restoredEvidence)).rejects.toThrow(
           'graph or immutable objects differ from recovery coverage');
       const corruptHeld = await restoreRequest(`corrupt-object-${randomUUID()}`);
@@ -707,12 +743,14 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(releaseResult).toMatchObject({ kind: 'restore', state: 'reconciled',
       disposition: 'matched' });
     expect((await restoreRequest(restoreKey)).status).toBe(200);
-    const cuts = await restoredRelay.query<{ owner: string; status: string }>(
+    const cuts = await relayPool.query<{ owner: string; status: string }>(
       `SELECT owner, status FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1`,
       [releaseResult.id]);
     expect(cuts.rows).toEqual(expect.arrayContaining(['account', 'access', 'content',
       'graph', 'object', 'relay'].map(owner => ({ owner, status: 'matched' }))));
-    await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);
+    expect((await restoredAccess.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0])
+      .toEqual({ open: true, generation: (BigInt(fenceGeneration) + 1n).toString() });
     expect((await accessPool.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open).toBe(false);
     await accountApp.stop();

@@ -171,8 +171,14 @@ export class OwnerOperations {
     } finally { if (!this.restoreResources) await pool.end(); }
   }
 
-  private restoreInputs(sealedCoverage: string): { resources: RestoreResources; close: () => Promise<void> } {
-    if (this.restoreResources) return { resources: this.restoreResources, close: async () => {} };
+  private restoreInputs(sealedCoverage: string, retainedAuthorityCoverage?: string): { resources: RestoreResources; close: () => Promise<void> } {
+    if (this.restoreResources) return { resources: {
+      ...this.restoreResources,
+      ...(retainedAuthorityCoverage !== undefined && this.restoreResources.erasures
+        ? { erasures: { ...this.restoreResources.erasures,
+          authority: { sealedCoverage: retainedAuthorityCoverage, hmacKey: this.restoreResources.hmacKey } } }
+        : {}),
+    }, close: async () => {} };
     const account = Bun.env.ACCOUNT_RECOVERY_DATABASE_URL;
     const access = Bun.env.ACCESS_DATABASE_URL;
     const content = Bun.env.CONTENT_DATABASE_URL;
@@ -203,7 +209,7 @@ export class OwnerOperations {
           structureQualifierRoots: new StructureQualifierRootStore(pools[2]!, structureObjects),
           structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) },
       ...(restoredRelayPool ? { restoredRelayPool } : {}),
-      ...(configuredRetained ? { erasures: { authority: { sealedCoverage, hmacKey },
+      ...(configuredRetained ? { erasures: { authority: { sealedCoverage: retainedAuthorityCoverage ?? sealedCoverage, hmacKey },
         signingKey, maintenance: heldErasureMaintenanceClient(graphUrl, maintenanceKey),
         originalSource: 'retained-native-event' as const } } : {}) },
     close: async () => { await Promise.all(pools.map(pool => pool.end())); } };
@@ -231,9 +237,10 @@ export class OwnerOperations {
    * The scans are O(owner rows + graph quads + referenced object bytes), with
    * bounded owner-table pages and the graph query deadline enforced below.
    */
-  async reconcileRestore(input: { sealedCoverage: string; sealedDeletionSets: readonly string[] },
+  async reconcileRestore(input: { sealedCoverage: string; sealedDeletionSets: readonly string[];
+    retainedAuthorityCoverage?: string },
     key: string): Promise<RestoreReconciliationView> {
-    const { resources, close } = this.restoreInputs(input.sealedCoverage);
+    const { resources, close } = this.restoreInputs(input.sealedCoverage, input.retainedAuthorityCoverage);
     try {
       let coverage: RecoveryCoverage;
       try { coverage = openRecoveryPayload<RecoveryCoverage>(
@@ -292,7 +299,10 @@ export class OwnerOperations {
               `${operationId}:erasures`);
           } else await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
             this.relay, this.environment.lineage, { sealedCoverage: input.sealedCoverage,
-              hmacKey: resources.hmacKey, accountPool: resources.accountPool,
+              hmacKey: resources.hmacKey,
+              ...(input.retainedAuthorityCoverage === undefined ? {}
+                : { retainedAuthorityCoverage: input.retainedAuthorityCoverage }),
+              accountPool: resources.accountPool,
               contentPool: resources.contentPool, objectStore: resources.objectStore,
               restoredRelayPool: resources.restoredRelayPool,
               ...(erasures ? { qualification: { resume: Boolean(bindings?.qualification) },

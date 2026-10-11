@@ -16,24 +16,9 @@ export interface RetainedAuthorityCoverage {
   hmacKey: string;
 }
 
-/**
- * Offline full Access comparison. Cost is O(Access rows + outbox rows), paged by
- * the owner coverage scanner; no restored route opens while it runs.
- * A supplied Access client keeps the caller's transaction; both scans finish
- * before this operation returns or rejects.
- */
-export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, access: Pool,
-  consumer: string, evidence: RetainedAuthorityCoverage, accessClient?: PoolClient,
-  release?: { fuseki: FusekiClient; graphRelease: RestoredGraphReleaseExpectation;
-    capturedGeneration: string;
-    /**
-     * The running outer operation whose HMAC-bound qualification and release
-     * findings authorize the opened captured+1 phase. The comparison below is
-     * then against the coverage that verified finding recorded, never a caller
-     * value. Without it the opened phase still compares to the signed coverage.
-     */
-    binding?: { outerReconciliationId: string; erasuresReconciliationId?: string } }): Promise<void> {
-  const graphRelease = release ? structuredClone(release.graphRelease) : undefined;
+/** Authenticate the existing retained head/global pointer without comparing restored Access. */
+export async function assertRetainedAuthorityCapture(relay: Pool | PoolClient,
+  consumer: string, evidence: RetainedAuthorityCoverage): Promise<RecoveryCoverage> {
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
     evidence.sealedCoverage, evidence.hmacKey, 'graph-recovery-coverage'); }
@@ -59,6 +44,28 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
     || current.coverage_generation !== head.generation) {
     throw new ErasureAuthorityCoverageConflict('a newer retained authority capture supersedes this restore');
   }
+  return coverage;
+}
+
+/**
+ * Offline full Access comparison. Cost is O(Access rows + outbox rows), paged by
+ * the owner coverage scanner; no restored route opens while it runs.
+ * A supplied Access client keeps the caller's transaction; both scans finish
+ * before this operation returns or rejects.
+ */
+export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, access: Pool,
+  consumer: string, evidence: RetainedAuthorityCoverage, accessClient?: PoolClient,
+  release?: { fuseki: FusekiClient; graphRelease: RestoredGraphReleaseExpectation;
+    capturedGeneration: string;
+    /**
+     * The running outer operation whose HMAC-bound qualification and release
+     * findings authorize the opened captured+1 phase. The comparison below is
+     * then against the coverage that verified finding recorded, never a caller
+     * value. Without it the opened phase still compares to the signed coverage.
+     */
+    binding?: { outerReconciliationId: string; erasuresReconciliationId?: string } }): Promise<void> {
+  const graphRelease = release ? structuredClone(release.graphRelease) : undefined;
+  const coverage = await assertRetainedAuthorityCapture(relay, consumer, evidence);
   const fence = (await (accessClient ?? access).query<{ open: boolean; generation: string }>(
     'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
   if (release) {

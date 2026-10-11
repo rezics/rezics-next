@@ -83,6 +83,7 @@ export interface RestoreChecks<Context extends OperatorRestoreReleaseContext = R
       profile: 'owner-reconciliation-v1';
       kind: 'restore';
       sealedCoverage: string;
+      retainedAuthorityCoverage?: string;
       sealedDeletionSets: string[];
     },
     key: string,

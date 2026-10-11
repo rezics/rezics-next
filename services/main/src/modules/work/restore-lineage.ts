@@ -1,3 +1,4 @@
+import { assertRetainedAuthorityCapture } from '../erasure/authority.ts';
 import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 import { StructureGroupRootStore } from '../structure/group-root.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
@@ -279,6 +280,8 @@ export interface DeletionReleaseEvidence {
 
 export interface AuthenticatedRecoveryCoverage {
   sealedCoverage: string;
+  /** Independently current evidence; the physical owner cut remains sealedCoverage. */
+  retainedAuthorityCoverage?: string;
   hmacKey: string;
   accountPool: Pool;
   deletions?: DeletionReleaseEvidence;
@@ -857,6 +860,7 @@ export function assertNativeAccessErasureBaseBinding(
     || reference.summary.baseFenceGeneration !== base.accessFenceGeneration
     || !sameCoreCoverage(reference.baseErasureJournal, base.erasureJournal)
     || !sameAccountRows(current.account, base.account)
+    || JSON.stringify(current.commerce) !== JSON.stringify(base.commerce)
     || !sameCoverage(reference.summary.baseState, rowCoverage(base.accessStateCount, base.accessStateDigest))
     || !sameCoverage(reference.summary.baseOutbox, rowCoverage(base.accessOutboxCount, base.accessOutboxDigest))) {
     throw new RestoreLineageConflict('native Access erasure reference is not bound to signed C0');
@@ -896,6 +900,45 @@ export function assertRetainedRecoveryRelayCut(coverage: RecoveryCoverage, retai
   }
 }
 
+/** Verify current authority and its signed native-addition relationship to the physical base. */
+export async function assertRestoreAuthorityBaseline(relay: PoolClient,
+  evidence: Pick<AuthenticatedRecoveryCoverage, 'sealedCoverage' | 'retainedAuthorityCoverage' | 'hmacKey'>,
+  base: RecoveryCoverage): Promise<void> {
+  if (evidence.retainedAuthorityCoverage === undefined) {
+    try { await assertCurrentRecoveryCoverageHead(relay, base); }
+    catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
+    return;
+  }
+  let current: RecoveryCoverage;
+  try {
+    current = await assertRetainedAuthorityCapture(relay, base.relay.consumer,
+      { sealedCoverage: evidence.retainedAuthorityCoverage, hmacKey: evidence.hmacKey });
+    assertRecoveryCoverage(current);
+  } catch (error) {
+    throw new RestoreLineageConflict('independently current authority capture is invalid or superseded', { cause: error });
+  }
+  if (evidence.retainedAuthorityCoverage === evidence.sealedCoverage) return;
+  // A later WAL floor alone needs no attachment: all captured owner facts and
+  // native Access values must still describe the same cut.
+  if (!current.nativeAccessErasure) {
+    const ownerFacts = (cut: RecoveryCoverage) => ({ ...cut, accountPg: undefined });
+    if (JSON.stringify(ownerFacts(current)) !== JSON.stringify(ownerFacts(base))) {
+      throw new RestoreLineageConflict('current authority requires a signed native Access attachment');
+    }
+    return;
+  }
+  assertNativeAccessErasureBaseBinding(current, base, evidence.sealedCoverage);
+  const reference = current.nativeAccessErasure!;
+  const [prefix, journal] = [
+    await captureErasureJournalCoreCoverage(relay, reference.baseErasureJournal.epoch),
+    await captureErasureJournalCoreCoverage(relay),
+  ];
+  if (!sameCoreCoverage(prefix, reference.baseErasureJournal)
+    || !sameCoreCoverage(journal, reference.sourceErasureJournal)) {
+    throw new RestoreLineageConflict('retained erasure journal differs from the signed two-cut relationship');
+  }
+}
+
 /** Release only after an independently retained authority/receipt frontier is compared.
  * Supplying both Access and relay clients preserves the caller's transactions.
  * The legacy relay-only argument retains its original transaction lifecycle.
@@ -929,6 +972,13 @@ export async function releaseRestoredGraphHold(
     capturedClient = await evidence.restoredRelayPool.connect();
     await capturedClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     capturedRelay = await relayCoverageOnClient(capturedClient, coverage.relay.consumer);
+    if (evidence.retainedAuthorityCoverage !== undefined
+      && evidence.retainedAuthorityCoverage !== evidence.sealedCoverage) {
+      const capturedJournal = await captureErasureJournalCoreCoverage(capturedClient);
+      if (!coverage.erasureJournal || !sameCoreCoverage(capturedJournal, coverage.erasureJournal)) {
+        throw new RestoreLineageConflict('captured erasure journal differs from signed C0');
+      }
+    }
     await capturedClient.query('COMMIT');
   } catch (error) {
     if (capturedClient) {
@@ -1015,8 +1065,12 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account'); }
     await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayHeadClient);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions, client);
-    try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
-    catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
+    if (evidence.retainedAuthorityCoverage !== undefined
+      && evidence.retainedAuthorityCoverage !== evidence.sealedCoverage
+      && fenceGeneration !== coverage.accessFenceGeneration) {
+      throw new RestoreLineageConflict('Access fence differs from signed C0');
+    }
+    await assertRestoreAuthorityBaseline(relayHeadClient, evidence, coverage);
     if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
     if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
     if (!coverage.objects) throw new RestoreLineageConflict('immutable object recovery coverage is missing');

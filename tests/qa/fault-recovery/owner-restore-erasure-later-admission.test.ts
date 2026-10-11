@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { openRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ERASURE_JOURNAL_EPOCH } from '../../../services/main/src/modules/erasure/journal.ts';
 import {
   accessOutboxCoverage,
@@ -10,10 +10,10 @@ import {
 } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import type { RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { ownerRestoreErasureFixture } from './owner-restore-erasure-fixture.ts';
+import { graphReleased, outerOperation, ownerRestoreErasureFixture } from './owner-restore-erasure-fixture.ts';
 
 test(
-  'OPS12: a later public erasure admission advances current Access while the physical base stays unchanged',
+  'OPS12: a later public erasure admission preserves C0 and verifies its current two-cut restore baseline',
   async () => {
     const fixtureStarted = Date.now();
     const fixture = await ownerRestoreErasureFixture({ laterApiAdmission: true });
@@ -177,6 +177,58 @@ test(
             )
           ).rows,
         ).toEqual([{ open: false, generation: fixture.generation }]);
+
+        const body = {
+          profile: 'owner-reconciliation-v1' as const,
+          kind: 'restore' as const,
+          sealedCoverage: fixture.baseAuthority.sealedCoverage,
+          retainedAuthorityCoverage: fixture.currentAuthority.sealedCoverage,
+          sealedDeletionSets: [],
+        };
+        // Omitting C1 still demands that C0 itself be independently current.
+        const sameCutKey = 'later-admission-same-cut';
+        const sameCut = await copy.request(sameCutKey);
+        expect(sameCut.status).toBe(201);
+        expect(await sameCut.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+        expect((await outerOperation(copy, sameCutKey)).hold_reason)
+          .toBe('signed recovery coverage is not the retained current capture');
+
+        const twoCutKey = 'later-admission-two-cut-baseline';
+        const twoCut = await copy.request(twoCutKey, undefined, body);
+        expect(twoCut.status).toBe(201);
+        expect(await twoCut.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+        const held = await outerOperation(copy, twoCutKey);
+        // The full C0 owner baseline and authenticated C1/C0/D/J1 gate passed.
+        // Native additions/release are subsequent steps, so replay cannot run yet.
+        expect(held.hold_reason).toBe('Access differs from independently current authority');
+        expect(held.erasures).toBeUndefined();
+        expect(held.qualifications).toEqual([]);
+        expect(held.releases).toEqual([]);
+        expect(await graphReleased(copy)).toBe(false);
+        expect(await accessStateCoverage(copy.owners.access)).toEqual(baseState);
+        expect(await accessOutboxCoverage(copy.owners.access)).toEqual(baseOutbox);
+        expect((await copy.ready()).status).toBe(503);
+        expect((await copy.request(twoCutKey, undefined, body)).status).toBe(200);
+        expect((await copy.request(twoCutKey)).status).toBe(409);
+
+        const wrongBase = JSON.stringify(sealRecoveryPayload({
+          ...fixture.baseCoverage, accessStateDigest: '0'.repeat(64),
+        }, fixture.baseAuthority.hmacKey, 'graph-recovery-coverage'));
+        const wrongBaseKey = 'later-admission-wrong-physical-base';
+        const refusedBase = await copy.request(wrongBaseKey, undefined,
+          { ...body, sealedCoverage: wrongBase });
+        expect(refusedBase.status).toBe(201);
+        expect(await refusedBase.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+        expect((await outerOperation(copy, wrongBaseKey)).hold_reason)
+          .toBe('Access state differs from recovery coverage');
+
+        const invalidCurrentKey = 'later-admission-invalid-current';
+        const invalidCurrent = await copy.request(invalidCurrentKey, undefined,
+          { ...body, retainedAuthorityCoverage: 'invalid-current-envelope' });
+        expect(invalidCurrent.status).toBe(201);
+        expect(await invalidCurrent.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+        expect((await outerOperation(copy, invalidCurrentKey)).hold_reason)
+          .toBe('independently current authority capture is invalid or superseded');
       } finally {
         await copy.dispose();
       }
@@ -190,5 +242,6 @@ test(
       expect(elapsedMs).toBeLessThan(600_000);
     }
   },
+  // The source-only predecessor has not yet passed QA; 600 s is a hang deadline.
   qaStartupTestTimeout(600_000),
 );

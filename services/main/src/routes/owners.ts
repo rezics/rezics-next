@@ -22,6 +22,7 @@ const reconcileBody = t.Union([t.Object({ profile: t.Literal('owner-reconciliati
   kind: t.Literal('revision_recovery'), revision }, { additionalProperties: false }),
 t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('restore'),
   sealedCoverage: bounded(1_000_000),
+  retainedAuthorityCoverage: t.Optional(bounded(1_000_000)),
   sealedDeletionSets: t.Optional(t.Array(bounded(100_000), { maxItems: 10_000 })) },
 { additionalProperties: false }),
 t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('relay_gap'),
@@ -108,7 +109,9 @@ export function ownerRoutes(work: MainWorkDependencies) {
         if (!key) return missingKey();
         const result = body.kind === 'restore'
           ? await work.ownerOperations.reconcileRestore({ sealedCoverage: body.sealedCoverage,
-            sealedDeletionSets: body.sealedDeletionSets ?? [] }, key)
+            sealedDeletionSets: body.sealedDeletionSets ?? [],
+            ...(body.retainedAuthorityCoverage === undefined ? {}
+              : { retainedAuthorityCoverage: body.retainedAuthorityCoverage }) }, key)
           : body.kind === 'relay_gap'
             ? await work.ownerOperations.reconcileRelayGap({ consumer: body.consumer,
               relayConsumer: body.relayConsumer, dataEpoch: body.dataEpoch,
