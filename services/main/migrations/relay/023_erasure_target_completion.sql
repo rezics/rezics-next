@@ -34,13 +34,31 @@ UPDATE relay.erasure_target t SET completion_state = 'legacy'
 FROM relay.erasure e
 WHERE e.id = t.erasure_id AND e.stage = 'verified';
 
+-- The summary cannot remain verified while any upgraded target awaits
+-- qualification. Keep the journal open for the bounded owner inventory.
+UPDATE relay.erasure e SET stage = 'reconciling', verified_at = NULL
+WHERE e.stage = 'verified' AND EXISTS (
+  SELECT 1 FROM relay.erasure_target t
+  WHERE t.erasure_id = e.id AND t.completion_state IS DISTINCT FROM 'completed'
+);
+
 CREATE FUNCTION relay.erasure_target_completion_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   old_state text;
   new_state text;
+  parent_stage text;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'retained erasure target cannot be deleted' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT stage INTO parent_stage FROM relay.erasure WHERE id = NEW.erasure_id FOR UPDATE;
+  IF parent_stage = 'verified' AND NEW.completion_state IS DISTINCT FROM 'completed' THEN
+    RAISE EXCEPTION 'verified erasure has incomplete target completion' USING ERRCODE = '23514';
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    RETURN NEW;
   END IF;
 
   IF ROW(OLD.erasure_id, OLD.ordinal, OLD.owner, OLD.target_kind, OLD.target_ref)
@@ -67,19 +85,18 @@ BEGIN
   RETURN NEW;
 END $$;
 
-CREATE TRIGGER erasure_target_completion_guard BEFORE UPDATE OR DELETE ON relay.erasure_target
+CREATE TRIGGER erasure_target_completion_guard BEFORE INSERT OR UPDATE OR DELETE ON relay.erasure_target
     FOR EACH ROW EXECUTE FUNCTION relay.erasure_target_completion_guard();
 
--- A journal summary cannot become verified until every retained target has
--- reached its successful terminal state.
+-- A verified journal summary must match its targets after every header change.
 CREATE FUNCTION relay.erasure_verified_targets_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF OLD.stage <> 'verified' AND NEW.stage = 'verified' AND EXISTS (
+  IF NEW.stage = 'verified' AND EXISTS (
       SELECT 1 FROM relay.erasure_target t
       WHERE t.erasure_id = NEW.id AND t.completion_state IS DISTINCT FROM 'completed') THEN
     RAISE EXCEPTION 'erasure has incomplete target completion' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END $$;
-CREATE TRIGGER erasure_verified_targets_guard BEFORE UPDATE OF stage ON relay.erasure
+CREATE TRIGGER erasure_verified_targets_guard BEFORE INSERT OR UPDATE ON relay.erasure
     FOR EACH ROW EXECUTE FUNCTION relay.erasure_verified_targets_guard();

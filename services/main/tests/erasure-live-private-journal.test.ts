@@ -146,6 +146,13 @@ test('target completion is immutable, replayable, bounded and required for verif
     WHERE id = $1`, [erasure.erasureId]);
   expect((await relay.query<{ stage: string }>('SELECT stage FROM relay.erasure WHERE id = $1',
     [erasure.erasureId])).rows[0]?.stage).toBe('verified');
+  for (const state of ['pending', 'failed'] as const) {
+    await expectConstraintFailure(relay.query(`INSERT INTO relay.erasure_target
+      (erasure_id, ordinal, owner, target_kind, target_ref, completion_state, completion_reason_code)
+      VALUES ($1, $2, 'content', 'content_revision', $3, $4, $5)`,
+    [erasure.erasureId, targets.length + 1, `late-target:${state}:${randomUUID()}`, state,
+      state === 'failed' ? 'owner_probe_failed' : null]));
+  }
 
   for (const state of ['pending', 'failed'] as const) {
     const target = await journalErasure(relay, {
@@ -166,7 +173,7 @@ test('target completion is immutable, replayable, bounded and required for verif
 
 });
 
-test('verified targets from before completion tracking remain explicitly unqualified on upgrade', async () => {
+test('failed legacy qualification stays unverified until later completion succeeds', async () => {
   const files = schemaFiles(root, 'relay');
   const completionFile = '023_erasure_target_completion.sql';
   const completionIndex = files.indexOf(completionFile);
@@ -197,13 +204,29 @@ test('verified targets from before completion tracking remain explicitly unquali
 
     await upgradeRelay.query(readFileSync(join(migrationDirectory, completionFile), 'utf8'));
     const report = await readErasure(upgradeRelay, erasureId);
-    expect(report.stage).toBe('verified');
+    expect(report.stage).toBe('reconciling');
+    expect(report.verifiedAt).toBeNull();
     expect(report.targets).toMatchObject([{ completionState: 'legacy', completionReasonCode: null,
       completionEvidenceRef: null, completedAt: null }]);
 
+    await failErasureTarget(upgradeRelay, erasureId, 1, 'qualification_probe_failed');
+    const failed = await readErasure(upgradeRelay, erasureId);
+    expect(failed.stage).toBe('reconciling');
+    expect(failed.verifiedAt).toBeNull();
+    expect(failed.targets).toMatchObject([{ completionState: 'failed',
+      completionReasonCode: 'qualification_probe_failed' }]);
+    await expectConstraintFailure(upgradeRelay.query(`UPDATE relay.erasure SET stage = 'verified',
+      verified_at = clock_timestamp() WHERE id = $1`, [erasureId]));
+    expect((await readErasure(upgradeRelay, erasureId)).stage).toBe('reconciling');
+
     const evidence = createHash('sha256').update('historical owner inventory').digest('hex');
     await completeErasureTarget(upgradeRelay, erasureId, 1, evidence);
+    await completeErasureTarget(upgradeRelay, erasureId, 1, evidence);
+    await upgradeRelay.query(`UPDATE relay.erasure SET stage = 'verified', verified_at = clock_timestamp()
+      WHERE id = $1`, [erasureId]);
     const upgraded = await readErasure(upgradeRelay, erasureId);
+    expect(upgraded.stage).toBe('verified');
+    expect(upgraded.verifiedAt).toEqual(expect.any(String));
     expect(upgraded.targets).toMatchObject([{ completionState: 'completed', completionReasonCode: null,
       completionEvidenceRef: evidence }]);
   } finally {
