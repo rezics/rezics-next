@@ -13,6 +13,8 @@ import { keepReading, type ZoneSite } from '../wiki/links.ts';
 import { withPosition } from '../wiki/position.ts';
 import { type PositionState, positionNote } from '../wiki/state.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
+import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
+import { aboutDiscussionAddress } from './about-discussion-intent.ts';
 
 type Search = Record<string, string | string[] | undefined>;
 
@@ -47,6 +49,9 @@ export async function ZoneEntityPage({
   const cursors = parseEntityCursors(search);
   if (!cursors) notFound();
   const base = standaloneHrefFor(cursors, path);
+  const address = aboutDiscussionAddress(path);
+  const discussion = address ? <ZoneAboutDiscussion zone={site.zone} path={address.path}
+    href={path} locale={locale} /> : null;
   const hrefFor: HrefFor = (link) =>
     link.kind === 'continue'
       ? keepReading(site, base(link))
@@ -66,7 +71,7 @@ export async function ZoneEntityPage({
     />
   );
   const Slot = view.pkg?.slots.entity;
-  if (!Slot) return generic;
+  if (!Slot) return <>{generic}{discussion}</>;
   const lists = view.mounts.map((item) => ({ segment: item.segment, name: zoneText(item.name) }));
   const entity = await buildEntity({
     id,
@@ -78,7 +83,7 @@ export async function ZoneEntityPage({
     lists,
     fullPage: keepReading(site, entityHref(id)),
   });
-  if (!entity) return generic;
+  if (!entity) return <>{generic}{discussion}</>;
   const where = mount ? lists.find((list) => list.segment === mount) : undefined;
   const here: { segment: string; name: ZoneText; href: string } | null = where
     ? { ...where, href: keepReading(site, spaceHref(site.ref, 'site', [where.segment])) }
@@ -99,7 +104,7 @@ export async function ZoneEntityPage({
     />
   );
   return (
-    <SlotBoundary slot="entity" fallback={generic}>
+    <><SlotBoundary slot="entity" fallback={generic}>
       <Slot
         zone={view.zone}
         entity={entity}
@@ -109,6 +114,6 @@ export async function ZoneEntityPage({
         fallback={generic}
         Link={LocalizedLink}
       />
-    </SlotBoundary>
+    </SlotBoundary>{discussion}</>
   );
 }

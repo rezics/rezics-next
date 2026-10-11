@@ -12,6 +12,7 @@ import { readPositionedRoute } from '../wiki/read.ts';
 import { positionNote, positionOf } from '../wiki/state.ts';
 import { cardRenderer, workRenderers } from './zone-home.tsx';
 import { SlotBoundary } from './slot-boundary.tsx';
+import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
 
 type Search = Record<string, string | string[] | undefined>;
 
@@ -78,7 +79,7 @@ export async function ZoneSiteHome({ view, search }: { view: RealmView; search: 
     )
   ).flatMap((section) => section ?? []);
   return (
-    <SlotBoundary slot="home" fallback={null}>
+    <><SlotBoundary slot="home" fallback={null}>
       <Home
         zone={view.zone}
         sections={sections}
@@ -88,5 +89,7 @@ export async function ZoneSiteHome({ view, search }: { view: RealmView; search: 
         {...workRenderers(card, locale, view.zoneMessages)}
       />
     </SlotBoundary>
+      <ZoneAboutDiscussion zone={zone.id} path="/" href={spaceHref(ref, 'site')} locale={locale} />
+    </>
   );
 }

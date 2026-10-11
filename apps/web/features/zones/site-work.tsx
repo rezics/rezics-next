@@ -9,6 +9,8 @@ import { loadWork } from '../work-page/read.ts';
 import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
 import { type CatalogueFacts, readCatalogueFacts } from './catalogue-facts.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
+import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
+import { aboutDiscussionAddress } from './about-discussion-intent.ts';
 import {
   idOf,
   iriOf,
@@ -100,6 +102,9 @@ export async function ZoneWorkPage({
     ? await readCatalogueFacts(work.id, locale, catalogue.count, catalogue.formatNames) : null;
   // The year is the Work's own accepted first-publication Statement; no year means none is recorded.
   const facts = read;
+  const discussionAddress = aboutDiscussionAddress(base.path);
+  const discussion = discussionAddress
+    ? <ZoneAboutDiscussion {...discussionAddress} href={base.path} locale={locale} /> : null;
   return (
     <WorkFrameView {...common} work={work.header} lead={lead}>
       {tab === 'overview' ? (
@@ -111,6 +116,7 @@ export async function ZoneWorkPage({
             <CatalogueFactRights facts={facts} locale={locale} />
           </SlotBoundary> : null}
           <WorkOverview {...common} work={work.header} scope={scope} context={context} lead={lead} />
+          {discussion}
         </>
       ) : tab === 'contents' ? (
         <WorkContents {...common} work={work.header} query={parseContentsQuery(search)} />
@@ -119,7 +125,7 @@ export async function ZoneWorkPage({
       ) : tab === 'history' ? (
         <WorkHistory {...common} query={parseHistoryQuery(search)} />
       ) : (
-        <WorkDiscussion {...common} scope={scope} cursor={parseCursor(search)} />
+        discussionAddress ? discussion : <WorkDiscussion {...common} scope={scope} cursor={parseCursor(search)} />
       )}
     </WorkFrameView>
   );
