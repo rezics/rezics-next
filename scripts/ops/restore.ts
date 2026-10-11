@@ -42,6 +42,7 @@ import {
   openManifest,
   privateStaging,
   RecoveryBudget,
+  RecoveryRefusal,
   stackContext,
   targetOccupied,
   targetOptions,
@@ -186,7 +187,8 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
     );
     const body = (await response.json()) as { state?: string; disposition?: string } | null;
     if (!response.ok || body?.state !== 'reconciled' || body.disposition !== 'matched')
-      throw new Error(
+      throw new RecoveryRefusal(
+        'owner-reconciliation-refused',
         `Owner reconciliation did not verify the restore (${response.status}, ${body?.state ?? 'unknown'}, ${body?.disposition ?? 'unknown'})`,
       );
     // A replayed matched result may belong to an earlier target. Record only

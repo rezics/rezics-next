@@ -52,6 +52,7 @@ export type RecoveryRefusalCode =
   | 'original-project'
   | 'occupied-target'
   | 'target-identity-refused'
+  | 'owner-reconciliation-refused'
   | 'source-volume-alias'
   | 'source-bind-alias';
 
