@@ -5311,8 +5311,13 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
 
 /** Concurrent type-check and unit gates share this many process-identity leases.
  * A killed gate's lease is stale, so the next gate takes its lane. */
-function gateLaneCount(): number {
-  return positiveInteger('GOAL_GATE_LANES', 2);
+function gateLaneCount(directory: string = gateLanesDir): number {
+  if (process.env.GOAL_GATE_LANES) return positiveInteger('GOAL_GATE_LANES', 2);
+  // Program sets the count for every Goal by writing this file beside the lanes; the environment
+  // variable overrides it for one process.
+  const file = join(dirname(directory), 'gate-lane-count');
+  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : 2;
 }
 
 const gateLanesDir = join(stateDir, 'gate-lanes');
@@ -5412,8 +5417,8 @@ export async function withGateLane<T>(work: (hold: { acquiredAt: number }) => Pr
   const announce = options.announce ?? console.error;
   const alive = options.alive ?? (pid => pidAlive(pid));
   const pid = options.pid ?? process.pid;
-  const lanes = options.lanes ?? gateLaneCount();
   const directory = options.directory ?? gateLanesDir;
+  const lanes = options.lanes ?? gateLaneCount(directory);
   const goal = options.goal ?? currentQaGoal();
   const command = options.command ?? 'gate';
   const waiterDirectory = join(directory, 'waiters');

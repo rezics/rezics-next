@@ -4638,6 +4638,38 @@ describe('gate lanes', () => {
     while (!check() && Date.now() < deadline) await Bun.sleep(5);
   }
 
+  test('the lane count comes from the file beside the lanes unless the environment names one', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'gate-lane-count-'));
+    const directory = join(root, 'lanes');
+    const previous = process.env.GOAL_GATE_LANES;
+    delete process.env.GOAL_GATE_LANES;
+    const waiting = async (): Promise<string> => {
+      const notes: string[] = [];
+      const releases: (() => void)[] = [];
+      const holders = [0, 1, 2].map(index => withGateLane(() => new Promise<void>(done => { releases.push(done); }), {
+        directory, command: `merge ${index}`, goal: 'program', pollMs: 5, announce: note => notes.push(note),
+      }));
+      await Bun.sleep(80);
+      const note = notes.find(line => line.includes('gate lanes busy')) ?? 'none waited';
+      let settled = false;
+      const all = Promise.all(holders).then(() => { settled = true; });
+      while (!settled) { releases.shift()?.(); await Bun.sleep(10); }
+      await all;
+      return note;
+    };
+    try {
+      expect(await waiting()).toContain('2/2 gate lanes busy');
+      writeFileSync(join(root, 'gate-lane-count'), '3\n');
+      expect(await waiting()).toBe('none waited');
+      process.env.GOAL_GATE_LANES = '1';
+      expect(await waiting()).toContain('1/1 gate lanes busy');
+    } finally {
+      if (previous === undefined) delete process.env.GOAL_GATE_LANES;
+      else process.env.GOAL_GATE_LANES = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test('a third concurrent gate waits for a lane', async () => {
     const root = mkdtempSync(join(tmpdir(), 'gate-lanes-'));
     const directory = join(root, 'lanes');
