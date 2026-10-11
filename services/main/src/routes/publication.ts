@@ -6,7 +6,7 @@ import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immut
 import { readRealmMediaSet, RealmMediaUnavailable, RealmMediaMissing } from '../modules/content-publication/realm-media.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { AdmissionUnavailable } from '../modules/access/admission.ts';
-import { GovernanceInvalid, GovernanceUnavailable } from '../modules/governance/store.ts';
+import { GOVERNANCE_LIMITS, GovernanceInvalid, GovernanceUnavailable } from '../modules/governance/store.ts';
 import { rejectAdmittedOrganizationPublication }
   from '../modules/work/reject-organization-admitted.ts';
 import { organizationRejectionBody, organizationRejectionResult }
@@ -79,7 +79,7 @@ const workStructurePublicationWriteResult = t.Object({
   replayed: t.Boolean(),
 });
 
-async function withStructuredPublicationFence<T>(work: MainWorkDependencies, workId: string,
+export async function withStructuredPublicationPreflight<T>(work: MainWorkDependencies, workId: string,
   dispatch: (allowed: boolean) => Promise<T>): Promise<T> {
   const governance = work.governance?.store;
   if (!governance) throw new AdmissionUnavailable('publication governance owner is unavailable');
@@ -98,12 +98,22 @@ async function withStructuredPublicationFence<T>(work: MainWorkDependencies, wor
     if (error instanceof AdmissionUnavailable) throw error;
     throw new AdmissionUnavailable('publication governance owner is unavailable');
   }
-  try { return await governance.withPublicationFence(resources, dispatch); }
+  let enforcement: Awaited<ReturnType<typeof governance.readEnforcement>>[];
+  try {
+    enforcement = await Promise.all(resources.flatMap(resource =>
+      (['publication', 'structure', 'record'] as const).map(component =>
+        governance.readEnforcement({ owner: 'graph', resource, component }))));
+  }
   catch (error) {
     if (error instanceof GovernanceInvalid || error instanceof GovernanceUnavailable)
       throw new AdmissionUnavailable('publication governance owner is unavailable');
     throw error;
   }
+  if (enforcement.some(rows => rows.length >= GOVERNANCE_LIMITS.page)) {
+    throw new AdmissionUnavailable('publication governance preflight is incomplete');
+  }
+  const blocked = enforcement.some(rows => rows.some(row => row.effect === 'publication' && row.state === 'restricted'));
+  return dispatch(!blocked);
 }
 
 export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
@@ -143,7 +153,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       try {
         const receipt = await changeAdmittedWorkStructurePublication(work.environment, work.account,
           work.access, request, { ...body, idempotencyKey }, dispatch =>
-          withStructuredPublicationFence(work, body.work, dispatch));
+          withStructuredPublicationPreflight(work, body.work, dispatch));
         return Response.json({ profile: 'work-structure-publication-v1', operation: body.operation,
           work: receipt.work, publicationDecision: receipt.publicationDecision!,
           ...(receipt.mainVersion ? { mainVersion: receipt.mainVersion } : {}),
