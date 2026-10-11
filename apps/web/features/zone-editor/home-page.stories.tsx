@@ -109,7 +109,7 @@ function SavedCollection({ incomplete = false, document = true }: { incomplete?:
 export const SavedCollectionPreview: Story = { render: () => <SavedCollection />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('The saved Collection member', { exact: true })).toBeVisible();
+    await expect(await canvas.findByRole('heading', { name: 'The saved Collection member' })).toBeVisible();
     await expect(canvas.getByText('Morning edition of the harbor')).toBeVisible();
     await expect(canvas.getByRole('heading', { name: 'Draft preview' })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -117,7 +117,7 @@ export const SavedCollectionPreview: Story = { render: () => <SavedCollection />
 export const SavedCollectionPreviewPhone: Story = { ...SavedCollectionPreview, globals: { viewport: { value: 'phone' } } };
 export const PresentationOnlyPreview: Story = { render: () => <SavedCollection document={false} />,
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByText('The saved Collection member', { exact: true })).toBeVisible();
+    await expect(await within(canvasElement).findByRole('heading', { name: 'The saved Collection member' })).toBeVisible();
     await expect(canvasElement.querySelector('.rezics-document')).not.toBeInTheDocument();
   } };
 export const IncompleteCollectionPreview: Story = { render: () => <SavedCollection incomplete />,

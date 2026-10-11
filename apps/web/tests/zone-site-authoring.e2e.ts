@@ -546,7 +546,7 @@ test('Zone preview: a saved Collection shelf renders before its mount is publish
   }, { timeout: 30_000 }).toContain(work);
   // There is deliberately no home document: saved presentation modules must still render.
   await page.goto(site.previewHref);
-  await expect(page.getByText('The unpublished shelf member', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'The unpublished shelf member' })).toBeVisible();
   await expect(page.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(['Home', 'Saved reading list']);
   await expect(page.getByText('Couldn’t load Saved reading list')).toHaveCount(0);
   await shoot(page, 'zone-unpublished-collection-preview', info);
