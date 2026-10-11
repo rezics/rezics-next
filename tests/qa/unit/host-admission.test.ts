@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { GiB } from '../../../scripts/qa/memory-admission.ts';
-import { hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission, SERIAL_ADMISSION_GIB } from '../../../scripts/qa/host-admission.ts';
+import { BUILD_ADMISSION_GIB, hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission, SERIAL_ADMISSION_GIB } from '../../../scripts/qa/host-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
@@ -128,4 +128,8 @@ test('a large need runs again under the host-wide lock, and a small or already l
     await runHostAdmission(7, ['tsc'], { ...options, env: qaEnv });
     expect(seen[3]).toEqual(['tsc']);
   } finally { rmSync(lock, { force: true }); }
+});
+
+test('long builds are admitted below the size that takes the serial turn', () => {
+  expect(BUILD_ADMISSION_GIB).toBeLessThan(SERIAL_ADMISSION_GIB);
 });

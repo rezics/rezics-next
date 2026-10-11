@@ -14,6 +14,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
+import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
 
 export function appHostSourceHash(root: string): string {
   const digest = createHash('sha256');
@@ -138,7 +139,7 @@ export const backendCommand: BackendCommand = (root, executable, args) => {
  * Generation imports the backend. Admit their host memory without taking QA. */
 export const backendBuildCommand: BackendCommand = (root, executable, args) =>
   executable === 'task' && ['install', 'gen'].includes(args[0] ?? '')
-    ? backendCommand(root, 'bun', [join(root, 'scripts/qa/host-admission.ts'), '--gib', '4', '--', executable, ...args])
+    ? backendCommand(root, 'bun', [join(root, 'scripts/qa/host-admission.ts'), '--gib', String(BUILD_ADMISSION_GIB), '--', executable, ...args])
     : backendCommand(root, executable, args);
 
 /** Model alignment's small intent/audit checkpoints survive executable revisions.

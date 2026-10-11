@@ -11,6 +11,7 @@ import { acquireSharedLifecycle, inheritedSharedLifecycleOwnership, markSharedLi
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
 import { sqlMigration } from '../lib/concurrent-index.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
+import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { readActiveModelGeneration } from '../../services/main/src/modules/semantic/generation-guard.ts';
 import { statementUpgradeCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
@@ -533,7 +534,7 @@ export function refreshBuildStepLog(candidate: string, args: string[], output: s
 
 export function refreshBuildTask(candidate: string, args: string[], env = process.env): void {
   const result = spawnSync('bun', [join(candidate, 'scripts/qa/host-admission.ts'),
-    '--gib', '4', '--', 'task', ...args,
+    '--gib', String(BUILD_ADMISSION_GIB), '--', 'task', ...args,
   ], { cwd: candidate, env, encoding: 'utf8', timeout: 600_000, maxBuffer: 8 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (!result.error && result.status === 0) return;

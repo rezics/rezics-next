@@ -18,8 +18,12 @@ export function parseHostAdmissionArgs(args: readonly string[]): { gib: number; 
 }
 
 /** Needs this large take turns. Two type checks that each fit when measured can exhaust the host together,
- * because a process grows to its need only after it was admitted. */
-export const SERIAL_ADMISSION_GIB = 4;
+ * because a process grows to its need only after it was admitted. The turn lasts the whole command, so only
+ * short checks may be this large. */
+export const SERIAL_ADMISSION_GIB = 5;
+/** Installs, generation and image builds run for minutes. They stay below the serial size: at it, one stack
+ * refresh held the turn for eleven minutes and every merge gate's web type check ran out of time behind it. */
+export const BUILD_ADMISSION_GIB = 4;
 const SERIAL_ADMISSION_MARK = 'REZICS_QA_SERIAL_ADMISSION';
 
 export interface HostAdmissionOptions {
