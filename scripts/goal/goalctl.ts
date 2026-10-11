@@ -1484,13 +1484,13 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   });
 }
 
-async function waitFor(id: string): Promise<void> {
+export async function waitFor(id: string, options: { pollMs?: number; settleMs?: number } = {}): Promise<void> {
   // A killed waiter must never record the worker as ended (an expired monitor once marked live workers exited).
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
   let watching = lastAttempt(taskOf(readLedger(), id));
   for (;;) {
     const alive = () => pidAlive(watching.pid, programOf(engineOf(watching)));
-    while (alive() || (await Bun.sleep(3000), alive())) await Bun.sleep(5000);
+    while (alive() || (await Bun.sleep(options.settleMs ?? 3000), alive())) await Bun.sleep(options.pollMs ?? 5000);
     const result = readResult(watching);
     const outcome = await withLedger(ledger => {
       const current = taskOf(ledger, id);
@@ -3552,9 +3552,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
 
 /** Owner files go through `task test`, the same command as the owner tier, so their environment matches.
  * The CLI's budget is this shard's remaining deadline; without it the tier stops at its own 600s ceiling. */
-export function runOwnerShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
-  const budgetMs = Math.max(1, deadline - Date.now());
-  const progressFile = join(cwd, '.temp', 'owner-shard-progress', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+export function runOwnerShard(cwd: string, files: readonly string[], deadline: number, now: () => number = Date.now): Promise<UnitShardResult> {
+  const budgetMs = Math.max(1, deadline - now());
+  const progressFile = join(cwd, '.temp', 'owner-shard-progress', `${process.pid}-${now()}-${Math.random().toString(16).slice(2)}`);
   mkdirSync(dirname(progressFile), { recursive: true });
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
   env.REZICS_QA_OWNER_BUDGET_MS = String(budgetMs);
@@ -3687,13 +3687,19 @@ async function mapPool<T, R>(items: readonly T[], concurrency: number, run: (ite
   return results;
 }
 
+export interface UnitGateOptions {
+  now?: () => number;
+  durations?: ReadonlyMap<string, number>;
+}
+
 /** One schedule of the files still without a verdict. A wide plan is many shards; only `shards` run at once. */
 export async function runUnitGate(cwd: string, files: readonly string[], shards?: number,
-  runShard: UnitShardRunner = runUnitShard): Promise<UnitGateResult> {
+  runShard: UnitShardRunner = runUnitShard, options: UnitGateOptions = {}): Promise<UnitGateResult> {
+  const now = options.now ?? Date.now;
   const concurrency = shards ?? unitGateShards();
   const ceiling = unitGateCeilingMs(files.length, unitGateBudgetMs(), concurrency);
-  const startedAt = Date.now();
-  const durations = readMeasuredUnitDurations(cwd);
+  const startedAt = now();
+  const durations = options.durations ?? readMeasuredUnitDurations(cwd);
   let pending = [...files];
   const passes: UnitGatePass[] = [];
   const failing = new Set<string>();
@@ -3709,13 +3715,13 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
     unfinished: [...unfinished].sort(), output: outputs.join('\n'), passes,
   });
   while (pending.length) {
-    if (wave > 0 && Date.now() - startedAt >= ceiling) {
+    if (wave > 0 && now() - startedAt >= ceiling) {
       const left = [...new Set([...pending, ...runningAtBudget])].sort();
       gateStop('the gate ceiling was reached with files still unfinished', left);
       return snapshot(left, false);
     }
     const scheduled = pending;
-    const pass = await runUnitGatePass(cwd, scheduled, concurrency, runShard, durations);
+    const pass = await runUnitGatePass(cwd, scheduled, concurrency, runShard, durations, now);
     wave++;
     outputs.push(pass.result.output);
     if (pass.result.runnerErrors.length) {
@@ -3822,7 +3828,7 @@ function attributeShard(result: UnitShardResult): UnitShardResult {
 }
 
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
-  runShard: UnitShardRunner, durations: ReadonlyMap<string, number>): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
+  runShard: UnitShardRunner, durations: ReadonlyMap<string, number>, now: () => number): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
   const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '', passes: [] };
   if (!files.length) return { result: empty, shards: [] };
   const budget = unitGateBudgetMs();
@@ -3837,7 +3843,7 @@ async function runUnitGatePass(cwd: string, files: readonly string[], shards: nu
   // At most `concurrency` shards run at once. Each budget starts when that shard starts.
   const slowest = Math.max(budget, ...planned.shards.map(shard => shard.budgetMs));
   console.log(`Unit gate: ${files.length} file(s) in ${planned.shards.length} shard(s), slowest budget ${slowest}ms`);
-  const results = (await mapPool(planned.shards, concurrency, shard => runShard(cwd, shard.files, Date.now() + shard.budgetMs))).map(attributeShard);
+  const results = (await mapPool(planned.shards, concurrency, shard => runShard(cwd, shard.files, now() + shard.budgetMs))).map(attributeShard);
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
@@ -3866,11 +3872,11 @@ interface TimeoutRetryResult {
 }
 
 async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main',
-  runShard?: UnitShardRunner, onRun?: (result: UnitGateResult) => void): Promise<TimeoutRetryResult> {
+  runShard?: UnitShardRunner, onRun?: (result: UnitGateResult) => void, options: UnitGateOptions = {}): Promise<TimeoutRetryResult> {
   const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   for (const file of [...new Set(files)].sort()) {
     console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
-    const retry = await runUnitGate(cwd, [file], 1, runShard);
+    const retry = await runUnitGate(cwd, [file], 1, runShard, options);
     // Keep the case before the timeout classification discards the transcript.
     onRun?.(retry);
     if (retry.runnerErrors.length) {
@@ -4183,13 +4189,13 @@ function emptyGate(): UnitGateResult {
 /** One side of the unit gate: first run, never-started rerun, isolated timeout retry, and confirm.
  * Every classified run keeps its failing cases. The caller decides whether they block the merge. */
 export async function runUnitSide(cwd: string, files: readonly string[], side: 'affected' | 'main',
-  evidence: UnitRunEvidence[], runShard?: UnitShardRunner): Promise<UnitSideResult> {
+  evidence: UnitRunEvidence[], runShard?: UnitShardRunner, options: UnitGateOptions = {}): Promise<UnitSideResult> {
   const none = (extra: Partial<UnitSideResult> = {}): UnitSideResult => ({
     failing: [], failures: [], fileErrors: [], runnerErrors: [], inconclusive: [], orderDependent: [], initialDone: true, ...extra,
   });
   const isolatedKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'isolated-retry';
   const confirmKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'confirm';
-  const branch = await runUnitGate(cwd, files, undefined, runShard);
+  const branch = await runUnitGate(cwd, files, undefined, runShard, options);
   notePasses(evidence, side, branch.passes, pass => pass.kind, cwd);
   if (branch.runnerErrors.length) return none({ runnerErrors: branch.runnerErrors, initialDone: branch.done });
   let failureFiles = branch.failing;
@@ -4198,7 +4204,7 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   if (!branch.done) {
     timeoutRetry = await retryTimedOutFiles(cwd, branch.timedOut, side, runShard, retry => {
       notePasses(evidence, side, retry.passes, isolatedKind, cwd);
-    });
+    }, options);
     if (timeoutRetry.runnerErrors.length) return none({ runnerErrors: timeoutRetry.runnerErrors, initialDone: false });
     failureFiles = [...new Set([...branch.failing, ...timeoutRetry.failing])].sort();
     const unresolved = [...new Set([
@@ -4222,12 +4228,12 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
   // then retry every timeout alone so the side's decision comes from its isolated run.
   const together = failureFiles.filter(file => !timedOut.includes(file));
-  const confirmed = together.length ? await runUnitGate(cwd, together, 1, runShard) : emptyGate();
+  const confirmed = together.length ? await runUnitGate(cwd, together, 1, runShard, options) : emptyGate();
   notePasses(evidence, side, confirmed.passes, confirmKind, cwd);
   if (confirmed.runnerErrors.length) return none({ runnerErrors: confirmed.runnerErrors, initialDone: branch.done });
   const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
   const retry = await retryTimedOutFiles(cwd, [...new Set([...timedOut, ...confirmed.timedOut])].filter(file => !alreadyRetried.has(file)),
-    side, runShard, result => { notePasses(evidence, side, result.passes, isolatedKind, cwd); });
+    side, runShard, result => { notePasses(evidence, side, result.passes, isolatedKind, cwd); }, options);
   const confirmedFailures = [...new Set([
     ...(!branch.done ? timeoutRetry.failing : []),
     ...confirmed.failing.filter(file => !confirmed.timedOut.includes(file)),

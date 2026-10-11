@@ -14,7 +14,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
-  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
+  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   gateLaneStatus, gateLaneWaiters, withGateLane,
   mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
@@ -22,6 +22,23 @@ import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, 
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
 import { reviewPrompt } from './land.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
+
+// A fake runner's schedule belongs to its fixture, not another worker's measured host history.
+function runUnitGate(...[cwd, files, shards, runShard, options]: Parameters<typeof measuredUnitGate>): ReturnType<typeof measuredUnitGate> {
+  return measuredUnitGate(cwd, files, shards, runShard, { durations: new Map(), ...options });
+}
+
+function runUnitSide(...[cwd, files, side, evidence, runShard, options]: Parameters<typeof measuredUnitSide>): ReturnType<typeof measuredUnitSide> {
+  return measuredUnitSide(cwd, files, side, evidence, runShard, { durations: new Map(), ...options });
+}
+
+async function waitUntil(check: () => boolean): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error('fixture did not reach its expected state');
+    await Bun.sleep(1);
+  }
+}
 
 const brief = `---
 id: G-040
@@ -462,7 +479,7 @@ describe('goalctl runtime policy', () => {
       done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [...group], output: '', ms: 1,
     });
     try {
-      const result = await runUnitGate(cwd, [slow, evidenceSlow, ...fast], 4, async (_cwd, group) => {
+      const result = await measuredUnitGate(cwd, [slow, evidenceSlow, ...fast], 4, async (_cwd, group) => {
         calls.push([...group]);
         return passed(group);
       });
@@ -473,6 +490,12 @@ describe('goalctl runtime policy', () => {
       expect(fastShard).toEqual(expect.arrayContaining(fast));
       expect(fastShard).not.toContain(slow);
       expect(fastShard).not.toContain(evidenceSlow);
+      calls.length = 0;
+      await runUnitGate(cwd, [slow, evidenceSlow, ...fast], 1, async (_cwd, group) => {
+        calls.push([...group]);
+        return passed(group);
+      });
+      expect(calls).toEqual([[slow, evidenceSlow, ...fast]]);
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
@@ -483,15 +506,16 @@ describe('goalctl runtime policy', () => {
     const lines: string[] = [];
     const write = console.log;
     console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+    let clock = 10_000;
     try {
       const result = await runUnitGate('.', files, 1, async (_cwd, group) => {
-        await Bun.sleep(5);
+        clock += 5;
         const completed = group[0]!;
         return {
           done: false, budgetExpired: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
           files: [...group], output: `${completed}:\n(pass) one [1ms]\n`, ms: 5,
         };
-      });
+      }, { now: () => clock });
       expect(result.done).toBe(false);
       expect(result.unfinished.length).toBeGreaterThan(0);
       expect(result.unfinished.length).toBeLessThan(files.length);
@@ -898,22 +922,20 @@ describe('goalctl runtime policy', () => {
     const lines: string[] = [];
     const write = console.log;
     console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
-    const before = Date.now();
+    const before = 10_000;
     try {
       const result = await runUnitGate(directory, ['long.test.ts', 'ordinary.test.ts'], 4, async (_cwd, files, deadline) => {
         calls.push({ files, deadline });
         return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
           output: '', ms: 1, files: [...files], budgetExpired: false };
-      });
+      }, { now: () => before });
       expect(result.failing).toEqual([]);
       const longCall = calls.find(call => call.files.length === 1 && call.files[0] === 'long.test.ts');
       const rest = calls.find(call => call.files.includes('ordinary.test.ts'));
       expect(longCall?.files).toEqual(['long.test.ts']);
       expect(rest?.files).toEqual(['ordinary.test.ts']);
-      expect(longCall!.deadline).toBeGreaterThanOrEqual(before + 970_000);
-      expect(longCall!.deadline).toBeLessThan(before + 970_000 + 2_000);
-      expect(rest!.deadline).toBeGreaterThanOrEqual(before + 12 * 60 * 1000);
-      expect(rest!.deadline).toBeLessThan(before + 12 * 60 * 1000 + 2_000);
+      expect(longCall!.deadline).toBe(before + 970_000);
+      expect(rest!.deadline).toBe(before + 12 * 60 * 1000);
       expect(lines.some(line => line.includes('slowest budget 970000ms'))).toBe(true);
     } finally {
       console.log = write;
@@ -934,17 +956,16 @@ describe('goalctl runtime policy', () => {
     const lines: string[] = [];
     const write = console.log;
     console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
-    const before = Date.now();
+    const before = 10_000;
     try {
       await runUnitGate(directory, ['bound.test.ts', 'missing.test.ts'], 1, async (_cwd, files, deadline) => {
         calls.push({ files, deadline });
         return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
           output: '', ms: 1, files: [...files], budgetExpired: false };
-      });
+      }, { now: () => before });
       expect(calls).toHaveLength(1);
       expect(calls[0]!.files).toContain('bound.test.ts');
-      expect(calls[0]!.deadline).toBeGreaterThanOrEqual(before + 12 * 60 * 1000);
-      expect(calls[0]!.deadline).toBeLessThan(before + 12 * 60 * 1000 + 2_000);
+      expect(calls[0]!.deadline).toBe(before + 12 * 60 * 1000);
       expect(lines.some(line => line.includes('bound.test.ts') && line.includes('could not be parsed'))).toBe(true);
       expect(lines.some(line => line.includes('slowest budget 970000ms'))).toBe(false);
     } finally {
@@ -2202,7 +2223,9 @@ describe('goalctl reclaim', () => {
     delete env.GIT_WORK_TREE;
     delete env.GIT_COMMON_DIR;
     delete env.GIT_INDEX_FILE;
-    return spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env });
+    const result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env });
+    if (result.status === null) throw new Error(`${args.join(' ')} did not exit: ${result.error?.message ?? result.signal}\n${result.stdout}\n${result.stderr}`);
+    return result;
   }
 
   function ledgerOf(dir: string): LedgerFile {
@@ -2506,8 +2529,14 @@ child.on('close', code => process.exit(code ?? 1));
     const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
     const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
     const save = (value: Ledger) => writeFileSync(ledgerPath, JSON.stringify(value));
-    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}, timeout = 45_000) => spawnSync('bun',
-      [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides }, timeout });
+    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}, timeout = 45_000) => {
+      const command = args[0] === 'wait'
+        ? [join(import.meta.dir, 'fixtures/wait-cli.ts'), ...args.slice(1)]
+        : [join(import.meta.dir, 'goalctl.ts'), ...args];
+      const result = spawnSync('bun', command, { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides }, timeout });
+      if (result.status === null) throw new Error(`${args.join(' ')} did not exit: ${result.error?.message ?? result.signal}\n${result.stdout}\n${result.stderr}`);
+      return result;
+    };
     for (const goal of ['alpha', 'beta']) {
       mkdirSync(join(dir, 'docs/goals', goal), { recursive: true });
       writeFileSync(join(dir, 'docs/goals', goal, 'GOAL.md'), '---\nareas: []\n---\n');
@@ -2583,7 +2612,7 @@ child.on('close', code => process.exit(code ?? 1));
       writeFileSync(join(r.dir, '.temp/bin/docker'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${dockerLog}'\necho container\n`);
       chmodSync(join(r.dir, '.temp/bin/docker'), 0o755);
       expect(r.run(['stop', first.id]).status).toBe(0);
-      await Bun.sleep(100);
+      await waitUntil(() => !r.alive(r.workers.get(first.id)!.worker) && !r.alive(r.workers.get(first.id)!.child));
       expect(r.alive(r.workers.get(first.id)!.worker)).toBe(false);
       expect(r.alive(r.workers.get(first.id)!.child)).toBe(false);
       expect(r.alive(r.workers.get(second.id)!.worker)).toBe(true);
@@ -2593,7 +2622,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(r.git('rev-parse', first.branch)).toBe(head);
       expect(r.ledger().tasks[first.id]!.state).toBe('stopped');
       expect(r.run(['stop', second.id]).status).toBe(0);
-      await Bun.sleep(100);
+      await waitUntil(() => !r.alive(server!.pid!));
       expect(r.alive(server.pid!)).toBe(false);
       expect(readFileSync(dockerLog, 'utf8')).toContain(`compose -p rezics-qa-wt-${second.worktree.split('/').at(-1)} down -v`);
     } finally { server?.kill('SIGKILL'); r.cleanup(); }
@@ -2655,7 +2684,7 @@ child.on('close', code => process.exit(code ?? 1));
       const task = r.ledger().tasks['G-001']!;
       const dirty = 'worker-001.ts';
       writeFileSync(join(task.worktree, dirty), "export const value = 'left behind';\n");
-      const waiter = spawn('bun', [join(import.meta.dir, 'goalctl.ts'), 'wait', 'G-001'], {
+      const waiter = spawn('bun', [join(import.meta.dir, 'fixtures/wait-cli.ts'), 'G-001'], {
         cwd: r.dir, env: { ...r.env, GOAL_WORKER_SCRIPT: script, GOAL_WORKER_LOG: log },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -3243,7 +3272,8 @@ process.exit(0);
     process.env.GOAL_STUB_MODE = mode;
     process.env.GOAL_STUB_LOG = log;
     try {
-      const result = await runOwnerShard(directory, ['slow.test.ts', 'later.test.ts'], Date.now() + deadlineMs);
+      const startedAt = Date.now();
+      const result = await runOwnerShard(directory, ['slow.test.ts', 'later.test.ts'], startedAt + deadlineMs, () => startedAt);
       const recorded = JSON.parse(readFileSync(log, 'utf8')) as { args: string[]; budget: string };
       return { result, budget: recorded.budget, args: recorded.args };
     } finally {
@@ -3264,8 +3294,7 @@ process.exit(0);
     expect(() => ownerTierBudgetMs({ REZICS_QA_OWNER_BUDGET_MS: '600s' })).toThrow('positive integer');
     const stopped = await withOwnerStub('budget', 970_000);
     expect(stopped.args).toEqual(['test', '--', tierTestTimeoutArg('owner'), 'slow.test.ts', 'later.test.ts']);
-    expect(Number(stopped.budget)).toBeGreaterThan(900_000);
-    expect(Number(stopped.budget)).toBeLessThanOrEqual(970_000);
+    expect(Number(stopped.budget)).toBe(970_000);
     // The running file is retried alone. The file with no header runs again with the rest of the shard.
     expect(stopped.result).toMatchObject({
       done: false, budgetExpired: true, timedOut: ['slow.test.ts'], files: ['slow.test.ts', 'later.test.ts'], failing: [],
@@ -3311,23 +3340,24 @@ process.exit(0);
   test('an outer kill names the owner file that was running', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'goalctl-owner-progress-'));
     const progress = join(directory, 'progress.txt');
+    const started = join(directory, 'hook-started');
+    const release = join(directory, 'hook-release');
     mkdirSync(join(directory, 'nested'));
     writeFileSync(join(directory, 'nested/slow.test.ts'), `import { beforeAll, test } from 'bun:test';\n`
-      + `beforeAll(async () => { await Bun.sleep(5_000); });\ntest('holds', () => {});\n`);
+      + `import { existsSync, writeFileSync } from 'node:fs';\n`
+      + `beforeAll(async () => { writeFileSync(${JSON.stringify(started)}, ''); while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(1); });\ntest('holds', () => {});\n`);
     const env: NodeJS.ProcessEnv = { ...process.env, CI: 'true', REZICS_QA_PROGRESS_FILE: progress };
     delete env.AGENT;
     const child = spawn(process.execPath, ['test', '--preload', join(import.meta.dir, '../qa/owner-shard-progress.ts'),
       'nested/slow.test.ts'], { cwd: directory, env, stdio: 'ignore' });
     try {
-      const deadline = Date.now() + 1_000;
-      let text = '';
-      while (Date.now() < deadline) {
-        if (existsSync(progress)) text = readFileSync(progress, 'utf8');
-        if (text.includes('nested/slow.test.ts:')) break;
-        await Bun.sleep(20);
-      }
+      await waitForWaiter(child, () => existsSync(started) && existsSync(progress)
+        && readFileSync(progress, 'utf8').includes('nested/slow.test.ts:'), () => existsSync(progress) ? readFileSync(progress, 'utf8') : '');
       // Recorded while beforeAll is still running, which is before the reporter would finish.
-      expect(text).toContain('nested/slow.test.ts:');
+      expect(existsSync(release)).toBe(false);
+      expect(child.exitCode).toBeNull();
+      expect(child.signalCode).toBeNull();
+      expect(readFileSync(progress, 'utf8')).toContain('nested/slow.test.ts:');
     } finally {
       const closed = new Promise<void>(resolve => {
         if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
@@ -3337,7 +3367,7 @@ process.exit(0);
       await closed;
       rmSync(directory, { recursive: true, force: true });
     }
-    const killed = await withOwnerStub('hang', 2_000);
+    const killed = await withOwnerStub('hang', 1_000);
     expect(killed.result.done).toBe(false);
     expect(killed.result.budgetExpired).toBe(true);
     expect(killed.result.timedOut).toEqual(['slow.test.ts']);
@@ -3707,13 +3737,11 @@ process.exit(0);
       writeFileSync(plan, `  unit: ${fast}\n  unit: ${slow}\n`);
       const log = join(r.dir, '.temp/unit-log');
       const before = r.git('rev-parse', 'main');
-      const started = Date.now();
       const result = r.run(['merge', task.id], {
-        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '2', GOAL_UNIT_GATE_BUDGET_MS: '8000',
+        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '2', GOAL_UNIT_GATE_BUDGET_MS: '1000',
       }, 40_000);
-      const elapsed = Date.now() - started;
-      expect(elapsed).toBeLessThan(30_000);
       expect(result.status).toBe(1);
+      expect(result.stdout).toContain('slowest budget 1000ms');
       expect(result.stdout).toContain('inconclusive');
       expect(result.stderr).toContain('unit gate remains inconclusive after isolated timeout retry');
       expect(result.stdout).toContain(`${slow} timed out on affected; rerunning alone`);
@@ -3761,7 +3789,7 @@ process.exit(0);
       writeFileSync(plan, [slow, ...later].map(file => `  unit: ${file}`).join('\n') + '\n');
       const log = join(r.dir, '.temp/unit-log');
       const result = r.run(['merge', task.id], {
-        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1', GOAL_UNIT_GATE_BUDGET_MS: '8000',
+        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1', GOAL_UNIT_GATE_BUDGET_MS: '1000',
       }, 40_000);
       expect(result.stderr).not.toContain('inconclusive');
       expect(result.status).toBe(0);
@@ -4712,11 +4740,13 @@ describe('gate lanes', () => {
     const work = mkdtempSync(join(tmpdir(), 'gate-budget-files-'));
     const previous = process.env.GOAL_UNIT_GATE_BUDGET_MS;
     process.env.GOAL_UNIT_GATE_BUDGET_MS = '400';
+    let clock = 10_000;
+    const now = () => clock;
     let releaseHold: (() => void) | undefined;
     const holder = withGateLane(() => new Promise<void>(done => { releaseHold = done; }), {
-      directory, lanes: 1, command: 'merge G-1', goal: 'program',
+      directory, lanes: 1, command: 'merge G-1', goal: 'program', now,
     });
-    const waitedAt = Date.now();
+    const waitedAt = clock;
     const messages: string[] = [];
     try {
       await withGateLane(async ({ acquiredAt }) => {
@@ -4724,15 +4754,14 @@ describe('gate lanes', () => {
         await runUnitGate(work, ['gate-lane-budget-probe.test.ts'], 1, async (_cwd, files, shardDeadline) => {
           deadline = shardDeadline;
           return pass(files);
-        });
-        expect(acquiredAt - waitedAt).toBeGreaterThanOrEqual(400);
-        expect(deadline).toBeGreaterThanOrEqual(acquiredAt + 400);
-        expect(deadline).toBeLessThan(acquiredAt + 400 + 5_000);
+        }, { now });
+        expect(acquiredAt).toBe(waitedAt + 500);
+        expect(deadline).toBe(acquiredAt + 400);
       }, {
-        directory, lanes: 1, command: 'merge G-2', goal: 'program', pollMs: 20,
+        directory, lanes: 1, command: 'merge G-2', goal: 'program', pollMs: 20, now,
         announce: message => messages.push(message),
         sleep: async () => {
-          await Bun.sleep(500);
+          clock += 500;
           releaseHold?.();
           await holder;
         },
@@ -5531,16 +5560,20 @@ await acquireHeavy(['blocked'], { lockDir: ${JSON.stringify(lockDir)}, pollMs: 3
       child.stdout?.on('data', collect);
       child.stderr?.on('data', collect);
       let settled = false;
-      const exited = new Promise<number | null>((resolve, reject) => {
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
         child.on('error', reject);
-        child.on('exit', code => { settled = true; resolve(code); });
+        child.on('exit', (code, signal) => { settled = true; resolve({ code, signal }); });
       });
       try {
         await waitForWaiter(child, () => mode === 'exit'
           ? existsSync(join(queueDir, 'seen'))
           : existsSync(queueDir) && readdirSync(queueDir).some(name => name.endsWith('.json')), () => output);
         if (mode === 'signal') child.kill('SIGTERM');
-        expect(await exited).toBe(mode === 'signal' ? 143 : 0);
+        const outcome = await exited;
+        if (mode === 'signal') {
+          const allowed: Array<typeof outcome> = [{ code: 143, signal: null }, { code: null, signal: 'SIGTERM' }];
+          expect(allowed).toContainEqual(outcome);
+        } else expect(outcome).toEqual({ code: 0, signal: null });
         expect(readdirSync(queueDir).filter(name => name.endsWith('.json'))).toEqual([]);
         expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
         expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
@@ -5559,6 +5592,7 @@ function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => 
     const tick = () => {
       if (ready()) return resolve();
       if (child.exitCode !== null) return reject(new Error(`waiter exited ${child.exitCode} before queuing\n${output()}`));
+      if (child.signalCode !== null) return reject(new Error(`waiter was killed by ${child.signalCode} before queuing\n${output()}`));
       if (Date.now() - started > 12_000) return reject(new Error(`waiter did not queue\n${output()}`));
       setTimeout(tick, 20);
     };
