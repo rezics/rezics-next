@@ -21,7 +21,7 @@ function reset(options: StackOptions): void {
 async function release(args: string[], timeout = 240_000): Promise<string> {
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (!result.ok) throw new Error(`Release command failed: ${result.output.slice(-1500)}`);
-  return result.output.replace(/^QA_MEMORY_WAIT_(?:BEGIN \d+-\d+|END \d+-\d+ \d+)\r?\n/gm, '').trim();
+  return result.stdout.replace(/^QA_MEMORY_WAIT_(?:BEGIN \d+-\d+|END \d+-\d+ \d+)\r?\n/gm, '').trim();
 }
 
 test('OPS01: pinned release provisions four owners and re-provisions without changing their data', async () => {

@@ -52,7 +52,7 @@ export async function runQaAdmissionChildAsync(root: string, program: string, ar
   const context = startupChildContext(env, workTimeout, Date.now());
   const result = await commandAsync(root, program, args, workTimeout, context.env,
     onOutputLine, { runDeadline: context.deadline });
-  return { ...result, stdout: result.output, stderr: '', status: result.ok ? 0 : 1,
+  return { ...result, status: result.ok ? 0 : 1,
     error: result.timedOut ? new Error('QA admission child timed out') : undefined };
 }
 
@@ -76,7 +76,7 @@ export async function runQaStartupChildAsync(root: string, args: string[], workT
     context.env, onOutputLine, { runDeadline: cloneDeadline });
   const admissionWaitMs = admissionWaitDuration(result.output);
   return { ...result, admissionWaitMs, activeElapsedMs: result.elapsedMs - admissionWaitMs,
-    stdout: result.output, stderr: '', status: result.ok ? 0 : 1,
+    status: result.ok ? 0 : 1,
     error: result.timedOut ? new Error('QA startup child timed out') : undefined };
 }
 

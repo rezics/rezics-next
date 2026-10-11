@@ -73,6 +73,44 @@ test('startup parents allow admission past the child work budget and exclude tha
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('startup wrappers preserve redacted stdout and stderr independently', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-startup-streams-'));
+  try {
+    mkdirSync(join(dir, 'scripts', 'dev'), { recursive: true });
+    writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), `
+      const token = process.pid + '-1';
+      process.stdout.write('QA_MEMORY_WAIT_BEGIN ' + token + '\\n');
+      await Bun.sleep(30);
+      process.stdout.write('QA_MEMORY_WAIT_END ' + token + ' 30\\n');
+      process.stdout.write('{"ready":true}\\n');
+      process.stderr.write('\\u001b[33mAUTH_');
+      await Bun.sleep(20);
+      process.stderr.write('TOKEN=private-secret-fragment');
+      await Bun.sleep(20);
+      process.stderr.write('\\u001b[0m Better Auth warning\\n');
+    `);
+    const env = { ...process.env, REZICS_STACK_PROFILE: 'dev', REZICS_QA_MEMORY_EVENTS: '1' };
+    const results = [
+      await runQaAdmissionChildAsync(dir, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 2_000, env),
+      await runQaStartupChildAsync(dir, ['stack:up'], 2_000, env),
+    ];
+    for (const result of results) {
+      const json = result.stdout.replace(/^QA_MEMORY_WAIT_(?:BEGIN \d+-\d+|END \d+-\d+ \d+)\r?\n/gm, '').trim();
+      expect(JSON.parse(json)).toEqual({ ready: true });
+      expect(result.stdout).toContain('QA_MEMORY_WAIT_BEGIN');
+      expect(result.stderr).toContain('Better Auth warning');
+      expect(result.stderr).toContain('\u001b[33mAUTH_TOKEN=[redacted]\u001b[0m');
+      expect(result.stdout).not.toContain('private-secret-fragment');
+      expect(result.stderr).not.toContain('private-secret-fragment');
+      expect(result.output).toContain('{"ready":true}');
+      expect(result.output).toContain('Better Auth warning');
+      expect(result.output).not.toContain('private-secret-fragment');
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe(0);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('child admission duration counts distinct startup tokens once', () => {
   expect(admissionWaitDuration('QA_MEMORY_WAIT_END 12-1 400000\nQA_MEMORY_WAIT_END 12-1 400000\n'
     + 'QA_MEMORY_WAIT_END 12-2 300000\n')).toBe(700_000);

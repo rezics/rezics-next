@@ -494,7 +494,7 @@ export const phaseDeadlineFailure = 'phase deadline failed';
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
-  options: { runDeadline?: number; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; elapsedMs: number;
+  options: { runDeadline?: number; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; stdout: string; stderr: string; elapsedMs: number;
   activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
   const start = Date.now();
   const environment = spawnEnvironment(name, args, env);
@@ -634,7 +634,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
   stdout += stdoutRedactor.finish();
   stderr += stderrRedactor.finish();
   return { ok: code === 0 && !timedOut, elapsedMs, activeElapsedMs: elapsedMs - admissionWaitMs, admissionWaitMs, timedOut,
-    output: [stdout, stderr, redactCommandOutput(timeoutReason)].filter(Boolean).join('\n') };
+    stdout, stderr, output: [stdout, stderr, redactCommandOutput(timeoutReason)].filter(Boolean).join('\n') };
 }
 
 /** Keep a burst of disposable stack starts below the Docker daemon's setup capacity. */
