@@ -296,6 +296,49 @@ test.each([
   },
 );
 
+test('records committed owner release when reconciliation returns at the deadline before cleanup', async () => {
+  let now = 0;
+  const fixture = restored();
+  fixture.context.budget = new RecoveryBudget(() => now);
+  fixture.proof.phases = fixture.context.budget.phases;
+  fixture.checks.reconcile = async () => {
+    fixture.events.push('authenticated-reconciliation');
+    now = 600_000;
+    return Response.json({ state: 'reconciled', disposition: 'matched' });
+  };
+
+  let failure: unknown;
+  try {
+    await fixture.finishAndVerify();
+  } catch (error) {
+    failure = error;
+    recordRestoreFailure(fixture.proof, error, () => {
+      fixture.events.push('stop-target');
+      throw new Error('docker stop failed; serving remains held');
+    });
+  }
+
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toBe(
+    'Full restore deadline exceeded after graph and Access release were committed: Recovery exceeded its 600-second budget',
+  );
+  expect(fixture.proof).toMatchObject({
+    state: 'released',
+    ownerReleaseObserved: true,
+    targetStopped: false,
+    failure: (failure as Error).message,
+    cleanupFailure: 'docker stop failed',
+  });
+  expect(fixture.proof.ownerLoginsEnabled).toBeUndefined();
+  expect(fixture.proof.state).not.toBe('verified');
+  expect(fixture.proof.phases['owner-reconciliation-api']).toBe(600_000);
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'stop-target',
+  ]);
+});
+
 test('serving verification shares the recovery deadline and reports failed target cleanup', async () => {
   let now = 0;
   const fixture = restored();

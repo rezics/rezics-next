@@ -123,9 +123,9 @@ function requireRestoreChecks(checks?: RestoreChecks): RestoreChecks {
   return checks;
 }
 
-/** The authenticated owner operation releases admission only after its current
- * retained journal check. Observe both releases before enabling owner logins;
- * a matched response alone cannot reopen a still-held or different generation. */
+/** The authenticated owner operation commits admission release only after its
+ * current retained journal check. Record that result before the budget check,
+ * then verify graph and Access state before enabling owner logins. */
 export async function finishOperatorRestore<Context extends OperatorRestoreReleaseContext>(
   context: Context,
   checks: Pick<RestoreChecks<Context>, 'reconcile'>,
@@ -150,6 +150,9 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       throw new Error(
         `Owner reconciliation did not verify the restore (${response.status}, ${body?.state ?? 'unknown'}, ${body?.disposition ?? 'unknown'})`,
       );
+    // A matched result is the authenticated owner's committed release outcome.
+    // Record it before RecoveryBudget.phase can fail its post-work check.
+    onCommittedTransition?.('owner-release');
   });
   const { MAIN_DATA_EPOCH: dataEpoch, MAIN_ROUTING_EPOCH: routingEpoch } = context.apps;
   if (!dataEpoch || !routingEpoch || !/^[0-9]+$/.test(context.manifest.fenceGeneration))
@@ -173,8 +176,6 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       throw new Error(
         'Owner reconciliation did not release the captured Access recovery generation',
       );
-    // Record the observation before the phase's post-work budget check can throw.
-    onCommittedTransition?.('owner-release');
   });
   await context.budget.phase('membership-preparation', async () => {
     const deadline = Date.now() + Math.min(540_000, context.budget.remaining());
@@ -231,10 +232,10 @@ export async function finishAndVerifyRestore<Context extends OperatorRestoreRele
     await finishOperatorRestore(context, checks, idempotencyKey, beforeReconcile, (transition) => {
       if (transition === 'owner-release') {
         evidence.ownerReleaseObserved = true;
+        evidence.state = 'released';
         return;
       }
       evidence.ownerLoginsEnabled = true;
-      evidence.state = 'released';
     });
   } catch (error) {
     if (!evidence.ownerReleaseObserved) throw error;
@@ -243,7 +244,7 @@ export async function finishAndVerifyRestore<Context extends OperatorRestoreRele
     const deadlineExpired = /600-second budget|deadline/i.test(detail);
     const committed = evidence.ownerLoginsEnabled
       ? 'graph and Access release and owner LOGIN were committed'
-      : 'graph and Access release were observed';
+      : 'graph and Access release were committed';
     throw new Error(
       `Full restore ${deadlineExpired ? 'deadline exceeded' : 'finish failed'} after ${committed}: ${detail.replace(/; serving remains held$/, '')}`,
       { cause: error },
