@@ -56,7 +56,8 @@ export async function discoveryChanges(
       `SELECT ?batch ?sequence ?count ?event ?ordinal ?action ?work ?outcome ?ratingContext ?realm ?mainVersion ?target ?targetWork ?ratingSlot ?chapterWork ?commandAction WHERE {
     VALUES ?sequence { ${Array.from({ length: Number(count) }, (_, i) => BigInt(after) + BigInt(i + 1)).join(' ')} }
     GRAPH ${iri(GRAPHS.outbox)} {
-      ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount ?count .
+      ?batch rv:sequence ?sequence .
+      ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:eventCount ?count .
       OPTIONAL { ?batch rv:event ?event .
         OPTIONAL { ?event rv:ordinal ?ordinal ; rv:action ?action }
         ${[

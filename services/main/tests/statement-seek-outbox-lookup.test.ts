@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { createHash, randomUUID } from 'node:crypto';
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { StatementSeek } from '../src/modules/statement/seek.ts';
 import { acceptedStatementPattern } from '../src/modules/statement/subject-read.ts';
@@ -9,7 +9,9 @@ import { reconcileRetainedEmptyBatch } from '../src/modules/work/reconcile-resto
 import { relayCoverage } from '../src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
+import type { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { discoveryChanges } from '../src/modules/discovery/changes.ts';
+import { assertFrozenContentRebuildAuthority } from '../src/modules/content-publication/rebuild-authority.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -72,6 +74,41 @@ function sequenceFirst(query: string, subject: string, type: string, sequence: s
   expect(constraint).toBeGreaterThan(lookup);
 }
 
+const requestedSequences = (query: string) => query.match(/VALUES \?sequence \{\s*([^}]+)\}/)?.[1]
+  ?.trim().split(/\s+/).map(Number) ?? [Number(query.match(/\?batch rv:sequence (\d+)/)![1])];
+
+async function discoveryQuery(through: number) {
+  let captured = '';
+  const session = { position: { dataEpoch: 'epoch', sequence: '64' }, query: async (query: string) => {
+    captured = query;
+    return requestedSequences(query).map(sequence => ({ sequence: { value: String(sequence) },
+      batch: { value: `urn:rezics:test:batch:${sequence}` }, count: { value: '1' },
+      event: { value: `urn:rezics:test:event:${sequence}` }, ordinal: { value: '0' },
+      action: { value: 'work.edit' }, work: { value: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001' } }));
+  } } as unknown as WorkReadSession;
+  expect(await discoveryChanges(session, String(through))).not.toBeNull();
+  return captured;
+}
+
+async function rebuildAuthorityQueries(through: number, end = 64) {
+  const queries: string[] = [];
+  const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
+    query: async (query: string) => {
+      if (query.includes('SELECT ?sequence ?mainSequence')) return { results: { bindings: [{
+        sequence: { value: String(end) }, mainSequence: { value: '1' },
+      }] } };
+      queries.push(query);
+      return { results: { bindings: requestedSequences(query).map(sequence => ({
+        sequence: { value: String(sequence) }, batch: { value: `urn:rezics:test:batch:${sequence}` },
+        allowed: { value: 'true' },
+      })) } };
+    },
+  } } as unknown as WorkActivationEnvironment;
+  await assertFrozenContentRebuildAuthority(env, { dataEpoch: 'epoch', routingEpoch: 'routing',
+    graphSequence: String(through), mainSequence: '1' }, { owner: 'content', dataEpoch: 'content', sequence: '1' });
+  return queries;
+}
+
 test('audited bounded lookups bind sequence or identity before checking type', async () => {
   for (const through of [63, 62]) {
     const queries = await projectionQueries(through);
@@ -83,6 +120,13 @@ test('audited bounded lookups bind sequence or identity before checking type', a
     sequenceFirst(queries[0]!, '?batch', 'OutboxBatch', '?sequence');
     sequenceFirst(queries[1]!, '?revision', 'StatementRevision', '?sequence');
     sequenceFirst(queries[2]!, '?revision', 'SemanticRevision', '?sequence');
+    const discovery = await discoveryQuery(through);
+    sequenceFirst(discovery, '?batch', 'OutboxBatch', '?sequence');
+    expect(discovery).toContain(`VALUES ?sequence { ${through === 63 ? '64' : '63 64'} }`);
+    const [authority] = await rebuildAuthorityQueries(through);
+    sequenceFirst(authority!, '?batch', 'OutboxBatch', '?sequence');
+    expect(authority).toContain(`VALUES ?sequence { ${through === 63 ? '64' : '63 64'} }`);
+    expect(authority).toContain('?operation rv:sequence ?sequence . ?operation a rv:OperationReceipt');
   }
   sequenceFirst(await restoredBatchQuery(), '?batch', 'OutboxBatch', '64');
   const acceptance = acceptedStatementPattern('https://rezics.com/id/00000000-0000-4000-8000-000000000001', true);
@@ -96,37 +140,69 @@ test('audited bounded lookups bind sequence or identity before checking type', a
   expect(conversion).toMatch(/\?decision rv:convertedFrom \$\{iri\(head\)\}\s*;[^\n]*?a rv:StatementDecision/);
 });
 
-test('native Jena sequence lookups visit the same batches at N and 16N', async () => {
-  const artifacts = join(root, '.temp', `statement-outbox-lookup-${randomUUID()}`);
-  const build = join(artifacts, 'build');
-  const tests = 'src/test/java/com/rezics/jena';
-  mkdirSync(join(build, tests), { recursive: true });
-  mkdirSync(join(build, 'tmp'));
-  mkdirSync(join(build, 'queries'));
-  const module = join(root, 'infra/jena/command-module');
-  cpSync(join(module, 'pom.xml'), join(build, 'pom.xml'));
-  cpSync(join(module, tests, 'StatementOutboxLookupTest.java'), join(build, tests, 'StatementOutboxLookupTest.java'));
-  for (const through of [63, 62]) {
-    const queries = await projectionQueries(through);
-    for (const [index, query] of queries.entries())
-      writeFileSync(join(build, 'queries', `projection-${through}-${index}.rq`), query);
+interface Batch { id: string; sequence: number; epoch: string; type: string }
+
+/** Model indexed first-pattern evaluation, counting emitted batch candidates.
+ * This guards the client query shape; the separate native proof measures ARQ. */
+function countingFuseki(population: number) {
+  const batches: Batch[] = Array.from({ length: population }, (_, i) => ({
+    id: `urn:rezics:test:batch:${i + 1}`, sequence: i + 1, epoch: 'epoch', type: 'OutboxBatch',
+  }));
+  for (const sequence of [63, 64]) {
+    batches.push({ id: `urn:other-epoch:${sequence}`, sequence, epoch: 'other', type: 'OutboxBatch' });
+    batches.push({ id: `urn:wrong-type:${sequence}`, sequence, epoch: 'epoch', type: 'Other' });
   }
-  writeFileSync(join(build, 'queries', 'restored.rq'), await restoredBatchQuery());
-  const image = /^FROM (\S+) AS module$/m.exec(readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8'))?.[1];
-  if (!image) throw new Error('Missing pinned native builder');
-  const cache = join(root, '.temp/statement-outbox-lookup-maven-cache');
-  mkdirSync(cache, { recursive: true });
-  const child = Bun.spawn(['docker', 'run', '--rm', '--name', `statement-outbox-lookup-${randomUUID()}`,
-    '--user', `${process.getuid!()}:${process.getgid!()}`, '--memory', '1g', '--cpus', '2',
-    '--volume', `${build}:/build`, '--volume', `${cache}:/maven-cache`, '--env', 'MAVEN_CONFIG=/maven-cache',
-    '--env', 'MAVEN_OPTS=-Xmx128m', '--env', 'JAVA_TOOL_OPTIONS=-XX:+UseSerialGC -XX:ActiveProcessorCount=2 -Djava.io.tmpdir=/build/tmp',
-    '--workdir', '/build', image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
-    '-DargLine=-Xmx384m -Drezics.statement.seek.queries=/build/queries', '-Dtest=StatementOutboxLookupTest', 'test'],
-  { cwd: root, env: loadDockerEnvironment(), stdout: 'pipe', stderr: 'pipe', timeout: 240_000 });
-  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(),
-    new Response(child.stderr).text(), child.exited]);
-  writeFileSync(join(artifacts, 'native.log'), `${stdout}\n${stderr}`);
-  expect(code, `Native evidence: ${join(artifacts, 'native.log')}`).toBe(0);
-  expect(stdout).toMatch(/Tests run: \d+, Failures: 0, Errors: 0, Skipped: 0/);
-  console.info(stdout.split('\n').filter(line => line.startsWith('Statement lookup ')).join('\n'));
-}, 250_000);
+  const bySequence = new Map<number, Batch[]>();
+  const byType = new Map<string, Batch[]>();
+  for (const batch of batches) {
+    bySequence.set(batch.sequence, [...bySequence.get(batch.sequence) ?? [], batch]);
+    byType.set(batch.type, [...byType.get(batch.type) ?? [], batch]);
+  }
+  return { query(query: string) {
+    const sequences = requestedSequences(query);
+    const epoch = query.match(/rv:dataEpoch "([^"]+)"/)![1];
+    const first = query.match(/\?batch\s+(a rv:OutboxBatch|rv:sequence (?:\?sequence|\d+))/)![1];
+    const rows: Batch[] = [];
+    let visited = 0;
+    for (const sequence of sequences) {
+      const candidates = first === 'a rv:OutboxBatch' ? byType.get('OutboxBatch')! : bySequence.get(sequence) ?? [];
+      for (const batch of candidates) {
+        visited++;
+        if (batch.sequence === sequence && batch.epoch === epoch && batch.type === 'OutboxBatch') rows.push(batch);
+      }
+    }
+    return { rows: rows.map(batch => batch.id), visited };
+  } };
+}
+
+test('Main counting client keeps sequence lookup work constant at N and 16N', async () => {
+  const small = countingFuseki(64), large = countingFuseki(1024);
+  for (const through of [63, 62]) {
+    const [statement] = await projectionQueries(through);
+    const [authority] = await rebuildAuthorityQueries(through);
+    for (const query of [statement!, authority!, await discoveryQuery(through), await restoredBatchQuery()]) {
+      const before = small.query(query), after = large.query(query);
+      expect(before.rows).toEqual(requestedSequences(query).map(sequence => `urn:rezics:test:batch:${sequence}`));
+      expect(after).toEqual(before);
+      expect(before.visited).toBe(requestedSequences(query).length * 3);
+    }
+    const old = statement!.replace('?batch rv:sequence ?sequence . ?batch a rv:OutboxBatch ; rv:dataEpoch "epoch"',
+      '?batch a rv:OutboxBatch ; rv:dataEpoch "epoch" ; rv:sequence ?sequence');
+    expect(old).not.toBe(statement);
+    const before = small.query(old), after = large.query(old);
+    expect(after.rows).toEqual(before.rows);
+    expect(after.visited).toBeGreaterThan(before.visited * 8);
+  }
+});
+
+test('frozen rebuild authority binds at most 64 contiguous sequence values per page', async () => {
+  const queries = await rebuildAuthorityQueries(0, 130);
+  expect(queries).toHaveLength(3);
+  const pages = queries.map(requestedSequences);
+  expect(pages.map(page => page.length)).toEqual([64, 64, 2]);
+  expect(pages.flat()).toEqual(Array.from({ length: 130 }, (_, i) => i + 1));
+  for (const query of queries) {
+    expect(query.indexOf('VALUES ?sequence')).toBeGreaterThan(query.indexOf('{ SELECT ?batch ?sequence ?count WHERE'));
+    expect(query).toContain('ORDER BY ?sequence STR(?batch) LIMIT 64');
+  }
+});

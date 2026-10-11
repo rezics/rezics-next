@@ -67,12 +67,17 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
   // UNION filters see their own arm's bindings before the surrounding joins.
   // Each arm binds its receipt locally; cross-graph identity checks follow the join.
   while (after < end) {
+    // Bind inside the header subquery so every read starts at its sequence;
+    // outer bindings do not reach a subquery's graph evaluation.
+    const through = after + BigInt(PAGE) < end ? after + BigInt(PAGE) : end;
+    const sequences = Array.from({ length: Number(through - after) }, (_, i) => after + BigInt(i + 1));
     const page = await bounded('maintenance page', () => env.fuseki.query(`PREFIX rv: <${RV}>
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       SELECT ?batch ?sequence ?allowed WHERE {
         { SELECT ?batch ?sequence ?count WHERE {
-          GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ;
-            rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount ?count .
+          VALUES ?sequence { ${sequences.join(' ')} }
+          GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:sequence ?sequence . ?batch a rv:OutboxBatch ;
+            rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:eventCount ?count .
             FILTER(?sequence > ${after} && ?sequence <= ${end}) }
         } ORDER BY ?sequence STR(?batch) LIMIT ${PAGE} }
         BIND(EXISTS {
@@ -95,8 +100,8 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
           GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:eventCount 0 ;
             rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence .
             FILTER NOT EXISTS { ?batch rv:event ?event } }
-          GRAPH ${iri(GRAPHS.receipts)} { ?operation a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence ; rv:requestDigest ?digest .
+          GRAPH ${iri(GRAPHS.receipts)} { ?operation rv:sequence ?sequence . ?operation a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:requestDigest ?digest .
             FILTER(REGEX(STR(?operation), "^urn:rezics:receipt:catalogue-search-index:[0-9a-f]{64}$"))
             FILTER(STR(?digest) = SHA256(STR(?operation))) }
           FILTER(STR(?batch) = CONCAT("urn:rezics:outbox:", STRAFTER(STR(?operation), "urn:rezics:receipt:catalogue-search-index:")))
