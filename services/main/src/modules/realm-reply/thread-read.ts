@@ -533,12 +533,22 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     blockedAuthors(session, all.map((row) => row.author))]);
   const about = titles.get(focused.work);
   if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
+  // An ancestor's placement alone does not disclose its body identity. Stop
+  // context at the first undisclosed parent, just as at an absent placement.
+  const visibleAbove: Head[] = [];
+  for (const row of [...above].reverse()) {
+    if (!texts.has(row.reply)) break;
+    visibleAbove.unshift(row);
+  }
+  const visibleParents = new Set([...visibleAbove, ...below].filter(row => texts.has(row.reply))
+    .map(row => row.reply));
   const reply = (row: Head): Reply[] => {
     const text = texts.get(row.reply);
     const { title, body } = !text ? { title: null, body: '' }
       : row.parent ? { title: null, body: text.body.trim() } : discussionParts(text.body);
     const hidden = blocked.has(row.author) || !text;
-    return [{ reply: row.reply, placement: row.placement, parent: row.parent,
+    return [{ reply: row.reply, placement: row.placement,
+      parent: row.parent && visibleParents.has(row.parent) ? row.parent : null,
       author: hidden ? null : named(row.author), blocked: blocked.has(row.author),
       time: row.time.toISOString(), language: text?.language ?? null, revisionId: row.revisionId,
       title: hidden ? null : title,
@@ -562,13 +572,13 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   };
   visit(below[0]!);
   const ancestors: Reply[] = [];
-  for (const row of [...above].reverse()) {
+  for (const row of [...visibleAbove].reverse()) {
     const shownReply = reply(row);
     if (!shownReply.length) break;
     ancestors.unshift(...shownReply);
   }
   const oldest = ancestors[0];
-  if (oldest?.parent && ancestors.length === REALM_THREAD_COST.ancestors) {
+  if (oldest && visibleAbove[0]?.parent && ancestors.length === REALM_THREAD_COST.ancestors) {
     continuations.push({ kind: 'ancestors', reply: oldest.reply });
   }
   const reachable = new Set(items.map(item => item.reply));
@@ -581,7 +591,10 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   // not a second Realm policy query.
   await threads.assertThreadProjection(session);
   if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
-  const response: Static<typeof realmThread> = { profile: 'realm-thread-v1' as const, realm, thread, focus, sort, work: about,
+  // The maintained opener is an internal coordinate until this reader has
+  // disclosed it. A bounded branch read can instead anchor at a visible reply.
+  const visibleThread = visibleParents.has(thread) ? thread : ancestors[0]?.reply ?? focus;
+  const response: Static<typeof realmThread> = { profile: 'realm-thread-v1' as const, realm, thread: visibleThread, focus, sort, work: about,
     rootRevision: focused.rootRevision, ancestors, items, continuations: visibleContinuations,
     displayLanguages: session.displayLanguages,
     complete: visibleContinuations.length === 0, sourcePosition: session.position };
@@ -665,23 +678,32 @@ export async function readProfileContributions(session: WorkReadSession, author:
   const items = [];
   const replies = session.deps.realmReplies;
   const disclosed = typeof replies.readPublicBatch === 'function'
-    ? await replies.readPublicBatch(page.map((node) => node.reply),
+    ? await replies.readPublicBatch(page.map(node => node.reply),
       session.principal ?? undefined, session.options.actingSubject)
-    : await Promise.all(page.map((node) => replies.readPublic(node.reply,
+    : await Promise.all(page.map(node => replies.readPublic(node.reply,
       session.principal ?? undefined, session.options.actingSubject)));
+  if (!(await session.deps.personPreferences?.profileVisible(author, session.principal))) {
+    throw new WorkReadMissing('Agent unavailable');
+  }
+  // At most eight immediate parents, through the same owner authority. Run
+  // this after the profile fence so a revoked parent cannot survive that await.
+  const parentIds = [...new Set(page.flatMap(node => node.parent ? [node.parent] : []))];
+  const parents = parentIds.length ? typeof replies.readPublicBatch === 'function'
+    ? await replies.readPublicBatch(parentIds, session.principal ?? undefined, session.options.actingSubject)
+    : await Promise.all(parentIds.map(parent => replies.readPublic(parent,
+      session.principal ?? undefined, session.options.actingSubject))) : [];
+  const publicParents = new Set(parentIds.filter((_id, index) => parents[index]));
   for (const [index, node] of page.entries()) {
     if (!node.origin) continue;
     const visible = disclosed[index];
     if (!visible || visible.originRealm !== node.origin || visible.author !== author) continue;
     const parts = node.parent ? { title: null, body: visible.body } : discussionParts(visible.body);
     const spoiler = declaredSpoiler(visible as Record<string, unknown>);
-    items.push({ reply: node.reply, realm: node.origin, parent: node.parent,
+    items.push({ reply: node.reply, realm: node.origin,
+      parent: node.parent && publicParents.has(node.parent) ? node.parent : null,
       time: node.createdAt.toISOString(), title: parts.title,
       excerpt: clip(parts.body, PROFILE_CONTRIBUTION_COST.excerptChars),
       ...(spoiler === undefined ? {} : { spoiler }) });
-  }
-  if (!(await session.deps.personPreferences?.profileVisible(author, session.principal))) {
-    throw new WorkReadMissing('Agent unavailable');
   }
   const last = page.at(-1);
   const next = nodes.length > PROFILE_CONTRIBUTION_COST.pageSize && last

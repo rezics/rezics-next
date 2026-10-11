@@ -32,6 +32,7 @@ interface Placed { id: number; parent?: number; author: number; minutes?: number
   approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean; rootRevision?: string;
   /** `bad` is a corrupt declaration. Null is an unset JSON value. */
   spoiler?: boolean | null | 'bad';
+  bodyUnavailable?: boolean;
 }
 
 export function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
@@ -111,6 +112,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
         calls.bodies++;
         return ids.map((id) => {
           const item = placed.find((candidate) => revision(candidate.id) === id)!;
+          if (item.bodyUnavailable) return { revisionId: id, status: 'unavailable' };
           const spoiler = item.spoiler === 'bad' ? 'yes' : item.spoiler;
           return { revisionId: id, status: 'available', body: { body: item.body ?? `Title ${item.id}\nBody ${item.id}`,
             ...(spoiler === undefined ? {} : { spoiler }) },
@@ -131,14 +133,15 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
         identities: async (ids: readonly string[]) => placed.filter(item => ids.includes(reply(item.id))).map(node),
         focusBasis: async (_epoch: string, _realm: string, focus: string) => {
           let current = placed.find(item => reply(item.id) === focus);
+          if (!current) return null;
           let active = current?.approved !== false;
-          while (current?.parent) current = byId.get(current.parent);
+          while (current.parent && byId.has(current.parent)) current = byId.get(current.parent)!;
           let above = placed.find(item => reply(item.id) === focus);
           while (above?.parent) {
             above = byId.get(above.parent);
             if (above?.approved === false) active = false;
           }
-          return current ? { thread: reply(current.id), active } : null;
+          return { thread: reply(current.parent ?? current.id), active };
         },
         siblingPage: async (_epoch: string, _realm: string, parent: string, sort: 'best' | 'new' | 'top',
           limit: number, after?: { rank: number; time: string; placement: string }) => {
@@ -327,6 +330,36 @@ test('a reply read on its own carries its visible parents, opening discussion fi
   expect(read.thread).toBe(reply(1));
   expect(read.ancestors.map((item) => item.reply)).toEqual([reply(1), reply(2)]);
   expect(read.items.map((item) => item.reply)).toEqual([reply(4)]);
+});
+
+test('thread parent output is identical for a hidden parent and a parent that never existed', async () => {
+  const child = { id: 2, parent: 1, author: 2, body: 'Unchanged child\nIts full body', spoiler: false };
+  const absent = await readRealmThread(world([child]).session, realm, reply(2));
+  for (const parent of [
+    { id: 1, author: 1, approved: false },
+    { id: 1, author: 1, bodyUnavailable: true },
+  ]) {
+    const hidden = await readRealmThread(world([parent, child]).session, realm, reply(2));
+    expect(hidden).toEqual(absent);
+    expect(hidden.thread).toBe(reply(2));
+    expect(hidden.ancestors).toEqual([]);
+    expect(hidden.items[0]).toMatchObject({ parent: null, body: child.body, spoiler: false });
+    expect(JSON.stringify(hidden)).not.toContain(reply(1));
+  }
+});
+
+test('thread context stops at a hidden grandparent and keeps the immediate visible parent', async () => {
+  const child = { id: 3, parent: 2, author: 2 };
+  const parent = { id: 2, parent: 1, author: 1 };
+  const absent = await readRealmThread(world([parent, child]).session, realm, reply(3));
+  const hidden = await readRealmThread(world([{ id: 1, author: 1, approved: false }, parent, child]).session,
+    realm, reply(3));
+  expect(hidden).toEqual(absent);
+  expect(hidden.thread).toBe(reply(2));
+  expect(hidden.ancestors).toHaveLength(1);
+  expect(hidden.ancestors[0]!.parent).toBeNull();
+  expect(hidden.items[0]!.parent).toBe(reply(2));
+  expect(JSON.stringify(hidden)).not.toContain(reply(1));
 });
 
 test('a reply whose graph parent disagrees with Content, or whose thread is cut off, is not shown as settled', async () => {

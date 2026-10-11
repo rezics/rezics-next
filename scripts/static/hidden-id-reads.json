@@ -252,7 +252,7 @@
       "path:id",
       "query:actingSubject"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/agents/{id}/shelves",
@@ -1234,7 +1234,7 @@
       "query:rootRevision",
       "query:rootTarget"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/member-replies/{reply}",
@@ -1898,7 +1898,7 @@
       "path:reply",
       "query:actingSubject"
     ],
-    "status": "unregistered"
+    "status": "registered"
   },
   {
     "operation": "GET /v1/realms/{realm}/works",

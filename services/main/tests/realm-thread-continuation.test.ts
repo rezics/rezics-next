@@ -109,7 +109,10 @@ test('depth 33 and ancestors above the 32-parent window have bounded refocus rea
   expect(next.continuations).toContainEqual({ kind: 'depth', reply: reply(65) });
 
   const bottom = await readRealmThread(session, realm, reply(81), 'new');
-  expect(bottom.thread).toBe(reply(1));
+  // The opener beyond this bounded window has not been disclosed. Navigation
+  // starts at the oldest visible ancestor, and its control still reaches above.
+  expect(bottom.thread).toBe(reply(49));
+  expect(bottom.ancestors[0]!.parent).toBeNull();
   expect(bottom.ancestors).toHaveLength(32);
   expect(bottom.continuations).toEqual([{ kind: 'ancestors', reply: reply(49) }]);
   const above = await readRealmThread(session, realm, reply(49), 'new');

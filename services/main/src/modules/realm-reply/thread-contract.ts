@@ -58,8 +58,8 @@ export const realmThreadsPage = t.Object({ profile: t.Literal('realm-threads-v1'
   items: t.Array(realmThreadSummary, { maxItems: REALM_THREAD_COST.pageSize }), ...pageFields });
 
 /**
- * One reply in a thread. `parent` is null only for the discussion that opens
- * it, which alone has a `title`: its first line, which `body` then leaves out.
+ * One reply in a thread. `parent` is null for an opener or an undisclosed
+ * parent. Only an opener has a `title`: its first line, which `body` leaves out.
  */
 export const realmThreadReply = t.Object({ reply: readId, placement: readId, parent: t.Nullable(readId),
   author: threadAuthor, time: t.String(), language: t.Nullable(t.String()), revisionId: readUuid,
@@ -84,7 +84,8 @@ export const realmThreadContinuation = t.Union([
  * A reply and everything under it, as one Realm shows it. `items` start with
  * the focus and follow each reply with its replies in `sort` order, the order
  * people read them in. `ancestors` are the visible parents above the focus,
- * the opening discussion first; `thread` is that discussion. Replying needs
+ * the oldest visible ancestor first; `thread` is the disclosed opener, or the
+ * oldest visible reply in this bounded branch when that opener is not disclosed. Replying needs
  * `work` and `rootRevision`, which every reply in the thread shares.
  */
 export const realmThread = t.Object({ profile: t.Literal('realm-thread-v1'), realm: readId, thread: readId,

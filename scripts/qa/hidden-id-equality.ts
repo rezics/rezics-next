@@ -40,7 +40,18 @@ export const registeredHiddenIdReads = [
 export const registeredHiddenIdWrites = [
   'POST /v1/realms/{realm}/about-posts',
 ] as const;
-export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenIdWrites] as const;
+/** Parent-output equality, proved at the owner tier in realm-reply-threads,
+ * realm-reply-profile and realm-reply-parent-disclosure tests. These cases
+ * compare the same child with a hidden parent and a parent that never existed;
+ * they do not claim route-input or read-count equality. Keep them out of the
+ * read-only integration fixture that substitutes the route's input ids. */
+export const registeredHiddenParentOutputReads = [
+  'GET /v1/agents/{id}/realm-contributions',
+  'GET /v1/member-replies',
+  'GET /v1/realms/{realm}/threads/{reply}',
+] as const;
+export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenParentOutputReads,
+  ...registeredHiddenIdWrites].sort();
 
 // The posting contract declares disclosure inputs, separately from its observed
 // revision and route coordinates. Do not invent scalar-id debt for unrelated writes.

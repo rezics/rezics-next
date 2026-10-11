@@ -476,7 +476,8 @@ export class RealmReplyStore {
 
   /** An explicit Realm selects its origin partition before LIMIT. Independent
    * public replies have a null origin, so private rows cannot alter their pages.
-   * At most 32 exact placement/review checks and two policy fences per page. */
+   * At most 32 children and 32 immediate parent body reads, with two Realm
+   * policy fences per page. Parent reads retain their own placement/review fences. */
   async listPublic(rootTarget: string, rootRevision: string, after?: string, realm?: string,
     principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
@@ -488,13 +489,23 @@ export class RealmReplyStore {
       const visible = await Promise.all(page.items.map(async item =>
         (await this.visible(realm, item.reply as string, principal, actor))?.revisionId === item.revisionId));
       page.items = page.items.filter((_item, index) => visible[index]);
-      if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) return null;
     }
     if (!await readableReplyRoot(this.env, rootTarget, rootRevision, this.access, principal ?? null, actor)) return null;
     const decisions = await discloseInventory(this.env, page.items.map(item => ({ owner: 'content' as const,
       resource: item.reply, component: 'body' as const, revision: item.revisionId,
       work: rootTarget, context: realm })), disclosureViewer(principal ?? null), 'thread');
     page.items = page.items.filter((_item, index) => decisions[index] === 'visible');
+    if (page.items.length > 32) throw new RealmReplyUnavailable('Reply page exceeds its owner bound');
+    const parents = [...new Set(page.items.flatMap(item => item.parentReply ? [item.parentReply as string] : []))];
+    // Parent coordinates disclose another contribution. Its existing body owner
+    // must authorize that exact revision for this same reader; do not walk ancestry.
+    const parentBodies = parents.length ? await this.readPublicBatch(parents, principal, actor) : [];
+    const revisions = new Map(parents.map((parent, index) => [parent, parentBodies[index]?.revisionId]));
+    page.items = page.items.map(item => item.parentReply && item.parentRevision
+      && revisions.get(item.parentReply as string) === item.parentRevision
+      ? item : { ...item, parentReply: null, parentRevision: null });
+    // The closing Realm fence includes the parent owner reads as well as the children.
+    if (realm && await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) return null;
     return page;
   }
 

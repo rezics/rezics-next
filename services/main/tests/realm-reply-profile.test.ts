@@ -29,7 +29,7 @@ test('profile contributions seek one bounded author page and disclose only curre
     async () => { gate++; return {} as never; });
   expect(gate).toBe(1);
   expect(pageCalls).toBe(1);
-  expect(visibleCalls).toBe(8);
+  expect(visibleCalls).toBe(9); // Eight children and one distinct immediate parent.
   expect(result.items).toHaveLength(7);
   expect(result.items[0]).toMatchObject({ reply: nodes[0]!.reply, title: 'A title' });
   expect(result.nextCursor).toBeString();
@@ -43,6 +43,77 @@ test('profile privacy changing during a contribution read fails closed', async (
   } as unknown as WorkReadSession;
   await expect(readProfileContributions(session, id(1), 'comments', undefined,
     async () => ({} as never))).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+function parentWorld(parent: 'visible' | 'hidden' | 'absent', options: {
+  revokeDuringProfileFence?: boolean; unavailable?: boolean; count?: number; distinct?: boolean;
+} = {}) {
+  const author = id(1), realm = id(2), actor = id(5), principal = { issuer: 'issuer', subject: 'reader' };
+  const nodes = Array.from({ length: options.count ?? 1 }, (_, index) => ({ reply: id(10 + index),
+    parent: id(options.distinct ? 50 + index : 50), author, origin: realm,
+    rootTarget: id(3), rootRevision: id(4), createdAt: new Date('2026-10-10') }));
+  const requests: string[][] = [];
+  let revoked = false;
+  const parentIds = new Set(nodes.map(node => node.parent));
+  const session = { position: { datasetId: 'product', dataEpoch: 'epoch', sequence: '10' },
+    principal, options: { actingSubject: actor }, deps: { content: {}, realmReplyThreads: {
+      authorPage: async () => nodes,
+    }, realmReplies: { readPublicBatch: async (replies: string[], viewer: unknown, actingSubject: string) => {
+      requests.push(replies);
+      expect(viewer).toBe(principal);
+      expect(actingSubject).toBe(actor);
+      return replies.map(reply => {
+        if (parentIds.has(reply)) {
+          if (options.unavailable) throw new Error('Parent disclosure owner unavailable');
+          // The hidden record exists, while the absent record never did. Both
+          // are suppressed by the existing owner, not a profile policy branch.
+          return parent === 'visible' && !revoked ? { reply, parentReply: id(99) } : null;
+        }
+        return { reply, author, originRealm: realm, body: 'Child heading\nUnchanged child text', spoiler: false };
+      });
+    } }, personPreferences: { profileVisible: async () => {
+      revoked = options.revokeDuringProfileFence === true;
+      return true;
+    } } },
+  } as unknown as WorkReadSession;
+  const read = () => readProfileContributions(session, author, 'comments', undefined, async () => ({} as never));
+  return { read, nodes, requests };
+}
+
+test('Person contribution parent output is identical for a hidden parent and a parent that never existed', async () => {
+  const hidden = parentWorld('hidden'), absent = parentWorld('absent');
+  const result = await hidden.read();
+  expect(result).toEqual(await absent.read());
+  expect(result.items[0]).toMatchObject({ parent: null, title: null,
+    excerpt: 'Child heading\nUnchanged child text', spoiler: false });
+  expect(JSON.stringify(result)).not.toContain(id(50));
+  expect(hidden.requests).toEqual([[id(10)], [id(50)]]);
+  expect(hidden.requests).toEqual(absent.requests);
+});
+
+test('Person contributions retain visible parent ids without walking their ancestors', async () => {
+  const h = parentWorld('visible', { count: 8 });
+  const result = await h.read();
+  expect(result.items.every(item => item.parent === id(50))).toBe(true);
+  expect(h.requests).toHaveLength(2);
+  expect(h.requests.map(ids => ids.length)).toEqual([8, 1]);
+  expect(h.requests.flat()).not.toContain(id(99));
+});
+
+test('Person contributions authorize at most eight distinct immediate parents', async () => {
+  const h = parentWorld('visible', { count: 8, distinct: true });
+  const result = await h.read();
+  expect(result.items.map(item => item.parent)).toEqual(h.nodes.map(node => node.parent));
+  expect(h.requests.map(ids => ids.length)).toEqual([8, 8]);
+});
+
+test('a parent revoked during the profile fence has no coordinates in Person contributions', async () => {
+  const revoked = await parentWorld('visible', { revokeDuringProfileFence: true }).read();
+  expect(revoked).toEqual(await parentWorld('absent').read());
+});
+
+test('a parent disclosure outage fails the Person contribution read instead of pretending no parent', async () => {
+  await expect(parentWorld('hidden', { unavailable: true }).read()).rejects.toThrow('Parent disclosure owner unavailable');
 });
 
 test('author paging uses a fixed index seek and separates posts from comments', async () => {
