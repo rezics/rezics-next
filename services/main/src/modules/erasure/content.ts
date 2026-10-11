@@ -3,6 +3,7 @@ import { revisionsWithOpenCommentSource } from '../../../../content/src/comments
 import { withPreservationFence, type PreservationAccess } from '../public-report/preservation.ts';
 import { graphErasureReceipt } from './graph.ts';
 import { MAX_ERASURE_TARGETS } from './journal.ts';
+import type { ReceiptCustody } from '../outbox/receipt-custody.ts';
 
 export class ContentErasureInvalid extends Error {}
 /** A revision already pinned for graph publication needs graph suppression first. */
@@ -236,7 +237,12 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
   revisionIds: readonly string[], erasureEpoch?: string): Promise<Map<string, ContentErasureProbe>> {
   if (revisionIds.length > 256) throw new ContentErasureInvalid('Content erasure probe is too large');
   const rows = (await content.query<{ id: string; availability: string | null;
-    erasure_id: string | null; erasure_epoch: string | null }>(`SELECT wanted.id::text AS id, r.availability,
+    erasure_id: string | null; erasure_epoch: string | null; payload_absent: boolean }>(`SELECT wanted.id::text AS id, r.availability,
+    (r.serialized_bytes IS NULL AND r.body IS NULL
+      AND NOT EXISTS (SELECT 1 FROM content.comment c WHERE c.revision_id = wanted.id
+        AND (c.exact IS NOT NULL OR c.prefix IS NOT NULL OR c.suffix IS NOT NULL))
+      AND NOT EXISTS (SELECT 1 FROM verification.evidence_item i WHERE i.content_revision_id = wanted.id
+        AND verification.evidence_selector_has_source(i.selector))) AS payload_absent,
     t.erasure_id, t.erasure_epoch::text AS erasure_epoch
     FROM unnest($1::uuid[]) AS wanted(id)
     LEFT JOIN content.revision r ON r.id = wanted.id
@@ -244,8 +250,45 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
   // With an epoch, a tombstone of the same id but another epoch is not this erasure's.
   return new Map(rows.map(row => [row.id, row.availability === null ? 'absent'
     : row.erasure_id === erasureId && row.availability === 'erased'
-      && (erasureEpoch === undefined || row.erasure_epoch === erasureEpoch) ? 'erased'
+      && row.payload_absent && (erasureEpoch === undefined || row.erasure_epoch === erasureEpoch) ? 'erased'
       : row.availability === 'available' && !row.erasure_id ? 'available' : 'foreign']));
+}
+
+export interface CommandCustodyErasureTarget {
+  receipt: string; revision: string; payloadSha256: string;
+  erasureId: string | null; erasureEpoch: string | null; payloadAbsent: boolean;
+}
+
+/** The unique revision key bounds this lookup to one retained command per revision,
+ * including retired proofs. No current-head or whole-custody scan is sufficient. */
+export async function commandCustodyErasureTargets(access: Pool,
+  revisionIris: readonly string[]): Promise<CommandCustodyErasureTarget[]> {
+  if (!revisionIris.length) return [];
+  if (revisionIris.length > MAX_CONTENT_ERASURE_TARGETS) {
+    throw new ContentErasureInvalid('command custody inventory is too large');
+  }
+  return (await access.query<CommandCustodyErasureTarget>(`SELECT receipt, revision,
+    payload_sha256 AS "payloadSha256", payload_erasure_id::text AS "erasureId",
+    payload_erasure_epoch::text AS "erasureEpoch", payload IS NULL AS "payloadAbsent"
+    FROM access.command_custody WHERE revision = ANY($1::text[]) ORDER BY revision LIMIT 65`,
+  [revisionIris])).rows;
+}
+
+/** Custody's own receipt lock, original proof and guarded terminal transition remain
+ * authoritative. This adapter only binds those identities to the retained inventory. */
+export async function applyCommandCustodyErasure(custody: ReceiptCustody | undefined,
+  targets: readonly CommandCustodyErasureTarget[],
+  command: { erasureId: string; erasureEpoch: string; objectRefs: ReadonlySet<string> }): Promise<void> {
+  for (const target of targets) {
+    if (!custody || !command.objectRefs.has(`sha256:${target.payloadSha256}`)
+      || (target.payloadAbsent && (target.erasureId !== command.erasureId
+        || target.erasureEpoch !== command.erasureEpoch))) {
+      throw new ContentErasureStale('command custody differs from the erasure inventory');
+    }
+    await custody.erasePayloadForErasure(target.receipt, { revision: target.revision,
+      payloadSha256: target.payloadSha256, erasureId: command.erasureId,
+      erasureEpoch: command.erasureEpoch });
+  }
 }
 
 /** Revisions whose comments still store source selectors. One indexed existence
