@@ -272,7 +272,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   };
   const projection = session.deps.zoneBrowse;
   if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
-  let current = prior.current && projection.current(session.position);
+  let current = prior.current && await projection.current(session.position);
   for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
     const entries = await projection.batch(realm, appliedSort, after, session.position);
     if (!entries.length) { more = false; break; }
@@ -288,7 +288,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     }
     if (!more || page.length === limit) break;
   }
-  current = current && projection.current(session.position);
+  current = current && await projection.current(session.position);
   const counts = browseCandidates(examined, filter, text, appliedSort).facets;
   const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
