@@ -12,6 +12,7 @@ import { configureDisclosure, type DisclosureReader } from '../src/modules/discl
 import { graphErasedContentRevisions, GraphErasureConflict, GraphErasureUnavailable } from
   '../src/modules/erasure/graph.ts';
 import { ObjectErasureConflict, replayObjectErasure } from '../src/modules/erasure/replay-objects.ts';
+import type { ErasedHistoricalReceiptSource, HistoricalReceiptSource } from '../src/modules/outbox/receipt-custody.ts';
 import type { CustodiedOutbox } from '../src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { custodyModelGenerationArtifacts } from '../src/modules/semantic/model-custody.ts';
@@ -84,8 +85,14 @@ class CustodyGraph extends FusekiClient {
 }
 
 interface CommandRow {
-  receipt: string; payload_sha256: string; data_epoch: string | null;
+  receipt: string; request_digest: string; payload_sha256: string; revision: string;
+  payload_erasure_id: string | null; payload_erasure_epoch: string | null; data_epoch: string | null;
   stream_sequence: string | null; graph_sequence: string | null;
+}
+
+interface JournalFixture {
+  id: string; epoch: string; kind: 'revision' | 'resource';
+  targets: { owner: string; target_kind: string; target_ref: string }[];
 }
 
 function fixture() {
@@ -104,6 +111,25 @@ function fixture() {
     if (!sql.includes('FROM access.command_custody')) throw new Error('unexpected borrowed custody query');
     return { rows: commandRows, rowCount: commandRows.length, command: 'SELECT', oid: 0, fields: [] };
   }) as typeof accessClient.query;
+  let journal: JournalFixture | null = null;
+  const relayClient: PoolClient = Object.assign(new Client(), { release: () => {
+    throw new Error('custody must not release a borrowed Relay client');
+  } });
+  relayClient.query = (async (sql: string) => {
+    if (sql.includes('FROM relay.erasure_target')) return { rows: journal?.targets.map((target, ordinal) => ({
+      ordinal, owner: target.owner, target_kind: target.target_kind, target_ref: target.target_ref,
+      completion_state: 'pending', completion_reason_code: null, completion_evidence_ref: null, completed_at: null,
+    })) ?? [], rowCount: journal?.targets.length ?? 0, command: 'SELECT', oid: 0, fields: [] };
+    if (sql.includes('FROM relay.erasure_disposition')) return { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] };
+    if (sql.includes('FROM relay.erasure WHERE id = $1')) return { rows: journal ? [{
+      id: journal.id, erasure_epoch: journal.epoch, operation_id: `operation:${journal.id}`,
+      request_digest: hash('request'), kind: journal.kind, authority: 'access_admission', principal_id: null,
+      admission_id: null, authority_epoch: null, stage: 'reconciling', suppression_status: 'suppressed',
+      destruction_status: 'pending', blocked_reason: null, requested_at: new Date(0), suppressed_at: new Date(1),
+      verified_at: null,
+    }] : [], rowCount: journal ? 1 : 0, command: 'SELECT', oid: 0, fields: [] };
+    throw new Error(`unexpected borrowed Relay query: ${sql}`);
+  }) as typeof relayClient.query;
   const graph: RestoredGraphCustody = { fuseki, lineage: { dataEpoch: 'restored-epoch', routingEpoch: '2' } };
   const store = { directory, workObjects: objects };
   const addModel = async (commandModule: string) => {
@@ -120,8 +146,9 @@ function fixture() {
     fuseki.generations.set(generation, { manifest: `urn:rezics:sha256:${anchor}`, commandModule });
     return { generation, manifestDigest: hash(manifestBytes), shapeDigest: hash(shape) };
   };
-  return { access, accessClient, graph, fuseki, objects, store, commandRows, addModel,
-    read: () => restoredCustodyDigests(access, graph, store, accessClient) };
+  return { access, accessClient, relayClient, graph, fuseki, objects, store, commandRows, addModel,
+    setJournal: (value: JournalFixture | null) => { journal = value; },
+    read: (client?: PoolClient) => restoredCustodyDigests(access, graph, store, accessClient, client) };
 }
 
 test('restored custody verifies a revision’s older pinned generation and retains every exact artifact', async () => {
@@ -196,7 +223,10 @@ async function command(f: ReturnType<typeof fixture>) {
     payload: await f.objects.put(Buffer.from('retired component payload bytes')),
     selectedShape: await f.objects.put(Buffer.from('original selected validation shape bytes')),
   };
-  const row: CommandRow = { receipt: `urn:rezics:receipt:${hash('retired command')}`, payload_sha256: hash('retired command bytes'),
+  const row: CommandRow = { receipt: `urn:rezics:receipt:${hash('retired command')}`,
+    request_digest: hash('retired command request'), payload_sha256: hash('retired command bytes'),
+    revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    payload_erasure_id: null, payload_erasure_epoch: null,
     data_epoch: 'command-epoch', stream_sequence: '4', graph_sequence: '900' };
   f.commandRows.push(row);
   const result: CustodiedOutbox = { batch: { batchId: `urn:rezics:outbox:${hash(row.receipt)}`,
@@ -211,7 +241,38 @@ function historicalReader(f: ReturnType<typeof fixture>, c: Awaited<ReturnType<t
     expect(client).toBe(f.accessClient);
     positions.push(position);
     for (const digest of Object.values(c.roots)) await originals.get(digest);
-    return { outbox: c.result, objectDigests: new Set(Object.values(c.roots)) };
+    return { kind: 'retained', outbox: c.result, objectDigests: new Set(Object.values(c.roots)),
+      source: {} as HistoricalReceiptSource['source'] } satisfies HistoricalReceiptSource;
+  } };
+}
+
+function erasedHistorical(c: Awaited<ReturnType<typeof command>>): ErasedHistoricalReceiptSource {
+  const terminal = { outcome: 'succeeded' as const, receipt: c.row.receipt, admissionId: 'admission',
+    requestDigest: c.row.request_digest, authorityEpoch: '1', scope: 'work', dataEpoch: c.row.data_epoch!,
+    sequence: c.row.graph_sequence!, streamSequence: c.row.stream_sequence!,
+    work: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
+    component: 'https://rezics.com/id/00000000-0000-4000-8000-000000000003', revision: c.row.revision };
+  return { kind: 'erased', receipt: c.row.receipt, requestDigest: c.row.request_digest,
+    payloadSha256: c.row.payload_sha256, revision: c.row.revision,
+    erasureId: c.row.payload_erasure_id!, erasureEpoch: c.row.payload_erasure_epoch!, terminal, outbox: c.result };
+}
+
+const commandErasureId = '10000000-0000-4000-8000-000000000001';
+function journalForCommand(c: Awaited<ReturnType<typeof command>>, epoch = '12',
+  targets = [
+    { owner: 'graph', target_kind: 'work_head', target_ref: c.row.revision.slice('https://rezics.com/id/'.length) },
+    { owner: 'object', target_kind: 'object', target_ref: `sha256:${c.row.payload_sha256}` },
+  ]): JournalFixture {
+  c.row.payload_erasure_id = commandErasureId;
+  c.row.payload_erasure_epoch = epoch;
+  return { id: commandErasureId, epoch, kind: 'revision', targets };
+}
+
+function erasedReader(f: ReturnType<typeof fixture>, c: Awaited<ReturnType<typeof command>>) {
+  return { readHistorical: async (position: { dataEpoch: string; streamSequence: string }, client: PoolClient) => {
+    expect(client).toBe(f.accessClient);
+    expect(position).toEqual({ dataEpoch: c.row.data_epoch!, streamSequence: c.row.stream_sequence! });
+    return erasedHistorical(c);
   } };
 }
 
@@ -254,8 +315,12 @@ for (const field of ['custodiedReceipt', 'streamScope', 'dataEpoch', 'sequence',
   test(`command custody refuses a mismatched ${field} in the C6 owner batch`, async () => {
     const f = fixture();
     const c = await command(f);
-    f.graph.receiptCustody = { readHistorical: async () => ({ outbox: { ...c.result,
-      batch: { ...c.result.batch, [field]: 'different' } }, objectDigests: new Set(Object.values(c.roots)) }) };
+    const reader = historicalReader(f, c).readHistorical;
+    f.graph.receiptCustody = { readHistorical: async (position, client) => {
+      const retained = await reader(position, client);
+      return { ...retained, outbox: { ...c.result,
+        batch: { ...c.result.batch, [field]: 'different' } } };
+    } };
     await expect(f.read()).rejects.toThrow('retained command custody differs');
   });
 }
@@ -274,6 +339,50 @@ test('missing command adapter, terminal position, owner result or exact bytes ca
     c.row[field] = null;
     await expect(f.read()).rejects.toThrow('retained command custody is unavailable');
     c.row[field] = before;
+  }
+});
+
+test('journal-bound terminal command erasure omits only its exact raw root from restored custody', async () => {
+  const f = fixture();
+  const c = await command(f);
+  f.setJournal(journalForCommand(c));
+  f.graph.receiptCustody = erasedReader(f, c);
+  const retained = await f.read(f.relayClient);
+  expect(retained.has(c.row.payload_sha256)).toBe(false);
+  expect(retained.has(c.roots.manifest)).toBe(false);
+});
+
+test('terminal command erasure cannot be accepted without the exact journal epoch', async () => {
+  const f = fixture();
+  const c = await command(f);
+  f.setJournal(journalForCommand(c, '12'));
+  c.row.payload_erasure_epoch = '13';
+  f.graph.receiptCustody = erasedReader(f, c);
+  await expect(f.read(f.relayClient)).rejects.toThrow('erasure journal');
+});
+
+test('a forged journal without the erased command object target cannot release custody', async () => {
+  const f = fixture();
+  const c = await command(f);
+  f.setJournal(journalForCommand(c, '12', [
+    { owner: 'graph', target_kind: 'work_head', target_ref: c.row.revision.slice('https://rezics.com/id/'.length) },
+    { owner: 'object', target_kind: 'object', target_ref: `sha256:${hash('different command')}` },
+  ]));
+  f.graph.receiptCustody = erasedReader(f, c);
+  await expect(f.read(f.relayClient)).rejects.toThrow('not authorized by its exact erasure journal');
+});
+
+test('erasing command custody does not release unrelated model manifests or validation shapes', async () => {
+  const f = fixture();
+  const c = await command(f);
+  const model = await f.addModel('unrelated-retained-module');
+  f.setJournal(journalForCommand(c));
+  f.graph.receiptCustody = erasedReader(f, c);
+  const retained = await f.read(f.relayClient);
+  expect(retained.has(c.row.payload_sha256)).toBe(false);
+  for (const digest of [model.manifestDigest, model.shapeDigest]) {
+    expect(retained.has(digest)).toBe(true);
+    expect(await replayObjectErasure(f.store, `sha256:${digest}`, retained, true)).toBe('conflict');
   }
 });
 

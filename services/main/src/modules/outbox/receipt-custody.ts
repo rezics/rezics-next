@@ -56,11 +56,25 @@ export interface CommittedCustodySource {
   objectReferences: { digest: string; kind: 'command' | 'manifest' | 'payload' | 'shape' }[];
 }
 export interface HistoricalReceiptSource {
+  kind: 'retained';
   outbox: CustodiedOutbox;
   objectDigests: ReadonlySet<string>;
   /** The same verified source supports held graph repair without another checkout. */
   source: CommittedCustodySource;
 }
+/** Original command bytes are gone, but its exact receipt and erasure marker remain. */
+export interface ErasedHistoricalReceiptSource {
+  kind: 'erased';
+  receipt: string;
+  requestDigest: string;
+  payloadSha256: string;
+  revision: string;
+  erasureId: string;
+  erasureEpoch: string;
+  terminal: CustodiedReceipt;
+  outbox: CustodiedOutbox;
+}
+export type HistoricalReceiptResult = HistoricalReceiptSource | ErasedHistoricalReceiptSource;
 export const CUSTODY_RECOVERY_COST = { commandBytes: 2_097_152, stateBytes: 65_536,
   shapeBytes: 4_194_304, selectedProfiles: 2 } as const;
 interface CustodyRowFacts {
@@ -756,7 +770,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
    * Historical reads never acquire a pool client, reconcile or consult native
    * proof/current heads, including when the original proof is retired. */
   async readHistorical(position: { dataEpoch: string; streamSequence: string },
-    accessClient: PoolClient): Promise<HistoricalReceiptSource | null> {
+    accessClient: PoolClient): Promise<HistoricalReceiptResult | null> {
     const { dataEpoch, streamSequence } = position;
     if (!dataEpoch || !/^[1-9][0-9]{0,99}$/.test(streamSequence)) throw new ObjectIntegrityError('Invalid historical custody position');
     const rows = (await accessClient.query<{ receipt: string; request_digest: string; payload_sha256: string;
@@ -784,15 +798,22 @@ export class ReceiptCustody implements CustodiedOutboxSource {
         erasureEpoch: value.payload_erasure_epoch! } }
       : { ...facts, payload: value.payload, payloadErasure: null });
     if (row.payload === null) {
-      erasedTerminal(row);
-      return null;
+      const terminal = erasedTerminal(row);
+      if (value.data_epoch !== dataEpoch || value.stream_sequence !== streamSequence
+        || terminal.dataEpoch !== dataEpoch || terminal.streamSequence !== streamSequence) {
+        throw new ObjectIntegrityError('Historical erased custody position differs from its exact terminal');
+      }
+      return { kind: 'erased', receipt: row.receipt, requestDigest: row.requestDigest,
+        payloadSha256: row.payloadSha256, revision: row.revision,
+        erasureId: row.payloadErasure.erasureId, erasureEpoch: row.payloadErasure.erasureEpoch,
+        terminal, outbox: this.deliveredOutbox(row.receipt, erasedOutbox(row, terminal)) };
     }
     const source = await this.verifyCommitted(row);
     if (value.data_epoch !== dataEpoch || value.stream_sequence !== streamSequence
       || source.terminal.dataEpoch !== dataEpoch || source.terminal.streamSequence !== streamSequence) {
       throw new ObjectIntegrityError('Historical custody position differs from its exact terminal');
     }
-    return { source,outbox: this.deliveredOutbox(source.terminal.receipt,source.outbox),
+    return { kind: 'retained', source,outbox: this.deliveredOutbox(source.terminal.receipt,source.outbox),
       objectDigests: new Set(source.objectReferences.map(reference => reference.digest)) };
   }
 

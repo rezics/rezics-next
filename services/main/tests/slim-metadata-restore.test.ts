@@ -682,14 +682,15 @@ test('supplied-client historical read verifies retired superseded custody closur
     const original = JSON.stringify(f.store.row), puts = f.objects.puts;
     f.objects.gets = [];
     const result = await f.custody.readHistorical({ dataEpoch: retainedEpoch,streamSequence: mainSequence },held.client);
-    expect(result?.source).toMatchObject({ prepared: f.prepared, terminal: f.terminal, model: f.model,
+    if (result?.kind !== 'retained') throw new Error('historical custody unexpectedly erased');
+    expect(result.source).toMatchObject({ prepared: f.prepared, terminal: f.terminal, model: f.model,
       payloadSha256: f.payloadSha256, manifestSha256: f.manifestSha256,
       componentPayloadSha256: f.componentPayloadSha256 });
-    expect(result?.outbox).toEqual({ batch: { batchId: f.outbox.batchId,streamScope: MAIN_RELAY_STREAM_SCOPE,
+    expect(result.outbox).toEqual({ batch: { batchId: f.outbox.batchId,streamScope: MAIN_RELAY_STREAM_SCOPE,
       dataEpoch: retainedEpoch,sequence: '4',graphSequence: '900',routingEpoch: f.prepared.routingEpoch,
       eventIds: [f.event.id],custodiedReceipt: f.receipt },events: f.outbox.events });
     const closure = [f.payloadSha256,f.manifestSha256,f.componentPayloadSha256,...f.shapeDigests];
-    expect([...result!.objectDigests].sort()).toEqual([...new Set(closure)].sort());
+    expect([...result.objectDigests].sort()).toEqual([...new Set(closure)].sort());
     expect([...new Set(f.objects.gets)].sort()).toEqual([...new Set(closure)].sort());
     expect(held.queries).toHaveLength(1);
     expect(held.queries[0]!.values).toEqual([retainedEpoch,'4']);

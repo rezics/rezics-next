@@ -68,9 +68,14 @@ export async function reconcileRetainedSlimMetadata(env: WorkActivationEnvironme
     throw new SlimMetadataRestoreConflict('retained slim metadata event is incomplete');
   }
   let source: CommittedCustodySource | null;
-  try { source = accessClient
-    ? (await env.receiptCustody.readHistorical({ dataEpoch: coverage.dataEpoch,streamSequence: mainSequence },accessClient))?.source ?? null
-    : await env.receiptCustody.readCommitted(envelope.data.receipt.id); }
+  try {
+    if (accessClient) {
+      const historical = await env.receiptCustody.readHistorical({
+        dataEpoch: coverage.dataEpoch, streamSequence: mainSequence,
+      }, accessClient);
+      source = historical?.kind === 'retained' ? historical.source : null;
+    } else source = await env.receiptCustody.readCommitted(envelope.data.receipt.id);
+  }
   catch (error) { throw new SlimMetadataRestoreConflict('retained slim custody is unavailable or corrupt', { cause: error }); }
   if (!source) throw new SlimMetadataRestoreConflict('retained slim custody is unavailable');
   const { terminal, prepared } = source;

@@ -3,10 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
-import type { HistoricalReceiptSource } from '../outbox/receipt-custody.ts';
+import type { HistoricalReceiptResult } from '../outbox/receipt-custody.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import { readExactModelGeneration } from '../semantic/model-custody.ts';
 import { GRAPHS, RV, hash, iri } from '../work/activate.ts';
+import { MAX_ERASURE_TARGETS, readErasure } from './journal.ts';
 import { canonicalErasureTargets, GraphErasureConflict, GraphErasureUnavailable, graphErasureReceipt,
   type GraphSuppressionProof, type HeldGraphErasureReplay } from './graph.ts';
 import { protectedObjectDigests } from './replay-objects.ts';
@@ -16,7 +17,7 @@ export interface RestoredGraphCustody {
   lineage: { dataEpoch: string; routingEpoch: string };
   receiptCustody?: {
     readHistorical(position: { dataEpoch: string; streamSequence: string }, accessClient: PoolClient):
-      Promise<Pick<HistoricalReceiptSource, 'outbox' | 'objectDigests'> | null>;
+      Promise<HistoricalReceiptResult | null>;
   };
   /** The outer owner qualifies the saved cut and selects an independently retained original source. */
   heldErasure?: Omit<HeldGraphErasureReplay, 'revisionIds' | 'original' | 'assertCurrent'> & (
@@ -128,10 +129,10 @@ export async function readRetainedNativeGraphSuppressionProof(relayClient: PoolC
 
 /** Offline owner checks reuse C6's exact readers; current build bytes cannot repair a legacy gap. */
 export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphCustody,
-  objects: ObjectRecoveryStore, accessClient?: PoolClient): Promise<Set<string>> {
+  objects: ObjectRecoveryStore, accessClient?: PoolClient, relayClient?: PoolClient): Promise<Set<string>> {
   if (!accessClient) {
     const owned = await access.connect();
-    try { return await restoredCustodyDigests(access, graph, objects, owned); }
+    try { return await restoredCustodyDigests(access, graph, objects, owned, relayClient); }
     finally { owned.release(); }
   }
   const retained = await protectedObjectDigests(graph.fuseki, objects);
@@ -187,9 +188,12 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
   // The owner position reader rechecks durable terminal/outbox AND exact objects.
   after = '';
   for (;;) {
-    const rows = (await accessClient.query<{ receipt: string; payload_sha256: string; data_epoch: string | null;
+    const rows = (await accessClient.query<{ receipt: string; request_digest: string; payload_sha256: string;
+      revision: string; payload_erasure_id: string | null; payload_erasure_epoch: string | null; data_epoch: string | null;
       stream_sequence: string | null; graph_sequence: string | null }>(`SELECT receipt, data_epoch,
-        payload_sha256, stream_sequence::text AS stream_sequence, terminal->>'sequence' AS graph_sequence
+        request_digest, payload_sha256, revision, payload_erasure_id,
+        payload_erasure_epoch::text AS payload_erasure_epoch, stream_sequence::text AS stream_sequence,
+        terminal->>'sequence' AS graph_sequence
       FROM access.command_custody WHERE receipt > $1 ORDER BY receipt LIMIT 100`, [after])).rows;
     for (const row of rows) {
       if (!row.data_epoch || !row.stream_sequence || !row.graph_sequence || !graph.receiptCustody) {
@@ -197,7 +201,42 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
       }
       const exact = await graph.receiptCustody.readHistorical({ dataEpoch: row.data_epoch,
         streamSequence: row.stream_sequence }, accessClient);
-      if (!exact || exact.outbox.batch.custodiedReceipt !== row.receipt
+      if (!exact) throw new Error('retained command custody differs from its owner position');
+      if (exact.kind === 'erased') {
+        const revision = /^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(row.revision)?.[1];
+        if (!relayClient || !revision || !row.payload_erasure_id || !row.payload_erasure_epoch
+          || exact.receipt !== row.receipt || exact.requestDigest !== row.request_digest
+          || exact.payloadSha256 !== row.payload_sha256 || exact.revision !== row.revision
+          || exact.erasureId !== row.payload_erasure_id || exact.erasureEpoch !== row.payload_erasure_epoch
+          || exact.terminal.receipt !== row.receipt || exact.terminal.revision !== row.revision
+          || exact.terminal.dataEpoch !== row.data_epoch || exact.terminal.streamSequence !== row.stream_sequence
+          || exact.terminal.sequence !== row.graph_sequence
+          || exact.outbox.batch.custodiedReceipt !== row.receipt
+          || exact.outbox.batch.streamScope !== MAIN_RELAY_STREAM_SCOPE
+          || exact.outbox.batch.dataEpoch !== row.data_epoch
+          || exact.outbox.batch.sequence !== row.stream_sequence
+          || exact.outbox.batch.graphSequence !== row.graph_sequence) {
+          throw new Error('erased command custody differs from its journal identity');
+        }
+        const journal = await readErasure(relayClient, exact.erasureId);
+        const targetKeys = journal.targets.map(target => `${target.owner}\0${target.kind}\0${target.ref}`);
+        const revisionKinds = new Set(['content_revision', 'semantic_revision', 'resource',
+          'text_contribution_draft', 'release_revision', 'work_head', 'composition_revision']);
+        const revisionTarget = journal.targets.some(target => target.ref === revision
+          && ((target.owner === 'content' && target.kind === 'content_revision')
+            || (target.owner === 'graph' && revisionKinds.has(target.kind))));
+        const commandObjectTarget = journal.targets.some(target => target.owner === 'object'
+          && target.kind === 'object' && target.ref === `sha256:${exact.payloadSha256}`);
+        if (journal.erasureId !== exact.erasureId || journal.erasureEpoch !== exact.erasureEpoch
+          || !['revision', 'resource'].includes(journal.kind) || journal.suppression !== 'suppressed'
+          || journal.targets.length === 0 || journal.targets.length > MAX_ERASURE_TARGETS
+          || new Set(targetKeys).size !== targetKeys.length || !revisionTarget || !commandObjectTarget) {
+          throw new Error('erased command custody is not authorized by its exact erasure journal');
+        }
+        continue;
+      }
+      if (exact.kind !== 'retained' || row.payload_erasure_id !== null || row.payload_erasure_epoch !== null
+        || exact.outbox.batch.custodiedReceipt !== row.receipt
         || exact.outbox.batch.streamScope !== MAIN_RELAY_STREAM_SCOPE
         || exact.outbox.batch.dataEpoch !== row.data_epoch || exact.outbox.batch.sequence !== row.stream_sequence
         || exact.outbox.batch.graphSequence !== row.graph_sequence
