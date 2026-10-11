@@ -163,6 +163,7 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-1023-alias-migration.test.ts',
   'tests/qa/integration/g-991-owner-migrations.test.ts',
   // Replays other files in one process; shared, their cached modules register no tests.
+  // The raw-update scan follows imports through export-api, discovery-projection and work-cards fixtures.
   'tests/qa/integration/discovery-read-isolation.test.ts',
   // Synthetic outbox batches would reach later files' relays in a shared project.
   'tests/qa/integration/membership-seek.test.ts',

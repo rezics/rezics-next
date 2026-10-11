@@ -65,8 +65,8 @@ export function qaStackEnvironment(
   };
 }
 
-/** One assembler serves a stack, so the planner must keep raw-update callers
- * together and apart from product-assembler files. */
+/** One assembler serves a stack, so the derived raw-update scan owns fixture
+ * eligibility, including wrappers whose imported tests perform the raw writes. */
 export function integrationStackAdmitsWorkScope(files: readonly string[], rawUpdate: boolean): boolean {
   const rawFiles = rawSparqlIntegrationFiles();
   const hasRawSparql = files.some((file) => rawFiles.has(file));

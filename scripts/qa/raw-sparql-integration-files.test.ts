@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { rawSparqlIntegrationFiles } from './isolated-integration-files.ts';
+import { rawSparqlIntegrationFiles, rawSparqlIntegrationScan } from './isolated-integration-files.ts';
 
 /** The initial ceiling unions the existing list with the callers missed in regression run 9,
  * including the 24 direct callers and roots that reach update helpers. It only shrinks as files
@@ -173,4 +173,18 @@ const ceiling = new Set<string>([
 test('raw SPARQL integration files only shrink', () => {
   const added = [...rawSparqlIntegrationFiles()].filter(file => !ceiling.has(file)).sort();
   expect(added).toEqual([]);
+});
+
+test('discovery replay inherits raw-fixture classification from its imported tests', () => {
+  const wrapper = 'tests/qa/integration/discovery-read-isolation.test.ts';
+  const sites = rawSparqlIntegrationScan().sites.get(wrapper) ?? [];
+
+  expect(rawSparqlIntegrationFiles().has(wrapper)).toBe(true);
+  for (const source of [
+    'tests/qa/integration/export-api.test.ts',
+    'tests/qa/integration/discovery-projection-fixture.ts',
+    'tests/qa/integration/g-1001-work-cards.test.ts',
+  ]) {
+    expect(sites.some(site => site.startsWith(`${source}:`))).toBe(true);
+  }
 });
