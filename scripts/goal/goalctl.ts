@@ -5381,14 +5381,14 @@ function readGateLaneWaiters(directory: string, alive: (pid: number) => boolean)
 
 /** Holders and how many gates are waiting. Dead holders are omitted; the next acquire reclaims their lease. */
 export function gateLaneStatus(directory = gateLanesDir, alive: (pid: number) => boolean = pidAlive,
-  lanes = gateLaneCount()): string {
+  lanes = gateLaneCount(directory)): string {
   const view = gateLaneView(directory, lanes, alive);
   const who = view.holders.length ? ` (${view.holders.join('; ')})` : '';
   return `${view.held}/${view.lanes} busy${who}; ${readGateLaneWaiters(directory, alive).length} waiting`;
 }
 
 export function gateLaneWaiters(directory = gateLanesDir, alive: (pid: number) => boolean = pidAlive,
-  lanes = gateLaneCount()): string[] {
+  lanes = gateLaneCount(directory)): string[] {
   const message = gateLaneBusyText(gateLaneView(directory, lanes, alive));
   return readGateLaneWaiters(directory, alive).map(wait =>
     `Gate waiting for lane: Goal ${wait.goal ?? '?'} (pid ${wait.pid}): ${wait.command}; ${message}`).sort();
