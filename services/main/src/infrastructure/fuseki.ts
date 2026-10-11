@@ -1,8 +1,117 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+export type FusekiReadCallFamily = 'health' | 'delta-proof' | 'query' | 'template-query';
+export type FusekiReadPhase = 'read' | 'writer-wait';
+export type FusekiReadCallStatus = 'complete' | 'failed' | 'aborted' | 'active';
+
+export interface FusekiReadCallDiagnostic {
+  family: FusekiReadCallFamily;
+  durationMs: number;
+  attempt: number;
+  phase: FusekiReadPhase;
+  status: FusekiReadCallStatus;
+}
+
+interface ActiveFusekiReadCall extends Omit<FusekiReadCallDiagnostic, 'durationMs' | 'status'> {
+  startedAt: number;
+}
+
+export interface FusekiReadDiagnosticSnapshot {
+  history: FusekiReadCallDiagnostic[];
+  active: FusekiReadCallDiagnostic[];
+  omitted: number;
+}
+
+export interface FusekiReadDiagnostics {
+  history: FusekiReadCallDiagnostic[];
+  active: Map<number, ActiveFusekiReadCall>;
+  omitted: number;
+  nextId: number;
+  closed: boolean;
+}
+
 /** One public-search route shares a wall deadline and Fuseki call/response budget. */
-export interface FusekiReadBudget { signal: AbortSignal; callsLeft: number; bytesLeft: number }
+export interface FusekiReadBudget {
+  signal: AbortSignal;
+  callsLeft: number;
+  bytesLeft: number;
+  /** Monotonic absolute deadline shared by all calls in the request. */
+  deadline?: number;
+  attempt?: number;
+  phase?: FusekiReadPhase;
+  diagnostics?: FusekiReadDiagnostics;
+}
 export const fusekiReadBudget = new AsyncLocalStorage<FusekiReadBudget>();
+
+const MAX_FUSEKI_DIAGNOSTIC_HISTORY = 8;
+const MAX_FUSEKI_DIAGNOSTIC_ACTIVE = 8;
+
+export function createFusekiReadDiagnostics(): FusekiReadDiagnostics {
+  return { history: [], active: new Map(), omitted: 0, nextId: 0, closed: false };
+}
+
+export function snapshotFusekiReadDiagnostics(budget?: FusekiReadBudget): FusekiReadDiagnosticSnapshot | undefined {
+  const diagnostics = budget?.diagnostics;
+  if (!diagnostics) return undefined;
+  const now = performance.now();
+  return {
+    history: diagnostics.history.map(item => ({ ...item })),
+    active: [...diagnostics.active.values()].map(({ family, startedAt, attempt, phase }) => ({
+      family, durationMs: Math.max(0, Math.round(now - startedAt)), attempt, phase, status: 'active',
+    })),
+    omitted: diagnostics.omitted,
+  };
+}
+
+export function clearFusekiReadDiagnostics(budget: FusekiReadBudget): void {
+  const diagnostics = budget.diagnostics;
+  if (!diagnostics) return;
+  diagnostics.closed = true;
+  diagnostics.active.clear();
+  diagnostics.history.length = 0;
+}
+
+function beginReadCall(family: FusekiReadCallFamily): number | undefined {
+  const budget = fusekiReadBudget.getStore();
+  const diagnostics = budget?.diagnostics;
+  if (!budget || !diagnostics || diagnostics.closed) return undefined;
+  const id = ++diagnostics.nextId;
+  if (diagnostics.active.size >= MAX_FUSEKI_DIAGNOSTIC_ACTIVE) {
+    const oldestId = diagnostics.active.keys().next().value;
+    if (oldestId !== undefined) diagnostics.active.delete(oldestId);
+    diagnostics.omitted++;
+  }
+  diagnostics.active.set(id, {
+    family, startedAt: performance.now(), attempt: budget.attempt ?? 1, phase: budget.phase ?? 'read',
+  });
+  return id;
+}
+
+function finishReadCall(id: number | undefined, status: Exclude<FusekiReadCallStatus, 'active'>): void {
+  if (id === undefined) return;
+  const diagnostics = fusekiReadBudget.getStore()?.diagnostics;
+  const active = diagnostics?.active.get(id);
+  if (!diagnostics || !active || diagnostics.closed) return;
+  diagnostics.active.delete(id);
+  if (diagnostics.history.length >= MAX_FUSEKI_DIAGNOSTIC_HISTORY) {
+    diagnostics.history.shift();
+    diagnostics.omitted++;
+  }
+  diagnostics.history.push({
+    family: active.family,
+    durationMs: Math.max(0, Math.round(performance.now() - active.startedAt)),
+    attempt: active.attempt,
+    phase: active.phase,
+    status,
+  });
+}
+
+function searchDiagnosticHeaders(): Record<string, string> {
+  const budget = fusekiReadBudget.getStore();
+  if (!budget?.diagnostics || budget.deadline === undefined || budget.diagnostics.closed) return {};
+  const remainingMs = Math.min(1_500, Math.max(1, Math.ceil(budget.deadline - performance.now())));
+  return { 'x-rezics-search-budget-ms': String(remainingMs) };
+}
 
 export class FusekiReadBudgetExceeded extends Error {}
 
@@ -271,17 +380,27 @@ export class FusekiClient {
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();
     takeReadCall();
-    const response = await fetch(new URL('query', this.baseUrl), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/sparql-query',
-        accept: 'application/sparql-results+json',
-      },
-      body: sparql,
-      signal,
-    });
-    if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
-    return boundedJson<SparqlResult>(response, maxResponseBytes, signal);
+    const diagnostic = beginReadCall('query');
+    let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
+    try {
+      const response = await fetch(new URL('query', this.baseUrl), {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/sparql-query',
+          accept: 'application/sparql-results+json',
+          ...searchDiagnosticHeaders(),
+        },
+        body: sparql,
+        signal,
+      });
+      if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
+      const result = await boundedJson<SparqlResult>(response, maxResponseBytes, signal);
+      status = 'complete';
+      return result;
+    } catch (error) {
+      if (signal.aborted) status = 'aborted';
+      throw error;
+    } finally { finishReadCall(diagnostic, status); }
   }
 
   async templateQuery(envelope: TemplateQueryEnvelope, maxResponseBytes = 512 * 1024): Promise<SparqlResult> {
@@ -300,14 +419,24 @@ export class FusekiClient {
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();
     takeReadCall();
-    const response = await fetch(new URL('command', this.baseUrl), {
-      method: 'POST', headers: { 'content-type': 'application/json',
-        accept: 'application/sparql-results+json', authorization: `Bearer ${this.commandCapability}` },
-      body, signal,
-    });
-    if (response.status === 403) throw new CommandForbidden('Fuseki template query capability rejected');
-    if (!response.ok) throw new Error(`Fuseki template query returned ${response.status}`);
-    return boundedJson<SparqlResult>(response, maxResponseBytes, signal);
+    const diagnostic = beginReadCall('template-query');
+    let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
+    try {
+      const response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST', headers: { 'content-type': 'application/json',
+          accept: 'application/sparql-results+json', authorization: `Bearer ${this.commandCapability}`,
+          ...searchDiagnosticHeaders() },
+        body, signal,
+      });
+      if (response.status === 403) throw new CommandForbidden('Fuseki template query capability rejected');
+      if (!response.ok) throw new Error(`Fuseki template query returned ${response.status}`);
+      const result = await boundedJson<SparqlResult>(response, maxResponseBytes, signal);
+      status = 'complete';
+      return result;
+    } catch (error) {
+      if (signal.aborted) status = 'aborted';
+      throw error;
+    } finally { finishReadCall(diagnostic, status); }
   }
 
   async templateIndex(input: StatementPublicationNativeRequest): Promise<StatementPublicationNativeResult>;
@@ -511,21 +640,29 @@ export class FusekiClient {
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();
     takeReadCall();
-    const response = await fetch(new URL('command', this.baseUrl), {
-      headers: { accept: 'application/json' }, signal,
-    });
-    if (!response.ok) throw new Error(`Fuseki command health returned ${response.status}`);
-    const value = await boundedJson<CommandHealth>(response, 65_536, signal);
-    if (!value || typeof value.moduleVersion !== 'string'
-      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.instanceId)
-      || !/^(0|[1-9][0-9]*)$/.test(value.publicSearchWriteEpoch)
-      || typeof value.publicSearchWriteActive !== 'boolean'
-      || value.publicSearchWriteActive !== (BigInt(value.publicSearchWriteEpoch) % 2n === 1n)
-      || (value.publicSearchDeltaAvailable !== undefined
-        && typeof value.publicSearchDeltaAvailable !== 'boolean')
-      || !value.profiles
-      || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
-    return value;
+    const diagnostic = beginReadCall('health');
+    let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
+    try {
+      const response = await fetch(new URL('command', this.baseUrl), {
+        headers: { accept: 'application/json', ...searchDiagnosticHeaders() }, signal,
+      });
+      if (!response.ok) throw new Error(`Fuseki command health returned ${response.status}`);
+      const value = await boundedJson<CommandHealth>(response, 65_536, signal);
+      if (!value || typeof value.moduleVersion !== 'string'
+        || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.instanceId)
+        || !/^(0|[1-9][0-9]*)$/.test(value.publicSearchWriteEpoch)
+        || typeof value.publicSearchWriteActive !== 'boolean'
+        || value.publicSearchWriteActive !== (BigInt(value.publicSearchWriteEpoch) % 2n === 1n)
+        || (value.publicSearchDeltaAvailable !== undefined
+          && typeof value.publicSearchDeltaAvailable !== 'boolean')
+        || !value.profiles
+        || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
+      status = 'complete';
+      return value;
+    } catch (error) {
+      if (signal.aborted) status = 'aborted';
+      throw error;
+    } finally { finishReadCall(diagnostic, status); }
   }
 
   async searchDeltaSince(ordinal: string): Promise<SearchDeltaProof> {
@@ -533,15 +670,23 @@ export class FusekiClient {
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();
     takeReadCall();
-    const url = new URL('command', this.baseUrl);
-    url.searchParams.set('deltaSince', ordinal);
-    const response = await fetch(url, {
-      headers: { accept: 'application/json' }, signal,
-    });
-    if (!response.ok) throw new Error(`Fuseki search delta returned ${response.status}`);
-    const proof = await boundedJson<SearchDeltaProof>(response, 65_536, signal);
-    if (!proof || typeof proof.available !== 'boolean') throw new Error('malformed search delta proof');
-    return proof;
+    const diagnostic = beginReadCall('delta-proof');
+    let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
+    try {
+      const url = new URL('command', this.baseUrl);
+      url.searchParams.set('deltaSince', ordinal);
+      const response = await fetch(url, {
+        headers: { accept: 'application/json', ...searchDiagnosticHeaders() }, signal,
+      });
+      if (!response.ok) throw new Error(`Fuseki search delta returned ${response.status}`);
+      const proof = await boundedJson<SearchDeltaProof>(response, 65_536, signal);
+      if (!proof || typeof proof.available !== 'boolean') throw new Error('malformed search delta proof');
+      status = 'complete';
+      return proof;
+    } catch (error) {
+      if (signal.aborted) status = 'aborted';
+      throw error;
+    } finally { finishReadCall(diagnostic, status); }
   }
 
   async command(envelope: CommandEnvelope): Promise<CommandResult> {

@@ -573,10 +573,9 @@ test('SEARCH18: a writer outliving the read deadline is reported with its retry 
       await assertPublicTextReady(source.fuseki, { dataEpoch: 'epoch', routingEpoch: 'routing' });
     }, 120, diagnostics)).rejects.toBeInstanceOf(SearchRequestTimedOut);
     expect(performance.now() - started).toBeLessThan(250);
-    expect(diagnostics.map(item => [item.phase, item.error])).toEqual([
-      ['read', 'SearchSnapshotMoved'], ['writer-wait', 'SearchRequestTimedOut'],
+    expect(diagnostics.map(item => [item.phase, item.result])).toEqual([
+      ['read', 'snapshot-moved'], ['writer-wait', 'request-timed-out'],
     ]);
-    expect(diagnostics[0]?.message).toContain('write is in progress');
   } finally { clearTimeout(release); source.endIndexWrite(); }
   await expect(withStableSearchSnapshot(source.fuseki, async () => {
     await assertPublicTextReady(source.fuseki, { dataEpoch: 'epoch', routingEpoch: 'routing' });
@@ -588,6 +587,126 @@ test('SEARCH18: stalled read is cut off by one request wall deadline', async () 
   await expect(withStableSearchSnapshot(undefined, () => new Promise<never>(() => {}), 20))
     .rejects.toBeInstanceOf(SearchRequestTimedOut);
   expect(performance.now() - started).toBeLessThan(300);
+});
+
+test('SEARCH18: public search calls forward the decreasing bounded request budget', async () => {
+  const originalFetch = globalThis.fetch;
+  const remainingBudgets: number[] = [];
+  let call = 0;
+  globalThis.fetch = (async (_input, init) => {
+    const value = new Headers(init?.headers).get('x-rezics-search-budget-ms');
+    if (value !== null) remainingBudgets.push(Number(value));
+    if (call++ === 0) await Bun.sleep(40);
+    return Response.json({ boolean: true });
+  }) as typeof fetch;
+  try {
+    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics');
+    await withStableSearchSnapshot(undefined, async () => {
+      await fuseki.query('ASK {}');
+      await fuseki.query('ASK {}');
+    });
+    expect(remainingBudgets).toHaveLength(2);
+    expect(remainingBudgets.every(value => Number.isSafeInteger(value) && value >= 1 && value <= 1_500)).toBe(true);
+    expect(remainingBudgets[1]).toBeLessThan(remainingBudgets[0]!);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('SEARCH18: timeout records fixed Fuseki families and their retry phases', async () => {
+  const originalFetch = globalThis.fetch;
+  let queryCalls = 0;
+  let healthCalls = 0;
+  let activeSignal: AbortSignal | undefined;
+  globalThis.fetch = ((input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname.endsWith('/query')) {
+      queryCalls++;
+      if (queryCalls === 2) {
+        activeSignal = init?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          activeSignal?.addEventListener('abort', () => reject(new DOMException('read stopped', 'AbortError')),
+            { once: true });
+        });
+      }
+      return Promise.resolve(Response.json({ boolean: true }));
+    }
+    if (url.searchParams.has('deltaSince')) return Promise.resolve(Response.json({ available: true }));
+    if (init?.method === 'POST') return Promise.resolve(Response.json({ results: { bindings: [] } }));
+    const active = ++healthCalls === 2;
+    return Promise.resolve(Response.json({ moduleVersion: COMMAND_MODULE_VERSION,
+      instanceId: '11111111-1111-4111-8111-111111111111',
+      publicSearchWriteEpoch: active ? '1' : '0', publicSearchWriteActive: active, profiles: {} }));
+  }) as typeof fetch;
+  try {
+    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics', undefined, 'a'.repeat(64));
+    let timeout: SearchRequestTimedOut | undefined;
+    try {
+      await withStableSearchSnapshot(fuseki, async () => {
+        if (queryCalls > 0) return fuseki.query('SELECT * WHERE { ?s ?p "private query" }');
+        await fuseki.query('ASK {}');
+        await fuseki.templateQuery({ query: 'SELECT * WHERE {}', bindings: {}, tables: [], limit: 1 });
+        await fuseki.searchDeltaSince('0');
+        await fuseki.commandHealth();
+        throw new SearchSnapshotMoved('position changed');
+      }, 300);
+    } catch (error) {
+      if (error instanceof SearchRequestTimedOut) timeout = error;
+      else throw error;
+    }
+    expect(timeout).toBeInstanceOf(SearchRequestTimedOut);
+    expect(activeSignal?.aborted).toBe(true);
+    expect(timeout?.diagnostics?.history.map(item => item.family)).toEqual([
+      'query', 'template-query', 'delta-proof', 'health', 'health', 'health',
+    ]);
+    expect(timeout?.diagnostics?.history.at(-1)).toMatchObject({ phase: 'writer-wait', attempt: 1 });
+    expect(timeout?.diagnostics?.active).toMatchObject([
+      { family: 'query', phase: 'read', attempt: 2, status: 'active' },
+    ]);
+    expect(JSON.stringify(timeout?.diagnostics)).not.toContain('private query');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('SEARCH18: timeout diagnostics are bounded, redacted, and retain an aborted active call', async () => {
+  const originalFetch = globalThis.fetch;
+  const privatePhrase = 'unlogged phrase 9926d511';
+  let call = 0;
+  let activeSignal: AbortSignal | undefined;
+  globalThis.fetch = ((input, init) => {
+    const currentCall = call++;
+    if (currentCall < 10 || currentCall > 10) return Promise.resolve(Response.json({ boolean: true }));
+    activeSignal = init?.signal ?? undefined;
+    return new Promise<Response>((_resolve, reject) => {
+      activeSignal?.addEventListener('abort', () => {
+        reject(new DOMException(privatePhrase, 'AbortError'));
+      }, { once: true });
+    });
+  }) as typeof fetch;
+  try {
+    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics');
+    let timeout: SearchRequestTimedOut | undefined;
+    try {
+      await withStableSearchSnapshot(undefined, async () => {
+        for (let index = 0; index < 10; index++) await fuseki.query('ASK {}');
+        await fuseki.query(`SELECT * WHERE { ?s ?p "${privatePhrase}" }`);
+      }, 300);
+    } catch (error) {
+      if (error instanceof SearchRequestTimedOut) timeout = error;
+      else throw error;
+    }
+    expect(timeout).toBeInstanceOf(SearchRequestTimedOut);
+    expect(activeSignal?.aborted).toBe(true);
+    expect(timeout?.diagnostics?.history).toHaveLength(8);
+    expect(timeout?.diagnostics?.omitted).toBe(2);
+    expect(timeout?.diagnostics?.active).toHaveLength(1);
+    expect(timeout?.diagnostics?.active[0]).toMatchObject({
+      family: 'query', attempt: 1, phase: 'read', status: 'active',
+    });
+    const output = JSON.stringify(timeout?.diagnostics);
+    expect(output).not.toContain(privatePhrase);
+    expect(output.length).toBeLessThan(2_048);
+
+    await withStableSearchSnapshot(undefined, () => fuseki.query('ASK {}'));
+    expect(timeout?.diagnostics?.active).toHaveLength(1);
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('SEARCH15/SEARCH18: only an anchored, changed control is a retryable empty snapshot', async () => {

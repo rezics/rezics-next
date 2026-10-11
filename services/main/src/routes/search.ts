@@ -15,7 +15,8 @@ import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
 import { queryPublicDisclosedFields } from '../modules/work/search-disclosed-fields.ts';
 import { queryPublicGroupedStatementPhrase } from '../modules/work/search-grouped.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
-import { withStableSearchSnapshot, SearchIndexUnavailable, type SearchAttemptDiagnostic }
+import { withStableSearchSnapshot, SearchIndexUnavailable, SearchRequestTimedOut,
+  type SearchAttemptDiagnostic }
   from '../modules/work/search-readiness.ts';
 import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
 import { applyWorkSearchMutes } from '../modules/work/search-presentation.ts';
@@ -77,14 +78,15 @@ const groupedStatementRequest = t.Object({
   { additionalProperties: false })),
 }, { additionalProperties: false });
 
-function logLoadSearchFailure(profile: string, error: unknown,
+function logSearchFailure(route: 'query' | 'query-page', error: unknown,
   diagnostics: SearchAttemptDiagnostic[] | undefined): void {
+  if (error instanceof SearchRequestTimedOut) {
+    console.error(JSON.stringify({ event: 'public-search-timeout', route, diagnostics: error.diagnostics }));
+    return;
+  }
   if (!process.env.REZICS_LOAD_RUN_ID || !(error instanceof SearchIndexUnavailable)) return;
-  console.error(JSON.stringify({ event: 'load-search-failure', profile,
-    error: error.constructor.name, message: error.message,
-    cause: error.cause instanceof Error ? { error: error.cause.constructor.name,
-      message: error.cause.message } : undefined,
-    attempts: diagnostics }));
+  console.error(JSON.stringify({ event: 'load-search-failure', route,
+    error: 'search-index-unavailable', attempts: diagnostics }));
 }
 
 function unsupportedSearchSelection(body: { sourcePolicy?: unknown; asOf?: unknown }) {
@@ -532,7 +534,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
-        logLoadSearchFailure(body.profile, error, diagnostics);
+        logSearchFailure('query', error, diagnostics);
         return commandError(error);
       }
     })
@@ -623,7 +625,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         return Response.json(page,
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
-        logLoadSearchFailure(body.profile, error, diagnostics);
+        logSearchFailure('query-page', error, diagnostics);
         return commandError(error);
       }
     });

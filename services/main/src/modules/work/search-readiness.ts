@@ -8,7 +8,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
 import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget,
-  type FusekiClient, type SearchDeltaProof, type SparqlResult } from '../../infrastructure/fuseki.ts';
+  clearFusekiReadDiagnostics, createFusekiReadDiagnostics, snapshotFusekiReadDiagnostics,
+  type FusekiClient, type FusekiReadDiagnosticSnapshot, type FusekiReadPhase,
+  type SearchDeltaProof, type SparqlResult } from '../../infrastructure/fuseki.ts';
 
 // MAX_PUBLIC_UNITS is kept for old fixture guards; it is no longer a population admission limit.
 export { MAX_PUBLIC_UNITS, MAX_PHRASE_CANDIDATES, PHRASE_HIT_PROBE, MAX_SEARCH_RESPONSE_BYTES } from './search-limits.ts';
@@ -27,7 +29,15 @@ export class SearchIndexUnavailable extends Error {
 export class SearchIndexBudgetExceeded extends Error {}
 /** A committed graph position changed between separate read snapshots. */
 export class SearchSnapshotMoved extends SearchIndexUnavailable {}
-export class SearchRequestTimedOut extends SearchIndexUnavailable {}
+export class SearchRequestTimedOut extends SearchIndexUnavailable {
+  readonly diagnostics?: FusekiReadDiagnosticSnapshot;
+
+  constructor(message?: string, options?: ErrorOptions & { diagnostics?: FusekiReadDiagnosticSnapshot }) {
+    const { diagnostics, ...errorOptions } = options ?? {};
+    super(message, errorOptions);
+    this.diagnostics = diagnostics;
+  }
+}
 /** The JVM started after an unclean stop; only an empty-index rebuild clears it (OPS15). */
 export class SearchIndexUncertain extends SearchIndexUnavailable {}
 
@@ -40,18 +50,28 @@ const RETRY_DELAYS_MS = [25, 50] as const;
 
 export interface SearchAttemptDiagnostic {
   attempt: number;
-  phase: 'read' | 'writer-wait';
+  phase: FusekiReadPhase;
   elapsedMs: number;
-  error: string;
-  message: string;
+  result: 'snapshot-moved' | 'request-timed-out' | 'read-budget-exceeded'
+    | 'response-too-large' | 'index-unavailable' | 'other';
+}
+
+const MAX_SEARCH_ATTEMPT_DIAGNOSTICS = 8;
+
+function attemptResult(error: unknown): SearchAttemptDiagnostic['result'] {
+  if (error instanceof SearchRequestTimedOut) return 'request-timed-out';
+  if (error instanceof SearchSnapshotMoved) return 'snapshot-moved';
+  if (error instanceof FusekiReadBudgetExceeded) return 'read-budget-exceeded';
+  if (error instanceof FusekiQueryResponseTooLarge) return 'response-too-large';
+  if (error instanceof SearchIndexUnavailable) return 'index-unavailable';
+  return 'other';
 }
 
 function reportAttempt(diagnostics: SearchAttemptDiagnostic[] | undefined,
   attempt: number, phase: SearchAttemptDiagnostic['phase'], started: number, error: unknown): void {
   if (!diagnostics) return;
-  diagnostics.push({ attempt, phase, elapsedMs: Math.round(performance.now() - started),
-    error: error instanceof Error ? error.constructor.name : typeof error,
-    message: error instanceof Error ? error.message : String(error) });
+  if (diagnostics.length >= MAX_SEARCH_ATTEMPT_DIAGNOSTICS) diagnostics.shift();
+  diagnostics.push({ attempt, phase, elapsedMs: Math.round(performance.now() - started), result: attemptResult(error) });
 }
 
 /** Retry only a proven position race; corruption and budget failures retain their typed outcome. */
@@ -61,28 +81,40 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
     throw new Error('invalid public search deadline');
   }
   const controller = new AbortController();
+  const budget = { signal: controller.signal, callsLeft: MAX_SEARCH_FUSEKI_CALLS,
+    bytesLeft: MAX_SEARCH_FUSEKI_BYTES, deadline: performance.now() + deadlineMs,
+    attempt: 1, phase: 'read' as FusekiReadPhase, diagnostics: createFusekiReadDiagnostics() };
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timeoutDiagnostics: FusekiReadDiagnosticSnapshot | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
+      timeoutDiagnostics = snapshotFusekiReadDiagnostics(budget);
       controller.abort();
-      reject(new SearchRequestTimedOut('public search request exceeded wall deadline'));
+      reject(new SearchRequestTimedOut('public search request exceeded wall deadline', {
+        diagnostics: timeoutDiagnostics,
+      }));
     }, deadlineMs);
   });
   try {
-    return await fusekiReadBudget.run({ signal: controller.signal,
-      callsLeft: MAX_SEARCH_FUSEKI_CALLS, bytesLeft: MAX_SEARCH_FUSEKI_BYTES }, async () => {
+    return await fusekiReadBudget.run(budget, async () => {
       // A fixed attempt count can reject a coherent read while time and call
       // budgets remain (observed under consecutive native index writes). Every
       // movement pays a delay; the shared wall and Fuseki budgets bound retries.
       for (let attempt = 1; ; attempt++) {
+        budget.attempt = attempt;
+        budget.phase = 'read';
         const readStarted = performance.now();
         try { return await Promise.race([read(), expired]); }
         catch (error) {
           reportAttempt(diagnostics, attempt, 'read', readStarted, error);
           if (controller.signal.aborted) {
-            throw new SearchRequestTimedOut('public search request exceeded wall deadline', { cause: error });
+            if (error instanceof SearchRequestTimedOut) throw error;
+            throw new SearchRequestTimedOut('public search request exceeded wall deadline', {
+              cause: error, diagnostics: timeoutDiagnostics ?? snapshotFusekiReadDiagnostics(budget),
+            });
           }
           if (!(error instanceof SearchSnapshotMoved)) throw error;
+          budget.phase = 'writer-wait';
           const waitStarted = performance.now();
           try {
             await delay(RETRY_DELAYS_MS[attempt - 1] ?? 50, undefined, { signal: controller.signal });
@@ -94,7 +126,10 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
           }
           catch (cause) {
             if (controller.signal.aborted) {
-              const timeout = new SearchRequestTimedOut('public search request exceeded wall deadline', { cause });
+              const timeout = cause instanceof SearchRequestTimedOut ? cause
+                : new SearchRequestTimedOut('public search request exceeded wall deadline', {
+                  cause, diagnostics: timeoutDiagnostics ?? snapshotFusekiReadDiagnostics(budget),
+                });
               reportAttempt(diagnostics, attempt, 'writer-wait', waitStarted, timeout);
               throw timeout;
             }
@@ -104,7 +139,10 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
         }
       }
     });
-  } finally { if (timer) clearTimeout(timer); }
+  } finally {
+    if (timer) clearTimeout(timer);
+    clearFusekiReadDiagnostics(budget);
+  }
 }
 
 export interface PublicTextPosition {
