@@ -55,16 +55,28 @@ async function openDialog() {
   return dialog;
 }
 
-/** Option labels from the edition select, ignoring the native select Storybook keeps beside the popup. */
+/** Read the edition popup once it accepts keyboard input, then return focus to its trigger. */
 async function editionLabels(dialog: HTMLElement): Promise<string[]> {
   const start = within(dialog).getByRole('region', { name: 'Start an attempt' });
-  await userEvent.click(within(start).getByRole('combobox', { name: 'Edition' }));
+  const trigger = within(start).getByRole('combobox', { name: 'Edition' });
+  await userEvent.click(trigger);
+  const listbox = await within(start).findByRole('listbox');
+  // Options can mount before the popup takes focus; an early Escape would dismiss the sheet.
+  await waitFor(async () => {
+    await expect(listbox).toBeVisible();
+    await expect(listbox).toHaveFocus();
+  });
   try {
-    const options = await within(document.body).findAllByRole('option');
-    return options.filter(option => !option.closest('select')).map(option => option.textContent ?? '')
+    return within(listbox).getAllByRole('option').map(option => option.textContent ?? '')
       .filter(label => label.startsWith('Release '));
   } finally {
     await userEvent.keyboard('{Escape}');
+    await waitFor(async () => {
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      await expect(trigger).toHaveFocus();
+    });
+    await expect(dialog).toHaveAttribute('data-state', 'open');
+    await expect(dialog).toBeVisible();
   }
 }
 
