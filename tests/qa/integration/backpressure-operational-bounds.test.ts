@@ -465,7 +465,14 @@ test('OPS06: projection pending capacity is transactional and remains visible to
     const snapshot = await snapshotResponse.json() as { lanes: [{ state: string; backlog: string | null;
       maxBacklog: number }, { state: string }, { state: string }] };
     expect(snapshot.lanes[0]).toMatchObject({ state: 'saturated', maxBacklog: 1000 });
-    const refused = await app.handle(new Request('http://main.local/v1/content-drafts', { method: 'POST' }));
+    const refused = await app.handle(new Request('http://main.local/v1/content-drafts', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        profile: 'content-text-v1', resourceId: `https://rezics.com/id/${randomUUID()}`,
+        variantId: `urn:rezics:variant:${randomUUID()}`,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+        expectedHead: null, actingSubject: `https://rezics.com/id/${randomUUID()}`, body: '',
+      }),
+    }));
     expect(refused.status).toBe(503);
     expect(refused.headers.get('retry-after')).toBe('5');
     expect((await refused.json() as { code: string }).code).toBe('backpressure_saturated');
