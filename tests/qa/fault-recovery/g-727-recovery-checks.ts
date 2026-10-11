@@ -9,6 +9,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import {
   OwnerOperations,
   type RestoreResources,
@@ -67,8 +68,8 @@ export function assertRecoveryServingTarget(
     throw new Error('Serving verification received a different restored target');
 }
 
-/** Readiness and an ordinary public Work read must come from the same restored
- * target that completed owner reconciliation. */
+/** Readiness and an ordinary operator-authorized Work read must come from the
+ * same restored target that completed owner reconciliation. */
 export async function verifyRecoveryServing(
   context: RestoredContext,
   reconciledTarget: RestoredContext | undefined,
@@ -83,7 +84,10 @@ export async function verifyRecoveryServing(
 
   const id = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(probes.sample.work)?.[1];
   if (!id) throw new Error('Recovery Work probe has an invalid target identity');
-  const response = await app.handle(new Request(`http://localhost/v1/works/${id}`));
+  const response = await app.handle(new Request(
+    `http://localhost/v1/works/${id}?actingSubject=${encodeURIComponent(probes.sample.actingSubject)}`,
+    { headers: { authorization: 'Bearer qa-owner' } },
+  ));
   if (response.status !== 200)
     throw new Error(`Restored target Work read returned ${response.status}`);
   const result = (await response.json()) as { id?: unknown };
@@ -244,9 +248,10 @@ export async function captureRecoveryProbes(
     );
   const operator = { issuer: source.apps.ACCOUNT_ISSUER!, subject: person };
   const deletedPrincipal = randomUUID();
+  const operatorPrincipalId = randomUUID();
   await access.query(
     'INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3),($4,$2,$5)',
-    [randomUUID(), operator.issuer, person, deletedPrincipal, deleted],
+    [operatorPrincipalId, operator.issuer, person, deletedPrincipal, deleted],
   );
   const deletion = await new AccessAdmissionRegistry(access).strongDeactivateAccountSubject(
     operator.issuer,
@@ -270,6 +275,31 @@ export async function captureRecoveryProbes(
      VALUES ($1,$2,$2,$3,'work.read',now() + interval '1 hour',false)`,
     [revoked, sample.actingSubject, readScope],
   );
+  // The first fixture sample is intentionally private. The QA operator reads
+  // it through the same represented-principal and grant checks as any reader.
+  const authority = await access.connect();
+  try {
+    await authority.query('BEGIN');
+    await authority.query("SET LOCAL lock_timeout = '2s'");
+    await authority.query("SET LOCAL statement_timeout = '5s'");
+    await grantFixtureAuthority(authority, {
+      scope: readScope,
+      requireDispatch: false,
+      representations: [{
+        principalId: operatorPrincipalId,
+        actor: sample.actingSubject,
+        action: 'work.read',
+        lifetime: '8 hours',
+      }],
+      grant: { actor: sample.actingSubject, action: 'work.read', lifetime: '8 hours' },
+    });
+    await authority.query('COMMIT');
+  } catch (error) {
+    await authority.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    authority.release();
+  }
   const archive = archiveBasis(
     await exportAccountData(account, source.apps.ACCOUNT_SECRET!, person, 'none'),
   );

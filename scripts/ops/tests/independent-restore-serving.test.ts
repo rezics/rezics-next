@@ -43,6 +43,44 @@ test('serving probes refuse a different restored target before making requests',
   expect(requests).toHaveLength(0);
 });
 
+test('launch-style serving verification reads a non-public first manifest sample with operator authority', async () => {
+  const target = {} as RestoredContext;
+  const manifest = {
+    entities: { publicUnits: 100 },
+    samples: [{
+      index: 0,
+      work: sampleWork,
+      agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
+    }],
+  };
+  const sample = manifest.samples[0]!;
+  const requests: Request[] = [];
+  const app = {
+    handle: async (request: Request) => {
+      requests.push(request);
+      if (new URL(request.url).pathname === '/health/ready')
+        return Response.json({ status: 'ready' });
+      if (
+        request.headers.get('authorization') !== 'Bearer qa-owner' ||
+        new URL(request.url).searchParams.get('actingSubject') !== sample.agent
+      )
+        return Response.json({ error: 'unauthorized' }, { status: 401 });
+      return Response.json({ id: sample.work });
+    },
+  };
+  const probes = {
+    sample: { work: sample.work, actingSubject: sample.agent },
+  } as Parameters<typeof verifyRecoveryServing>[2];
+
+  await verifyRecoveryServing(target, target, probes, app);
+
+  expect(sample.index).toBe(0);
+  expect(sample.index > 0 && sample.index <= manifest.entities.publicUnits).toBe(false);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.headers.get('authorization')).toBe('Bearer qa-owner');
+  expect(new URL(requests[1]!.url).searchParams.get('actingSubject')).toBe(sample.agent);
+});
+
 test('serving probes fail when a normal restored Work read fails after readiness', async () => {
   const target = {} as RestoredContext;
   const requests: string[] = [];
