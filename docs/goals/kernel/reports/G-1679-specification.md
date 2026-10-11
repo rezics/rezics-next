@@ -56,7 +56,7 @@ the fourth, `existing-type`, not native CAS or replay:
    `main.route.dependency_unavailable` and returns **503
    `dependency_unavailable`**, with `Retry-After: 1`.
 
-The newly added catch at `change.ts:565-577` cannot handle this exception:
+The newly added catch at `change.ts:565-574` cannot handle this exception:
 `changeSemanticComponent` has not been dispatched and the exception is not a
 native `unknown-profile` rejection. The test has not actually lost an admitted
 head at this interception point.
@@ -203,6 +203,9 @@ leave its later race and withdrawn-head expectations failing.
    and the original success response's source position. a2's inability to add
    a second opinion is
    retained without disclosing a's head to an unprovisioned Persona.
+   Extend this file's `Opinion` response type at line 20 with
+   `sourcePosition: { datasetId: string; dataEpoch: string; sequence: string }`
+   for the position assertion, and import the existing standing-receipt reader.
 4. Preserve the **authorized** 409 cases: c's concurrent first-write loser at
    lines 167-173, b's withdrawn predecessor at line 214, and the same-key
    idempotency conflicts. a/b/c now have the required disclosure prerequisites.
@@ -250,7 +253,7 @@ The Person/control proof was introduced by `8cc2f6c6e`; the
 | Lock-class propagation in rating context, Global context/observation, standing observation, policy, question presentation, semantic admitted wrappers | Keep. Their broad pending-operation adapters must not erase a known retryable refusal. |
 | `modules/rating/target.ts:216-219` recognizes the translated lock class | Keep. That adapter already owns `rating_write_busy`; recognize both native SQL and translated lock forms rather than inventing another rating mechanism. The brief reports `rating-gate` passes; its lines 216-233 assert held-gate retry and later same-key success. |
 | Removed first disclosure gate in `routes/rating-global.ts` | Restore as specified above; keep the final recheck and principal-derived slot. The slot was already principal-derived before the branch. This removal did not fix RATE06 and changes denied-plus-corrupt precedence. |
-| Native `unknown-profile` stale-head catch in `modules/semantic/change.ts:565-577` and new `CommandRejected` import | Remove this unsubstantiated addition for this repair. Native `CommandService.java:297-307` emits unknown-profile for missing/mismatched profile/hash/shape, before graph execution, not for a lost CAS. Its guarded-write path returns guard-unmatched when no receipt was created (:1039); existing post-write stale sealing at `change.ts:578-590` already owns CAS classification. This report found a fixture assertion failure, not a native profile rejection. An independent profile/head race contract would need its own evidence and test before changing availability precedence. |
+| Native `unknown-profile` stale-head catch in `modules/semantic/change.ts:565-574` and new `CommandRejected` import | Remove this unsubstantiated addition for this repair: remove import line 3, unwrap the try at line 530, preserve the sendSemanticWrite body at lines 531-564, and remove the catch. Native `CommandService.java:297-307` emits unknown-profile for missing/mismatched profile/hash/shape, before graph execution, not for a lost CAS. Its guarded-write path returns guard-unmatched when no receipt was created (:1039); existing post-write terminal/generation/head resolution at `change.ts:575-590` already owns CAS classification. This report found a fixture assertion failure, not a native profile rejection. An independent profile/head race contract would need its own evidence and test before changing availability precedence. |
 
 Removing that native catch does not mean changing the generic native problem
 mapping: preserve genuine profile unavailability as 503 and real invalid profile
@@ -283,7 +286,31 @@ The standalone semantic reproduction completed:
 
 The log intentionally reports an error class rather than an internal assertion
 stack; the exact failing assertion and fourth-seam collision are established
-by the source path above. The new run is on this investigation checkout, not an
-execution of `bb74465fe`; branch conclusions use its exact git objects and the
-brief's supplied branch failure evidence. No fix was executed or qualified by
-this read-only investigation.
+by the source path above.
+
+The standalone rating reproduction also completed:
+
+- Command: `REZICS_QA_ARTIFACT_ROOT=.temp/qa bun scripts/goal/goalctl.ts test
+  tests/qa/integration/rating-global-synthesis.test.ts`.
+- Run `20261011t101545-992556`, starting source
+  `07338f5835a4e1b27ee68b802eeb9f2fcf9db549`, **FAIL**: line 165 expected
+  `stale_head`, received the exact problem `{ code: 'authority_denied',
+  status: 403, title: 'Authority is not admitted',
+  type: 'https://rezics.com/problems/authority_denied' }`. No head is disclosed.
+  0 pass/1 fail, 44 assertions, 7.5 seconds in the integration body. The body
+  began around 10:24:30 UTC after waiting for a slot since around 10:15:45 UTC.
+- Evidence: `.temp/qa/20261011t101545-992556/logs/integration-1.log` and
+  `.temp/qa/20261011t101545-992556/summary.md`. This run additionally reports
+  **source stable: no**: the specification was committed and refined while the
+  test was queued. Only this report changed, as shown by the committed and
+  working-tree diffs; no product or test source changed. The response is an
+  observed reproduction, not a stable-source qualification result.
+
+Both new runs are on this investigation checkout, not executions of
+`bb74465fe`; branch conclusions use its exact git objects and the brief's
+supplied branch failure evidence. The historical ordered chain and run-9 logs
+could not be independently inspected because their translated paths are absent.
+No fix was executed or qualified by this read-only investigation. The two
+failure causes are established; corrected-fixture success, denied-plus-corrupt
+precedence and mid-lookup revocation remain the implementation session's proving
+tests, not claims of green qualification here.
