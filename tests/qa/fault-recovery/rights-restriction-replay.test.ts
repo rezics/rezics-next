@@ -12,7 +12,9 @@ import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { Pool } from 'pg';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { engageAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
-import { GovernanceStore, type DecisionInput, type ReportInput } from '../../../services/main/src/modules/governance/store.ts';
+import { GovernanceStore, type DecisionInput, type DecisionTargetInput, type ReportInput, type StepInput }
+  from '../../../services/main/src/modules/governance/store.ts';
+import type { ModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
@@ -45,6 +47,59 @@ async function freePort(): Promise<number> {
 
 async function migrateAccess(url: string): Promise<void> {
   await applyQaSqlMigrations(url, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
+}
+
+type ProcessReplayRow = {
+  id: string;
+  case_id: string;
+  report_id: string | null;
+  decision_id: string;
+  process: string;
+  step: string;
+  principal_id: string | null;
+  party_subject: string | null;
+  party: string | null;
+  idempotency_key: string;
+  request_digest: string;
+  statement: string | null;
+  document_digest: string | null;
+  occurred_at: Date;
+  due_at: Date | null;
+  content_language: string | null;
+  declarations: Record<string, unknown> | null;
+};
+
+type CounterNoticeReplayJob = {
+  step_id: string;
+  case_id: string;
+  report_id: string;
+  restriction_id: string;
+  delivery_id: string;
+  occurred_at: Date;
+  received_at: Date;
+  delivered_at: Date | null;
+  not_before: Date;
+  expected_not_before: Date;
+  not_after: Date;
+  expected_not_after: Date;
+  phase: string;
+};
+
+async function processReplayRows(pool: Pool, caseId: string): Promise<ProcessReplayRow[]> {
+  return (await pool.query<ProcessReplayRow>(`SELECT id::text,case_id::text,report_id::text,decision_id::text,
+    process,step,principal_id::text,party_subject,party,idempotency_key,request_digest,statement,
+    document_digest,occurred_at,due_at,content_language,declarations
+    FROM access.governance_process_step WHERE case_id = $1 ORDER BY step,id`, [caseId])).rows;
+}
+
+async function counterNoticeReplayJob(pool: Pool, stepId: string): Promise<CounterNoticeReplayJob[]> {
+  return (await pool.query<CounterNoticeReplayJob>(`SELECT j.step_id::text,j.case_id::text,j.report_id::text,
+    j.restriction_id::text,j.delivery_id::text,s.occurred_at,j.received_at,j.delivered_at,
+    j.not_before,access.counter_notice_business_day(j.received_at,10) AS expected_not_before,
+    j.not_after,access.counter_notice_business_day(j.received_at,14) AS expected_not_after,j.phase
+    FROM access.rights_counter_notice j
+    JOIN access.governance_process_step s ON s.id = j.step_id
+    WHERE j.step_id = $1`, [stepId])).rows;
 }
 
 test('GOV25: replaying an Access backup preserves its restriction fence through counter-notice and decision replay', async () => {
@@ -95,10 +150,24 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     }
 
     const rule = { ref: 'urn:rezics:rule:source-rights', revision: 'v1', digest: digest('gov25-rule-v1') };
+    const expectedTarget = (target: DecisionTargetInput) => target.owner === 'source' && target.resource === resource
+      && target.component === 'synopsis' && target.locator === null && target.scopeKind === 'component'
+      && target.revision === null && target.expectedHead === null && target.effect === 'export'
+      && (target.expiresAt ?? null) === null;
+    const effects: ModerationEffects = {
+      async plan(target) {
+        if (!expectedTarget(target)) throw new Error('The governance fixture received an unrelated plan target');
+        return { participant: actingSubject };
+      },
+      async apply(operationId, ordinal, target) {
+        if (!expectedTarget(target)) throw new Error('The governance fixture received an unrelated effect target');
+        return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+      },
+    };
     const storeFor = (pool: Pool) => new GovernanceStore(pool, { capture: async (_principal, _actor, target) => ({
       ...target, state: 'available', representation: 'source-observation-v1',
       revisionDigest: digest('gov25-observation'), provenance: { test: 'GOV25-backup-replay' },
-    }) }, { current: async () => null }, { current: async ref => ref === rule.ref ? rule : null });
+    }) }, { current: async () => null }, { current: async ref => ref === rule.ref ? rule : null }, effects);
     const store = storeFor(access);
     const reportInput: ReportInput = { kind: 'rights_complaint', actingSubject,
       authority: { kind: 'platform', scopeId: scope }, context: 'urn:rezics:context:global',
@@ -123,13 +192,49 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     const restrictedFence = await store.readEnforcement(target);
     expect(restrictedFence).toEqual([expect.objectContaining({ state: 'restricted', fenceEpoch: '1',
       decisionId: restriction.decisionId })]);
-    const counter = await store.recordStep(principal, { caseId: report.caseId,
+    const notices = await access.query<{ id: string; decision_id: string; principal_id: string; case_id: string }>(
+      `SELECT id::text,decision_id::text,principal_id::text,case_id::text FROM access.safety_party_notice
+        WHERE case_id = $1 AND decision_id = $2 AND principal_id = $3 ORDER BY id`,
+    [report.caseId, restriction.decisionId, principalId]);
+    expect(notices.rows).toHaveLength(1);
+    expect(notices.rows[0]).toMatchObject({ decision_id: restriction.decisionId,
+      principal_id: principalId, case_id: report.caseId });
+    const counterInput: StepInput = { caseId: report.caseId,
       decisionId: restriction.decisionId, actingSubject, process: 'dmca_512', step: 'counter_notice',
       partySubject: actingSubject, statement: 'Counter-notice recorded before backup.',
       documentDigest: digest('gov25-counter-notice'), occurredAt: new Date().toISOString(),
-      dueAt: new Date(Date.now() + 86_400_000).toISOString(), idempotencyKey: 'gov25-counter-notice' });
+      dueAt: null, idempotencyKey: 'gov25-counter-notice', contentLanguage: 'en',
+      counterNotice: { signature: 'Fixture signer', materialLocation: 'https://example.test/material',
+        goodFaithMistakeUnderPerjury: true, name: 'Fixture signer', address: '1 Fixture Way',
+        phone: '+1 555 0100', courtJurisdiction: 'United States District Court for the District of Example',
+        consentToJurisdiction: true, acceptService: true } };
+    const counter = await store.recordStep(principal, counterInput);
     expect(counter.replayed).toBe(false);
+    expect(counter.dueAt).toBeNull();
+    const processBeforeReplay = await processReplayRows(access, report.caseId);
+    expect(processBeforeReplay.map(row => row.step).sort()).toEqual([
+      'counter_notice', 'restoration_not_after', 'restoration_not_before',
+    ]);
+    expect(processBeforeReplay).toContainEqual(expect.objectContaining({ id: counter.stepId,
+      case_id: report.caseId, report_id: report.reportId, decision_id: restriction.decisionId,
+      process: 'dmca_512', step: 'counter_notice', principal_id: principalId,
+      party_subject: actingSubject, party: 'affected', statement: counterInput.statement,
+      due_at: null, content_language: 'en', declarations: counterInput.counterNotice }));
+    const obligationBeforeReplay = await counterNoticeReplayJob(access, counter.stepId);
+    expect(obligationBeforeReplay).toHaveLength(1);
+    expect(obligationBeforeReplay[0]).toMatchObject({ step_id: counter.stepId, case_id: report.caseId,
+      report_id: report.reportId, restriction_id: restriction.decisionId,
+      occurred_at: expect.any(Date), received_at: expect.any(Date), delivered_at: null, phase: 'delivery',
+      not_before: expect.any(Date), expected_not_before: expect.any(Date),
+      not_after: expect.any(Date), expected_not_after: expect.any(Date) });
+    expect(obligationBeforeReplay[0]!.received_at).toEqual(obligationBeforeReplay[0]!.occurred_at);
+    expect(obligationBeforeReplay[0]!.not_before).toEqual(obligationBeforeReplay[0]!.expected_not_before);
+    expect(obligationBeforeReplay[0]!.not_after).toEqual(obligationBeforeReplay[0]!.expected_not_after);
+    const replayedCounter = await store.recordStep(principal, counterInput);
+    expect(replayedCounter).toEqual({ stepId: counter.stepId, dueAt: null, replayed: true });
     expect(await store.readEnforcement(target)).toEqual(restrictedFence);
+    expect(await processReplayRows(access, report.caseId)).toEqual(processBeforeReplay);
+    expect(await counterNoticeReplayJob(access, counter.stepId)).toEqual(obligationBeforeReplay);
     const decisionReplay = await store.decide(principal, decisionInput);
     expect(decisionReplay).toMatchObject({ decisionId: restriction.decisionId, replayed: true,
       enforcement: [expect.objectContaining({ state: 'restricted', fenceEpoch: '1' })] });
@@ -173,6 +278,8 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     const outbox = await restored.query<{ kind: string; moderation_decision_id: string }>(`SELECT kind,
       moderation_decision_id FROM access.outbox WHERE moderation_decision_id = $1`, [restriction.decisionId]);
     expect(outbox.rows).toEqual([{ kind: 'moderation.decided', moderation_decision_id: restriction.decisionId }]);
+    expect(await processReplayRows(restored, report.caseId)).toEqual(processBeforeReplay);
+    expect(await counterNoticeReplayJob(restored, counter.stepId)).toEqual(obligationBeforeReplay);
 
   } finally {
     await Promise.allSettled(pools.map(pool => pool.end()));
