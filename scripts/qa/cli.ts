@@ -82,7 +82,7 @@ import { exclusiveWorkScopeAssembler, integrationStackAdmitsWorkScope, qaStackEn
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
 import {
-  campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
+  CAMPAIGN_QUALIFICATION_FILE, campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
   childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
   type CampaignEvidenceRead, type CommandPhaseSample,
 } from './campaign-envelope.ts';
@@ -820,16 +820,19 @@ async function runStackTier(tier: StackTier): Promise<void> {
     ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();
   const estimates = estimatedDurations(expandTestPaths(root, paths),
     tier === 'fault/recovery' ? new Map([...recorded, ...faultRecoveryBaselineDurations, ...local]) : recorded);
-  // Prepare the small retained owner cut once before any JVM shards start.
-  // The launch drill restores only its isolated writable copy; medium launch
-  // qualification continues to use its explicitly prepared source/fixture.
-  if (
-    tier === 'fault/recovery' &&
-    estimates.has('tests/qa/fault-recovery/g-727-launch-drill.test.ts') &&
-    !process.env.G727_LAUNCH_SOURCE_RUN_ID &&
-    !process.env.G727_LAUNCH_FIXTURE &&
-    (process.env.G727_LAUNCH_PROFILE ?? 'small') === 'small'
-  ) {
+  // Prepare the small retained fixture once before any fault/recovery shards.
+  // Launch and erasure decide independently whether they need the default
+  // small profile, then share this preparation when both do.
+  const launchNeedsSmallFixture = estimates.has('tests/qa/fault-recovery/g-727-launch-drill.test.ts')
+    && !process.env.G727_LAUNCH_SOURCE_RUN_ID
+    && !process.env.G727_LAUNCH_FIXTURE
+    && (process.env.G727_LAUNCH_PROFILE ?? 'small') === 'small';
+  const erasureNeedsSmallFixture = estimates.has(CAMPAIGN_QUALIFICATION_FILE)
+    && (process.env.ERASURE_CAMPAIGN_PROFILE ?? 'small') === 'small'
+    && process.env.ERASURE_CAMPAIGN_FIXTURE === undefined
+    && process.env.ERASURE_CAMPAIGN_SOURCES === undefined
+    && process.env.ERASURE_CAMPAIGN_COPY === undefined;
+  if (tier === 'fault/recovery' && (launchNeedsSmallFixture || erasureNeedsSmallFixture)) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
     const prepared = await withWorkSlot(reserveWork => admit('other', () => withStartupSlot(
@@ -856,8 +859,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
       elapsedMs: number;
     };
     faultFixtureEnvironment.REZICS_FIXTURE_ROOT = fixtureRoot;
-    faultFixtureEnvironment.G727_LAUNCH_FIXTURE = report.fixture;
-    faultFixtureEnvironment.G727_LAUNCH_PREPARATION_MS = String(prepared.activeElapsedMs);
+    if (launchNeedsSmallFixture) {
+      faultFixtureEnvironment.G727_LAUNCH_FIXTURE = report.fixture;
+      faultFixtureEnvironment.G727_LAUNCH_PREPARATION_MS = String(prepared.activeElapsedMs);
+    }
+    if (erasureNeedsSmallFixture) faultFixtureEnvironment.ERASURE_CAMPAIGN_FIXTURE = report.fixture;
   }
   const maximum = maximumShards(process.env, tier);
   const wanted =

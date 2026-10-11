@@ -360,6 +360,14 @@ function startupHarness(directory: string) {
     import { withQaStackStartup } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
     import { commandAsync } from ${JSON.stringify(join(root, 'scripts/qa/core.ts'))};
     const args = process.argv.slice(2);
+    const captureFixtureEnvironment = phase => {
+      if (process.env.QA_HARNESS_CAPTURE_FIXTURE !== '1') return;
+      const keys = ['REZICS_FIXTURE_ROOT', 'G727_LAUNCH_FIXTURE', 'G727_LAUNCH_PREPARATION_MS',
+        'ERASURE_CAMPAIGN_PROFILE', 'ERASURE_CAMPAIGN_FIXTURE', 'ERASURE_CAMPAIGN_SOURCES', 'ERASURE_CAMPAIGN_COPY'];
+      const values = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+      appendFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-fixture-events'),
+        JSON.stringify({ phase, args, values }) + '\\n');
+    };
     if (['scripts/qa/test.ts', 'scripts/qa/cli.ts'].includes(args[0]) || process.env.QA_HARNESS_REAL_HOST_TEST === '1' && args[0] === 'test') {
       const forwardedEnv = process.env.QA_HARNESS_REAL_HOST_TEST === '1' && args[0] === 'test'
         ? { ...process.env, QA_HARNESS_SLOT_OWNER: String(process.ppid) } : process.env;
@@ -371,14 +379,23 @@ function startupHarness(directory: string) {
       if (args[0] === 'test') writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-host-finished'), '');
       process.exitCode = result.ok ? 0 : 1;
     } else if (args[0] === 'scripts/fixture/cli.ts') {
-      await withQaStackStartup(${JSON.stringify(root)}, process.env, undefined, () => {
-        const owner = readFileSync(join(process.env.GOAL_QA_SLOT_DIRECTORY, '0', 'pid'), 'utf8');
-        if (owner !== String(process.ppid)) throw new Error('Fixture preparation started without its lease');
-        writeFileSync(args[args.indexOf('--evidence') + 1], JSON.stringify({ fixture: 'prepared-source', elapsedMs: 0 }));
-        writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-prepared'), '');
-      }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10,
-        read: async () => ({ vmTotal: 64 * 1024 ** 3, vmUsed: 0, hostAvailable: 64 * 1024 ** 3 }) });
+      captureFixtureEnvironment('prepare');
+      if (process.env.QA_HARNESS_FAIL_FIXTURE_PREPARATION === '1') {
+        writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-prepare-failed'), '');
+        process.exitCode = 1;
+      } else {
+        await withQaStackStartup(${JSON.stringify(root)}, process.env, undefined, () => {
+          const owner = readFileSync(join(process.env.GOAL_QA_SLOT_DIRECTORY, '0', 'pid'), 'utf8');
+          if (owner !== String(process.ppid)) throw new Error('Fixture preparation started without its lease');
+          writeFileSync(args[args.indexOf('--evidence') + 1], JSON.stringify({
+            fixture: process.env.QA_HARNESS_PREPARED_FIXTURE ?? 'prepared-source', elapsedMs: 0,
+          }));
+          writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-prepared'), '');
+        }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10,
+          read: async () => ({ vmTotal: 64 * 1024 ** 3, vmUsed: 0, hostAvailable: 64 * 1024 ** 3 }) });
+      }
     } else if (args[0] === 'test') {
+      captureFixtureEnvironment('test');
       const result = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 10000,
         { ...process.env, QA_HARNESS_SLOT_OWNER: process.env.QA_HARNESS_SLOT_OWNER ?? String(process.ppid) });
       console.log(result.output);
@@ -391,6 +408,7 @@ function startupHarness(directory: string) {
     } else {
     if (args[0] !== 'scripts/dev/cli.ts') throw new Error('Unexpected non-stack command: ' + args.join(' '));
     if (args[1] === 'stack:up') {
+      captureFixtureEnvironment('stack-up');
       const control = process.env.QA_HARNESS_CONTROL;
       const name = process.env.QA_HARNESS_NAME;
       await withQaStackStartup(${JSON.stringify(root)}, process.env, undefined, async () => {
@@ -486,6 +504,39 @@ async function until(predicate: () => boolean, description: string): Promise<voi
     if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`);
     await Bun.sleep(10);
   }
+}
+
+type FixtureHarnessEvent = { phase: string; args: string[]; values: Record<string, string | undefined> };
+
+function fixtureHarnessEvents(harness: ReturnType<typeof startupHarness>, name: string): FixtureHarnessEvent[] {
+  const path = join(harness.control, `${name}-fixture-events`);
+  return existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n').map(line => JSON.parse(line) as FixtureHarnessEvent) : [];
+}
+
+function startFaultRecoverySelection(harness: ReturnType<typeof startupHarness>, name: string,
+  files: string[], environment: NodeJS.ProcessEnv = {}) {
+  const args = ['--tier', 'fault/recovery', ...files.flatMap(file => ['--file', file])];
+  writeFileSync(join(harness.control, `${name}-memory`), '');
+  return harness.startArgs(name, args, { QA_HARNESS_CAPTURE_FIXTURE: '1', ...environment });
+}
+
+async function failFaultRecoveryAtStartup(harness: ReturnType<typeof startupHarness>, name: string,
+  run: ReturnType<typeof startFaultRecoverySelection>): Promise<void> {
+  try {
+    await Promise.race([
+      until(() => existsSync(join(harness.control, `${name}-started`)), 'fault/recovery shard startup'),
+      run.child.exited.then(async code => {
+        throw new Error(`QA runner exited ${code} before shard startup: ${(await run.output).join('\n')}`);
+      }),
+    ]);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('Timed out waiting for fault/recovery shard startup')) throw error;
+    const events = fixtureHarnessEvents(harness, name);
+    const waits = qaWaitStatusLines(harness.slots);
+    throw new Error(`${error.message}; fixture events: ${JSON.stringify(events)}; QA waits: ${JSON.stringify(waits)}`);
+  }
+  writeFileSync(join(harness.control, `${name}-finish`), '');
+  expect(await run.child.exited).toBe(1);
 }
 
 for (const entry of ['CLI', 'goalctl test']) {
@@ -627,6 +678,112 @@ for (const blockedBy of ['memory', 'startup']) {
     }
   }, 20_000);
 }
+
+test('an erasure-only selection prepares its default small fixture before the shard', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-erasure-fixture-preparation-'));
+  const harness = startupHarness(directory);
+  const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+  try {
+    const run = startFaultRecoverySelection(harness, 'erasure-only', [campaign], {
+      QA_HARNESS_PREPARED_FIXTURE: 'fixture-erasure-prepared',
+    });
+    await failFaultRecoveryAtStartup(harness, 'erasure-only', run);
+    const events = fixtureHarnessEvents(harness, 'erasure-only');
+    const preparation = events.find(event => event.phase === 'prepare');
+    const shard = events.find(event => event.phase === 'stack-up');
+    expect(events.filter(event => event.phase === 'prepare')).toHaveLength(1);
+    expect(preparation?.args).toContain('--prepare');
+    expect(preparation?.args).toContain('--profile');
+    expect(preparation?.args).toContain('small');
+    expect(shard?.values.ERASURE_CAMPAIGN_FIXTURE).toBe('fixture-erasure-prepared');
+    expect(shard?.values.REZICS_FIXTURE_ROOT).toBe(join(root, '.temp', 'fixture'));
+    expect(events.findIndex(event => event.phase === 'prepare'))
+      .toBeLessThan(events.findIndex(event => event.phase === 'stack-up'));
+  } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
+}, 20_000);
+
+test('launch and erasure share one prepared small fixture across their selected shards', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-shared-fixture-preparation-'));
+  const harness = startupHarness(directory);
+  const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+  const launch = 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
+  try {
+    const run = startFaultRecoverySelection(harness, 'shared-fixture', [launch, campaign], {
+      QA_HARNESS_PREPARED_FIXTURE: 'fixture-shared-small',
+    });
+    await failFaultRecoveryAtStartup(harness, 'shared-fixture', run);
+    const events = fixtureHarnessEvents(harness, 'shared-fixture');
+    const shardEvents = events.filter(event => event.phase === 'stack-up' || event.phase === 'test');
+    expect(events.filter(event => event.phase === 'prepare')).toHaveLength(1);
+    expect(shardEvents.length).toBeGreaterThanOrEqual(2);
+    expect(shardEvents.every(event => event.values.G727_LAUNCH_FIXTURE === 'fixture-shared-small'
+      && event.values.ERASURE_CAMPAIGN_FIXTURE === 'fixture-shared-small')).toBe(true);
+  } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
+}, 20_000);
+
+test('a supplied launch fixture does not suppress erasure small-fixture preparation', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-independent-fixture-needs-'));
+  const harness = startupHarness(directory);
+  const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+  const launch = 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
+  try {
+    const run = startFaultRecoverySelection(harness, 'independent-fixture-needs', [launch, campaign], {
+      G727_LAUNCH_FIXTURE: 'fixture-launch-caller',
+      QA_HARNESS_PREPARED_FIXTURE: 'fixture-erasure-prepared',
+    });
+    await failFaultRecoveryAtStartup(harness, 'independent-fixture-needs', run);
+    const events = fixtureHarnessEvents(harness, 'independent-fixture-needs');
+    const shardEvents = events.filter(event => event.phase === 'stack-up' || event.phase === 'test');
+    expect(events.filter(event => event.phase === 'prepare')).toHaveLength(1);
+    expect(shardEvents.length).toBeGreaterThanOrEqual(2);
+    expect(shardEvents.every(event => event.values.G727_LAUNCH_FIXTURE === 'fixture-launch-caller'
+      && event.values.ERASURE_CAMPAIGN_FIXTURE === 'fixture-erasure-prepared')).toBe(true);
+  } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
+}, 20_000);
+
+for (const scenario of [
+  { name: 'explicit fixture', environment: { ERASURE_CAMPAIGN_FIXTURE: 'fixture-caller-retained' }, expected: 'fixture-caller-retained' },
+  { name: 'explicit source copy', environment: { ERASURE_CAMPAIGN_SOURCES: 'fixture-caller-source', ERASURE_CAMPAIGN_COPY: '0' }, expected: undefined },
+  { name: 'medium profile', environment: { ERASURE_CAMPAIGN_PROFILE: 'medium' }, expected: undefined },
+  { name: 'empty malformed fixture', environment: { ERASURE_CAMPAIGN_FIXTURE: '' }, expected: '' },
+]) {
+  test(`erasure ${scenario.name} bypasses automatic small-fixture preparation`, async () => {
+    const directory = mkdtempSync(join(root, '.temp', 'qa-erasure-fixture-bypass-'));
+    const harness = startupHarness(directory);
+    const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+    try {
+      const run = startFaultRecoverySelection(harness, 'fixture-bypass', [campaign], scenario.environment);
+      await failFaultRecoveryAtStartup(harness, 'fixture-bypass', run);
+      const events = fixtureHarnessEvents(harness, 'fixture-bypass');
+      expect(events.filter(event => event.phase === 'prepare')).toHaveLength(0);
+      const shard = events.find(event => event.phase === 'stack-up');
+      if (scenario.expected === undefined) {
+        expect(shard?.values.ERASURE_CAMPAIGN_FIXTURE).toBeUndefined();
+      } else {
+        expect(shard?.values.ERASURE_CAMPAIGN_FIXTURE).toBe(scenario.expected);
+      }
+      for (const [key, value] of Object.entries(scenario.environment)) expect(shard?.values[key]).toBe(value);
+    } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
+  }, 20_000);
+}
+
+test('failed small-fixture preparation stops before any erasure shard starts', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-erasure-fixture-preparation-failure-'));
+  const harness = startupHarness(directory);
+  const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+  try {
+    const run = startFaultRecoverySelection(harness, 'failed-preparation', [campaign], {
+      QA_HARNESS_FAIL_FIXTURE_PREPARATION: '1',
+    });
+    await until(() => existsSync(join(harness.control, 'failed-preparation-prepare-failed')),
+      'fixture preparation failure');
+    expect(await run.child.exited).toBe(1);
+    const events = fixtureHarnessEvents(harness, 'failed-preparation');
+    expect(events.filter(event => event.phase === 'prepare')).toHaveLength(1);
+    expect(events.some(event => event.phase === 'stack-up' || event.phase === 'test')).toBe(false);
+    expect(existsSync(join(harness.control, 'failed-preparation-started'))).toBe(false);
+  } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
+}, 20_000);
 
 test('finished fixture preparation releases its lease before drill startup admission', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-preparation-stack-transition-'));
