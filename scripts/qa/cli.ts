@@ -61,6 +61,7 @@ import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv, replacePrivate } from '../dev/config.ts';
+import { fusekiBuildInputs } from '../dev/fuseki-image.ts';
 import { preserveReapEnvironment } from './container-reaper.ts';
 import { stageQaBootstrap } from './bootstrap.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
@@ -160,13 +161,18 @@ const stackPool = createQaStackPool({ root, slotDirectory: qaSlotDirectory,
   slots: /^[1-9]\d*$/.test(process.env.GOAL_QA_SLOTS ?? '') ? Number(process.env.GOAL_QA_SLOTS) : 3 });
 
 async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessEnv): Promise<string | undefined> {
-  const paths = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml',
-    'infra/dev/postgres/00-owners.sh', 'scripts/qa/bootstrap.ts', 'scripts/qa/integration-reset.ts',
-    'scripts/dev/config.ts', 'scripts/ops/migrate.ts', 'services/account/src/migrate.ts',
-    'services/account/src/auth.ts', 'services/account/package.json', 'yarn.lock',
+  // Schemas and graph seeds are planned from imported code. Whole source trees
+  // deliberately prefer an extra startup to reusing a different bootstrap result.
+  const paths = [...new Set(['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml',
+    'infra/dev/postgres/00-owners.sh', 'services/account/package.json', 'yarn.lock',
+    ...['scripts/**/*', 'services/*/src/**/*', 'packages/*/src/**/*', 'generated/**/*',
+      '{package.json,.yarnrc.yml,bunfig.toml,tsconfig*.json}',
+      '{services,packages}/*/{package.json,bunfig.toml,tsconfig*.json}'].flatMap(pattern =>
+      [...new Bun.Glob(pattern).scanSync({ cwd: root, onlyFiles: true, dot: true })]),
+    ...fusekiBuildInputs(root),
     ...new Bun.Glob('infra/jena/fuseki-text*.ttl').scanSync({ cwd: root }),
-    ...new Bun.Glob('services/{main,account,content}/migrations/**/*.sql').scanSync({ cwd: root })];
-  const files = paths.sort().map(path => [path, readFileSync(join(root, path), 'utf8')] as [string, string]);
+    ...new Bun.Glob('services/{main,account,content}/migrations/**/*.sql').scanSync({ cwd: root })])];
+  const files = paths.sort().map(path => [path, readFileSync(join(root, path)).toString('base64')] as [string, string]);
   const compose = readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8');
   const images = [...compose.matchAll(/^  (?:postgres|fuseki|rustfs|mailpit):\n    image: (\S+)$/gm)].map(match => match[1]!);
   const inspected = await commandAsync(root, 'docker', ['image', 'inspect', '--format', '{{.Id}}', ...images],

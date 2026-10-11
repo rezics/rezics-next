@@ -2,11 +2,12 @@ import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Script } from 'node:vm';
 import ts from 'typescript-6';
 import { devStackStopArgs, rememberDevStack, startedDevStacks, stopDevSession }
   from '../../../scripts/dev/stack-session.ts';
+import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount } from '../../../scripts/qa/browser-budget.ts';
 import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
 import { acquireQaSlots, commandAsync, parseArgs, selfManagedFaultFiles, tierBunTestArgs } from '../../../scripts/qa/core.ts';
@@ -61,6 +62,114 @@ function poolStartupBoundary(bindings: Record<string, unknown>) {
   };
 }
 
+/** Fingerprint the same synthetic checkout bytes through the actual CLI
+ * function; Docker resolves identical immutable images for both checkouts. */
+function checkoutFingerprintBoundary(checkout: string) {
+  const source = ts.createSourceFile('cli.ts', readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = source.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'integrationInfrastructureFingerprint')!;
+  const boundary = ts.transpileModule(declaration.getText(source) + '\nintegrationInfrastructureFingerprint;',
+    { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
+  return new Script(boundary).runInNewContext({ root: checkout, Bun, Buffer, join, readFileSync, fusekiBuildInputs,
+    qaStackFingerprint, preserveReapEnvironment: (environment: NodeJS.ProcessEnv) => environment,
+    commandAsync: async (_root: string, command: string, args: string[]) => {
+      expect(command).toBe('docker');
+      expect(args.slice(0, 3)).toEqual(['image', 'inspect', '--format']);
+      return { ok: true, output: 'sha256:postgres\nsha256:fuseki\nsha256:rustfs\nsha256:mailpit\n' };
+    },
+  }) as (environment: NodeJS.ProcessEnv) => Promise<string | undefined>;
+}
+
+function writeFingerprintFile(checkout: string, path: string, bytes: string | Uint8Array): void {
+  const destination = join(checkout, path);
+  mkdirSync(dirname(destination), { recursive: true });
+  writeFileSync(destination, bytes);
+}
+
+function fingerprintCheckout(checkout: string): void {
+  // Tiny source trees retain the real schema and preparation sources under
+  // examination. They do not import or execute any copied application code.
+  for (const path of ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'infra/dev/postgres/00-owners.sh',
+    'scripts/qa/bootstrap.ts', 'scripts/qa/integration-reset.ts', 'scripts/dev/config.ts', 'scripts/ops/migrate.ts',
+    'services/account/src/migrate.ts', 'services/account/src/auth.ts', 'services/account/src/account-settings.ts',
+    'services/account/package.json', 'yarn.lock', 'scripts/lib/migration-order.ts',
+    'scripts/dev/signup-policy-fixture.ts', 'scripts/dev/seed/plan.ts', 'scripts/fixture/owners/graph.ts',
+    'services/main/src/modules/work/activate.ts', 'packages/model/src/index.ts',
+    'packages/model/package.json', 'packages/model/tsconfig.json', 'services/account/tsconfig.json',
+    'package.json']) {
+    writeFingerprintFile(checkout, path, readFileSync(join(root, path)));
+  }
+  writeFingerprintFile(checkout, 'infra/jena/Dockerfile',
+    'FROM scratch\nCOPY infra/jena/fuseki-text-qa.ttl /fuseki/config.ttl\n');
+  writeFingerprintFile(checkout, 'infra/jena/fuseki-text-qa.ttl', readFileSync(join(root, 'infra/jena/fuseki-text-qa.ttl')));
+  writeFingerprintFile(checkout, 'generated/openapi/main/public.json', '{"openapi":"3.1.0"}\n');
+  writeFingerprintFile(checkout, 'generated/model/manifest.json', '{"profiles":[]}\n');
+  writeFingerprintFile(checkout, 'bunfig.toml', '[test]\ntimeout = 5000\n');
+  writeFingerprintFile(checkout, 'tsconfig.fingerprint.json', '{"compilerOptions":{"strict":true}}\n');
+}
+
+test('Account locale-field schema changes qualify a different stack even with identical SQL and images', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-account-schema-'));
+  const first = join(directory, 'first');
+  const second = join(directory, 'second');
+  try {
+    fingerprintCheckout(first);
+    fingerprintCheckout(second);
+    const fingerprintFirst = checkoutFingerprintBoundary(first);
+    const fingerprintSecond = checkoutFingerprintBoundary(second);
+    const before = await fingerprintFirst({});
+    expect(before).toMatch(/^[0-9a-f]{64}$/);
+    expect(await fingerprintSecond({})).toBe(before);
+    const path = 'services/account/src/account-settings.ts';
+    const source = readFileSync(join(second, path), 'utf8');
+    const changed = source.replace("type: 'string', required: false, input: true, returned: true",
+      "type: 'string', required: true, input: true, returned: true");
+    expect(changed).not.toBe(source);
+    writeFingerprintFile(second, path, changed);
+    expect(await fingerprintSecond({})).not.toBe(before);
+    expect(await fingerprintFirst({})).toBe(before);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test.each(['services/account/src', 'services/main/src', 'packages/model/src', 'scripts', 'generated'])(
+  'fingerprints cover added, changed and deleted nested hidden binary files in %s', async sourceDirectory => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-source-inventory-'));
+  try {
+    fingerprintCheckout(directory);
+    const fingerprint = checkoutFingerprintBoundary(directory);
+    const original = await fingerprint({});
+    const path = `${sourceDirectory}/.schema-state/nested/unnamed`;
+    writeFingerprintFile(directory, path, new Uint8Array([0xff, 0xfe, 0x00]));
+    const added = await fingerprint({});
+    expect(added).not.toBe(original);
+    // These two byte sequences collapse to the same UTF-8 replacement text.
+    // Their identities still must differ, so every source byte needs coverage.
+    writeFingerprintFile(directory, path, new Uint8Array([0xfd, 0xfe, 0x00]));
+    const changed = await fingerprint({});
+    expect(changed).not.toBe(added);
+    rmSync(join(directory, path));
+    expect(await fingerprint({})).toBe(original);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test.each(['scripts/lib/migration-order.ts', 'scripts/dev/signup-policy-fixture.ts',
+  'scripts/dev/seed/plan.ts', 'scripts/fixture/owners/graph.ts', 'services/main/src/modules/work/activate.ts',
+  'packages/model/src/index.ts', 'generated/openapi/main/public.json', 'generated/model/manifest.json',
+  'package.json', 'bunfig.toml', 'tsconfig.fingerprint.json', 'packages/model/package.json', 'packages/model/tsconfig.json',
+  'services/account/package.json', 'services/account/tsconfig.json', 'infra/jena/Dockerfile', 'infra/jena/fuseki-text-qa.ttl'])(
+  'fingerprints include preparation sources, generated contracts and workspace configuration: %s', async path => {
+    const directory = mkdtempSync(join(root, '.temp', 'qa-pool-preparation-source-'));
+    try {
+      fingerprintCheckout(directory);
+      const fingerprint = checkoutFingerprintBoundary(directory);
+      const before = await fingerprint({});
+      const bytes = readFileSync(join(directory, path));
+      writeFingerprintFile(directory, path, Buffer.concat([bytes, Buffer.from('\n// Changed preparation source.\n')]));
+      expect(await fingerprint({})).not.toBe(before);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
 function coldPoolHarness(directory: string, inspectionError: string,
   mode: { initialPresent?: boolean; postMissing?: boolean; rejectSnapshot?: boolean; realPool?: boolean } = {}) {
   const events: string[] = [];
@@ -96,7 +205,7 @@ function coldPoolHarness(directory: string, inspectionError: string,
     async destroy() { events.push('destroy'); await realLease?.destroy(); },
   };
   const boundary = poolStartupBoundary({
-    root, directory, logs: directory, runId: 'cold-pool', Date, Bun, join,
+    root, directory, logs: directory, runId: 'cold-pool', Date, Bun, join, fusekiBuildInputs,
     process: { env: {} }, readFileSync, writeFileSync, appendFileSync, mkdirSync,
     options: {}, faultFixtureEnvironment: {}, qaSlotDirectory: join(directory, 'slots'),
     QA_STACK_TIER: 'REZICS_QA_STACK_TIER',
