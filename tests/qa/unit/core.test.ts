@@ -491,9 +491,13 @@ test('QA shards: restore owner, hold and package files use their correct singlet
     'tests/qa/fault-recovery/owner-restore-erasure-source-closure.test.ts',
     'tests/qa/fault-recovery/owner-restore-erasure-transition.test.ts',
   ];
+  const restoreFiles = [
+    'tests/qa/fault-recovery/erasure-restore.test.ts',
+    'tests/qa/fault-recovery/erasure-restore-release.test.ts',
+  ];
   const holdFile = 'tests/qa/fault-recovery/restore-hold-seam.test.ts';
   const packageFile = 'tests/qa/fault-recovery/package-install-process-crash.test.ts';
-  const files = [...ownerFiles, holdFile, packageFile];
+  const files = [...ownerFiles, ...restoreFiles, holdFile, packageFile];
   const plans = new Map<number, string[][]>();
 
   for (const workers of [1, 3]) {
@@ -516,6 +520,13 @@ test('QA shards: restore owner, hold and package files use their correct singlet
     expect(selfManagedFaultAdmission.has(ownerFile)).toBe(false);
     expect(selfManagedFaultFiles.has(ownerFile)).toBe(false);
     for (const plan of plans.values()) expect(plan.filter(project => project.includes(ownerFile))).toEqual([[ownerFile]]);
+  }
+
+  for (const file of restoreFiles) {
+    expect(isolatedFaultFiles.has(file)).toBe(true);
+    expect(selfManagedFaultAdmission.get(file)).toBe('startup');
+    expect(selfManagedFaultFiles.has(file)).toBe(true);
+    for (const plan of plans.values()) expect(plan.filter(project => project.includes(file))).toEqual([[file]]);
   }
 
   expect(selfManagedFaultAdmission.get(holdFile)).toBe('startup');
