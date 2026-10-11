@@ -249,6 +249,8 @@ export interface RealmRankingRestore {
   target: string;
   manifest: RealmRankingCorpusManifest;
   home: HomeStack;
+  /** The restored endpoint differs from the parent QA shard's endpoint. */
+  fusekiUrl: string;
   elapsedMs: number;
   close: () => Promise<void>;
 }
@@ -265,12 +267,15 @@ export async function restoreRealmRankingCorpus(
 
   const target = `realm-ranking-${size}-${randomUUID().slice(0, 8)}`;
   let home: HomeStack | undefined;
+  let fusekiUrl: string | undefined;
   const driver = createRealmRankingCorpusDriver({
     sourceRunId: REALM_RANKING_BUILD_RUN,
     async quiesce(signal) {
       signal.throwIfAborted();
     },
     async smokeRead(input) {
+      if (!input.apps.FUSEKI_URL) throw new Error('Restored corpus has no Fuseki endpoint');
+      fusekiUrl = input.apps.FUSEKI_URL;
       const previous = new Map<string, string | undefined>();
       try {
         const environment = {
@@ -336,7 +341,8 @@ export async function restoreRealmRankingCorpus(
     const elapsedMs = performance.now() - started;
     if (elapsedMs > 600_000)
       throw new Error('Realm ranking restore preparation exceeded 600 seconds');
-    if (!home) throw new Error('Realm ranking smoke read did not retain its Main stack');
+    if (!home || !fusekiUrl)
+      throw new Error('Realm ranking smoke read did not retain its Main stack and endpoint');
     console.log(
       JSON.stringify({ realmRankingRestoreReadyMs: Math.round(elapsedMs), threads: size, target }),
     );
@@ -344,6 +350,7 @@ export async function restoreRealmRankingCorpus(
       target,
       manifest,
       home,
+      fusekiUrl,
       elapsedMs,
       close: () =>
         timeRealmRankingStage('cleanup', () => driver.stop(target), { threads: size, target }),

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import {
   startTelemetry,
   flushTelemetryTraces,
+  instrumentFetch,
   shutdownTelemetry,
 } from '@rezics/observability/runtime';
 import {
@@ -13,14 +14,12 @@ import {
   type WorkProfile,
 } from '../../../tests/qa/support/work-profile.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
-import {
-  foregroundCounted,
-  meterFuseki,
-  meterPool,
-} from '../../../tests/qa/integration/support/query-cost-meter.ts';
-
 const sink = startWorkProfileSink({ settleMs: 25, maxSpans: 500_000 });
+const nativeFetch = globalThis.fetch;
 startTelemetry('main', { ...process.env, ...sink.env });
+const { foregroundCounted } =
+  await import('../../../tests/qa/integration/support/query-cost-meter.ts');
+const { default: pg } = await import('pg');
 const { createMainApp } = await import('../src/app.ts');
 const { GovernanceRules } = await import('../src/modules/governance/rules.ts');
 const { GovernanceStore } = await import('../src/modules/governance/store.ts');
@@ -46,6 +45,47 @@ let restored = await restoreRealmRankingCorpus(100).catch(async (error) => {
   throw error;
 });
 let home = restored.home;
+let restoreProfileFetch: (() => void) | undefined;
+const instrumentRestoredFetch = () => {
+  restoreProfileFetch?.();
+  const startupFetch = globalThis.fetch;
+  globalThis.fetch = nativeFetch;
+  const origin = new URL(restored.fusekiUrl).origin;
+  const undo = instrumentFetch(new Set([origin]), sink.url, new Map([[origin, 'fuseki']]));
+  restoreProfileFetch = () => {
+    undo();
+    globalThis.fetch = startupFetch;
+  };
+};
+// Observe physical dispatch, including callback checkouts captured by Kysely.
+// No extra SQL is issued, and scheduler contexts use the fixture's shared attribution.
+const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+const originalQuery = prototype.query;
+let foregroundStatements = 0;
+prototype.query = function (this: object, ...args: unknown[]) {
+  if (foregroundCounted()) foregroundStatements++;
+  return originalQuery.apply(this, args);
+};
+const profileForegroundRequest = async <T>(request: (headers: Headers) => Promise<T>) => {
+  let statements = 0;
+  const measured = await profileRequest(
+    sink,
+    async (headers) => {
+      const before = foregroundStatements;
+      try {
+        return await request(headers);
+      } finally {
+        statements = foregroundStatements - before;
+      }
+    },
+    { service: 'main', flush: flushTelemetryTraces },
+  );
+  return {
+    ...measured,
+    profile: { ...measured.profile, postgresStatements: statements },
+    tracedPostgresStatements: measured.profile.postgresStatements,
+  };
+};
 const evidence: Record<string, unknown>[] = [];
 const ownerDatabases: Record<string, string> = {};
 const profiles: {
@@ -62,6 +102,7 @@ const replyWrites: {
   fusekiQueryCalls: number;
 }[] = [];
 try {
+  instrumentRestoredFetch();
   let { stack } = home;
   for (const [owner, pool] of [
     ['access', stack.accessPool],
@@ -369,27 +410,22 @@ try {
         const measured = await timeRealmRankingStage(
           'header-read',
           () =>
-            profileRequest(
-              sink,
-              async (headers) => {
-                if (viewer === 'member')
-                  headers.set('authorization', `Bearer ${home.reader.token}`);
-                const response = await app.handle(
-                  new Request(
-                    `http://main.local${root}${viewer === 'member' ? `?actingSubject=${encodeURIComponent(reader)}` : ''}`,
-                    { headers },
-                  ),
-                );
-                const body = (await response.json()) as {
-                  rules: unknown[];
-                  moderators: { items: string[] };
-                };
-                assert.equal(response.status, 200, JSON.stringify(body));
-                assert.equal(body.rules.length, count);
-                assert.equal(body.moderators.items.length, count === 12 ? 16 : count);
-              },
-              { service: 'main', flush: flushTelemetryTraces },
-            ),
+            profileForegroundRequest(async (headers) => {
+              if (viewer === 'member') headers.set('authorization', `Bearer ${home.reader.token}`);
+              const response = await app.handle(
+                new Request(
+                  `http://main.local${root}${viewer === 'member' ? `?actingSubject=${encodeURIComponent(reader)}` : ''}`,
+                  { headers },
+                ),
+              );
+              const body = (await response.json()) as {
+                rules: unknown[];
+                moderators: { items: string[] };
+              };
+              assert.equal(response.status, 200, JSON.stringify(body));
+              assert.equal(body.rules.length, count);
+              assert.equal(body.moderators.items.length, count === 12 ? 16 : count);
+            }),
           { rules: count, viewer },
         );
         assertWorkCost(measured.profile, {
@@ -553,6 +589,7 @@ try {
       restored = await restoreRealmRankingCorpus(size);
       home = restored.home;
       stack = home.stack;
+      instrumentRestoredFetch();
       evidence.push({ restore: size, elapsedMs: restored.elapsedMs });
       const nextRules = new GovernanceRules(stack.accessPool);
       app = createMainApp(stack.fuseki, {
@@ -623,30 +660,26 @@ try {
           const measured = await timeRealmRankingStage(
             'ranking-read',
             () =>
-              profileRequest(
-                sink,
-                async (headers) => {
-                  if (viewer === 'member')
-                    headers.set('authorization', `Bearer ${home.reader.token}`);
-                  const response = await app.handle(
-                    new Request(
-                      `http://main.local${root}/threads?sort=${sort}&window=all&limit=2${viewer === 'member' ? `&actingSubject=${encodeURIComponent(reader)}` : ''}`,
-                      { headers },
-                    ),
-                  );
-                  const body = (await response.json()) as {
-                    items: { reply: string }[];
-                    nextCursor: string | null;
-                  };
-                  assert.equal(response.status, 200, JSON.stringify(body));
-                  assert.deepEqual(
-                    body.items.map((item) => item.reply),
-                    [winner, opening.reply],
-                  );
-                  assert(body.nextCursor);
-                },
-                { service: 'main', flush: flushTelemetryTraces },
-              ),
+              profileForegroundRequest(async (headers) => {
+                if (viewer === 'member')
+                  headers.set('authorization', `Bearer ${home.reader.token}`);
+                const response = await app.handle(
+                  new Request(
+                    `http://main.local${root}/threads?sort=${sort}&window=all&limit=2${viewer === 'member' ? `&actingSubject=${encodeURIComponent(reader)}` : ''}`,
+                    { headers },
+                  ),
+                );
+                const body = (await response.json()) as {
+                  items: { reply: string }[];
+                  nextCursor: string | null;
+                };
+                assert.equal(response.status, 200, JSON.stringify(body));
+                assert.deepEqual(
+                  body.items.map((item) => item.reply),
+                  [winner, opening.reply],
+                );
+                assert(body.nextCursor);
+              }),
             { threads: size, sort, viewer, temperature },
           );
           profiles.push({ size, operation: sort, viewer, temperature, profile: measured.profile });
@@ -711,16 +744,9 @@ try {
       size + (size === 1600 ? corpus.identity.deepChain.length : 0),
       'The write cost must be measured against the populated Realm graph',
     );
-    const poolMeters = [...new Set([stack.accessPool, stack.contentPool, home.relay])].map(
-      (pool) => {
-        const meter = meterPool(pool);
-        pool.query = meter.query as typeof pool.query;
-        pool.connect = meter.connect as typeof pool.connect;
-        return meter;
-      },
-    );
-    const fusekiMeter = meterFuseki(stack.fuseki);
-    stack.fuseki.query = fusekiMeter.query as typeof stack.fuseki.query;
+    const beforeStatements = foregroundStatements;
+    // CountingFuseki observes native template queries as well as legacy query calls.
+    const beforeGraphQueries = stack.fuseki.queries;
     let replyCommandProfiles: WorkProfile[] | undefined;
     const profileCommandFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const invoke = async (traceparent?: string) => {
@@ -729,27 +755,45 @@ try {
         return app.handle(new Request(input, { ...init, headers }));
       };
       if (!replyCommandProfiles || !foregroundCounted()) return invoke();
-      const measured = await profileRequest(
-        sink,
-        async (headers) => {
-          const response = await invoke(headers.get('traceparent') ?? undefined);
-          await response.clone().arrayBuffer();
-          return response;
-        },
-        { service: 'main', flush: flushTelemetryTraces },
-      );
+      const measured = await profileForegroundRequest(async (headers) => {
+        const response = await invoke(headers.get('traceparent') ?? undefined);
+        await response.clone().arrayBuffer();
+        return response;
+      });
       replyCommandProfiles.push(measured.profile);
+      evidence.push({
+        commandTrace: measured.profile.traceId,
+        threads: size,
+        postgresStatements: measured.profile.postgresStatements,
+        tracedPostgresStatements: measured.tracedPostgresStatements,
+      });
       return measured.result;
     };
     api = workProfileCorpusApi('http://main.local', home.author.token, {
       fetch: profileCommandFetch as typeof fetch,
     });
-    poolMeters.forEach((meter) => meter.reset());
-    fusekiMeter.reset();
     replyCommandProfiles = [];
-    const posted = await timeRealmRankingStage('measured-write', () => post(`g1034:cost:${size}`), {
-      threads: size,
-    });
+    let posted;
+    try {
+      posted = await timeRealmRankingStage('measured-write', () => post(`g1034:cost:${size}`), {
+        threads: size,
+      });
+    } finally {
+      evidence.push({
+        replyWriteObservation: size,
+        populatedSlots,
+        fusekiOrigin: new URL(restored.fusekiUrl).origin,
+        postgresStatements: foregroundStatements - beforeStatements,
+        fusekiQueryCalls: stack.fuseki.queries - beforeGraphQueries,
+        commands: replyCommandProfiles.map((profile) => ({
+          traceId: profile.traceId,
+          postgresStatements: profile.postgresStatements,
+          fusekiRequests: profile.fusekiRequests,
+          unclassifiedFetches: profile.unclassifiedFetches,
+          unobserved: profile.unobserved,
+        })),
+      });
+    }
     assert(posted.reply.startsWith('https://rezics.com/id/'));
     const commandProfiles = replyCommandProfiles;
     replyCommandProfiles = undefined;
@@ -758,15 +802,15 @@ try {
       4,
       'A Realm reply has draft, identity, review, and placement commands',
     );
-    const statements = poolMeters.reduce((sum, meter) => sum + meter.queries, 0);
+    const statements = commandProfiles.reduce(
+      (sum, profile) => sum + profile.postgresStatements!,
+      0,
+    );
+    const fusekiQueryCalls = stack.fuseki.queries - beforeGraphQueries;
     const fusekiRequests = commandProfiles.every((profile) => profile.fusekiRequests !== null)
       ? commandProfiles.reduce((sum, profile) => sum + profile.fusekiRequests!, 0)
       : null;
     const unobserved = [...new Set(commandProfiles.flatMap((profile) => profile.unobserved))];
-    assert(
-      statements > 0 && fusekiRequests !== null && fusekiRequests > 0 && fusekiMeter.queries > 0,
-      'Foreground write meters must observe both owner and graph work',
-    );
     replyWrites.push({
       size,
       populatedSlots,
@@ -780,15 +824,19 @@ try {
         ),
         unobserved,
       },
-      fusekiQueryCalls: fusekiMeter.queries,
+      fusekiQueryCalls,
     });
     evidence.push({
       replyWrite: size,
       populatedSlots,
       postgresStatements: statements,
       fusekiRequests,
-      fusekiQueryCalls: fusekiMeter.queries,
+      fusekiQueryCalls,
     });
+    assert(
+      statements > 0 && fusekiRequests !== null && fusekiRequests > 0 && fusekiQueryCalls > 0,
+      'Foreground write meters must observe both owner and graph work',
+    );
     assert(
       performance.now() - started < 600_000,
       'Corpus readiness exceeded its preparation budget',
@@ -985,6 +1033,8 @@ try {
   try {
     await timeRealmRankingStage('profile-cleanup', () => restored.close());
   } finally {
+    prototype.query = originalQuery;
+    restoreProfileFetch?.();
     await shutdownTelemetry();
     await sink.stop();
   }
