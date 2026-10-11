@@ -1,6 +1,7 @@
 import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
+import { PageContainer } from '../shell/page.tsx';
 import { fictionZone, zoneMessagesFor } from '../zones/fixtures.ts';
 import { presetTokens } from '../zones/presentation.ts';
 import { savedSiteCuts } from '../zones/site-cuts.ts';
@@ -12,10 +13,16 @@ import { ZoneDraftPreview } from './preview.tsx';
 import { messages } from './messages.ts';
 import type { ZoneHomePage } from './home-document.tsx';
 
-const homeDocument = fromPlainText('Morning edition of the harbor', 'blocks');
+const homeDocument = structuredClone(fromPlainText('Morning edition of the harbor', 'blocks'));
 const definition = 'https://rezics.com/definition/showcase-block-v1';
 homeDocument.doc.content!.push({ type: 'extensionBlock', attrs: {
-  id: 'showcase', definition, version: '2', payload: {}, fallback: 'Showcase fallback text',
+  id: 'showcase', definition, version: '2', fallback: 'Showcase fallback text',
+  payload: {
+    'rv:module': [{ id: 'showcase', type: 'hero-carousel', title: 'Harbor showcase',
+      source: { kind: 'query-block', block: 'new-adoptions' } }],
+    'rv:slides': [{ id: 'harbor', title: 'The harbor exhibition', href: '/harbor-exhibition' }],
+    'rv:titleEffect': ['plain'],
+  },
 } });
 const page: ZoneHomePage = { document: homeDocument, blocks: [{ id: 'showcase', definition, version: '2',
   fallback: 'Showcase fallback text', status: 'resolved', kind: 'showcase', showcase: 'showcase' }] };
@@ -41,8 +48,8 @@ function Home({ preview = false }: { preview?: boolean }) {
     pkg={null} members={null} actions={null} tabs={null}
     masthead={<ZoneMasthead zone={zone} members={null} actions={null} />}
     site={{ label: zone.name.value, links: cuts.navigation }}>
-    {preview ? <ZoneDraftPreview copy={messages.en} document={homeDocument} editorPath="/manage/z/harbor"
-      sitePath="/z/harbor" status="private">{body}</ZoneDraftPreview> : body}
+    {preview ? <PageContainer><ZoneDraftPreview copy={messages.en} document={homeDocument} editorPath="/manage/z/harbor"
+      sitePath="/z/harbor" status="private">{body}</ZoneDraftPreview></PageContainer> : body}
   </ZoneFrame>;
 }
 

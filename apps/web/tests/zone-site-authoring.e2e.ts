@@ -367,7 +367,7 @@ const showcaseDefinition = 'https://rezics.com/definition/showcase-block-v1';
 const showcaseFallback = 'A Showcase fallback is not the rendered stage';
 
 function showcaseHome(title: string): DocumentSnapshot {
-  const document = fromPlainText(morning, 'blocks');
+  const document = structuredClone(fromPlainText(morning, 'blocks'));
   document.doc.content!.push({ type: 'extensionBlock', attrs: {
     id: 'harbor-showcase', definition: showcaseDefinition, version: '2', fallback: showcaseFallback,
     payload: {

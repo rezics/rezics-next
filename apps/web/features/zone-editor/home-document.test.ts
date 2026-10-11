@@ -13,7 +13,7 @@ const resolved: ZoneHomePage['blocks'][number] = {
 
 describe('Zone home document rendering', () => {
   test('a Showcase resolved by Main renders through modules, while prose and opaque blocks retain their order', () => {
-    const document = fromPlainText('Before the Showcase', 'blocks');
+    const document = structuredClone(fromPlainText('Before the Showcase', 'blocks'));
     const opaque: DocumentNode = { ...showcase, attrs: { ...showcase.attrs, id: 'future',
       definition: 'https://example.org/future', fallback: 'Future component' } };
     document.doc.content!.push(showcase, opaque, ...fromPlainText('After the Showcase', 'blocks').doc.content!);
@@ -29,7 +29,7 @@ describe('Zone home document rendering', () => {
   });
 
   test('a nested resolved Showcase is removed without discarding its surrounding document structure', () => {
-    const document = fromPlainText('Kept paragraph', 'blocks');
+    const document = structuredClone(fromPlainText('Kept paragraph', 'blocks'));
     document.doc.content!.push({ type: 'blockquote', attrs: { id: 'quote' }, content: [showcase,
       ...fromPlainText('Kept quotation', 'blocks').doc.content!] });
     const body = zoneHomeProse(document, [resolved]);
@@ -38,7 +38,7 @@ describe('Zone home document rendering', () => {
   });
 
   test('unresolved, invalid and future Showcase versions keep the original fallback', () => {
-    const document = fromPlainText('Kept', 'blocks');
+    const document = structuredClone(fromPlainText('Kept', 'blocks'));
     document.doc.content!.push(showcase);
     expect(zoneHomeProse(document, [{ ...resolved, status: 'placeholder', reason: 'invalid_payload' }])).toBe(document);
     expect(zoneHomeProse(document, [])).toBe(document);
