@@ -629,6 +629,7 @@ export const operationExposures = {
   "postV1RealmsByRealmSubmissions": "public",
   "postV1RealmsByRealmSubmissionsBySubmissionDecisions": "public",
   "postV1RealmsByRealmSubmissionsBySubmissionWithdrawals": "public",
+  "postV1RecipesByIdFile-imports": "public",
   "postV1RecipesByIdImports": "public",
   "postV1RecipesByIdMeasures": "public",
   "postV1RecipesByIdScalings": "public",
