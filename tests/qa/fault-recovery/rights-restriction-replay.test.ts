@@ -285,12 +285,14 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
       decision_id: restriction.decisionId }]);
     expect((await restored.query<{ outcome: string }>(`SELECT outcome FROM access.moderation_decision
       WHERE case_id = $1 ORDER BY case_sequence`, [report.caseId])).rows).toEqual([{ outcome: 'interim_restrict' }]);
-    expect((await restored.query<{ step: string }>(`SELECT step FROM access.governance_process_step
-      WHERE case_id = $1`, [report.caseId])).rows).toEqual([{ step: 'counter_notice' }]);
+    const restoredProcessRows = await processReplayRows(restored, report.caseId);
+    expect(restoredProcessRows.map(row => row.step).sort()).toEqual([
+      'counter_notice', 'restoration_not_after', 'restoration_not_before',
+    ]);
+    expect(restoredProcessRows).toEqual(processBeforeReplay);
     const outbox = await restored.query<{ kind: string; moderation_decision_id: string }>(`SELECT kind,
       moderation_decision_id FROM access.outbox WHERE moderation_decision_id = $1`, [restriction.decisionId]);
     expect(outbox.rows).toEqual([{ kind: 'moderation.decided', moderation_decision_id: restriction.decisionId }]);
-    expect(await processReplayRows(restored, report.caseId)).toEqual(processBeforeReplay);
     expect(await counterNoticeReplayJob(restored, counter.stepId)).toEqual(obligationBeforeReplay);
 
   } finally {
