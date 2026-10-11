@@ -10,6 +10,7 @@ import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessOrgRealmParticipation } from '../../../services/main/src/modules/access/org-realm-participation.ts';
 import { AccessOrganizationModeration } from '../../../services/main/src/modules/access/organization-moderation.ts';
 import { ORGANIZATION_MODERATION_PROFILE } from '../../../services/main/src/modules/access/organization-publication.ts';
@@ -71,6 +72,7 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
     const main = (fault = false) => {
       const access = new AccessAdmissionRegistry(pool!);
       return createMainApp(fuseki, { environment: env, account,
+        platformAccess: new AccessExposure(pool!, { REZICS_PLATFORM_OPEN_GROUPS: 'organization-authority' }),
         access: fault ? new Proxy(access, { get: (owner, key) => key === 'recordGraphOutcome'
           ? async () => { throw new Error('Access connection lost after graph commit'); }
           : typeof Reflect.get(owner, key) === 'function' ? Reflect.get(owner, key).bind(owner) : Reflect.get(owner, key) }) : access,
@@ -159,6 +161,16 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
     expect(units.has(s.other.selection.matchUnit)).toBe(true); expect(units.has(s.main.matchUnit)).toBe(true);
     expect((await readExactContributionDraft(restored, s.target.contribution, s.target.selectedDraft,
       async () => true)).body).toBe(s.body);
+    const heldMarker = await restoredFuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?graphSequence ?mainSequence WHERE { GRAPH <urn:rezics:graph:control> {
+        <urn:rezics:dataset:product> rv:dataEpoch "${next.dataEpoch}" ; rv:routingEpoch "2" ; rv:sequence 0 ;
+          rv:restoreCutover <urn:rezics:restore:${next.dataEpoch}> ; rv:restoreHold true .
+        <urn:rezics:restore:${next.dataEpoch}> rv:priorDataEpoch "${lineage.dataEpoch}" ;
+          rv:priorSequence 9 ; rv:priorMainSequence 9 ;
+          rv:reconciledPriorSequence ?graphSequence ; rv:reconciledPriorMainSequence ?mainSequence .
+      } }`);
+    expect(heldMarker.results?.bindings?.map(row => [row.graphSequence?.value, row.mainSequence?.value]))
+      .toEqual([['9', '9']]);
   } finally {
     await Promise.all([pool?.end(), relay?.end(), before?.end(), after?.end()]);
     for (const id of started.reverse()) await stack('stack:reset', id);
