@@ -215,6 +215,22 @@ export class RealmReplyContentStore {
       throw new RealmReplyDenied('reply admission differs from author and target');
     }
     return this.transaction(async client => {
+      // Allocated canonical replies must use the recorded root/child selection,
+      // even on replay. Unrelated Realm reply identities keep their own flow.
+      const about = (await client.query<{ phase: string; variant_id: string; actor: string; about: string;
+        root_revision: string; realm: string; parent_reply: string | null; parent_revision: string | null;
+        revision_id: string | null; identity_operation_id: string | null }>(
+        'SELECT * FROM content.realm_about_post_operation WHERE reply = $1 FOR UPDATE', [input.reply])).rows[0];
+      if (about) {
+        if (about.phase === 'selected') throw new RealmReplyUnavailable('canonical reply draft is pending');
+        if (about.variant_id !== input.variantId || about.actor !== input.author || about.about !== input.rootTarget
+          || about.root_revision !== input.rootRevision || about.realm !== input.originRealm
+          || about.parent_reply !== input.parentReply || about.parent_revision !== input.parentRevision
+          || about.revision_id !== input.revisionId || input.contextRevision !== null
+          || about.identity_operation_id !== null && about.identity_operation_id !== admission.id) {
+          throw new RealmReplyConflict('reply differs from reserved discussion selection');
+        }
+      }
       if (await this.prior(client, admission, 'reply.create')) {
         const row = (await client.query<{ spoiler: unknown }>(`SELECT body->'spoiler' AS spoiler
           FROM content.revision WHERE variant_id = $1 AND id = $2`, [input.variantId, input.revisionId])).rows[0];
@@ -263,6 +279,10 @@ export class RealmReplyContentStore {
           (SELECT variant_id FROM content.reply WHERE id = $6), $7, $8, $9, $10)`,
       [input.reply, input.variantId, input.author, input.rootTarget, input.rootRevision,
         input.parentReply, input.parentRevision, input.contextRevision, admission.id, author.rows[0]!.origin_realm]);
+      if (about) {
+        await client.query(`UPDATE content.realm_about_post_operation
+          SET phase = 'identified', identity_operation_id = $2 WHERE reply = $1`, [input.reply, admission.id]);
+      }
       return { ...input, ...(typeof spoiler === 'boolean' ? { spoiler } : {}), replayed: false };
     });
   }

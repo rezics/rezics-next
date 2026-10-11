@@ -6,6 +6,14 @@ import type { OwnerColumns } from '../commerce/owner-columns.ts';
 export const realmReplySchema = 'content';
 
 export const realmReplyColumns = {
+  realm_about_thread: { realm: 'text', about: 'text', opener_reply: 'text', root_revision: 'text',
+    revision_id: 'uuid?', state: 'text', created_at: 'timestamptz' },
+  realm_about_post_operation: { id: 'uuid', actor: 'text', intent_key: 'text', intent_digest: 'text',
+    requested_root_revision: 'text',
+    realm: 'text', about: 'text', reply: 'text', variant_id: 'text', opener_reply: 'text', root_revision: 'text',
+    parent_reply: 'text?', parent_revision: 'uuid?', phase: 'text', revision_id: 'uuid?',
+    draft_operation_id: 'text?', identity_operation_id: 'text?', placement_operation_id: 'text?',
+    placement_receipt: 'text?', created_at: 'timestamptz' },
   reply_author: { reply: 'text', variant_id: 'text', author: 'text', root_target: 'text',
     root_revision: 'text', operation_id: 'text', origin_realm: 'text?' },
   reply: { id: 'text', variant_id: 'text', author: 'text', root_target: 'text',

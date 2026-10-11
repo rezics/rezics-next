@@ -30,11 +30,11 @@ afterAll(async () => {
 
 /** Deterministic counts per owner and command reject growth and omitted owner checks.
  * SQL shares are Content persistence, Access authority/disclosure, and Account live verification.
- * Production composition totals 63 Content + 520 Access + 198 Account = 781 SQL.
+ * Production composition totals 64 Content + 520 Access + 198 Account = 782 SQL.
  * Guard calls retain the legacy convention, including nested graph command wrappers. */
 export const REALM_REPLY_WRITE_COST = {
   draft: { content: 14, access: 114, account: 54, statements: 182, fusekiReads: 27, guardCalls: 27 },
-  identity: { content: 13, access: 127, account: 54, statements: 194, fusekiReads: 30, guardCalls: 32 },
+  identity: { content: 14, access: 127, account: 54, statements: 195, fusekiReads: 30, guardCalls: 32 },
   review: { content: 12, access: 77, account: 18, statements: 107, fusekiReads: 3, guardCalls: 5 },
   placement: { content: 24, access: 202, account: 72, statements: 298, fusekiReads: 10, guardCalls: 13 },
 } as const;
