@@ -355,6 +355,21 @@ async function runE2e(): Promise<void> {
     if (!responded) throw new Error(`${name} did not become ready at ${url} within ${timeoutMs / 1000}s (${last})`);
   }
 
+  async function started(name: string, child: ChildProcess, marker: string, timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    const logPath = join(artifactDir, 'logs', `e2e-${name}.log`);
+    const responded = await pollUntilDeadline(async () => {
+      const launchError = launchErrors.get(child);
+      if (launchError) throw new Error(`${name} could not start: ${launchError.message}`);
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`${name} exited before readiness (code ${child.exitCode}, signal ${child.signalCode})`);
+      }
+      try { return readFileSync(logPath, 'utf8').includes(marker); }
+      catch { return false; }
+    }, deadline, 100);
+    if (!responded) throw new Error(`${name} did not report readiness within ${timeoutMs / 1000}s`);
+  }
+
   async function completed(name: string, child: ChildProcess, timeoutMs: number): Promise<number> {
     return await new Promise<number>((resolveExit, reject) => {
       const timer = setTimeout(() => {
@@ -394,6 +409,8 @@ async function runE2e(): Promise<void> {
       }
       const main = launch('main', 'bun', ['services/main/src/index.ts']);
       await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
+      const relayProcess = launch('main-relay', 'bun', ['services/main/src/relay.ts']);
+      await started('main-relay', relayProcess, '"event":"main_relay_started"', 30_000);
       const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
       await ready('Web Worker', `${web.origin}/search`, preview, 240_000);
     });
