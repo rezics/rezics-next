@@ -1,10 +1,14 @@
 import type { OccurrenceRecord } from '../structure/format.ts';
 
+export const RECIPE_EXPORT_OCCURRENCE_LIMIT = 4096;
+
 export class RecipeExportLimit extends Error {}
 
 /** Build a bounded Schema.org view from one exact Structure revision. */
 export function exportRecipe(records: readonly OccurrenceRecord[], structure: string) {
-  if (records.length > 4096) throw new RecipeExportLimit('Recipe export exceeds 4096 occurrences');
+  if (records.length > RECIPE_EXPORT_OCCURRENCE_LIMIT) {
+    throw new RecipeExportLimit(`Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
+  }
   const children = new Map<string, OccurrenceRecord[]>();
   const ingredients: Array<string | Record<string, unknown>> = [];
   const residuals: Array<{ sourceKey: string | null; text: string; parseStatus: string;

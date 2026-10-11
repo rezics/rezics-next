@@ -448549,6 +448549,7 @@
     },
     "/v1/recipes/{id}/exports/schema-org": {
       "get": {
+        "description": "Export the selected Recipe revision as Schema.org JSON. Traversal is limited to 4,096 occurrences; larger revisions return 413 recipe_export_too_large.",
         "operationId": "getV1RecipesByIdExportsSchema-org",
         "parameters": [
           {
@@ -448583,7 +448584,1110 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cost": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "occurrences": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        },
+                        "pagesRead": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pages",
+                        "pagesRead",
+                        "occurrences"
+                      ],
+                      "type": "object"
+                    },
+                    "profile": {
+                      "const": "recipe-schema-org-export-v1",
+                      "type": "string"
+                    },
+                    "recipe": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "@context": {
+                          "const": "https://schema.org",
+                          "type": "string"
+                        },
+                        "@type": {
+                          "const": "Recipe",
+                          "type": "string"
+                        },
+                        "recipeIngredient": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "@type": {
+                                    "const": "PropertyValue",
+                                    "type": "string"
+                                  },
+                                  "inLanguage": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "unitCode": {
+                                    "type": "string"
+                                  },
+                                  "unitText": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "@type",
+                                  "name",
+                                  "value",
+                                  "inLanguage"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "maxItems": 4096,
+                          "type": "array"
+                        },
+                        "recipeInstructions": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "@type": {
+                                    "const": "HowToStep",
+                                    "type": "string"
+                                  },
+                                  "inLanguage": {
+                                    "type": "string"
+                                  },
+                                  "sourceKey": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "@type",
+                                  "text",
+                                  "inLanguage"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "@type": {
+                                    "const": "HowToSection",
+                                    "type": "string"
+                                  },
+                                  "inLanguage": {
+                                    "type": "string"
+                                  },
+                                  "itemListElement": {
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "@type": {
+                                              "const": "HowToStep",
+                                              "type": "string"
+                                            },
+                                            "inLanguage": {
+                                              "type": "string"
+                                            },
+                                            "sourceKey": {
+                                              "type": "string"
+                                            },
+                                            "text": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "@type",
+                                            "text",
+                                            "inLanguage"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "@type": {
+                                              "const": "HowToSection",
+                                              "type": "string"
+                                            },
+                                            "inLanguage": {
+                                              "type": "string"
+                                            },
+                                            "itemListElement": {
+                                              "items": {
+                                                "anyOf": [
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "@type": {
+                                                        "const": "HowToStep",
+                                                        "type": "string"
+                                                      },
+                                                      "inLanguage": {
+                                                        "type": "string"
+                                                      },
+                                                      "sourceKey": {
+                                                        "type": "string"
+                                                      },
+                                                      "text": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "@type",
+                                                      "text",
+                                                      "inLanguage"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "@type": {
+                                                        "const": "HowToSection",
+                                                        "type": "string"
+                                                      },
+                                                      "inLanguage": {
+                                                        "type": "string"
+                                                      },
+                                                      "itemListElement": {
+                                                        "items": {
+                                                          "anyOf": [
+                                                            {
+                                                              "additionalProperties": false,
+                                                              "properties": {
+                                                                "@type": {
+                                                                  "const": "HowToStep",
+                                                                  "type": "string"
+                                                                },
+                                                                "inLanguage": {
+                                                                  "type": "string"
+                                                                },
+                                                                "sourceKey": {
+                                                                  "type": "string"
+                                                                },
+                                                                "text": {
+                                                                  "type": "string"
+                                                                }
+                                                              },
+                                                              "required": [
+                                                                "@type",
+                                                                "text",
+                                                                "inLanguage"
+                                                              ],
+                                                              "type": "object"
+                                                            },
+                                                            {
+                                                              "additionalProperties": false,
+                                                              "properties": {
+                                                                "@type": {
+                                                                  "const": "HowToSection",
+                                                                  "type": "string"
+                                                                },
+                                                                "inLanguage": {
+                                                                  "type": "string"
+                                                                },
+                                                                "itemListElement": {
+                                                                  "items": {
+                                                                    "anyOf": [
+                                                                      {
+                                                                        "additionalProperties": false,
+                                                                        "properties": {
+                                                                          "@type": {
+                                                                            "const": "HowToStep",
+                                                                            "type": "string"
+                                                                          },
+                                                                          "inLanguage": {
+                                                                            "type": "string"
+                                                                          },
+                                                                          "sourceKey": {
+                                                                            "type": "string"
+                                                                          },
+                                                                          "text": {
+                                                                            "type": "string"
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "@type",
+                                                                          "text",
+                                                                          "inLanguage"
+                                                                        ],
+                                                                        "type": "object"
+                                                                      },
+                                                                      {
+                                                                        "additionalProperties": false,
+                                                                        "properties": {
+                                                                          "@type": {
+                                                                            "const": "HowToSection",
+                                                                            "type": "string"
+                                                                          },
+                                                                          "inLanguage": {
+                                                                            "type": "string"
+                                                                          },
+                                                                          "itemListElement": {
+                                                                            "items": {
+                                                                              "anyOf": [
+                                                                                {
+                                                                                  "additionalProperties": false,
+                                                                                  "properties": {
+                                                                                    "@type": {
+                                                                                      "const": "HowToStep",
+                                                                                      "type": "string"
+                                                                                    },
+                                                                                    "inLanguage": {
+                                                                                      "type": "string"
+                                                                                    },
+                                                                                    "sourceKey": {
+                                                                                      "type": "string"
+                                                                                    },
+                                                                                    "text": {
+                                                                                      "type": "string"
+                                                                                    }
+                                                                                  },
+                                                                                  "required": [
+                                                                                    "@type",
+                                                                                    "text",
+                                                                                    "inLanguage"
+                                                                                  ],
+                                                                                  "type": "object"
+                                                                                },
+                                                                                {
+                                                                                  "additionalProperties": false,
+                                                                                  "properties": {
+                                                                                    "@type": {
+                                                                                      "const": "HowToSection",
+                                                                                      "type": "string"
+                                                                                    },
+                                                                                    "inLanguage": {
+                                                                                      "type": "string"
+                                                                                    },
+                                                                                    "itemListElement": {
+                                                                                      "items": {
+                                                                                        "anyOf": [
+                                                                                          {
+                                                                                            "additionalProperties": false,
+                                                                                            "properties": {
+                                                                                              "@type": {
+                                                                                                "const": "HowToStep",
+                                                                                                "type": "string"
+                                                                                              },
+                                                                                              "inLanguage": {
+                                                                                                "type": "string"
+                                                                                              },
+                                                                                              "sourceKey": {
+                                                                                                "type": "string"
+                                                                                              },
+                                                                                              "text": {
+                                                                                                "type": "string"
+                                                                                              }
+                                                                                            },
+                                                                                            "required": [
+                                                                                              "@type",
+                                                                                              "text",
+                                                                                              "inLanguage"
+                                                                                            ],
+                                                                                            "type": "object"
+                                                                                          },
+                                                                                          {
+                                                                                            "additionalProperties": false,
+                                                                                            "properties": {
+                                                                                              "@type": {
+                                                                                                "const": "HowToSection",
+                                                                                                "type": "string"
+                                                                                              },
+                                                                                              "inLanguage": {
+                                                                                                "type": "string"
+                                                                                              },
+                                                                                              "itemListElement": {
+                                                                                                "items": {
+                                                                                                  "anyOf": [
+                                                                                                    {
+                                                                                                      "additionalProperties": false,
+                                                                                                      "properties": {
+                                                                                                        "@type": {
+                                                                                                          "const": "HowToStep",
+                                                                                                          "type": "string"
+                                                                                                        },
+                                                                                                        "inLanguage": {
+                                                                                                          "type": "string"
+                                                                                                        },
+                                                                                                        "sourceKey": {
+                                                                                                          "type": "string"
+                                                                                                        },
+                                                                                                        "text": {
+                                                                                                          "type": "string"
+                                                                                                        }
+                                                                                                      },
+                                                                                                      "required": [
+                                                                                                        "@type",
+                                                                                                        "text",
+                                                                                                        "inLanguage"
+                                                                                                      ],
+                                                                                                      "type": "object"
+                                                                                                    },
+                                                                                                    {
+                                                                                                      "additionalProperties": false,
+                                                                                                      "properties": {
+                                                                                                        "@type": {
+                                                                                                          "const": "HowToSection",
+                                                                                                          "type": "string"
+                                                                                                        },
+                                                                                                        "inLanguage": {
+                                                                                                          "type": "string"
+                                                                                                        },
+                                                                                                        "itemListElement": {
+                                                                                                          "items": {
+                                                                                                            "anyOf": [
+                                                                                                              {
+                                                                                                                "additionalProperties": false,
+                                                                                                                "properties": {
+                                                                                                                  "@type": {
+                                                                                                                    "const": "HowToStep",
+                                                                                                                    "type": "string"
+                                                                                                                  },
+                                                                                                                  "inLanguage": {
+                                                                                                                    "type": "string"
+                                                                                                                  },
+                                                                                                                  "sourceKey": {
+                                                                                                                    "type": "string"
+                                                                                                                  },
+                                                                                                                  "text": {
+                                                                                                                    "type": "string"
+                                                                                                                  }
+                                                                                                                },
+                                                                                                                "required": [
+                                                                                                                  "@type",
+                                                                                                                  "text",
+                                                                                                                  "inLanguage"
+                                                                                                                ],
+                                                                                                                "type": "object"
+                                                                                                              },
+                                                                                                              {
+                                                                                                                "additionalProperties": false,
+                                                                                                                "properties": {
+                                                                                                                  "@type": {
+                                                                                                                    "const": "HowToSection",
+                                                                                                                    "type": "string"
+                                                                                                                  },
+                                                                                                                  "inLanguage": {
+                                                                                                                    "type": "string"
+                                                                                                                  },
+                                                                                                                  "itemListElement": {
+                                                                                                                    "items": {
+                                                                                                                      "anyOf": [
+                                                                                                                        {
+                                                                                                                          "additionalProperties": false,
+                                                                                                                          "properties": {
+                                                                                                                            "@type": {
+                                                                                                                              "const": "HowToStep",
+                                                                                                                              "type": "string"
+                                                                                                                            },
+                                                                                                                            "inLanguage": {
+                                                                                                                              "type": "string"
+                                                                                                                            },
+                                                                                                                            "sourceKey": {
+                                                                                                                              "type": "string"
+                                                                                                                            },
+                                                                                                                            "text": {
+                                                                                                                              "type": "string"
+                                                                                                                            }
+                                                                                                                          },
+                                                                                                                          "required": [
+                                                                                                                            "@type",
+                                                                                                                            "text",
+                                                                                                                            "inLanguage"
+                                                                                                                          ],
+                                                                                                                          "type": "object"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          "additionalProperties": false,
+                                                                                                                          "properties": {
+                                                                                                                            "@type": {
+                                                                                                                              "const": "HowToSection",
+                                                                                                                              "type": "string"
+                                                                                                                            },
+                                                                                                                            "inLanguage": {
+                                                                                                                              "type": "string"
+                                                                                                                            },
+                                                                                                                            "itemListElement": {
+                                                                                                                              "items": {
+                                                                                                                                "anyOf": [
+                                                                                                                                  {
+                                                                                                                                    "additionalProperties": false,
+                                                                                                                                    "properties": {
+                                                                                                                                      "@type": {
+                                                                                                                                        "const": "HowToStep",
+                                                                                                                                        "type": "string"
+                                                                                                                                      },
+                                                                                                                                      "inLanguage": {
+                                                                                                                                        "type": "string"
+                                                                                                                                      },
+                                                                                                                                      "sourceKey": {
+                                                                                                                                        "type": "string"
+                                                                                                                                      },
+                                                                                                                                      "text": {
+                                                                                                                                        "type": "string"
+                                                                                                                                      }
+                                                                                                                                    },
+                                                                                                                                    "required": [
+                                                                                                                                      "@type",
+                                                                                                                                      "text",
+                                                                                                                                      "inLanguage"
+                                                                                                                                    ],
+                                                                                                                                    "type": "object"
+                                                                                                                                  },
+                                                                                                                                  {
+                                                                                                                                    "additionalProperties": false,
+                                                                                                                                    "properties": {
+                                                                                                                                      "@type": {
+                                                                                                                                        "const": "HowToSection",
+                                                                                                                                        "type": "string"
+                                                                                                                                      },
+                                                                                                                                      "inLanguage": {
+                                                                                                                                        "type": "string"
+                                                                                                                                      },
+                                                                                                                                      "itemListElement": {
+                                                                                                                                        "items": {
+                                                                                                                                          "anyOf": [
+                                                                                                                                            {
+                                                                                                                                              "additionalProperties": false,
+                                                                                                                                              "properties": {
+                                                                                                                                                "@type": {
+                                                                                                                                                  "const": "HowToStep",
+                                                                                                                                                  "type": "string"
+                                                                                                                                                },
+                                                                                                                                                "inLanguage": {
+                                                                                                                                                  "type": "string"
+                                                                                                                                                },
+                                                                                                                                                "sourceKey": {
+                                                                                                                                                  "type": "string"
+                                                                                                                                                },
+                                                                                                                                                "text": {
+                                                                                                                                                  "type": "string"
+                                                                                                                                                }
+                                                                                                                                              },
+                                                                                                                                              "required": [
+                                                                                                                                                "@type",
+                                                                                                                                                "text",
+                                                                                                                                                "inLanguage"
+                                                                                                                                              ],
+                                                                                                                                              "type": "object"
+                                                                                                                                            },
+                                                                                                                                            {
+                                                                                                                                              "additionalProperties": false,
+                                                                                                                                              "properties": {
+                                                                                                                                                "@type": {
+                                                                                                                                                  "const": "HowToSection",
+                                                                                                                                                  "type": "string"
+                                                                                                                                                },
+                                                                                                                                                "inLanguage": {
+                                                                                                                                                  "type": "string"
+                                                                                                                                                },
+                                                                                                                                                "itemListElement": {
+                                                                                                                                                  "items": {
+                                                                                                                                                    "anyOf": [
+                                                                                                                                                      {
+                                                                                                                                                        "additionalProperties": false,
+                                                                                                                                                        "properties": {
+                                                                                                                                                          "@type": {
+                                                                                                                                                            "const": "HowToStep",
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          },
+                                                                                                                                                          "inLanguage": {
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          },
+                                                                                                                                                          "sourceKey": {
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          },
+                                                                                                                                                          "text": {
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          }
+                                                                                                                                                        },
+                                                                                                                                                        "required": [
+                                                                                                                                                          "@type",
+                                                                                                                                                          "text",
+                                                                                                                                                          "inLanguage"
+                                                                                                                                                        ],
+                                                                                                                                                        "type": "object"
+                                                                                                                                                      },
+                                                                                                                                                      {
+                                                                                                                                                        "additionalProperties": false,
+                                                                                                                                                        "properties": {
+                                                                                                                                                          "@type": {
+                                                                                                                                                            "const": "HowToSection",
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          },
+                                                                                                                                                          "inLanguage": {
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          },
+                                                                                                                                                          "itemListElement": {
+                                                                                                                                                            "items": {
+                                                                                                                                                              "anyOf": [
+                                                                                                                                                                {
+                                                                                                                                                                  "additionalProperties": false,
+                                                                                                                                                                  "properties": {
+                                                                                                                                                                    "@type": {
+                                                                                                                                                                      "const": "HowToStep",
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    },
+                                                                                                                                                                    "inLanguage": {
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    },
+                                                                                                                                                                    "sourceKey": {
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    },
+                                                                                                                                                                    "text": {
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    }
+                                                                                                                                                                  },
+                                                                                                                                                                  "required": [
+                                                                                                                                                                    "@type",
+                                                                                                                                                                    "text",
+                                                                                                                                                                    "inLanguage"
+                                                                                                                                                                  ],
+                                                                                                                                                                  "type": "object"
+                                                                                                                                                                },
+                                                                                                                                                                {
+                                                                                                                                                                  "additionalProperties": false,
+                                                                                                                                                                  "properties": {
+                                                                                                                                                                    "@type": {
+                                                                                                                                                                      "const": "HowToSection",
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    },
+                                                                                                                                                                    "inLanguage": {
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    },
+                                                                                                                                                                    "itemListElement": {
+                                                                                                                                                                      "items": {
+                                                                                                                                                                        "anyOf": [
+                                                                                                                                                                          {
+                                                                                                                                                                            "additionalProperties": false,
+                                                                                                                                                                            "properties": {
+                                                                                                                                                                              "@type": {
+                                                                                                                                                                                "const": "HowToStep",
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              },
+                                                                                                                                                                              "inLanguage": {
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              },
+                                                                                                                                                                              "sourceKey": {
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              },
+                                                                                                                                                                              "text": {
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              }
+                                                                                                                                                                            },
+                                                                                                                                                                            "required": [
+                                                                                                                                                                              "@type",
+                                                                                                                                                                              "text",
+                                                                                                                                                                              "inLanguage"
+                                                                                                                                                                            ],
+                                                                                                                                                                            "type": "object"
+                                                                                                                                                                          },
+                                                                                                                                                                          {
+                                                                                                                                                                            "additionalProperties": false,
+                                                                                                                                                                            "properties": {
+                                                                                                                                                                              "@type": {
+                                                                                                                                                                                "const": "HowToSection",
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              },
+                                                                                                                                                                              "inLanguage": {
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              },
+                                                                                                                                                                              "itemListElement": {
+                                                                                                                                                                                "items": {
+                                                                                                                                                                                  "anyOf": [
+                                                                                                                                                                                    {
+                                                                                                                                                                                      "additionalProperties": false,
+                                                                                                                                                                                      "properties": {
+                                                                                                                                                                                        "@type": {
+                                                                                                                                                                                          "const": "HowToStep",
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "inLanguage": {
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "sourceKey": {
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "text": {
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        }
+                                                                                                                                                                                      },
+                                                                                                                                                                                      "required": [
+                                                                                                                                                                                        "@type",
+                                                                                                                                                                                        "text",
+                                                                                                                                                                                        "inLanguage"
+                                                                                                                                                                                      ],
+                                                                                                                                                                                      "type": "object"
+                                                                                                                                                                                    },
+                                                                                                                                                                                    {
+                                                                                                                                                                                      "additionalProperties": false,
+                                                                                                                                                                                      "properties": {
+                                                                                                                                                                                        "@type": {
+                                                                                                                                                                                          "const": "HowToSection",
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "inLanguage": {
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "itemListElement": {
+                                                                                                                                                                                          "items": {
+                                                                                                                                                                                            "additionalProperties": false,
+                                                                                                                                                                                            "properties": {
+                                                                                                                                                                                              "@type": {
+                                                                                                                                                                                                "const": "HowToStep",
+                                                                                                                                                                                                "type": "string"
+                                                                                                                                                                                              },
+                                                                                                                                                                                              "inLanguage": {
+                                                                                                                                                                                                "type": "string"
+                                                                                                                                                                                              },
+                                                                                                                                                                                              "sourceKey": {
+                                                                                                                                                                                                "type": "string"
+                                                                                                                                                                                              },
+                                                                                                                                                                                              "text": {
+                                                                                                                                                                                                "type": "string"
+                                                                                                                                                                                              }
+                                                                                                                                                                                            },
+                                                                                                                                                                                            "required": [
+                                                                                                                                                                                              "@type",
+                                                                                                                                                                                              "text",
+                                                                                                                                                                                              "inLanguage"
+                                                                                                                                                                                            ],
+                                                                                                                                                                                            "type": "object"
+                                                                                                                                                                                          },
+                                                                                                                                                                                          "maxItems": 4096,
+                                                                                                                                                                                          "type": "array"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "name": {
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "sourceKey": {
+                                                                                                                                                                                          "type": "string"
+                                                                                                                                                                                        }
+                                                                                                                                                                                      },
+                                                                                                                                                                                      "required": [
+                                                                                                                                                                                        "@type",
+                                                                                                                                                                                        "name",
+                                                                                                                                                                                        "itemListElement"
+                                                                                                                                                                                      ],
+                                                                                                                                                                                      "type": "object"
+                                                                                                                                                                                    }
+                                                                                                                                                                                  ]
+                                                                                                                                                                                },
+                                                                                                                                                                                "maxItems": 4096,
+                                                                                                                                                                                "type": "array"
+                                                                                                                                                                              },
+                                                                                                                                                                              "name": {
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              },
+                                                                                                                                                                              "sourceKey": {
+                                                                                                                                                                                "type": "string"
+                                                                                                                                                                              }
+                                                                                                                                                                            },
+                                                                                                                                                                            "required": [
+                                                                                                                                                                              "@type",
+                                                                                                                                                                              "name",
+                                                                                                                                                                              "itemListElement"
+                                                                                                                                                                            ],
+                                                                                                                                                                            "type": "object"
+                                                                                                                                                                          }
+                                                                                                                                                                        ]
+                                                                                                                                                                      },
+                                                                                                                                                                      "maxItems": 4096,
+                                                                                                                                                                      "type": "array"
+                                                                                                                                                                    },
+                                                                                                                                                                    "name": {
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    },
+                                                                                                                                                                    "sourceKey": {
+                                                                                                                                                                      "type": "string"
+                                                                                                                                                                    }
+                                                                                                                                                                  },
+                                                                                                                                                                  "required": [
+                                                                                                                                                                    "@type",
+                                                                                                                                                                    "name",
+                                                                                                                                                                    "itemListElement"
+                                                                                                                                                                  ],
+                                                                                                                                                                  "type": "object"
+                                                                                                                                                                }
+                                                                                                                                                              ]
+                                                                                                                                                            },
+                                                                                                                                                            "maxItems": 4096,
+                                                                                                                                                            "type": "array"
+                                                                                                                                                          },
+                                                                                                                                                          "name": {
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          },
+                                                                                                                                                          "sourceKey": {
+                                                                                                                                                            "type": "string"
+                                                                                                                                                          }
+                                                                                                                                                        },
+                                                                                                                                                        "required": [
+                                                                                                                                                          "@type",
+                                                                                                                                                          "name",
+                                                                                                                                                          "itemListElement"
+                                                                                                                                                        ],
+                                                                                                                                                        "type": "object"
+                                                                                                                                                      }
+                                                                                                                                                    ]
+                                                                                                                                                  },
+                                                                                                                                                  "maxItems": 4096,
+                                                                                                                                                  "type": "array"
+                                                                                                                                                },
+                                                                                                                                                "name": {
+                                                                                                                                                  "type": "string"
+                                                                                                                                                },
+                                                                                                                                                "sourceKey": {
+                                                                                                                                                  "type": "string"
+                                                                                                                                                }
+                                                                                                                                              },
+                                                                                                                                              "required": [
+                                                                                                                                                "@type",
+                                                                                                                                                "name",
+                                                                                                                                                "itemListElement"
+                                                                                                                                              ],
+                                                                                                                                              "type": "object"
+                                                                                                                                            }
+                                                                                                                                          ]
+                                                                                                                                        },
+                                                                                                                                        "maxItems": 4096,
+                                                                                                                                        "type": "array"
+                                                                                                                                      },
+                                                                                                                                      "name": {
+                                                                                                                                        "type": "string"
+                                                                                                                                      },
+                                                                                                                                      "sourceKey": {
+                                                                                                                                        "type": "string"
+                                                                                                                                      }
+                                                                                                                                    },
+                                                                                                                                    "required": [
+                                                                                                                                      "@type",
+                                                                                                                                      "name",
+                                                                                                                                      "itemListElement"
+                                                                                                                                    ],
+                                                                                                                                    "type": "object"
+                                                                                                                                  }
+                                                                                                                                ]
+                                                                                                                              },
+                                                                                                                              "maxItems": 4096,
+                                                                                                                              "type": "array"
+                                                                                                                            },
+                                                                                                                            "name": {
+                                                                                                                              "type": "string"
+                                                                                                                            },
+                                                                                                                            "sourceKey": {
+                                                                                                                              "type": "string"
+                                                                                                                            }
+                                                                                                                          },
+                                                                                                                          "required": [
+                                                                                                                            "@type",
+                                                                                                                            "name",
+                                                                                                                            "itemListElement"
+                                                                                                                          ],
+                                                                                                                          "type": "object"
+                                                                                                                        }
+                                                                                                                      ]
+                                                                                                                    },
+                                                                                                                    "maxItems": 4096,
+                                                                                                                    "type": "array"
+                                                                                                                  },
+                                                                                                                  "name": {
+                                                                                                                    "type": "string"
+                                                                                                                  },
+                                                                                                                  "sourceKey": {
+                                                                                                                    "type": "string"
+                                                                                                                  }
+                                                                                                                },
+                                                                                                                "required": [
+                                                                                                                  "@type",
+                                                                                                                  "name",
+                                                                                                                  "itemListElement"
+                                                                                                                ],
+                                                                                                                "type": "object"
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          "maxItems": 4096,
+                                                                                                          "type": "array"
+                                                                                                        },
+                                                                                                        "name": {
+                                                                                                          "type": "string"
+                                                                                                        },
+                                                                                                        "sourceKey": {
+                                                                                                          "type": "string"
+                                                                                                        }
+                                                                                                      },
+                                                                                                      "required": [
+                                                                                                        "@type",
+                                                                                                        "name",
+                                                                                                        "itemListElement"
+                                                                                                      ],
+                                                                                                      "type": "object"
+                                                                                                    }
+                                                                                                  ]
+                                                                                                },
+                                                                                                "maxItems": 4096,
+                                                                                                "type": "array"
+                                                                                              },
+                                                                                              "name": {
+                                                                                                "type": "string"
+                                                                                              },
+                                                                                              "sourceKey": {
+                                                                                                "type": "string"
+                                                                                              }
+                                                                                            },
+                                                                                            "required": [
+                                                                                              "@type",
+                                                                                              "name",
+                                                                                              "itemListElement"
+                                                                                            ],
+                                                                                            "type": "object"
+                                                                                          }
+                                                                                        ]
+                                                                                      },
+                                                                                      "maxItems": 4096,
+                                                                                      "type": "array"
+                                                                                    },
+                                                                                    "name": {
+                                                                                      "type": "string"
+                                                                                    },
+                                                                                    "sourceKey": {
+                                                                                      "type": "string"
+                                                                                    }
+                                                                                  },
+                                                                                  "required": [
+                                                                                    "@type",
+                                                                                    "name",
+                                                                                    "itemListElement"
+                                                                                  ],
+                                                                                  "type": "object"
+                                                                                }
+                                                                              ]
+                                                                            },
+                                                                            "maxItems": 4096,
+                                                                            "type": "array"
+                                                                          },
+                                                                          "name": {
+                                                                            "type": "string"
+                                                                          },
+                                                                          "sourceKey": {
+                                                                            "type": "string"
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "@type",
+                                                                          "name",
+                                                                          "itemListElement"
+                                                                        ],
+                                                                        "type": "object"
+                                                                      }
+                                                                    ]
+                                                                  },
+                                                                  "maxItems": 4096,
+                                                                  "type": "array"
+                                                                },
+                                                                "name": {
+                                                                  "type": "string"
+                                                                },
+                                                                "sourceKey": {
+                                                                  "type": "string"
+                                                                }
+                                                              },
+                                                              "required": [
+                                                                "@type",
+                                                                "name",
+                                                                "itemListElement"
+                                                              ],
+                                                              "type": "object"
+                                                            }
+                                                          ]
+                                                        },
+                                                        "maxItems": 4096,
+                                                        "type": "array"
+                                                      },
+                                                      "name": {
+                                                        "type": "string"
+                                                      },
+                                                      "sourceKey": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "@type",
+                                                      "name",
+                                                      "itemListElement"
+                                                    ],
+                                                    "type": "object"
+                                                  }
+                                                ]
+                                              },
+                                              "maxItems": 4096,
+                                              "type": "array"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "sourceKey": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "@type",
+                                            "name",
+                                            "itemListElement"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "maxItems": 4096,
+                                    "type": "array"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "sourceKey": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "@type",
+                                  "name",
+                                  "itemListElement"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "maxItems": 4096,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "@context",
+                        "@type",
+                        "recipeIngredient",
+                        "recipeInstructions"
+                      ],
+                      "type": "object"
+                    },
+                    "residuals": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "parseStatus": {
+                            "enum": [
+                              "partial",
+                              "unparsed"
+                            ],
+                            "type": "string"
+                          },
+                          "residual": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sourceKey": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "sourceKey",
+                          "text",
+                          "parseStatus",
+                          "residual"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 4096,
+                      "type": "array"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourceObservations": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 4096,
+                      "type": "array"
+                    },
+                    "sourcePosition": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "structure": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "structure",
+                    "revision",
+                    "recipe",
+                    "residuals",
+                    "sourceObservations",
+                    "sourcePosition",
+                    "cost"
+                  ],
+                  "type": "object"
+                }
               }
             },
             "description": "Response for status 200"

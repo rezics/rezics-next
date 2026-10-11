@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { createHash } from 'node:crypto';
-import type { Static } from 'typebox';
+import type { Static, TSchema } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { changeAdmittedComposition, changeAdmittedStructureMeasures }
   from '../modules/structure/change-admitted.ts';
@@ -25,7 +25,7 @@ import { RecipeSourceConversionInvalid, RecipeSourceConversionUnavailable,
 import { sourceFieldOccurrence } from '../modules/source/support-attach.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavailable }
   from '../modules/source/withdrawal.ts';
-import { exportRecipe, RecipeExportLimit } from '../modules/recipe/export.ts';
+import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../modules/recipe/export.ts';
 import { readRecipeWorkPage, RECIPE_WORK_PAGE_CURSOR_MAX } from '../modules/recipe/work-page.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -85,6 +85,38 @@ const timingKinds = [['preparation', 'preparation-duration'], ['cooking', 'cooki
   ['total', 'total-duration']] as const;
 const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingSubject: ref },
   { additionalProperties: false });
+const recipeExportStep = t.Object({ '@type': t.Literal('HowToStep'), text: t.String(), inLanguage: t.String(),
+  sourceKey: t.Optional(t.String()) }, { additionalProperties: false });
+function recipeExportInstruction(depth = 0): TSchema {
+  if (depth >= 16) return recipeExportStep;
+  return t.Union([recipeExportStep, t.Object({ '@type': t.Literal('HowToSection'), name: t.String(),
+    inLanguage: t.Optional(t.String()),
+    itemListElement: t.Array(recipeExportInstruction(depth + 1), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+    sourceKey: t.Optional(t.String()) }, { additionalProperties: false })]);
+}
+const recipeExportResponse = t.Object({
+  profile: t.Literal('recipe-schema-org-export-v1'),
+  structure: ref,
+  revision: ref,
+  recipe: t.Object({
+    '@context': t.Literal('https://schema.org'),
+    '@type': t.Literal('Recipe'),
+    recipeIngredient: t.Array(t.Union([t.String(), t.Object({
+      '@type': t.Literal('PropertyValue'), name: t.String(), value: t.String(),
+      unitCode: t.Optional(t.String()), unitText: t.Optional(t.String()), inLanguage: t.String(),
+    }, { additionalProperties: false })]), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+    recipeInstructions: t.Array(recipeExportInstruction(), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+  }, { additionalProperties: false }),
+  residuals: t.Array(t.Object({ sourceKey: t.Nullable(t.String()), text: t.String(),
+    parseStatus: t.Union([t.Literal('partial'), t.Literal('unparsed')]),
+    residual: t.Nullable(t.String()) }, { additionalProperties: false }),
+  { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+  sourceObservations: t.Array(t.String(), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() },
+    { additionalProperties: false }),
+  cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() },
+    { additionalProperties: false }),
+}, { additionalProperties: false });
 
 export const openApiOperations = {
   '/v1/recipes/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
@@ -141,7 +173,9 @@ async function readPage(work: MainWorkDependencies, request: Request, input: {
 }
 
 async function allOccurrences(work: MainWorkDependencies, request: Request, structure: string,
-  actingSubject: string, revision: string): Promise<{ records: OccurrenceRecord[];
+  actingSubject: string, revision: string,
+  limitError: new (message: string) => Error = CompositionConflict,
+  limitMessage = `recipe calculation exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`): Promise<{ records: OccurrenceRecord[];
     pages: number; pagesRead: number }> {
   const records: OccurrenceRecord[] = [];
   let pages = 0;
@@ -159,7 +193,7 @@ async function allOccurrences(work: MainWorkDependencies, request: Request, stru
       for (const occurrence of page.occurrences) {
         if (occurrence.state === 'active' && occurrence.role === 'group') parents.push(occurrence.occurrence);
       }
-      if (records.length > 4096) throw new CompositionConflict('recipe calculation exceeds 4096 occurrences');
+      if (records.length > RECIPE_EXPORT_OCCURRENCE_LIMIT) throw new limitError(limitMessage);
     } while (after);
   }
   return { records, pages, pagesRead };
@@ -359,14 +393,16 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/recipes/:id/exports/schema-org', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, revision: t.Optional(ref) }, { additionalProperties: false }),
-      response: { 200: t.Any(), 413: problemResult(413), ...problems } },
+      detail: { description: `Export the selected Recipe revision as Schema.org JSON. Traversal is limited to ${RECIPE_EXPORT_OCCURRENCE_LIMIT.toLocaleString('en-US')} occurrences; larger revisions return 413 recipe_export_too_large.` },
+      response: { 200: recipeExportResponse, 413: problemResult(413), ...problems } },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject: string; revision?: string } }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
         const header = await readPage(work, request, { structure, actingSubject: query.actingSubject,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
-        const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision);
+        const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision,
+          RecipeExportLimit, `Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
         return Response.json({ profile: 'recipe-schema-org-export-v1', structure,
           revision: header.revision, ...exportRecipe(scanned.records, structure),
           sourcePosition: header.sourcePosition,
