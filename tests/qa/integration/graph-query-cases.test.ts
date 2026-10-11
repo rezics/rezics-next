@@ -408,9 +408,42 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     expect(JSON.stringify(hidden)).not.toContain(privateTarget);
 
     // GRAPH02: claims from personal and Realm canons retain the speaker, exact meaning and evidence.
-    const predicate = 'https://rezics.com/vocab/graphQueryLink';
-    const personalDefinition = 'https://rezics.com/definition/personal-link-v1';
-    const realmDefinition = 'https://rezics.com/definition/realm-link-v1';
+    const relation = await createdSemantic('Statement relation definition', {
+      component: 'definition',
+      kind: 'property',
+      lifecycle: 'active',
+      successor: null,
+      roles: [],
+    });
+    await f.grant(`semantic:read:${relation.component}`, 'semantic.read');
+    const predicate = relation.component;
+    const personalMeaning = await createdSemantic('personal interpretation definition', {
+      component: 'definition',
+      kind: 'interpretation',
+      lifecycle: 'active',
+      successor: null,
+      roles: [],
+    });
+    const realmMeaning = await createdSemantic('Realm interpretation definition', {
+      component: 'definition',
+      kind: 'interpretation',
+      lifecycle: 'active',
+      successor: null,
+      roles: [],
+    });
+    const privateMeaning = await createdSemantic('private interpretation definition', {
+      component: 'definition',
+      kind: 'interpretation',
+      lifecycle: 'active',
+      successor: null,
+      roles: [],
+    });
+    await Promise.all([personalMeaning, realmMeaning, privateMeaning].map((meaning) =>
+      f.grant(`semantic:read:${meaning.component}`, 'semantic.read'),
+    ));
+    const personalDefinition = personalMeaning.revision;
+    const realmDefinition = realmMeaning.revision;
+    const privateDefinition = privateMeaning.revision;
     const makeContext = async (definition: string, disclosure: 'public' | 'private' = 'public') => {
       const input = {
         role: 'shared' as const,
@@ -433,7 +466,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     const personalContext = await makeContext(personalDefinition);
     const realmContext = await makeContext(realmDefinition);
     const privateContext = await makeContext(
-      'https://rezics.com/definition/private-link-v1',
+      privateDefinition,
       'private',
     );
     const realmInput = { name: `Graph query Realm ${randomUUID()}`, actingSubject: f.actor };
@@ -468,7 +501,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     const createStatement = async (
       speaker: { kind: 'personal' } | { kind: 'realm'; realm: string },
       context: { component: string; revision: string },
-      definition: string,
+      interpretationDefinition: string,
       evidence: string,
       canReadPrivate?: (context: string) => Promise<boolean>,
     ) => {
@@ -476,7 +509,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
         speaker,
         subject: performer,
         predicate,
-        relationDefinition: definition,
+        relationDefinition: relation.revision,
         value: { kind: 'resource' as const, iri: characters[0]! },
         applicability: [],
         interpretation: {
@@ -515,7 +548,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
       return {
         statement: receipt.component,
         context: context.component,
-        meaning: definition,
+        meaning: interpretationDefinition,
         evidence,
         speaker: speaker.kind === 'realm' ? speaker.realm : f.actor,
         decisionScope:
@@ -558,7 +591,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     const privateClaim = await createStatement(
       { kind: 'personal' },
       privateContext,
-      'https://rezics.com/definition/graph-link-v1',
+      privateDefinition,
       'https://evidence.example/private-canon',
       canReadPrivate,
     );
@@ -613,7 +646,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     for (const hiddenReference of [
       privateContext.component,
       privateContext.revision,
-      'https://rezics.com/definition/private-link-v1',
+      privateDefinition,
     ]) {
       expect(JSON.stringify(privateResult)).not.toContain(hiddenReference);
     }
