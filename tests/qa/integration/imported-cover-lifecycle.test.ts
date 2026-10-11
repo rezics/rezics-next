@@ -333,11 +333,12 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
 
       await moderator.grant('governance:platform', 'governance.rights.decide');
       const ruleKey = randomUUID();
-      const rule = await json<{ ref: string; revision: string; digest: string }>(await govern('POST',
+      const ruleReceipt = await json<{ ref: string; revision: string; digest: string }>(await govern('POST',
         '/v1/governance/rules', { profile: 'governance-rule-v1', ref: `urn:cover-lifecycle:${randomUUID()}`,
           scopeId: 'governance:platform', actingSubject: moderator.actor, expectedRevision: null,
           document: { rule: 'Restrict an exact reported imported cover Use.' }, idempotencyKey: ruleKey },
       moderator.token, ruleKey), 201);
+      const rule = { ref: ruleReceipt.ref, revision: ruleReceipt.revision, digest: ruleReceipt.digest };
       const reportKey = `imported-cover-notice-${randomUUID()}`;
       const publicReceipt = await json<NoticeReceipt>(await govern('POST', '/v1/public-reports', reportInput,
         undefined, reportKey), 201);
