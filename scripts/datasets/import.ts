@@ -1202,7 +1202,7 @@ export async function importDataset(
             + (details.httpStatus ? ` HTTP ${details.httpStatus}` : '')
             + (details.problemType ? ` problem=${details.problemType}` : '');
           (options.progress ?? console.info)(log);
-          note(`cover ${recordDigest.slice(0, 16)} pending (${reason})`);
+          note(`cover pending ${recordDigest.slice(0, 16)} (${reason})`);
         };
         const mapped = journal.native[image.record];
         if (mapped?.kind !== 'work' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(mapped.id)) {

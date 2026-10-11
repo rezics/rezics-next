@@ -8,6 +8,8 @@ import { freezeSnapshot } from '../../../scripts/datasets/snapshot.ts';
 import { importDataset } from '../../../scripts/datasets/import.ts';
 import { repository } from '../../../scripts/datasets/store.ts';
 import type { DatasetRecord, DatasetSnapshot, DatasetSource } from '../../../scripts/datasets/types.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { MediaRenditionWorker } from '../../../services/main/src/modules/media-rendition/worker.ts';
 import { LocalImageTransformer } from '../../../services/main/src/modules/media-rendition/transform.ts';
@@ -41,6 +43,24 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 async function image(color: { r: number; g: number; b: number }) {
   return sharp({ create: { width: 320, height: 180, channels: 3, background: color } })
     .png().toBuffer();
+}
+
+async function catchUpContentProjection(stack: MediaStack) {
+  const command = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!,
+    Bun.env.FUSEKI_COMMAND_TOKEN!);
+  const relayEnv = { ...stack.env, fuseki: command };
+  const cut = await stack.content.ownerPosition();
+  for (let step = 0; step < 64; step++) {
+    const checkpoint = await stack.contentCursor.read(stack.contentConsumer);
+    if (checkpoint.dataEpoch !== cut.dataEpoch)
+      throw new Error('Content owner epoch changed before cover search preparation');
+    if (checkpoint.sequence === cut.sequence) return;
+    if (BigInt(checkpoint.sequence) > BigInt(cut.sequence))
+      throw new Error('Content projection passed the cover search source cut');
+    if (!await relayContentProjectionOnce(relayEnv, stack.content, stack.contentCursor, stack.contentConsumer))
+      throw new Error('Content projection stopped before the cover search source cut');
+  }
+  throw new Error('Content projection exceeded its cover search preparation budget');
 }
 
 async function frozenCover(root: string, bytes: Buffer, title: string): Promise<DatasetSnapshot> {
@@ -151,7 +171,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const initial = await importDataset(root, snapshot, importOptions);
       expect(initial.completed).toBe(true);
       expect(initial.coverResults.map(result => result.status)).toEqual(['imported']);
-      expect(initial.limitations.some(item => /^cover [a-f0-9]{16} pending \(/.test(item))).toBe(false);
+      expect(initial.limitations.some(item => /^cover pending [a-f0-9]{16} \(/.test(item))).toBe(false);
       const initialJournal = JSON.parse(readFileSync(initial.receiptFile, 'utf8')) as ImportJournal;
       const imported = initialJournal.native[record.key]!;
       const work = imported.id;
@@ -164,6 +184,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         `publication:select:${imported.receipt.mainVersion}`, 'publication.select', mainSelectionDigest(publishInput)),
       publishInput);
       expect(publication.outcome).toBe('succeeded');
+      await catchUpContentProjection(stack);
 
       const expectedCredit = { kind: 'copyright', text: 'Evidence Holder', holder: 'Evidence Holder',
         source: { name: 'Bangumi', href: record.sourceUrl }, permittedRole: 'cover' };
