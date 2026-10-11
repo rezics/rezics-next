@@ -8,13 +8,30 @@ import { Progress } from '@rezics/ui/progress';
 import { CheckIcon } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import type { EpisodeApi, EpisodeProgress as Mark } from './episode-api.ts';
-import { type Episode, markPosition, reach, standingOf, totalOf } from './episodes.ts';
+import { type Episode, type Standing, markPosition, reach, standingOf, totalOf } from './episodes.ts';
 import type { Copy } from './messages.ts';
 
 const nameOf = (episode: Episode, t: Copy) =>
   episode.label ?? (episode.special ? t.specialLabel : t.episodeLabel)({ number: String(episode.number) });
 
 type Selected = { episode: Episode; mark: Mark | 'loading' | 'failed' };
+
+/**
+ * The line under Episodes: an unbroken run from episode 1, or the furthest watched when that run is
+ * empty, or none yet. Continue already uses the episode after the furthest completed (`read.next`);
+ * the sparse case takes the same place and names the episode before it.
+ */
+export function episodeProgressWhere(read: Standing, total: number | null, t: Copy): string {
+  if (read.through) {
+    return total !== null
+      ? t.watchedThroughOf({ number: String(read.through.number), total: String(total) })
+      : t.watchedThrough({ number: String(read.through.number) });
+  }
+  const last = read.next
+    ? (read.next.number > 1 ? read.next.number - 1 : null)
+    : (read.mains.items.at(-1)?.number ?? null);
+  return last === null ? t.noneWatched : t.lastWatched({ number: String(last) });
+}
 
 /**
  * Where the reader stands in a series' episodes, and the ways to move: mark the next one in a tap,
@@ -94,10 +111,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.episodes}</h2>
 
     <div className="grid gap-2">
-      <p className="font-medium text-base" data-where>
-        {!read.through ? t.noneWatched : total !== null
-          ? t.watchedThroughOf({ number: String(read.through.number), total: String(total) })
-          : t.watchedThrough({ number: String(read.through.number) })}</p>
+      <p className="font-medium text-base" data-where>{episodeProgressWhere(read, total, t)}</p>
       {total !== null && read.through
         ? <Progress value={Math.round((read.through.number / total) * 100)} aria-label={t.episodes} /> : null}
     </div>

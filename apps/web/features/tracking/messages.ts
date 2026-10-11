@@ -93,6 +93,7 @@ const en = {
   watchedThrough: insert('Watched through episode {{number}}', { number: String }),
   watchedThroughOf: insert('Watched through episode {{number}} of {{total}}', { number: String, total: String }),
   noneWatched: 'No episode watched yet',
+  lastWatched: insert('Last watched: episode {{number}}', { number: String }),
   continueFrom: insert('Continue from episode {{number}}', { number: String }),
   markNext: insert('Mark episode {{number}} watched', { number: String }),
   allWatched: 'You have watched every episode.',

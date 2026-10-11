@@ -80,6 +80,8 @@ export default {
   watchedThrough: insert('第{{number}}話まで視聴済み', { number: String }),
   watchedThroughOf: insert('全{{total}}話のうち第{{number}}話まで視聴済み', { number: String, total: String }),
   noneWatched: 'まだ視聴したエピソードはありません',
+  // Machine-drafted; needs native review.
+  lastWatched: insert('前回視聴：第{{number}}話', { number: String }),
   continueFrom: insert('第{{number}}話から続ける', { number: String }),
   markNext: insert('第{{number}}話を視聴済みにする', { number: String }),
   allWatched: 'すべてのエピソードを視聴しました。',

@@ -125,4 +125,20 @@ export const ThousandEpisodes: Story = {
   },
 };
 
+/** Only a late episode watched: the summary names that episode, not "nothing watched". */
+export const SparseLastWatched: Story = {
+  args: { main: withEpisodes((() => {
+    const episodes = createMemoryEpisodes({ ...episodeSeries({ mains: 1002 }), page: 20 });
+    const item = episodes.mains[1000]!;
+    episodes.progress.set(item.occurrence, { completed: true, position: 'episode:1001', version: 1 });
+    return episodes;
+  })()) },
+  async play({ canvasElement }) {
+    const view = panel(canvasElement);
+    await view.findByText('Last watched: episode 1001');
+    await expect(view.getByText('Continue from episode 1002')).toBeVisible();
+    await expect(view.queryByRole('progressbar')).toBeNull();
+  },
+};
+
 export const Desktop: Story = { globals: { viewport: { value: 'desktop' } } };

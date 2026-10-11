@@ -80,6 +80,8 @@ export default {
   watchedThrough: insert('已看到第 {{number}} 集', { number: String }),
   watchedThroughOf: insert('已看到第 {{number}} 集，共 {{total}} 集', { number: String, total: String }),
   noneWatched: '還沒有看過任何一集',
+  // Machine-drafted; needs native review.
+  lastWatched: insert('上次看到：第 {{number}} 集', { number: String }),
   continueFrom: insert('從第 {{number}} 集繼續', { number: String }),
   markNext: insert('標記第 {{number}} 集為已看', { number: String }),
   allWatched: '你已經看完所有劇集。',
