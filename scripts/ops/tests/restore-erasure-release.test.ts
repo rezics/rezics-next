@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import type {
+  FusekiClient,
+  MembershipPreparationInput,
+  MembershipPreparationResult,
+} from '../../../services/main/src/infrastructure/fuseki.ts';
 import {
   finishOperatorRestore,
   restoreRecoverySet,
@@ -12,14 +16,34 @@ import { RecoveryBudget } from '../recovery-set.ts';
 const dataEpoch = '00000000-0000-4000-8000-000000000051';
 const routingEpoch = '00000000-0000-4000-8000-000000000052';
 
+function membershipResult(complete: boolean): MembershipPreparationResult {
+  return {
+    status: 'committed',
+    complete,
+    placements: 0,
+    receipts: [],
+    examined: 0,
+    phase: complete ? 4 : 0,
+    after: '',
+    restarted: false,
+  };
+}
+
 function restored(
   options: {
     graphOpen?: boolean;
     fence?: { open: boolean; generation: string } | null;
     epochFailure?: boolean;
+    membership?: { statuses?: unknown[]; preparations?: unknown[] };
   } = {},
 ) {
   const events: string[] = [];
+  const preparationCalls: MembershipPreparationInput[] = [];
+  const statuses = [...(options.membership?.statuses ?? [
+    { needsPreparation: true },
+    { needsPreparation: false },
+  ])];
+  const preparations = [...(options.membership?.preparations ?? [membershipResult(true)])];
   const context: OperatorRestoreReleaseContext = {
     budget: new RecoveryBudget(),
     manifest: {
@@ -34,6 +58,19 @@ function restored(
         expect(query).toContain(dataEpoch);
         expect(query).toContain(routingEpoch);
         return { boolean: options.graphOpen ?? true };
+      },
+      membershipPreparationStatus: async () => {
+        events.push('membership-status');
+        const status = statuses.shift();
+        if (status instanceof Error) throw status;
+        return status;
+      },
+      membershipPrepare: async (input: MembershipPreparationInput) => {
+        events.push('membership-prepare');
+        preparationCalls.push(input);
+        const result = preparations.shift();
+        if (result instanceof Error) throw result;
+        return result as MembershipPreparationResult;
       },
     } as FusekiClient,
     pools: {
@@ -83,7 +120,7 @@ function restored(
     finishOperatorRestore(context, checks, 'recovery-cut-successor', () => {
       events.push('independent-frontier-and-source-check');
     });
-  return { context, checks, events, finish };
+  return { context, checks, events, preparationCalls, finish };
 }
 
 test('operator restore default and incomplete adapters hold before reading or creating a target', async () => {
@@ -112,15 +149,185 @@ test('operator finish observes both owner releases before enabling logins, using
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+    'membership-status',
     'graph-release-observation',
     'access-release-observation',
     'advance-owner-epochs',
     'enable-owner-logins',
   ]);
+  expect(fixture.preparationCalls).toHaveLength(1);
+  expect(fixture.preparationCalls[0]).toMatchObject({ dataEpoch, routingEpoch });
+  expect(Number.isSafeInteger(fixture.preparationCalls[0]?.deadline)).toBe(true);
   expect(Object.keys(fixture.context.budget.phases)).toEqual([
     'owner-reconciliation-api',
+    'membership-preparation',
     'release-observation-and-logins',
   ]);
+});
+
+test('operator finish confirms an already complete native membership proof without preparing again', async () => {
+  const fixture = restored({
+    membership: { statuses: [{ needsPreparation: false }, { needsPreparation: false }], preparations: [] },
+  });
+  await fixture.finish();
+  await fixture.finish();
+  expect(fixture.events.filter((event) => event === 'membership-status')).toHaveLength(2);
+  expect(fixture.events).not.toContain('membership-prepare');
+  expect(fixture.events).toContain('enable-owner-logins');
+});
+
+test('operator finish resumes native membership progress across bounded turns', async () => {
+  const fixture = restored({
+    membership: {
+      preparations: [membershipResult(false), membershipResult(true)],
+    },
+  });
+  await fixture.finish();
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+    'membership-prepare',
+    'membership-status',
+    'graph-release-observation',
+    'access-release-observation',
+    'advance-owner-epochs',
+    'enable-owner-logins',
+  ]);
+  expect(fixture.preparationCalls).toHaveLength(2);
+  expect(fixture.preparationCalls.map((call) => [call.dataEpoch, call.routingEpoch])).toEqual([
+    [dataEpoch, routingEpoch],
+    [dataEpoch, routingEpoch],
+  ]);
+  expect(new Set(fixture.preparationCalls.map((call) => call.requestId)).size).toBe(2);
+  expect(fixture.preparationCalls[0]?.deadline).toBe(fixture.preparationCalls[1]?.deadline);
+});
+
+test('operator finish refuses release when membership status still needs preparation', async () => {
+  const fixture = restored({
+    membership: {
+      statuses: [{ needsPreparation: true }, { needsPreparation: true }],
+      preparations: [membershipResult(true)],
+    },
+  });
+  await expect(fixture.finish()).rejects.toThrow(
+    'Native membership preparation did not confirm completion',
+  );
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+    'membership-status',
+  ]);
+  expect(fixture.events).not.toContain('enable-owner-logins');
+});
+
+test.each([
+  undefined,
+  { needsPreparation: 'no' },
+] as const)('operator finish refuses an invalid native membership status (%j)', async (status) => {
+  const fixture = restored({ membership: { statuses: [status] } });
+  await expect(fixture.finish()).rejects.toThrow('Native membership preparation status is invalid');
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+  ]);
+  expect(fixture.events).not.toContain('enable-owner-logins');
+});
+
+test.each(['conflict', 'invalid', 'unknown-profile', 'deadline'] as const)(
+  'operator finish keeps logins held when native membership preparation is refused with %s',
+  async (status) => {
+    const fixture = restored({
+      membership: { preparations: [{ status }], },
+    });
+    await expect(fixture.finish()).rejects.toThrow(`Native membership preparation was refused (${status})`);
+    expect(fixture.events).toEqual([
+      'independent-frontier-and-source-check',
+      'authenticated-reconciliation',
+      'membership-status',
+      'membership-prepare',
+    ]);
+    expect(fixture.events).not.toContain('enable-owner-logins');
+  },
+);
+
+test('partial native membership progress cannot outlive the restore deadline', async () => {
+  const fixture = restored({
+    membership: { preparations: [membershipResult(false), membershipResult(true)] },
+  });
+  let now = 0;
+  fixture.context.budget = new RecoveryBudget(() => {
+    now += 70_000;
+    return now;
+  });
+  await expect(fixture.finish()).rejects.toThrow('600-second budget');
+  expect(fixture.preparationCalls).toHaveLength(1);
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+  ]);
+  expect(fixture.events).not.toContain('enable-owner-logins');
+});
+
+test('a stale restored membership epoch stops before release observation and login', async () => {
+  const fixture = restored({ membership: { preparations: [{ status: 'guard-unmatched' }] } });
+  await expect(fixture.finish()).rejects.toThrow('Restored membership preparation lineage changed');
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+  ]);
+  expect(fixture.events).not.toContain('enable-owner-logins');
+});
+
+test('lost native acknowledgment keeps logins held and the next finish resumes preparation', async () => {
+  const fixture = restored({
+    membership: {
+      statuses: [
+        { needsPreparation: true },
+        { needsPreparation: true },
+        { needsPreparation: false },
+      ],
+      preparations: [
+        membershipResult(false),
+        new Error('Membership preparation outcome unknown'),
+        membershipResult(true),
+      ],
+    },
+  });
+  await expect(fixture.finish()).rejects.toThrow('Membership preparation outcome unknown');
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+    'membership-prepare',
+  ]);
+  expect(fixture.events).not.toContain('enable-owner-logins');
+
+  const secondFinishStart = fixture.events.length;
+  await fixture.finish();
+  expect(fixture.events.slice(secondFinishStart)).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+    'membership-status',
+    'graph-release-observation',
+    'access-release-observation',
+    'advance-owner-epochs',
+    'enable-owner-logins',
+  ]);
+  expect(new Set(fixture.preparationCalls.map((call) => call.requestId)).size).toBe(3);
 });
 
 test.each([
@@ -151,6 +358,9 @@ test('a matched response cannot bypass the restored graph hold or a different li
   expect(fixture.events).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
+    'membership-status',
+    'membership-prepare',
+    'membership-status',
     'graph-release-observation',
   ]);
 });
@@ -170,6 +380,9 @@ test.each([
     expect(fixture.events).toEqual([
       'independent-frontier-and-source-check',
       'authenticated-reconciliation',
+      'membership-status',
+      'membership-prepare',
+      'membership-status',
       'graph-release-observation',
       'access-release-observation',
     ]);

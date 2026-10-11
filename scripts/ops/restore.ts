@@ -139,6 +139,41 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
         `Owner reconciliation did not verify the restore (${response.status}, ${body?.state ?? 'unknown'}, ${body?.disposition ?? 'unknown'})`,
       );
   });
+  await context.budget.phase('membership-preparation', async () => {
+    const initialStatus = await context.fuseki.membershipPreparationStatus();
+    if (typeof initialStatus?.needsPreparation !== 'boolean')
+      throw new Error('Native membership preparation status is invalid');
+    if (initialStatus.needsPreparation) {
+      const { MAIN_DATA_EPOCH: dataEpoch, MAIN_ROUTING_EPOCH: routingEpoch } = context.apps;
+      if (!dataEpoch || !routingEpoch)
+        throw new Error('Restored membership preparation lineage is unavailable');
+      const deadline = Date.now() + context.budget.remaining();
+      const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+      let complete = false;
+      while (Date.now() < deadline) {
+        context.budget.remaining();
+        const result = await context.fuseki.membershipPrepare(
+          { dataEpoch, routingEpoch, requestId: randomUUID(), deadline },
+          signal,
+        );
+        if (result.status === 'guard-unmatched')
+          throw new Error('Restored membership preparation lineage changed');
+        if (result.status !== 'committed')
+          throw new Error(`Native membership preparation was refused (${result.status})`);
+        if (typeof result.complete !== 'boolean')
+          throw new Error('Native membership preparation result is invalid');
+        if (result.complete) {
+          complete = true;
+          break;
+        }
+      }
+      if (!complete)
+        throw new Error('Native membership preparation exceeded its recovery deadline');
+      const confirmedStatus = await context.fuseki.membershipPreparationStatus();
+      if (typeof confirmedStatus?.needsPreparation !== 'boolean' || confirmedStatus.needsPreparation)
+        throw new Error('Native membership preparation did not confirm completion');
+    }
+  });
   await context.budget.phase('release-observation-and-logins', async () => {
     const { MAIN_DATA_EPOCH: dataEpoch, MAIN_ROUTING_EPOCH: routingEpoch } = context.apps;
     if (!dataEpoch || !routingEpoch || !/^[0-9]+$/.test(context.manifest.fenceGeneration))
