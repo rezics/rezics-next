@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { AdmissionRequest, VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { platformAdministratorProof, savePlatformAdministratorProof } from '../src/modules/access/platform-administrator.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 
@@ -109,6 +110,57 @@ async function grant(principalId: string, actingSubject: string,
   return { representationId, grantId };
 }
 
+async function platformGrant(principalId: string, actingSubject: string,
+  permission: string, scope: string) {
+  const grantId = randomUUID();
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+  await pool.query(`INSERT INTO access.principal_permission_grant
+    (id, issuer_subject, principal_id, scope_id, action, valid_until)
+    VALUES ($1,$2,$3,$4,$5,'infinity')`, [grantId, actingSubject, principalId, scope, permission]);
+  await pool.query(`INSERT INTO access.platform_grant_episode
+    (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
+    VALUES ($1,$1,$2,$3,$4,$5,$6)`, [grantId, actingSubject, permission, scope, principalId,
+    `urn:rezics:access-receipt:${digest(`${grantId}:${permission}:${scope}`)}`]);
+}
+
+async function platformAdministratorGrants(principalId: string, actingSubject: string,
+  action: string, scope: string) {
+  await platformGrant(principalId, actingSubject, 'platform:use:platform-admin', 'platform:access');
+  await platformGrant(principalId, actingSubject, `platform:resource:${action}`, scope);
+}
+
+async function legacyAdministratorAdmission(input: AdmissionRequest, principalId: string) {
+  const id = randomUUID();
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [input.scope]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO access.admission
+      (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
+       authority_epoch, expires_at, state, authority_witness)
+      SELECT $1,$2,$3,$4,$5,$6,$7,g.authority_epoch,clock_timestamp() + interval '1 minute','registered',
+        jsonb_build_array(jsonb_build_object('table','principal','id',($2::uuid)::text,'generation','0'),
+          jsonb_build_object('table','authority_subject','id',$3::text,'generation','0'))
+      FROM access.scope_gate g WHERE g.id = $4`,
+    [id, principalId, input.actingSubject, input.scope, input.action, input.idempotencyKey, input.requestDigest]);
+    await client.query(`INSERT INTO access.admission_receipt
+      (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
+      VALUES ($1,$2,$3,$4,$5,'registered')`,
+    [id, principalId, input.action, input.idempotencyKey, input.requestDigest]);
+    const proof = await platformAdministratorProof(client, principalId, input.actingSubject, true,
+      { action: input.action, scope: input.scope });
+    expect(proof).not.toBeNull();
+    await savePlatformAdministratorProof(client, id, proof!);
+    await client.query('COMMIT');
+    return id;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 function request(identity: VerifiedPrincipal, actingSubject: string, action: string, scope: string,
   extra: Partial<AdmissionRequest> = {}): AdmissionRequest {
   const key = `reply-authorship-${randomUUID()}`;
@@ -210,6 +262,55 @@ test('explicit draft and create grants cannot replace Person proof for Org or le
   });
   await grant(person.principalId, person.agent, 'content.draft', malformed.scope);
   await expect(person.access.register(malformed)).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('a pending Org reply draft with saved administrator proof stays nondispatchable on replay and claim', async () => {
+  const identity = principal();
+  const organization = await actor(identity, 'organization');
+  const rootTarget = nativeId();
+  const rootRevision = randomUUID();
+  const input = request(identity, organization.agent, 'content.draft', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision,
+  });
+  await platformAdministratorGrants(organization.principalId, organization.agent,
+    input.action, input.scope);
+  const id = await legacyAdministratorAdmission(input, organization.principalId);
+
+  expect(await organization.access.register(input)).toMatchObject({
+    id, state: 'registered', dispatchEligible: false, replayed: true,
+  });
+  await expect(organization.access.claim(id, input.requestDigest, identity))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('a Person with platform administrator and resource grants still saves the baseline reply proof', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const rootTarget = nativeId();
+  const rootRevision = randomUUID();
+  const input = request(identity, person.agent, 'content.draft', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision,
+  });
+  await platformAdministratorGrants(person.principalId, person.agent, input.action, input.scope);
+
+  const client = await pool.connect();
+  try {
+    expect(await platformAdministratorProof(client, person.principalId, person.agent, true,
+      { action: input.action, scope: input.scope })).not.toBeNull();
+  } finally {
+    client.release();
+  }
+
+  const admitted = await person.access.register(input);
+  expect(admitted.dispatchEligible).toBe(true);
+  expect((await pool.query(`SELECT b.provision_id, b.related_work, b.source_revision, p.agent_kind
+    FROM access.baseline_admission b JOIN access.agent_provision p ON p.id = b.provision_id
+    WHERE b.admission_id = $1`, [admitted.id])).rows[0]).toEqual({
+    provision_id: person.provisionId, related_work: rootTarget,
+    source_revision: rootRevision, agent_kind: 'person',
+  });
+  expect((await pool.query('SELECT admission_id FROM access.platform_administrator_admission WHERE admission_id = $1',
+    [admitted.id])).rowCount).toBe(0);
 });
 
 test('an installed authoring policy refuses baseline and explicit-grant substitution', async () => {

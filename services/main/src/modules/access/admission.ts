@@ -1120,7 +1120,20 @@ export class AccessAdmissionRegistry {
       }
 
       const zonePage = resolveZonePageContent(request);
-      const savedAdministrator = existing ? await savedPlatformAdministratorProof(client, existing.id) : null;
+      const savedBaseline = existing ? await savedBaselineProof(client, existing.id) : null;
+      // Old reply drafts may have only an administrator or generic grant proof.
+      // Keep their receipt replayable, but never let a nonbaseline proof dispatch.
+      if (existing && memberReply && !savedBaseline) {
+        if (!transaction) await client.query('COMMIT');
+        return { id: existing.id, principalId: existing.principal_id,
+          actingSubject: existing.acting_subject, authorityPath: existing.authority_path,
+          scope: existing.scope_id, action: existing.action, idempotencyKey: existing.idempotency_key,
+          requestDigest: existing.request_digest, authorityEpoch: existing.authority_epoch,
+          registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
+          state: existing.state as RegisteredAdmission['state'], dispatchEligible: false, replayed: true };
+      }
+      const savedAdministrator = existing && !memberReply
+        ? await savedPlatformAdministratorProof(client, existing.id) : null;
       if (existing && savedAdministrator) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
@@ -1147,7 +1160,6 @@ export class AccessAdmissionRegistry {
           dispatchEligible, replayed: true };
       }
 
-      const savedBaseline = existing ? await savedBaselineProof(client, existing.id) : null;
       if (existing && savedBaseline) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
@@ -1173,18 +1185,6 @@ export class AccessAdmissionRegistry {
           requestDigest: existing.request_digest, authorityEpoch: existing.authority_epoch,
           registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
           state: existing.state as RegisteredAdmission['state'], dispatchEligible, replayed: true };
-      }
-
-      // Older reply admissions may have only a generic action grant witness.
-      // Preserve their receipt, but never let that witness authorize dispatch.
-      if (existing && memberReply) {
-        if (!transaction) await client.query('COMMIT');
-        return { id: existing.id, principalId: existing.principal_id,
-          actingSubject: existing.acting_subject, authorityPath: existing.authority_path,
-          scope: existing.scope_id, action: existing.action, idempotencyKey: existing.idempotency_key,
-          requestDigest: existing.request_digest, authorityEpoch: existing.authority_epoch,
-          registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
-          state: existing.state as RegisteredAdmission['state'], dispatchEligible: false, replayed: true };
       }
 
       // A retry may recover the immutable receipt after authority changes. Its
@@ -1286,6 +1286,7 @@ export class AccessAdmissionRegistry {
       if (participationDenied) throw participationDenied;
       authoritySources.push(...participationSources);
       const administratorCandidate = !existing && zonePage.kind !== 'refused' && authorityPath === 'represented-agent'
+        && !memberReply
         && platformAdministratorAction(request.action, request.scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
         ? await platformAdministratorProof(client, principalId, request.actingSubject, true,
@@ -1683,6 +1684,13 @@ export class AccessAdmissionRegistry {
         idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
       });
       const administrator = await savedPlatformAdministratorProof(client, row.id);
+      const baseline = await savedBaselineProof(client, row.id);
+      // Administrator admissions do not retain reply-root metadata. A saved
+      // Zone target remains explicit; other nonbaseline content drafts cannot
+      // be distinguished from an older member-reply intent at claim time.
+      if (row.action === 'content.draft' && administrator && !administrator.resolved_zone_page && !baseline) {
+        throw new AdmissionDenied('member reply draft requires a Person baseline admission');
+      }
       if (administrator) {
         let current: VerifiedPrincipal | undefined;
         try { current = await accountPrincipal?.currentAssertion?.(); }
@@ -1715,7 +1723,6 @@ export class AccessAdmissionRegistry {
         [row.principal_id, row.acting_subject, row.action, row.scope_id]);
         if (!current.rowCount) throw new AdmissionDenied('Reviewer authority changed before claim');
       }
-      const baseline = await savedBaselineProof(client, row.id);
       if (baseline) {
         const identity = principal.rows[0]!;
         let current: VerifiedPrincipal | undefined;
