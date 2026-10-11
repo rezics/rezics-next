@@ -73,9 +73,11 @@ read for the batch. Character, Role and RelationDefinition state goes through
 the semantic owner's exact current read after an Access check; Context state
 goes through its disclosure-aware owner read. The latter owner reads currently
 cost up to four and two graph queries per distinct reference, respectively,
-and semantic Access checks cost one query per reference. They are included in
-the response cost counters; a 64-item request is the hard bound. A projection
-adds its parts: its subject and frames are summarized as ordinary references in
+and semantic Access checks cost one query per reference. The reported public
+`cost` is the REQUEST-SHAPED unit (`min(requested ids, 64) + 3` graph units),
+identical for hidden, absent and visible ids, and NOT a measurement of physical
+reads; bounding the readers' own physical reads is a growth-check concern. A
+projection adds its parts: its subject and frames are summarized as ordinary references in
 extra pages of 64 on the same graph generation, and its disclosure is the most
 restrictive of theirs ([projections](../projection/README.md)).
 `access-batch.ts` evaluates the current gate, principal, represented subject and grant under the Access recovery fence.
