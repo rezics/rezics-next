@@ -8,8 +8,11 @@ import { appendContentEvent } from '../../content/src/event-sequencer.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { ErasureUnavailable, journalErasure, markErasureBlocked, markErasureSuppressed }
+import { completeErasureTarget, ErasureUnavailable, journalErasure, markErasureBlocked, markErasureSuppressed,
+  readErasure, sha256 }
   from '../src/modules/erasure/journal.ts';
+import { probeContentErasure } from '../src/modules/erasure/content.ts';
+import { readGraphErasureProof } from '../src/modules/erasure/graph.ts';
 import { completePendingContentErasures, ErasureService, OPEN_SOURCE_PROBE } from '../src/modules/erasure/request.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -21,6 +24,9 @@ const root = resolve(import.meta.dir, '../../..');
 const quote = 'OLD-QUOTE-ζ-source';
 const authored = 'authored annotation stays';
 const manifestDigest = 'cd'.repeat(32);
+const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
+  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value)
+    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, item]) => [key, canonical(item)])) : value;
 
 let state = '';
 let cluster: PostgresCluster | undefined;
@@ -170,6 +176,25 @@ async function oldErasure(target: Env, options: Options = {}): Promise<Fixture> 
       SELECT id, $2, $3 FROM unnest($1::uuid[]) AS id`, [ids, journaled.erasureId, journaled.erasureEpoch]);
   }
   nativeSuppressed = new Set([...nativeSuppressed, ...ids]);
+  // Model durable historical byte/graph completion, with leftover quote sources
+  // from before source clearing existed. Pending/stale/unsupported fixtures must
+  // remain unqualified; remediation still has to freshly prove all source absence.
+  if ((options.kind ?? 'revision') === 'revision'
+    && (options.targetKind ?? 'content_revision') === 'content_revision'
+    && options.stage !== 'requested' && options.stage !== 'blocked'
+    && !options.mismatchedOperation && options.tombstone !== false && ids.length <= 64) {
+    const graphProof = await readGraphErasureProof(graph.fuseki, lineage,
+      journaled.erasureId, journaled.erasureEpoch, ids);
+    const contentProofs = await probeContentErasure(pool, journaled.erasureId, ids, journaled.erasureEpoch);
+    const report = await readErasure(service.relay, journaled.erasureId);
+    for (const target of report.targets) {
+      expect(contentProofs.get(target.ref)).toBe('erased');
+      await completeErasureTarget(service.relay, report.erasureId, target.ordinal,
+        sha256(JSON.stringify(canonical({ erasureId: report.erasureId, erasureEpoch: report.erasureEpoch,
+          target: { ordinal: target.ordinal, owner: target.owner, kind: target.kind, ref: target.ref },
+          graphProof, contentState: contentProofs.get(target.ref) }))));
+    }
+  }
   return { erasureId: journaled.erasureId, epoch: journaled.erasureEpoch, admission, resource, revisions: ids,
     evidence, receiptDigest: manifestDigest, env: target };
 }

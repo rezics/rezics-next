@@ -709,8 +709,8 @@ test(
       expect(elapsedMs).toBeLessThan(600_000);
     }
   },
-  // 600 s is a hang deadline. The same genuine source plus one physical copy
-  // measured 242,936 ms in QA20261011t220649-f78dff; three serial copies and
-  // every operator attempt log their measured durations in this file's QA run.
+  // 600 s is a hang deadline. The source plus one copy measured 242,936 ms in
+  // QA20261011t220649-f78dff; this complete three-copy drill measured 204,240 ms
+  // (205.91 s file) in QA20261011t233604-c97d55. Attempts each stay under 180 s.
   qaStartupTestTimeout(600_000),
 );

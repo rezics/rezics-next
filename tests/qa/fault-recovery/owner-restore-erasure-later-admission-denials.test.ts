@@ -471,7 +471,7 @@ test(
                   principalId: fixture.principalId,
                   admissionId: randomUUID(),
                   authorityEpoch: fixture.generation,
-                  targets: [{ kind: 'content_revision', ref: fixture.revisionId }],
+                  targets: [{ kind: 'content_revision', ref: randomUUID() }],
                 }),
               );
             const current = structuredClone(fixture.currentCoverage);
