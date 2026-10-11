@@ -6,7 +6,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { workRead, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { FEED_COST } from './contract.ts';
-import { compareMainFeedPosition, requireMainFeedCoverage } from './frame.ts';
+import { compareMainFeedPosition, mainFeedPosition, requireMainFeedCoverage } from './frame.ts';
 import { feedReferences, feedReviewSources, feedSources, reviewActivityId } from './source.ts';
 import type { FeedStore } from './store.ts';
 
@@ -33,8 +33,8 @@ export class FeedRefreshWorker {
       const checkpointOrder = compareMainFeedPosition(checkpoint.data_epoch, checkpoint.sequence, relay);
       if (checkpointOrder > 0) throw new WorkReadUnavailable('Feed exceeds relay');
       if (checkpointOrder !== 0 || checkpoint.after_id !== '\uffff') {
-        const sources = await feedReferences(session, { epoch: relay.dataEpoch, through: relay.sequence,
-          afterSequence: checkpoint.sequence, afterId: checkpoint.after_id });
+        const sources = await feedReferences(session, this.relay, { after: mainFeedPosition(checkpoint.data_epoch, checkpoint.sequence),
+          through: relay, afterId: checkpoint.after_id });
         // Group only currently admitted activity identities. Hidden references still
         // enter the projection independently and are never dropped at ingestion.
         const admitted = new Map((await feedSources(session, { ids: sources.slice(0, FEED_COST.refreshItems).map(item => item.id) }))

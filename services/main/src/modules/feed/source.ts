@@ -1,3 +1,4 @@
+import type { Pool } from 'pg';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { publicWork, unerased, WorkReadMissing, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
@@ -8,6 +9,7 @@ import type { ReviewRow } from '../review/store.ts';
 import { GLOBAL_RATING_POPULATION_OWNER, GLOBAL_RATING_POPULATION } from '../rating/global.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { resolveTargets } from '../target/resolve.ts';
+import { compareRelayPositions, MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 
 export interface FeedSource { id: string; sequence: string; kind: FeedKind; target: string;
   work: string | null; actor: string; realm: string | null; zone: string | null;
@@ -16,7 +18,8 @@ export interface FeedSource { id: string; sequence: string; kind: FeedKind; targ
   readerReview?: ReviewRow;
   /** Request-local exact bytes already admitted for a published card. */
   publishedContent?: Extract<import('../../../../content/src/core.ts').ExactReadResult,{ status: 'available' }> }
-export interface FeedCut { epoch: string; through: string; afterSequence: string; afterId: string }
+export interface FeedReferenceCut { after: RelayHandoffPosition; through: RelayHandoffPosition; afterId: string }
+/** `sequence` is the Main stream position persisted with a Feed item. */
 export interface FeedReference { id: string; sequence: string; kind: FeedKind; work?: string | null;
   realm?: string | null; target?: string; actor?: string; occurrence?: string;
   contentRevision?: string; groupKind?: 'chapter' | 'hub' }
@@ -74,21 +77,144 @@ export async function feedReviewSources(session: WorkReadSession, ids: readonly 
   return result.filter((source): source is FeedSource => !!source);
 }
 
+interface GraphSourcePosition { dataEpoch: string; sequence: string }
+interface DeliveredReferencePosition {
+  graph_sequence: string;
+  stream_sequence: string;
+  dataset_id: string;
+  graph_epoch: string;
+  relay_scope: string;
+  relay_epoch: string;
+  envelope_stream_sequence: string;
+}
+
+function requireSequence(value: string | undefined): string {
+  if (!value || !/^(0|[1-9][0-9]{0,99})$/.test(value))
+    throw new WorkReadUnavailable('Feed source position is unavailable');
+  return value;
+}
+
+/** Relay envelopes carry both domains. Read the graph cut from that durable
+ * binding instead of treating a Main stream sequence as a graph revision. */
+async function graphPositionAtRelay(relay: Pick<Pool, 'query'>, position: RelayHandoffPosition): Promise<GraphSourcePosition> {
+  if (position.streamScope !== MAIN_RELAY_STREAM_SCOPE) throw new WorkReadUnavailable('Main feed stream position is unavailable');
+  if (position.sequence === '0') return { dataEpoch: position.dataEpoch, sequence: '0' };
+  const rows = (await relay.query<{
+    stream_sequence: string; dataset_id: string | null; graph_epoch: string | null; graph_sequence: string | null;
+    relay_scope: string | null; relay_epoch: string | null; envelope_stream_sequence: string | null;
+  }>(`SELECT DISTINCT sequence::text AS stream_sequence,
+      envelope #>> '{data,sourcePosition,datasetId}' AS dataset_id,
+      envelope #>> '{data,sourcePosition,dataEpoch}' AS graph_epoch,
+      envelope #>> '{data,sourcePosition,sequence}' AS graph_sequence,
+      envelope #>> '{data,relayPosition,streamScope}' AS relay_scope,
+      envelope #>> '{data,relayPosition,dataEpoch}' AS relay_epoch,
+      envelope #>> '{data,relayPosition,sequence}' AS envelope_stream_sequence
+    FROM relay.delivered_event WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3::numeric LIMIT 2`,
+  [position.streamScope, position.dataEpoch, position.sequence])).rows;
+  const row = rows[0];
+  if (rows.length !== 1 || !row || row.stream_sequence !== position.sequence || row.dataset_id !== 'product'
+    || row.graph_epoch !== position.dataEpoch || row.relay_scope !== position.streamScope
+    || row.relay_epoch !== position.dataEpoch || row.envelope_stream_sequence !== position.sequence) {
+    throw new WorkReadUnavailable('Main feed graph reference cut is unavailable');
+  }
+  return { dataEpoch: row.graph_epoch, sequence: requireSequence(row.graph_sequence ?? undefined) };
+}
+
+async function graphPositionAtReference(session: WorkReadSession, epoch: string, id: string): Promise<GraphSourcePosition> {
+  const rows = await session.query(`SELECT DISTINCT ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(id)} rv:dataEpoch ${lit(epoch)} ; rv:sequence ?sequence }
+  } LIMIT 2`, 2);
+  if (rows.length !== 1 || !rows[0]?.sequence) throw new WorkReadUnavailable('Feed reference cursor is unavailable');
+  return { dataEpoch: epoch, sequence: requireSequence(rows[0].sequence.value) };
+}
+
+async function mainSequencesForGraphReferences(relay: Pick<Pool, 'query'>, epoch: string,
+  through: RelayHandoffPosition, sequences: readonly string[]): Promise<Map<string, string>> {
+  if (!sequences.length) return new Map();
+  const rows = (await relay.query<DeliveredReferencePosition>(`SELECT DISTINCT
+      envelope #>> '{data,sourcePosition,sequence}' AS graph_sequence,
+      sequence::text AS stream_sequence,
+      envelope #>> '{data,sourcePosition,datasetId}' AS dataset_id,
+      envelope #>> '{data,sourcePosition,dataEpoch}' AS graph_epoch,
+      envelope #>> '{data,relayPosition,streamScope}' AS relay_scope,
+      envelope #>> '{data,relayPosition,dataEpoch}' AS relay_epoch,
+      envelope #>> '{data,relayPosition,sequence}' AS envelope_stream_sequence
+    FROM relay.delivered_event
+    WHERE stream_scope = $1 AND data_epoch = $2
+      AND envelope #>> '{data,sourcePosition,sequence}' = ANY($3::text[])`,
+  [MAIN_RELAY_STREAM_SCOPE, epoch, [...new Set(sequences)]] )).rows;
+  const result = new Map<string, string>();
+  for (const row of rows) {
+    const graphSequence = requireSequence(row.graph_sequence);
+    const streamSequence = requireSequence(row.stream_sequence);
+    if (row.dataset_id !== 'product' || row.graph_epoch !== epoch || row.relay_scope !== MAIN_RELAY_STREAM_SCOPE
+      || row.relay_epoch !== epoch || row.envelope_stream_sequence !== streamSequence
+      || compareRelayPositions({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: epoch, sequence: streamSequence }, through) > 0) {
+      throw new WorkReadUnavailable('Feed reference relay position is unavailable');
+    }
+    const previous = result.get(graphSequence);
+    if (previous !== undefined && previous !== streamSequence)
+      throw new WorkReadUnavailable('Ambiguous feed reference relay position');
+    result.set(graphSequence, streamSequence);
+  }
+  if (sequences.some(sequence => !result.has(sequence)))
+    throw new WorkReadUnavailable('Feed reference relay position is unavailable');
+  return result;
+}
+
 /** Ingestion retains only opaque references, including currently hidden ones.
  * Otherwise a later disclosure/review change could never reveal an older
  * activity. Hydration below is always the independent current public gate. */
-export async function feedReferences(session: WorkReadSession, cut: FeedCut): Promise<FeedReference[]> {
+export async function feedReferences(session: WorkReadSession, relay: Pick<Pool, 'query'>,
+  cut: FeedReferenceCut): Promise<FeedReference[]> {
+  const after = cut.after;
+  const through = cut.through;
+  try {
+    if (after.streamScope !== MAIN_RELAY_STREAM_SCOPE || after.dataEpoch !== session.position.dataEpoch)
+      throw new Error('feed cursor position changed');
+    compareRelayPositions(after, through);
+  } catch (error) {
+    throw new WorkReadUnavailable('Main feed stream position is unavailable', { cause: error });
+  }
+  const afterRelayGraph = await graphPositionAtRelay(relay, after);
+  const afterGraph = cut.afterId && cut.afterId !== '\uffff'
+    ? await graphPositionAtReference(session, session.position.dataEpoch, cut.afterId)
+    : afterRelayGraph;
+  const throughGraph = compareRelayPositions(after, through) === 0
+    ? afterRelayGraph : await graphPositionAtRelay(relay, through);
+  if (afterGraph.dataEpoch !== session.position.dataEpoch || throughGraph.dataEpoch !== session.position.dataEpoch
+    || BigInt(afterGraph.sequence) > BigInt(throughGraph.sequence)
+    || BigInt(throughGraph.sequence) > BigInt(requireSequence(session.position.sequence))) {
+    throw new WorkReadUnavailable('Feed graph reference cut is unavailable');
+  }
+  if (cut.afterId && cut.afterId !== '\uffff') {
+    if (afterRelayGraph.sequence !== afterGraph.sequence) throw new WorkReadUnavailable('Feed reference cursor moved');
+  } else if (cut.afterId === '' && after.sequence !== '0') {
+    throw new WorkReadUnavailable('Feed reference cursor is unavailable');
+  }
   const rows = await session.query(`SELECT DISTINCT ?id ?sequence ?kind WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
-      ?id rv:dataEpoch ${lit(cut.epoch)} ; rv:sequence ?sequence ; a ?type .
+      ?id rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:sequence ?sequence ; a ?type .
       VALUES (?type ?kind) { (rv:PublicationSelection "work") (rv:StatementDecision "decision")
         (rv:RealmReplyPlacement "reply") (rv:CollectionRevision "collection") (rv:ContentSearchEligibilityDecision "contribution") }
-      FILTER(?sequence <= ${cut.through})
-      FILTER(?sequence > ${cut.afterSequence} || (?sequence = ${cut.afterSequence} && STR(?id) > ${lit(cut.afterId)}))
+      FILTER(?sequence <= ${throughGraph.sequence})
+      FILTER(?sequence > ${afterGraph.sequence} || (?sequence = ${afterGraph.sequence} && STR(?id) > ${lit(cut.afterId)}))
     } } ORDER BY ?sequence STR(?id) LIMIT ${FEED_COST.refreshItems + 1}`, FEED_COST.refreshItems + 1);
   if (rows.some(row => !row.id || !row.sequence || !row.kind)
     || new Set(rows.map(row => row.id!.value)).size !== rows.length) throw new WorkReadUnavailable('Ambiguous feed reference');
-  return rows.map(row => ({ id: row.id!.value, sequence: row.sequence!.value, kind: row.kind!.value as FeedKind }));
+  const graphSequences = rows.map(row => requireSequence(row.sequence!.value));
+  const streamSequences = await mainSequencesForGraphReferences(relay, session.position.dataEpoch, through, graphSequences);
+  let previous = after;
+  const references = rows.map((row, index) => {
+    const streamSequence = streamSequences.get(graphSequences[index]!)!;
+    const position = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: session.position.dataEpoch, sequence: streamSequence };
+    const order = compareRelayPositions(previous, position);
+    if (order > 0 || (index === 0 && (cut.afterId === '' || cut.afterId === '\uffff') && order === 0))
+      throw new WorkReadUnavailable('Feed reference stream order is unavailable');
+    previous = position;
+    return { id: row.id!.value, sequence: streamSequence, kind: row.kind!.value as FeedKind };
+  });
+  return references;
 }
 
 const canonicalWork = publicWork('?otherWork', '?otherMain').replace(/\?([A-Za-z]\w*)/g,
@@ -105,18 +231,14 @@ const publicRealm = `GRAPH ${iri(GRAPHS.current)} {
 /** Re-admit exact activity references against current public publication,
  * Realm and review heads. A changed Main selection can retain an earlier
  * publication's activity; replacing/erasing that publication cannot. */
-export async function feedSources(session: WorkReadSession, selection: { ids: string[] } | FeedCut): Promise<FeedSource[]> {
-  if ('ids' in selection && selection.ids.length === 0) return [];
-  const limit = 'ids' in selection ? selection.ids.length : FEED_COST.refreshItems;
+export async function feedSources(session: WorkReadSession, selection: { ids: string[] }): Promise<FeedSource[]> {
+  if (selection.ids.length === 0) return [];
+  const limit = selection.ids.length;
   if (limit > 20) throw new WorkReadUnavailable('Feed source budget exceeded');
   // Each UNION branch starts from the admitted references. Jena evaluates a
   // branch before joining it, so a selection outside the UNION would scan every
   // branch's whole relation (about 1 s per call at 10,000 Works).
-  const anchor = 'ids' in selection ? `VALUES ?id { ${selection.ids.map(iri).join(' ')} }` : '';
-  const cut = 'ids' in selection ? ''
-    : `FILTER(?epoch = ${lit(selection.epoch)} && ?sequence <= ${selection.through})
-       FILTER(?sequence > ${selection.afterSequence} || (?sequence = ${selection.afterSequence}
-         && STR(?id) > ${lit(selection.afterId)}))`;
+  const anchor = `VALUES ?id { ${selection.ids.map(iri).join(' ')} }`;
   const rows = await session.query(`SELECT DISTINCT ?id ?sequence ?kind ?target ?work ?actor ?realm ?zone
     ?language ?excerpt ?title ?reply ?contentRevision ?review ?occurrence ?contentTarget WHERE {
     {
@@ -136,7 +258,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
       BIND(IF(?successor, ?contribution, ?work) AS ?target)
       OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?id ; rv:revision ?draft ; rv:searchBody ?body }
         BIND(SUBSTR(STR(?body),1,400) AS ?excerpt) }
-      ${cut}
     } UNION {
       ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ?realm ;
@@ -149,7 +270,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND("adoption" AS ?kind) BIND(?work AS ?target)
-      ${cut}
     } UNION {
       ${anchor}
       GRAPH ${iri(GRAPHS.current)} {
@@ -170,7 +290,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER(?targetKind = rv:StatementTarget || EXISTS { ?id rv:support ?statement }) }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND("decision" AS ?kind) BIND(?work AS ?target)
-      ${cut}
     } UNION {
       ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:realm ?realm ;
@@ -181,7 +300,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         BIND(EXISTS { ?id rv:parentReply ?parent } AS ?isReply) }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND(IF(?isReply, "reply", "discussion") AS ?kind) BIND(?reply AS ?target)
-      ${cut}
     } UNION {
       ${anchor}
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ContentSearchEligibilityDecision ;
@@ -213,7 +331,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER(CONCAT(STR(?otherWork), STR(?otherOccurrence)) < CONCAT(STR(?work), STR(?occurrence)))
       } ${canonicalWork} }
       BIND("contribution" AS ?kind) BIND(?contentTarget AS ?target)
-      ${cut}
     } UNION {
       ${anchor}
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ContentSearchEligibilityDecision ;
@@ -226,7 +343,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         ?work a ?hubKind . VALUES ?hubKind { rv:PromptTemplate rv:SkillPackage } }
       ${publicWork('?work', '?main')}
       BIND(?work AS ?contentTarget) BIND(?work AS ?target) BIND("contribution" AS ?kind)
-      ${cut}
     } UNION {
       ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?target a rv:Collection ; rv:collectionHead ?id ; rv:curator ?actor ;
@@ -236,7 +352,6 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:CollectionRevision ; rv:component ?target ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       BIND("collection" AS ?kind)
-      ${cut}
     }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ErasedRevision } }
   } ORDER BY ?sequence STR(?id) LIMIT ${limit + 1}`, limit + 1);

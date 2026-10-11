@@ -12,5 +12,5 @@ export const FEED_HEALTH_COST = { accessStatements: 6, graphCalls: 2, payloads: 
 
 export async function readFeedProjectionHealth(session: WorkReadSession) {
   if (!session.deps.feed) throw new WorkReadUnavailable('Feed owner is unavailable');
-  return session.deps.feed.readiness(session.position);
+  return session.deps.feed.readiness(session.position, await session.deps.relayPosition?.read());
 }
