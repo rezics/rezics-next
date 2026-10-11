@@ -250,13 +250,17 @@ test('a ban fences a registered placement; an expired public ban permits a fresh
 test('public membership generations fence old placements across leave and rejoin', async () => {
   const h = await realmVisibilityFixture();
   try {
-    await h.policy('public', 'open');
+    await h.policy('public', 'trusted-members');
     await joinPen(h);
     const beforeLeave = await h.reply(h.pen);
     const intent = await registerPlacement(h, h.pen, beforeLeave);
     expect(intent.registered.dispatchEligible).toBe(true);
+    const whileLeft = await h.reply(h.pen);
 
     await leavePen(h);
+    const leftRefusal = await h.call('POST', '/v1/realm-reply-placements', whileLeft.placement, h.pen);
+    expect(leftRefusal.status, JSON.stringify(leftRefusal.body)).toBe(403);
+
     await joinPen(h);
     const replay = await h.access.register(intent.request);
     expect(replay).toMatchObject({ id: intent.registered.id, replayed: true, dispatchEligible: false });
@@ -278,8 +282,12 @@ test('private membership generations fence old placements across leave and rejoi
     const beforeLeave = await h.reply(h.pen);
     const intent = await registerPlacement(h, h.pen, beforeLeave);
     expect(intent.registered.dispatchEligible).toBe(true);
+    const whileLeft = await h.reply(h.pen);
 
     await leavePrivatePen(h);
+    const leftRefusal = await h.call('POST', '/v1/realm-reply-placements', whileLeft.placement, h.pen);
+    expect(leftRefusal.status, JSON.stringify(leftRefusal.body)).toBe(403);
+
     await joinPrivatePen(h);
     const replay = await h.access.register(intent.request);
     expect(replay).toMatchObject({ id: intent.registered.id, replayed: true, dispatchEligible: false });
@@ -304,9 +312,13 @@ test('expired and revoked owner grants fence registered private trusted placemen
     const originalGrant = await currentOwnerGrant(h);
     await h.accessPool.query(`UPDATE access.permission_grant
       SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1`, [originalGrant.id]);
-    await replaceOwnerGrant(h);
     const firstReplay = await h.access.register(firstIntent.request);
     expect(firstReplay).toMatchObject({ id: firstIntent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(firstIntent.registered.id, firstIntent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await replaceOwnerGrant(h);
+    const firstReplayAfterReplacement = await h.access.register(firstIntent.request);
+    expect(firstReplayAfterReplacement).toMatchObject({ id: firstIntent.registered.id, replayed: true, dispatchEligible: false });
     await expect(h.access.claim(firstIntent.registered.id, firstIntent.digest, h.principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
 
@@ -315,9 +327,13 @@ test('expired and revoked owner grants fence registered private trusted placemen
     expect(secondIntent.registered.dispatchEligible).toBe(true);
     const currentGrant = await currentOwnerGrant(h);
     await h.accessPool.query(`UPDATE access.permission_grant SET active = false WHERE id = $1`, [currentGrant.id]);
-    await replaceOwnerGrant(h);
     const secondReplay = await h.access.register(secondIntent.request);
     expect(secondReplay).toMatchObject({ id: secondIntent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(secondIntent.registered.id, secondIntent.digest, h.principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await replaceOwnerGrant(h);
+    const secondReplayAfterReplacement = await h.access.register(secondIntent.request);
+    expect(secondReplayAfterReplacement).toMatchObject({ id: secondIntent.registered.id, replayed: true, dispatchEligible: false });
     await expect(h.access.claim(secondIntent.registered.id, secondIntent.digest, h.principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
 
