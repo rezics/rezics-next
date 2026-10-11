@@ -21,9 +21,9 @@ test('finds direct access writes, ignores an interpolated table name, and allows
     'access.permission_grant', 'none', 'access.representation', 'access.scope_gate', 'access.permission_grant',
   ]);
   // Each entry of a TRUNCATE list may carry ONLY before its name and * after it.
-  expect(scanAccessFixtureWriteText('const q = `TRUNCATE content.work, ONLY access.permission_grant, access.scope_gate`;', 'only.fixture')
+  expect(scanAccessFixtureWriteText('const q = `TRUNCATE media.asset, ONLY access.permission_grant, access.scope_gate`;', 'only.fixture')
     .map(finding => finding.table)).toEqual(['access.permission_grant', 'access.scope_gate']);
-  expect(scanAccessFixtureWriteText('const q = `TRUNCATE content.work *, access.permission_grant, access.scope_gate`;', 'star.fixture')
+  expect(scanAccessFixtureWriteText('const q = `TRUNCATE media.asset *, access.permission_grant, access.scope_gate`;', 'star.fixture')
     .map(finding => finding.table)).toEqual(['access.permission_grant', 'access.scope_gate']);
   expect(scanAccessFixtureWriteText(lines[5]!, 'copy-to.fixture')).toEqual([]);
   expect(scanAccessFixtureWriteText(lines[6]!, 'read-only.fixture')).toEqual([]);
