@@ -484,10 +484,16 @@ export function assertWorkCostAtScales(
     if (!declaration) continue;
     const field = counter as WorkCostField;
     const scales = profiles.map((profile, index) => {
-      const observed = declaration.dimension === 'threads'
-        ? profile.dimensions?.threads
-        : profile[declaration.dimension];
-      if (observed === null || observed === undefined || !Number.isFinite(observed) || observed <= 0)
+      const observed =
+        declaration.dimension === 'threads'
+          ? profile.dimensions?.threads
+          : profile[declaration.dimension];
+      if (
+        observed === null ||
+        observed === undefined ||
+        !Number.isFinite(observed) ||
+        observed <= 0
+      )
         throw new Error(
           `Cost growth contract requires an observed positive ${declaration.dimension} scale at profile ${index}`,
         );
