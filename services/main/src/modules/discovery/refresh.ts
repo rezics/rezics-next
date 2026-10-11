@@ -33,6 +33,11 @@ import {
   type DiscoveryProjection,
 } from './store.ts';
 import { ALSO_ENJOYED_COST } from '../also-enjoyed/store.ts';
+import {
+  compareRelayPositions,
+  MAIN_RELAY_STREAM_SCOPE,
+  type RelayHandoffPosition,
+} from '../outbox/relay-position.ts';
 
 export type RefreshOutcome =
   | 'idle'
@@ -70,13 +75,24 @@ export class DiscoveryRefreshWorker {
     return works && (await this.store.members(prior, works));
   }
 
+  private async streamCoverage(session: WorkReadSession): Promise<RelayHandoffPosition | null> {
+    const coverage = await this.deps.relayPosition?.read();
+    if (!coverage) return null;
+    try {
+      const start = {
+        streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: session.position.dataEpoch,
+        sequence: '0',
+      };
+      compareRelayPositions(coverage, start);
+      return coverage;
+    } catch {
+      return null;
+    }
+  }
+
   private async caughtUp(session: WorkReadSession): Promise<boolean> {
-    const relay = await this.deps.relayPosition?.read();
-    return (
-      !!relay &&
-      relay.dataEpoch === session.position.dataEpoch &&
-      relay.sequence === session.position.sequence
-    );
+    return (await this.streamCoverage(session)) !== null;
   }
 
   private async enroll(): Promise<void> {
@@ -162,7 +178,8 @@ export class DiscoveryRefreshWorker {
         request(),
         { scope: job.basis.scope, realm: job.basis.realm ?? undefined },
         async (session) => {
-          if (!(await this.caughtUp(session))) return 'relay-behind';
+          const streamCoverage = await this.streamCoverage(session);
+          if (!streamCoverage) return 'relay-behind';
           const state = await this.store.inspect(job, session.position);
           if (state.inactive) return 'inactive';
           session.principal = state.principal;
@@ -194,15 +211,18 @@ export class DiscoveryRefreshWorker {
             (state.row.validated_sequence ?? state.row.source_sequence) !==
               session.position.sequence
           ) {
-            const after = state.row.validated_sequence ?? state.row.source_sequence;
+            const after = {
+              dataEpoch: state.row.source_epoch,
+              sequence: state.row.validated_sequence ?? state.row.source_sequence,
+            };
             intervening = this.deps.discoveryRefreshInputs
               ? await this.deps.discoveryRefreshInputs.read(
-                  session.position,
+                  streamCoverage,
                   after,
                   job.basis,
                   session,
                 )
-              : await discoveryChanges(session, after, job.basis);
+              : await discoveryChanges(session, after.sequence, job.basis);
             // Finish the pinned population; journal changes and reconcile them
             // before publication. Remote HTTP cannot reconstruct an old mutable
             // head, so mixed source pages never activate at the original cut.
@@ -211,8 +231,11 @@ export class DiscoveryRefreshWorker {
             !state.row && state.reuse
               ? this.deps.discoveryRefreshInputs
                 ? await this.deps.discoveryRefreshInputs.read(
-                    session.position,
-                    state.reuse.covered_sequence ?? state.reuse.source_sequence,
+                    streamCoverage,
+                    {
+                      dataEpoch: state.reuse.source_epoch,
+                      sequence: state.reuse.covered_sequence ?? state.reuse.source_sequence,
+                    },
                     job.basis,
                     session,
                   )
@@ -284,7 +307,9 @@ export class DiscoveryRefreshWorker {
               step,
               projected: { ...projected, nextPass },
               position: session.position,
-              validatedSequence: catchingUp ? row.source_sequence : session.position.sequence,
+              validatedPosition: catchingUp
+                ? { dataEpoch: row.source_epoch, sequence: row.source_sequence }
+                : session.position,
               intervening,
             };
           }
@@ -304,7 +329,7 @@ export class DiscoveryRefreshWorker {
           await this.store.validated(
             job,
             prepared.row,
-            prepared.validatedSequence,
+            prepared.validatedPosition,
             prepared.intervening,
           );
         const row =

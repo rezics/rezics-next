@@ -382,9 +382,11 @@ export class DiscoveryRefreshStore {
   async validated(
     job: RefreshJob,
     row: DiscoveryGeneration,
-    sequence: string,
+    position: ReadPosition,
     changes?: DiscoveryChanges | null,
   ): Promise<void> {
+    if (position.dataEpoch !== row.source_epoch)
+      throw new RecommendationStale('Discovery validation graph epoch changed');
     await inAccess(this.pool, async (client) => {
       const since = await sourceChanges(client, row, discoveryAccessBasis(row));
       if (since.wide || row.recovery_generation !== since.generation) {
@@ -401,7 +403,7 @@ export class DiscoveryRefreshStore {
         FROM access.derived_generation g WHERE i.generation_id=$1 AND i.source='main-graph'
           AND g.id=i.generation_id AND g.state='building' AND i.checkpoint_sequence <= $2::numeric
           AND i.pinned_sequence <= $2::numeric`,
-        [row.generation_id, sequence],
+        [row.generation_id, position.sequence],
       );
       if (!result.rowCount)
         throw new RecommendationStale('Discovery validation checkpoint changed');
@@ -424,7 +426,7 @@ export class DiscoveryRefreshStore {
       await client.query(
         `INSERT INTO access.discovery_coverage (generation_id,sequence) VALUES ($1,$2)
         ON CONFLICT (generation_id) DO UPDATE SET sequence=greatest(access.discovery_coverage.sequence,EXCLUDED.sequence)`,
-        [row.generation_id, sequence],
+        [row.generation_id, position.sequence],
       );
     });
   }

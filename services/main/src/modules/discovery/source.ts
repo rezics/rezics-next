@@ -13,6 +13,7 @@ import {
   WorkReadLimit,
   WorkReadMissing,
   WorkReadUnavailable,
+  type ReadPosition,
   type WorkReadSession,
 } from '../work/read-session.ts';
 import {
@@ -25,7 +26,11 @@ import { readEpochOrder } from './lineage.ts';
 import { primaryDiscoveryCreditBatch, DISCOVERY_CREDIT_BATCH_COST } from './credits.ts';
 import type { Pool } from 'pg';
 import type { DeliveredMainEvent } from '../outbox/relay.ts';
-import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
+import {
+  compareRelayPositions,
+  MAIN_RELAY_STREAM_SCOPE,
+  type RelayHandoffPosition,
+} from '../outbox/relay-position.ts';
 import { FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 import { DISCOVERY_DELTA_COST, type DiscoveryChanges } from './changes.ts';
 import { discoveryEventEffect, discoveryEventWorks, type DiscoveryEventInput } from './effects.ts';
@@ -50,43 +55,102 @@ export class DiscoveryRefreshInputs {
   ) {}
 
   async read(
-    position: { dataEpoch: string; sequence: string },
-    after: string,
+    coverage: RelayHandoffPosition,
+    afterGraph: ReadPosition,
     basis?: OwnedDiscoveryBasis,
     session?: Pick<WorkReadSession, 'query'>,
   ): Promise<DiscoveryChanges | null> {
-    const count = BigInt(position.sequence) - BigInt(after);
-    if (count === 0n) return { works: [], created: [] };
-    if (count < 0n || count > BigInt(DISCOVERY_REFRESH_INPUT_COST.batches)) return null;
+    if (
+      coverage.streamScope !== MAIN_RELAY_STREAM_SCOPE ||
+      coverage.dataEpoch !== afterGraph.dataEpoch ||
+      !/^(0|[1-9][0-9]{0,99})$/.test(afterGraph.sequence)
+    )
+      return null;
+    try {
+      compareRelayPositions(coverage, {
+        streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: afterGraph.dataEpoch,
+        sequence: '0',
+      });
+    } catch {
+      return null;
+    }
+    const afterGraphSequence = BigInt(afterGraph.sequence);
     const rows = (
       await this.pool.query<{
-        sequence: string;
-        batch_id: string;
-        routing_epoch: string;
-        event_count: number;
+        after_sequence: string;
+        coverage_stream_scope: string;
+        coverage_data_epoch: string;
+        coverage_sequence: string;
+        stream_scope: string | null;
+        data_epoch: string | null;
+        sequence: string | null;
+        batch_id: string | null;
+        routing_epoch: string | null;
+        event_count: number | null;
         event_id: string | null;
         envelope: DeliveredMainEvent | null;
       }>(
-        `SELECT b.sequence::text,
-        b.batch_id,b.routing_epoch,b.event_count,e.event_id,e.envelope
-      FROM relay.checkpoint c JOIN relay.delivered_batch b ON b.stream_scope=c.stream_scope AND b.data_epoch=c.data_epoch
-      LEFT JOIN relay.delivered_event e ON e.stream_scope=b.stream_scope AND e.data_epoch=b.data_epoch AND e.sequence=b.sequence
-      WHERE c.consumer=$1 AND c.stream_scope='${MAIN_RELAY_STREAM_SCOPE}' AND c.data_epoch=$2 AND c.sequence >= $4::numeric
-        AND b.sequence > $3::numeric AND b.sequence <= $4::numeric
-      ORDER BY b.sequence,e.event_id LIMIT $5`,
+        `WITH coverage AS (
+        SELECT c.stream_scope,c.data_epoch,c.sequence::text AS sequence,
+          COALESCE((SELECT max(b.sequence) FROM relay.delivered_batch b
+            WHERE b.stream_scope=c.stream_scope AND b.data_epoch=c.data_epoch
+              AND b.sequence <= c.sequence AND EXISTS (
+                SELECT 1 FROM relay.delivered_event e
+                WHERE e.stream_scope=b.stream_scope AND e.data_epoch=b.data_epoch AND e.sequence=b.sequence
+                  AND e.source='https://rezics.com/services/main'
+                  AND e.envelope #>> '{data,sourcePosition,datasetId}'='product'
+                  AND e.envelope #>> '{data,sourcePosition,dataEpoch}'=c.data_epoch
+                  AND e.envelope #>> '{data,sourcePosition,sequence}' ~ '^(0|[1-9][0-9]{0,99})$'
+                  AND (e.envelope #>> '{data,sourcePosition,sequence}')::numeric <= $5::numeric
+              )),0)::text AS after_sequence
+        FROM relay.checkpoint c
+        WHERE c.consumer=$1 AND c.stream_scope=$2 AND c.data_epoch=$3 AND c.sequence >= $4::numeric
+      )
+      SELECT coverage.after_sequence,coverage.stream_scope AS coverage_stream_scope,
+        coverage.data_epoch AS coverage_data_epoch,coverage.sequence AS coverage_sequence,
+        b.stream_scope,b.data_epoch,b.sequence::text,b.batch_id,b.routing_epoch,b.event_count,
+        e.event_id,e.envelope
+      FROM coverage
+      LEFT JOIN relay.delivered_batch b ON b.stream_scope=coverage.stream_scope
+        AND b.data_epoch=coverage.data_epoch AND b.sequence > coverage.after_sequence::numeric
+        AND b.sequence <= coverage.sequence::numeric
+      LEFT JOIN relay.delivered_event e ON e.stream_scope=b.stream_scope
+        AND e.data_epoch=b.data_epoch AND e.sequence=b.sequence
+      ORDER BY b.sequence,e.event_id LIMIT $6`,
         [
           this.consumer,
-          position.dataEpoch,
-          after,
-          position.sequence,
+          coverage.streamScope,
+          coverage.dataEpoch,
+          coverage.sequence,
+          afterGraph.sequence,
           DISCOVERY_REFRESH_INPUT_COST.events + 1,
         ],
       )
     ).rows;
-    if (rows.length > DISCOVERY_REFRESH_INPUT_COST.events) return null;
+    if (!rows.length) return null;
+    const afterSequence = rows[0]!.after_sequence;
+    const count = BigInt(coverage.sequence) - BigInt(afterSequence);
+    if (count < 0n || count > BigInt(DISCOVERY_REFRESH_INPUT_COST.batches)) return null;
+    if (
+      rows.some(
+        (row) =>
+          row.coverage_stream_scope !== coverage.streamScope ||
+          row.coverage_data_epoch !== coverage.dataEpoch ||
+          row.coverage_sequence !== coverage.sequence,
+      )
+    )
+      return null;
+    const batchRows = rows.filter((row) => row.sequence !== null);
+    if (
+      rows.length > DISCOVERY_REFRESH_INPUT_COST.events + 1 ||
+      batchRows.filter((row) => row.event_id !== null).length > DISCOVERY_REFRESH_INPUT_COST.events
+    )
+      return null;
+    if (count === 0n) return batchRows.length ? null : { works: [], created: [] };
     const targets = [
       ...new Set(
-        rows.flatMap((row) => {
+        batchRows.flatMap((row) => {
           const input = row.envelope?.data?.receipt as DiscoveryEventInput | undefined;
           return input?.action === 'rating.observation.set' &&
             input.outcome === 'succeeded' &&
@@ -134,12 +198,23 @@ export class DiscoveryRefreshInputs {
     const batches = new Map<string, typeof rows>();
     const works = new Set<string>(),
       created = new Set<string>();
-    for (const row of rows) {
+    for (const row of batchRows) {
+      if (!row.sequence || !row.stream_scope || !row.data_epoch || !row.batch_id ||
+          !row.routing_epoch || row.event_count === null) return null;
+      batches.set(row.sequence, [...(batches.get(row.sequence) ?? []), row]);
+      if (row.event_id === null) {
+        if (row.envelope || row.event_count !== 0) return null;
+        continue;
+      }
       const event = row.envelope,
         data = event?.data,
         receipt = data?.receipt;
-      const positionInStream = data?.relayPosition ?? (data?.sourcePosition
-        ? { ...data.sourcePosition, streamScope: MAIN_RELAY_STREAM_SCOPE } : undefined);
+      const rowPosition = {
+        streamScope: row.stream_scope,
+        dataEpoch: row.data_epoch,
+        sequence: row.sequence,
+      };
+      const sourcePosition = data?.sourcePosition;
       if (
         !event ||
         !data ||
@@ -149,11 +224,20 @@ export class DiscoveryRefreshInputs {
         event.id !== row.event_id ||
         data.batchId !== row.batch_id ||
         data.routingEpoch !== row.routing_epoch ||
-        data.sourcePosition?.dataEpoch !== position.dataEpoch ||
-        positionInStream?.streamScope !== MAIN_RELAY_STREAM_SCOPE ||
-        positionInStream.dataEpoch !== position.dataEpoch || positionInStream.sequence !== row.sequence
+        !sourcePosition ||
+        sourcePosition.datasetId !== 'product' ||
+        sourcePosition.dataEpoch !== afterGraph.dataEpoch ||
+        !/^(0|[1-9][0-9]{0,99})$/.test(sourcePosition.sequence) ||
+        BigInt(sourcePosition.sequence) <= afterGraphSequence
       )
         return null;
+      if (data.relayPosition) {
+        try {
+          if (compareRelayPositions(data.relayPosition, rowPosition) !== 0) return null;
+        } catch {
+          return null;
+        }
+      }
       const input = { ...receipt } as DiscoveryEventInput;
       if (input.target && !input.mainVersion && targetWorks.has(input.target)) {
         if (input.work && input.work !== targetWorks.get(input.target)) return null;
@@ -169,21 +253,23 @@ export class DiscoveryRefreshInputs {
         if (receipt.action === 'work.create' && receipt.outcome === 'succeeded')
           for (const work of local) created.add(work);
       }
-      batches.set(row.sequence, [...(batches.get(row.sequence) ?? []), row]);
     }
     if (batches.size !== Number(count)) return null;
-    let next = BigInt(after) + 1n;
+    let next = BigInt(afterSequence) + 1n;
     for (const [sequence, batch] of batches) {
+      const events = batch.filter((row) => row.event_id !== null);
+      const first = batch[0]!;
       if (
         BigInt(sequence) !== next++ ||
         batch.some(
           (row) =>
-            row.event_count !== batch.length ||
-            row.batch_id !== batch[0]!.batch_id ||
-            row.routing_epoch !== batch[0]!.routing_epoch,
+            row.event_count !== events.length ||
+            row.batch_id !== first.batch_id ||
+            row.routing_epoch !== first.routing_epoch,
         ) ||
-        new Set(batch.map((row) => row.event_id)).size !== batch.length ||
-        batch
+        (first.event_count === 0) !== (events.length === 0) ||
+        new Set(events.map((row) => row.event_id)).size !== events.length ||
+        events
           .map((row) => row.envelope!.data.ordinal)
           .sort((a, b) => a - b)
           .some((ordinal, index) => ordinal !== index)
