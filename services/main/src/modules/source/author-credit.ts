@@ -7,6 +7,7 @@ import { adoptAuthorCredit, authorCreditDigest, readAuthorCredit, readAuthorCred
   AuthorCreditInvalid, AuthorCreditConflict, AuthorCreditUnavailable,
   type AuthorCreditValue, type NativeAuthorCredit, type AuthorCreditReceipt } from '../work/author-credit.ts';
 import { readAuthorCreditRetirement } from '../work/author-credit-retirement.ts';
+import type { SourceAuthorNameStore } from './author-name.ts';
 import { compareSourceChildren, sourceChildOccurrence } from './child-correspondence.ts';
 import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
 import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
@@ -85,7 +86,8 @@ export class SourceAuthorCreditStore {
     private readonly correspondences: SourceChildCorrespondenceStore,
     private readonly env: WorkActivationEnvironment,
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
-    private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'withWorkEditAuthority'>) {}
+    private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'withWorkEditAuthority'>,
+    private readonly names?: Pick<SourceAuthorNameStore, 'publish'>) {}
 
   async intent(principalId: string, supportId: string): Promise<AuthorCreditIntentRow | null> {
     const row = (await this.pool.query<AuthorCreditIntentRow>(
@@ -255,6 +257,7 @@ export class SourceAuthorCreditStore {
     }
     const support = await this.read(principalId, row.id);
     if (!support) throw new AuthorCreditUnavailable('credit support did not complete');
+    await this.names?.publish(row.source_key, row.work);
     return { support, replayed: !inserted };
   }
 

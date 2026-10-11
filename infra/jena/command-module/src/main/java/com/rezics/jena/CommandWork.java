@@ -80,6 +80,10 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
         CommandWork current = CURRENT.get();
         return current == null ? "" : current.counters();
     }
+    static long currentCount(String name) {
+        CommandWork current = CURRENT.get();
+        return current == null ? 0L : current.counts.getOrDefault(name, 0L);
+    }
     DatasetGraph observed(DatasetGraph data) {
         return new DatasetGraphTextMonitor(data, this) {
             @Override public void add(org.apache.jena.sparql.core.Quad quad) {

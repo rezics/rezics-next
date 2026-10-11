@@ -18,8 +18,8 @@ public class PrefixWalkTest {
     private static Node p(String name){return NodeFactory.createURI("https://rezics.com/vocab/"+name);}
     private static Node id(int n){return NodeFactory.createURI(String.format("https://rezics.com/id/00000000-0000-4000-8000-%012d",n));}
     private static void set(DatasetGraph data,Node graph,Node subject,Node predicate,Node value){data.deleteAny(graph,subject,predicate,Node.ANY);data.add(graph,subject,predicate,value);}
-    private record Owner(Node work,Node main,Node unit,Node selection,Node contribution,Node decision,Node draft){}
-    private static final class Fixture implements AutoCloseable {
+    record Owner(Node work,Node main,Node unit,Node selection,Node contribution,Node decision,Node draft){}
+    static final class Fixture implements AutoCloseable {
         final FilteredGraphTextIndex index; final DatasetGraphText data; boolean project=true;
         Fixture(){
             var definition=new EntityDefinition("uri","label","graph");definition.set("body",p("searchBody"));definition.set("publicTitle",p("publicTitle"));definition.set("label",LABEL);definition.setLangField("lang");definition.setUidField("uid");

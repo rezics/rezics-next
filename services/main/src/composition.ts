@@ -430,6 +430,7 @@ export async function composeMain(input: ComposeMainInput) {
   const accessOwners = composeAccess(pool, environment);
   const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
     ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
+  const sourceAuthorNames = new SourceAuthorNameStore(contentPool, sourceIntake, openLibraryFetch, fuseki);
   await configureNamePreferences(environment, pool);
   configureLibraryShelves(contentPool, pool, fuseki);
   configureFollowGraph(pool, fuseki);
@@ -551,7 +552,7 @@ export async function composeMain(input: ComposeMainInput) {
     roles: accessOwners.roles,
     accessPolicy: new AccessPolicyOwner(pool),
     sourceIntake,
-    sourceAuthorNames: new SourceAuthorNameStore(contentPool, sourceIntake, openLibraryFetch),
+    sourceAuthorNames,
     openLibraryFetch,
     recipeSourceConversions: new RecipeSourceConversionStore(contentPool, sourceIntake),
     sourceAcquisitions: sourceAcquisitionServices(contentPool,
@@ -561,7 +562,7 @@ export async function composeMain(input: ComposeMainInput) {
     sourceConversions,
     sourceCorrespondences,
     sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
-      sourceCorrespondences, environment, account, access),
+      sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),

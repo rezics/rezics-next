@@ -6,6 +6,8 @@ import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeUnavailable,
 import { fetchOpenLibraryJson, OpenLibraryAcquisitionUnavailable } from './open-library.ts';
 import { authorFactsWithSource, projectOpenLibraryAuthorFacts, sourceFactProvenance,
   type AuthorFacts } from './author-facts.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { publishSourceAuthorName } from './author-name-publication.ts';
 
 export const AUTHOR_NAME_COST = { keys: 192, readQueries: 1, providerRequests: 1,
   searchQueries: 2, searchFenceQueries: 1,
@@ -22,12 +24,14 @@ export interface AuthorName { displayName: string; nameSource: {
   digest: string; url: string; fetchedAt: string; basis: 'facts'; field: '/name' } }
 export type AuthorNameCommand = { action: 'refresh'; expectedRevision: string | null }
   | { action: 'remove'; expectedRevision: string; reason: string };
-interface Row { id: string; author_key: string; principal_id: string; request_digest: string;
+interface Row { id: string; source_position: string; author_key: string; principal_id: string; request_digest: string;
   provider_revision: string | null;
   observation_id: string | null; display_name: string | null; reason: string | null;
   source_revision: string | null; record_id: string | null; byte_digest: string | null;
   capture: { url: string; fetchedAt: string } | null }
-const selected = `SELECT n.*, o.record_id, o.source_revision, o.byte_digest, o.capture
+const selected = `SELECT n.*, ((SELECT version FROM source.author_name_epoch WHERE singleton)::numeric
+  * 18446744073709551616 + n.native_position)::text AS source_position,
+  o.record_id, o.source_revision, o.byte_digest, o.capture
   FROM source.author_name_revision n LEFT JOIN source.observation o ON o.id = n.observation_id`;
 
 /** Only the factual /name field is projected. A missing name removes the old
@@ -63,13 +67,38 @@ function name(row: Row): AuthorName | null {
  * No provider request is made from discovery, search or Work reads. */
 export class SourceAuthorNameStore {
   constructor(private readonly pool: Pool, private readonly intake: SourceIntakeStore,
-    private readonly fetcher: typeof fetch = fetch) {}
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly publication?: Pick<FusekiClient, 'query' | 'sourceAuthorNames'>) {}
+
+  async publish(author: string, target?: string) {
+    if (this.publication) await publishSourceAuthorName(this.publication,
+      { read: key => this.publicationHead(key) }, author, target);
+  }
+
+  /** Explicit rollout/recovery page: existing SQL heads are not inferred by a
+   * native-only rebuild. Retrying this page republishes current, fenced facts. */
+  async publishNativePage(after: string | null = null) {
+    if (!this.publication) throw new SourceIntakeUnavailable('Native source name publication is unavailable');
+    if (after !== null && !authorKey.test(after)) throw new SourceIntakeInvalid('Invalid source author publication cursor');
+    const rows = (await this.pool.query<{ author_key: string }>(`SELECT author_key FROM source.author_name_head
+      WHERE author_key > $1 ORDER BY author_key LIMIT ${AUTHOR_WORKS_COST.works + 1}`, [after ?? ''])).rows;
+    for (const row of rows.slice(0, AUTHOR_WORKS_COST.works)) await this.publish(row.author_key);
+    const more = rows.length > AUTHOR_WORKS_COST.works;
+    return { authors: Math.min(rows.length, AUTHOR_WORKS_COST.works), more,
+      after: more ? rows[AUTHOR_WORKS_COST.works - 1]!.author_key : null };
+  }
 
   async read(author: string) {
+    const value = await this.publicationHead(author);
+    if (!value) return null;
+    return { revision: value.revision, authorKey: value.authorKey, state: value.state, name: value.name };
+  }
+
+  private async publicationHead(author: string) {
     if (!authorKey.test(author)) throw new SourceIntakeInvalid('Invalid author key');
     const row = (await this.pool.query<Row>(`${selected}
       JOIN source.author_name_head h ON h.revision = n.id WHERE h.author_key = $1`, [author])).rows[0];
-    return row ? { revision: row.id, authorKey: author,
+    return row ? { revision: row.id, sourcePosition: row.source_position, authorKey: author,
       state: row.display_name === null ? 'removed' as const : 'available' as const, name: name(row) } : null;
   }
 
@@ -199,6 +228,7 @@ export class SourceAuthorNameStore {
       WHERE n.principal_id = $1 AND n.idempotency_key = $2`, [principalId, key])).rows[0];
     if (prior) {
       if (prior.request_digest !== requestDigest) throw new SourceIntakeConflict('Author name intent changed');
+      await this.publish(author);
       return result(prior, true);
     }
     let observationId: string | null = null, displayName: string | null = null;
@@ -234,6 +264,7 @@ export class SourceAuthorNameStore {
       observationId = observation.observation.split('/').at(-1)!;
     }
     const client = await this.pool.connect();
+    let committed = false, released = false;
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -244,6 +275,10 @@ export class SourceAuthorNameStore {
       if (replay) {
         if (replay.request_digest !== requestDigest) throw new SourceIntakeConflict('Author name intent changed');
         await client.query('COMMIT');
+        committed = true;
+        client.release();
+        released = true;
+        await this.publish(author);
         return result(replay, true);
       }
       const current = (await client.query<Row>(`${selected}
@@ -263,11 +298,15 @@ export class SourceAuthorNameStore {
         ON CONFLICT (author_key) DO UPDATE SET revision = EXCLUDED.revision`, [author, id]);
       const saved = (await client.query<Row>(`${selected} WHERE n.id = $1`, [id])).rows[0]!;
       await client.query('COMMIT');
+      committed = true;
+      client.release();
+      released = true;
+      await this.publish(author);
       return result(saved, false);
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (!committed) await client.query('ROLLBACK');
       if ((error as { code?: string }).code === '23505') throw new SourceIntakeConflict('Author name intent conflicts');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!released) client.release(); }
   }
 }

@@ -666,6 +666,11 @@ tasks:
     cmds:
       - bun ../../scripts/qa/host-admission.ts --gib 2 -- bun check -p tsconfig.json --no-pretty --threads 8
 
+  source:names:publish:
+    desc: Publish one bounded page of retained source-author names to native search; continue with --after from the result.
+    cmds:
+      - bun scripts/operations/publish-source-author-names.ts {{.CLI_ARGS}}
+
   main:test:
     desc: Run Main unit tests.
     cmds:

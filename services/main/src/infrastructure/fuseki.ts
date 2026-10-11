@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { canonicalLanguage } from '../modules/display-language/select.ts';
 
 export type FusekiReadCallFamily = 'health' | 'delta-proof' | 'query' | 'template-query';
 export type FusekiReadPhase = 'read' | 'writer-wait';
@@ -269,6 +270,18 @@ export interface SearchDeltaProof {
 
 export class CommandOutcomeUnknown extends Error {}
 export class CommandForbidden extends Error {}
+export interface SourceAuthorNamesRequest {
+  target: string;
+  sourceKey: string;
+  credits: string[];
+  names: { sourceKey: string; displayName: string; language: string | null }[];
+  sourcePosition: string;
+  idempotencyKey: string;
+}
+export interface SourceAuthorNamesResponse {
+  target: string; work: string; mainVersion: string | null;
+  sourceKey: string; sourcePosition: string; names: number; examined: number; replayed: boolean;
+}
 export class FusekiQueryResponseTooLarge extends Error {}
 
 async function boundedJson<T>(response: Response, maxResponseBytes?: number, signal?: AbortSignal): Promise<T> {
@@ -357,6 +370,46 @@ function safeIri(value: string): string {
 }
 
 export class FusekiClient {
+  async sourceAuthorNames(request: SourceAuthorNamesRequest): Promise<SourceAuthorNamesResponse> {
+    const id = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
+    if (!id.test(request.target) || !/^\/authors\/OL[1-9][0-9]{0,11}A$/u.test(request.sourceKey)
+      || !/^(0|[1-9][0-9]{0,63})$/u.test(request.sourcePosition)
+      || !/^[A-Za-z0-9:_./-]{1,128}$/u.test(request.idempotencyKey)
+      || request.credits.length > 128 || request.credits.some(credit => !id.test(credit))
+      || request.names.length > 192 || request.names.some(name => name.sourceKey !== request.sourceKey
+        || !name.displayName.trim() || name.displayName.length > 200
+        || /[\u0000-\u001f\u007f]/u.test(name.displayName)
+        || (name.language !== null && !canonicalLanguage(name.language)))) {
+      throw new Error('invalid source author name publication');
+    }
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/u)) throw new CommandForbidden('Fuseki admitted command capability is required');
+    const body = JSON.stringify({ sourceAuthorNames: request });
+    if (Buffer.byteLength(body) > 131_072) throw new Error('source author names exceed request budget');
+    const signal = this.preparationSignal ? AbortSignal.any([this.preparationSignal, AbortSignal.timeout(12_000)])
+      : AbortSignal.timeout(12_000);
+    signal.throwIfAborted();
+    let response: Response;
+    try {
+      response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json',
+          authorization: `Bearer ${this.commandCapability}` }, body,
+        signal,
+      });
+    } catch (error) { throw new CommandOutcomeUnknown('Source author publication outcome unknown', { cause: error }); }
+    if (response.status === 403) throw new CommandForbidden('Source author publication capability rejected');
+    if (!response.ok) throw new Error(`Source author publication returned ${response.status}`);
+    const result = await boundedJson<SourceAuthorNamesResponse>(response, 4096, signal);
+    if (result.target !== request.target || !id.test(result.work)
+      || (result.mainVersion !== null && !id.test(result.mainVersion))
+      || (result.work !== request.target && result.mainVersion !== request.target)
+      || result.sourceKey !== request.sourceKey || result.sourcePosition !== request.sourcePosition || !Number.isSafeInteger(result.names)
+      || result.names !== request.names.length || !Number.isSafeInteger(result.examined)
+      || result.examined < 0 || result.examined > 64 * (192 * 128 + 192) + 192 + 128
+      || typeof result.replayed !== 'boolean') {
+      throw new CommandOutcomeUnknown('Malformed source author publication response');
+    }
+    return result;
+  }
   private templateIndexWriter?: (delta: TemplateIndexDelta) => Promise<void>;
   attachTemplateIndexWriter(writer: (delta: TemplateIndexDelta) => Promise<void>): void {
     this.templateIndexWriter = writer;

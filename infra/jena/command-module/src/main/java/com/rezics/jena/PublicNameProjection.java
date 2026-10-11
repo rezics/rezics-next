@@ -1472,7 +1472,7 @@ final class PublicNameProjection {
         } } finally { org.apache.jena.atlas.iterator.Iter.close(credits); }
         return names;
     }
-    private static void prefixDependency(DatasetGraph data, Node owner, Node work) {
+    static void prefixDependency(DatasetGraph data, Node owner, Node work) {
         // Historical adjacency also refreshes after the owner link is removed.
         if (productResource(owner) && productResource(work))
             data.add(REPAIR, owner, p("prefixOwnerWork"), work);
@@ -1480,6 +1480,9 @@ final class PublicNameProjection {
     /** Exact title/credit candidate projection maintained with public names.
      * It stores every normalized prefix admitted by the public raw-text bound,
      * including Unicode word-boundary prefixes and metadata aliases. */
+    static void refreshPrefixSource(DatasetGraph data, Node work, long deadline) {
+        refreshPrefixResources(data, Set.of(work), deadline);
+    }
     static void refreshPrefixUnit(DatasetGraph data, Node unit) { refreshPrefixUnit(data, unit, Long.MAX_VALUE); }
     static void refreshPrefixUnit(DatasetGraph data, Node unit, long deadline) {
         TemplateIndexService.workScopeBudget(deadline);
@@ -1510,7 +1513,9 @@ final class PublicNameProjection {
                 } } finally { org.apache.jena.atlas.iterator.Iter.close(labels); }
                 titles.addAll(payloadNames(data, work, "work"));
                 prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "title", titles, deadline);
-                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "credit", prefixCreditNames(data, work, deadline), deadline);
+                Set<Node> creditNames = prefixCreditNames(data, work, deadline);
+                creditNames.addAll(SourceAuthorNameProjection.names(data, work, deadline));
+                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "credit", creditNames, deadline);
             }
         }
         for (Quad quad : prior) { TemplateIndexService.workScopeBudget(deadline); if (!desired.contains(quad)) data.delete(quad); }

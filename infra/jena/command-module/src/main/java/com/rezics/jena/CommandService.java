@@ -130,6 +130,35 @@ final class CommandService extends ActionService {
             String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             TitleControlPolicy.commandJSONDepth(requestJSON);
             JsonObject body = JSON.parse(requestJSON);
+            if (body.get("sourceAuthorNames") != null) {
+                JsonObject result;
+                int status = 200;
+                try {
+                    if (!authorized(action, admittedCapability)) {
+                        status = 403; result = jsonObject(Map.of("status", "forbidden"));
+                    } else {
+                        if (bytes.length > 128 * 1024 || !body.keys().equals(Set.of("sourceAuthorNames"))
+                            || !body.get("sourceAuthorNames").isObject())
+                            throw new IllegalArgumentException("invalid source author names envelope");
+                        if (!deltaExclusive(action.getDataService()) || textIndexUncertain) {
+                            status = 503; result = jsonObject(Map.of("status", "unavailable"));
+                        } else {
+                            result = runSourceAuthorNames(action.getDataService().getDataset(),
+                                body.get("sourceAuthorNames").getAsObject(), System.nanoTime() + 10_000_000_000L);
+                        }
+                    }
+                } catch (SourceAuthorNameProjection.ConflictException conflict) {
+                    status = 409; result = jsonObject(Map.of("status", "conflict"));
+                } catch (IllegalArgumentException malformed) {
+                    status = 400; result = jsonObject(Map.of("status", "bad-request", "message", malformed.getMessage()));
+                } catch (IllegalStateException | org.apache.jena.query.text.TextIndexException unavailable) {
+                    status = 503; result = jsonObject(Map.of("status", "unavailable"));
+                }
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, status, result);
+                return;
+            }
             if (body.get("prefixWalk") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -325,6 +354,48 @@ final class CommandService extends ActionService {
         } catch (RuntimeException ex) {
             action.log.error("command failed", ex);
             respond(action, 500, Map.of("status", "error"));
+        }
+    }
+
+    /** Source names are a closed owner publication through the same exclusive
+     * native writer, journal and rollback fence as maintained public names. */
+    JsonObject runSourceAuthorNames(DatasetGraph dataset, JsonObject request, long deadline) {
+        CommandWork.enter("queue");
+        synchronized (dataset) {
+            TemplateIndexService.workScopeBudget(deadline);
+            dataset.begin(ReadWrite.WRITE);
+            boolean commit = false, tracksIndex = false;
+            try {
+                CommandWork.enter("preflight");
+                TemplateIndexService.workScopeBudget(deadline);
+                CommandInvariant.Control control = CommandInvariant.readControl(dataset);
+                if (textIndexUncertain || control == null || control.held() || CommandModule.hasRestoreHold(dataset)
+                    || prefixIndex(dataset) == null || !SearchDeltaJournal.canTrackCommit(dataset))
+                    throw new IllegalStateException("source author name writer is unavailable");
+                tracksIndex = true;
+                publicSearchWriteEpoch.incrementAndGet();
+                SearchDeltaJournal.fenceBeforeWrite(dataset);
+                var delta = new SearchDeltaJournal.Capture(dataset, false, deadline);
+                delta.sourceDeadline(deadline);
+                CommandWork.enter("projections");
+                JsonObject result = SourceAuthorNameProjection.publish(CommandWork.observe(delta.observed()), request, deadline);
+                TemplateIndexService.workScopeBudget(deadline);
+                if (result.get("replayed") == null || !result.get("replayed").isBoolean())
+                    throw new IllegalStateException("source author name publication omitted its replay outcome");
+                // An exact receipt replay must retain its native reader generation.
+                if (result.get("replayed").getAsBoolean().value()) return result;
+                CommandWork.enter("journal");
+                SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
+                delta.finishSemanticSources(deadline);
+                CommandWork.enter("commit");
+                SemanticSourceBasis.check(deadline);
+                TemplateIndexService.workScopeBudget(deadline);
+                CommitHalt.commit(dataset); commit = true;
+                CommandWork.count("durable_commits", 1);
+                return result;
+            } finally {
+                finishNativeWrite(dataset, commit, tracksIndex, false, true, false, false);
+            }
         }
     }
 
