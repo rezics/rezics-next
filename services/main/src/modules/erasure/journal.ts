@@ -211,7 +211,7 @@ export async function markErasureBlocked(relay: Queryable, erasureId: string, re
     WHERE id = $1 AND stage = 'requested'`, [erasureId, reason.slice(0, 500)]);
 }
 
-/** A target failure is retained and its reason code cannot be replaced. */
+/** A target failure is retained until a successful completion supersedes it. */
 export async function failErasureTarget(relay: Pool, erasureId: string, ordinal: number,
   reasonCode: string, borrowed?: PoolClient): Promise<void> {
   const boundedReasonCode = reasonCode.trim();
@@ -238,7 +238,7 @@ export async function failErasureTarget(relay: Pool, erasureId: string, ordinal:
   }, borrowed);
 }
 
-/** Completion is idempotent for its exact evidence; a failed target is terminal. */
+/** Completion is idempotent for its exact evidence and can recover failed or legacy targets. */
 export async function completeErasureTarget(relay: Pool, erasureId: string, ordinal: number,
   evidenceDigest: string, borrowed?: PoolClient): Promise<void> {
   if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > MAX_ERASURE_TARGETS
@@ -255,11 +255,8 @@ export async function completeErasureTarget(relay: Pool, erasureId: string, ordi
       if (row.completion_evidence_ref === evidenceDigest) return;
       throw new ErasureConflict('erasure target completion evidence is immutable');
     }
-    if (row.completion_state === 'failed') {
-      throw new ErasureConflict('failed erasure target is terminal');
-    }
     await client.query(`UPDATE relay.erasure_target
-      SET completion_state = 'completed', completion_evidence_ref = $3,
+      SET completion_state = 'completed', completion_reason_code = NULL, completion_evidence_ref = $3,
         completed_at = clock_timestamp()
       WHERE erasure_id = $1 AND ordinal = $2`, [erasureId, ordinal, evidenceDigest]);
   }, borrowed);

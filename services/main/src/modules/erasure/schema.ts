@@ -55,7 +55,7 @@ export const ERASURE_TARGET_OWNERS = {
   composition_revision: 'graph',
 } as const;
 export type ErasureTargetKind = keyof typeof ERASURE_TARGET_OWNERS;
-export const ERASURE_TARGET_COMPLETION_STATES = ['pending', 'failed', 'completed'] as const;
+export const ERASURE_TARGET_COMPLETION_STATES = ['pending', 'failed', 'completed', 'legacy'] as const;
 
 /** `relay.erasure_target`: exact references and monotone per-target completion. */
 export interface ErasureTargetRow {

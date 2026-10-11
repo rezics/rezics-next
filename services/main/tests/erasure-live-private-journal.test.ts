@@ -111,16 +111,9 @@ test('target completion is immutable, replayable, bounded and required for verif
   await failErasureTarget(relay, erasure.erasureId, failedOrdinal, 'deletion_probe_failed');
   await expect(failErasureTarget(relay, erasure.erasureId, failedOrdinal, 'changed_failure'))
     .rejects.toThrow('reason code is immutable');
-  await expect(completeErasureTarget(relay, erasure.erasureId, failedOrdinal, 'ef'.repeat(32)))
-    .rejects.toThrow('is terminal');
   await expectConstraintFailure(relay.query(`UPDATE relay.erasure_target
     SET completion_reason_code = 'changed_failure' WHERE erasure_id = $1 AND ordinal = $2`,
   [erasure.erasureId, failedOrdinal]));
-  await expectConstraintFailure(relay.query(`UPDATE relay.erasure_target
-    SET completion_state = 'completed', completion_reason_code = NULL,
-      completion_evidence_ref = $3, completed_at = clock_timestamp()
-    WHERE erasure_id = $1 AND ordinal = $2`,
-  [erasure.erasureId, failedOrdinal, 'ef'.repeat(32)]));
   expect((await relay.query<{ completion_state: string; completion_reason_code: string }>(
     `SELECT completion_state, completion_reason_code FROM relay.erasure_target
      WHERE erasure_id = $1 AND ordinal = $2`, [erasure.erasureId, failedOrdinal])).rows[0])
@@ -136,10 +129,23 @@ test('target completion is immutable, replayable, bounded and required for verif
     .toEqual({ stage: 'inventory_complete', verified_at: null });
 
   await completeErasureTarget(relay, erasure.erasureId, pendingOrdinal, 'de'.repeat(32));
+  const recoveryEvidence = 'ef'.repeat(32);
+  await completeErasureTarget(relay, erasure.erasureId, failedOrdinal, recoveryEvidence);
+  await completeErasureTarget(relay, erasure.erasureId, failedOrdinal, recoveryEvidence);
+  expect((await relay.query<{ completion_state: string; completion_reason_code: string | null;
+    completion_evidence_ref: string | null; completed_at: Date | null }>(`SELECT completion_state,
+      completion_reason_code, completion_evidence_ref, completed_at FROM relay.erasure_target
+      WHERE erasure_id = $1 AND ordinal = $2`, [erasure.erasureId, failedOrdinal])).rows[0])
+    .toEqual({ completion_state: 'completed', completion_reason_code: null,
+      completion_evidence_ref: recoveryEvidence, completed_at: expect.any(Date) });
   for (let ordinal = 4; ordinal <= targets.length; ordinal += 1) {
     await completeErasureTarget(relay, erasure.erasureId, ordinal,
       createHash('sha256').update(`target completion ${ordinal}`).digest('hex'));
   }
+  await relay.query(`UPDATE relay.erasure SET stage = 'verified', verified_at = clock_timestamp()
+    WHERE id = $1`, [erasure.erasureId]);
+  expect((await relay.query<{ stage: string }>('SELECT stage FROM relay.erasure WHERE id = $1',
+    [erasure.erasureId])).rows[0]?.stage).toBe('verified');
 
   for (const state of ['pending', 'failed'] as const) {
     const target = await journalErasure(relay, {
@@ -158,18 +164,50 @@ test('target completion is immutable, replayable, bounded and required for verif
       verified_at = clock_timestamp() WHERE id = $1`, [target.erasureId]));
   }
 
-  const allComplete = await journalErasure(relay, {
-    operationId: `erasure-target-complete:${randomUUID()}`,
-    requestDigest: createHash('sha256').update(randomUUID()).digest('hex'),
-    kind: 'revision', principalId: randomUUID(), admissionId: randomUUID(), authorityEpoch: '1',
-    targets: [{ kind: 'content_revision', ref: `target:complete:${randomUUID()}` }],
-  });
-  await completeErasureTarget(relay, allComplete.erasureId, 1, 'fa'.repeat(32));
-  await markErasureSuppressed(relay, allComplete.erasureId);
-  await relay.query(`UPDATE relay.erasure SET stage = 'inventory_complete', destruction_status = 'destroyed'
-    WHERE id = $1`, [allComplete.erasureId]);
-  await relay.query(`UPDATE relay.erasure SET stage = 'verified', verified_at = clock_timestamp()
-    WHERE id = $1`, [allComplete.erasureId]);
-  expect((await relay.query<{ stage: string }>('SELECT stage FROM relay.erasure WHERE id = $1',
-    [allComplete.erasureId])).rows[0]?.stage).toBe('verified');
+});
+
+test('verified targets from before completion tracking remain explicitly unqualified on upgrade', async () => {
+  const files = schemaFiles(root, 'relay');
+  const completionFile = '023_erasure_target_completion.sql';
+  const completionIndex = files.indexOf(completionFile);
+  expect(completionIndex).toBeGreaterThan(0);
+
+  const databaseName = `erasure_upgrade_${randomUUID().replaceAll('-', '')}`;
+  await admin.query(`CREATE DATABASE ${databaseName}`);
+  const upgradeRelay = new Pool({ ...cluster!.connection, database: databaseName, max: 2 });
+  try {
+    const migrationDirectory = join(root, 'services/main/migrations/relay');
+    for (const file of files.slice(0, completionIndex)) {
+      await upgradeRelay.query(readFileSync(join(migrationDirectory, file), 'utf8'));
+    }
+
+    const erasureId = randomUUID();
+    await upgradeRelay.query(`INSERT INTO relay.erasure
+      (id, erasure_epoch, operation_id, request_digest, kind, authority, principal_id,
+       admission_id, authority_epoch, stage, suppression_status, destruction_status,
+       suppressed_at, verified_at)
+      VALUES ($1, 1, $2, $3, 'resource', 'access_admission', $4, $5, 1,
+        'verified', 'suppressed', 'destroyed', clock_timestamp(), clock_timestamp())`,
+    [erasureId, `historical-erasure:${randomUUID()}`,
+      createHash('sha256').update(randomUUID()).digest('hex'), randomUUID(), randomUUID()]);
+    await upgradeRelay.query(`INSERT INTO relay.erasure_target
+      (erasure_id, ordinal, owner, target_kind, target_ref)
+      VALUES ($1, 1, 'content', 'content_revision', $2)`,
+    [erasureId, `historical-target:${randomUUID()}`]);
+
+    await upgradeRelay.query(readFileSync(join(migrationDirectory, completionFile), 'utf8'));
+    const report = await readErasure(upgradeRelay, erasureId);
+    expect(report.stage).toBe('verified');
+    expect(report.targets).toMatchObject([{ completionState: 'legacy', completionReasonCode: null,
+      completionEvidenceRef: null, completedAt: null }]);
+
+    const evidence = createHash('sha256').update('historical owner inventory').digest('hex');
+    await completeErasureTarget(upgradeRelay, erasureId, 1, evidence);
+    const upgraded = await readErasure(upgradeRelay, erasureId);
+    expect(upgraded.targets).toMatchObject([{ completionState: 'completed', completionReasonCode: null,
+      completionEvidenceRef: evidence }]);
+  } finally {
+    await upgradeRelay.end();
+    await admin.query(`DROP DATABASE ${databaseName}`);
+  }
 });

@@ -6,7 +6,7 @@ ALTER TABLE relay.erasure_target
   ADD COLUMN completion_evidence_ref text,
   ADD COLUMN completed_at timestamptz,
   ADD CONSTRAINT erasure_target_completion_state_check
-    CHECK (completion_state IS NULL OR completion_state IN ('pending', 'failed', 'completed')),
+    CHECK (completion_state IS NULL OR completion_state IN ('pending', 'failed', 'completed', 'legacy')),
   ADD CONSTRAINT erasure_target_completion_reason_code_check
     CHECK (completion_reason_code IS NULL OR completion_reason_code ~ '^[a-z][a-z0-9_]{0,63}$'),
   ADD CONSTRAINT erasure_target_completion_evidence_ref_check
@@ -19,11 +19,20 @@ ALTER TABLE relay.erasure_target
       (completion_reason_code IS NOT NULL AND completion_evidence_ref IS NULL AND completed_at IS NULL)),
   ADD CONSTRAINT erasure_target_completed_completion_check
     CHECK (completion_state <> 'completed' OR
-      (completion_reason_code IS NULL AND completion_evidence_ref IS NOT NULL AND completed_at IS NOT NULL));
+      (completion_reason_code IS NULL AND completion_evidence_ref IS NOT NULL AND completed_at IS NOT NULL)),
+  ADD CONSTRAINT erasure_target_legacy_completion_check
+    CHECK (completion_state <> 'legacy' OR
+      (completion_reason_code IS NULL AND completion_evidence_ref IS NULL AND completed_at IS NULL));
 
 -- Replace the blanket immutable-row trigger without changing the target's
 -- identity, ordinal bound, or latest kind-owner CHECK.
 DROP TRIGGER erasure_target_immutable ON relay.erasure_target;
+
+-- A previous verified header predates target-level proof. Keep its targets
+-- visibly unqualified until a bounded owner inventory completes each one.
+UPDATE relay.erasure_target t SET completion_state = 'legacy'
+FROM relay.erasure e
+WHERE e.id = t.erasure_id AND e.stage = 'verified';
 
 CREATE FUNCTION relay.erasure_target_completion_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -47,14 +56,13 @@ BEGIN
 
   old_state := coalesce(OLD.completion_state, 'pending');
   new_state := coalesce(NEW.completion_state, 'pending');
-  IF old_state <> 'pending' THEN
-    RAISE EXCEPTION 'erasure target completion is immutable once set' USING ERRCODE = '23514';
+  IF old_state = 'completed' THEN
+    RAISE EXCEPTION 'completed erasure target evidence is immutable' USING ERRCODE = '23514';
   END IF;
-  IF new_state = 'pending' THEN
-    RAISE EXCEPTION 'erasure target completion must advance from pending' USING ERRCODE = '23514';
-  END IF;
-  IF new_state NOT IN ('failed', 'completed') THEN
-    RAISE EXCEPTION 'erasure target completion state is invalid' USING ERRCODE = '23514';
+  IF NOT ((old_state = 'pending' AND new_state IN ('failed', 'completed'))
+      OR (old_state = 'failed' AND new_state = 'completed')
+      OR (old_state = 'legacy' AND new_state IN ('failed', 'completed'))) THEN
+    RAISE EXCEPTION 'erasure target completion transition is invalid' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END $$;
