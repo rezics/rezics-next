@@ -660,7 +660,9 @@ export class ContentCore {
     return sequenceContentEvents(this.pool);
   }
 
-  async saveDraft(command: SaveDraftCommand): Promise<SaveDraftResult> {
+  /** Await the fence before locks or receipt replays. It must not commit, roll back or release the client. */
+  async saveDraft(command: SaveDraftCommand,
+    transactionFence?: (client: PoolClient) => Promise<void>): Promise<SaveDraftResult> {
     checkId(command.operationId, 'operation id', 200);
     validateVariant(command.variant);
     if (command.expectedHead !== null) checkUuid(command.expectedHead, 'expected head');
@@ -751,6 +753,7 @@ export class ContentCore {
       expectedHead: command.expectedHead, model: command.model,
       sourceRevision: command.sourceRevision, provenance: command.provenance, byteDigest }));
     const result = await transaction(this.pool, async (client): Promise<Omit<SaveDraftResult, 'position'>> => {
+      await transactionFence?.(client);
       await operationLock(client, command.operationId);
       const previous = await client.query('SELECT * FROM content.receipt WHERE operation_id = $1', [command.operationId]);
       if (previous.rowCount) {
