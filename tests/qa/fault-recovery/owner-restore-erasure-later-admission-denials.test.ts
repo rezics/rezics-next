@@ -52,9 +52,15 @@ const sha = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).d
 const seal = (coverage: RecoveryCoverage, key = restoreKey) =>
   JSON.stringify(sealRecoveryPayload(coverage, key, 'graph-recovery-coverage'));
 const canonical = (value: unknown): unknown =>
-  Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
-    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-      .map(([key, item]) => [key, canonical(item)])) : value;
+  Array.isArray(value)
+    ? value.map(canonical)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(
+          Object.entries(value)
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+            .map(([key, item]) => [key, canonical(item)]),
+        )
+      : value;
 
 /** Fault custody is byte-exact; restoring it must not recapture or normalize evidence. */
 async function retainedSnapshot(copy: Copy, table: string, where = 'true', values: unknown[] = []) {
@@ -169,12 +175,17 @@ test(
         const restoreEvents = await retainedSnapshot(copy, 'relay.delivered_event');
         // Fault custody signs and retains the changed evidence together, so a
         // freshness mismatch cannot stand in for the intended reference gate.
-        const pinCurrent = (coverage: RecoveryCoverage) => copy.faultRetained([
-          { sql: 'UPDATE relay.recovery_coverage_head SET coverage_digest=$1 WHERE consumer=$2',
-            values: [sha(JSON.stringify(canonical(coverage))), fixture.coverage.relay.consumer] },
-          { sql: 'UPDATE relay.current_authority_coverage SET coverage_digest=$1 WHERE id=true',
-            values: [sha(JSON.stringify(canonical(coverage)))] },
-        ]);
+        const pinCurrent = (coverage: RecoveryCoverage) =>
+          copy.faultRetained([
+            {
+              sql: 'UPDATE relay.recovery_coverage_head SET coverage_digest=$1 WHERE consumer=$2',
+              values: [sha(JSON.stringify(canonical(coverage))), fixture.coverage.relay.consumer],
+            },
+            {
+              sql: 'UPDATE relay.current_authority_coverage SET coverage_digest=$1 WHERE id=true',
+              values: [sha(JSON.stringify(canonical(coverage)))],
+            },
+          ]);
         const pristine = async () => {
           expect(await accessStateCoverage(copy.owners.access)).toEqual(baseState);
           expect(await accessOutboxCoverage(copy.owners.access)).toEqual(baseOutbox);
@@ -302,7 +313,7 @@ test(
           await controlled(
             'missing-encrypted-D',
             () => unlinkSync(fixture.nativeAccessAttachment!.path),
-          () => writeFileSync(fixture.nativeAccessAttachment!.path, ciphertext, { mode: 0o600 }),
+            () => writeFileSync(fixture.nativeAccessAttachment!.path, ciphertext, { mode: 0o600 }),
           );
 
           const plaintext = execFileSync(
@@ -320,8 +331,11 @@ test(
             key?: Record<string, string>;
             values?: Record<string, unknown>;
           };
-          const faultAttachment = async (label: string, gate: string,
-            tamper: (rows: NativeRow[]) => void) => {
+          const faultAttachment = async (
+            label: string,
+            gate: string,
+            tamper: (rows: NativeRow[]) => void,
+          ) => {
             const rows = plaintext
               .trimEnd()
               .split('\n')
@@ -329,43 +343,52 @@ test(
             tamper(rows);
             const changedCoverage = structuredClone(fixture.currentCoverage);
             const summary = changedCoverage.nativeAccessErasure!.summary;
-            const nativeRows = rows.filter(row => row.kind === 'row');
+            const nativeRows = rows.filter((row) => row.kind === 'row');
             summary.rowCount = String(nativeRows.length);
-            summary.rowDigest = sha(nativeRows.map(row => JSON.stringify(row) + '\n').join(''));
-            Object.assign(rows.at(-1)!, { rowCount: summary.rowCount, rowDigest: summary.rowDigest });
+            summary.rowDigest = sha(nativeRows.map((row) => JSON.stringify(row) + '\n').join(''));
+            Object.assign(rows.at(-1)!, {
+              rowCount: summary.rowCount,
+              rowDigest: summary.rowDigest,
+            });
             const changed = rows.map((row) => JSON.stringify(row)).join('\n') + '\n';
             summary.plaintextBytes = String(Buffer.byteLength(changed));
             summary.plaintextDigest = sha(changed);
             const originalImport = nativeRecovery.importAccessErasureRecoveryAttachment;
             const failures: string[] = [];
-            const imported = spyOn(nativeRecovery, 'importAccessErasureRecoveryAttachment')
-              .mockImplementation(async (...args) => {
-                try { return await originalImport(...args); }
-                catch (error) {
-                  failures.push(error instanceof Error ? error.message : String(error));
-                  throw error;
-                }
-              });
-            try { await controlled(
-              label,
-              async () => {
-                await pinCurrent(changedCoverage);
-                copy.resources.nativeAccessAttachment = async function* () {
-                  yield changed;
-                };
-              },
-              async () => {
-                copy.resources.nativeAccessAttachment = custody;
-                await restoreHead();
-                await restoreCurrent();
-              },
-              { ...body, retainedAuthorityCoverage: seal(changedCoverage) },
-              'native Access additions differ from signed current custody',
-            );
+            const imported = spyOn(
+              nativeRecovery,
+              'importAccessErasureRecoveryAttachment',
+            ).mockImplementation(async (...args) => {
+              try {
+                return await originalImport(...args);
+              } catch (error) {
+                failures.push(error instanceof Error ? error.message : String(error));
+                throw error;
+              }
+            });
+            try {
+              await controlled(
+                label,
+                async () => {
+                  await pinCurrent(changedCoverage);
+                  copy.resources.nativeAccessAttachment = async function* () {
+                    yield changed;
+                  };
+                },
+                async () => {
+                  copy.resources.nativeAccessAttachment = custody;
+                  await restoreHead();
+                  await restoreCurrent();
+                },
+                { ...body, retainedAuthorityCoverage: seal(changedCoverage) },
+                'native Access additions differ from signed current custody',
+              );
               expect(failures).toHaveLength(1);
               expect(failures[0]).toContain(gate);
               console.info('later admission attachment denial gate', { label, gate: failures[0] });
-            } finally { imported.mockRestore(); }
+            } finally {
+              imported.mockRestore();
+            }
           };
           for (const field of [
             'registered_at',
@@ -374,11 +397,14 @@ test(
             'authority_epoch',
             'graph_sequence',
           ] as const) {
-            const gate = field === 'id'
-              ? 'graph_receipt'
-              : field === 'authority_epoch' ? 'native Access erasure outbox differs from its admission'
-              : field === 'graph_sequence' ? 'retained revision erasure differs from its completed native admission'
-              : 'restored Access does not equal the signed current capture';
+            const gate =
+              field === 'id'
+                ? 'graph_receipt'
+                : field === 'authority_epoch'
+                  ? 'native Access erasure outbox differs from its admission'
+                  : field === 'graph_sequence'
+                    ? 'retained revision erasure differs from its completed native admission'
+                    : 'restored Access does not equal the signed current capture';
             await faultAttachment(`native-admission-${field}`, gate, (rows) => {
               const row = rows.find((row) => row.table === 'access.admission')!;
               expect(row.values).toHaveProperty(field);
@@ -393,24 +419,33 @@ test(
               if (field === 'id') row.key!.id = row.values!.id as string;
             });
           }
-          await faultAttachment('native-registration-receipt', 'native Access erasure receipt differs from its admission', (rows) => {
-            rows.find((row) => row.table === 'access.admission_receipt')!.values!.request_digest =
-              'a'.repeat(64);
-          });
-          await faultAttachment('absent-sealed-outbox', 'new Access erasure admission is missing a native outbox phase', (rows) => {
-            const index = rows.findIndex(
-              (row) => row.table === 'access.outbox' && row.values!.kind === 'admission.sealed',
-            );
-            expect(index).toBeGreaterThanOrEqual(0);
-            rows.splice(index, 1);
-          });
+          await faultAttachment(
+            'native-registration-receipt',
+            'native Access erasure receipt differs from its admission',
+            (rows) => {
+              rows.find((row) => row.table === 'access.admission_receipt')!.values!.request_digest =
+                'a'.repeat(64);
+            },
+          );
+          await faultAttachment(
+            'absent-sealed-outbox',
+            'new Access erasure admission is missing a native outbox phase',
+            (rows) => {
+              const index = rows.findIndex(
+                (row) => row.table === 'access.outbox' && row.values!.kind === 'admission.sealed',
+              );
+              expect(index).toBeGreaterThanOrEqual(0);
+              rows.splice(index, 1);
+            },
+          );
           await faultAttachment('extra-admission', 'graph_receipt', (rows) => {
             const extra = structuredClone(rows.find((row) => row.table === 'access.admission')!);
             extra.key!.id = randomUUID();
             extra.values!.id = extra.key!.id;
             rows.splice(rows.findIndex((row) => row.table === 'access.admission') + 1, 0, extra);
-            const admissions = rows.filter(row => row.table === 'access.admission')
-              .sort((a, b) => a.key!.id! < b.key!.id! ? -1 : 1);
+            const admissions = rows
+              .filter((row) => row.table === 'access.admission')
+              .sort((a, b) => (a.key!.id! < b.key!.id! ? -1 : 1));
             rows.splice(1, admissions.length, ...admissions);
           });
           await controlled(
@@ -525,23 +560,35 @@ test(
             );
             const originalCapture = authority.assertRetainedAuthorityCapture;
             const captures: RecoveryCoverage[] = [];
-            const captured = spyOn(authority, 'assertRetainedAuthorityCapture')
-              .mockImplementation(async (...args) => {
+            const captured = spyOn(authority, 'assertRetainedAuthorityCapture').mockImplementation(
+              async (...args) => {
                 const result = await originalCapture(...args);
                 captures.push(result);
                 return result;
-              });
-            try { await controlled(label, () => pinCurrent(changed), async () => {
-              await restoreHead();
-              await restoreCurrent();
-            }, {
-              ...body, retainedAuthorityCoverage: seal(changed),
-            }, 'independently current authority capture is invalid or superseded');
+              },
+            );
+            try {
+              await controlled(
+                label,
+                () => pinCurrent(changed),
+                async () => {
+                  await restoreHead();
+                  await restoreCurrent();
+                },
+                {
+                  ...body,
+                  retainedAuthorityCoverage: seal(changed),
+                },
+                'independently current authority capture is invalid or superseded',
+              );
               expect(captures).toContainEqual(changed);
               console.info('later admission signed-reference denial gate', {
-                label, gate: 'native Access erasure reference is invalid or differs from C1',
+                label,
+                gate: 'native Access erasure reference is invalid or differs from C1',
               });
-            } finally { captured.mockRestore(); }
+            } finally {
+              captured.mockRestore();
+            }
           }
           // Covered but unsupported writes cannot be admitted into an older cut.
           const gate = (
@@ -564,17 +611,26 @@ test(
                 gate,
               ]),
           );
-          await faultAttachment('auxiliary-admission-proof', 'unknown native Access attachment schema or row', (rows) => {
-            const extra = structuredClone(
-              rows.find((row) => row.table === 'access.admission_receipt')!,
-            );
-            extra.table = 'access.admission_proof';
-            rows.splice(rows.length - 1, 0, extra);
-          });
-          await faultAttachment('source-queue-fold', 'discovery source invalidation is not the fence reopen/refence', (rows) => {
-            rows.find((row) => row.table === 'access.discovery_source_change')!.values!.context_key =
-              'unsupported-fold';
-          });
+          await faultAttachment(
+            'auxiliary-admission-proof',
+            'unknown native Access attachment schema or row',
+            (rows) => {
+              const extra = structuredClone(
+                rows.find((row) => row.table === 'access.admission_receipt')!,
+              );
+              extra.table = 'access.admission_proof';
+              rows.splice(rows.length - 1, 0, extra);
+            },
+          );
+          await faultAttachment(
+            'source-queue-fold',
+            'discovery source invalidation is not the fence reopen/refence',
+            (rows) => {
+              rows.find(
+                (row) => row.table === 'access.discovery_source_change',
+              )!.values!.context_key = 'unsupported-fold';
+            },
+          );
           await controlled(
             'unrelated-graph-tail-command',
             () =>
