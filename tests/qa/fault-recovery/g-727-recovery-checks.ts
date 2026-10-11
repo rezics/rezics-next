@@ -36,12 +36,18 @@ import {
 import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
 import type { RetainedAuthorityCoverage } from '../../../services/main/src/modules/erasure/authority.ts';
 import type { RestoredContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
-import { startPostgresCluster } from '../support/postgres-cluster.ts';
+import {
+  currentRelayTransferForDump,
+  importCurrentRelay,
+  type CurrentRelayTransfer,
+} from './independent-restore-support.ts';
+
+export { importCurrentRelay } from './independent-restore-support.ts';
 
 export type RecoveryProbeSource = Pick<RestoredContext, 'apps' | 'pools' | 'fuseki'>;
 
 export interface RetainedRecoveryChecks {
-  /** The original source's current relay, still running while the target restores. */
+  /** An independent copy of the source's current relay, separate from the restored relay. */
   relayPool: Pool;
   /** Kept outside the restored owners: the signed capture and the source's key. */
   erasures: Pick<NonNullable<RestoreResources['erasures']>, 'authority' | 'signingKey'>;
@@ -76,14 +82,14 @@ export async function retainedRecoveryAuthority(
 }
 
 /** Backup stops the whole source project, so its relay cannot be the current
- * ledger a successor reconciles against. Dump the stopped source's final relay
- * once and keep it on a separate PostgreSQL instance that outlives both the
- * source and the restored target. The copy holds exactly what the source
+ * ledger a successor reconciles against. Export the stopped source's final
+ * relay once as a data-only transfer; import it into an independent PostgreSQL
+ * instance after the source phase. The copy holds exactly what the source
  * retained: the coverage head and the deletion and erasure journals. */
-export async function retainCurrentRelay(
+export async function exportCurrentRelay(
   source: StackOptions,
   directory: string,
-): Promise<{ relayPool: Pool; close: () => Promise<void> }> {
+): Promise<CurrentRelayTransfer> {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const stopped = stackContext(source, new RecoveryBudget());
   const dump = join(directory, 'relay.dump');
@@ -97,28 +103,20 @@ export async function retainCurrentRelay(
   } finally {
     stopped.compose(['stop', 'postgres']);
   }
-  const cluster = await startPostgresCluster({ role: 'postgres' });
-  const url = (database: string) => `postgresql://postgres@127.0.0.1:${cluster.port}/${database}`;
-  try {
-    execFileSync('createdb', ['-h', '127.0.0.1', '-p', String(cluster.port), '-U', 'postgres', 'relay'], {
-      timeout: 30_000,
-    });
-    execFileSync(
-      'pg_restore',
-      ['--exit-on-error', '--no-owner', '--no-privileges', `--dbname=${url('relay')}`, dump],
-      { timeout: 60_000 },
-    );
-  } catch (error) {
-    cluster.remove();
-    throw error;
-  }
-  const pool = new Pool({ connectionString: url('relay'), max: 4 });
-  pool.on('error', () => {});
+  return currentRelayTransferForDump(dump);
+}
+
+/** Preserve the legacy one-call setup for callers that need a live retained pool. */
+export async function retainCurrentRelay(
+  source: StackOptions,
+  directory: string,
+): Promise<{ relayPool: Pool; close: () => Promise<void> }> {
+  const transfer = await exportCurrentRelay(source, directory);
+  const imported = await importCurrentRelay(transfer);
   return {
-    relayPool: pool,
+    relayPool: imported.relayPool,
     close: async () => {
-      await pool.end();
-      cluster.remove();
+      await imported.close();
       rmSync(directory, { recursive: true, force: true });
     },
   };
