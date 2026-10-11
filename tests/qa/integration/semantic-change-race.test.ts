@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { readSemanticChangeTerminal } from '../../../services/main/src/modules/semantic/change.ts';
+import { profileValidations } from '../../../services/main/src/infrastructure/profile.ts';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
 
 type Change = { component: string; revision: string; receipt: string };
@@ -49,7 +50,7 @@ test('semantic change races retain 409 and the winning head across admission, ow
         // The loser has already crossed the real Access admission boundary.
         const admission = await f.accessPool.query<{ state: string }>(
           'SELECT state FROM access.admission WHERE idempotency_key = $1', [loserKey]);
-        expect(admission.rows).toEqual([{ state: 'claimed' }]);
+        expect(admission.rows, `${seam}: interception must happen after admission`).toEqual([{ state: 'claimed' }]);
         expect((await graph.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
           ${iri(target)} <${RV}${firstDescription ? 'head' : 'semanticHead'}> ${iri(expectedHead)} } }`)).boolean).toBe(true);
         winner = await f.json<Change>(await write(target, expectedHead, types, assertions), 200);
@@ -59,6 +60,7 @@ test('semantic change races retain 409 and the winning head across admission, ow
           if (property === 'query') return async (query: string) => {
             const ownerQuery = query.includes(iri(target)) && (seam === 'existing-type'
               ? query.includes('SELECT ?type WHERE') && query.includes('VALUES ?type')
+                && query.includes(`${iri(target)} a ?type`)
               : query.includes('SELECT ?predicate WHERE') && query.includes('VALUES ?predicate'));
             const admissionQuery = seam === 'after-admission' && query.includes('a rv:ModelGeneration');
             if (!intercepted && seam !== 'write-cas' && (ownerQuery || admissionQuery)) await commitWinner();
@@ -74,8 +76,8 @@ test('semantic change races retain 409 and the winning head across admission, ow
         },
       });
       const loser = await write(target, expectedHead, types, assertions, loserKey);
-      expect(intercepted).toBe(true);
-      expect(loser.status).toBe(409);
+      expect(intercepted, `${seam}: race interceptor must run`).toBe(true);
+      expect(loser.status, `${seam}: admitted stale head must return 409`).toBe(409);
       expect(loser.headers.get('content-type')).toContain('application/problem+json');
       const conflict = await loser.json();
       expect(conflict).toMatchObject({ code: 'stale_head', currentHead: winner!.revision });
@@ -98,9 +100,36 @@ test('semantic change races retain 409 and the winning head across admission, ow
     const existing = await f.json<Change>(await write(undefined, null, [baseType], []), 201);
     await f.grant(`semantic:read:${existing.component}`, 'semantic.read');
     await f.grant(`semantic:edit:${existing.component}`, 'semantic.change');
-    // Another component already owns these triples at the named semantic head.
-    await graph.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(existing.component)} a <${addedType}> ; <${predicate}> "Other owner" . } }`);
+    // Competing current triples at the unchanged semantic head are reserved.
+    const ownershipReceipt = `urn:rezics:receipt:semantic-race-owner:${hash(randomUUID())}`;
+    const ownershipDigest = hash(ownershipReceipt);
+    const ownershipBatch = `urn:rezics:outbox:${hash(`${ownershipReceipt}\0batch`)}`;
+    const ownershipEvent = `urn:rezics:event:${hash(`${ownershipReceipt}\0event`)}`;
+    const ownershipValidations = await profileValidations(graph, 'semantic-resource-v1', [{
+      shape: 'https://rezics.com/definition/semantic-resource-v1/resource-shape',
+      focus: [existing.component], graphs: [GRAPHS.current, GRAPHS.revisions],
+    }]);
+    const ownershipMutation = await graph.commandWithReceipt({ receipt: ownershipReceipt, digest: ownershipDigest,
+      validations: ownershipValidations, deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?prior } }
+        INSERT {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(existing.component)} a <${addedType}> ; <${predicate}> "Other owner" . }
+          GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+          GRAPH ${iri(GRAPHS.receipts)} { ${iri(ownershipReceipt)} a rv:OperationReceipt ;
+            rv:outcome rv:Succeeded ; rv:requestDigest ${lit(ownershipDigest)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ?next . }
+          GRAPH ${iri(GRAPHS.outbox)} {
+            ${iri(ownershipBatch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ;
+              rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(ownershipEvent)} .
+            ${iri(ownershipEvent)} a rv:SemanticChangedEvent ; rv:ordinal 0 ; rv:receipt ${iri(ownershipReceipt)} ;
+              rv:action "semantic.change" .
+          }
+        }
+        WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(f.env.lineage.routingEpoch)} ; rv:sequence ?prior }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(ownershipReceipt)} ?p ?o } }
+          BIND(?prior + 1 AS ?next) }` });
+    expect(ownershipMutation.status).toBe('committed');
     for (const [types, assertions] of [[ [baseType, addedType], [] ], [ [baseType], properties ]] as const) {
       const refused = await write(existing.component, existing.revision, [...types], [...assertions]);
       expect(refused.status).toBe(422);

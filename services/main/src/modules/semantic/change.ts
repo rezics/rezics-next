@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, WORK_SEMANTIC_TYPES, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
@@ -527,15 +526,14 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
       ? await validationsFor(env, 'definition-key-v1', [{ role: 'key', focus: [definitionKeyIri(target)] }]) : []),
   ];
   await intent.beforeCommit?.(target,receipt);
-  try {
-    await sendSemanticWrite(env, {
-      receipt, digest, admission: intent.admission, validations,
-      deletes: old.length ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }` : '',
-      inserts: `GRAPH ${iri(GRAPHS.current)} { ${next.map(triple => `${iri(target)} ${triple} .`).join('\n')}
+  await sendSemanticWrite(env, {
+    receipt, digest, admission: intent.admission, validations,
+    deletes: old.length ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }` : '',
+    inserts: `GRAPH ${iri(GRAPHS.current)} { ${next.map(triple => `${iri(target)} ${triple} .`).join('\n')}
       ${state.component === 'definition' && state.notation ? definitionKeyTriples(target, state.notation) : ''} }
       GRAPH ${iri(GRAPHS.revisions)} { ${anchor}
         ${rdf.flatMap(item => item.node ? item.node.triples.map(triple => `${triple} .`) : []).join('\n')} }`,
-      where: `${modelGenerationHeadGuard(generation)}
+    where: `${modelGenerationHeadGuard(generation)}
       ${intent.target ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(target)} rv:protectionHead ?protection } }` : ''}
       ${state.component === 'definition' && state.notation ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
@@ -559,19 +557,9 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
         ${iri(state.successor)} a rv:SemanticDefinition } }` : ''}
       ${nodes.map(node => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(node.iri)} ?nodeP ?nodeO } }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
-      receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(target)} ; rv:revision ${iri(revision)} ;
-        ${intent.expectedHead ? `rv:expectedHead ${iri(intent.expectedHead)} ;` : ''}`,
-    });
-  } catch (error) {
-    // A CAS loser can reach native profile validation after its winner changes
-    // the current resource. Resolve that stale basis before reporting a profile
-    // availability failure; the request has lost its named head either way.
-    if (error instanceof CommandRejected && error.result.status === 'unknown-profile' && intent.target) {
-      const now = await readCurrentComponent(env, target, state.component).catch(() => null);
-      if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
-    }
-    throw error;
-  }
+    receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(target)} ; rv:revision ${iri(revision)} ;
+      ${intent.expectedHead ? `rv:expectedHead ${iri(intent.expectedHead)} ;` : ''}`,
+  });
   const committed = await readSemanticTerminal(env, receipt);
   if (committed) return checkedResult(env, committed, intent, committed.revision !== revision);
   const changedGeneration = await sealSemanticRejection(env, receipt, digest, intent.admission, 'generation-changed',
