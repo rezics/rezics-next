@@ -149,7 +149,6 @@ describe('G-965 Concept and saved-view owner journey', () => {
   });
 
   test('Current Off choices and private Realms revoke queued post disclosure', async () => {
-    const { stack } = home;
     savedFollow = await follow(`urn:rezics:saved-view:${saved.id}`, savedFollow.revision, { level: 'off' });
     expect(await service.resolve(input())).toEqual({ status: 'undisclosed' });
     await follow(`urn:rezics:saved-view:${saved.id}`, savedFollow.revision, { level: 'all' });
