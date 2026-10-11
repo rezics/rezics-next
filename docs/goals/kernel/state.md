@@ -38,6 +38,10 @@ No kernel worktree is dirty and no task is half-done. Next step for each, when q
 
 Landed directly on main from regression run 9 (no worker needed): the recipe reader no longer takes a qualifier node as a target (the recipes went 503 after the structure-profile change), and hidden/absent targets answer 404 again with their keys still unsealed (G-1623's 503s). No task is one step from landing. Merged and closed this session: G-1592, G-1617, G-1623. The shared stack runs pin `ce9c77bee5cd` (refreshed 2026-10-10 17:01 UTC; the rebuilt search index survived the restart).
 
+## Launch asks (2026-10-11, not briefed)
+
+Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recipe export paging (limit kept, typed); cover rights mark (M, needs media stack and rights takedown; contract in source-lifecycle); board tags and primary board as Statements with a filtered thread read (M, needs G-1618 and G-1591). G-1593, G-1618 and G-1591 are A (public API shape before opening, no compatibility layer).
+
 ## Open
 
 - Rights T2, T3a, T3b, T4, T5: send each diff to Trust-ops before landing. The Statement create has no licence field (`importBangumiWorkFacts` gap), flagged for T4.
