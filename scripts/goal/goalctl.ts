@@ -2737,8 +2737,13 @@ export function balanceUnitShards(files: readonly string[], shards: number): str
   return groups;
 }
 
+/** How many shards of one gate run at a time. Program sets it for every Goal in `unit-gate-shards` in the
+ * orchestration state; `GOAL_UNIT_GATE_SHARDS` overrides it for one process. Each shard still passes memory admission. */
 function unitGateShards(): number {
-  return positiveInteger('GOAL_UNIT_GATE_SHARDS', 4);
+  if (process.env.GOAL_UNIT_GATE_SHARDS) return positiveInteger('GOAL_UNIT_GATE_SHARDS', 4);
+  const file = join(stateDir, 'unit-gate-shards');
+  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : 4;
 }
 
 /** Wall clock for every shard of one side. Twelve minutes: one Access-sized run previously waited past 25.
