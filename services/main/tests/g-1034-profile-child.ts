@@ -820,6 +820,13 @@ try {
   const voter = workProfileCorpusApi('http://main.local', voterMember.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });
+  // Capture the committed score before the transactional vote changes it.
+  const baseline = (
+    await stack.accessPool.query<{ score: number }>(
+      'SELECT score FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3',
+      [epoch, realm, opening.reply],
+    )
+  ).rows[0]!.score;
   const voted = await timeRealmRankingStage('vote', () =>
     voter.command<{ score: number; replayed: boolean }>(`g1034:vote:${randomUUID()}`, {
       method: 'POST',
@@ -832,14 +839,6 @@ try {
       },
     }),
   );
-  // Supporters and the author already voted. This reader's vote and the two
-  // concurrent score writes compose on that baseline, whatever the baseline is.
-  const baseline = (
-    await stack.accessPool.query<{ score: number }>(
-      'SELECT score FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3',
-      [epoch, realm, opening.reply],
-    )
-  ).rows[0]!.score;
   assert.equal(voted.score, baseline + 1);
   await Promise.all([
     stack.accessPool.query(
