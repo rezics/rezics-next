@@ -26,5 +26,9 @@ export const searchProjectionCases: CaseDeclarations = {
     tier: 'integration',
     file: 'tests/qa/integration/content-eligibility-order.test.ts',
     name: 'SEARCH19/SEARCH20/OPS16: closed eligibility and verified rebuild adoption preserve exact source authority',
+  }, {
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/content-private-projection-rebuild.test.ts',
+    name: 'SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen rebuild recover together',
   }],
 };

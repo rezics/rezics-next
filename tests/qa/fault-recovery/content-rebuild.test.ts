@@ -108,6 +108,7 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       const published = await publishPinnedContent(env, content, admission, publicationInput);
       expect(published.status).toBe('active');
       expect(published.graphSequence).toBeTruthy();
+      const publicationCut = await content.ownerPosition();
       if (!published.decision) throw new Error('publication decision absent');
       const eligibilityInput = { resourceId: resource, variantId: variant,
         publicationDecision: published.decision, expectedEligibilityHead: null, actingSubject: actor,
@@ -177,7 +178,9 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       const restartedCursor = new ContentProjectionCursor(pool);
       await expect(replayQuarantinedContentCut(env, content, restartedCursor, job))
         .rejects.toThrow('terminal publication exact revision unavailable');
-      expect((await restartedCursor.read(job.consumer)).sequence).toBe('2');
+      // The active terminal is covered by its retained approval handoff. Exact
+      // bytes are required when that approval event itself projects the body.
+      expect((await restartedCursor.read(job.consumer)).sequence).toBe(publicationCut.sequence);
       await expect(replayQuarantinedContentCut(env, content, new ContentProjectionCursor(pool), job))
         .rejects.toThrow('terminal publication exact revision unavailable');
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toThrow();

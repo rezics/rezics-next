@@ -32,6 +32,10 @@ export const opsSearchCases: CaseDeclarations = {
     name: 'SEARCH19/SEARCH20/OPS16: closed eligibility and verified rebuild adoption preserve exact source authority',
   }, {
     tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/content-private-projection-rebuild.test.ts',
+    name: 'SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen rebuild recover together',
+  }, {
+    tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/search-ops-generation.test.ts',
     name: 'OPS15/OPS16: a crash retains the TDB2 receipt, fences text, and a pinned rebuild activates a qualified generation',
   }, {

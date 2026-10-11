@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { saveAdmittedContentDraft } from '../../../services/main/src/modules/content-publication/draft.ts';
 import { contentSearchEligibilityDigest, selectPublicContentSearch }
   from '../../../services/main/src/modules/content-publication/eligibility.ts';
@@ -99,14 +100,9 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
     [principalId, principal.issuer, principal.subject]);
   await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
   const grant = async (scope: string, action: string) => {
-    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
-    await accessPool.query(`INSERT INTO access.representation
-      (id, principal_id, subject_id, action, valid_until) VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
-    [randomUUID(), principalId, actor, action]);
-    await accessPool.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
-    [randomUUID(), actor, scope, action]);
+    await grantFixtureAuthority(accessPool, { scope, requireDispatch: true,
+      representations: [{ principalId, actor, action, lifetime: '1 hour' }],
+      grant: { actor, action, lifetime: '1 hour' } });
   };
   const variantId = `urn:rezics:variant:${randomUUID()}`;
   await grant(`content:draft:${work}`, 'content.draft');

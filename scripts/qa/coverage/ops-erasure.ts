@@ -23,6 +23,8 @@ export const opsErasureCases: CaseDeclarations = {
   SEARCH20: [
     { tier: 'integration', file: 'tests/qa/integration/content-eligibility-order.test.ts',
       name: 'SEARCH19/SEARCH20/OPS16: closed eligibility and verified rebuild adoption preserve exact source authority' },
+    { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/content-private-projection-rebuild.test.ts',
+      name: 'SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen rebuild recover together' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/content-rebuild-positive.test.ts',
       name: 'SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed cut' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/content-rebuild.test.ts',

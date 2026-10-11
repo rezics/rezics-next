@@ -512,11 +512,12 @@ sync`); }
 
     const interruptedId = randomUUID();
     const beforeQuiescence = offlinePasses;
+    const beforeWriterRefusal = await retainedState(interruptedId);
     await expect(rebuild(interruptedId, async () => { throw new Error('test: writer remains'); }))
       .rejects.toThrow('test: writer remains');
     expect(offlinePasses).toBe(beforeQuiescence);
-    expect(await contentProjectionPresent()).toBe(false);
-    const emptyState = await retainedState(interruptedId);
+    expect(await contentProjectionPresent()).toBe(true);
+    expect(await retainedState(interruptedId)).toEqual(beforeWriterRefusal);
     // A malformed retained Content subject is also nonempty; cleanup's typed
     // inventory must not let it enter the offline indexer.
     const orphan = `urn:rezics:content:match-unit:${randomUUID()}`;
@@ -525,8 +526,9 @@ sync`); }
     try {
       await expect(rebuild(interruptedId)).rejects.toThrow('Content units remain after terminal clear');
       expect(offlinePasses).toBe(beforeQuiescence);
-      expect(await retainedState(interruptedId)).toEqual(emptyState);
     } finally { await fuseki.update(`DELETE WHERE { GRAPH ${iri(publicGraph)} { ${iri(orphan)} ?p ?o } }`); }
+    expect(await contentProjectionPresent()).toBe(false);
+    const emptyState = await retainedState(interruptedId);
     for (const phase of ['before', 'after'] as const) {
       offlineFault = phase;
       await expect(rebuild(interruptedId)).rejects.toThrow(`test: interrupted ${phase} offline`);
