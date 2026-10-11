@@ -1134,38 +1134,51 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       ) {
         throw new Error('later erasure API fixture did not leave a completed native admission');
       }
-      newerCoverage = await timing.phase('source.later-authority-capture', () =>
-        captureGraphRecoveryCoverage(
-          native,
-          source.account,
-          source.access,
-          source.relay,
-          consumer,
-          source.content,
-          {
-            directory: objects.directory,
-            workObjects: objects,
-            structureObjects: objects,
-          },
-          undefined,
-          {
-            baseCoverage,
-            baseCoverageEnvelope: authority.sealedCoverage,
-            baseCoverageHmacKey: restoreKey,
-            baseAccessPool: baseAccess,
-            baseRelayPool: baseRelay,
-            encryptAttachment: async (produce) => {
-              nativeAccessAttachment = await encryptRecoveryAttachment(
-                attachmentCustody!.recipient,
-                join(directory, 'native-access-attachments'),
-                produce,
-                attachmentCustody!.publicOnly,
-              );
-              return nativeAccessAttachment;
+      const captureRelay = await source.relay.connect();
+      try {
+        await captureRelay.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await captureRelay.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))",
+        );
+        newerCoverage = await timing.phase('source.later-authority-capture', () =>
+          captureGraphRecoveryCoverage(
+            native,
+            source.account,
+            source.access,
+            source.relay,
+            consumer,
+            source.content,
+            {
+              directory: objects.directory,
+              workObjects: objects,
+              structureObjects: objects,
             },
-          },
-        ),
-      );
+            { fuseki: native, relayClient: captureRelay },
+            {
+              baseCoverage,
+              baseCoverageEnvelope: authority.sealedCoverage,
+              baseCoverageHmacKey: restoreKey,
+              baseAccessPool: baseAccess,
+              baseRelayPool: baseRelay,
+              encryptAttachment: async (produce) => {
+                nativeAccessAttachment = await encryptRecoveryAttachment(
+                  attachmentCustody!.recipient,
+                  join(directory, 'native-access-attachments'),
+                  produce,
+                  attachmentCustody!.publicOnly,
+                );
+                return nativeAccessAttachment;
+              },
+            },
+          ),
+        );
+        await captureRelay.query('COMMIT');
+      } catch (error) {
+        await captureRelay.query('ROLLBACK');
+        throw error;
+      } finally {
+        captureRelay.release();
+      }
       newerAuthority = {
         sealedCoverage: JSON.stringify(
           sealRecoveryPayload(newerCoverage, restoreKey, 'graph-recovery-coverage'),
