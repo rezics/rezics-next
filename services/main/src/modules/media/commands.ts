@@ -183,7 +183,7 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
   }
   const digest = sha256(bytes);
   let verdict: Parameters<MediaStore['settleUpload']>[1];
-  let persist: (() => Promise<string>) | undefined;
+  let persist: Parameters<MediaStore['settleUpload']>[2];
   if (bytes.length !== upload.byteLength) verdict = { status: 'rejected', reason: 'size-mismatch' };
   else if (upload.sha256 && digest !== upload.sha256) verdict = { status: 'rejected', reason: 'digest-mismatch' };
   else {
@@ -191,13 +191,19 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
       const image = verifyImage(bytes, upload.mediaType);
       verdict = { status: 'activated', sha256: digest, byteLength: bytes.length,
         mediaType: image.mediaType, width: image.width, height: image.height };
-      persist = async () => {
+      persist = async (signal, onFailure) => {
         // The owner holds the asset and reservation fence across both writes.
         const quarantine = media.objects(`${upload.quarantineKey}/`);
-        const staged = await quarantine.get(await quarantine.put(bytes));
+        const original = media.objects(upload.objectNamespace);
+        if (!quarantine.deleteAndVerifyAbsent || !original.deleteAndVerifyAbsent)
+          throw new MediaUnavailable('media persistence requires verified object deletion');
+        onFailure(cleanupSignal => quarantine.deleteAndVerifyAbsent!(digest, cleanupSignal));
+        const staged = await quarantine.get(await quarantine.put(bytes, signal), bytes.length, signal);
+        signal.throwIfAborted();
         if (staged.length !== bytes.length || sha256(staged) !== digest)
           throw new MediaUnavailable('quarantined media integrity differs');
-        return media.objects(upload.objectNamespace).put(staged);
+        onFailure(cleanupSignal => original.deleteAndVerifyAbsent!(digest, cleanupSignal));
+        return original.put(staged, signal);
       };
     } catch (error) {
       if (!(error instanceof ImageFormatRejected)) throw error;

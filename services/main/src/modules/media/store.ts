@@ -200,7 +200,9 @@ function checkAdmission(admission: MediaAdmission): void {
 /** Receipts each open transaction recorded, numbered after its commit. */
 const recorded = new WeakMap<PoolClient, string[]>();
 
-async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
+  onFailure?: () => Promise<void>,
+): Promise<T> {
   const client = await pool.connect();
   const operations: string[] = [];
   recorded.set(client, operations);
@@ -210,7 +212,9 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
     result = await work(client);
     await client.query('COMMIT');
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Compensation runs while the owner lock is still held whenever possible.
+    if (onFailure) await onFailure();
+    await client.query('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
     recorded.delete(client);
@@ -614,15 +618,20 @@ export class MediaStore {
   }
 
   /** Persist quarantine and original bytes under the asset -> upload fence, then
-   * activate their exact representation. A replay never invokes persistence. */
+   * activate their exact representation. Every callback I/O must honor the shared
+   * abort signal and register exact-key compensation before attempting a write.
+   * A replay never invokes persistence. */
   async settleUpload(upload: string, verdict: { status: 'activated'; sha256: string; byteLength: number;
     mediaType: MediaType; width: number; height: number } | { status: 'rejected'; reason: string },
-    persist?: () => Promise<string>,
+    persist?: (signal: AbortSignal, onFailure: (cleanup: (signal: AbortSignal) => Promise<void>) => void)
+      => Promise<string>,
   ): Promise<ActivatedUpload> {
     const current = await this.readUpload(upload);
     if (!current) throw new MediaMissing('media upload is unavailable');
     const operationId = `media-activate:${upload}`;
     const digest = hash(JSON.stringify({ family: 'media-upload-settle-v1', upload, verdict }));
+    const cleanup: ((signal: AbortSignal) => Promise<void>)[] = [];
+    let cleanupMs = 1;
     return this.positioned(operationId, await transaction(this.pool, async (client):
       Promise<Omit<ActivatedUpload, 'position'>> => {
       const previous = await prior(client, operationId, digest, 'media.upload.settle');
@@ -664,9 +673,33 @@ export class MediaStore {
         || reservation.declared_digest !== null && reservation.declared_digest !== verdict.sha256)
         throw new MediaInvalid('media upload does not admit these bytes');
       if (!persist) throw new MediaInvalid('media activation requires fenced persistence');
-      if (await persist() !== verdict.sha256) throw new MediaInvalid('media object digest differs');
-      // Persistence may outlive the reservation; metadata stays uncommitted and
-      // any orphan remains inside the asset/upload namespace that erasure owns.
+      // Read the effective pool setting on this client, including startup overrides.
+      // One deadline covers both writes and verification, leaving time to compensate
+      // before PostgreSQL can release the owner lock on an idle transaction.
+      const bounds = (await client.query<{ idle_ms: number; transaction_id: string }>(`
+        SELECT (extract(epoch FROM current_setting('idle_in_transaction_session_timeout')::interval)
+          * 1000)::float8 AS idle_ms, txid_current()::text AS transaction_id`)).rows[0]!;
+      if (!Number.isFinite(bounds.idle_ms) || bounds.idle_ms < 0)
+        throw new MediaUnavailable('media persistence requires a bounded transaction');
+      // Zero disables PostgreSQL's idle timeout (e.g. migration/test pools).
+      const idleBudgetMs = bounds.idle_ms || Infinity;
+      const deadlineMs = Math.max(1, Math.floor(Math.min(idleBudgetMs / 2, 30_000)));
+      cleanupMs = Math.max(1, Math.floor(Math.min(idleBudgetMs / 4, 5_000)));
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new MediaUnavailable('media persistence deadline elapsed')),
+        deadlineMs);
+      let persisted: string;
+      try {
+        persisted = await persist(controller.signal, undo => { cleanup.push(undo); });
+        controller.signal.throwIfAborted();
+      } finally { clearTimeout(timer); }
+      // A live connection alone is insufficient: a rolled-back transaction would
+      // give a fresh xid. Require the same transaction that acquired the locks.
+      const alive = (await client.query<{ transaction_id: string }>(
+        'SELECT txid_current()::text AS transaction_id')).rows[0];
+      if (alive?.transaction_id !== bounds.transaction_id)
+        throw new MediaStale('media persistence lost its owner transaction');
+      if (persisted !== verdict.sha256) throw new MediaInvalid('media object digest differs');
       if (!(await client.query('SELECT id FROM media.upload WHERE id=$1 AND expires_at>clock_timestamp()',
         [upload])).rowCount) throw new MediaStale('media upload reservation has lapsed');
       const representation = randomUUID();
@@ -695,6 +728,12 @@ export class MediaStore {
       [randomUUID(), operationId, current.asset, verdict.sha256]);
       return { asset: current.asset, upload, representation, sha256: verdict.sha256, status: 'activated',
         reason: null, replayed: false };
+    }, async () => {
+      // Aborted PUT responses can still have stored bytes, so every attempted key
+      // is registered before I/O. Failed verified deletion leaves the existing
+      // asset/upload orphan sweep as the recovery backstop.
+      const signal = AbortSignal.timeout(cleanupMs);
+      await Promise.allSettled(cleanup.map(async undo => undo(signal)));
     }));
   }
 

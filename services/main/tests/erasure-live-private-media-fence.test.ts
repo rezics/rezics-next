@@ -4,7 +4,8 @@ import { Pool } from 'pg';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentCore, migrateContent } from '../../content/src/index.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { ObjectUnavailable, S3ImmutableObjects, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { boundedPool, CONNECTION_BOUNDS } from '../src/infrastructure/pg-pool.ts';
 import { applyContentErasure } from '../src/modules/erasure/content.ts';
 import { activateUploadedBytes, type MediaDependencies } from '../src/modules/media/commands.ts';
 import { assetIri, MediaFenced, MediaInvalid, MediaMissing, MediaStale, MediaStore,
@@ -60,10 +61,12 @@ afterAll(async () => {
   cluster?.remove();
 });
 
-async function fixture(run: (f: Awaited<ReturnType<typeof mediaFixture>>) => Promise<void>, imported = false) {
+async function fixture(run: (f: Awaited<ReturnType<typeof mediaFixture>>) => Promise<void>, imported = false,
+  idleTimeout = CONNECTION_BOUNDS.idleInTransactionSessionTimeout) {
   const name = `media_fence_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE DATABASE ${name} TEMPLATE media_fence_template`);
-  const pool = new Pool({ ...cluster!.connection, database: name, max: 8 });
+  const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 },
+    { ...CONNECTION_BOUNDS, idleInTransactionSessionTimeout: idleTimeout });
   try { await run(await mediaFixture(pool, imported)); }
   finally { await pool.end(); }
 }
@@ -96,20 +99,40 @@ async function mediaFixture(pool: Pool, imported: boolean) {
   const reserved = await store.reserveUpload(admission(), { asset: null, mediaType: 'image/gif',
     byteLength: image.length, sha256: sha(image), disclosure: 'private', importedCover });
   const objects = new Map<string, Uint8Array>();
+  const deleted: string[] = [];
   let writes = 0;
-  let onPut: ((namespace: string) => Promise<void>) | undefined;
+  let onPut: ((namespace: string, signal?: AbortSignal) => Promise<void>) | undefined;
+  let onDelete: ((namespace: string, signal?: AbortSignal) => Promise<void>) | undefined;
   const media: MediaDependencies = { store, content, objects: namespace => ({
-    put: async (bytes: Uint8Array) => {
-      await onPut?.(namespace);
+    put: async (bytes: Uint8Array, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
+      const pending = onPut?.(namespace, signal);
+      if (pending && signal) await new Promise<void>((resolve, reject) => {
+        const abort = () => reject(signal.reason);
+        signal.addEventListener('abort', abort, { once: true });
+        pending.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+        if (signal.aborted) abort();
+      });
+      else await pending;
+      signal?.throwIfAborted();
       writes++;
       const digest = sha(bytes);
       objects.set(`${namespace}sha256/${digest}`, bytes.slice());
       return digest;
     },
-    get: async (digest: string) => {
+    get: async (digest: string, _maximum?: number, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
       const bytes = objects.get(`${namespace}sha256/${digest}`);
       if (!bytes) throw new Error('object is absent');
       return bytes.slice();
+    },
+    deleteAndVerifyAbsent: async (digest: string, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
+      await onDelete?.(namespace, signal);
+      const key = `${namespace}sha256/${digest}`;
+      objects.delete(key);
+      deleted.push(key);
+      expect(objects.has(key)).toBe(false);
     },
   } as ImmutableObjects) };
   const env = { fuseki: new class extends FusekiClient {
@@ -121,10 +144,13 @@ async function mediaFixture(pool: Pool, imported: boolean) {
   const request = new Request('http://media-fence.invalid', { headers: { authorization: 'Bearer owner' } });
   const transfer = (intake: Parameters<typeof activateUploadedBytes>[6] = image) =>
     activateUploadedBytes(env, media, account, access, request, reserved.upload, intake);
-  const persist = async () => {
+  const persist: NonNullable<Parameters<MediaStore['settleUpload']>[2]> = async (signal, onFailure) => {
     const quarantine = media.objects(`${reserved.quarantineKey}/`);
-    const staged = await quarantine.get(await quarantine.put(image));
-    return media.objects(reserved.objectNamespace).put(staged);
+    onFailure(cleanupSignal => quarantine.deleteAndVerifyAbsent!(sha(image), cleanupSignal));
+    const staged = await quarantine.get(await quarantine.put(image, signal), undefined, signal);
+    const original = media.objects(reserved.objectNamespace);
+    onFailure(cleanupSignal => original.deleteAndVerifyAbsent!(sha(staged), cleanupSignal));
+    return original.put(staged, signal);
   };
   const change = async (lifecycle: 'active' | 'deleted' | 'erased', actingSubject = owner) => {
     const state = await store.readAsset(reserved.asset);
@@ -143,8 +169,9 @@ async function mediaFixture(pool: Pool, imported: boolean) {
     objects.clear();
     return result;
   };
-  return { pool, content, store, reserved, objects, principal, owner, transfer, persist, change, erase,
-    writes: () => writes, onPut: (callback: typeof onPut) => { onPut = callback; } };
+  return { pool, content, store, reserved, objects, deleted, principal, owner, transfer, persist, change, erase,
+    writes: () => writes, onPut: (callback: typeof onPut) => { onPut = callback; },
+    onDelete: (callback: typeof onDelete) => { onDelete = callback; } };
 }
 
 test('erase wins a slow upload: neither quarantine nor original persistence starts', async () => {
@@ -202,7 +229,9 @@ test('concurrent settlement persists once and returns the same original on repla
   await fixture(async f => {
     const started = barrier(), release = barrier();
     let calls = 0;
-    const persist = async () => { calls++; started.release(); await release.promise; return f.persist(); };
+    const persist: typeof f.persist = async (signal, onFailure) => {
+      calls++; started.release(); await release.promise; return f.persist(signal, onFailure);
+    };
     const first = f.store.settleUpload(f.reserved.upload, verdict, persist);
     await started.promise;
     const second = f.store.settleUpload(f.reserved.upload, verdict, persist);
@@ -271,7 +300,7 @@ test('partial object persistence rolls back activation and can recover or be fen
       if (namespace === f.reserved.objectNamespace) throw new Error('original store unavailable');
     });
     await expect(f.transfer()).rejects.toThrow('original store unavailable');
-    expect(f.objects.size).toBe(1);
+    expect(f.objects.size).toBe(0);
     expect((await f.store.readUpload(f.reserved.upload))!.status).toBe('reserved');
     expect((await f.pool.query('SELECT 1 FROM media.representation')).rowCount).toBe(0);
     expect((await f.pool.query('SELECT 1 FROM content.receipt WHERE operation_id=$1',
@@ -287,6 +316,145 @@ test('partial object persistence rolls back activation and can recover or be fen
     expect(f.writes()).toBe(writes);
     expect(f.objects.size).toBe(0);
   });
+});
+
+test('bounded request pools abort stalled quarantine and original writes while erasure still waits', async () => {
+  for (const stage of ['quarantine', 'original']) await fixture(async f => {
+    const started = barrier(), release = barrier();
+    let writeSignal: AbortSignal | undefined;
+    let cleanupHeldLock = false;
+    f.onPut(async (namespace, signal) => {
+      const stalled = stage === 'original' ? namespace === f.reserved.objectNamespace
+        : namespace === `${f.reserved.quarantineKey}/`;
+      if (!stalled) return;
+      writeSignal = signal;
+      started.release();
+      await release.promise;
+    });
+    f.onDelete(async (_namespace, signal) => {
+      expect(writeSignal?.aborted).toBe(true);
+      expect(signal?.aborted).toBe(false);
+      const waiting = await admin.query(`SELECT 1 FROM pg_stat_activity
+        WHERE datname=$1 AND position('FOR UPDATE OF a' in query)>0
+          AND cardinality(pg_blocking_pids(pid))>0`, [f.pool.options.database]);
+      cleanupHeldLock ||= Boolean(waiting.rowCount);
+    });
+    const outcome = f.transfer().then(() => null, error => error as unknown);
+    await started.promise;
+    expect(writeSignal).toBeInstanceOf(AbortSignal);
+    let erased = false;
+    const erasure = f.erase().then(result => { erased = true; return result; });
+    try {
+      await blocked(f.pool, 'FOR UPDATE OF a');
+      expect(erased).toBe(false);
+      expect(await outcome).toBeInstanceOf(Error);
+      expect(cleanupHeldLock).toBe(true);
+      expect(f.objects.size).toBe(0);
+      expect(f.deleted).toContain(`${f.reserved.quarantineKey}/sha256/${sha(image)}`);
+      if (stage === 'original') expect(f.deleted).toContain(`${f.reserved.objectNamespace}sha256/${sha(image)}`);
+      await erasure;
+      const writes = f.writes();
+      release.release();
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(f.writes()).toBe(writes);
+      expect(f.objects.size).toBe(0);
+      expect((await f.pool.query('SELECT 1 FROM media.representation')).rowCount).toBe(0);
+      expect((await f.store.readAsset(f.reserved.asset))!.lifecycle).toBe('erased');
+    } finally {
+      release.release();
+      await erasure;
+    }
+  }, false, '2s');
+}, 10_000);
+
+test('both exact objects are cleaned when activation SQL fails after persistence', async () => {
+  await fixture(async f => {
+    await f.pool.query(`CREATE FUNCTION media.refuse_original() RETURNS trigger LANGUAGE plpgsql AS
+      $$ BEGIN RAISE EXCEPTION 'original activation unavailable'; END $$;
+      CREATE TRIGGER refuse_original BEFORE INSERT ON media.representation
+      FOR EACH ROW EXECUTE FUNCTION media.refuse_original()`);
+    await expect(f.transfer()).rejects.toThrow('original activation unavailable');
+    expect(f.objects.size).toBe(0);
+    expect(f.deleted.sort()).toEqual([`${f.reserved.quarantineKey}/sha256/${sha(image)}`,
+      `${f.reserved.objectNamespace}sha256/${sha(image)}`].sort());
+    expect((await f.store.readUpload(f.reserved.upload))!.status).toBe('reserved');
+    expect((await f.pool.query('SELECT 1 FROM media.representation')).rowCount).toBe(0);
+    await f.erase();
+  });
+});
+
+test('failed verified cleanup preserves the persistence error and erasure removes the orphan', async () => {
+  await fixture(async f => {
+    f.onPut(async namespace => {
+      if (namespace === f.reserved.objectNamespace) throw new Error('original store unavailable');
+    });
+    f.onDelete(async () => { throw new Error('verified cleanup unavailable'); });
+    await expect(f.transfer()).rejects.toThrow('original store unavailable');
+    expect(f.objects.size).toBe(1);
+    expect((await f.store.readUpload(f.reserved.upload))!.status).toBe('reserved');
+    expect((await f.pool.query('SELECT 1 FROM media.representation')).rowCount).toBe(0);
+    await f.erase();
+    expect(f.objects.size).toBe(0);
+  });
+});
+
+test('a lost persistence transaction cannot publish and cleans both exact objects', async () => {
+  await fixture(async f => {
+    const persist: typeof f.persist = async (signal, onFailure) => {
+      const digest = await f.persist(signal, onFailure);
+      const terminated = await admin.query(`SELECT pg_terminate_backend(pid) AS terminated
+        FROM pg_stat_activity WHERE datname=$1 AND state='idle in transaction'
+          AND backend_xid IS NOT NULL`, [f.pool.options.database]);
+      expect(terminated.rows).toEqual([{ terminated: true }]);
+      return digest;
+    };
+    await expect(f.store.settleUpload(f.reserved.upload, verdict, persist)).rejects.toBeInstanceOf(Error);
+    expect(f.objects.size).toBe(0);
+    expect(f.deleted).toHaveLength(2);
+    expect((await f.pool.query('SELECT 1 FROM media.representation')).rowCount).toBe(0);
+    await f.erase();
+  });
+});
+
+test('S3 persistence deadline cancels the PUT and its uncached verification read', async () => {
+  for (const stalledMethod of ['PUT', 'GET']) {
+    const started = barrier(), release = barrier();
+    const data = new Map<string, Uint8Array>();
+    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+      const key = new URL(request.url).pathname;
+      if (request.method === 'DELETE') {
+        data.delete(key);
+        return new Response(null, { status: 204 });
+      }
+      if (request.method === 'HEAD') return new Response(null, { status: data.has(key) ? 200 : 404 });
+      if (request.method === 'PUT') data.set(key, new Uint8Array(await request.arrayBuffer()));
+      if (request.method === stalledMethod) {
+        started.release();
+        await release.promise;
+      }
+      if (request.method === 'PUT') return new Response(null, { status: 200 });
+      const bytes = data.get(key);
+      return bytes ? new Response(Buffer.from(bytes)) : new Response(null, { status: 404 });
+    } });
+    const objects = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+      bucket: 'rezics-media', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+      prefix: 'media/quarantine/' });
+    const controller = new AbortController();
+    const outcome = objects.put(image, controller.signal).then(() => null, error => error as unknown);
+    try {
+      await started.promise;
+      controller.abort(new Error('persistence deadline'));
+      expect(await outcome).toBeInstanceOf(ObjectUnavailable);
+      await objects.deleteAndVerifyAbsent(sha(image), AbortSignal.timeout(1_000));
+      expect(data.size).toBe(0);
+      release.release();
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(data.size).toBe(0);
+    } finally {
+      release.release();
+      await server.stop(true);
+    }
+  }
 });
 
 test('activation requires fenced persistence and refuses undeclared or mismatched object bytes', async () => {

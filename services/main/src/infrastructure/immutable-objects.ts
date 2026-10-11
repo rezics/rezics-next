@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { DOMParser, type Element } from '@xmldom/xmldom';
 import { AwsClient } from 'aws4fetch';
 
@@ -228,7 +229,7 @@ export interface ImmutableObjectListOptions {
 
 export interface ImmutableObjects {
   /** Return the digest only after a conditional create and verified read-back. */
-  put(bytes: Uint8Array): Promise<string>;
+  put(bytes: Uint8Array, signal?: AbortSignal): Promise<string>;
   /** A missing object is unavailable; bytes with the wrong digest are corrupt. */
   get(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array>;
   /** Probe one exact key; only a 404 is reported as {@link ObjectNotFound}. */
@@ -422,7 +423,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
     if (!readable.ok) throw new ObjectUnavailable(`cannot access immutable object bucket (${readable.status})`);
   }
 
-  async put(bytes: Uint8Array): Promise<string> {
+  async put(bytes: Uint8Array, signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted();
     const digest = sha256(bytes);
     const key = this.key(digest);
     const body = new Uint8Array(bytes);
@@ -430,6 +432,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     try {
       response = await this.signer.fetch(`${this.bucketUrl}/${key}`, {
         method: 'PUT',
+        signal,
         headers: {
           'content-type': 'application/octet-stream',
           // Signing turns the bytes into a Request stream. Keep their known
@@ -452,11 +455,12 @@ export class S3ImmutableObjects implements ImmutableObjects {
     // read-back skips the cache: a hit is not proof this namespace stored them.
     for (let attempt = 0; attempt < 8; attempt++) {
       try {
-        await this.readStoreAndRemember(digest);
+        await this.readStoreAndRemember(digest, undefined, signal);
+        signal?.throwIfAborted();
         return digest;
       } catch (error) {
-        if (!(error instanceof ObjectUnavailable) || attempt === 7) throw error;
-        await Bun.sleep(25 * (attempt + 1));
+        if (signal?.aborted || !(error instanceof ObjectUnavailable) || attempt === 7) throw error;
+        await delay(25 * (attempt + 1), undefined, { signal });
       }
     }
     throw new ObjectUnavailable('immutable object was not visible after conditional create');

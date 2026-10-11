@@ -42,8 +42,10 @@ function fixture() {
     media: {
       store: {
         readUpload: async () => { events.push('reservation'); return state.row ? { ...state.row } : null; },
-        settleUpload: async (_id: string, verdict: Parameters<MediaStore['settleUpload']>[1], persist?: () => Promise<string>) => {
-          if (verdict.status === 'activated') expect(await persist!()).toBe(verdict.sha256);
+        settleUpload: async (_id: string, verdict: Parameters<MediaStore['settleUpload']>[1],
+          persist?: Parameters<MediaStore['settleUpload']>[2]) => {
+          if (verdict.status === 'activated')
+            expect(await persist!(new AbortController().signal, () => undefined)).toBe(verdict.sha256);
           state.settlements++;
           state.row!.status = verdict.status;
           state.row!.reason = verdict.status === 'rejected' ? verdict.reason : null;
@@ -57,6 +59,7 @@ function fixture() {
       objects: () => ({
         put: async (bytes: Uint8Array) => { state.writes++; stored.set(sha(bytes), bytes.slice()); return sha(bytes); },
         get: async (digest: string) => stored.get(digest)!,
+        deleteAndVerifyAbsent: async (digest: string) => { stored.delete(digest); },
       }),
     },
   } as unknown as MainWorkDependencies;
