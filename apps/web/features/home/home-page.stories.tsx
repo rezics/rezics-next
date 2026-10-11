@@ -503,7 +503,7 @@ export const MoreTopicsPhone: Story = {
     await expect(within(tabs).getAllByRole('link').length).toBeLessThan(8);
     await userEvent.click(within(tabs).getByRole('button', { name: 'More topics' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'More topics' }));
-    await expect(dialog.getByRole('link', { name: 'Contemporary fantasy romance topic 6' })).toBeVisible();
+    await waitFor(() => expect(dialog.getByRole('link', { name: 'Contemporary fantasy romance topic 6' })).toBeVisible());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
