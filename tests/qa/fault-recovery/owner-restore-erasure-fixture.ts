@@ -3,7 +3,15 @@ import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
@@ -137,6 +145,64 @@ class DirectoryObjects implements ImmutableObjects {
   }
 }
 
+export interface RestoreCleanupAction {
+  resource: string;
+  run: () => void | Promise<void>;
+}
+
+export interface RestoreCleanupFailure {
+  action: RestoreCleanupAction;
+  error: unknown;
+}
+
+export async function attemptRestoreCleanup(
+  actions: readonly RestoreCleanupAction[],
+): Promise<RestoreCleanupFailure[]> {
+  const failures: RestoreCleanupFailure[] = [];
+  for (const action of actions) {
+    try {
+      await action.run();
+    } catch (error) {
+      failures.push({ action, error });
+    }
+  }
+  return failures;
+}
+
+function restoreCleanupError(
+  failures: readonly RestoreCleanupFailure[],
+  message: string,
+): AggregateError {
+  return new AggregateError(
+    failures.map(
+      ({ action, error }) => new Error(`${action.resource} cleanup failed`, { cause: error }),
+    ),
+    message,
+  );
+}
+
+export function createRestoreCopyDisposal(
+  actions: readonly RestoreCleanupAction[],
+): () => Promise<void> {
+  const completed = new Set<RestoreCleanupAction>();
+  let active: Promise<void> | undefined;
+  return () => {
+    if (active) return active;
+    const run = async () => {
+      const pending = actions.filter((action) => !completed.has(action));
+      const failures = await attemptRestoreCleanup(pending);
+      const failed = new Set(failures.map(({ action }) => action));
+      for (const action of pending) if (!failed.has(action)) completed.add(action);
+      if (failures.length)
+        throw restoreCleanupError(failures, 'restore copy disposal failed');
+    };
+    active = run().finally(() => {
+      active = undefined;
+    });
+    return active;
+  };
+}
+
 /** One real owner/native cut, one physical backup, isolated writable replay copies. */
 export async function ownerRestoreErasureFixture() {
   const preparationStarted = Date.now();
@@ -175,6 +241,7 @@ export async function ownerRestoreErasureFixture() {
   const volumes: string[] = [],
     copies: string[] = [],
     pgCopies: string[] = [];
+  const candidateDirectories = new Set<string>();
   const containers: Awaited<ReturnType<typeof standaloneFuseki>>[] = [];
   const docker = (args: string[], timeout = 60_000) => {
     const result = spawnSync('docker', args, { env: qa.dockerEnv, encoding: 'utf8', timeout });
@@ -184,9 +251,39 @@ export async function ownerRestoreErasureFixture() {
   };
   const volume = (label: string) => {
     const name = `rezics-owner-erasure-${suffix}-${label}`;
-    docker(['volume', 'create', name]);
     volumes.push(name);
+    docker(['volume', 'create', name]);
     return name;
+  };
+  const removeContainer = async (container: Awaited<ReturnType<typeof standaloneFuseki>>) => {
+    await container.remove();
+    const remaining = docker([
+      'ps',
+      '--all',
+      '--quiet',
+      '--no-trunc',
+      '--filter',
+      `name=^${container.name}$`,
+    ]);
+    if (remaining) throw new Error(`Fuseki container ${container.name} remains after removal`);
+    const index = containers.indexOf(container);
+    if (index >= 0) containers.splice(index, 1);
+  };
+  const removeVolume = (name: string) => {
+    let removeFailure: unknown;
+    try {
+      docker(['volume', 'rm', '-f', name], 30_000);
+    } catch (error) {
+      removeFailure = error;
+    }
+    const remaining = docker(['volume', 'ls', '--quiet', '--filter', `name=${name}`])
+      .split(/\s+/)
+      .filter((value) => value === name);
+    if (remaining.length) {
+      throw removeFailure ?? new Error(`Docker volume ${name} remains after removal`);
+    }
+    const index = volumes.indexOf(name);
+    if (index >= 0) volumes.splice(index, 1);
   };
   const copyGraph = (from: string, to: string) =>
     docker([
@@ -217,25 +314,96 @@ export async function ownerRestoreErasureFixture() {
       await client.end();
     }
   };
+  const pgCtlStatus = (data: string) => {
+    if (!existsSync(data)) return 'stopped' as const;
+    const result = spawnSync('pg_ctl', ['-D', data, 'status'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    if (result.error) throw result.error;
+    if (result.status === 0) return 'running' as const;
+    if (result.status === 3) return 'stopped' as const;
+    if (result.status === 4 && !existsSync(join(data, 'postmaster.pid'))) return 'stopped' as const;
+    throw new Error(
+      `could not confirm PostgreSQL state for ${data}: ${result.stderr || result.stdout || result.status}`,
+    );
+  };
+  const stopPostgres = (data: string) => {
+    if (pgCtlStatus(data) === 'running') {
+      execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
+        timeout: 15_000,
+      });
+    }
+    if (pgCtlStatus(data) !== 'stopped')
+      throw new Error(`PostgreSQL at ${data} is still running after stop`);
+  };
+  const removeCandidateDirectory = (path: string) => {
+    if (pgCopies.includes(path) && pgCtlStatus(path) !== 'stopped')
+      throw new Error(`PostgreSQL directory ${path} is not safe to remove while running`);
+    rmSync(path, { recursive: true, force: true });
+    if (existsSync(path)) throw new Error(`candidate directory ${path} remains after removal`);
+    candidateDirectories.delete(path);
+    const pgIndex = pgCopies.indexOf(path);
+    if (pgIndex >= 0) pgCopies.splice(pgIndex, 1);
+  };
   const objects = new DirectoryObjects(join(directory, 'objects-live'));
   let authenticated: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   const close = () =>
     timing.phase('fixture.final-disposal', async () => {
-      await authenticated?.close();
-      for (const container of containers) container.remove();
-      await Promise.allSettled([...pools].map((value) => value.end()));
-      for (const data of pgCopies) {
-        if (spawnSync('pg_ctl', ['-D', data, 'status'], { timeout: 5_000 }).status === 0) {
-          execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
-            timeout: 15_000,
+      const actions: RestoreCleanupAction[] = [];
+      if (authenticated)
+        actions.push({ resource: 'authenticated fixture client', run: () => authenticated!.close() });
+      for (const value of [...pools])
+        actions.push({ resource: 'candidate or source pool', run: () => closePool(value) });
+      for (const container of [...containers])
+        actions.push({ resource: `Fuseki container ${container.name}`, run: () => removeContainer(container) });
+      for (const data of [...pgCopies])
+        actions.push({ resource: `recovery PostgreSQL process ${data}`, run: () => stopPostgres(data) });
+      for (const name of [...copies].reverse())
+        actions.push({
+          resource: `retained relay database ${name}`,
+          run: async () => {
+            if (!/^[a-z0-9_]+$/.test(name)) throw new Error('invalid retained relay database name');
+            await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+            const index = copies.indexOf(name);
+            if (index >= 0) copies.splice(index, 1);
+          },
+        });
+      actions.push({ resource: 'source and relay template databases', run: () => databases.close() });
+      for (const name of [...volumes])
+        actions.push({ resource: `graph volume ${name}`, run: () => removeVolume(name) });
+      for (const path of [...candidateDirectories]) {
+        actions.push({
+          resource: `candidate directory ${path}`,
+          run: () => removeCandidateDirectory(path),
+        });
+      }
+      const failures = await attemptRestoreCleanup(actions);
+      const hasOutstandingResources =
+        pools.size > 0 ||
+        containers.length > 0 ||
+        pgCopies.length > 0 ||
+        copies.length > 0 ||
+        volumes.length > 0 ||
+        candidateDirectories.size > 0;
+      if (!hasOutstandingResources) {
+        try {
+          rmSync(directory, { recursive: true, force: true });
+          if (existsSync(directory)) throw new Error('fixture directory remains after removal');
+        } catch (error) {
+          failures.push({
+            action: { resource: `fixture directory ${directory}`, run: () => undefined },
+            error,
           });
         }
+      } else {
+        failures.push({
+          action: { resource: `fixture directory ${directory}`, run: () => undefined },
+          error: new Error('retained because candidate resources remain outstanding'),
+        });
       }
-      for (const name of copies.reverse())
-        await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-      await databases.close();
-      for (const name of volumes) docker(['volume', 'rm', '-f', name], 30_000);
-      rmSync(directory, { recursive: true, force: true });
+      if (failures.length)
+        throw restoreCleanupError(failures, 'restore fixture final disposal failed');
     });
   let sourceApiPhase: RestoreFixturePhaseHandle | undefined;
   let sourceProofPhase: RestoreFixturePhaseHandle | undefined;
@@ -805,10 +973,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         async () => {
           if (!/^[a-z0-9_]+$/.test(relayTemplate))
             throw new Error('invalid retained relay template');
+          copies.push(retainedDatabase);
           await admin(
             `CREATE DATABASE ${retainedDatabase} WITH TEMPLATE ${relayTemplate} OWNER relay`,
           );
-          copies.push(retainedDatabase);
           const relayUrl = new URL(retainedRelayTemplate);
           relayUrl.pathname = `/${retainedDatabase}`;
           return { retainedRelay: pool(relayUrl.toString()), relayUrl };
@@ -817,7 +985,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       );
       relayUrl.pathname = `/${retainedDatabase}`;
       const data = join(directory, `postgres-${ordinal}`);
+      const logFile = join(directory, `postgres-${ordinal}.log`);
       pgCopies.push(data);
+      candidateDirectories.add(data);
+      candidateDirectories.add(logFile);
       await timing.phase(
         'candidate.postgres-filesystem-copy',
         () => {
@@ -842,7 +1013,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
               '-D',
               data,
               '-l',
-              join(directory, `postgres-${ordinal}.log`),
+              logFile,
               '-o',
               `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`,
               '-t',
@@ -885,10 +1056,11 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         ordinal,
       );
       let graph!: Awaited<ReturnType<typeof standaloneFuseki>>;
+      let restoredVolume: string | undefined;
       await timing.phase(
         'candidate.graph-copy-startup',
         async () => {
-          const restoredVolume = volume(`copy-${ordinal}`);
+          restoredVolume = volume(`copy-${ordinal}`);
           copyGraph(cutVolume, restoredVolume);
           graph = await standaloneFuseki(qa.dockerEnv, {
             name: `rezics-owner-erasure-${suffix}-copy-${ordinal}`,
@@ -921,6 +1093,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         ordinal,
       );
       const restoredDirectory = join(directory, `objects-${ordinal}`);
+      candidateDirectories.add(restoredDirectory);
       await timing.phase(
         'candidate.object-filesystem-copy',
         () => cpSync(backupObjects, restoredDirectory, { recursive: true }),
@@ -1036,19 +1209,52 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         },
         ordinal,
       );
-      const dispose = () =>
-        timing.phase(
-          'candidate.disposal',
-          async () => {
-            graph.remove();
-            for (const owner of [...Object.values(owners), retainedRelay]) await closePool(owner);
-            execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
-              timeout: 15_000,
-            });
-            pgCopies.splice(pgCopies.indexOf(data), 1);
+      const disposeResources = createRestoreCopyDisposal([
+        ...[...Object.values(owners), retainedRelay].map((owner, index) => ({
+          resource: `candidate pool ${ordinal}.${index + 1}`,
+          run: () => closePool(owner),
+        })),
+        {
+          resource: `candidate graph ${ordinal}`,
+          run: () => removeContainer(graph),
+        },
+        {
+          resource: `candidate PostgreSQL ${ordinal}`,
+          run: () => stopPostgres(data),
+        },
+        {
+          resource: `candidate retained relay database ${ordinal}`,
+          run: async () => {
+            if (!/^[a-z0-9_]+$/.test(retainedDatabase))
+              throw new Error('invalid retained relay database name');
+            await admin(`DROP DATABASE IF EXISTS ${retainedDatabase} WITH (FORCE)`);
+            const index = copies.indexOf(retainedDatabase);
+            if (index >= 0) copies.splice(index, 1);
           },
-          ordinal,
-        );
+        },
+        {
+          resource: `candidate graph volume ${ordinal}`,
+          run: () => {
+            if (!restoredVolume) return;
+            removeVolume(restoredVolume);
+          },
+        },
+        {
+          resource: `candidate directories ${ordinal}`,
+          run: async () => {
+            const failures = await attemptRestoreCleanup(
+              [data, logFile, restoredDirectory].map((path) => ({
+                resource: `candidate directory ${path}`,
+                run: () => removeCandidateDirectory(path),
+              })),
+            );
+            if (failures.length)
+              throw restoreCleanupError(failures, `candidate ${ordinal} directory cleanup failed`);
+          },
+        },
+      ]);
+      const dispose = () =>
+        timing.phase('candidate.disposal', disposeResources, ordinal);
       const copyElapsedMs = Date.now() - copyStarted;
       console.info('owner restore erasure copy ready', { ordinal, elapsedMs: copyElapsedMs });
       expect(copyElapsedMs).toBeLessThan(600_000);
@@ -1101,7 +1307,14 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         // Preserve the fixture's original failure if writing timing evidence also fails.
       }
     }
-    await close();
+    try {
+      await close();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'restore fixture creation failed and final disposal was incomplete',
+      );
+    }
     throw error;
   }
 }
