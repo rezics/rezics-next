@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -162,10 +162,17 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
   const artifactDirectory = process.env.REZICS_QA_ARTIFACT_DIR ?? options.state;
   const timingPath = join(artifactDirectory, 'retained-erasure-recovery-fixture-timings.json');
   const timingRows: Array<{ phase: string; ordinal?: number; startedAt: string; durationMs: number | null }> = [];
+  const subprocessRows: Array<{
+    command: string; phase: string | null; startedAt: string; durationMs: number;
+    status: number | null; signal: NodeJS.Signals | null;
+    error: { code: string | undefined; message: string } | null;
+    stdout: string; stderr: string;
+  }> = [];
   const activeTimings = new Map<(typeof timingRows)[number], number>();
   const persistTimings = () => {
     for (const [row, started] of activeTimings) row.durationMs = Math.max(0, Math.round(performance.now() - started));
-    writeFileSync(timingPath, JSON.stringify({ runId: options.runId, phases: timingRows }, null, 2),
+    writeFileSync(timingPath, JSON.stringify({ runId: options.runId, phases: timingRows,
+      subprocesses: subprocessRows }, null, 2),
       { mode: 0o600 });
   };
   const timingPulse = setInterval(persistTimings, 5_000);
@@ -197,15 +204,26 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     expect(Date.now() - preparationStarted).toBeLessThan(600_000);
   };
 
-  const docker = (args: string[], timeout = 120_000): string => {
-    const result = spawnSync('docker', args, { env: qa.dockerEnv, encoding: 'utf8', timeout,
+  const subprocess = (command: string, program: string, args: string[], timeout: number): string => {
+    const startedAt = new Date().toISOString();
+    const started = performance.now();
+    const result = spawnSync(program, args, { env: qa.dockerEnv, encoding: 'utf8', timeout,
       maxBuffer: 2_000_000 });
+    const evidence = { command, phase: [...activeTimings.keys()].at(-1)?.phase ?? null,
+      startedAt, durationMs: Math.max(0, Math.round(performance.now() - started)),
+      status: result.status, signal: result.signal,
+      error: result.error ? { code: (result.error as NodeJS.ErrnoException).code,
+        message: result.error.message } : null,
+      stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+    subprocessRows.push(evidence);
+    persistTimings();
     if (result.status !== 0 || result.error) {
-      throw new Error(`isolated erasure restore Docker step failed: ${
-        (result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
+      throw new Error(`isolated erasure restore subprocess failed: ${JSON.stringify(evidence)}`);
     }
     return result.stdout.trim();
   };
+  const docker = (args: string[], timeout = 120_000): string =>
+    subprocess(`docker ${args[0]}`, 'docker', args, timeout);
   const removePool = async (pool: Pool): Promise<void> => {
     if (!pools.has(pool)) return;
     await pool.end();
@@ -459,20 +477,18 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       await phase('capture.postgres-backup', async () => {
         try {
           const remote = `/tmp/rezics-erasure-${suffix}-${name}`;
+          const container = docker(['ps', '--quiet', '--no-trunc',
+            '--filter', `label=com.docker.compose.project=${qa.project}`,
+            '--filter', 'label=com.docker.compose.service=postgres'], 10_000);
+          if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('source PostgreSQL container is unavailable');
           try {
-            const copied = qa.compose(['exec', '-T', '-u', 'postgres', 'postgres', 'sh', '-ec',
-              `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`],
+            subprocess('pg_basebackup', 'docker', ['exec', '-u', 'postgres', container, 'sh', '-ec',
+              `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast --verbose --progress`],
             65_000);
-            if (copied.status !== 0)
-              throw new Error(`physical erasure backup failed: ${copied.output.slice(-2000)}`);
-            const container = qa.compose(['ps', '-q', '--no-trunc', 'postgres'], 10_000).output.trim();
-            if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('source PostgreSQL container is unavailable');
             docker(['cp', `${container}:${remote}`, backupPostgres]);
-            execFileSync('pg_verifybackup', ['--no-parse-wal', backupPostgres],
-              { cwd: options.state, timeout: 15_000 });
+            subprocess('pg_verifybackup', 'pg_verifybackup', ['--no-parse-wal', backupPostgres], 15_000);
           } finally {
-            const removed = qa.compose(['exec', '-T', '-u', 'postgres', 'postgres', 'rm', '-rf', remote], 10_000);
-            if (removed.status !== 0) throw new Error('physical erasure backup staging cleanup failed');
+            docker(['exec', '-u', 'postgres', container, 'rm', '-rf', remote], 10_000);
           }
         } finally {
           if (graphStopAttempted) {
