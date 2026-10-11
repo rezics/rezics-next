@@ -224,8 +224,11 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
           (?unit ?score) text:query (rv:searchBody '"replacement content lighthouse"' 10) .
           FILTER(?unit = ${iri(lostUnit)}) } }`);
       expect(staleIndex.results?.bindings.length).toBe(1);
-      await rootCommand(['stack:down', ...stackArgs], 120_000);
-      await rootCommand(['stack:up', ...stackArgs], 180_000);
+      // Restart the native search owner while the Content, Access and retained
+      // relay pools keep their PostgreSQL connections for checkpoint recovery.
+      const recoveryStack = qaStack(runId, { rawUpdate: true });
+      recoveryStack.runner.stop();
+      await recoveryStack.runner.start();
       expect(await quarantinePublicContentSearch(env, content, jobId)).toEqual(job);
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toBeInstanceOf(SearchIndexUnavailable);
 
@@ -274,7 +277,6 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
       // resumes that exact receipt without another index pass or generation.
       const recoveryJob = await quarantinePublicContentSearch(env, content, randomUUID());
       expect(await clearQuarantinedContentUnits(env, recoveryJob)).toBe(1);
-      const recoveryStack = qaStack(runId, { rawUpdate: true });
       const recoveryOfflineLog = await offlineTextIndex(recoveryStack.runner);
       expect(await replayQuarantinedContentCut(env, content, cursor, recoveryJob)).toBeGreaterThan(0);
       const liveBeforeAdoption = await cursor.read(consumer);

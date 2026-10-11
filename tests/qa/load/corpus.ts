@@ -101,8 +101,8 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
   await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
   const grant = async (scope: string, action: string) => {
     await grantFixtureAuthority(accessPool, { scope, requireDispatch: true,
-      representations: [{ principalId, actor, action, lifetime: '1 hour' }],
-      grant: { actor, action, lifetime: '1 hour' } });
+      representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+      grant: { actor, action, lifetime: '8 hours' } });
   };
   const variantId = `urn:rezics:variant:${randomUUID()}`;
   await grant(`content:draft:${work}`, 'content.draft');
