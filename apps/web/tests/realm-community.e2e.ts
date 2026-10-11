@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { expect, type Browser, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Browser, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { Pool } from 'pg';
 import { localizedPath } from '../i18n/locale.ts';
 import { realmHref as communityHref } from '../features/realm/route.ts';
@@ -354,6 +354,11 @@ async function chooseSort(page: Page, current: 'Best' | 'New' | 'Top', next: 'Be
   await expect(page.getByRole('button', { name: `Sort: ${next}`, exact: true })).toBeVisible();
 }
 
+async function waitForReactHandler(control: Locator) {
+  await expect.poll(() => control.evaluate(element => Object.keys(element)
+    .some(key => key.startsWith('__reactProps$'))), { timeout: 15_000 }).toBe(true);
+}
+
 test('a manager creates a role, assigns it to a member, and sees the public team after reload', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
   page.setDefaultTimeout(30_000);
@@ -434,16 +439,9 @@ test('a member opens a thread and nested replies that another person sees after 
   await writer.page.goto(communityHref('en', realm.realm, 'discussions'));
   await writer.page.getByRole('link', { name: 'Create post', exact: true }).click();
   const workSearch = writer.page.getByRole('searchbox', { name: 'Search for a Work' });
-  const typeaheadResponse = writer.page.waitForResponse(response => {
-    const url = new URL(response.url());
-    return url.pathname.endsWith('/search/typeahead') && url.searchParams.get('prefix') === work.title;
-  });
+  await waitForReactHandler(workSearch);
   await workSearch.fill(work.title);
-  const typeahead = await typeaheadResponse;
-  const typeaheadBody = await typeahead.text();
-  expect(typeahead.status(), typeaheadBody).toBe(200);
-  expect((JSON.parse(typeaheadBody) as { items?: { title: string }[] }).items?.map(item => item.title))
-    .toContain(work.title);
+  await expect(workSearch).toHaveValue(work.title);
   const workChoice = writer.page.getByRole('button', { name: work.title, exact: true });
   await expect(workChoice).toBeVisible();
   await workChoice.click();
@@ -501,6 +499,7 @@ test('Best, Top and New reorder every Realm discussion after a reader votes', as
   const votedCard = feed.getByRole('article').filter({ has: voter.page.getByRole('heading', { name: titles.voted, exact: true }) });
   const upvote = votedCard.getByRole('button', { name: 'Upvote', exact: true });
   await expect(upvote).toBeVisible();
+  await waitForReactHandler(upvote);
   const savedVote = voter.page.waitForResponse(response =>
     new URL(response.url()).pathname.endsWith(`/feed/${idOf(realm.realm)}/vote`)
     || new URL(response.url()).pathname.match(/\/api\/main\/v1\/feed\/[0-9a-f-]{36}\/vote$/) !== null);

@@ -273,9 +273,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1042-community-cost-follows-threads.test.ts',
       'threads API profiles keep bounded hydration as follows grows',
       'Runs the Main API corpus child to create an opening and nested reply, then checks discussion lists and a two-item thread as follows grow.'),
-    browser: browser('apps/web/tests/realm-community.e2e.ts',
-      'a member opens a thread and nested replies that another person sees after reload',
-      'A joined member posts from Realm discussions, adds a comment and nested reply, and a second person reads both after reload.'),
+    browser: missing('gap'),
   },
   {
     kind: 'realm',
