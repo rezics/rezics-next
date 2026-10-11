@@ -1,7 +1,7 @@
 import type { WriteRound } from '../api/command.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { settle } from '../manage/read.ts';
-import { problemCode, type Loaded, type MainClient } from '../manage/types.ts';
+import { problemCode, type Loaded, type MainClient, type ReadFailure } from '../manage/types.ts';
 import { isWideText } from '../search/suggest.ts';
 import { normalizePhrase, PHRASE } from '../search/state.ts';
 import {
@@ -9,8 +9,8 @@ import {
   type AuthoringFailure, type DraftBasis, type DraftChoice, type DraftWire, type LoadedDraft, type PublicationChoice,
 } from './model.ts';
 import {
-  foldMountPages, NAV_PAGE_CAP, NAV_PAGE_SIZE, pageNameOf, zoneMountPage,
-  type NavPosition, type NavWriteFailure, type NavWriteResult, type SiteLink,
+  foldMountPages, NAV_LOAD_BATCH, NAV_PAGE_SIZE, navigationReadTarget, pageNameOf, zoneMountPage,
+  type NavigationReadTarget, type NavPosition, type NavWriteFailure, type NavWriteResult, type SiteLink,
 } from './navigation.ts';
 
 export type WriteResult<T> =
@@ -157,11 +157,20 @@ export interface NavigationSnapshot {
   navigation: string;
   links: SiteLink[];
   complete: boolean;
+  /** Outstanding continuation cursor when the inventory is incomplete. */
+  after: string | null;
   zoneHead: string | null;
+}
+
+export interface NavigationResume {
+  head: string;
+  after: string;
 }
 
 export interface ZoneNavigationClient {
   readNavigation(zoneId: string, actingSubject: string): Promise<WriteResult<NavigationSnapshot>>;
+  /** Next burst after an incomplete read, pinned to the revision already loaded. */
+  continueNavigation(zoneId: string, actingSubject: string, resume: NavigationResume): Promise<WriteResult<NavigationSnapshot>>;
   insertMount(zoneId: string, body: MountBody, key: string): Promise<NavWriteResult | NavWriteFailure>;
   removeMount(zoneId: string, occurrenceId: string, body: { expectedHead: string; actingSubject: string }, key: string): Promise<NavWriteResult | NavWriteFailure>;
   moveMount(navigation: string, body: MoveBody, key: string): Promise<NavWriteResult | NavWriteFailure>;
@@ -187,33 +196,11 @@ export interface MoveBody {
 /** Browser commands for the Zone's navigation. Stories pass their own client. */
 export function browserZoneNavigation(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneNavigationClient {
   return {
-    async readNavigation(zoneId, actingSubject) {
-      const pages: NonNullable<ReturnType<typeof zoneMountPage>>[] = [];
-      let after: string | undefined;
-      for (let page = 0; page < NAV_PAGE_CAP; page += 1) {
-        const answer = await post(() => main.v1.zones({ id: zoneId }).get({
-          query: { actingSubject, limit: NAV_PAGE_SIZE, ...(after ? { after } : {}) },
-        }));
-        if (!answer.ok) return answer;
-        const parsed = zoneMountPage(answer.data);
-        if (!parsed) return { ok: false, failure: 'unavailable' };
-        pages.push(parsed);
-        if (!parsed.next) break;
-        if (parsed.next === after) return { ok: false, failure: 'unavailable' };
-        after = parsed.next;
-      }
-      const folded = foldMountPages(pages);
-      if (!folded) return { ok: false, failure: 'unavailable' };
-      return {
-        ok: true,
-        data: {
-          head: folded.head,
-          navigation: folded.navigation,
-          links: await withPageNames(main, folded.links, actingSubject),
-          complete: folded.complete,
-          zoneHead: folded.zoneHead,
-        },
-      };
+    readNavigation(zoneId, actingSubject) {
+      return collectBrowserNavigation(main, zoneId, actingSubject);
+    },
+    continueNavigation(zoneId, actingSubject, resume) {
+      return collectBrowserNavigation(main, zoneId, actingSubject, resume);
     },
     async insertMount(zoneId, body, key) {
       return mountOf(await post(() => main.v1.zones({ id: zoneId }).mounts.post(body, { headers: { 'idempotency-key': key } })));
@@ -243,22 +230,102 @@ export function browserZoneNavigation(main: ReturnType<typeof browserMainApi> = 
 
 /**
  * Server-side Zone navigation read that follows continuation pages.
- * An outstanding next after the page cap is returned as an incomplete snapshot.
+ * A filled burst keeps `after` so the editor can resume without discarding the cursor.
  */
 export async function loadZoneNavigation(
   main: MainClient,
   zoneId: string,
   actingSubject: string,
+  resume?: NavigationResume,
 ): Promise<Loaded<NavigationSnapshot>> {
+  let readFailure: ReadFailure | null = null;
+  const batch = await collectMountPages(async target => {
+    const read = await settle(() => zonePageCall(main, zoneId, actingSubject, target), {
+      management: true, cursor: target.kind === 'revision' ? target.after : undefined,
+    });
+    if (!read.ok) {
+      readFailure = read.failure;
+      return { ok: false as const, failure: read.failure };
+    }
+    return { ok: true as const, data: read.data };
+  }, resume);
+  if (!batch.ok) return { ok: false, failure: readFailure ?? 'unavailable' };
+  return {
+    ok: true,
+    data: {
+      ...batch.data,
+      links: await withPageNames(main, batch.data.links, actingSubject),
+    },
+  };
+}
+
+async function collectBrowserNavigation(
+  main: MainClient,
+  zoneId: string,
+  actingSubject: string,
+  resume?: NavigationResume,
+): Promise<WriteResult<NavigationSnapshot>> {
+  let writeFailure: WriteResult<NavigationSnapshot> | null = null;
+  const batch = await collectMountPages(async target => {
+    const answer = await post(() => zonePageCall(main, zoneId, actingSubject, target));
+    if (!answer.ok) {
+      writeFailure = answer as WriteResult<NavigationSnapshot>;
+      return answer;
+    }
+    return { ok: true as const, data: answer.data };
+  }, resume);
+  if (!batch.ok) return writeFailure ?? { ok: false, failure: 'unavailable' };
+  return {
+    ok: true,
+    data: {
+      ...batch.data,
+      links: await withPageNames(main, batch.data.links, actingSubject),
+    },
+  };
+}
+
+function zonePageCall(
+  main: MainClient,
+  zoneId: string,
+  actingSubject: string,
+  target: NavigationReadTarget,
+) {
+  const query = { actingSubject, limit: NAV_PAGE_SIZE, ...(target.kind === 'revision' ? { after: target.after } : {}) };
+  if (target.kind === 'revision') {
+    return main.v1.zones({ id: zoneId }).revisions({ revision: target.revision.slice(-36) }).get({ query });
+  }
+  return main.v1.zones({ id: zoneId }).get({ query });
+}
+
+type MountBatch = {
+  head: string;
+  navigation: string;
+  links: SiteLink[];
+  complete: boolean;
+  after: string | null;
+  zoneHead: string | null;
+};
+
+async function collectMountPages(
+  readPage: (target: NavigationReadTarget) => Promise<
+    { ok: true; data: unknown } | { ok: false; failure: string } | WriteResult<unknown>
+  >,
+  resume?: NavigationResume,
+): Promise<{ ok: true; data: MountBatch } | { ok: false; failure: 'unavailable' | 'stale' }> {
   const pages: NonNullable<ReturnType<typeof zoneMountPage>>[] = [];
-  let after: string | undefined;
-  for (let page = 0; page < NAV_PAGE_CAP; page += 1) {
-    const read = await settle(() => main.v1.zones({ id: zoneId }).get({
-      query: { actingSubject, limit: NAV_PAGE_SIZE, ...(after ? { after } : {}) },
-    }), { management: true, cursor: after });
-    if (!read.ok) return read;
-    const parsed = zoneMountPage(read.data);
+  let pinned: string | null = resume?.head ?? null;
+  let after: string | undefined = resume?.after;
+  for (let page = 0; page < NAV_LOAD_BATCH; page += 1) {
+    const target = navigationReadTarget(pinned, after);
+    if (resume && page === 0 && target.kind !== 'revision') return { ok: false, failure: 'unavailable' };
+    const answer = await readPage(target);
+    if (!answer.ok) {
+      return { ok: false, failure: answer.failure === 'stale' ? 'stale' : 'unavailable' };
+    }
+    const parsed = zoneMountPage(answer.data);
     if (!parsed) return { ok: false, failure: 'unavailable' };
+    if (pinned && parsed.head !== pinned) return { ok: false, failure: 'unavailable' };
+    pinned = parsed.head;
     pages.push(parsed);
     if (!parsed.next) break;
     if (parsed.next === after) return { ok: false, failure: 'unavailable' };
@@ -266,16 +333,7 @@ export async function loadZoneNavigation(
   }
   const folded = foldMountPages(pages);
   if (!folded) return { ok: false, failure: 'unavailable' };
-  return {
-    ok: true,
-    data: {
-      head: folded.head,
-      navigation: folded.navigation,
-      links: await withPageNames(main, folded.links, actingSubject),
-      complete: folded.complete,
-      zoneHead: folded.zoneHead,
-    },
-  };
+  return { ok: true, data: folded };
 }
 
 /** The page's name, when either read has one. A mount stores no name of its own. */

@@ -74,7 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: '不公開',
   pathInvalid: '請使用由小寫字母、數字和連字號組成的短路徑。',
   duplicatePath: '這個路徑已經是一個連結。',
-  navIncomplete: '尚未載入全部連結。完整清單就緒前無法儲存。',
+  navIncomplete: '尚未載入全部連結。完整清單就緒前無法儲存。繼續載入以讀取其餘連結。',
+  navContinue: '載入更多連結',
   pathEditLimited: '已儲存連結的路徑暫時無法在此變更。請保留目前路徑，或移除該連結後重新新增。',
   // Machine-drafted; needs native review.
   sectionRealm: '社群',

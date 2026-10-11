@@ -74,7 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: 'Privado',
   pathInvalid: 'Usa una ruta corta con letras minúsculas, números y guiones.',
   duplicatePath: 'Esa ruta ya es un enlace.',
-  navIncomplete: 'Aún no se han cargado todos los enlaces. Guardar permanece desactivado hasta que esté la lista completa.',
+  navIncomplete: 'Aún no se han cargado todos los enlaces. Guardar permanece desactivado hasta que esté la lista completa. Carga más para continuar.',
+  navContinue: 'Cargar más enlaces',
   pathEditLimited: 'La ruta de un enlace guardado aún no se puede cambiar aquí. Mantén esta ruta, o quita el enlace y vuelve a añadirlo.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Comunidad',

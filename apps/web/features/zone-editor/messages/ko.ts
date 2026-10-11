@@ -74,7 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: '비공개',
   pathInvalid: '소문자, 숫자, 하이픈만 쓴 짧은 경로를 사용하세요.',
   duplicatePath: '그 경로는 이미 링크입니다.',
-  navIncomplete: '아직 모든 링크가 불러와지지 않았습니다. 전체 목록이 올 때까지 저장할 수 없습니다.',
+  navIncomplete: '아직 모든 링크가 불러와지지 않았습니다. 전체 목록이 올 때까지 저장할 수 없습니다. 계속하려면 더 불러오세요.',
+  navContinue: '링크 더 불러오기',
   pathEditLimited: '저장된 링크의 경로는 아직 여기서 바꿀 수 없습니다. 이 경로를 유지하거나, 링크를 지운 뒤 다시 추가하세요.',
   // Machine-drafted; needs native review.
   sectionRealm: '커뮤니티',

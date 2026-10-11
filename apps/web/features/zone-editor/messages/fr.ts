@@ -74,7 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: 'Privé',
   pathInvalid: 'Utilisez un chemin court en lettres minuscules, chiffres et traits d’union.',
   duplicatePath: 'Ce chemin est déjà un lien.',
-  navIncomplete: 'Tous les liens ne sont pas encore chargés. L’enregistrement reste indisponible jusqu’à la liste complète.',
+  navIncomplete: 'Tous les liens ne sont pas encore chargés. L’enregistrement reste indisponible jusqu’à la liste complète. Chargez davantage pour continuer.',
+  navContinue: 'Charger plus de liens',
   pathEditLimited: 'Le chemin d’un lien enregistré ne peut pas encore être modifié ici. Gardez ce chemin, ou retirez le lien et ajoutez-le à nouveau.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Communauté',

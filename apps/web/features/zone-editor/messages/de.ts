@@ -74,7 +74,8 @@ const messages: ZoneEditorMessages = {
   privateLink: 'Privat',
   pathInvalid: 'Verwenden Sie einen kurzen Pfad aus Kleinbuchstaben, Zahlen und Bindestrichen.',
   duplicatePath: 'Diesen Pfad gibt es schon als Link.',
-  navIncomplete: 'Noch sind nicht alle Links geladen. Speichern bleibt aus, bis die vollständige Liste da ist.',
+  navIncomplete: 'Noch sind nicht alle Links geladen. Speichern bleibt aus, bis die vollständige Liste da ist. Laden Sie mehr, um fortzufahren.',
+  navContinue: 'Weitere Links laden',
   pathEditLimited: 'Der Pfad eines gespeicherten Links lässt sich hier noch nicht ändern. Behalten Sie diesen Pfad, oder entfernen Sie den Link und fügen Sie ihn erneut hinzu.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Community',

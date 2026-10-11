@@ -25,9 +25,9 @@ export default async function ZoneNavigationPage({ params }: { params: Promise<{
   if (loaded.kind === 'failure') return <ZoneAuthoringFailure failure={loaded.failure} copy={copy} />;
   const read = await loadZoneNavigation(main, loaded.model.zoneId, actingSubject);
   if (!read.ok) return <ZoneAuthoringFailure failure={read.failure} copy={copy} />;
-  const { links, head, navigation, complete, zoneHead } = read.data;
+  const { links, head, navigation, complete, after, zoneHead } = read.data;
   const initial: NavigationState = {
-    links, saved: links.map(link => ({ ...link })), head, navigation, complete, notice: { kind: 'idle' },
+    links, saved: links.map(link => ({ ...link })), head, navigation, complete, after, notice: { kind: 'idle' },
   };
   const home: EditorState = {
     ...loaded.model.state,

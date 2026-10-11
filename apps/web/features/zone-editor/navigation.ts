@@ -10,8 +10,13 @@ const reservedSegments = new Set(['browse', 'discussions', 'decisions', 'about',
 
 /** One Zone read page; Main's default and the editor's continuation size. */
 export const NAV_PAGE_SIZE = 50;
-/** Enough pages for the 1,000-mount routing proof, with a little headroom. */
-export const NAV_PAGE_CAP = 40;
+/**
+ * Pages fetched in one load or continue burst. An outstanding cursor is kept when
+ * the batch fills so the author can resume; this is not a permanent inventory ceiling.
+ */
+export const NAV_LOAD_BATCH = 40;
+/** Safety bound on commands in one save; a completed plan is success before this refuses. */
+export const NAV_COMMAND_LIMIT = NAV_LOAD_BATCH * NAV_PAGE_SIZE;
 
 /** One link in the Zone's navigation. Readers see `name`, which is the page's name. */
 export interface SiteLink {
@@ -45,6 +50,8 @@ export interface NavigationState {
   navigation: string;
   /** False when a continuation page is still outstanding. */
   complete: boolean;
+  /** Cursor for the next page when `complete` is false; null once the list is whole. */
+  after: string | null;
   notice: NavNotice;
 }
 
@@ -55,9 +62,24 @@ export type NavEvent =
   | { type: 'segment'; id: string; segment: string }
   | { type: 'stale'; currentHead: string | null }
   | { type: 'saved'; links: SiteLink[]; head: string; replayed: boolean }
-  | { type: 'loaded'; links: SiteLink[]; head: string; navigation: string; complete: boolean }
-  | { type: 'retarget'; head: string; saved: SiteLink[]; links: SiteLink[]; navigation: string; complete: boolean }
+  | { type: 'loaded'; links: SiteLink[]; head: string; navigation: string; complete: boolean; after: string | null }
+  | { type: 'continued'; links: SiteLink[]; complete: boolean; after: string | null }
+  | { type: 'retarget'; head: string; saved: SiteLink[]; links: SiteLink[]; navigation: string; complete: boolean; after: string | null }
   | { type: 'failed'; failure: AuthoringFailure };
+
+/** Live Zone read for the first page; revision-specific read for every later page. */
+export type NavigationReadTarget =
+  | { kind: 'current' }
+  | { kind: 'revision'; revision: string; after: string };
+
+/**
+ * Pin continuation (and resume) pages to the revision from the first page so a
+ * concurrent write cannot mix heads across the inventory.
+ */
+export function navigationReadTarget(pinnedHead: string | null, after: string | undefined): NavigationReadTarget {
+  if (after && pinnedHead) return { kind: 'revision', revision: pinnedHead, after };
+  return { kind: 'current' };
+}
 
 export type NavPosition = 'first' | 'last' | { after: string };
 
@@ -186,10 +208,12 @@ export async function commitNavigation(
   let links = desired.map(link => ({ ...link }));
   let current = head;
   let replayed = false;
-  for (let step = 0; step < NAV_PAGE_CAP * NAV_PAGE_SIZE; step += 1) {
+  for (let step = 0; ; step += 1) {
     const plan = planNavigation(currentSaved, links);
     if (!plan.ok) return { ok: false, failure: 'invalid', head: current, links };
+    // A plan that finished on the last command is success before any limit check.
     if (!plan.ops.length) return { ok: true, head: current, links, replayed };
+    if (step >= NAV_COMMAND_LIMIT) return { ok: false, failure: 'unavailable', head: current, links };
     const op = plan.ops[0]!;
     const result = await write(op, step === 0 ? key : `${key}.${step}`, current);
     if (!result.ok) return { ...result, head: current, links };
@@ -209,7 +233,6 @@ export async function commitNavigation(
       currentSaved = moveSaved(currentSaved, op.occurrence, op.position);
     }
   }
-  return { ok: false, failure: 'unavailable', head: current, links };
 }
 
 function placeSaved(saved: SiteLink[], link: SiteLink, position: NavPosition): SiteLink[] {
@@ -284,8 +307,22 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         head: event.head,
         navigation: event.navigation,
         complete: event.complete,
+        after: event.after,
         notice: { kind: 'loaded' },
       };
+    case 'continued': {
+      const seen = new Set(state.links.flatMap(link => link.occurrence ? [link.occurrence] : []));
+      const added = event.links.filter(link => !link.occurrence || !seen.has(link.occurrence));
+      const links = [...state.links, ...added];
+      return {
+        ...state,
+        links,
+        saved: links.map(link => ({ ...link })),
+        complete: event.complete,
+        after: event.after,
+        notice: clears(state.notice) ? { kind: 'idle' } : state.notice,
+      };
+    }
     case 'retarget':
       return {
         ...state,
@@ -294,6 +331,7 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         links: event.links,
         navigation: event.navigation,
         complete: event.complete,
+        after: event.after,
         notice: { kind: 'idle' },
       };
     case 'failed':
@@ -346,10 +384,10 @@ export function zoneMountPage(zone: unknown): {
   return { head, navigation, links, next, zoneHead };
 }
 
-/** Fold continued Zone pages into one snapshot. A trailing next means the list is incomplete. */
+/** Fold continued Zone pages into one snapshot. A trailing next is kept so loading can resume. */
 export function foldMountPages(
   pages: readonly { head: string; navigation: string; links: SiteLink[]; next: string | null; zoneHead: string | null }[],
-): { head: string; navigation: string; links: SiteLink[]; complete: boolean; zoneHead: string | null } | null {
+): { head: string; navigation: string; links: SiteLink[]; complete: boolean; after: string | null; zoneHead: string | null } | null {
   if (!pages.length) return null;
   const first = pages[0]!;
   const links: SiteLink[] = [];
@@ -359,7 +397,12 @@ export function foldMountPages(
   }
   const last = pages[pages.length - 1]!;
   return {
-    head: first.head, navigation: first.navigation, links, complete: last.next === null, zoneHead: first.zoneHead,
+    head: first.head,
+    navigation: first.navigation,
+    links,
+    complete: last.next === null,
+    after: last.next,
+    zoneHead: first.zoneHead,
   };
 }
 

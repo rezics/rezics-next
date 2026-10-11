@@ -47,8 +47,8 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
 }) {
   const [state, dispatch] = useState(initial);
   const [page, setPage] = useState(home);
-  const [busy, setBusy] = useState<null | 'save' | 'publish' | 'load'>(null);
-  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load'>(null);
+  const [busy, setBusy] = useState<null | 'save' | 'publish' | 'load' | 'continue'>(null);
+  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load' | 'continue'>(null);
   const [query, setQuery] = useState('');
   const [choices, setChoices] = useState<PageChoice[]>([]);
   const [picked, setPicked] = useState<PageChoice | null>(null);
@@ -114,7 +114,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
     };
   }, [query, picked, locale]);
 
-  function track(kind: 'save' | 'publish' | 'load', work: Promise<unknown>) {
+  function track(kind: 'save' | 'publish' | 'load' | 'continue', work: Promise<unknown>) {
     inflight.current += 1;
     setBusy(kind);
     setIntent(kind);
@@ -186,12 +186,12 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       const links = alignLinks(stateRef.current.links, read.data.links);
       const next = reduceNavigation(stateRef.current, {
         type: 'retarget', head: read.data.head, saved: read.data.links, links,
-        navigation: read.data.navigation, complete: read.data.complete,
+        navigation: read.data.navigation, complete: read.data.complete, after: read.data.after,
       });
       stateRef.current = next;
       put({
         type: 'retarget', head: read.data.head, saved: read.data.links, links,
-        navigation: read.data.navigation, complete: read.data.complete,
+        navigation: read.data.navigation, complete: read.data.complete, after: read.data.after,
       });
       if (!read.data.complete) return;
       if (!isNavigationDirty(next)) {
@@ -216,8 +216,22 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       setPathLimitId(null);
       put({
         type: 'loaded', links: result.data.links, head: result.data.head,
-        navigation: result.data.navigation, complete: result.data.complete,
+        navigation: result.data.navigation, complete: result.data.complete, after: result.data.after,
       });
+    }));
+  }
+
+  function continueLoading() {
+    const current = stateRef.current;
+    if (busy || current.complete || !current.after) return;
+    track('continue', client.current!.continueNavigation(zoneId, actingSubject, {
+      head: current.head, after: current.after,
+    }).then(result => {
+      if (!result.ok) {
+        put({ type: 'failed', failure: result.failure === 'stale' ? 'conflict' : result.failure });
+        return;
+      }
+      put({ type: 'continued', links: result.data.links, complete: result.data.complete, after: result.data.after });
     }));
   }
 
@@ -234,12 +248,12 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       if (!isNavigationDirty(stateRef.current) && stateRef.current.head !== heads.data.navigationRevision) {
         const next = reduceNavigation(stateRef.current, {
           type: 'retarget', head: heads.data.navigationRevision, saved: stateRef.current.saved, links: stateRef.current.links,
-          navigation: stateRef.current.navigation, complete: stateRef.current.complete,
+          navigation: stateRef.current.navigation, complete: stateRef.current.complete, after: stateRef.current.after,
         });
         stateRef.current = next;
         put({
           type: 'retarget', head: heads.data.navigationRevision, saved: next.saved, links: next.links,
-          navigation: next.navigation, complete: next.complete,
+          navigation: next.navigation, complete: next.complete, after: next.after,
         });
       }
       const choice = siteChoice(stateRef.current.head);
@@ -255,6 +269,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
     if (page.notice.kind === 'publish-stale') refreshAndPublish();
     else if (intent === 'publish') publish();
     else if (intent === 'load') loadTheirs();
+    else if (intent === 'continue') continueLoading();
     else save();
   }
 
@@ -299,7 +314,7 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
     <div className="min-w-0 space-y-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id="zone-navigation-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.navTitle}</h2>
-        <EditorActions copy={copy} canEdit busy={busy} dirty={dirty}
+        <EditorActions copy={copy} canEdit busy={busy === 'continue' ? null : busy} dirty={dirty}
           saveDisabled={!!busy || !dirty || !state.complete || state.notice.kind === 'stale'}
           publishDisabled={!!busy || !publishable || !state.complete || page.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
@@ -307,9 +322,13 @@ export function ZoneNavigationEditor({ zoneId, zoneIri, actingSubject, locale, c
       <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{copy.navHelp}</p>
       <p className="text-sm" role="status">{copy.navStatus}</p>
     </div>
-    {!state.complete ? <Alert variant="warning" role="status">
-      <AlertTitle>{copy.navTitle}</AlertTitle>
-      <AlertDescription>{copy.navIncomplete}</AlertDescription>
+    {!state.complete ? <Alert variant="warning" role="status" className="sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="min-w-0 space-y-1">
+        <AlertTitle>{copy.navTitle}</AlertTitle>
+        <AlertDescription>{copy.navIncomplete}</AlertDescription>
+      </div>
+      {state.after ? <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy}
+        isLoading={busy === 'continue'} onClick={() => continueLoading()}>{copy.navContinue}</Button> : null}
     </Alert> : null}
     {savedNotice ? <p className="text-sm" role="status">{savedNotice}</p> : null}
     {state.notice.kind === 'saved' ? <p className="text-pretty text-muted-foreground text-sm">{copy.navSavedHint}</p> : null}

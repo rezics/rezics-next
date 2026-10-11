@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import {
-  alignLinks, commitNavigation, foldMountPages, isNavigationDirty, isSegment, linksFromZone, NAV_PAGE_SIZE,
-  navigationOps, pageNameOf, pathEditBlocked, planNavigation, reduceNavigation, segmentFor, zoneMountPage,
+  alignLinks, commitNavigation, foldMountPages, isNavigationDirty, isSegment, linksFromZone,
+  NAV_COMMAND_LIMIT, NAV_LOAD_BATCH, NAV_PAGE_SIZE, navigationOps, navigationReadTarget, pageNameOf,
+  pathEditBlocked, planNavigation, reduceNavigation, segmentFor, zoneMountPage,
   type SiteLink, type NavigationState,
 } from './navigation.ts';
 
@@ -27,7 +28,7 @@ function link(
 }
 
 function state(links: SiteLink[], saved = links): NavigationState {
-  return { links, saved, head, navigation, complete: true, notice: { kind: 'idle' } };
+  return { links, saved, head, navigation, complete: true, after: null, notice: { kind: 'idle' } };
 }
 
 function mount(n: number, segment: string, target: string, extra: Record<string, unknown> = {}) {
@@ -159,10 +160,82 @@ test('continued pages past the first 50 fold into one list; a trailing next stay
   expect(first.next).toBe('cursor:50');
   const complete = foldMountPages([first, second])!;
   expect(complete.complete).toBe(true);
+  expect(complete.after).toBeNull();
   expect(complete.links).toHaveLength(NAV_PAGE_SIZE + 1);
   expect(complete.links[0]).toMatchObject({ routeKey: 'alias', presentation });
   expect(complete.links[NAV_PAGE_SIZE]).toMatchObject({ segment: 'page-51', presentation });
-  expect(foldMountPages([first])?.complete).toBe(false);
+  const incomplete = foldMountPages([first])!;
+  expect(incomplete.complete).toBe(false);
+  expect(incomplete.after).toBe('cursor:50');
+});
+
+test('continuation pages pin to the first page revision so concurrent heads cannot mix', () => {
+  expect(navigationReadTarget(null, undefined)).toEqual({ kind: 'current' });
+  expect(navigationReadTarget(head, undefined)).toEqual({ kind: 'current' });
+  expect(navigationReadTarget(head, 'cursor:50')).toEqual({ kind: 'revision', revision: head, after: 'cursor:50' });
+  // A resume burst also pins: the first request of the burst is revision-specific.
+  expect(navigationReadTarget(head, 'cursor:2000')).toEqual({
+    kind: 'revision', revision: head, after: 'cursor:2000',
+  });
+  const first = zoneMountPage({
+    revision: head, navigation, ownerRevision: later,
+    mounts: [mount(1, 'one', charts)], next: 'cursor:1',
+  })!;
+  const mixed = zoneMountPage({
+    revision: next, navigation, ownerRevision: later,
+    mounts: [mount(2, 'two', tides)], next: null,
+  })!;
+  expect(foldMountPages([first, mixed])).toBeNull();
+  const pinned = zoneMountPage({
+    revision: head, navigation, ownerRevision: later,
+    mounts: [mount(2, 'two', tides)], next: null,
+  })!;
+  expect(foldMountPages([first, pinned])).toMatchObject({ head, complete: true, after: null });
+});
+
+test('a filled load batch keeps the outstanding cursor for resume', () => {
+  const pages = Array.from({ length: NAV_LOAD_BATCH }, (_, page) => zoneMountPage({
+    revision: head, navigation, ownerRevision: later,
+    mounts: [mount(page + 1, `page-${page + 1}`, charts)],
+    next: `cursor:${(page + 1) * NAV_PAGE_SIZE}`,
+  })!);
+  const folded = foldMountPages(pages)!;
+  expect(folded.complete).toBe(false);
+  expect(folded.after).toBe(`cursor:${NAV_LOAD_BATCH * NAV_PAGE_SIZE}`);
+  expect(folded.links).toHaveLength(NAV_LOAD_BATCH);
+  const resumed = reduceNavigation(
+    { ...state(folded.links), complete: false, after: folded.after },
+    {
+      type: 'continued',
+      links: [link('More', tides, 'more', NAV_LOAD_BATCH + 1)],
+      complete: true,
+      after: null,
+    },
+  );
+  expect(resumed.complete).toBe(true);
+  expect(resumed.after).toBeNull();
+  expect(resumed.links).toHaveLength(NAV_LOAD_BATCH + 1);
+  expect(resumed.links.at(-1)).toMatchObject({ segment: 'more', occurrence: occurrence(NAV_LOAD_BATCH + 1) });
+});
+
+test('a save that finishes exactly at the command limit is success, not unavailable', async () => {
+  const saved = Array.from({ length: NAV_COMMAND_LIMIT }, (_, index) => {
+    const n = index + 1;
+    return link(`Page ${n}`, `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, 'c')}`,
+      `page-${n}`, n);
+  });
+  const keys: string[] = [];
+  const written = await commitNavigation(saved, [], head, 'clear-all', async (op, key, expectedHead) => {
+    keys.push(key);
+    expect(op.kind).toBe('remove');
+    return { ok: true, head: expectedHead === head ? next : later, occurrence: null, replayed: false };
+  });
+  expect(written.ok).toBe(true);
+  if (!written.ok) return;
+  expect(written.links).toEqual([]);
+  expect(keys).toHaveLength(NAV_COMMAND_LIMIT);
+  expect(keys[0]).toBe('clear-all');
+  expect(keys.at(-1)).toBe(`clear-all.${NAV_COMMAND_LIMIT - 1}`);
 });
 
 test('reordering across the first-page boundary keeps untouched mount metadata', async () => {

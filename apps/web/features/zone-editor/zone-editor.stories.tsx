@@ -231,7 +231,10 @@ function navigationClient(calls: { name: string; key: string; segment?: string }
   let inserts = 0;
   return {
     async readNavigation() {
-      return { ok: true, data: { head: navigation, navigation, links: [], complete: true, zoneHead: null } };
+      return { ok: true, data: { head: navigation, navigation, links: [], complete: true, after: null, zoneHead: null } };
+    },
+    async continueNavigation() {
+      return { ok: true, data: { head: navigation, navigation, links: [], complete: true, after: null, zoneHead: null } };
     },
     async insertMount(_zone, body, key) {
       calls.push({ name: 'insert', key, segment: body.routeSegment });
@@ -263,7 +266,7 @@ function NavigationPage({ mode }: { mode: 'save' | 'stale' }) {
   const [authoring] = useState(() => clientOf([], 'save'));
   const [home] = useState(() => opening(fromPlainText('Morning edition of the harbor', 'blocks'), '00000000-0000-4000-8000-000000000311'));
   const [initial] = useState<NavigationState>(() => ({
-    links: [], saved: [], head: navigation, navigation, complete: true, notice: { kind: 'idle' },
+    links: [], saved: [], head: navigation, navigation, complete: true, after: null, notice: { kind: 'idle' },
   }));
   return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en" manageMessages={manageMessages}
     sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm}>
