@@ -1,5 +1,5 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { Fragment, useId, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useId, type ComponentProps, type ReactNode } from 'react';
 import { cn } from '../utils.ts';
 import { safeDocumentUrl } from './document-url.tsx';
 import { DocumentSpoiler } from './document-spoiler.tsx';
@@ -15,26 +15,57 @@ export interface DocumentBodyProps extends Omit<ComponentProps<'div'>, 'children
   spoilerLabel?: string;
 }
 
-function string(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined;
+function string(value: unknown): string | undefined;
+function string<T extends string>(value: unknown, allowed: readonly T[]): T | undefined;
+function string(value: unknown, allowed?: readonly string[]): string | undefined {
+  return typeof value === 'string' && (!allowed || allowed.includes(value)) ? value : undefined;
+}
+
+/** Stored JSON must pass a primitive guard before any coercion or DOM assignment. */
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return undefined;
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+function positiveNumber(value: unknown): number | undefined {
+  const number = finiteNumber(value);
+  return number !== undefined && number > 0 ? number : undefined;
+}
+function positiveInteger(value: unknown): number | undefined {
+  const number = positiveNumber(value);
+  return number !== undefined && Number.isInteger(number) ? number : undefined;
+}
+function boolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+function color(value: unknown): string | undefined {
+  const text = string(value);
+  return text !== undefined && !/[;{}\u0000-\u001f]/u.test(text) ? text : undefined;
 }
 function cellWidth(value: unknown): number | undefined {
   if (!Array.isArray(value)) return undefined;
-  const width = value.reduce<number>(
-    (sum, column) => sum + (typeof column === 'number' ? column : 0),
-    0,
-  );
-  return width > 0 ? width : undefined;
+  let width = 0;
+  for (const column of value) {
+    const number = positiveInteger(column);
+    if (number === undefined) return undefined;
+    width += number;
+  }
+  return positiveNumber(width);
 }
 function common(node: DocumentNode) {
+  const textAlign = string(node.attrs?.textAlign ?? node.attrs?.align, [
+    'left',
+    'center',
+    'right',
+    'justify',
+    'start',
+    'end',
+  ] as const);
   return {
     'data-block-id': string(node.attrs?.id),
     lang: string(node.attrs?.lang),
-    dir: string(node.attrs?.dir),
-    style:
-      node.attrs?.textAlign || node.attrs?.align
-        ? { textAlign: (node.attrs.textAlign ?? node.attrs.align) as CSSProperties['textAlign'] }
-        : undefined,
+    dir: string(node.attrs?.dir, ['ltr', 'rtl', 'auto']),
+    style: textAlign ? { textAlign } : undefined,
   };
 }
 
@@ -77,7 +108,7 @@ function isolatedPlaceholder(kind: 'unknown' | 'malformed', name: string) {
 /** Missing level stays the historical h6 default; only a present value outside 1–6 is malformed. */
 function headingLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | 6 | 'default' | 'malformed' {
   if (value === undefined) return 'default';
-  const level = Number(value);
+  const level = finiteNumber(value);
   if (level === 1 || level === 2 || level === 3 || level === 4 || level === 5 || level === 6) {
     return level;
   }
@@ -87,7 +118,7 @@ function headingLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | 6 | 'default' | 'malf
 function marked(
   node: DocumentNode,
   spoilerLabel: string,
-  base: ReactNode = node.text ?? '',
+  base: ReactNode = string(node.text) ?? '',
   revealSpoiler = false,
 ): ReactNode {
   const content = (node.marks ?? []).reduce<ReactNode>((children, mark, index) => {
@@ -104,7 +135,7 @@ function marked(
       case 'code':
         return <code key={index}>{children}</code>;
       case 'link': {
-        const href = safeDocumentUrl(attrs.href);
+        const href = safeDocumentUrl(string(attrs.href));
         return href ? (
           <a key={index} href={href} title={string(attrs.title)} rel="noopener noreferrer">
             {children}
@@ -115,7 +146,11 @@ function marked(
       }
       case 'language':
         return (
-          <span key={index} lang={string(attrs.lang)} dir={string(attrs.dir)}>
+          <span
+            key={index}
+            lang={string(attrs.lang)}
+            dir={string(attrs.dir, ['ltr', 'rtl', 'auto'])}
+          >
             {children}
           </span>
         );
@@ -123,24 +158,34 @@ function marked(
         return (
           <span
             key={index}
-            style={{ color: string(attrs.color), backgroundColor: string(attrs.backgroundColor) }}
+            style={{ color: color(attrs.color), backgroundColor: color(attrs.backgroundColor) }}
           >
             {children}
           </span>
         );
-      case 'textEmphasis':
+      case 'textEmphasis': {
+        const fill = string(attrs.fill ?? 'filled', ['filled', 'open']);
+        const shape = string(attrs.shape ?? 'dot', [
+          'dot',
+          'sesame',
+          'circle',
+          'double-circle',
+          'triangle',
+        ]);
+        const position = string(attrs.position ?? 'over', ['over', 'under']);
         return (
           <span
             key={index}
             style={{
-              textEmphasisStyle: `${String(attrs.fill ?? 'filled')} ${String(attrs.shape ?? 'dot')}`,
-              textEmphasisPosition: `${String(attrs.position ?? 'over')} right`,
-              textEmphasisColor: string(attrs.color),
+              textEmphasisStyle: fill && shape ? `${fill} ${shape}` : undefined,
+              textEmphasisPosition: position ? `${position} right` : undefined,
+              textEmphasisColor: color(attrs.color),
             }}
           >
             {children}
           </span>
         );
+      }
       default:
         return children;
     }
@@ -171,13 +216,17 @@ export function DocumentBody({
     if (!knownNodeTypes.has(node.type)) {
       return isolatedPlaceholder('unknown', node.type);
     }
-    const imageSrc = node.type === 'image' ? safeDocumentUrl(attrs.src, true) : undefined;
+    const imageSrc = node.type === 'image' ? safeDocumentUrl(string(attrs.src), true) : undefined;
     if (node.type === 'image' && !imageSrc) {
       return isolatedPlaceholder('malformed', 'image');
     }
     const level = node.type === 'heading' ? headingLevel(attrs.level) : undefined;
     if (level === 'malformed') {
       return isolatedPlaceholder('malformed', 'heading');
+    }
+    const rubyText = node.type === 'ruby' ? string(attrs.rt) : undefined;
+    if (node.type === 'ruby' && rubyText === undefined) {
+      return isolatedPlaceholder('malformed', 'ruby');
     }
     const shared = { ...common(node), ...nodeAttributes?.(node) };
     const children: ReactNode[] = [];
@@ -209,7 +258,7 @@ export function DocumentBody({
       case 'doc':
         return children;
       case 'text':
-        return marked(node, spoilerLabel, node.text ?? '', revealSpoiler);
+        return marked(node, spoilerLabel, string(node.text) ?? '', revealSpoiler);
       case 'paragraph': {
         const paragraphIndex = paragraph++;
         return renderParagraph ? (
@@ -242,7 +291,7 @@ export function DocumentBody({
         return <ul {...shared}>{children}</ul>;
       case 'orderedList':
         return (
-          <ol {...shared} start={Number(attrs.start ?? 1)}>
+          <ol {...shared} start={positiveInteger(attrs.start ?? 1)}>
             {children}
           </ol>
         );
@@ -260,7 +309,7 @@ export function DocumentBody({
           <li {...shared} data-type="taskItem">
             <span
               role="checkbox"
-              aria-checked={Boolean(attrs.checked)}
+              aria-checked={boolean(attrs.checked) ?? false}
               aria-disabled="true"
               aria-labelledby={taskLabel}
             />
@@ -283,8 +332,8 @@ export function DocumentBody({
           <td
             {...shared}
             style={{ ...shared.style, width: cellWidth(attrs.colwidth) }}
-            colSpan={Number(attrs.colspan ?? 1)}
-            rowSpan={Number(attrs.rowspan ?? 1)}
+            colSpan={positiveInteger(attrs.colspan ?? 1)}
+            rowSpan={positiveInteger(attrs.rowspan ?? 1)}
           >
             {children}
           </td>
@@ -294,8 +343,8 @@ export function DocumentBody({
           <th
             {...shared}
             style={{ ...shared.style, width: cellWidth(attrs.colwidth) }}
-            colSpan={Number(attrs.colspan ?? 1)}
-            rowSpan={Number(attrs.rowspan ?? 1)}
+            colSpan={positiveInteger(attrs.colspan ?? 1)}
+            rowSpan={positiveInteger(attrs.rowspan ?? 1)}
             scope="col"
           >
             {children}
@@ -308,12 +357,12 @@ export function DocumentBody({
           <ruby
             {...shared}
             style={{
-              rubyPosition: String(attrs.position ?? 'over') as CSSProperties['rubyPosition'],
+              rubyPosition: string(attrs.position ?? 'over', ['over', 'under', 'inter-character']),
             }}
           >
             <span>{children}</span>
             <rp>(</rp>
-            <rt>{string(attrs.rt)}</rt>
+            <rt>{rubyText}</rt>
             <rp>)</rp>
           </ruby>,
           revealSpoiler,
@@ -325,11 +374,11 @@ export function DocumentBody({
               src={imageSrc!}
               representationId={string(attrs.representationId)}
               mediaUseId={string(attrs.mediaUseId)}
-              conceal={attrs.conceal === true}
+              conceal={boolean(attrs.conceal) ?? false}
               alt={string(attrs.alt) ?? ''}
               title={string(attrs.title)}
-              width={typeof attrs.width === 'number' ? attrs.width : undefined}
-              height={typeof attrs.height === 'number' ? attrs.height : undefined}
+              width={positiveNumber(attrs.width)}
+              height={positiveNumber(attrs.height)}
               loading="lazy"
               referrerPolicy="no-referrer"
             />
@@ -337,21 +386,22 @@ export function DocumentBody({
         );
       }
       case 'media': {
-        const src = safeDocumentUrl(attrs.src, true);
+        const src = safeDocumentUrl(string(attrs.src), true);
         const caption = string(attrs.caption);
+        const kind = string(attrs.kind, ['audio', 'video', 'file']);
         if (!src) return <p {...shared}>{caption}</p>;
         return (
           <figure {...shared}>
-            {attrs.kind === 'audio' ? (
+            {kind === 'audio' ? (
               <audio controls src={src} preload="none" aria-label={caption} />
-            ) : attrs.kind === 'video' ? (
+            ) : kind === 'video' ? (
               <video controls src={src} preload="none" aria-label={caption} />
             ) : (
               <a href={src} rel="noopener noreferrer">
                 {caption ?? src}
               </a>
             )}
-            {caption && attrs.kind !== 'file' ? <figcaption>{caption}</figcaption> : null}
+            {caption && kind !== 'file' ? <figcaption>{caption}</figcaption> : null}
           </figure>
         );
       }
