@@ -159,6 +159,69 @@ interface LaterAdmissionEvidence {
   erasureEpoch: string;
   baseGeneration: string;
   currentGeneration: string;
+  accountChanges: AccountRowChange[];
+}
+
+interface AccountRowChange {
+  table: string;
+  keyDigest: string;
+  kind: 'inserted' | 'deleted' | 'updated';
+  columns: string[];
+}
+
+type AccountRows = Map<string, Map<string, Record<string, unknown>>>;
+
+// Measure whole rows, independently of the authority digest's usage projection.
+// Keep credential values in memory only; reports identify keys by digest.
+async function accountRows(pool: Pool): Promise<AccountRows> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query("SET LOCAL TIME ZONE 'UTC'");
+    const catalog = await client.query<{ table_name: string; keys: string[] }>(
+      `SELECT c.relname AS table_name, array_agg(a.attname ORDER BY k.ordinality) AS keys
+       FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+       JOIN pg_index i ON i.indrelid=c.oid AND i.indisprimary
+       CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ordinality)
+       JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum
+       WHERE n.nspname='public' AND c.relkind='r' GROUP BY c.relname ORDER BY c.relname`);
+    const tables = await client.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name`);
+    expect(catalog.rows.map(row => row.table_name)).toEqual(tables.rows.map(row => row.table_name));
+    const result: AccountRows = new Map();
+    for (const { table_name: table, keys } of catalog.rows) {
+      const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+      const rows = await client.query<{ key: string; body: Record<string, unknown> }>(
+        `SELECT jsonb_build_array(${keys.map(quote).join(', ')})::text AS key,
+          to_jsonb(t) AS body FROM public.${quote(table)} AS t`);
+      result.set(table, new Map(rows.rows.map(row => [row.key, row.body])));
+    }
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function changedAccountRows(base: AccountRows, current: AccountRows): AccountRowChange[] {
+  expect([...current.keys()]).toEqual([...base.keys()]);
+  const changes: AccountRowChange[] = [];
+  for (const [table, before] of base) {
+    const after = current.get(table)!;
+    for (const key of [...new Set([...before.keys(), ...after.keys()])].sort()) {
+      const oldRow = before.get(key), newRow = after.get(key);
+      const columns = [...new Set([...Object.keys(oldRow ?? {}), ...Object.keys(newRow ?? {})])]
+        .filter(column => JSON.stringify(oldRow?.[column]) !== JSON.stringify(newRow?.[column]))
+        .sort();
+      if (columns.length) changes.push({ table, keyDigest: hash(key),
+        kind: !oldRow ? 'inserted' : !newRow ? 'deleted' : 'updated', columns });
+    }
+  }
+  return changes;
 }
 
 class DirectoryObjects implements ImmutableObjects {
@@ -927,6 +990,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       await grant(`erasure:${created.work}`, 'erasure.request');
     }
     const generation = await engageAccessRecoveryFence(source.access);
+    const baseAccountRows = options.laterApiAdmission ? await accountRows(source.account) : undefined;
     let coverage: RecoveryCoverage | undefined;
     await timing.phase('source.recovery-authority-capture', async () => {
       for (let attempt = 0; attempt < 8 && !coverage; attempt++) {
@@ -1134,6 +1198,13 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       ) {
         throw new Error('later erasure API fixture did not leave a completed native admission');
       }
+      const accountChanges = changedAccountRows(baseAccountRows!, await accountRows(source.account));
+      console.info('later-admission C0/C1 Account row changes', accountChanges);
+      // An unreviewed change must stop before current attachment publication.
+      expect(accountChanges.length).toBeGreaterThan(0);
+      for (const change of accountChanges) expect(change).toMatchObject({
+        table: 'rezics_account_grant', kind: 'updated', columns: ['last_used_at'],
+      });
       const captureRelay = await source.relay.connect();
       try {
         await captureRelay.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -1206,6 +1277,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         erasureEpoch: erased.erasureEpoch,
         baseGeneration: generation,
         currentGeneration,
+        accountChanges,
       };
     } else {
       erased = await journalErasure(source.relay, {

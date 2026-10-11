@@ -8,6 +8,19 @@ export interface AccountRecoveryCoverage {
   rowDigest: string;
 }
 
+/** Reviewed usage projection; its version is part of the signed digest profile. */
+export const ACCOUNT_RECOVERY_USAGE_EXCLUSIONS = {
+  version: 1,
+  columns: {
+    // Throttled resource-use timestamp: no credential, grant generation,
+    // scope, session validity or policy meaning; revocation remains covered.
+    rezics_account_grant: ['last_used_at'],
+  },
+  // Rate-limit rows enforce admission policy and remain covered. No table
+  // exclusion is justified by the measured later-erasure transition.
+  tables: [],
+} as const;
+
 // Better Auth 1.7.5, its pinned OAuth provider, the private code-basis fence,
 // App installations, signing-key generations and independent credential
 // recovery evidence. A schema change must be reviewed before coverage is accepted.
@@ -58,7 +71,7 @@ const KEYS: Record<string, [string, string][]> = {
   rezics_mail_suppression: [['address', 'text'], ['purpose', 'text']],
 };
 
-/** Offline coverage of every private Account table at one UTC snapshot. */
+/** Offline authority coverage of every private Account table at one UTC snapshot. */
 export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecoveryCoverage> {
   const client = await pool.connect();
   try {
@@ -78,15 +91,22 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
         + `unexpected ${JSON.stringify(unexpected)}`);
     }
     const digest = createHash('sha256');
+    digest.update(JSON.stringify(ACCOUNT_RECOVERY_USAGE_EXCLUSIONS));
+    digest.update('\n');
     let count = 0n;
     for (const table of tables) {
       const keys = KEYS[table] ?? [['id', UUID_ID_TABLES.has(table) ? 'uuid' : 'text']];
       const columns = keys.map(([name]) => `"${name}"`).join(', ');
+      const excluded = (ACCOUNT_RECOVERY_USAGE_EXCLUSIONS.columns as
+        Readonly<Record<string, readonly string[]>>)[table] ?? [];
+      const body = excluded.length
+        ? `to_jsonb(t) - ARRAY[${excluded.map(name => `'${name}'`).join(', ')}]::text[]`
+        : 'to_jsonb(t)';
       let lastKey: unknown[] | null = null;
       while (true) {
         const page: QueryResult<{ id: string; body: string }> =
           await client.query<{ id: string; body: string }>(
-            `SELECT jsonb_build_array(${columns})::text AS id, to_jsonb(t)::text AS body FROM public."${table}" AS t
+            `SELECT jsonb_build_array(${columns})::text AS id, (${body})::text AS body FROM public."${table}" AS t
              ${lastKey ? `WHERE ROW(${columns}) > ROW(${keys.map(([, type], index) => `$${index + 1}::${type}`).join(', ')})` : ''}
              ORDER BY ${columns} LIMIT 1000`, lastKey ?? []);
         for (const row of page.rows) {

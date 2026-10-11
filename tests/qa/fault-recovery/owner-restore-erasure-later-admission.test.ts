@@ -22,6 +22,12 @@ test(
       expect(later).toBeDefined();
       if (!later) throw new Error('later public erasure admission was not prepared');
 
+      expect(later.accountChanges.length).toBeGreaterThan(0);
+      for (const change of later.accountChanges) expect(change).toMatchObject({
+        table: 'rezics_account_grant', kind: 'updated', columns: ['last_used_at'],
+      });
+      expect(fixture.currentCoverage.account).toEqual(fixture.baseCoverage.account);
+
       expect(fixture.erased.erasureId).toBe(later.erasureId);
       expect(fixture.erased.erasureEpoch).toBe(later.erasureEpoch);
       const admission = (
