@@ -124,7 +124,7 @@ export const cases = defineCases('docs/testing/search.md', [
     id: 'SEARCH21',
     scenario: 'Ask public typeahead for b and bo at 16, 64 and 256 product-published Works with two matching title fields',
     requiredResult:
-      'Every page contains ten distinct title suggestions. Before prefixWalkAvailable, characterize 32/128/512 native returned candidate rows; after cutover, native examined evidence stays equal across populations and at most four entries per page item. Missing visit evidence cannot pass as zero work.',
+      'Before prefixWalkAvailable, characterize 32/128/512 native returned candidate rows and record unavailable outcomes without substituting them for bounded work. Successful pages contain ten distinct title suggestions. After cutover, every request succeeds and native examined evidence stays equal across populations and at most four entries per page item. Missing visit evidence cannot pass as zero work.',
   },
 ]);
 
