@@ -148,6 +148,7 @@ test('cover provenance is sealed to the exact asset revision', async () => {
 test('replacement cannot clear imported cover purpose', async () => {
   const first = await storeCover(await sourceCover('cover-201'));
   const secondFixture = await sourceCover('cover-202');
+  secondFixture.provenance.targetWork = first.input.importedCover!.targetWork;
   const replacement = uploadInput(secondFixture, first.reserved.asset);
   const denied = ordinaryInput({ ...secondFixture, provenance: first.input.importedCover! }, first.reserved.asset);
   await expect(first.store.reserveUpload(admission(denied, randomUUID(), first.actingSubject), denied))

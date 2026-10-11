@@ -7,7 +7,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { contentDraftReceiptIri } from '../content-publication/draft.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ImageFormatRejected, verifyImage } from './image.ts';
 import { validateImageInference, validateMediaField, type ImageInferenceInput,
   type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
@@ -136,8 +136,8 @@ export function reserveAdmittedUpload(env: WorkActivationEnvironment, media: Med
     operation: id => `media-upload:${id}`, accountScope: 'work:edit' },
   media.store, async admission => {
     if (reservation.importedCover) {
-      const target = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(reservation.importedCover.targetWork)} a rv:Work . } }`, 8192);
+      const target = await env.fuseki.query(`PREFIX schema: <https://schema.org/> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(reservation.importedCover.targetWork)} a schema:CreativeWork . } }`, 8192);
       if (target.boolean !== true) throw new MediaDenied('imported covers require an active Work target');
       if (!media.sourceCoverEvidence) throw new MediaUnavailable('Source cover evidence owner is unavailable');
       try { await media.sourceCoverEvidence.verify(admission.principalId, reservation.importedCover); }
@@ -256,8 +256,8 @@ export function selectAdmittedAvatar(env: WorkActivationEnvironment, media: Medi
       const targetWork = await media.store.importedCoverTargetWork(selection.asset);
       if (targetWork) {
         if (selection.target !== targetWork) throw new MediaDenied('imported covers are limited to their Work');
-        const target = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-          GRAPH ${iri(GRAPHS.current)} { ${iri(targetWork)} a rv:Work . } }`, 8192);
+        const target = await env.fuseki.query(`PREFIX schema: <https://schema.org/> ASK {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(targetWork)} a schema:CreativeWork . } }`, 8192);
         if (target.boolean !== true) throw new MediaDenied('imported cover Work is unavailable');
       }
     }
