@@ -247,9 +247,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/realm-admin-api.test.ts',
       'Realm roles: exact impact matches enforced grants; retries, stale and concurrent changes stay atomic',
       'Creates a Realm role, assigns and removes a team member through Main and checks enforced grants, stale impact and concurrent edits.'),
-    browser: browser('apps/web/tests/realm-community.e2e.ts',
-      'a manager creates a role, assigns it to a member, and sees the public team after reload',
-      'Creates and assigns a moderator role in Manage, then reloads both the member roster and the opted-in public Realm team.'),
+    browser: missing('gap'),
   },
   {
     kind: 'realm',
