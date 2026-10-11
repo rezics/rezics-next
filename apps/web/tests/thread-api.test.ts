@@ -134,8 +134,55 @@ test('legacy independent progress replays the draft key and verifies its revisio
   expect((await fx.api.reply(input('Legacy words'), progress)).kind).toBe('placed');
   expect(fx.drafts).toHaveLength(1);
   expect(fx.drafts[0]?.key).toBe('legacy-key:draft');
-  expect(fx.drafts[0]?.body).toMatchObject({ originRealm: null, reply: iri(97) });
+  expect(fx.drafts[0]?.body).toMatchObject({ reply: iri(97) });
+  expect(fx.drafts[0]?.body.originRealm).toBeUndefined();
   expect(fx.placements[0]?.body).toMatchObject({ revisionId: 'saved-revision', revisionDigest: 'recovered-digest' });
+});
+
+test('lost legacy draft response is replayed unchanged, withdrawn, then replaced with a Realm intent', async () => {
+  const words = 'Replay the original words';
+  const request = input(words);
+  const fx = harness({
+    parentAnswer: { data: { originRealm: realm } },
+    // The prior draft call committed but its response was lost. This replay recovers it.
+    draftAnswer: (_body, index) => index === 0
+      ? { data: { revisionId: 'committed-revision', revisionDigest: 'committed-digest' } }
+      : { data: { revisionId: 'fresh-revision', revisionDigest: 'fresh-digest' } },
+  });
+  const progress: ReplyProgress = {
+    key: 'legacy-lost-key', reply: iri(103), variantId: `urn:rezics:variant:${iri(104).slice(-36)}`,
+  };
+
+  expect((await fx.api.reply(request, progress)).kind).toBe('placed');
+  expect(fx.drafts).toHaveLength(3);
+  expect(fx.drafts[0]).toMatchObject({
+    key: 'legacy-lost-key:draft',
+    body: {
+      profile: 'member-reply-draft-v1',
+      reply: progress.reply,
+      variantId: progress.variantId,
+      rootTarget: request.work,
+      rootRevision: request.rootRevision,
+      language: request.language,
+      expectedHead: null,
+      body: words,
+      actingSubject: request.actingSubject,
+    },
+  });
+  expect(fx.drafts[0]?.body.originRealm).toBeUndefined();
+  expect(fx.drafts[1]).toMatchObject({
+    key: 'legacy-lost-key:withdraw',
+    body: { reply: iri(103), body: null, expectedHead: 'committed-revision' },
+  });
+  expect(fx.drafts[1]?.body.originRealm).toBeUndefined();
+  expect(fx.drafts[2]?.key).not.toBe('legacy-lost-key:draft');
+  expect(fx.drafts[2]?.body).toMatchObject({
+    originRealm: realm,
+    body: words,
+  });
+  expect(fx.drafts[2]?.body.reply).not.toBe(iri(103));
+  expect(fx.drafts[2]?.key).not.toBe('legacy-lost-key:withdraw');
+  expect(fx.placements[0]?.body).toMatchObject({ revisionId: 'fresh-revision', revisionDigest: 'fresh-digest' });
 });
 
 test('a mismatched legacy Realm draft is withdrawn before a fresh Realm intent', async () => {
@@ -186,7 +233,7 @@ test('a changed revision on legacy draft replay never replaces saved progress', 
   };
 
   expect(await fx.api.reply(input('Legacy words'), progress)).toEqual({ kind: 'failed', progress: {
-    ...progress, originRealm: null,
+    ...progress, draftStarted: true,
   } });
   expect(fx.placements).toHaveLength(0);
 });

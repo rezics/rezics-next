@@ -195,7 +195,12 @@ export function ReplyComposer({
     actingSubject: actingSubject!,
   });
   // Once Main holds the words, they stay as sent until the reply is placed or taken back.
-  const saved = Boolean(progress.current?.revisionId);
+  const saved = Boolean(
+    progress.current &&
+      (progress.current.revisionId ||
+        progress.current.draftStarted ||
+        progress.current.originVersion !== 1),
+  );
 
   async function send() {
     const body = text;

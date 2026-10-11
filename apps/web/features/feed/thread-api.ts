@@ -30,6 +30,10 @@ export interface ReplyProgress {
   variantId: string;
   /** Canonical origin inherited from the exact parent reply; null for independent replies. */
   originRealm?: string | null;
+  /** Missing on saved intents whose draft payload predates parent-origin binding. */
+  originVersion?: 1;
+  /** The draft request was sent, even if its response did not provide a revision ID. */
+  draftStarted?: boolean;
   revisionId?: string;
   identified?: boolean;
   digest?: string;
@@ -52,6 +56,7 @@ export function replyProgress(): ReplyProgress {
     key: crypto.randomUUID(),
     reply: `https://rezics.com/id/${crypto.randomUUID()}`,
     variantId: `urn:rezics:variant:${crypto.randomUUID()}`,
+    originVersion: 1,
   };
 }
 
@@ -99,15 +104,28 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
           });
           if (!data) return { kind: 'failed', progress: step };
           const parentOriginRealm = data.originRealm ?? null;
-          // A legacy draft was authored with null origin. Its immutable draft and
-          // identity keys cannot be changed to inherit a Realm origin.
-          if (step.revisionId && (step.originRealm ?? null) !== parentOriginRealm) {
+          const legacyNullOrigin = step.originVersion !== 1;
+          // Recover legacy writes with the original null-origin payload before
+          // changing their intent. The old key cannot be replayed with a Realm origin.
+          if (legacyNullOrigin && (!step.revisionId || (!parentOriginRealm && !step.digest))) {
+            step.draftStarted = true;
+            const { data: recovered } = await draft(input, step, input.body, null, 'draft');
+            if (!recovered || (step.revisionId && recovered.revisionId !== step.revisionId))
+              return { kind: 'failed', progress: step };
+            step.revisionId = recovered.revisionId;
+            step.digest = recovered.revisionDigest;
+          }
+          if (step.revisionId && (legacyNullOrigin
+            ? parentOriginRealm !== null
+            : (step.originRealm ?? null) !== parentOriginRealm)) {
             await withdraw(input, step);
             step = replyProgress();
           }
           step.originRealm = parentOriginRealm;
+          step.originVersion = 1;
         }
         if (!step.revisionId) {
+          step.draftStarted = true;
           const { data, error } = await draft(input, step, input.body, null, 'draft');
           if (!data && error?.status === 403) {
             await withdraw(input, step);
@@ -118,6 +136,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
           step.digest = data.revisionDigest;
         } else if (!step.digest) {
           // Same-key replay recovers the digest from older saved progress.
+          step.draftStarted = true;
           const { data, error } = await draft(input, step, input.body, null, 'draft');
           if (!data && error?.status === 403) {
             await withdraw(input, step);
