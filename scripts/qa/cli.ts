@@ -60,7 +60,7 @@ import {
 import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
-import { readEnv } from '../dev/config.ts';
+import { readEnv, replacePrivate } from '../dev/config.ts';
 import { preserveReapEnvironment } from './container-reaper.ts';
 import { stageQaBootstrap } from './bootstrap.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
@@ -71,7 +71,7 @@ import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparat
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import {
-  integrationBudgetSummary, integrationOverBudgetFiles, integrationTierWallMs, planIntegrationShards,
+  integrationBudgetSummary, integrationOverBudgetFiles, integrationStackPoolEligible, integrationTierWallMs, planIntegrationShards,
   runQueuedProjects,
 } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
@@ -85,6 +85,7 @@ import {
   childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
   type CampaignEvidenceRead, type CommandPhaseSample,
 } from './campaign-envelope.ts';
+import { createQaStackPool, destroyHeldQaStacks, qaStackFingerprint, qaStackPoolEnabled } from './stack-pool.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -97,6 +98,7 @@ const tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?
 const isolation: IsolationRecord[] = [];
 const errors: string[] = [];
 const integrationBudgetNotes: string[] = [];
+const stackLeaseNotes: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
 const rawUpdateProjects = new Set<string>();
@@ -154,6 +156,27 @@ const qaSlotDirectory = process.env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(
 if (qaSlotDirectory) process.env.GOAL_QA_WAIT_DIR ??= join(qaSlotDirectory, 'waiters');
 process.env.GOAL_QA_COMMAND ??= ['bun', ...process.argv.slice(1)].join(' ');
 const heavyQaRun = process.env.GOAL_QA_HEAVY_RUN === '1';
+const stackPool = createQaStackPool({ root, slotDirectory: qaSlotDirectory,
+  slots: /^[1-9]\d*$/.test(process.env.GOAL_QA_SLOTS ?? '') ? Number(process.env.GOAL_QA_SLOTS) : 3 });
+
+async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessEnv): Promise<string> {
+  const paths = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml',
+    'infra/dev/postgres/00-owners.sh', 'scripts/qa/bootstrap.ts', 'scripts/qa/integration-reset.ts',
+    'scripts/dev/config.ts', 'scripts/ops/migrate.ts', 'services/account/src/migrate.ts',
+    'services/account/src/auth.ts', 'services/account/package.json', 'yarn.lock',
+    ...new Bun.Glob('infra/jena/fuseki-text*.ttl').scanSync({ cwd: root }),
+    ...new Bun.Glob('services/{main,account,content}/migrations/**/*.sql').scanSync({ cwd: root })];
+  const files = paths.sort().map(path => [path, readFileSync(join(root, path), 'utf8')] as [string, string]);
+  const compose = readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8');
+  const images = [...compose.matchAll(/^  (?:postgres|fuseki|rustfs|mailpit):\n    image: (\S+)$/gm)].map(match => match[1]!);
+  const inspected = await commandAsync(root, 'docker', ['image', 'inspect', '--format', '{{.Id}}', ...images],
+    10_000, preserveReapEnvironment(environment));
+  if (!inspected.ok) throw new Error(`Cannot fingerprint QA images: ${inspected.output}`);
+  const settings = Object.fromEntries(Object.entries(environment).filter(([key, value]) => value !== undefined
+    && /^REZICS_(?:FUSEKI|POSTGRES|RUSTFS|MAILPIT|QA_STACK_MODE)/.test(key))) as Record<string, string>;
+  return qaStackFingerprint({ files, images: inspected.output.trim().split('\n'),
+    assembler: environment.REZICS_FUSEKI_ASSEMBLER ?? '/fuseki/fuseki-text-qa.ttl', environment: settings });
+}
 async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof acquireQaSlots>[4] = {}) {
   let waitPath: string | undefined;
   const removeWait = () => { if (waitPath) rmSync(waitPath, { force: true }); };
@@ -397,6 +420,8 @@ async function runShardWork(
   reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<void> = reserveRunSlot,
 ): Promise<ShardRun> {
   const preparationStartedAt = Date.now();
+  const shardProjectRunId = projectRunId;
+  const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
   const resourceClass = tier === 'integration' ? integrationResourceClass(files) : undefined;
   if (resourceClass) budget = qaResourceClasses[resourceClass].budgetMs;
   const environment = qaStackEnvironment({
@@ -414,11 +439,34 @@ async function runShardWork(
   // Only integration stacks need the derived raw-SPARQL classification; keep that scan behind tier selection.
   const admitsWorkScope = tier === 'integration' && integrationStackAdmitsWorkScope(files, rawUpdate);
   if (admitsWorkScope) environment.REZICS_FUSEKI_ASSEMBLER = exclusiveWorkScopeAssembler;
+  let lease: Awaited<ReturnType<typeof stackPool.acquire>> = undefined;
+  let leased = false;
+  if (qaStackPoolEnabled(qaSlotDirectory) && integrationStackPoolEligible({ tier, files,
+    keep: options.keep, backend: options.backend, persistent }) && !isolated) {
+    const fingerprint = await integrationInfrastructureFingerprint(environment);
+    // A warm stack needs host work admission, but no new-container startup turn.
+    lease = await admitRun(() => stackPool.acquire(fingerprint), environment, reserve);
+    if (lease) {
+      leased = true;
+      projectRunId = lease.entry.projectRunId;
+      stackLeaseNotes.push(`- Integration shard ${shardProjectRunId} leased from rezics-qa-${projectRunId}, parked for ${lease.parkedMs} ms.`);
+      const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+      mkdirSync(stackDir, { recursive: true, mode: 0o700 });
+      replacePrivate(join(stackDir, 'apps.env'), { ...lease.entry.apps,
+        MAIN_OBJECT_DIRECTORY: join(stackDir, 'objects'), MAIN_CANDIDATE_DIRECTORY: join(stackDir, 'candidates') });
+      replacePrivate(join(stackDir, 'compose.env'), lease.entry.compose);
+    } else {
+      lease = await stackPool.register(projectRunId, fingerprint);
+    }
+  }
+  // Pool ownership replaces runner ancestry for these containers. Test-created
+  // containers still inherit the runner's reaper and are removed at test exit.
+  const startupEnvironment = lease ? { ...environment, REZICS_REAP_OWNER: '', REZICS_REAP_SCOPE: '',
+    REZICS_REAP_SCOPES: '', REZICS_REAP_STATE: '', REZICS_QA_POOL_STARTUP_PROJECT: projectRunId } : environment;
   const stackArgs = ['--profile', 'qa', '--run-id', projectRunId,
     ...(persistent ? ['--persistent'] : []), ...(rawUpdate ? ['--raw-update'] : [])];
   const started = persistent ? startedFixtureProjects : startedProjects;
-  const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
-  const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
+  const record: ShardRecord = { project: shardProjectRunId, files, status: 'failed', stage: 'stack',
     ...(isolated ? { isolation: true } : {}),
     ...(resourceClass ? { resourceClass, budgetMs: budget } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
@@ -435,9 +483,27 @@ async function runShardWork(
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
     }
     if (!options.keep && needsStack) {
-      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000, environment);
-      record.cleanupMs = down.elapsedMs;
-      if (down.ok) started.splice(started.indexOf(projectRunId), 1);
+      const cleanupStarted = Date.now();
+      let parked = false;
+      if (lease && run.ok && record.stage === 'test') {
+        const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+        const reset = await commandAsync(root, 'bun', ['scripts/qa/integration-reset.ts',
+          join(stackDir, 'apps.env'), join(stackDir, 'compose.env')], 180_000, environment, noteMemory, { runDeadline });
+        if (reset.ok) parked = await lease.park(readEnv(join(stackDir, 'apps.env')), readEnv(join(stackDir, 'compose.env')));
+        else {
+          run.ok = false;
+          errors.push(`integration pool reset failed: ${projectRunId} (see logs/${label}-reset.log)`);
+          writeFileSync(join(logs, `${label}-reset.log`), reset.output);
+        }
+      }
+      if (lease) {
+        if (!parked) await lease.destroy();
+        started.splice(started.indexOf(projectRunId), 1);
+      } else {
+        const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000, environment);
+        if (down.ok) started.splice(started.indexOf(projectRunId), 1);
+      }
+      record.cleanupMs = Date.now() - cleanupStarted;
     }
     record.status = run.ok ? 'passed' : 'failed';
     return { record, ...run };
@@ -447,9 +513,10 @@ async function runShardWork(
   if (needsStack) {
     started.push(projectRunId);
     const upCommand = () => startRunStack(['stack:up', ...stackArgs], 180_000, {
-      ...environment, [QA_STACK_TIER]: tier,
+      ...startupEnvironment, [QA_STACK_TIER]: tier,
     }, reserve);
-    const up = await (startStack ? startStack(upCommand) : upCommand()).catch(error => ({
+    const up = leased ? { ok: true, timedOut: false, elapsedMs: 0, activeElapsedMs: 0, output: '' }
+      : await (startStack ? startStack(upCommand) : upCommand()).catch(error => ({
       ok: false, timedOut: true, elapsedMs: Date.now() - preparationStartedAt,
       output: redactCommandOutput(error instanceof Error ? error.message : String(error)),
     }));
@@ -484,7 +551,8 @@ async function runShardWork(
     apps = staged.apps;
     compose = readEnv(join(stackDir, 'compose.env'));
     record.stage = 'bootstrap';
-    const bootstrap = await commandAsync(root, 'bun', staged.args, 180_000, environment);
+    const bootstrap = leased ? { ok: true, timedOut: false, elapsedMs: 0, output: '' }
+      : await commandAsync(root, 'bun', staged.args, 180_000, environment);
     record.bootstrapMs = bootstrap.elapsedMs;
     if (!bootstrap.ok) {
       errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
@@ -880,6 +948,7 @@ function noteIntegrationBudget(artifactDirectory: string): void {
 }
 
 try {
+  await stackPool.sweep();
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
   if (options.record) {
     const missing = missingCaseDeclarations(cases, caseCoverage);
@@ -1090,6 +1159,7 @@ try {
         writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
     }
   }
+  destroyHeldQaStacks();
   try {
     const sourceAfter = sourceIdentity(root);
     if (sourceAfter.fingerprint !== sourceBefore.fingerprint) errors.push('Source changed during QA run');
@@ -1109,6 +1179,7 @@ try {
       inventoryFingerprint: backendSelection?.inventoryFingerprint });
     noteBrowserPlan(directory);
     noteIntegrationBudget(directory);
+    if (stackLeaseNotes.length) appendFileSync(join(directory, 'summary.md'), `${stackLeaseNotes.join('\n')}\n`);
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
       if (record.certifiesFull) {

@@ -247,7 +247,7 @@ test('integration reset drains every bucket page and mailbox, then verifies both
     await clearIntegrationMailbox(fixture.compose);
     expect(fixture.counts().listings).toBe(4);
   } finally {
-    fixture.server.stop(true);
+    await fixture.server.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }
 });
@@ -275,7 +275,7 @@ test.each([
     })).rejects.toThrow(message);
     expect(readFileSync(join(objects, 'prior-file'), 'utf8')).toBe('prior');
   } finally {
-    fixture.server.stop(true);
+    await fixture.server.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }
 });

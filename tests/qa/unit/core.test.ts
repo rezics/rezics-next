@@ -775,3 +775,41 @@ test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline relea
     }
   }
 });
+
+test('a run deadline destroys its leased warm stack before releasing the QA slot', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-pool-deadline-'));
+  const slots = join(dir, 'slots');
+  const destroyed = join(dir, 'destroyed');
+  mkdirSync(slots);
+  writeFileSync(join(dir, 'qa-stack-pool'), 'on');
+  const script = join(dir, 'holder.ts');
+  writeFileSync(script, `
+    import { acquireQaSlots } from ${JSON.stringify(join(import.meta.dir, '../../../scripts/qa/core.ts'))};
+    import { createQaStackPool } from ${JSON.stringify(join(import.meta.dir, '../../../scripts/qa/stack-pool.ts'))};
+    import { existsSync, writeFileSync } from 'node:fs';
+    const pool = createQaStackPool({ root: ${JSON.stringify(dir)}, slotDirectory: ${JSON.stringify(slots)},
+      slots: 1, janitor: false, destroy: async () => {}, destroySync: entry => {
+        if (!existsSync(${JSON.stringify(join(slots, '0'))})) throw new Error('Slot released before stack destruction');
+        writeFileSync(${JSON.stringify(destroyed)}, entry.projectRunId);
+      } });
+    const first = await pool.register('deadline-stack', 'fingerprint');
+    await first!.park({}, {});
+    const leased = await pool.acquire('fingerprint');
+    if (!leased) throw new Error('Expected a warm lease');
+    await acquireQaSlots(${JSON.stringify(slots)}, 1, { GOAL_QA_SLOTS: '1' }, process.pid,
+      { runDeadline: Date.now() + 100 });
+    setInterval(() => {}, 1000);
+  `);
+  const child = Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' });
+  try {
+    expect(await child.exited).toBe(124);
+    expect(readFileSync(destroyed, 'utf8')).toBe('deadline-stack');
+    expect(existsSync(join(slots, '0'))).toBe(false);
+    expect(existsSync(join(dir, 'qa-stack-pool-state', 'deadline-stack.json'))).toBe(false);
+    expect(await new Response(child.stderr).text()).toContain('reached its deadline');
+  } finally {
+    child.kill();
+    await child.exited;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

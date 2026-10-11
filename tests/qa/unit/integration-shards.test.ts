@@ -4,6 +4,7 @@ import {
   integrationBudgetSummary,
   integrationOverBudgetFiles,
   integrationPlanLimitMs,
+  integrationStackPoolEligible,
   integrationTierWallMs,
   planIntegrationShards,
   runQueuedProjects,
@@ -12,6 +13,22 @@ import { qaResourceClasses, queuedProjectsBudget } from '../../../scripts/qa/res
 
 const ordinaryBudgetMs = qaResourceClasses.ordinary.budgetMs;
 const planLimitMs = integrationPlanLimitMs(ordinaryBudgetMs);
+
+test('only shared ordinary integration stacks enter the warm pool', () => {
+  const files = ['tests/qa/integration/shared-stack.test.ts'];
+  expect(integrationStackPoolEligible({ tier: 'integration', files })).toBe(true);
+  for (const input of [
+    { tier: 'integration', files, keep: true },
+    { tier: 'integration', files, backend: true },
+    { tier: 'integration', files, persistent: true },
+    { tier: 'e2e', files },
+    { tier: 'fault/recovery', files },
+    { tier: 'integration', files: [] },
+    { tier: 'integration', files: ['services/main/tests/edit.integration.test.ts'] },
+    { tier: 'integration', files: ['tests/qa/integration/g-1038-catalogue-scale.test.ts'] },
+    { tier: 'integration', files: ['tests/qa/integration/event-query-bounds.test.ts'] },
+  ]) expect(integrationStackPoolEligible(input)).toBe(false);
+});
 
 // Case times from the loaded run that put these six files in one 480s project.
 // erasure-release-proof's longer cases are the 20–30s proofs.

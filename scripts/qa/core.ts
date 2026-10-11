@@ -22,6 +22,7 @@ import {
 } from './container-reaper.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
+import { destroyHeldQaStacks, trackHeldQaStackStartup } from './stack-pool.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
 import { PINNED_FIXTURE_IDS } from '../fixture/stack.ts';
 import { processAlive, processAncestors } from './process/identity.ts';
@@ -504,6 +505,15 @@ export async function commandAsync(root: string, name: string, args: string[], t
     env: environment,
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (child.pid) trackCommandProcess(child.pid);
+  let untrackStartup: (() => void) | undefined;
+  if (child.pid && env.REZICS_QA_POOL_STARTUP_PROJECT) {
+    try { untrackStartup = trackHeldQaStackStartup(env.REZICS_QA_POOL_STARTUP_PROJECT, child.pid); }
+    catch (error) {
+      terminateProcessGroupSync(child.pid, 0);
+      untrackCommandProcess(child.pid);
+      throw error;
+    }
+  }
   let stdout = '', stderr = '', timedOut = false;
   const stdoutRedactor = createCommandOutputRedactor();
   const stderrRedactor = createCommandOutputRedactor();
@@ -628,6 +638,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     clearTimeout(timer);
     if (stopping) await stopping;
     if (child.pid) untrackCommandProcess(child.pid);
+    untrackStartup?.();
     reapSpawnedTest(name, args, environment);
     forgetChildScope(scope);
   }
@@ -1186,6 +1197,7 @@ export async function acquireQaSlots(
     // Detached stack:up children must stop before their leases become available.
     stopAsyncCommands();
     reapActiveChildScopes();
+    destroyHeldQaStacks();
     release();
   };
   const onSignal = (signal: NodeJS.Signals) => {

@@ -15,6 +15,16 @@ export interface IntegrationShard {
   resourceClass: QaResourceClass;
 }
 
+/** Only ordinary, shared-state integration projects can cross run boundaries. */
+export function integrationStackPoolEligible(input: {
+  tier: string; files: readonly string[]; keep?: boolean; backend?: boolean; persistent?: boolean;
+}): boolean {
+  return input.tier === 'integration' && !input.keep && !input.backend && !input.persistent
+    && integrationResourceClass(input.files) === 'ordinary'
+    && input.files.length > 0
+    && input.files.every(file => !isolatedIntegrationFiles.has(file) && !commandOnlyIntegrationFiles.has(file));
+}
+
 /** 60% of the command budget. Integer arithmetic so 480s stays exactly 288s. */
 export function integrationPlanLimitMs(budgetMs: number): number {
   return budgetMs * 6 / 10;
