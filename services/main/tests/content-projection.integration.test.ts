@@ -17,13 +17,14 @@ import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, TEXT_INDEX_PROBE, TEXT_INDEX
   TEXT_INDEX_PROBE_GRAPH, iri, lit, textIndexProbePattern,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { saveAdmittedContentDraft } from '../src/modules/content-publication/draft.ts';
 import { publishAdmittedContent } from '../src/modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch } from '../src/modules/content-publication/eligibility-admitted.ts';
 import { contentRebuildDelivery, type ContentRebuildFrontier }
   from '../src/modules/content-publication/rebuild-preflight.ts';
-import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, quarantinePublicContentSearch,
+import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, ContentRebuildFreshJob, quarantinePublicContentSearch,
   replayQuarantinedContentCut, verifyQuarantinedContentIndex } from '../src/modules/content-publication/rebuild.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
 import { qaStack } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
@@ -175,13 +176,9 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
       [principalId, principal.issuer, principal.subject]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
     const grant = async (scope: string, action: string) => {
-      await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-      await accessPool.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until)
-        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), principalId, actor, action]);
-      await accessPool.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
+      await grantFixtureAuthority(accessPool, { scope, requireDispatch: true,
+        representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+        grant: { actor, action, lifetime: '8 hours' } });
     };
     await grant('work:create:root', 'work.create');
     const work = await createAdmittedMetadataWork(env, account, access, request, {
@@ -466,10 +463,10 @@ test -z "$(ls -A /fuseki/databases/rezics/lucene)"`);
           GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} { ${iri(TEXT_INDEX_PROBE)} rv:searchBody ?body } }`);
       } };
     const frontiersByJob = new Map<string, ContentRebuildFrontier>();
-    const rebuild = (id: string, assertWritersStopped = async () => undefined) =>
+    const rebuild = (id: string, assertWritersStopped = async () => undefined, continuingJob?: string) =>
       rebuildPublicContentSearch({ runner, dockerEnv: stack.dockerEnv, env, content, cursor,
         delivery, frontier: frontiersByJob.get(id), onFrontierRecorded: frontier => frontiersByJob.set(id, frontier),
-        id, publicConsumer: consumer, expected: expectedPins, reserveBytes: 0, assertWritersStopped });
+        id, continuingJob, publicConsumer: consumer, expected: expectedPins, reserveBytes: 0, assertWritersStopped });
     const control = async () => (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?generation ?anchor WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:textIndexGeneration ?generation }
       OPTIONAL { GRAPH ${iri(publicGraph)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a ?anchor } }
@@ -568,20 +565,36 @@ sync`); }
     const partialJob = await quarantinePublicContentSearch(env, content, interruptedId);
     expect(await clearQuarantinedContentUnits(env, partialJob)).toBe(0);
     const partialPasses = offlinePasses;
-    // Replay has left sequence 0, so a rerun continues it and activates. It does
-    // not delete those units and does not run the indexer over the partial graph.
-    const resumed = await rebuild(interruptedId);
+    // Replay advanced beyond zero without retained offline evidence. Its native
+    // receipts cannot recreate cleared units under this job, so continue C with
+    // a fresh job, clear the partial inventory, index and replay from zero.
+    await expect(rebuild(interruptedId)).rejects.toBeInstanceOf(ContentRebuildFreshJob);
     expect(offlinePasses).toBe(partialPasses);
-    expect(resumed.replayed).toBe(1);
-    expect(resumed.generation).toMatch(/^urn:rezics:text-index-generation:/);
     expect(await receiptBody(partialDelivery.envelope.receipt)).toEqual(partialBody);
-    expect(await physicalBody(partialBody.unit!.value)).toMatchObject([{ literal: {
+    const freshId = randomUUID();
+    const frozenFrontier = frontiersByJob.get(interruptedId);
+    if (!frozenFrontier?.cut) throw new Error('interrupted rebuild frozen frontier absent');
+    frontiersByJob.set(freshId, frozenFrontier);
+    const resumed = await rebuild(freshId, undefined, interruptedId);
+    expect(resumed).toMatchObject({ job: freshId, removed: 1, replayed: 5 });
+    expect(offlinePasses).toBe(partialPasses + 1);
+    expect(resumed.generation).toMatch(/^urn:rezics:text-index-generation:/);
+    expect(frontiersByJob.get(freshId)).toEqual(frozenFrontier);
+    expect((await cursor.read(consumer)).sequence).toBe(owner.sequence);
+    const resumedDelivery = fuseki.deliveries.at(-1)!;
+    const resumedBody = await receiptBody(resumedDelivery.envelope.receipt);
+    expect(resumedBody.unit?.value).not.toBe(partialBody.unit?.value);
+    expect(resumedBody.source?.value).toBe(partialBody.source?.value);
+    expect(await physicalBody(partialBody.unit!.value)).toEqual([]);
+    expect((await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
+      ${iri(partialDelivery.envelope.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded } }`)).boolean).toBe(true);
+    expect(await physicalBody(resumedBody.unit!.value)).toMatchObject([{ literal: {
       value: body, 'xml:lang': language }, datatype: { value: datatype } }]);
     expect(await sourceEvidence()).toEqual(originalEvidence);
-    expect(await native.command(partialDelivery.envelope)).toMatchObject({
-      status: 'committed', position: partialDelivery.position });
-    unit = partialBody.unit!.value;
-    const topLevelDeliveries = fuseki.deliveries.length - 4;
+    expect(await native.command(resumedDelivery.envelope)).toMatchObject({
+      status: 'committed', position: resumedDelivery.position });
+    unit = resumedBody.unit!.value;
+    const deliveriesBeforeUnavailable = fuseki.deliveries.length;
 
     // The isolated owner database is disposable. Its immutable unavailable
     // transition stays terminal; the fixture does not disable custody guards.
@@ -589,7 +602,7 @@ sync`); }
       serialized_bytes = NULL, body = NULL WHERE id = $1`, [saved.revisionId]);
     try {
       await replaceBody(null);
-      await expect(native.command(partialDelivery.envelope)).rejects.toThrow('Fuseki command returned 500');
+      await expect(native.command(resumedDelivery.envelope)).rejects.toThrow('Fuseki command returned 500');
       const unavailableConsumer = `content-unavailable-${randomUUID()}`;
       await cursor.initialize(unavailableConsumer);
       let refused = false;
@@ -598,7 +611,7 @@ sync`); }
           ?.disposition === 'deferred') { refused = true; break; }
       }
       expect(refused).toBe(true);
-      expect(fuseki.deliveries.length - topLevelDeliveries).toBe(4);
+      expect(fuseki.deliveries).toHaveLength(deliveriesBeforeUnavailable);
     } finally {
       await fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(publicGraph)} {
         ${iri(unit)} rv:searchBody ${lit(body)}@${language} } }`);

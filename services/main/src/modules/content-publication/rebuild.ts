@@ -299,31 +299,52 @@ async function receiptIsCommitted(env: WorkActivationEnvironment, phase: Phase, 
 
 /** Complete a committed activation whose process died before SQL checkpoint promotion. */
 export async function resumeActivatedContentRebuild(env: WorkActivationEnvironment,
-  cursor: ContentProjectionCursor, id: string, publicConsumer: string): Promise<string | null> {
+  content: ContentCore, cursor: ContentProjectionCursor, id: string, publicConsumer: string): Promise<string | null> {
   rebuildId(id);
   const result = await readContentRebuildStep('activate: receipt', () => env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sourceEpoch
-    ?sourceSequence ?generation WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+    ?sourceSequence ?sequence ?generation ?digest WHERE { GRAPH ${iri(GRAPHS.receipts)} {
     ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
       rv:dataEpoch ?epoch ; rv:ownerDataEpoch ?sourceEpoch ;
-      rv:ownerSequence ?sourceSequence ; rv:textIndexGeneration ?generation . } }`));
+      rv:ownerSequence ?sourceSequence ; rv:sequence ?sequence ;
+      rv:textIndexGeneration ?generation ; rv:indexRebuildDigest ?digest . } }`));
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) return null;
   const row = rows[0];
   if (rows.length !== 1 || value(row!, 'epoch') !== env.lineage.dataEpoch
     || !UUID.test(value(row!, 'sourceEpoch') ?? '')
     || !DECIMAL.test(value(row!, 'sourceSequence') ?? '')
+    || !DECIMAL.test(value(row!, 'sequence') ?? '')
+    || !/^[0-9a-f]{64}$/.test(value(row!, 'digest') ?? '')
     || !/^urn:rezics:text-index-generation:[0-9a-f-]{36}$/.test(value(row!, 'generation') ?? '')) {
     throw new ContentRebuildUnavailable('activated rebuild receipt is incomplete');
   }
   const generation = value(row!, 'generation')!;
-  const confirmed = await readContentRebuildStep('activate: control', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+  const cut: ContentPosition = { owner: 'content', dataEpoch: value(row!, 'sourceEpoch')!,
+    sequence: value(row!, 'sourceSequence')! };
+  // The activation command verifies the whole prefix before committing. Its
+  // proof remains usable only while control is exactly that committed state.
+  const assertActivation = async () => {
+    const confirmed = await readContentRebuildStep('activate: control', () => env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-      rv:textIndexGeneration ${iri(generation)} . }
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ${value(row!, 'sequence')} ;
+      rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ; rv:textIndexGeneration ${iri(generation)} .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.receipts)} {
+      ${iri(receipt('activate', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ${value(row!, 'sequence')} ;
+        rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ${cut.sequence} ;
+        rv:textIndexGeneration ${iri(generation)} ; rv:indexRebuildDigest ${lit(value(row!, 'digest')!)} .
+      ${iri(receipt('quarantine', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:ownerDataEpoch ${lit(cut.dataEpoch)} ;
+        rv:ownerSequence ${lit(cut.sequence)} .
+      ${iri(receipt('cleared', id))} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} . }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
   }`));
-  if (confirmed.boolean !== true) throw new ContentRebuildUnavailable('activated index control differs from receipt');
-  await cursor.adoptRebuildCheckpoint(publicConsumer, `content-rebuild.${id}`,
-    { owner: 'content', dataEpoch: value(row!, 'sourceEpoch')!, sequence: value(row!, 'sourceSequence')! });
+    if (confirmed.boolean !== true) throw new ContentRebuildUnavailable('activated index control differs from receipt');
+  };
+  await cursor.adoptRebuildCheckpoint(publicConsumer, `content-rebuild.${id}`, cut,
+    async event => (await content.readProjectionPublication(event, true)).reference.variantId, assertActivation);
   return generation;
 }
 
@@ -979,6 +1000,7 @@ export async function activateRebuiltPublicContentSearch(env: WorkActivationEnvi
           rv:indexRebuildDigest ${lit(offlineIndexDigest)}`,
       });
   });
-  await cursor.adoptRebuildCheckpoint(publicConsumer, job.consumer, job.cut);
-  return nextGeneration;
+  const activated = await resumeActivatedContentRebuild(env, content, cursor, job.id, publicConsumer);
+  if (activated !== nextGeneration) throw new ContentRebuildUnavailable('activated rebuild receipt differs');
+  return activated;
 }

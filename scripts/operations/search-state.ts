@@ -8,7 +8,7 @@ import { CONTENT_REBUILD_NONEMPTY_REFUSAL, ContentRebuildFreshJob, ContentRebuil
   activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, crashSearchRebuild,
   nextContentRebuildStep, quarantinePublicContentSearch, readContentRebuildStep,
   readContentRebuildProgress, reclearQuarantinedContentUnits, recordOfflineContentRebuild,
-  replayQuarantinedContentCut }
+  replayQuarantinedContentCut, resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
 import { RV, textIndexProbePattern, type WorkActivationEnvironment }
   from '../../services/main/src/modules/work/activate.ts';
@@ -338,8 +338,10 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
     }
     if (next === 'done') {
       if (!progress.generation) throw new ContentRebuildUnavailable('activate: generation is absent');
-      await input.cursor.adoptRebuildCheckpoint(input.publicConsumer, job.consumer, job.cut);
-      return { job: input.id, removed, replayed, generation: progress.generation, offlineLog, storage, pins,
+      const generation = await resumeActivatedContentRebuild(input.env, input.content, input.cursor,
+        input.id, input.publicConsumer);
+      if (generation !== progress.generation) throw new ContentRebuildUnavailable('activated rebuild receipt differs');
+      return { job: input.id, removed, replayed, generation, offlineLog, storage, pins,
         elapsedMs: { verify: Math.round(verify), replay: Math.round(replayMs),
           offline: Math.round(offlineMs), activate: Math.round(activateMs) } };
     }

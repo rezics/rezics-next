@@ -28,15 +28,17 @@ import { queryPublicContentPhrase }
 import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
+import { backfillCatalogueNames } from '../../../services/main/src/modules/search/names.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { assertFrozenContentRebuildAuthority }
   from '../../../services/main/src/modules/content-publication/rebuild-authority.ts';
-import { clearQuarantinedContentUnits, quarantinePublicContentSearch, replayQuarantinedContentCut }
+import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, quarantinePublicContentSearch,
+  replayQuarantinedContentCut, resumeActivatedContentRebuild }
   from '../../../services/main/src/modules/content-publication/rebuild.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('SEARCH19: closed eligibility completes and a stale worker cannot replace newer text', async () => {
+test('SEARCH19/SEARCH20/OPS16: closed eligibility and verified rebuild adoption preserve exact source authority', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -330,8 +332,40 @@ test('SEARCH19: closed eligibility completes and a stale worker cannot replace n
     expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(503);
     expect(await clearQuarantinedContentUnits(env, job)).toBe(1);
     await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
+    await backfillCatalogueNames(env);
+    await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
     expect(await replayQuarantinedContentCut(env, content, cursor, job)).toBeGreaterThan(0);
     await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
+    // A stopped live consumer can retain an old publication while independent
+    // replay proves the whole prefix. The target comes from that original pin.
+    const parked = `order-parked-${randomUUID()}`;
+    await cursor.initialize(parked);
+    let scanned = await cursor.readScan(parked);
+    for (const event of await content.readOutbox(job.cut.dataEpoch, '0', 100)) {
+      await cursor.acknowledge(parked, scanned, event.position,
+        event.id === e2Delivery.id ? { event, target: variantId } : undefined);
+      scanned = event.position;
+    }
+    const parkedBefore = await cursor.read(parked);
+    expect(BigInt(parkedBefore.sequence)).toBeLessThan(BigInt(job.cut.sequence));
+    const lostPromotion = new Proxy(cursor, { get(target, property) {
+      if (property === 'adoptRebuildCheckpoint') return () => { throw new Error('lost SQL adoption'); };
+      const member = Reflect.get(target, property, target);
+      return typeof member === 'function' ? member.bind(target) : member;
+    } });
+    await expect(activateRebuiltPublicContentSearch(env, content, lostPromotion, job,
+      parked, 'a'.repeat(64))).rejects.toThrow('lost SQL adoption');
+    const activatedSequence = await graphSequence();
+    expect(await cursor.read(parked)).toEqual(parkedBefore);
+    const adoptedGeneration = await resumeActivatedContentRebuild(env, content, cursor, job.id, parked);
+    expect(adoptedGeneration).toMatch(/^urn:rezics:text-index-generation:/);
+    expect(await cursor.read(parked)).toEqual(job.cut);
+    expect(await cursor.retries(parked)).toEqual([]);
+    expect((await pool.query(`SELECT pending_count::text FROM content.projection_checkpoint
+      WHERE consumer = $1`, [parked])).rows[0].pending_count).toBe('0');
+    expect(await resumeActivatedContentRebuild(env, content, cursor, job.id, parked)).toBe(adoptedGeneration);
+    expect(await graphSequence()).toBe(activatedSequence);
+    expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(200);
     const movedTitle = `Frozen rebuild owner moved ${randomUUID()}`;
     await activateMetadataWork(env, { title: movedTitle, admission: {
       id: randomUUID(), scope: 'work:create:root', action: 'work.create',
@@ -340,8 +374,10 @@ test('SEARCH19: closed eligibility completes and a stale worker cannot replace n
     } });
     await expect(assertFrozenContentRebuildAuthority(env, frozen, job.cut))
       .rejects.toThrow('graph authority moved after frozen rebuild cut');
+    await expect(resumeActivatedContentRebuild(env, content, cursor, job.id, parked))
+      .rejects.toThrow('activated index control differs from receipt');
     expect(await content.ownerPosition()).toEqual(job.cut);
-    expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(503);
+    expect(await cursor.read(parked)).toEqual(job.cut);
   } finally {
     await accessPool.end();
     await pool.end();

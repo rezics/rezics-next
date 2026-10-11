@@ -21,6 +21,8 @@ export const opsErasureCases: CaseDeclarations = {
       name: 'SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offline rebuild' },
   ],
   SEARCH20: [
+    { tier: 'integration', file: 'tests/qa/integration/content-eligibility-order.test.ts',
+      name: 'SEARCH19/SEARCH20/OPS16: closed eligibility and verified rebuild adoption preserve exact source authority' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/content-rebuild-positive.test.ts',
       name: 'SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed cut' },
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/content-rebuild.test.ts',

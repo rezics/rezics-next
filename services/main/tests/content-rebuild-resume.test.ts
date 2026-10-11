@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { ContentCore } from '../../content/src/core.ts';
+import type { ContentCore, ContentOutboxEvent } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { checkProductionEnv } from '../../../scripts/ops/production-env.ts';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -8,7 +8,7 @@ import { CONTENT_REBUILD_NONEMPTY_REFUSAL, CONTENT_REBUILD_PAGE, SEARCH_REBUILD_
   SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRASH_POINTS, SearchRebuildCrash,
   contentRebuildClearPageQuery, crashSearchRebuild, freshJobLine, nextContentRebuildStep,
   quarantinePublicContentSearch, readAdoptedQuarantineJob, readContentRebuildProgress,
-  repeatedFreshJobRefusal, type ContentRebuildProgress }
+  repeatedFreshJobRefusal, resumeActivatedContentRebuild, type ContentRebuildProgress }
   from '../src/modules/content-publication/rebuild.ts';
 import { DATASET, hash, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { assertContentRebuildConsumers, prepareContentRebuild, validateContentRebuildFrontier,
@@ -415,4 +415,74 @@ test('SEARCH20/OPS16: joint consumer preflight preserves parked work and refuses
   advanced = true;
   await expect(assertContentRebuildConsumers(cursor, 'live', 'rebuild', cut))
     .rejects.toThrow('projection consumer differs from frozen Content cut');
+});
+
+function activationRecoveryScene() {
+  const cut = { owner: 'content' as const, dataEpoch: epoch, sequence: '6' };
+  const source = { id: job } as ContentOutboxEvent;
+  let control = true;
+  let lost = true;
+  let receiptPresent = true;
+  let receiptSequence = '19';
+  let promoted = 0;
+  let resolved = 0;
+  const queries: string[] = [];
+  const env = { lineage: { dataEpoch: epoch, routingEpoch: prior }, objectDirectory: '.temp/unused',
+    fuseki: { async query(sparql: string) {
+      queries.push(sparql);
+      if (sparql.includes('SELECT')) return { results: { bindings: receiptPresent ? [{
+        epoch: term(epoch), sourceEpoch: term(epoch), sourceSequence: term(cut.sequence),
+        sequence: term(receiptSequence), generation: term(generation), digest: term(digest),
+      }] : [] } };
+      return { boolean: control };
+    } } } as unknown as WorkActivationEnvironment;
+  const content = { async readProjectionPublication(event: ContentOutboxEvent, metadataOnly: boolean) {
+    expect(event).toBe(source);
+    expect(metadataOnly).toBe(true);
+    resolved++;
+    return { reference: { variantId: 'urn:rezics:variant:original-settled-pin' } };
+  } } as unknown as ContentCore;
+  const cursor = { async adoptRebuildCheckpoint(live: string, rebuild: string,
+    received: typeof cut, resolve: (event: ContentOutboxEvent) => Promise<string>, assert: () => Promise<void>) {
+    expect(live).toBe('live');
+    expect(rebuild).toBe(`content-rebuild.${job}`);
+    expect(received).toEqual(cut);
+    expect(await resolve(source)).toBe('urn:rezics:variant:original-settled-pin');
+    await assert();
+    if (lost) { lost = false; throw new Error('SQL adoption interrupted'); }
+    promoted++;
+  } } as unknown as ContentProjectionCursor;
+  return { run: () => resumeActivatedContentRebuild(env, content, cursor, job, 'live'), queries,
+    moved: () => { control = false; }, missing: () => { receiptPresent = false; },
+    malformed: () => { receiptSequence = 'NaN'; }, promoted: () => promoted, resolved: () => resolved };
+}
+
+test('SEARCH20/OPS16: committed activation recovers SQL adoption using the original settled pin and exact control', async () => {
+  const scene = activationRecoveryScene();
+  await expect(scene.run()).rejects.toThrow('SQL adoption interrupted');
+  expect(scene.promoted()).toBe(0);
+  expect(await scene.run()).toBe(generation);
+  expect(scene.promoted()).toBe(1);
+  expect(scene.resolved()).toBe(2);
+  const proof = scene.queries.find(query => query.includes('ASK'))!;
+  expect(proof).toContain('rv:sequence 19');
+  expect(proof).toContain(`rv:routingEpoch "${prior}"`);
+  expect(proof).toContain('rv:restoreHold true');
+  expect(proof).toContain('rv:textIndexProfile');
+  expect(proof).toContain('content-rebuild:quarantine');
+  expect(proof).toContain('content-rebuild:cleared');
+  scene.moved();
+  await expect(scene.run()).rejects.toThrow('activated index control differs from receipt');
+  expect(scene.promoted()).toBe(1);
+});
+
+test('SEARCH20/OPS16: absent or malformed activation cannot certify a replay prefix', async () => {
+  const absent = activationRecoveryScene();
+  absent.missing();
+  expect(await absent.run()).toBeNull();
+  expect(absent.resolved()).toBe(0);
+  const malformed = activationRecoveryScene();
+  malformed.malformed();
+  await expect(malformed.run()).rejects.toThrow('activated rebuild receipt is incomplete');
+  expect(malformed.resolved()).toBe(0);
 });

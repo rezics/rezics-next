@@ -17,18 +17,23 @@ import { contentSearchEligibilityDigest, selectPublicContentSearch }
 import { contentPublicationDigest, publishPinnedContent }
   from '../../../services/main/src/modules/content-publication/publish.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
-  quarantinePublicContentSearch, replayQuarantinedContentCut }
+  quarantinePublicContentSearch, replayQuarantinedContentCut, resumeActivatedContentRebuild }
   from '../../../services/main/src/modules/content-publication/rebuild.ts';
+import { contentRebuildDelivery, prepareContentRebuild }
+  from '../../../services/main/src/modules/content-publication/rebuild-preflight.ts';
 import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../../../services/main/src/modules/content-publication/search.ts';
-import { RV, initializeFreshGraph, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, initializeFreshGraph, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { assertPublicTextReady, SearchIndexUnavailable }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { seedRecoveryContent } from './search-content-fixture.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { migrateTracked } from '../../../scripts/ops/migrate.ts';
+import { offlineTextIndex, sha256 } from '../../../scripts/operations/search-state.ts';
+import { qaStack } from './search-ops-support.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -64,13 +69,23 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
     await migrateAccess(apps.ACCESS_DATABASE_URL!);
     const contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
     const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 4 });
+    const relayPool = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL, max: 2 });
     try {
       await migrateContent(contentPool);
+      await migrateTracked(apps.MAIN_RELAY_DATABASE_URL!, root, 'services/main/migrations/relay');
       const content = new ContentCore(contentPool);
       const cursor = new ContentProjectionCursor(contentPool);
       const consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
+      const delivery = contentRebuildDelivery(env, content, relayPool, apps.MAIN_RELAY_CONSUMER!);
+      const deliverApprovals = async () => {
+        await delivery.relayPosition();
+        while (await delivery.relayOnce() !== null) { /* retain the fixture Main frontier */ }
+        const through = await delivery.relayPosition();
+        while (await delivery.deliverOnce(through) !== null) { /* commit approval handoffs before C */ }
+      };
       const corpus = await seedRecoveryContent(env, contentPool, accessPool);
+      await deliverApprovals();
       const cut = await content.ownerPosition();
       await cursor.initialize(consumer);
       for (let i = 0; i < 10 && (await cursor.read(consumer)).sequence !== cut.sequence; i++) {
@@ -137,6 +152,7 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
       const nextEligibility = await selectPublicContentSearch(env, content, access,
         claimedEligibility, eligibilityInput);
       expect(nextEligibility.outcome).toBe('succeeded');
+      await deliverApprovals();
       const draftBody = 'unpublished draft search shadow';
       const privateDraft = await content.saveDraft({ operationId: `private-draft-${randomUUID()}`,
         variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: corpus.works[0]!,
@@ -172,8 +188,13 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
         async ids => new Set(ids)))[0]?.status).toBe('available');
 
       const jobId = randomUUID();
-      const job = await quarantinePublicContentSearch(env, content, jobId);
-      expect(job.cut).toEqual(changedCut);
+      const jobFile = join(stackDirectory(root, options), 'content-rebuild.json');
+      const frozen = await prepareContentRebuild({ env, content, delivery,
+        remember: frontier => writeFileSync(jobFile, JSON.stringify({ id: jobId, frontier }) + '\n', { mode: 0o600 }),
+        assertWritersStopped: async () => undefined });
+      const job = await quarantinePublicContentSearch(env, content, jobId, undefined, frozen.cut);
+      expect(job.cut).toEqual(frozen.cut);
+      expect(BigInt(job.cut.sequence)).toBeGreaterThanOrEqual(BigInt(changedCut.sequence));
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toBeInstanceOf(SearchIndexUnavailable);
       await expect(queryPublicContentPhrase(env, content, cursor, consumer, currentInput))
         .rejects.toBeInstanceOf(SearchIndexUnavailable);
@@ -227,7 +248,7 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
         variant: changed.results[0]!.variant, revision: changed.results[0]!.revision });
       expect(after.results[0]!.matchUnit).not.toBe(changed.results[0]!.matchUnit);
       expect(after.results[0]!.matchUnit).not.toBe(before.results[0]!.matchUnit);
-      expect(after.contentPosition).toEqual(changedCut);
+      expect(after.contentPosition).toEqual(frozen.cut);
       expect(after.indexGeneration).toBe(result.generation);
       expect(BigInt(after.graphPosition.sequence)).toBeGreaterThan(BigInt(before.graphPosition.sequence));
       const old = await queryPublicContentPhrase(env, content, cursor, consumer, input);
@@ -249,9 +270,51 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
           rv:revision ${iri(`urn:rezics:content:revision:${privateDraft.revisionId}`)} . } }`);
       expect(draftUnits.boolean).toBe(false);
 
+      // The native activation commits before SQL adoption. A lost SQL response
+      // resumes that exact receipt without another index pass or generation.
+      const recoveryJob = await quarantinePublicContentSearch(env, content, randomUUID());
+      expect(await clearQuarantinedContentUnits(env, recoveryJob)).toBe(1);
+      const recoveryStack = qaStack(runId, { rawUpdate: true });
+      const recoveryOfflineLog = await offlineTextIndex(recoveryStack.runner);
+      expect(await replayQuarantinedContentCut(env, content, cursor, recoveryJob)).toBeGreaterThan(0);
+      const liveBeforeAdoption = await cursor.read(consumer);
+      let adoptionAttempts = 0;
+      const interruptedCursor = new Proxy(cursor, { get(target, key) {
+        if (key === 'adoptRebuildCheckpoint') {
+          return async (...args: Parameters<ContentProjectionCursor['adoptRebuildCheckpoint']>) => {
+            if (++adoptionAttempts === 1) throw new Error('test: activated graph before SQL adoption');
+            return target.adoptRebuildCheckpoint(...args);
+          };
+        }
+        const member = Reflect.get(target, key);
+        return typeof member === 'function' ? member.bind(target) : member;
+      } });
+      await expect(activateRebuiltPublicContentSearch(env, content, interruptedCursor,
+        recoveryJob, consumer, sha256(recoveryOfflineLog)))
+        .rejects.toThrow('test: activated graph before SQL adoption');
+      expect(adoptionAttempts).toBe(1);
+      expect(await cursor.read(consumer)).toEqual(liveBeforeAdoption);
+      const activationControl = async () => (await fuseki.query(`PREFIX rv: <${RV}>
+        SELECT ?sequence ?generation WHERE { GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:sequence ?sequence ; rv:textIndexGeneration ?generation } } LIMIT 2`))
+        .results?.bindings ?? [];
+      const committedControl = await activationControl();
+      expect(committedControl).toHaveLength(1);
+      const recoveredGeneration = await resumeActivatedContentRebuild(env, content,
+        interruptedCursor, recoveryJob.id, consumer);
+      expect(adoptionAttempts).toBe(2);
+      expect(recoveredGeneration).toBe(committedControl[0]!.generation!.value);
+      expect(await cursor.read(consumer)).toEqual(recoveryJob.cut);
+      expect(await resumeActivatedContentRebuild(env, content, cursor, recoveryJob.id, consumer))
+        .toBe(recoveredGeneration);
+      expect(await activationControl()).toEqual(committedControl);
+      expect((await queryPublicContentPhrase(env, content, cursor, consumer, currentInput)).total).toBe(1);
+
       // A second quarantined pass loses the *current* exact source body. It
       // must stop before index activation, even though the prior pass succeeded.
       const missingJob = await quarantinePublicContentSearch(env, content, randomUUID());
+      await expect(resumeActivatedContentRebuild(env, content, cursor, recoveryJob.id, consumer))
+        .rejects.toThrow('activated index control differs from receipt');
       await contentPool.query(`UPDATE content.revision SET availability = 'erased',
         serialized_bytes = NULL, body = NULL WHERE id = $1`, [nextDraft.revisionId]);
       expect((await content.readExactBatch([nextDraft.revisionId],
@@ -267,14 +330,15 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
         JSON.stringify({ runId, job: jobId, oldGeneration: before.indexGeneration,
           newGeneration: after.indexGeneration, oldGraphSequence: before.graphPosition.sequence,
           newGraphSequence: after.graphPosition.sequence, initialContentCut: cut,
-          contentCut: changedCut, oldRevision: before.results[0]!.revision,
+          contentCut: frozen.cut, recoveryJob: recoveryJob.id, recoveredGeneration,
+          adoptionAttempts, oldRevision: before.results[0]!.revision,
           newRevision: after.results[0]!.revision, lostUnit, oldErased: retainedOld?.status,
           unpublishedDraftRevision: privateDraft.revisionId, missingJob: missingJob.id,
           missingCurrentRevision: nextDraft.revisionId, oldTotal: old.total,
           removed: result.removed, replayed: result.replayed, elapsedMs: Date.now() - startedAt,
           result: after.results[0] }, null, 2) + '\n');
     } finally {
-      await Promise.all([contentPool.end(), accessPool.end()]);
+      await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
     }
   } finally {
     if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);

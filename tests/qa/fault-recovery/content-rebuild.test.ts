@@ -7,7 +7,11 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, type RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { saveAdmittedContentDraft } from '../../../services/main/src/modules/content-publication/draft.ts';
+import { contentSearchEligibilityDigest, selectPublicContentSearch }
+  from '../../../services/main/src/modules/content-publication/eligibility.ts';
 import { contentPublicationDigest, publishPinnedContent, type PublishPinnedContentInput }
   from '../../../services/main/src/modules/content-publication/publish.ts';
 import { clearQuarantinedContentUnits,
@@ -23,6 +27,8 @@ import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/sel
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
 import { migrateTracked } from '../../../scripts/ops/migrate.ts';
+import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -48,9 +54,11 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
     await initializeFreshGraph(fuseki, lineage);
     const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
     const relayPool = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL, max: 2 });
+    const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 4 });
     try {
       await migrateContent(pool);
       await migrateTracked(apps.MAIN_RELAY_DATABASE_URL!, root, 'services/main/migrations/relay');
+      await applyQaSqlMigrations(apps.ACCESS_DATABASE_URL!, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
       const content = new ContentCore(pool);
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
       const id = randomUUID();
@@ -64,11 +72,24 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       } });
       const resource = created.work;
       const variant = `urn:rezics:variant:${randomUUID()}`;
-      const saved = await content.saveDraft({ operationId: `draft-${id}`,
+      const access = new AccessAdmissionRegistry(accessPool);
+      const principal = { issuer: 'https://rebuild-recovery.test', subject: randomUUID() };
+      const principalId = randomUUID();
+      const actor = `https://rezics.com/id/${randomUUID()}`;
+      await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+        [principalId, principal.issuer, principal.subject]);
+      await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
+      const grant = async (scope: string, action: string) => grantFixtureAuthority(accessPool, {
+        scope, requireDispatch: true, representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+        grant: { actor, action, lifetime: '8 hours' } });
+      await grant(`content:draft:${resource}`, 'content.draft');
+      const saved = await saveAdmittedContentDraft(env, content, { verify: async () => principal }, access,
+        new Request('http://main.local/v1/content-drafts', { headers: { authorization: 'Bearer qa' } }), {
+        resourceId: resource,
         variant: { id: variant, resourceId: resource,
           language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-        expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
-        provenance: { fixture: 'erasure-rebuild' }, serializedJson: '{"body":"erased source must stay hidden"}' });
+        expectedHead: null, body: 'erased source must stay hidden', actingSubject: actor,
+        idempotencyKey: `draft-${id}` });
       if (!saved.revisionId) throw new Error('draft fixture has no revision');
       const exact = (await content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
       if (exact?.status !== 'available') throw new Error('draft fixture bytes are unavailable');
@@ -78,7 +99,7 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
         variantId: variant, expectedPublicationHead: null };
       const publicationAdmissionId = randomUUID();
       const admission: RegisteredAdmission = { id: publicationAdmissionId,
-        principalId: randomUUID(), actingSubject: `https://rezics.com/id/${randomUUID()}`,
+        principalId, actingSubject: actor,
         scope: `content:publish:${variant}`, action: 'content.publish',
         idempotencyKey: `rebuild-publish-${id}`,
         requestDigest: contentPublicationDigest(publicationInput), authorityEpoch: '0',
@@ -87,7 +108,22 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       const published = await publishPinnedContent(env, content, admission, publicationInput);
       expect(published.status).toBe('active');
       expect(published.graphSequence).toBeTruthy();
+      if (!published.decision) throw new Error('publication decision absent');
+      const eligibilityInput = { resourceId: resource, variantId: variant,
+        publicationDecision: published.decision, expectedEligibilityHead: null, actingSubject: actor,
+        rightsBasis: 'original-contribution' as const, disclosure: 'public' as const };
+      const eligibilityScope = `content:search-eligibility:${variant}`;
+      await grant(eligibilityScope, 'content.search-eligibility');
+      const eligibilityDigest = contentSearchEligibilityDigest(eligibilityInput);
+      const registered = await access.register({ principal, actingSubject: actor, scope: eligibilityScope,
+        action: 'content.search-eligibility', idempotencyKey: `eligibility-${id}`, requestDigest: eligibilityDigest });
+      const claimed = await access.claim(registered.id, eligibilityDigest);
+      expect((await selectPublicContentSearch(env, content, access, claimed, eligibilityInput)).outcome).toBe('succeeded');
       const delivery = contentRebuildDelivery(env, content, relayPool, apps.MAIN_RELAY_CONSUMER!);
+      await delivery.relayPosition();
+      while (await delivery.relayOnce() !== null) { /* retain the Public approval */ }
+      const through = await delivery.relayPosition();
+      while (await delivery.deliverOnce(through) !== null) { /* acknowledge committed Content ingestion */ }
       let frontier: ContentRebuildFrontier | undefined;
       const prepare = () => prepareContentRebuild({ env, content, delivery, frontier,
         remember: next => { frontier = next; }, assertWritersStopped: async () => undefined });
@@ -95,7 +131,7 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       expect(frozen.cut).toEqual(await content.ownerPosition());
       expect(await delivery.deliveryPosition()).toBe(frozen.mainSequence);
       const job = await quarantinePublicContentSearch(env, content, id, undefined, frozen.cut);
-      expect(job.cut.sequence).toBe('3');
+      expect(BigInt(job.cut.sequence)).toBeGreaterThan(3n);
       const replayedStart = await quarantinePublicContentSearch(env, content, id);
       expect(replayedStart).toEqual(job);
       expect(await clearQuarantinedContentUnits(env, job)).toBe(0);
@@ -145,7 +181,7 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       await expect(replayQuarantinedContentCut(env, content, new ContentProjectionCursor(pool), job))
         .rejects.toThrow('terminal publication exact revision unavailable');
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toThrow();
-    } finally { await pool.end(); await relayPool.end(); }
+    } finally { await Promise.all([pool.end(), relayPool.end(), accessPool.end()]); }
   } finally {
     if (started) await rootCommand(['stack:reset', '--profile', 'qa', '--run-id', runId], 120_000);
   }

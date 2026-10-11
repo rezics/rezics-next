@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
-import { ContentConflict, ContentCore, ContentUnavailable, type ContentOutboxEvent } from '../src/core.ts';
+import { appendContentEvent, ContentConflict, ContentCore, ContentUnavailable, type ContentOutboxEvent } from '../src/core.ts';
 import { migrateContent } from '../src/migrate.ts';
 import { ContentProjectionCursor, CONTENT_PROJECTION_COST } from '../src/projection-cursor.ts';
 
@@ -180,4 +180,197 @@ test('Content bounds retries by target and rotates unresolved heads without expo
   expect((await f.snapshot()).checkpoint[0]?.pending_count).toBe(String(sources.length + 1));
   expect((await f.cursor.read(f.consumer)).sequence)
     .toBe((BigInt(sources[0]!.event.position.sequence) - 1n).toString());
+}, 60_000);
+
+async function rebuildScenario() {
+  const f = await scenario();
+  const first = await f.draft();
+  const second = await f.draft(first.target);
+  await f.retain(first);
+  await f.retain(second);
+  const rebuildConsumer = `rebuild-${randomUUID()}`;
+  await f.cursor.initialize(rebuildConsumer);
+  while (true) {
+    const scan = await f.cursor.readScan(rebuildConsumer);
+    const events = await f.core.readOutbox(scan.dataEpoch, scan.sequence, 100);
+    if (!events.length) break;
+    let expected = scan;
+    for (const event of events) {
+      await f.cursor.acknowledge(rebuildConsumer, expected, event.position);
+      expected = event.position;
+    }
+  }
+  const cut = await f.core.ownerPosition();
+  const resolveTarget = async (event: ContentOutboxEvent) => {
+    // Cursor has reconstructed this exact immutable event; Main's resolver uses
+    // the original settled publication pin rather than a current mutable head.
+    const source = [first, second].find(source => source.event.id === event.id);
+    if (!source) throw new Error('original projection source missing');
+    expect(event).toEqual(source.event);
+    return source.target;
+  };
+  const adopt = (resolve = resolveTarget, activation = async () => undefined) =>
+    f.cursor.adoptRebuildCheckpoint(f.consumer, rebuildConsumer, cut, resolve, activation);
+  return { ...f, first, second, rebuildConsumer, cut, resolveTarget, adopt };
+}
+
+test('[SEARCH20/OPS16] Content adopts a verified rebuild prefix and retires only its parked live sources', async () => {
+  const f = await rebuildScenario();
+  const unrelatedConsumer = `unrelated-${randomUUID()}`;
+  await f.cursor.initialize(unrelatedConsumer);
+  const unrelatedBefore = (await f.pool.query(`SELECT * FROM content.projection_checkpoint
+    WHERE consumer = $1`, [unrelatedConsumer])).rows;
+  const resolved: string[] = [];
+  let verified = 0;
+  await f.adopt(async event => { resolved.push(event.id); return f.resolveTarget(event); }, async () => { verified++; });
+  expect(resolved).toEqual([f.first.event.id, f.second.event.id]);
+  expect(verified).toBe(1);
+  expect(await f.cursor.read(f.consumer)).toEqual(f.cut);
+  expect(await f.cursor.readScan(f.consumer)).toEqual(f.cut);
+  const after = await f.snapshot();
+  expect(after.pending).toHaveLength(0);
+  expect(after.targets).toHaveLength(0);
+  expect(after.checkpoint[0]?.pending_count).toBe('0');
+  expect((await f.pool.query(`SELECT * FROM content.projection_checkpoint WHERE consumer = $1`,
+    [unrelatedConsumer])).rows).toEqual(unrelatedBefore);
+  await f.adopt();
+  expect(await f.snapshot()).toEqual(after);
+}, 60_000);
+
+test('[SEARCH20/OPS16] Content refuses wrong targets, foreign or missing exact sources and inconsistent parked counts', async () => {
+  const mutations = [
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_pending SET target = 'urn:rezics:variant:wrong'
+        WHERE consumer = $1 AND event_id = $2`, [f.consumer, f.first.event.id]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_pending SET event_id = $2
+        WHERE consumer = $1 AND sequence = $3`, [f.consumer, f.second.event.id, f.first.event.position.sequence]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`DELETE FROM content.projection_target WHERE consumer = $1`, [f.consumer]);
+      await f.pool.query(`UPDATE content.projection_pending SET data_epoch = $2 WHERE consumer = $1`,
+        [f.consumer, randomUUID()]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_pending SET target = '' WHERE consumer = $1`, [f.consumer]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_checkpoint SET pending_count = 0 WHERE consumer = $1`, [f.consumer]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_target SET first_sequence = $2 WHERE consumer = $1`,
+        [f.consumer, f.second.event.position.sequence]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`DELETE FROM content.projection_target WHERE consumer = $1`, [f.consumer]);
+      await f.pool.query(`UPDATE content.projection_pending SET sequence = $2
+        WHERE consumer = $1 AND event_id = $3`,
+      [f.consumer, (BigInt(f.cut.sequence) + 1n).toString(), f.second.event.id]);
+    },
+  ];
+  for (const mutate of mutations) {
+    const f = await rebuildScenario();
+    await mutate(f);
+    const before = await f.snapshot();
+    await expect(f.adopt()).rejects.toBeInstanceOf(ContentConflict);
+    expect(await f.snapshot()).toEqual(before);
+  }
+}, 60_000);
+
+test('[SEARCH20/OPS16] Content requires exact owner, both cursor bounds and a completely closed replay', async () => {
+  const mutations = [
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => { await f.draft(); },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_checkpoint SET scan_sequence = $2 WHERE consumer = $1`,
+        [f.rebuildConsumer, (BigInt(f.cut.sequence) + 1n).toString()]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`UPDATE content.projection_checkpoint SET data_epoch = $2 WHERE consumer = $1`,
+        [f.consumer, randomUUID()]);
+    },
+    async (f: Awaited<ReturnType<typeof rebuildScenario>>) => {
+      await f.pool.query(`INSERT INTO content.projection_pending(consumer,data_epoch,sequence,event_id,target)
+        VALUES($1,$2,$3,$4,$5)`, [f.rebuildConsumer, randomUUID(), f.first.event.position.sequence,
+        f.first.event.id, f.first.target]);
+    },
+  ];
+  for (const mutate of mutations) {
+    const f = await rebuildScenario();
+    await mutate(f);
+    const before = await f.snapshot();
+    await expect(f.adopt()).rejects.toBeInstanceOf(ContentConflict);
+    expect(await f.snapshot()).toEqual(before);
+  }
+}, 60_000);
+
+test('[SEARCH20/OPS16] Content rolls back parked rows, targets and counts when activation or promotion fails', async () => {
+  const f = await rebuildScenario();
+  const before = await f.snapshot();
+  await expect(f.adopt(async () => { throw new Error('settled source unavailable'); }))
+    .rejects.toThrow('settled source unavailable');
+  expect(await f.snapshot()).toEqual(before);
+  await expect(f.adopt(f.resolveTarget, async () => { throw new Error('activation control moved'); }))
+    .rejects.toThrow('activation control moved');
+  expect(await f.snapshot()).toEqual(before);
+  await f.pool.query(`CREATE FUNCTION content.fail_cursor_adoption() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN IF NEW.consumer = TG_ARGV[0] THEN RAISE EXCEPTION 'forced adoption rollback'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER fail_cursor_adoption BEFORE UPDATE ON content.projection_checkpoint
+      FOR EACH ROW EXECUTE FUNCTION content.fail_cursor_adoption('${f.consumer}')`);
+  try {
+    await expect(f.adopt()).rejects.toThrow('forced adoption rollback');
+    expect(await f.snapshot()).toEqual(before);
+  } finally {
+    await f.pool.query(`DROP TRIGGER fail_cursor_adoption ON content.projection_checkpoint;
+      DROP FUNCTION content.fail_cursor_adoption()`);
+  }
+  await f.adopt();
+  expect(await f.cursor.read(f.consumer)).toEqual(f.cut);
+}, 60_000);
+
+test('[SEARCH20/OPS16] Content serializes adoption, retry completion and a competing adoption under checkpoint locks', async () => {
+  const f = await rebuildScenario();
+  let releaseActivation!: () => void;
+  const activationHeld = new Promise<void>(resolve => { releaseActivation = resolve; });
+  let locked!: () => void;
+  const locksHeld = new Promise<void>(resolve => { locked = resolve; });
+  const first = f.adopt(f.resolveTarget, async () => { locked(); await activationHeld; });
+  await locksHeld;
+  const retry = f.cursor.finishRetry(f.consumer, f.first.event, true);
+  const second = f.adopt();
+  releaseActivation();
+  await Promise.all([first, retry, second]);
+  expect(await f.cursor.read(f.consumer)).toEqual(f.cut);
+  const after = await f.snapshot();
+  expect(after.pending).toHaveLength(0);
+  expect(after.targets).toHaveLength(0);
+  expect(after.checkpoint[0]?.pending_count).toBe('0');
+}, 60_000);
+
+test('[SEARCH20/OPS16] Content refuses activation recovery while a committed source has no owner position', async () => {
+  const f = await rebuildScenario();
+  const before = await f.snapshot();
+  const client = await f.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await appendContentEvent(client, { operationId: `cursor-unsequenced:${randomUUID()}`,
+      requestDigest: '0'.repeat(64), action: 'draft.save', outcome: 'rejected',
+      reason: 'fixture-retained-event', eventType: 'content.draft.stale',
+      recipe: f.first.event.recipe, payload: { reason: 'fixture-retained-event' } });
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+  try {
+    expect(await f.core.ownerPosition()).toEqual(f.cut);
+    expect(await f.core.hasUnsequencedEvents()).toBe(true);
+    await expect(f.adopt()).rejects.toThrow('committed Content events remain unsequenced');
+    expect(await f.snapshot()).toEqual(before);
+    expect(await f.core.ownerPosition()).toEqual(f.cut);
+  } finally { await f.core.sequencePending(); }
+  expect(await f.core.hasUnsequencedEvents()).toBe(false);
+  expect((await f.core.ownerPosition()).sequence).toBe((BigInt(f.cut.sequence) + 1n).toString());
+  await expect(f.adopt()).rejects.toThrow('Content owner moved before checkpoint promotion');
+  expect(await f.snapshot()).toEqual(before);
 }, 60_000);

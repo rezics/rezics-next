@@ -25,6 +25,6 @@ export const searchProjectionCases: CaseDeclarations = {
   }, {
     tier: 'integration',
     file: 'tests/qa/integration/content-eligibility-order.test.ts',
-    name: 'SEARCH19: lagging eligibility stays unavailable and a stale worker cannot replace newer text',
+    name: 'SEARCH19/SEARCH20/OPS16: closed eligibility and verified rebuild adoption preserve exact source authority',
   }],
 };

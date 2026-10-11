@@ -65,7 +65,7 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
   let after = BigInt(frozen.graphSequence);
   const end = BigInt(before.graphSequence);
   // UNION filters see their own arm's bindings before the surrounding joins.
-  // Each maintenance arm must bind its receipt locally to prove its family.
+  // Each arm binds its receipt locally; cross-graph identity checks follow the join.
   while (after < end) {
     const page = await bounded('maintenance page', () => env.fuseki.query(`PREFIX rv: <${RV}>
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -92,13 +92,14 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
           GRAPH ${iri(GRAPHS.receipts)} { ?operation a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence . }
         } || EXISTS {
-          GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:eventCount 0 .
+          GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:eventCount 0 ;
+            rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence .
             FILTER NOT EXISTS { ?batch rv:event ?event } }
           GRAPH ${iri(GRAPHS.receipts)} { ?operation a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence ; rv:requestDigest ?digest .
             FILTER(REGEX(STR(?operation), "^urn:rezics:receipt:catalogue-search-index:[0-9a-f]{64}$"))
-            FILTER(STR(?batch) = CONCAT("urn:rezics:outbox:", STRAFTER(STR(?operation), "urn:rezics:receipt:catalogue-search-index:")))
             FILTER(STR(?digest) = SHA256(STR(?operation))) }
+          FILTER(STR(?batch) = CONCAT("urn:rezics:outbox:", STRAFTER(STR(?operation), "urn:rezics:receipt:catalogue-search-index:")))
         } AS ?allowed)
       } ORDER BY ?sequence STR(?batch)`));
     const rows = page.results?.bindings ?? [];

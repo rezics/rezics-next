@@ -148,7 +148,7 @@ try {
     let offlinePreSequence = saved?.offlinePreSequence;
     for (;;) {
       await assertWritersStopped(apps.MAIN_ORIGIN!);
-      const activated = await resumeActivatedContentRebuild(env, cursor, id, publicConsumer);
+      const activated = await resumeActivatedContentRebuild(env, content, cursor, id, publicConsumer);
       if (activated) {
         rmSync(jobFile);
         console.log(JSON.stringify({ job: id, generation: activated, resumed: true }));
