@@ -22,7 +22,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
       laterPreparation, contentErasure, accountErasureId, pinnedErasure, ownerErasure,
       surviving,
       credentials, exact, bindCandidate, ownerOperationFor, interruptBeforeOwnerRelease,
-      expectBothHoldsClosed, offline, readJournal, refreshOperatorToken, pools, replayClusters,
+      expectBothHoldsClosed, offline, readJournal, refreshOperatorToken, pools, replayClusters, phase,
     } = scenario;
     const staleErasure = await ownerErasure(staleTarget, 'stale-target');
     const sealedDeletionSet = third.deletionSet;
@@ -179,11 +179,15 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
     const offHostAdmin = new Pool({ host: '127.0.0.1', port: offHostPort,
       database: 'postgres', user: 'postgres' });
     pools.push(offHostAdmin);
+    // Access measured 52.308 s after loaded runs hit 60 s; 180 s is a hang detector.
+    const offHostRestoreTimeoutMs = 180_000;
     for (const name of ['account', 'access', 'content', 'relay'] as const) {
       await offHostAdmin.query(`CREATE DATABASE ${name}`);
-      execFileSync('pg_restore', ['--no-owner', '--no-acl', '-h', '127.0.0.1',
-        '-p', String(offHostPort), '-U', 'postgres', '-d', name, archives.get(name)!],
-      { cwd: state, timeout: 60_000, stdio: 'pipe' });
+      await phase(`archive.pg-restore.${name}`, async () => {
+        execFileSync('pg_restore', ['--no-owner', '--no-acl', '-h', '127.0.0.1',
+          '-p', String(offHostPort), '-U', 'postgres', '-d', name, archives.get(name)!],
+        { cwd: state, timeout: offHostRestoreTimeoutMs, stdio: 'pipe' });
+      });
     }
     const copy = (database: string) => new Pool({ host: '127.0.0.1', port: offHostPort,
       database, user: 'postgres' });

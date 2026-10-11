@@ -575,7 +575,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     }
   };
 
-  return { captureAndRestore, dispose };
+  return { captureAndRestore, dispose, phase };
 }
 
 const root = resolve(import.meta.dir, '../../..');
@@ -1188,7 +1188,7 @@ export async function createRetainedErasureRestoreScenario() {
       contentErasure, accountErasureId, pinnedErasure, ownerErasure, credentials, exact, bindCandidate,
       readFindings, expectFinding, expectFindingPrefix, expectCustodyFindings, expectBothHoldsClosed,
       ownerOperationFor, interruptBeforeOwnerRelease, offline, readJournal, refreshOperatorToken,
-      pools, replayClusters, dispose,
+      pools, replayClusters, dispose, phase: recoveryFixture.phase,
     };
   } catch (error) {
     recordRetainedErasureFailure(error, 'scenario-setup');
