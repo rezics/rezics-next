@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
@@ -62,7 +62,7 @@ function runUnitSide(...[cwd, files, side, evidence, runShard, options]: Paramet
 }
 
 async function waitUntil(check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
   while (!check()) {
     if (Date.now() >= deadline) throw new Error('fixture did not reach its expected state');
     await Bun.sleep(1);
@@ -2589,7 +2589,7 @@ child.on('close', code => process.exit(code ?? 1));
       const result = run(['dispatch', brief(id, { worktree })], { GOAL_ID: goal });
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (!existsSync(join(ready, id)) && Date.now() < deadline) await Bun.sleep(20);
       const pids = JSON.parse(readFileSync(join(ready, id), 'utf8')) as { worker: number; child: number };
       workers.set(id, pids);
@@ -2599,7 +2599,7 @@ child.on('close', code => process.exit(code ?? 1));
     const stopFixture = async (id: string) => {
       const pids = workers.get(id)!;
       for (const pid of [pids.worker, pids.child]) { try { process.kill(pid, 'SIGTERM'); } catch { /* exited */ } }
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while ([pids.worker, pids.child].some(alive) && Date.now() < deadline) await Bun.sleep(20);
       const value = ledger();
       value.tasks[id]!.state = 'exited';
@@ -2612,6 +2612,15 @@ child.on('close', code => process.exit(code ?? 1));
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', `Deliver ${task.id}`]).status).toBe(0);
     };
     const cleanup = () => {
+      const runs = join(dir, '.temp/goal-orchestration/runs');
+      if (process.env.GOAL_TEST_SPAWN_LOG && existsSync(runs)) {
+        for (const task of readdirSync(runs)) for (const file of readdirSync(join(runs, task))) {
+          if (!file.endsWith('.err')) continue;
+          const error = readFileSync(join(runs, task, file), 'utf8');
+          if (error) appendFileSync(`${process.env.GOAL_TEST_SPAWN_LOG}.engines.jsonl`,
+            `${JSON.stringify({ dir, task, file, error })}\n`);
+        }
+      }
       for (const entry of readdirSync('/proc')) {
         if (!/^\d+$/.test(entry)) continue;
         try {
@@ -2712,7 +2721,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
       const ready = join(r.dir, '.temp/ready', 'G-001');
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
       const task = r.ledger().tasks['G-001']!;
       const dirty = 'worker-001.ts';
@@ -4178,7 +4187,7 @@ process.exit(0);
       const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', 'claude', '--force-usage']);
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (r.workers.get('G-001')!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number }).worker
         && Date.now() < deadline) await Bun.sleep(20);
       r.workers.set('G-001', JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number; child: number });
@@ -4208,7 +4217,7 @@ process.exit(0);
       expect(status.stdout).toContain(refusal!);
       const resumed = r.run(['resume', task.id, '-m', 'continue']);
       expect(resumed.status).toBe(0);
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (r.workers.get(task.id)!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number }).worker
         && Date.now() < deadline) await Bun.sleep(20);
       r.workers.set(task.id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number; child: number });
@@ -4877,7 +4886,7 @@ await withGateLane(async () => {
       child.once('exit', code => resolve(code));
     });
     try {
-      const readyDeadline = Date.now() + 10_000;
+      const readyDeadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
       while (!existsSync(ready) && Date.now() < readyDeadline) await Bun.sleep(20);
       if (!existsSync(ready)) throw new Error(`holder did not take a lane\n${output}`);
       expect(child.pid).toBeGreaterThan(0);
@@ -5668,7 +5677,7 @@ function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => 
       if (ready()) return resolve();
       if (child.exitCode !== null) return reject(new Error(`waiter exited ${child.exitCode} before queuing\n${output()}`));
       if (child.signalCode !== null) return reject(new Error(`waiter was killed by ${child.signalCode} before queuing\n${output()}`));
-      if (Date.now() - started > 12_000) return reject(new Error(`waiter did not queue\n${output()}`));
+      if (Date.now() - started > CLI_SPAWN_DEADLINE_MS) return reject(new Error(`waiter did not queue\n${output()}`));
       setTimeout(tick, 20);
     };
     tick();
