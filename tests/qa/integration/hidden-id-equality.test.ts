@@ -7,6 +7,11 @@ import { commitCommand } from '../../../services/main/src/modules/context/comman
 import { profileValidations } from '../../../services/main/src/infrastructure/profile.ts';
 import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
+import { RealmAboutThreadStore } from '../../../services/main/src/modules/realm-reply/about-store.ts';
+import { readReplyGraphReceipt } from '../../../services/main/src/modules/realm-reply/graph.ts';
+import { realmReplyDigest } from '../../../services/main/src/modules/realm-reply/store.ts';
+import { resolveTargets, targetRead } from '../../../services/main/src/modules/target/resolve.ts';
 import { registeredHiddenIdReads } from '../../../scripts/qa/hidden-id-equality.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertHiddenIdEquality, comparableBody, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
@@ -176,6 +181,114 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     const claimId = local((JSON.parse(claimedText) as { claim: { claim: string } }).claim.claim);
     await owner.grant(`work:read:${hiddenWork.work}`, 'work.read');
 
+    // Compare thread disclosure only: both about targets and the Realm remain public.
+    const threadAbout = await stack.publicWork(owner.actor, ['en'], 'A public discussion target');
+    const noThreadAbout = await stack.publicWork(owner.actor, ['en'], 'Another public discussion target');
+    const createdJson = async <T>(response: Response, expected = 201): Promise<T> => {
+      const body = await response.text();
+      expect(response.status, body).toBe(expected);
+      return JSON.parse(body) as T;
+    };
+    await owner.grant('space:create:root', 'space.create');
+    const threadRealm = await createdJson<{ realm: string }>(await owner.send('POST', '/v1/spaces', {
+      profile: 'space-realm-v2', name: `Thread equality ${randomUUID()}`, capabilities: ['realm'],
+      actingSubject: owner.actor,
+    }));
+    await new AccessRealmManagement(stack.accessPool).initialize(
+      { ...owner.principal, emailVerified: true }, threadRealm.realm, owner.actor, stack.env);
+    await owner.grant(`governance:realm:${threadRealm.realm}`, 'realm.settings.manage');
+    await owner.grant(`governance:realm:${threadRealm.realm}`, 'governance.rule.publish');
+    const settingsPath = `/v1/realms/${local(threadRealm.realm)}/settings`;
+    const settings = await createdJson<{ generation: string; ruleBasis: { revision: string | null } }>(
+      await owner.read(settingsPath), 200);
+    await createdJson(await owner.send('PUT', settingsPath, { actingSubject: owner.actor,
+      expectedGeneration: settings.generation, expectedRulesRevision: settings.ruleBasis.revision,
+      reason: 'Set public discussion admission', settings: { visibility: 'public', reviewMode: 'open',
+        reviewRequired: false, whoMaySubmit: 'granted', rules: [] },
+    }));
+    const [threadTarget] = await targetRead(stack.env, { access: stack.access },
+      session => resolveTargets(session, [threadAbout.work], 'discussion'));
+    const aboutThreads = new RealmAboutThreadStore(stack.contentPool);
+    const selected = await aboutThreads.reserve({ realm: threadRealm.realm, about: threadAbout.work,
+      actor: owner.actor, intentKey: randomUUID(), intentDigest: createHash('sha256').update(threadAbout.work).digest('hex'),
+      rootRevision: threadTarget!.revision });
+    await owner.grant(`content:draft:${selected.reply}`, 'content.draft');
+    await owner.grant(`reply:create:${threadAbout.work}`, 'reply.create');
+    await owner.grant(`reply:place:${threadRealm.realm}`, 'reply.place');
+    const replyDraft = await createdJson<{ revisionId: string; revisionDigest: string }>(
+      await owner.send('POST', '/v1/member-reply-drafts', { profile: 'member-reply-draft-v1',
+        reply: selected.reply, variantId: selected.variantId, rootTarget: threadAbout.work,
+        rootRevision: selected.rootRevision, originRealm: threadRealm.realm, expectedHead: null,
+        language: 'en', direction: 'ltr', body: 'The accepted opener later withheld from disclosure.',
+        actingSubject: owner.actor }));
+    await aboutThreads.recordDraftRevision(selected.id, replyDraft.revisionId);
+    const identity = {
+      reply: selected.reply, variantId: selected.variantId, revisionId: replyDraft.revisionId,
+      author: owner.actor, rootTarget: threadAbout.work, rootRevision: selected.rootRevision,
+      originRealm: threadRealm.realm, parentReply: null, parentRevision: null, contextRevision: null };
+    // The canonical identity has server-only origin coordinates; the standalone
+    // identity HTTP contract cannot carry them. Use the same owner as the command.
+    const principal = await stack.composition.dependencies.account.verify(new Request('http://main.local', {
+      headers: { authorization: `Bearer ${owner.token}` },
+    }), ['work:edit']);
+    await stack.composition.dependencies.realmReplies!.create(principal, identity, randomUUID(), realmReplyDigest(identity));
+    await createdJson(await owner.send('POST', '/v1/realm-reply-placements', { profile: 'realm-reply-placement-v1',
+      realm: threadRealm.realm, reply: selected.reply, revisionId: replyDraft.revisionId,
+      revisionDigest: replyDraft.revisionDigest, reviewDecisionId: null, expectedHead: null, actingSubject: owner.actor }));
+    const preparation = await stack.contentPool.query<{ operation_id: string }>(
+      'SELECT operation_id FROM content.realm_placement_preparation WHERE realm=$1 AND variant_id=$2 AND revision_id=$3',
+      [threadRealm.realm, selected.variantId, replyDraft.revisionId]);
+    expect(preparation.rows).toHaveLength(1);
+    const placement = await readReplyGraphReceipt(stack.env,
+      { id: preparation.rows[0]!.operation_id, action: 'reply.place' });
+    expect(placement?.outcome).toBe('succeeded');
+    await aboutThreads.recordPosted(selected.id, preparation.rows[0]!.operation_id, placement!.receipt);
+    const aboutPath = (about: string) => `/v1/realms/${local(threadRealm.realm!)}/about-thread?${new URLSearchParams({ about })}`;
+    const visibleThread = await stack.call('GET', aboutPath(threadAbout.work));
+    expect(visibleThread.status).toBe(200);
+    expect(await visibleThread.json()).toMatchObject({ thread: { reply: selected.reply, rootRevision: selected.rootRevision } });
+
+    // Committed owner disclosure fixture, with real case/decision/target references.
+    // Admission of moderation decisions is covered by the governance suites.
+    await owner.grant('governance:platform', 'governance.moderate');
+    const caseId = randomUUID(), decisionId = randomUUID(), fenceId = randomUUID();
+    const disclosureClient = await stack.accessPool.connect();
+    try {
+      await disclosureClient.query('BEGIN');
+      await disclosureClient.query(`INSERT INTO access.governance_case
+        (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
+        VALUES ($1,'content_report','platform','governance:platform','urn:rezics:context:global','content',$2,'body','private')`,
+      [caseId, selected.reply]);
+      await disclosureClient.query(`INSERT INTO access.moderation_decision
+        (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
+        authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure,statement_of_reasons)
+        VALUES ($1::uuid,'content_moderation','restrict','urn:rezics:context:global',$2,1,$3,$4,'platform','governance:platform',
+        0,$5,$1::text,$5,'urn:rezics:rule:hidden-about-thread','1',$5,$5,'private',$6::jsonb)`,
+      [decisionId, caseId, owner.principalId, owner.actor, 'a'.repeat(64), {
+        facts: 'The accepted discussion opener is withheld from public disclosure.', scope: 'This exact reply body revision.',
+        duration: 'Until an attributable restoration.', automation: false,
+        appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en',
+        rule: { ref: 'urn:rezics:rule:hidden-about-thread', revision: '1', digest: 'a'.repeat(64) },
+      }]);
+      await disclosureClient.query(`INSERT INTO access.moderation_decision_target
+        (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect)
+        VALUES ($1,1,'content',$2,'body','exact_revision',$3,$3,'disclosure')`,
+      [decisionId, selected.reply, replyDraft.revisionId]);
+      await disclosureClient.query(`INSERT INTO access.governance_enforcement
+        (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
+        VALUES ($1,'governance:platform','urn:rezics:context:global','content',$2,'body',$3,'disclosure',$4,1,'restricted',1)`,
+      [fenceId, selected.reply, replyDraft.revisionId, decisionId]);
+      await disclosureClient.query('UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1', [caseId, decisionId]);
+      await disclosureClient.query('COMMIT');
+    } catch (error) {
+      await disclosureClient.query('ROLLBACK');
+      throw error;
+    } finally { disclosureClient.release(); }
+    const hiddenThread = await stack.call('GET', aboutPath(threadAbout.work));
+    expect(hiddenThread.status).toBe(200);
+    expect(await hiddenThread.json()).toEqual({ realm: threadRealm.realm, about: threadAbout.work, thread: null });
+    expect(await aboutThreads.readThread(threadRealm.realm, noThreadAbout.work)).toBeNull();
+
     const http = async (method: string, path: string, body?: unknown, token?: string) => {
       const response = await stack.call(method, path, { token, body, ...(body ? { key: randomUUID() } : {}) });
       bytes += (await response.clone().arrayBuffer()).byteLength;
@@ -219,6 +332,10 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     calls.set('GET /v1/realms/{realm}/roles', {
       hidden: realmId, absent,
       call: (id) => http('GET', outsiderQuery(`/v1/realms/${id}/roles`), undefined, outsider.token),
+    });
+    calls.set('GET /v1/realms/{realm}/about-thread', {
+      hidden: threadAbout.work, absent: noThreadAbout.work,
+      call: (about) => http('GET', aboutPath(about)),
     });
     calls.set('GET /v1/exports/{export}', {
       hidden: manifest.manifestId, absent,
