@@ -44,7 +44,7 @@ const pride = [
 ];
 
 function results(hits: SearchHit[], options: Partial<SearchResultPage> = {}): SearchLoaded {
-  return { ok: true, page: { total: hits.length, population: 42, sequence: '47',
+  return { ok: true, page: { total: hits.length, sequence: '47',
     indexGeneration: 'urn:rezics:text-index-generation:story', next: null, titles: true, hits, ...options } };
 }
 const failed = (failure: SearchFailure): SearchLoaded => ({ ok: false, failure });
@@ -79,9 +79,9 @@ export const Populated: Story = {
     const completeness = canvas.getByTestId('search-completeness');
     await expect(within(completeness).getByText('5 works')).toBeVisible();
     // What was searched is one click away rather than in the reader's way.
-    await expect(within(completeness).getByText('Searched 42 published texts in All of REZICS')).not.toBeVisible();
+    await expect(within(completeness).getByText('Searched published texts in All of REZICS')).not.toBeVisible();
     await userEvent.click(within(completeness).getByText('About these results'));
-    await expect(within(completeness).getByText('Searched 42 published texts in All of REZICS')).toBeVisible();
+    await expect(within(completeness).getByText('Searched published texts in All of REZICS')).toBeVisible();
     await expect(completeness).toHaveTextContent('Search index as of change 47');
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' }))
       .toHaveAttribute('href', localizedPath(resourceHref('/w/', '00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f'), 'en'));
@@ -497,6 +497,8 @@ export const ChineseDark: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '搜索作品' })).toBeVisible();
     await expect(canvas.getByTestId('search-completeness')).toHaveTextContent('2 部作品');
+    await userEvent.click(canvas.getByText('关于这些结果'));
+    await expect(canvas.getByText('已搜索全站中的已发布文本')).toBeVisible();
   },
 };
 

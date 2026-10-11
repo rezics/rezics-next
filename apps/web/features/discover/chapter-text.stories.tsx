@@ -14,7 +14,7 @@ import { fixtureTopicLoader } from './browse-fixtures.ts';
 const book = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const post = '00000000-0000-4000-8000-000000000002';
 const chapter = chapterHref(book, post, 'en');
-const read: Extract<SearchLoaded, { ok: true }> = { ok: true, page: { total: 1, population: 1, sequence: '1', indexGeneration: 'index',
+const read: Extract<SearchLoaded, { ok: true }> = { ok: true, page: { total: 1, sequence: '1', indexGeneration: 'index',
   next: null, titles: true, hits: [{ matchUnit: 'unit', work: book, mainVersion: book, types: ['https://schema.org/Book'],
     title: { value: 'The Lantern Road', language: 'en', direction: direction('en', 'The Lantern Road'), basis: 'requested' },
     cover: null, authors: [], rating: null, tagline: null, completion: null,

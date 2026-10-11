@@ -53,8 +53,6 @@ export interface SearchHit {
 
 export interface SearchResultPage {
   total: number;
-  /** Published texts the index searched. */
-  population: number;
   sequence: string;
   indexGeneration: string;
   next: SearchContinuation | null;

@@ -51,13 +51,12 @@ function languageName(tag: string, locale: UiLocale): string {
 }
 
 /**
- * The count, then what was searched for anyone who asks: the population,
- * filters, mutes and index position stay one click away, not in the way.
+ * The match count leads; the scope, filters, mutes and index position are one click away.
  */
 function Completeness({ page, state, scopeLabel, signedIn, locale, t }: {
   page: SearchResultPage; state: SearchState; scopeLabel: string; signedIn: boolean; locale: UiLocale; t: Text;
 }) {
-  const parts = [t.searched({ count: page.population, scope: scopeLabel }), t.complete,
+  const parts = [t.searched({ scope: scopeLabel }), t.complete,
     ...(state.language ? [t.onlyLanguage({ language: languageName(state.language, locale) })] : []),
     ...(state.term ? [t.onlyTerm] : []), ...(signedIn ? [t.mutes] : []),
     t.freshness({ sequence: page.sequence })];

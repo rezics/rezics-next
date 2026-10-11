@@ -100,7 +100,7 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
       concept: reasons.classification.concept ?? (selected.length === 1 ? selected[0]! : null),
       conceptName: named?.get(reasons.classification.concept
         ?? (selected.length === 1 ? selected[0]! : ''))?.name ?? null } : null } }));
-  return { ok: true, page: { total: page.total, population: page.population, sequence: page.sourcePosition.sequence,
+  return { ok: true, page: { total: page.total, sequence: page.sourcePosition.sequence,
     indexGeneration: page.indexGeneration, next: page.next as SearchContinuation | null,
     facets: 'facets' in page ? page.facets : undefined,
     concepts: selected.flatMap(id => {
