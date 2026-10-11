@@ -1,80 +1,74 @@
--- Target identity remains immutable. Keep progress and proof in a one-to-one
--- retained row so retries can advance without changing the erasure reference.
-CREATE TABLE relay.erasure_target_completion (
-    erasure_id uuid NOT NULL,
-    ordinal smallint NOT NULL,
-    completion_state text NOT NULL DEFAULT 'pending'
-        CHECK (completion_state IN ('pending', 'failed', 'completed')),
-    failure_reason text CHECK (failure_reason IS NULL OR
-        (length(btrim(failure_reason)) BETWEEN 1 AND 500)),
-    completion_evidence_digest text CHECK (completion_evidence_digest ~ '^[0-9a-f]{64}$'),
-    completed_at timestamptz,
-    PRIMARY KEY (erasure_id, ordinal),
-    FOREIGN KEY (erasure_id, ordinal) REFERENCES relay.erasure_target (erasure_id, ordinal),
-    CHECK (completion_state <> 'pending' OR
-        (failure_reason IS NULL AND completion_evidence_digest IS NULL AND completed_at IS NULL)),
+-- Completion belongs to the retained target reference itself. The latest
+-- kind-owner check remains in place while only progress fields can advance.
+ALTER TABLE relay.erasure_target
+  ADD COLUMN completion_state text DEFAULT 'pending',
+  ADD COLUMN completion_reason_code text,
+  ADD COLUMN completion_evidence_ref text,
+  ADD COLUMN completed_at timestamptz,
+  ADD CONSTRAINT erasure_target_completion_state_check
+    CHECK (completion_state IS NULL OR completion_state IN ('pending', 'failed', 'completed')),
+  ADD CONSTRAINT erasure_target_completion_reason_code_check
+    CHECK (completion_reason_code IS NULL OR completion_reason_code ~ '^[a-z][a-z0-9_]{0,63}$'),
+  ADD CONSTRAINT erasure_target_completion_evidence_ref_check
+    CHECK (completion_evidence_ref IS NULL OR completion_evidence_ref ~ '^[0-9a-f]{64}$'),
+  ADD CONSTRAINT erasure_target_pending_completion_check
+    CHECK (coalesce(completion_state, 'pending') <> 'pending' OR
+      (completion_reason_code IS NULL AND completion_evidence_ref IS NULL AND completed_at IS NULL)),
+  ADD CONSTRAINT erasure_target_failed_completion_check
     CHECK (completion_state <> 'failed' OR
-        (failure_reason IS NOT NULL AND completion_evidence_digest IS NULL AND completed_at IS NULL)),
+      (completion_reason_code IS NOT NULL AND completion_evidence_ref IS NULL AND completed_at IS NULL)),
+  ADD CONSTRAINT erasure_target_completed_completion_check
     CHECK (completion_state <> 'completed' OR
-        (completion_evidence_digest IS NOT NULL AND completed_at IS NOT NULL))
-);
+      (completion_reason_code IS NULL AND completion_evidence_ref IS NOT NULL AND completed_at IS NOT NULL));
 
--- Historical target references begin pending: migration cannot invent proof.
-INSERT INTO relay.erasure_target_completion (erasure_id, ordinal)
-SELECT erasure_id, ordinal FROM relay.erasure_target;
-
-CREATE FUNCTION relay.create_erasure_target_completion() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  INSERT INTO relay.erasure_target_completion (erasure_id, ordinal)
-  VALUES (NEW.erasure_id, NEW.ordinal);
-  RETURN NULL;
-END $$;
-CREATE TRIGGER erasure_target_completion_create AFTER INSERT ON relay.erasure_target
-    FOR EACH ROW EXECUTE FUNCTION relay.create_erasure_target_completion();
+-- Replace the blanket immutable-row trigger without changing the target's
+-- identity, ordinal bound, or latest kind-owner CHECK.
+DROP TRIGGER erasure_target_immutable ON relay.erasure_target;
 
 CREATE FUNCTION relay.erasure_target_completion_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-  old_rank integer;
-  new_rank integer;
+  old_state text;
+  new_state text;
 BEGIN
   IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'retained erasure target completion cannot be deleted' USING ERRCODE = '23514';
+    RAISE EXCEPTION 'retained erasure target cannot be deleted' USING ERRCODE = '23514';
   END IF;
-  IF (OLD.erasure_id, OLD.ordinal) IS DISTINCT FROM (NEW.erasure_id, NEW.ordinal) THEN
-    RAISE EXCEPTION 'erasure target completion identity is immutable' USING ERRCODE = '23514';
+
+  IF ROW(OLD.erasure_id, OLD.ordinal, OLD.owner, OLD.target_kind, OLD.target_ref)
+      IS DISTINCT FROM ROW(NEW.erasure_id, NEW.ordinal, NEW.owner, NEW.target_kind, NEW.target_ref) THEN
+    RAISE EXCEPTION 'erasure target identity is immutable' USING ERRCODE = '23514';
   END IF;
-  old_rank := CASE OLD.completion_state WHEN 'pending' THEN 0 WHEN 'failed' THEN 1 ELSE 2 END;
-  new_rank := CASE NEW.completion_state WHEN 'pending' THEN 0 WHEN 'failed' THEN 1 ELSE 2 END;
-  IF new_rank < old_rank THEN
-    RAISE EXCEPTION 'erasure target completion cannot regress' USING ERRCODE = '23514';
+
+  IF ROW(OLD.completion_state, OLD.completion_reason_code, OLD.completion_evidence_ref, OLD.completed_at)
+      IS NOT DISTINCT FROM ROW(NEW.completion_state, NEW.completion_reason_code,
+        NEW.completion_evidence_ref, NEW.completed_at) THEN
+    RETURN NEW;
   END IF;
-  IF OLD.failure_reason IS NOT NULL AND NEW.failure_reason IS DISTINCT FROM OLD.failure_reason THEN
-    RAISE EXCEPTION 'erasure target failure reason is immutable' USING ERRCODE = '23514';
+
+  old_state := coalesce(OLD.completion_state, 'pending');
+  new_state := coalesce(NEW.completion_state, 'pending');
+  IF old_state <> 'pending' THEN
+    RAISE EXCEPTION 'erasure target completion is immutable once set' USING ERRCODE = '23514';
   END IF;
-  IF OLD.failure_reason IS NULL AND NEW.failure_reason IS NOT NULL
-      AND NEW.completion_state <> 'failed' THEN
-    RAISE EXCEPTION 'erasure target failure reason requires a failed outcome' USING ERRCODE = '23514';
+  IF new_state = 'pending' THEN
+    RAISE EXCEPTION 'erasure target completion must advance from pending' USING ERRCODE = '23514';
   END IF;
-  IF OLD.completion_evidence_digest IS NOT NULL
-      AND NEW.completion_evidence_digest IS DISTINCT FROM OLD.completion_evidence_digest THEN
-    RAISE EXCEPTION 'erasure target completion evidence is immutable' USING ERRCODE = '23514';
-  END IF;
-  IF OLD.completed_at IS NOT NULL AND NEW.completed_at IS DISTINCT FROM OLD.completed_at THEN
-    RAISE EXCEPTION 'erasure target completion time is immutable' USING ERRCODE = '23514';
+  IF new_state NOT IN ('failed', 'completed') THEN
+    RAISE EXCEPTION 'erasure target completion state is invalid' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END $$;
-CREATE TRIGGER erasure_target_completion_guard BEFORE UPDATE OR DELETE
-    ON relay.erasure_target_completion FOR EACH ROW
-    EXECUTE FUNCTION relay.erasure_target_completion_guard();
 
+CREATE TRIGGER erasure_target_completion_guard BEFORE UPDATE OR DELETE ON relay.erasure_target
+    FOR EACH ROW EXECUTE FUNCTION relay.erasure_target_completion_guard();
+
+-- A journal summary cannot become verified until every retained target has
+-- reached its successful terminal state.
 CREATE FUNCTION relay.erasure_verified_targets_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF OLD.stage <> 'verified' AND NEW.stage = 'verified' AND EXISTS (
       SELECT 1 FROM relay.erasure_target t
-      LEFT JOIN relay.erasure_target_completion c
-        ON c.erasure_id = t.erasure_id AND c.ordinal = t.ordinal
-      WHERE t.erasure_id = NEW.id AND c.completion_state IS DISTINCT FROM 'completed') THEN
+      WHERE t.erasure_id = NEW.id AND t.completion_state IS DISTINCT FROM 'completed') THEN
     RAISE EXCEPTION 'erasure has incomplete target completion' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;

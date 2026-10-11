@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { DESTRUCTION_STATUSES, type DISPOSITION_DESTRUCTION, type DISPOSITION_SUPPRESSION,
-  ERASURE_TARGET_OWNERS, type ErasureRow, type ErasureTargetCompletionRow, type ErasureTargetKind,
-  type RETENTION_CUSTODY, type RETENTION_OWNERS, type RETENTION_STORES } from './schema.ts';
+  ERASURE_TARGET_COMPLETION_STATES, ERASURE_TARGET_OWNERS, type ErasureRow,
+  type ErasureTargetKind, type ErasureTargetRow, type RETENTION_CUSTODY, type RETENTION_OWNERS,
+  type RETENTION_STORES } from './schema.ts';
 
 export class ErasureInvalid extends Error {}
 export class ErasureConflict extends Error {}
@@ -51,7 +52,9 @@ export interface ErasureReport {
   requestedAt: string;
   suppressedAt: string | null;
   verifiedAt: string | null;
-  targets: { ordinal: number; owner: string; kind: ErasureTargetKind; ref: string }[];
+  targets: { ordinal: number; owner: string; kind: ErasureTargetKind; ref: string;
+    completionState: typeof ERASURE_TARGET_COMPLETION_STATES[number]; completionReasonCode: string | null;
+    completionEvidenceRef: string | null; completedAt: string | null }[];
   dispositions: ErasureDisposition[];
 }
 
@@ -97,8 +100,11 @@ export async function readErasure(pool: Queryable, erasureId: string): Promise<E
        suppression_status, destruction_status, blocked_reason, requested_at, suppressed_at, verified_at
      FROM relay.erasure WHERE id = $1`, [erasureId])).rows[0];
   if (!header) throw new ErasureNotFound('erasure is unavailable');
-  const targets = (await pool.query<{ ordinal: number; owner: string; target_kind: ErasureTargetKind;
-    target_ref: string }>(`SELECT ordinal, owner, target_kind, target_ref FROM relay.erasure_target
+  const targets = (await pool.query<Pick<ErasureTargetRow,
+    'ordinal' | 'owner' | 'target_kind' | 'target_ref' | 'completion_state' | 'completion_reason_code'
+    | 'completion_evidence_ref' | 'completed_at'>>(`SELECT ordinal, owner, target_kind, target_ref,
+       completion_state, completion_reason_code, completion_evidence_ref, completed_at
+     FROM relay.erasure_target
      WHERE erasure_id = $1 ORDER BY ordinal LIMIT ${MAX_ERASURE_TARGETS}`, [erasureId])).rows;
   const dispositions = (await pool.query<{ label: string; owner: ErasureDisposition['owner'];
     store: ErasureDisposition['store']; custody: ErasureDisposition['custody'];
@@ -120,7 +126,9 @@ export async function readErasure(pool: Queryable, erasureId: string): Promise<E
     blockedReason: header.blocked_reason, requestedAt: header.requested_at.toISOString(),
     suppressedAt: iso(header.suppressed_at), verifiedAt: iso(header.verified_at),
     targets: targets.map(row => ({ ordinal: row.ordinal, owner: row.owner, kind: row.target_kind,
-      ref: row.target_ref })),
+      ref: row.target_ref, completionState: row.completion_state ?? 'pending',
+      completionReasonCode: row.completion_reason_code,
+      completionEvidenceRef: row.completion_evidence_ref, completedAt: iso(row.completed_at) })),
     dispositions: dispositions.map(row => ({ domain: row.label, owner: row.owner, store: row.store,
       custody: row.custody, suppression: row.suppression, destruction: row.destruction,
       retainedUntil: iso(row.retained_until), reason: row.reason, evidenceDigest: row.evidence_digest })),
@@ -203,33 +211,34 @@ export async function markErasureBlocked(relay: Queryable, erasureId: string, re
     WHERE id = $1 AND stage = 'requested'`, [erasureId, reason.slice(0, 500)]);
 }
 
-/** A target failure is retained and cannot replace its original reason. */
+/** A target failure is retained and its reason code cannot be replaced. */
 export async function failErasureTarget(relay: Pool, erasureId: string, ordinal: number,
-  reason: string, borrowed?: PoolClient): Promise<void> {
-  const boundedReason = reason.trim().slice(0, 500);
+  reasonCode: string, borrowed?: PoolClient): Promise<void> {
+  const boundedReasonCode = reasonCode.trim();
   if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > MAX_ERASURE_TARGETS
-    || !boundedReason) throw new ErasureInvalid('erasure target failure is invalid');
+    || !/^[a-z][a-z0-9_]{0,63}$/.test(boundedReasonCode)) {
+    throw new ErasureInvalid('erasure target failure is invalid');
+  }
   await relayTransaction(relay, async client => {
-    const row = (await client.query<Pick<ErasureTargetCompletionRow,
-      'completion_state' | 'failure_reason'>>(`SELECT completion_state, failure_reason
-      FROM relay.erasure_target_completion WHERE erasure_id = $1 AND ordinal = $2 FOR UPDATE`,
+    const row = (await client.query<Pick<ErasureTargetRow,
+      'completion_state' | 'completion_reason_code'>>(`SELECT completion_state, completion_reason_code
+      FROM relay.erasure_target WHERE erasure_id = $1 AND ordinal = $2 FOR UPDATE`,
     [erasureId, ordinal])).rows[0];
     if (!row) throw new ErasureNotFound('erasure target is unavailable');
     if (row.completion_state === 'completed') {
-      if (row.failure_reason === boundedReason) return;
       throw new ErasureConflict('completed erasure target cannot fail');
     }
     if (row.completion_state === 'failed') {
-      if (row.failure_reason === boundedReason) return;
-      throw new ErasureConflict('erasure target failure reason is immutable');
+      if (row.completion_reason_code === boundedReasonCode) return;
+      throw new ErasureConflict('erasure target failure reason code is immutable');
     }
-    await client.query(`UPDATE relay.erasure_target_completion
-      SET completion_state = 'failed', failure_reason = $3
-      WHERE erasure_id = $1 AND ordinal = $2`, [erasureId, ordinal, boundedReason]);
+    await client.query(`UPDATE relay.erasure_target
+      SET completion_state = 'failed', completion_reason_code = $3
+      WHERE erasure_id = $1 AND ordinal = $2`, [erasureId, ordinal, boundedReasonCode]);
   }, borrowed);
 }
 
-/** Completion is idempotent for its exact evidence and advances a failed target. */
+/** Completion is idempotent for its exact evidence; a failed target is terminal. */
 export async function completeErasureTarget(relay: Pool, erasureId: string, ordinal: number,
   evidenceDigest: string, borrowed?: PoolClient): Promise<void> {
   if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > MAX_ERASURE_TARGETS
@@ -237,17 +246,20 @@ export async function completeErasureTarget(relay: Pool, erasureId: string, ordi
     throw new ErasureInvalid('erasure target completion is invalid');
   }
   await relayTransaction(relay, async client => {
-    const row = (await client.query<Pick<ErasureTargetCompletionRow,
-      'completion_state' | 'completion_evidence_digest'>>(`SELECT completion_state,
-        completion_evidence_digest FROM relay.erasure_target_completion
+    const row = (await client.query<Pick<ErasureTargetRow,
+      'completion_state' | 'completion_evidence_ref'>>(`SELECT completion_state,
+        completion_evidence_ref FROM relay.erasure_target
       WHERE erasure_id = $1 AND ordinal = $2 FOR UPDATE`, [erasureId, ordinal])).rows[0];
     if (!row) throw new ErasureNotFound('erasure target is unavailable');
     if (row.completion_state === 'completed') {
-      if (row.completion_evidence_digest === evidenceDigest) return;
+      if (row.completion_evidence_ref === evidenceDigest) return;
       throw new ErasureConflict('erasure target completion evidence is immutable');
     }
-    await client.query(`UPDATE relay.erasure_target_completion
-      SET completion_state = 'completed', completion_evidence_digest = $3,
+    if (row.completion_state === 'failed') {
+      throw new ErasureConflict('failed erasure target is terminal');
+    }
+    await client.query(`UPDATE relay.erasure_target
+      SET completion_state = 'completed', completion_evidence_ref = $3,
         completed_at = clock_timestamp()
       WHERE erasure_id = $1 AND ordinal = $2`, [erasureId, ordinal, evidenceDigest]);
   }, borrowed);

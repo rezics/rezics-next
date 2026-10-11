@@ -55,25 +55,18 @@ export const ERASURE_TARGET_OWNERS = {
   composition_revision: 'graph',
 } as const;
 export type ErasureTargetKind = keyof typeof ERASURE_TARGET_OWNERS;
+export const ERASURE_TARGET_COMPLETION_STATES = ['pending', 'failed', 'completed'] as const;
 
-/** `relay.erasure_target`: at most 256 exact references per erasure. */
+/** `relay.erasure_target`: exact references and monotone per-target completion. */
 export interface ErasureTargetRow {
   erasure_id: string;
   ordinal: number;
   owner: typeof ERASURE_TARGET_OWNERS[ErasureTargetKind];
   target_kind: ErasureTargetKind;
   target_ref: string;
-}
-
-export const ERASURE_TARGET_COMPLETION_STATES = ['pending', 'failed', 'completed'] as const;
-
-/** Per-target progress; reason and evidence are retained after their first write. */
-export interface ErasureTargetCompletionRow {
-  erasure_id: string;
-  ordinal: number;
-  completion_state: typeof ERASURE_TARGET_COMPLETION_STATES[number];
-  failure_reason: string | null;
-  completion_evidence_digest: string | null;
+  completion_state: typeof ERASURE_TARGET_COMPLETION_STATES[number] | null;
+  completion_reason_code: string | null;
+  completion_evidence_ref: string | null;
   completed_at: Date | null;
 }
 
@@ -166,11 +159,9 @@ export const erasureTables = {
   } satisfies Record<keyof ErasureRow, true>,
   'relay.erasure_target': {
     erasure_id: true, ordinal: true, owner: true, target_kind: true, target_ref: true,
+    completion_state: true, completion_reason_code: true, completion_evidence_ref: true,
+    completed_at: true,
   } satisfies Record<keyof ErasureTargetRow, true>,
-  'relay.erasure_target_completion': {
-    erasure_id: true, ordinal: true, completion_state: true, failure_reason: true,
-    completion_evidence_digest: true, completed_at: true,
-  } satisfies Record<keyof ErasureTargetCompletionRow, true>,
   'relay.retention_domain': {
     id: true, label: true, owner: true, store: true, custody: true, expires_at: true,
     hold_reason: true, state: true, created_at: true, retired_at: true,
