@@ -3,7 +3,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import type { ContentCore, SaveDraftCommand, SaveDraftResult } from '../../content/src/core.ts';
 import type { AdmissionRequest, VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { platformAdministratorProof, savePlatformAdministratorProof } from '../src/modules/access/platform-administrator.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
@@ -32,6 +34,8 @@ await mock.module('../src/modules/realm-reply/root.ts', () => ({
 
 const { AccessAdmissionRegistry, AdmissionDenied } = await import('../src/modules/access/admission.ts');
 const { resolveZonePageContent } = await import('../src/modules/access/zone-content-authority.ts');
+const { saveAdmittedContentDraft } = await import('../src/modules/content-publication/draft.ts');
+const { nativePostType } = await import('../src/modules/work/work-kinds.ts');
 const root = resolve(import.meta.dir, '../../..');
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -235,6 +239,51 @@ test('Person reply proof selection revalidates while ordinary and Zone drafts re
       baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision }))).rejects.toBeInstanceOf(AdmissionDenied);
 });
 
+test('administrator-backed Work and Post drafts claim and save without reply metadata', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const organization = await actor(identity, 'organization');
+  const cases = [
+    { label: 'Work', selected: person, type: 'https://schema.org/CreativeWork' },
+    { label: 'Post', selected: organization, type: nativePostType },
+  ] as const;
+
+  for (const { label, selected, type } of cases) {
+    const resourceId = nativeId();
+    const scope = `content:draft:${resourceId}`;
+    await platformAdministratorGrants(selected.principalId, selected.agent, 'content.draft', scope);
+    const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
+      fuseki: { query: async (query: string) => query.includes('SELECT DISTINCT ?type')
+        ? { results: { bindings: [{ type: { value: type } }] } } : { boolean: true } },
+    } as unknown as WorkActivationEnvironment;
+    const commands: SaveDraftCommand[] = [];
+    const content = { saveDraft: async (command: SaveDraftCommand): Promise<SaveDraftResult> => {
+      commands.push(command);
+      return { outcome: 'succeeded', revisionId: randomUUID(), predecessor: command.expectedHead,
+        position: { owner: 'content', dataEpoch: randomUUID(), sequence: '1' }, replayed: false };
+    }, readDraftReceipt: async () => null } as unknown as ContentCore;
+    const account = { verify: async () => identity };
+    const variantId = `urn:rezics:variant:${randomUUID()}`;
+    const saved = await saveAdmittedContentDraft(env, content, account, selected.access,
+      new Request('http://main.local/v1/content-drafts'), {
+        resourceId,
+        variant: { id: variantId, resourceId,
+          language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+        expectedHead: null, body: `${label} steward draft`,
+        actingSubject: selected.agent, idempotencyKey: `admin-${label.toLowerCase()}-${randomUUID()}`,
+      });
+    const admissionId = String(commands[0]?.provenance.admissionId);
+    expect(saved.outcome, `${label} draft saves after the administrator claim`).toBe('succeeded');
+    expect(commands).toHaveLength(1);
+    expect((await pool.query('SELECT 1 FROM access.platform_administrator_admission WHERE admission_id = $1',
+      [admissionId])).rowCount).toBe(1);
+    expect((await pool.query('SELECT 1 FROM access.baseline_admission WHERE admission_id = $1',
+      [admissionId])).rowCount).toBe(0);
+    expect((await pool.query('SELECT state FROM access.admission WHERE id = $1', [admissionId])).rows[0]?.state)
+      .toBe('sealed');
+  }
+});
+
 test('explicit draft and create grants cannot replace Person proof for Org or legacy PenName', async () => {
   const identity = principal();
   const person = await actor(identity, 'person');
@@ -264,7 +313,7 @@ test('explicit draft and create grants cannot replace Person proof for Org or le
   await expect(person.access.register(malformed)).rejects.toBeInstanceOf(AdmissionDenied);
 });
 
-test('a pending Org reply draft with saved administrator proof stays nondispatchable on replay and claim', async () => {
+test('a pending Org reply draft with saved administrator proof stays nondispatchable on replay', async () => {
   const identity = principal();
   const organization = await actor(identity, 'organization');
   const rootTarget = nativeId();
@@ -279,8 +328,6 @@ test('a pending Org reply draft with saved administrator proof stays nondispatch
   expect(await organization.access.register(input)).toMatchObject({
     id, state: 'registered', dispatchEligible: false, replayed: true,
   });
-  await expect(organization.access.claim(id, input.requestDigest, identity))
-    .rejects.toBeInstanceOf(AdmissionDenied);
 });
 
 test('a Person with platform administrator and resource grants still saves the baseline reply proof', async () => {

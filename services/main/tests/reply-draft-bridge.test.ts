@@ -81,6 +81,8 @@ function fixture(access = accessOwner()): {
   const content = {
     readExactBatch: async () => [],
     readDraftReceipt: async (operationId: string) => saved?.operationId === operationId ? { operationId } : null,
+    cancelDraft: async () => ({ outcome: 'cancelled' as const, revisionId: null,
+      predecessor: null, position, replayed: false }),
     saveDraft: async (command: SaveDraftCommand) => {
       saveCalls++;
       const prior = saved?.operationId === command.operationId;
@@ -215,6 +217,28 @@ test('a steward cannot draft canonically as a controlled Org', async () => {
     .rejects.toBeInstanceOf(AdmissionDenied);
   expect(fx.saveCalls).toBe(0);
   expect(fx.access.registrations).toHaveLength(0);
+});
+
+test('a pending legacy Org member-reply admission is refused before claim or save', async () => {
+  const rootTarget = id(), rootRevision = id(), organization = id();
+  rootState(rootRevision);
+  const fx = fixture();
+  fx.access.register = async request => {
+    fx.access.registrations.push(request);
+    return { id: randomUUID(), principalId: randomUUID(), actingSubject: request.actingSubject!,
+      authorityPath: 'represented-agent', scope: request.scope, action: request.action,
+      idempotencyKey: request.idempotencyKey, requestDigest: request.requestDigest,
+      authorityEpoch: '5', expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      state: 'registered', dispatchEligible: false, replayed: true };
+  };
+  const input = ordinaryInput(rootTarget, rootRevision);
+  input.actingSubject = organization;
+
+  await expect(saveVerifiedMemberReplyDraft(fx.env, fx.content, fx.access, principal,
+    { kind: 'member-reply', input }, 'legacy-org-reply')).rejects.toBeInstanceOf(AdmissionDenied);
+  expect(fx.access.registrations).toHaveLength(1);
+  expect(fx.access.claims).toBe(0);
+  expect(fx.saveCalls).toBe(0);
 });
 
 test('caller-supplied parent, approval, or retained-root fields are rejected', async () => {

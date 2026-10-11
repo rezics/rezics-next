@@ -1685,12 +1685,10 @@ export class AccessAdmissionRegistry {
       });
       const administrator = await savedPlatformAdministratorProof(client, row.id);
       const baseline = await savedBaselineProof(client, row.id);
-      // Administrator admissions do not retain reply-root metadata. A saved
-      // Zone target remains explicit; other nonbaseline content drafts cannot
-      // be distinguished from an older member-reply intent at claim time.
-      if (row.action === 'content.draft' && administrator && !administrator.resolved_zone_page && !baseline) {
-        throw new AdmissionDenied('member reply draft requires a Person baseline admission');
-      }
+      // Reply-root metadata is request-local for content.draft. Replay marks an
+      // old nonbaseline member-reply intent nondispatchable before its owner
+      // reaches claim; ordinary administrator-backed Work and Post drafts have
+      // no baseline proof and still need this claim path.
       if (administrator) {
         let current: VerifiedPrincipal | undefined;
         try { current = await accountPrincipal?.currentAssertion?.(); }
