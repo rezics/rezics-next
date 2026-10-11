@@ -68,6 +68,7 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
   // Each maintenance arm must bind its receipt locally to prove its family.
   while (after < end) {
     const page = await bounded('maintenance page', () => env.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       SELECT ?batch ?sequence ?allowed WHERE {
         { SELECT ?batch ?sequence ?count WHERE {
           GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ;
@@ -84,7 +85,9 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
             UNION { ?event a rv:ContentProjectionEvent ; rv:action "content.project" ; rv:receipt ?operation .
               FILTER(REGEX(STR(?operation), "^urn:rezics:receipt:content-projection:[0-9a-f]{64}$"))
               GRAPH ${iri(GRAPHS.receipts)} { ?operation rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ?ownerSequence .
-                FILTER(?ownerSequence > 0 && ?ownerSequence <= ${cut.sequence}) } }
+                FILTER(REGEX(STR(?ownerSequence), "^(0|[1-9][0-9]*)$"))
+                BIND(xsd:integer(STR(?ownerSequence)) AS ?sourceSequence)
+                FILTER(?sourceSequence > 0 && ?sourceSequence <= ${cut.sequence}) } }
           }
           GRAPH ${iri(GRAPHS.receipts)} { ?operation a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(frozen.dataEpoch)} ; rv:sequence ?sequence . }

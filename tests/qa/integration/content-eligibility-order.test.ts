@@ -31,7 +31,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/sel
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { assertFrozenContentRebuildAuthority }
   from '../../../services/main/src/modules/content-publication/rebuild-authority.ts';
-import { clearQuarantinedContentUnits, quarantinePublicContentSearch }
+import { clearQuarantinedContentUnits, quarantinePublicContentSearch, replayQuarantinedContentCut }
   from '../../../services/main/src/modules/content-publication/rebuild.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -329,6 +329,8 @@ test('SEARCH19: closed eligibility completes and a stale worker cannot replace n
     await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
     expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(503);
     expect(await clearQuarantinedContentUnits(env, job)).toBe(1);
+    await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
+    expect(await replayQuarantinedContentCut(env, content, cursor, job)).toBeGreaterThan(0);
     await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
     const movedTitle = `Frozen rebuild owner moved ${randomUUID()}`;
     await activateMetadataWork(env, { title: movedTitle, admission: {
