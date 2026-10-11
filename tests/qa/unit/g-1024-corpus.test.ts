@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -33,11 +33,13 @@ function directory() {
 test('G1024: each axis grows alone at three strictly increasing scales with stable dataset identities', () => {
   for (const dimension of WORK_PROFILE_DIMENSIONS) {
     let last = 0;
+    const sizes: number[] = [];
     const ids = new Set<string>();
     for (const scale of WORK_PROFILE_SCALES) {
       const dimensions = workProfileDimensions(dimension, scale, fixed);
       expect(dimensions[dimension]).toBeGreaterThan(last);
       last = dimensions[dimension];
+      sizes.push(last);
       for (const key of WORK_PROFILE_DIMENSIONS.filter((key) => key !== dimension))
         expect(dimensions[key]).toBe(0);
       const recipe = { version: 'calibration-v1', fixed } as WorkProfileCorpusRecipe;
@@ -46,6 +48,8 @@ test('G1024: each axis grows alone at three strictly increasing scales with stab
       ids.add(id);
     }
     expect(ids.size).toBe(3);
+    expect(sizes[1]! / sizes[0]!).toBe(4);
+    expect(sizes[2]! / sizes[1]!).toBe(4);
   }
 });
 
@@ -78,8 +82,14 @@ test('G1024: corpus runs public commands with idempotency, verifies dimensions, 
   const recipe: WorkProfileCorpusRecipe = {
     version: 'history-v1',
     fixed,
-    async initialize() {
+    async initialize(client, key) {
       initializes++;
+      const value = await client.command<{ revision: string }>(key, {
+        method: 'POST',
+        path: '/v1/works',
+        body: { expectedHead: head },
+      });
+      head = value.revision;
     },
     async grow(client, dimension, _index, key) {
       expect(dimension).toBe('historyDepth');
@@ -92,7 +102,7 @@ test('G1024: corpus runs public commands with idempotency, verifies dimensions, 
     },
     async verify(client) {
       const value = await client.read<{ count: number }>('/v1/history');
-      return { ...fixed, historyDepth: value.count };
+      return { ...fixed, historyDepth: value.count - 1 };
     },
   };
   const driver = {
@@ -119,16 +129,27 @@ test('G1024: corpus runs public commands with idempotency, verifies dimensions, 
     expect(manifest.dimensions.historyDepth).toBe(2);
     expect(await prepareWorkProfileCorpus(input)).toEqual(manifest);
     expect(initializes).toBe(1);
-    expect(backups).toBe(1);
-    expect(commands.size).toBe(2);
+    const medium = await prepareWorkProfileCorpus({ ...input, scale: 'medium' });
+    const large = await prepareWorkProfileCorpus({ ...input, scale: 'large' });
+    expect(medium.dimensions.historyDepth).toBe(8);
+    expect(large.dimensions.historyDepth).toBe(32);
+    expect(initializes).toBe(3);
+    expect(backups).toBe(3);
+    expect(commands.size).toBe(33);
     await restoreWorkProfileCorpus(manifest, 'isolated-g-1024', driver);
     expect(restores).toBe(1);
+    writeFileSync(
+      join(dir, `${manifest.id}.json`),
+      JSON.stringify({ ...manifest, compatibility: { digest: '0'.repeat(64), files: {} } }),
+    );
+    await expect(prepareWorkProfileCorpus(input)).rejects.toThrow('Incompatible or incomplete');
     await expect(restoreWorkProfileCorpus(manifest, manifest.id, driver)).rejects.toThrow(
       'distinct',
     );
     await expect(
       prepareWorkProfileCorpus({
         ...input,
+        recipe: { ...recipe, version: 'history-deadline-v1' },
         startedAt: performance.now() - 600_001,
         scale: 'medium',
       }),

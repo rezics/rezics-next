@@ -28,7 +28,7 @@ const sizes: Record<WorkProfileDimension, readonly [number, number, number]> = {
   unrelatedWorks: [4, 16, 64],
   unrelatedPosts: [4, 16, 64],
   follows: [4, 16, 64],
-  memberships: [2, 8, 24],
+  memberships: [2, 8, 32],
   historyDepth: [2, 8, 32],
   realmSize: [4, 16, 64],
   conceptVocabulary: [8, 32, 128],
@@ -192,6 +192,8 @@ export async function prepareWorkProfileCorpus(input: {
   if (dimensions[dimension] < recipe.fixed[dimension])
     throw new Error('Fixed dimension exceeds the smallest requested scale');
   const id = workProfileCorpusId(recipe, dimension, scale, compatibility);
+  // Manifest ids vary by scale; command keys stay stable as the live corpus grows.
+  const buildId = workProfileCorpusId(recipe, dimension, 'small', compatibility);
   const directory = resolve(input.directory);
   if (
     relative(root, directory).startsWith('..') &&
@@ -222,7 +224,8 @@ export async function prepareWorkProfileCorpus(input: {
   };
   const saved = retained();
   if (saved) return saved;
-  const lock = `${path}.lock`;
+  // All scale checkpoints for this recipe/dimension share one live API build.
+  const lock = join(directory, `${buildId}.lock`);
   try {
     mkdirSync(lock);
   } catch {
@@ -245,7 +248,7 @@ export async function prepareWorkProfileCorpus(input: {
       command: (key, command) => input.api.command(key, command, signal),
       read: (path) => input.api.read(path, signal),
     };
-    await recipe.initialize(api, `${id}:base`);
+    await recipe.initialize(api, `${buildId}:base`);
     checkBudget();
     const count = dimensions[dimension] - recipe.fixed[dimension];
     await runBoundedIndices(
@@ -253,7 +256,7 @@ export async function prepareWorkProfileCorpus(input: {
       dimension === 'historyDepth' ? 1 : 2,
       async (index) => {
         checkBudget();
-        await recipe.grow(api, dimension, index, `${id}:${dimension}:${index}`);
+        await recipe.grow(api, dimension, index, `${buildId}:${dimension}:${index}`);
       },
       () => {},
     );

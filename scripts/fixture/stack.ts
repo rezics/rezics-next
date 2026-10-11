@@ -52,7 +52,8 @@ export function run(command: string, args: string[], env: NodeJS.ProcessEnv, tim
 
 /** Spawn with an optional streamed stdin; resolves with combined output or rejects with its tail. */
 export async function stream(command: string, args: string[], env: NodeJS.ProcessEnv,
-  input?: AsyncIterable<string>, timeout = 600_000): Promise<string> {
+  input?: AsyncIterable<string>, timeout = 600_000, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
   const child = spawn(command, args, { cwd: root, env, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
   let output = '';
   const stdoutRedactor = createCommandOutputRedactor();
@@ -65,6 +66,8 @@ export async function stream(command: string, args: string[], env: NodeJS.Proces
   child.stdout!.on('data', keep(stdoutRedactor));
   child.stderr!.on('data', keep(stderrRedactor));
   const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
+  const abort = () => child.kill('SIGKILL');
+  signal?.addEventListener('abort', abort, { once: true });
   const exited = new Promise<number | null>((resolveExit, reject) => {
     child.once('error', reject);
     child.once('close', code => resolveExit(code));
@@ -89,10 +92,14 @@ export async function stream(command: string, args: string[], env: NodeJS.Proces
       if (!closed) stdin.end();
     }
     const code = await exited;
+    signal?.throwIfAborted();
     output = (output + stdoutRedactor.finish() + stderrRedactor.finish()).slice(-200_000);
     if (code !== 0) throw new Error(redactCommandOutput(`${command} ${args.slice(0, 6).join(' ')} exited ${code}: ${output.slice(-2000)}`));
     return output;
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
 }
 
 export function composeArgs(project: string, envFile: string, command: string[]): string[] {
@@ -157,11 +164,18 @@ export function removeStoppedContainers(project: string, docker: NodeJS.ProcessE
 }
 
 /** Whole-volume stopped copy with the pinned PostgreSQL image as the helper. */
-export async function copyVolume(from: string, to: string, docker: NodeJS.ProcessEnv): Promise<void> {
+export async function copyVolume(
+  from: string,
+  to: string,
+  docker: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+): Promise<void> {
+  signal?.throwIfAborted();
   run('docker', ['volume', 'create', to], docker, 15_000);
+  signal?.throwIfAborted();
   await stream('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
     '--volume', `${from}:/from:ro`, '--volume', `${to}:/to`, '--entrypoint', 'sh', postgresImage(),
-    '-ec', 'cp -a /from/. /to/'], docker, undefined, 540_000);
+    '-ec', 'cp -a /from/. /to/'], docker, undefined, 540_000, signal);
 }
 
 export interface ListedDockerVolume {
