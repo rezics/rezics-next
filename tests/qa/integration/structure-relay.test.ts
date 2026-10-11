@@ -21,7 +21,8 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
     throw new Error('Run through the isolated integration tier');
   }
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
-    resolve('.temp', `structure-relay-${randomUUID()}`));
+    resolve('.temp', `structure-relay-${randomUUID()}`),
+    'openid work:create work:edit work:read library:write');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
   try {
     const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,

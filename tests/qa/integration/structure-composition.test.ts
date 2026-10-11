@@ -24,7 +24,8 @@ type Page = { revision: string; predecessor: string | null;
 test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence identity and exact heads', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
-    resolve('.temp', `structure-composition-${randomUUID()}`));
+    resolve('.temp', `structure-composition-${randomUUID()}`),
+    'openid work:create work:edit work:read library:write');
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
