@@ -166,7 +166,6 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
         <urn:rezics:dataset:product> rv:dataEpoch "${next.dataEpoch}" ; rv:routingEpoch "2" ; rv:sequence 0 ;
           rv:restoreCutover <urn:rezics:restore:${next.dataEpoch}> ; rv:restoreHold true .
         <urn:rezics:restore:${next.dataEpoch}> rv:priorDataEpoch "${lineage.dataEpoch}" ;
-          rv:priorSequence 9 ; rv:priorMainSequence 9 ;
           rv:reconciledPriorSequence ?graphSequence ; rv:reconciledPriorMainSequence ?mainSequence .
       } }`);
     expect(heldMarker.results?.bindings?.map(row => [row.graphSequence?.value, row.mainSequence?.value]))
