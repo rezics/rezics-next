@@ -74,11 +74,17 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
         await home.call('GET', `${root}/threads/${reply.slice(-36)}`),
       );
     expect((await readThread(seed.discussion.reply)).complete).toBe(true);
-    const postReply = (key: string, parent?: { reply: string; revision: string }) =>
-      seed.post(key, parent && { reply: parent.reply, revisionId: parent.revision }).then((created) => ({
-        reply: created.reply,
-        revision: created.revisionId,
-      }));
+    let replyCommands = 0;
+    const postReply = async (key: string, parent?: { reply: string; revision: string }) => {
+      const started = performance.now();
+      const created = await seed.post(key, parent && { reply: parent.reply, revisionId: parent.revision });
+      replyCommands++;
+      if (replyCommands % 10 === 0 || replyCommands === 1) {
+        console.log(JSON.stringify({ realmRankingFollowupReplyCommands: replyCommands,
+          lastCommandMs: Math.round(performance.now() - started) }));
+      }
+      return { reply: created.reply, revision: created.revisionId };
+    };
     const chain = await growRealmThreads(postReply, 34, {
       parent: { reply: seed.discussion.reply, revision: seed.discussion.revisionId, chain: true },
       keyPrefix: 'g1042:chain',
