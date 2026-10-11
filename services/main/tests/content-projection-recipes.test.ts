@@ -4,13 +4,51 @@ import { join } from 'node:path';
 import type { ContentCore, ContentOutboxEvent, ProjectionPublication } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { contentPublicationDecisionIri, contentPublicationReceiptIri } from '../src/modules/content-publication/publish.ts';
 import { relayContentProjectionOnce } from '../src/modules/content-publication/relay.ts';
 import { discoverProjectionRecipes, projectionRecipeFor } from '../src/modules/content-publication/projection-recipes.ts';
+import { DATASET, RV } from '../src/modules/work/activate.ts';
 
 const contentEpoch = '11111111-1111-4111-8111-111111111111';
 const graphEpoch = '22222222-2222-4222-8222-222222222222';
 const position = (sequence: string) => ({ owner: 'content' as const, dataEpoch: contentEpoch, sequence });
 const bound = (value: string) => ({ type: 'literal', value });
+const uri = (value: string) => ({ type: 'uri', value });
+
+function publicationInventoryProof(reference: ProjectionPublication['reference']) {
+  const admissionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const preparation = 'prepare-1';
+  const decision = contentPublicationDecisionIri(admissionId);
+  const receipt = contentPublicationReceiptIri(admissionId);
+  const revision = `urn:rezics:content:revision:${reference.revisionId}`;
+  const fields: Array<[string, string | undefined, string]> = [
+    ['dComponent', reference.variantId, 'uri'], ['dResource', reference.resourceId, 'uri'],
+    ['dRevision', revision, 'uri'], ['dDigest', reference.byteDigest, 'literal'],
+    ['dOwnerEpoch', contentEpoch, 'literal'], ['dOwnerSequence', '2', 'literal'],
+    ['dDataEpoch', graphEpoch, 'literal'], ['dSequence', '7', 'literal'],
+    ['dModel', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+    ['dShape', 'https://rezics.com/definition/content-publication-v1', 'uri'],
+    ['dDataset', DATASET, 'uri'], ['dPreparation', preparation, 'literal'],
+    ['rOutcome', `${RV}Succeeded`, 'uri'], ['rReason', undefined, 'uri'],
+    ['rRequestDigest', 'b'.repeat(64), 'literal'], ['rAdmissionId', admissionId, 'literal'],
+    ['rAuthorityEpoch', '2', 'literal'], ['rScope', `content:publish:${reference.variantId}`, 'literal'],
+    ['rPreparation', preparation, 'literal'], ['rRevision', revision, 'uri'],
+    ['rVariant', reference.variantId, 'uri'], ['rResource', reference.resourceId, 'uri'],
+    ['rByteDigest', reference.byteDigest, 'literal'], ['rOwnerEpoch', contentEpoch, 'literal'],
+    ['rOwnerSequence', '2', 'literal'], ['rExpectedHead', 'urn:rezics:none', 'uri'],
+    ['rDataset', DATASET, 'uri'], ['rDataEpoch', graphEpoch, 'literal'],
+    ['rSequence', '7', 'literal'], ['rDecision', decision, 'uri'],
+  ];
+  const row: Record<string, ReturnType<typeof bound>> = {
+    publication: uri(decision), decisionTypeCount: bound('1'), anchorTypeCount: bound('1'),
+    receiptCount: bound('1'), receipt: uri(receipt), receiptTypeCount: bound('1'),
+  };
+  for (const [name, value, type] of fields) {
+    row[`${name}Count`] = bound(value === undefined ? '0' : '1');
+    if (value !== undefined) row[name] = type === 'uri' ? uri(value) : bound(value);
+  }
+  return { decision, row };
+}
 
 test('G-087: media-set publication is proven and acknowledged without text projection', async () => {
   const reference: ProjectionPublication['reference'] = {
@@ -36,10 +74,11 @@ test('G-087: media-set publication is proven and acknowledged without text proje
   } as unknown as ContentCore;
   const cursor = { read: async () => position('2'), readScan: async () => position('2'),
     retries: async () => [], hasPendingTarget: async () => false, acknowledge: async () => { acknowledgements++; } } as unknown as ContentProjectionCursor;
+  const ownerProof = publicationInventoryProof(reference);
   const row = { epoch: bound(graphEpoch), sequence: bound('7'), routing: bound('1'),
     outcome: bound('https://rezics.com/vocab/Succeeded'), receiptEpoch: bound(graphEpoch),
-    receiptSequence: bound('7'), decision: bound('urn:rezics:decision:1'),
-    head: bound('urn:rezics:decision:1'), revision: bound(`urn:rezics:content:revision:${reference.revisionId}`),
+    receiptSequence: bound('7'), decision: bound(ownerProof.decision),
+    head: bound(ownerProof.decision), revision: bound(`urn:rezics:content:revision:${reference.revisionId}`),
     digest: bound(reference.byteDigest), ownerEpoch: bound(contentEpoch), ownerSequence: bound('2'),
     resource: bound(reference.resourceId), variant: bound(reference.variantId),
     decisionRevision: bound(`urn:rezics:content:revision:${reference.revisionId}`),
@@ -47,8 +86,21 @@ test('G-087: media-set publication is proven and acknowledged without text proje
     decisionSequence: bound('2'),
   };
   // The relay first asks whether public search is open (the anchor is present).
-  const fuseki = { query: async (sparql: string) => sparql.includes('SearchGraphAnchor')
-      ? { boolean: true } : { results: { bindings: [row] } },
+  const fuseki = { query: async (sparql: string) => {
+      if (sparql.includes('SearchGraphAnchor')) return { boolean: true };
+      if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
+        return { results: { bindings: [{ epoch: bound(graphEpoch), routing: bound('1'), sequence: bound('7') }] } };
+      }
+      if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
+        return { results: { bindings: [{ variant: uri(reference.variantId), resourceCount: bound('1'),
+          resource: uri(reference.resourceId), publicationCount: bound('1'), publication: uri(ownerProof.decision),
+          eligibilityCount: bound('0') }] } };
+      }
+      if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
+        return { results: { bindings: [ownerProof.row] } };
+      }
+      return { results: { bindings: [row] } };
+    },
     commandHealth: async () => { throw new Error('text profile was checked'); },
   } as unknown as FusekiClient;
   const env = { fuseki, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' },
