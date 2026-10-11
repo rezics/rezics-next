@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { alertRecovery, mandatoryMailRecovery } from '../integration/g-925-safety-recovery.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import type { Static } from 'typebox';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import type { publicReportStatus } from '../../../services/main/src/modules/public-report/contract.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { SCREEN_POLICY } from '../../../services/main/src/modules/media-screen/policy.ts';
 import {
@@ -125,7 +127,7 @@ test('SAFETY02: NCII receipt closes original, known identical uses and later ide
     expect(visible.status).toBe(200);
     expect(visible.headers.get('cache-control')).toBe('public, no-cache');
     const receipt = await f.report(first, 'ncii', nciiDeclaration);
-    const status = await json<{ steps: { kind: string; dueAt: string | null }[] }>(
+    const status = await json<Static<typeof publicReportStatus>>(
       await f.call(
         'GET',
         `/v1/public-reports/${receipt.caseId}`,
@@ -135,7 +137,7 @@ test('SAFETY02: NCII receipt closes original, known identical uses and later ide
         receipt.credential,
       ),
     );
-    const dueAt = status.steps.find((step) => step.kind === 'removal_deadline')!.dueAt!;
+    const dueAt = status.items.find((step) => step.kind === 'removal_deadline')!.dueAt!;
     expect(Date.parse(dueAt) - Date.parse(receipt.receivedAt)).toBe(48 * 3600_000);
     const input = await f.input(receipt, first);
     const decision = await f.complete(input);
