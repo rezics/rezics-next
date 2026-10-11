@@ -46,11 +46,11 @@ import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { zoneTheme } from './theme.ts';
-import { savedSiteCuts } from './site-cuts.ts';
+import { savedSiteCuts, type SiteMountCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
 import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneHomeDocument, zoneHomeDocument } from '../zone-editor/home-document.tsx';
-import type { ZoneContext } from '@rezics/zone-sdk';
+import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from './csp.ts';
@@ -190,7 +190,27 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     params: Promise.resolve({ locale, realm: space }),
     searchParams: Promise.resolve(search),
   };
-  if (routed.ok && routed.data.kind === 'home') return SiteHomeRoute(communityProps);
+  if (routed.ok && routed.data.kind === 'home') {
+    const document = zoneHomeDocument(routed.data.page);
+    if (document) {
+      const homeView = await loadRealmView(space, locale, search, 'site');
+      if (homeView.kind === 'unavailable')
+        return <RealmUnavailable messages={await getMessages('realm', locale)} failure={homeView.failure}
+          reference={homeView.reference} />;
+      if (homeView.kind === 'join') return privateJoinPage(homeView.page, locale, siteHref(locale, space, path));
+      if (homeView.kind !== 'view') notFound();
+      return <RealmFrame view={homeView} tab={null} locale={locale} search={search}
+        address={siteHref(locale, homeView.context.ref, path)}>
+        <PageContainer>
+          <div data-zone-site-home-surface={homeView.presentation.tokens.pageSurface}
+            className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
+            <ZoneHomeDocument document={document} className="text-pretty leading-7" />
+          </div>
+        </PageContainer>
+      </RealmFrame>;
+    }
+    return SiteHomeRoute(communityProps);
+  }
   if (!routed.ok && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
     return RealmBrowseRoute(communityProps);
   }
@@ -437,7 +457,7 @@ async function standaloneSite(
     },
   };
   const mounts = presentation.data.navigation;
-  const frame = (children: ReactNode) => <StandaloneZoneSiteFrame zone={zone} zoneId={resolved.zone} ref={ref}
+  const frame = (children: ReactNode) => <StandaloneZoneSiteFrame zone={zone} zoneId={resolved.zone} address={ref}
     locale={locale} messages={messages} presentation={presentation.data}>{children}</StandaloneZoneSiteFrame>;
   const read = route.data;
   if (read.kind === 'home') {
@@ -446,7 +466,10 @@ async function standaloneSite(
     const document = zoneHomeDocument(read.page);
     if (document) return frame(
       <PageContainer>
-        <ZoneHomeDocument document={document} className="max-w-3xl text-pretty leading-7" />
+        <div data-zone-site-home-surface={presentation.data.presentation.tokens.pageSurface}
+          className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
+          <ZoneHomeDocument document={document} className="text-pretty leading-7" />
+        </div>
       </PageContainer>,
     );
     return frame(
@@ -508,24 +531,29 @@ async function standaloneSite(
 }
 
 /** The common standalone Zone frame used by its public site and the editor's saved preview. */
-export async function StandaloneZoneSiteFrame({ zone, zoneId, ref, locale, messages, presentation, children }: {
+export async function StandaloneZoneSiteFrame({ zone, zoneId, address, locale, messages, presentation, siteMounts, siteTokens, children }: {
   zone: ZoneContext;
   zoneId: string;
-  ref: string;
+  address: string;
   locale: import('../../i18n/define.ts').UiLocale;
   messages: RealmMessages;
   presentation: ZonePresentationRead;
+  siteMounts?: readonly SiteMountCut[];
+  siteTokens?: ZoneTokens;
   children: ReactNode;
 }) {
   const [jar, incoming] = await Promise.all([cookies(), headers()]);
-  const cuts = savedSiteCuts({ tokens: presentation.presentation.tokens, navigation: presentation.presentation.navigation },
-    presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })), ref, locale, messages.home);
+  const tokens = siteTokens ?? presentation.presentation.tokens;
+  const frameZone = siteTokens ? { ...zone, tokens: siteTokens } : zone;
+  const cuts = savedSiteCuts({ tokens, navigation: presentation.presentation.navigation },
+    siteMounts ?? presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
+    address, locale, messages.home);
   const theme = zoneTheme(cuts.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value), enabled: true });
-  const actions = <ZoneEditLink zoneId={zoneId} space={ref} locale={locale} />;
-  return <ZoneFrame zone={zone} dataZone={zoneId} theme={theme} pkg={null}
+  const actions = <ZoneEditLink zoneId={zoneId} space={address} locale={locale} />;
+  return <ZoneFrame zone={frameZone} dataZone={zoneId} theme={theme} pkg={null}
     nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined} members={null} actions={actions}
-    masthead={<ZoneMasthead zone={zone} members={null} actions={actions} />} tabs={null}
-    site={{ label: zone.name.value, links: cuts.navigation }}>
+    masthead={<ZoneMasthead zone={frameZone} members={null} actions={actions} />} tabs={null}
+    site={{ label: frameZone.name.value, links: cuts.navigation }}>
     {children}
   </ZoneFrame>;
 }

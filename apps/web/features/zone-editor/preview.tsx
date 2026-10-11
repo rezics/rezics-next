@@ -27,7 +27,7 @@ export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status,
         <p className="text-sm" role="status">{statusText}</p>
       </div>
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-        <LocalizedLink href={editorPath} className={cn(buttonVariants({ variant: 'outline' }), linkClass)}>{copy.backToEditor}</LocalizedLink>
+        <LocalizedLink href={editorPath} documentNavigation className={cn(buttonVariants({ variant: 'outline' }), linkClass)}>{copy.backToEditor}</LocalizedLink>
         <LocalizedLink href={sitePath} className={cn(buttonVariants({ variant: 'outline' }), linkClass)}>{copy.viewSite}</LocalizedLink>
       </div>
     </div>

@@ -1,3 +1,5 @@
+'use client';
+
 import { ChevronRightIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';

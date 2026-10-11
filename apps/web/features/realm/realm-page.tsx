@@ -1,4 +1,4 @@
-import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
+import type { ZoneContext, ZonePackage, ZoneTokens } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import { cookies, headers } from 'next/headers';
 import { cache, type ReactNode } from 'react';
@@ -32,7 +32,7 @@ import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { PositionBar } from '../wiki/position-bar.tsx';
 import { withContinuity } from '../wiki/continuity.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
-import { savedSiteCuts } from '../zones/site-cuts.ts';
+import { savedSiteCuts, type SiteMountCut } from '../zones/site-cuts.ts';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmBanPanel } from '../realm-appeal/panel.tsx';
 import { readOwnRealmBan } from '../realm-appeal/read.ts';
@@ -267,6 +267,8 @@ export async function RealmFrame({
   address,
   crumbs,
   structuralPreview = false,
+  siteMounts,
+  siteTokens,
   children,
 }: {
   view: RealmView;
@@ -278,13 +280,20 @@ export async function RealmFrame({
   crumbs?: readonly SiteCrumb[];
   /** The editor preview always shows its saved structural theme, independent of a reader's standard-look choice. */
   structuralPreview?: boolean;
+  /** The authorized editor read supplies saved mounts before a site publication exists. */
+  siteMounts?: readonly SiteMountCut[];
+  /** The authorized editor read supplies the saved structural tokens before publication. */
+  siteTokens?: ZoneTokens;
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, data, zone, messages, zoneMessages, lookEnabled } = view;
   const site = tab === null;
-  const siteCuts = site ? savedSiteCuts({ tokens: presentation.tokens, navigation: presentation.navigation },
-    view.mounts.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })), realm.ref, locale, messages.home) : null;
-  const theme = zoneTheme(siteCuts?.tokens ?? presentation.tokens, {
+  const tokens = site && structuralPreview && siteTokens ? siteTokens : presentation.tokens;
+  const frameZone = site && structuralPreview && siteTokens ? { ...zone, tokens: siteTokens } : zone;
+  const siteCuts = site ? savedSiteCuts({ tokens, navigation: presentation.navigation },
+    siteMounts ?? view.mounts.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
+    realm.ref, locale, messages.home) : null;
+  const theme = zoneTheme(siteCuts?.tokens ?? tokens, {
     reader: parseTheme(jar.get(THEME_COOKIE)?.value),
     enabled: structuralPreview || lookEnabled,
   });
@@ -299,7 +308,7 @@ export async function RealmFrame({
     <>
       <RealmMembership
         realm={realm.header.id}
-        realmName={zone.name.value}
+        realmName={frameZone.name.value}
         initial={view.membership}
         signedIn={view.reader.signedIn}
         actingSubject={view.reader.actingSubject}
@@ -342,14 +351,14 @@ export async function RealmFrame({
   return (
     <>
       <ZoneFrame
-        zone={zone}
+        zone={frameZone}
         dataZone={zone.slug ?? realm.realm}
         theme={theme}
         pkg={pkg}
         nonce={request.get(ZONE_NONCE_HEADER) ?? undefined}
         actions={actions}
         members={members}
-        masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
+        masthead={<ZoneMasthead zone={frameZone} members={members} actions={actions} />}
         tabs={
           site ? null : (
             <RealmTabs

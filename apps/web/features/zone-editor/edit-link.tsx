@@ -33,7 +33,8 @@ export async function ZoneEditLink({ zoneId, space, locale, className }: {
   const allowed = await showcaseEditorOpen(zoneId, session.agent.agent.iri, token);
   if (!allowed.ok) return null;
   const { t } = await getTranslation('manage', [locale]);
-  return <LocalizedLink href={zoneEditorPath(space)} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), className)}>
+  return <LocalizedLink href={zoneEditorPath(space)} documentNavigation
+    className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), className)}>
     {t.editSite}
   </LocalizedLink>;
 }
