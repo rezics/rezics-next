@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { ContentCore, migrateContent } from '../../content/src/index.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/contract.ts';
@@ -30,7 +31,7 @@ const logo = (target: string, language: string, tone: 'light' | 'dark' = 'light'
   expectedSelection: null, role: 'logo', language, tone, anchor: 'center-top',
   asset, crop: null, focalArea: null });
 
-const poolFor = (database: string) => new Pool({ ...cluster!.connection, database, max: 8 });
+const poolFor = (database: string) => boundedPool({ ...cluster!.connection, database, max: 8 });
 
 /** Build the migrated owner and exact source once; each test restores an isolated copy. */
 beforeAll(async () => {

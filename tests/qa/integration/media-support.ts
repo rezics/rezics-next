@@ -11,6 +11,7 @@ import { mainConfig } from '../../../services/main/src/config.ts';
 import { composeMain } from '../../../services/main/src/composition.ts';
 import { attributeDirectoryRefreshQueries, CountingFuseki } from './support/counting-fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { connectionBoundOptions } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
@@ -82,7 +83,8 @@ export async function startMediaStack(label: string, options: { contentProjectio
   // The graph is shared by the shard, so immutable manifests must survive this
   // fixture too. The runner removes both owners when it resets the QA stack.
   const accessPool = new CountingPool({ connectionString: options.ownerUrls?.access ?? Bun.env.ACCESS_DATABASE_URL });
-  const contentPool = new CountingPool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL });
+  const contentPool = new CountingPool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL,
+    options: connectionBoundOptions() });
   const relayPool = new CountingPool({ connectionString: options.ownerUrls?.relay ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);

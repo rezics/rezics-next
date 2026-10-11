@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { grantRecordedPlatformUse } from './platform-grant.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -68,8 +68,8 @@ export async function authorCreditFixture(
   options: { readingPositions?: boolean; platformAccess?: AccessExposure } = {},
 ) {
   const account = await ratingAccount(apps, scopes, deletionFence);
-  const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
-  const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
+  const accessPool = boundedPool({ connectionString: apps.ACCESS_DATABASE_URL });
+  const pool = boundedPool({ connectionString: apps.CONTENT_DATABASE_URL });
   await migrateContent(pool);
   attributeDirectoryRefreshQueries();
   const nativeFuseki = new CountingFuseki(

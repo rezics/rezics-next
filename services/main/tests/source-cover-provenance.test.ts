@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentCore, migrateContent } from '../../content/src/index.ts';
 import { MediaConflict, MediaInvalid, MediaStore, MediaUnavailable } from '../src/modules/media/store.ts';
@@ -98,9 +99,9 @@ async function storeCover(fixture: CoverFixture, asset: string | null = null) {
 
 beforeAll(async () => {
   cluster = await startPostgresCluster();
-  admin = new Pool({ ...cluster.connection });
+  admin = boundedPool({ ...cluster.connection });
   await admin.query('CREATE DATABASE media_cover_provenance');
-  pool = new Pool({ ...cluster.connection, database: 'media_cover_provenance', max: 8 });
+  pool = boundedPool({ ...cluster.connection, database: 'media_cover_provenance', max: 8 });
   await migrateContent(pool);
 });
 

@@ -56,10 +56,34 @@ function fixture() {
           return { revision: revisionId, replayed: state.revisions++ > 0 };
         },
       },
-      objects: () => ({
-        put: async (bytes: Uint8Array) => { state.writes++; stored.set(sha(bytes), bytes.slice()); return sha(bytes); },
-        get: async (digest: string) => stored.get(digest)!,
-        deleteAndVerifyAbsent: async (digest: string) => { stored.delete(digest); },
+      objects: (prefix: string) => ({
+        put: async (bytes: Uint8Array, signal?: AbortSignal) => {
+          signal?.throwIfAborted();
+          state.writes++;
+          stored.set(`${prefix}${sha(bytes)}`, bytes.slice());
+          return sha(bytes);
+        },
+        putTracked: async (bytes: Uint8Array, signal?: AbortSignal, onCreated?: (digest: string) => void) => {
+          expect(signal).toBeInstanceOf(AbortSignal);
+          signal?.throwIfAborted();
+          state.writes++;
+          const digest = sha(bytes);
+          const key = `${prefix}${digest}`;
+          const created = !stored.has(key);
+          if (created) {
+            stored.set(key, bytes.slice());
+            onCreated?.(digest);
+          }
+          return { digest, created };
+        },
+        get: async (digest: string, _maxBytes?: number, signal?: AbortSignal) => {
+          signal?.throwIfAborted();
+          return stored.get(`${prefix}${digest}`)!;
+        },
+        deleteAndVerifyAbsent: async (digest: string, signal?: AbortSignal) => {
+          signal?.throwIfAborted();
+          stored.delete(`${prefix}${digest}`);
+        },
       }),
     },
   } as unknown as MainWorkDependencies;

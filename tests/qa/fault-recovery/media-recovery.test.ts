@@ -22,7 +22,11 @@ test('VIEW08: a lost asset-revision stage, a moved head and fenced or lost respo
   const { asset, upload, objectNamespace } = await reserved.json() as { asset: string; upload: string;
     objectNamespace: string };
   const activated = await store.settleUpload(upload, { status: 'activated', sha256: sha(bytes),
-    byteLength: bytes.length, mediaType: 'image/png', width: 40, height: 40 }, () => objects(objectNamespace).put(bytes));
+    byteLength: bytes.length, mediaType: 'image/png', width: 40, height: 40 }, async (signal, onFailure) => {
+      const original = objects(objectNamespace);
+      return (await original.putTracked(bytes, signal, digest => onFailure({ digest,
+        cleanup: cleanupSignal => original.deleteAndVerifyAbsent(digest, cleanupSignal) }))).digest;
+    });
   expect(activated.status).toBe('activated');
   const headOf = async () => (await contentPool.query<{ draft_head: string | null }>(
     'SELECT draft_head FROM content.variant WHERE id = $1', [`urn:rezics:variant:${asset}`])).rows[0]?.draft_head ?? null;
@@ -45,7 +49,11 @@ test('VIEW08: a lost asset-revision stage, a moved head and fenced or lost respo
     actingSubject: owner.actor });
   const nextUpload = (await next.json() as { upload: string }).upload;
   await store.settleUpload(nextUpload, { status: 'activated', sha256: sha(later), byteLength: later.length,
-    mediaType: 'image/png', width: 41, height: 41 }, () => objects(objectNamespace).put(later));
+    mediaType: 'image/png', width: 41, height: 41 }, async (signal, onFailure) => {
+      const original = objects(objectNamespace);
+      return (await original.putTracked(later, signal, digest => onFailure({ digest,
+        cleanup: cleanupSignal => original.deleteAndVerifyAbsent(digest, cleanupSignal) }))).digest;
+    });
   const other = await owner.upload(png(42, 42), 'public', asset);
   expect(await headOf()).toBe(other.revision);
   const moved = await store.recordAssetRevision(nextUpload);
