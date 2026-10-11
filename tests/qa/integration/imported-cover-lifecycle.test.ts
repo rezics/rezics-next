@@ -381,7 +381,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         scopeKind: 'exact_revision', revision: importedUse.revision, expectedHead: null,
         effect: 'media_delivery' };
       const firstDecision = await decide(publicReceipt, target, 'interim_restrict');
-      expect(firstDecision.accepted.status).toBe(202);
+      expect(firstDecision.accepted.status, await firstDecision.accepted.clone().text()).toBe(202);
       const completed = await govern('POST', `/v1/safety-cases/${publicReceipt.caseId}/decisions`,
         firstDecision.input, moderator.token, firstDecision.input.idempotencyKey);
       const decisionReceipt = await completed.json() as { decisionId: string; operation: { status: string } };
