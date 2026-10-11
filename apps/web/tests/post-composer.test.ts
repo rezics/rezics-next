@@ -63,7 +63,8 @@ function unplacedReplyMain(
       failed = true;
       if (options.failure === 'lost') throw new Error('Response lost after the write');
       if (options.failure === 'unavailable') return { data: null, error: { status: 503 } };
-      if (options.failure === 'pending') return { data: null, error: { status: 202 } };
+      if (options.failure === 'pending')
+        return { data: null, error: { status: 409, value: { code: 'admission_busy' } } };
       const error =
         options.failure === 'cancelled'
           ? { status: 409, value: { code: step === 'draft' ? 'stale_head' : 'realm_reply_stale' } }
