@@ -2,7 +2,7 @@ import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,6 +21,7 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import * as admission from '../../../services/main/src/modules/access/admission.ts';
 import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -44,12 +45,14 @@ import { initializeFreshGraph, type WorkActivationEnvironment } from '../../../s
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { readGraphRecoverySource, readRestoredGraphReleaseExpectation } from
   '../../../services/main/src/modules/work/restore-lineage.ts';
+import { readRestoredGraphReleaseProof } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { ensureModelGeneration } from '../../../services/main/src/modules/semantic/command.ts';
 import { relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from
   '../../../services/main/src/modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { OwnerOperations, OwnerOperationUnavailable } from '../../../services/main/src/modules/owner/operations.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
 import { constructRetainedErasureCandidatesInOrder, createRetainedErasureRecoveryFixture, DirectoryObjects,
@@ -318,7 +321,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
           originalSource: 'retained-native-event',
         },
       };
-      return { ...candidate, restored: { ...restored, graph,
+      return { ...candidate, restoredFence: cut.restoredFence, restored: { ...restored, graph,
         objects: { directory: candidateObjects.directory, workObjects: candidateObjects } }, receiptCustody };
     };
     const readFindings = async (reconciliationId: string) => (await relay.query<{
@@ -354,6 +357,69 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
           rv:dataEpoch "${restored.graph!.lineage.dataEpoch}" ;
           rv:routingEpoch "${restored.graph!.lineage.routingEpoch}" ; rv:sequence 0 ; rv:restoreHold true . } }`)).boolean)
         .toBe(true);
+    };
+    const ownerOperationFor = (candidate: Awaited<ReturnType<typeof bindCandidate>>,
+      cut: Awaited<ReturnType<typeof captureAndBackup>>) => {
+      const environment: WorkActivationEnvironment = {
+        fuseki: candidate.candidateGraph.fuseki,
+        lineage: candidate.candidateGraph.lineage,
+        objectDirectory: candidate.candidateObjects.directory,
+        workObjects: candidate.candidateObjects,
+        receiptCustody: candidate.receiptCustody,
+      };
+      return new OwnerOperations(relay, environment, {
+        accountPool: candidate.restored.account,
+        accessPool: candidate.restored.access,
+        contentPool: candidate.restored.content,
+        restoredRelayPool: candidate.restored.relay,
+        hmacKey: recoveryKey,
+        objectStore: {
+          directory: candidate.candidateObjects.directory,
+          workObjects: candidate.candidateObjects,
+          structureObjects: candidate.candidateObjects,
+        },
+        erasures: {
+          authority: cut.authority,
+          originalSource: 'retained-native-event',
+          signingKey: compose.FUSEKI_TITLE_ADMISSION_KEY!,
+          maintenance: heldErasureMaintenanceClient(candidate.candidateGraph.url,
+            compose.FUSEKI_MAINTENANCE_TOKEN!),
+        },
+      });
+    };
+    const interruptBeforeOwnerRelease = async (candidate: Awaited<ReturnType<typeof bindCandidate>>,
+      cut: Awaited<ReturnType<typeof captureAndBackup>>, operations: OwnerOperations, key: string) => {
+      const lock = admission.lockAccessRecoveryFenceForRelease;
+      let interrupted = false;
+      const interruption = spyOn(admission, 'lockAccessRecoveryFenceForRelease').mockImplementation(
+        async (client, generation) => {
+          if (!interrupted) {
+            interrupted = true;
+            throw new Error('transient interruption before native restore release');
+          }
+          return lock(client, generation);
+        });
+      try {
+        await expect(operations.reconcileRestore({ sealedCoverage: cut.authority.sealedCoverage,
+          sealedDeletionSets: cut.deletionSet ? [cut.deletionSet] : [] }, key))
+          .rejects.toBeInstanceOf(OwnerOperationUnavailable);
+      } finally { interruption.mockRestore(); }
+      expect(interrupted).toBe(true);
+      const outerOperationId = `owner:reconcile:${key}`;
+      const outer = (await relay.query<{ id: string; state: string; hold_reason: string | null }>(
+        'SELECT id, state, hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1',
+        [outerOperationId])).rows[0];
+      expect(outer).toMatchObject({ state: 'running', hold_reason: null });
+      const bindings = (await relay.query<{ item_ref: string }>(`SELECT item_ref
+        FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1
+          AND item_ref LIKE 'restore-%' ORDER BY ordinal`, [outer!.id])).rows.map(row => row.item_ref);
+      expect(bindings.filter(ref => ref.startsWith('restore-qualification:'))).toHaveLength(1);
+      expect(bindings.filter(ref => ref.startsWith('restore-release:'))).toEqual([]);
+      const graphRelease = await readRestoredGraphReleaseExpectation(
+        candidate.candidateGraph.fuseki, candidate.candidateGraph.lineage, cut.coverage);
+      expect(await readRestoredGraphReleaseProof(candidate.candidateGraph.fuseki, graphRelease)).toBeNull();
+      await expectBothHoldsClosed(candidate);
+      return { outerOperationId, outerId: outer!.id };
     };
 
     // IAM11: Account erasure through the Account owner, then journal settlement.
@@ -407,6 +473,10 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     const apiErasureReport = await readErasure(relay, contentErasure.erasureId);
     expect(apiErasureReport).toMatchObject({ erasureId: contentErasure.erasureId,
       erasureEpoch: contentErasure.erasureEpoch, stage: 'verified', suppression: 'suppressed' });
+    expect(apiErasureReport.targets).toEqual([expect.objectContaining({ ordinal: 1,
+      owner: 'content', kind: 'content_revision', ref: payload, completionState: 'completed',
+      completionReasonCode: null, completionEvidenceRef: expect.stringMatching(/^[a-f0-9]{64}$/),
+      completedAt: expect.any(String) })]);
     const apiErasureAdmission = (await access.query<{ state: string; graph_outcome: string;
       graph_receipt: string; graph_data_epoch: string; graph_sequence: string }>(
       `SELECT state, graph_outcome, graph_receipt, graph_data_epoch, graph_sequence
@@ -577,7 +647,6 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     await expect(releaseErasureRestoreHold(relay, secondRestored, staleAuthority.reconciliationId,
       second.restoredFence, second.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
     await expectBothHoldsClosed(secondCandidate);
-    await secondCandidate.dispose();
     expect((await thirdRestored.access.query<{ open: boolean }>(
       'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(false);
 
@@ -627,7 +696,6 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     await expectBothHoldsClosed(firstCandidate);
     expect((await readJournal(olderMain)).status).toBe(503);
     expect(await credentials(older.account, erased.id)).toMatchObject({ users: '1' });
-    await firstCandidate.dispose();
 
     // The final backup includes the API erasure and current Access authority;
     // the retained owner chain has since erased the pinned later target.
@@ -733,80 +801,138 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         erasure_id: staleErasure.erasureId, erasure_epoch: staleErasure.erasureEpoch }]
         .sort((left, right) => left.revision_id.localeCompare(right.revision_id)));
     expect(await exact(current.content, staleTarget)).toMatchObject({ status: 'erased' });
-    // Simulate an unsafe copy replacement after reconciliation. Release checks
-    // the owner again under the retained journal lock, then refuses resurrection.
-    const unsafe = await current.content.connect();
-    try {
-      await unsafe.query('BEGIN');
-      await unsafe.query('SET LOCAL session_replication_role = replica');
-      await unsafe.query(`UPDATE content.revision SET availability = 'available',
-        serialized_bytes = $2, body = $3 WHERE id = $1`,
-      [payload, originalPayload.serialized_bytes, originalPayload.body]);
-      await unsafe.query('COMMIT');
-    } catch (error) {
-      await unsafe.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    } finally { unsafe.release(); }
-    expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
-    await expect(releaseErasureRestoreHold(relay, current, final.reconciliationId,
-      third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
-    expect((await readJournal(currentMain)).status).toBe(503);
-    await current.content.query(`UPDATE content.revision SET availability = 'erased',
-      serialized_bytes = NULL, body = NULL WHERE id = $1`, [payload]);
-    const supersessionSequence = (await current.content.query<{ graph_sequence: string }>(
-      `SELECT graph_sequence::text FROM content.publication_erasure_supersession
-       WHERE operation_id = $1`, [laterPreparation])).rows[0]!.graph_sequence;
-    const altered = await current.content.connect();
-    try {
-      await altered.query('BEGIN');
-      await altered.query('SET LOCAL session_replication_role = replica');
-      await altered.query(`UPDATE content.publication_erasure_supersession
-        SET graph_sequence = graph_sequence + 1 WHERE operation_id = $1`, [laterPreparation]);
-      await altered.query('COMMIT');
-    } finally { altered.release(); }
-    await expect(releaseErasureRestoreHold(relay, current, final.reconciliationId,
-      third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
-    const repaired = await current.content.connect();
-    try {
-      await repaired.query('BEGIN');
-      await repaired.query('SET LOCAL session_replication_role = replica');
-      await repaired.query(`UPDATE content.publication_erasure_supersession
-        SET graph_sequence = $2::bigint WHERE operation_id = $1`,
-      [laterPreparation, supersessionSequence]);
-      await repaired.query('COMMIT');
-    } finally { repaired.release(); }
-    const detached = await current.content.connect();
-    try {
-      await detached.query('BEGIN');
-      await detached.query('SET LOCAL session_replication_role = replica');
-      await detached.query(`UPDATE content.publication_preparation
-        SET status = 'rejected', pin_active = false WHERE operation_id = $1`, [laterPreparation]);
-      await detached.query('COMMIT');
-    } finally { detached.release(); }
-    await expect(releaseErasureRestoreHold(relay, current, final.reconciliationId,
-      third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
-    const reattached = await current.content.connect();
-    try {
-      await reattached.query('BEGIN');
-      await reattached.query('SET LOCAL session_replication_role = replica');
-      await reattached.query(`UPDATE content.publication_preparation
-        SET status = 'active', pin_active = true WHERE operation_id = $1`, [laterPreparation]);
-      await reattached.query('COMMIT');
-    } finally { reattached.release(); }
-    await releaseErasureRestoreHold(relay, current, final.reconciliationId,
-      third.restoredFence, third.authority);
+    // T10 uses fresh copies of the final captured cut. Qualification commits
+    // before the one-shot owner interruption, leaving both release holds closed.
+    const sealedDeletionSet = third.deletionSet;
+    if (!sealedDeletionSet) throw new Error('final retained Account deletion set is unavailable');
+    const ownerRestoreInput = { sealedCoverage: third.authority.sealedCoverage,
+      sealedDeletionSets: [sealedDeletionSet] };
+    const expectComposedRefusal = async (mutate: (candidate: Awaited<ReturnType<typeof bindCandidate>>)
+      => Promise<void>, reason: string) => {
+      const candidate = await bindCandidate(third);
+      try {
+        const operations = ownerOperationFor(candidate, third);
+        const key = `erasure-restore-owner-${randomUUID()}`;
+        const { outerOperationId } = await interruptBeforeOwnerRelease(candidate, third, operations, key);
+        await mutate(candidate);
+        expect(await operations.reconcileRestore(ownerRestoreInput, key))
+          .toMatchObject({ state: 'held', disposition: 'conflict' });
+        expect((await relay.query<{ state: string; hold_reason: string | null }>(
+          'SELECT state, hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1',
+          [outerOperationId])).rows[0]).toEqual({ state: 'held', hold_reason: reason });
+        await expectBothHoldsClosed(candidate);
+        const graphRelease = await readRestoredGraphReleaseExpectation(
+          candidate.candidateGraph.fuseki, candidate.candidateGraph.lineage, third.coverage);
+        expect(await readRestoredGraphReleaseProof(candidate.candidateGraph.fuseki, graphRelease)).toBeNull();
+      } finally { await candidate.dispose(); }
+    };
+    await expectComposedRefusal(async candidate => {
+      const unsafe = await candidate.restored.content.connect();
+      try {
+        await unsafe.query('BEGIN');
+        await unsafe.query('SET LOCAL session_replication_role = replica');
+        await unsafe.query(`UPDATE content.revision SET availability = 'available',
+          serialized_bytes = $2, body = $3 WHERE id = $1`,
+        [payload, originalPayload.serialized_bytes, originalPayload.body]);
+        await unsafe.query('COMMIT');
+      } catch (error) {
+        await unsafe.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally { unsafe.release(); }
+      expect(await exact(candidate.restored.content, payload)).toMatchObject({ status: 'available' });
+    }, 'retained erasure reconciliation failed: restored Content still exposes an erased revision');
+    await expectComposedRefusal(async candidate => {
+      const supersession = (await candidate.restored.content.query<{ graph_sequence: string }>(
+        `SELECT graph_sequence::text FROM content.publication_erasure_supersession
+         WHERE operation_id = $1`, [laterPreparation])).rows[0];
+      expect(supersession).toBeDefined();
+      const altered = await candidate.restored.content.connect();
+      try {
+        await altered.query('BEGIN');
+        await altered.query('SET LOCAL session_replication_role = replica');
+        await altered.query(`UPDATE content.publication_erasure_supersession
+          SET graph_sequence = graph_sequence + 1 WHERE operation_id = $1`, [laterPreparation]);
+        await altered.query('COMMIT');
+      } finally { altered.release(); }
+    }, 'retained erasure reconciliation failed: restored publication supersession differs from erasure proof');
+    await expectComposedRefusal(async candidate => {
+      const detached = await candidate.restored.content.connect();
+      try {
+        await detached.query('BEGIN');
+        await detached.query('SET LOCAL session_replication_role = replica');
+        await detached.query(`UPDATE content.publication_preparation
+          SET status = 'rejected', pin_active = false WHERE operation_id = $1`, [laterPreparation]);
+        await detached.query('COMMIT');
+      } finally { detached.release(); }
+    }, 'retained erasure reconciliation failed: restored publication supersession differs from erasure proof');
 
-    // Reopened restore: no resurrection, credentials absent, unrelated content intact.
-    const reopened = await readJournal(currentMain);
+    const successfulCandidate = await bindCandidate(third);
+    const successfulOperations = ownerOperationFor(successfulCandidate, third);
+    const successfulKey = `erasure-restore-owner-${randomUUID()}`;
+    await interruptBeforeOwnerRelease(successfulCandidate, third, successfulOperations, successfulKey);
+    expect(await successfulOperations.reconcileRestore(ownerRestoreInput, successfulKey))
+      .toMatchObject({ kind: 'restore', scope: 'product', state: 'reconciled' });
+    const successful = successfulCandidate.restored;
+    const successfulOuter = (await relay.query<{ id: string; state: string }>(
+      'SELECT id, state FROM relay.owner_reconciliation WHERE operation_id = $1',
+      [`owner:reconcile:${successfulKey}`])).rows[0]!;
+    expect(successfulOuter.state).toBe('reconciled');
+    const successfulBindings = (await relay.query<{ item_ref: string }>(`SELECT item_ref
+      FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1
+        AND item_ref LIKE 'restore-%' ORDER BY ordinal`, [successfulOuter.id])).rows.map(row => row.item_ref);
+    expect(successfulBindings.filter(ref => ref.startsWith('restore-qualification:'))).toHaveLength(1);
+    expect(successfulBindings.filter(ref => ref.startsWith('restore-release:'))).toHaveLength(1);
+    const successfulGraphRelease = await readRestoredGraphReleaseExpectation(
+      successfulCandidate.candidateGraph.fuseki, successfulCandidate.candidateGraph.lineage, third.coverage);
+    const nativeRelease = await readRestoredGraphReleaseProof(
+      successfulCandidate.candidateGraph.fuseki, successfulGraphRelease);
+    expect(nativeRelease?.receipt).toMatchObject({
+      id: expect.stringMatching(/^urn:rezics:receipt:restore-release:/),
+      requestDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      dataEpoch: successfulCandidate.candidateGraph.lineage.dataEpoch,
+      sequence: '0',
+    });
+    expect((await successful.access.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0])
+      .toEqual({ open: true, generation: (BigInt(third.restoredFence) + 1n).toString() });
+    expect(await exact(successful.content, payload)).toMatchObject({ status: 'erased' });
+    expect(await exact(successful.content, later)).toMatchObject({ status: 'erased' });
+    expect(await exact(successful.content, staleTarget)).toMatchObject({ status: 'erased' });
+    expect(await exact(successful.content, unrelated)).toMatchObject({ status: 'available',
+      serializedJson: JSON.stringify({ body: 'unrelated public text' }) });
+    expect(await credentials(successful.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
+    expect(await accountCredentialsPresent(successful.account, [erased.id])).toEqual(new Set());
+    expect(await credentials(successful.account, operator.id)).toMatchObject({ users: '1' });
+    expect((await successful.content.query<{ pin_active: boolean; status: string }>(
+      'SELECT pin_active, status FROM content.publication_preparation WHERE operation_id = $1',
+      [laterPreparation])).rows[0]).toEqual({ pin_active: true, status: 'active' });
+    expect((await successful.content.query<{ revision_id: string; erasure_id: string;
+      erasure_epoch: string }>(`SELECT revision_id::text AS revision_id, erasure_id::text AS erasure_id,
+        erasure_epoch::text AS erasure_epoch FROM content.revision_erasure
+      WHERE revision_id = ANY($1::uuid[]) ORDER BY revision_id`, [[later, staleTarget]])).rows)
+      .toEqual([{ revision_id: later, erasure_id: pinnedErasure.erasureId,
+        erasure_epoch: pinnedErasure.erasureEpoch }, { revision_id: staleTarget,
+        erasure_id: staleErasure.erasureId, erasure_epoch: staleErasure.erasureEpoch }]
+        .sort((left, right) => left.revision_id.localeCompare(right.revision_id)));
+    await expectBothHoldsClosed(firstCandidate);
+    await expectBothHoldsClosed(secondCandidate);
+    await expectBothHoldsClosed(currentCandidate);
+    expect((await readJournal(olderMain)).status).toBe(503);
+    expect((await readJournal(currentMain)).status).toBe(503);
+    await firstCandidate.dispose();
+    await secondCandidate.dispose();
+    await currentCandidate.dispose();
+
+    // The reopened Main APIs serve protected reads from the successfully released copy.
+    const successfulMain = offline(successfulCandidate);
+    const reopened = await readJournal(successfulMain);
     expect(reopened.status).toBe(200);
     expect(await reopened.json()).toMatchObject({ erasureId: contentErasure.erasureId, stage: 'verified' });
-    expect(await exact(current.content, payload)).toMatchObject({ status: 'erased' });
-    expect(await exact(current.content, later)).toMatchObject({ status: 'erased' });
-    expect(await exact(current.content, unrelated)).toMatchObject({ status: 'available',
-      serializedJson: JSON.stringify({ body: 'unrelated public text' }) });
-    expect(await credentials(current.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
-    expect(await credentials(current.account, operator.id)).toMatchObject({ users: '1' });
-    expect((await readJournal(olderMain)).status).toBe(503);
+    const protectedWorkRead = await successfulMain.handle(new Request(
+      `http://main.local/v1/works/${work.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    expect(protectedWorkRead.status).toBe(200);
+    expect(await protectedWorkRead.json()).toMatchObject({ id: work });
 
     // IAM11: build a fresh logical archive only from the reconciled cut. This
     // local, separate cluster represents off-host custody; no pre-erasure
@@ -828,8 +954,8 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       archives.set(name, file);
       return createHash('sha256').update(readFileSync(file)).digest('hex');
     };
-    const archiveDigests = [archive('account', current.port),
-      archive('access', current.port), archive('content', current.port),
+    const archiveDigests = [archive('account', successful.port),
+      archive('access', successful.port), archive('content', successful.port),
       archive('relay', Number(compose.POSTGRES_PORT))];
     const sealedCustody = JSON.stringify(sealRecoveryPayload({
       format: 'rezics-sanitized-custody-v1',
@@ -875,7 +1001,9 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     expect((await offAccess.query<{ open: boolean }>(
       'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(false);
     expect(await readErasure(offRelay, contentErasure.erasureId)).toMatchObject({
-      erasureEpoch: contentErasure.erasureEpoch, suppression: 'suppressed' });
+      erasureEpoch: contentErasure.erasureEpoch, suppression: 'suppressed',
+      targets: [expect.objectContaining({ owner: 'content', kind: 'content_revision', ref: payload,
+        completionState: 'completed', completionEvidenceRef: expect.stringMatching(/^[a-f0-9]{64}$/) })] });
     expect(await readErasure(offRelay, accountErasureId)).toMatchObject({ suppression: 'suppressed' });
 
     // Retire the three historical physical backup directories only after the
