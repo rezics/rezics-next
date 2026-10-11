@@ -1,16 +1,28 @@
-import type { Pool } from 'pg';
-import { logWorkerFault } from '@rezics/observability/log';
+import type { Pool, PoolClient } from 'pg';
+import { logWorkerFault, telemetryLog } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { runWorkerTick } from '../../worker-tick.ts';
+import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
 import { compareRelayPositions, MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 
-export const ZONE_BROWSE_PROJECTION_COST = { batch: 64, relayEvents: 64, relayBatches: 16, pollMs: 500 } as const;
+export const ZONE_BROWSE_PROJECTION_COST = {
+  batch: 64, relayEvents: 64, relayBatches: 16, pollMs: 500, recoveryPageMs: 5_000,
+} as const;
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAIN_RELAY_SOURCE = 'https://rezics.com/services/main';
 export interface BrowseEntry { work: string; adoptedOrder: string; updatedAt: string | null; words: number | null }
 export interface BrowseAfter { work: string; key: string | null }
+type ProjectionKey = { realm: string; work: string };
+type GraphCut = ReadPosition & { relaySequence: string };
+interface Reconciliation {
+  cut: GraphCut;
+  coverage: RelayHandoffPosition;
+  epochs: string;
+  phase: 'project' | 'prune';
+  after?: ProjectionKey;
+}
 export interface BrowseEntryReader {
   current(position: ReadPosition): boolean | Promise<boolean>;
   batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition): Promise<BrowseEntry[]>;
@@ -24,6 +36,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   private ready = false;
   private checkpoint: RelayHandoffPosition;
   private afterEvent: string | null = null;
+  private reconciliation: Reconciliation | undefined;
   constructor(private readonly access: Pool, private readonly relay: Pool,
     private readonly env: WorkActivationEnvironment) {
     this.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: env.lineage.dataEpoch, sequence: '0' };
@@ -71,7 +84,34 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     return `VALUES (?epoch ?epochOrder) { ${epochs.map((value, index) => `(${lit(value)} ${epochs.length - index})`).join(' ')} }`;
   }
 
-  private async project(where: string, epochs: string): Promise<{ realm: string; work: string }[]> {
+  private checkDeadline(deadline?: number): void {
+    if (deadline !== undefined && performance.now() >= deadline) {
+      throw new WorkReadUnavailable('Zone browse reconciliation page exceeded its time budget');
+    }
+  }
+
+  private async poolPage<T>(pool: Pool, deadline: number | undefined, apply: (client: PoolClient) => Promise<T>): Promise<T> {
+    this.checkDeadline(deadline);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (deadline !== undefined) {
+        await client.query("SET LOCAL lock_timeout = '1s'");
+        await client.query("SET LOCAL statement_timeout = '2s'");
+        await client.query("SET LOCAL transaction_timeout = '5s'");
+      }
+      this.checkDeadline(deadline);
+      const result = await apply(client);
+      this.checkDeadline(deadline);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+  }
+
+  private async project(where: string, epochs: string, deadline?: number): Promise<ProjectionKey[]> {
     const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}>
       SELECT DISTINCT ?realm ?work ?sequence ?epochOrder WHERE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
@@ -91,21 +131,19 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
         ${where}
       } ORDER BY STR(?realm) STR(?work) LIMIT ${ZONE_BROWSE_PROJECTION_COST.batch}`, 128 * 1024)).results?.bindings ?? [];
-    const examined: { realm: string; work: string }[] = [];
-    const client = await this.access.connect();
-    try {
-      await client.query('BEGIN');
+    const examined: ProjectionKey[] = [];
+    await this.poolPage(this.access, deadline, async client => {
       // SerialStatisticsProjection holds this row FOR UPDATE while changing
       // summaries. Its triggers cannot race an adoption's initial stats copy.
       await client.query('SELECT generation FROM access.serial_stats_checkpoint WHERE singleton FOR SHARE');
       for (const row of rows) {
         const realm = row.realm?.value, work = row.work?.value;
-        if (realm && work) examined.push({ realm, work });
         if (!realm || !work || !ID.test(realm) || !ID.test(work)
           || !/^\d{1,38}$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')) {
-          logWorkerFault('main.zone-browse.projection', { code: 'malformed_adoption' });
-          continue;
+          throw new WorkReadUnavailable('Zone browse graph has a malformed adoption');
         }
+        this.checkDeadline(deadline);
+        examined.push({ realm, work });
         const order = BigInt(row.sequence!.value) + BigInt(row.epochOrder!.value) * 10n ** 38n;
         await client.query(`INSERT INTO access.zone_browse_entry (realm, work, adopted_order, updated_at, word_count)
           SELECT $1, $2, $3::numeric, s.last_updated_at, s.word_count
@@ -114,46 +152,94 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
           LEFT JOIN access.serial_summary s ON s.generation = c.generation AND s.work = $2
           ON CONFLICT (realm, work) DO UPDATE SET updated_at = EXCLUDED.updated_at, word_count = EXCLUDED.word_count`, [realm, work, order.toString()]);
       }
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally { client.release(); }
+    });
     return examined;
   }
 
-  /** Idempotent, asynchronous startup reconciliation; never runs in a read.
-   * The graph diagnostic and scoped relay cuts stay in their own domains. */
+  /** One bounded reconciliation page per poll, also used after a relay gap.
+   * A stable graph cut proves all pages describe the same authoritative state.
+   * Partial pages remain unreadable and never move the relay checkpoint. */
   async backfill(): Promise<void> {
     this.ready = false;
-    const graphCut = await this.graphCut();
-    const coverage = await this.mainStreamCoverage();
-    const epochs = await this.epochs();
-    let after: { realm: string; work: string } | undefined;
-    for (;;) {
-      const rows = await this.project(after ? `FILTER(STR(?realm) > ${lit(after.realm)}
-        || (STR(?realm) = ${lit(after.realm)} && STR(?work) > ${lit(after.work)}))` : '', epochs);
-      if (rows.length < ZONE_BROWSE_PROJECTION_COST.batch) break;
-      after = rows.at(-1)!;
-    }
-    // Keep the graph read's recovery fence separate from relay progress. Any
-    // Main deliveries that arrived during the scan remain beyond checkpoint
-    // and keep the projection stale until catch-up processes them.
-    const graphAfter = await this.graphCut();
-    if (graphCut.dataEpoch !== graphAfter.dataEpoch) {
-      throw new WorkReadUnavailable('Zone browse graph epoch changed during backfill');
-    }
-    this.checkpoint = coverage;
-    this.afterEvent = null;
-    this.ready = true;
+    const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPageMs;
+    await fusekiReadBudget.run({ signal: AbortSignal.timeout(ZONE_BROWSE_PROJECTION_COST.recoveryPageMs),
+      callsLeft: 6, bytesLeft: 256 * 1024 }, async () => {
+      const cut = await this.graphCut();
+      let state = this.reconciliation;
+      if (!state) {
+        const coverage = await this.mainStreamCoverage(deadline);
+        if (BigInt(coverage.sequence) > BigInt(cut.relaySequence)) {
+          throw new WorkReadUnavailable('Zone browse relay coverage exceeds authoritative Main cut');
+        }
+        state = { cut, coverage, epochs: await this.epochs(), phase: 'project' };
+        this.reconciliation = state;
+      }
+      this.validateCut(state.cut, cut);
+      this.checkDeadline(deadline);
+      let complete = false;
+      if (state.phase === 'project') {
+        const after = state.after;
+        const rows = await this.project(after ? `FILTER(STR(?realm) > ${lit(after.realm)}
+          || (STR(?realm) = ${lit(after.realm)} && STR(?work) > ${lit(after.work)}))` : '', state.epochs, deadline);
+        if (rows.length < ZONE_BROWSE_PROJECTION_COST.batch) {
+          state.phase = 'prune';
+          state.after = undefined;
+        } else state.after = rows.at(-1)!;
+      } else {
+        const after = state.after;
+        const candidates = await this.poolPage(this.access, deadline, async client => (await client.query<ProjectionKey>(
+          `SELECT realm, work FROM access.zone_browse_entry
+            ${after ? 'WHERE (realm, work) > ($1::text, $2::text)' : ''}
+            ORDER BY realm, work LIMIT ${ZONE_BROWSE_PROJECTION_COST.batch}`,
+          after ? [after.realm, after.work] : [])).rows);
+        if (candidates.length) {
+          const found = await this.project(`VALUES (?realm ?work) { ${candidates.map(row =>
+            `(${iri(row.realm)} ${iri(row.work)})`).join(' ')} }`, state.epochs, deadline);
+          const retained = new Set(found.map(row => `${row.realm}\n${row.work}`));
+          await this.poolPage(this.access, deadline, async client => {
+            for (const row of candidates) if (!retained.has(`${row.realm}\n${row.work}`)) {
+              this.checkDeadline(deadline);
+              await client.query('DELETE FROM access.zone_browse_entry WHERE realm = $1 AND work = $2',
+                [row.realm, row.work]);
+            }
+          });
+        }
+        complete = candidates.length < ZONE_BROWSE_PROJECTION_COST.batch;
+        state.after = candidates.at(-1);
+      }
+      // Deliveries below the captured maximum can arrive late without changing
+      // it: the validated graph already includes those effects. A new maximum
+      // or graph mutation requires another scan, never a checkpoint jump.
+      if (complete && compareRelayPositions(state.coverage, await this.mainStreamCoverage(deadline)) !== 0) {
+        this.reconciliation = undefined;
+        throw new WorkReadUnavailable('Zone browse relay coverage changed during reconciliation');
+      }
+      this.validateCut(state.cut, await this.graphCut());
+      this.checkDeadline(deadline);
+      if (complete) {
+        this.checkpoint = state.coverage;
+        this.afterEvent = null;
+        this.reconciliation = undefined;
+        this.ready = true;
+      }
+    });
   }
 
-  private async mainStreamCoverage(): Promise<RelayHandoffPosition> {
-    const row = (await this.relay.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
+  private validateCut(before: GraphCut, after: GraphCut): void {
+    if (before.dataEpoch !== after.dataEpoch || before.sequence !== after.sequence
+      || before.relaySequence !== after.relaySequence) {
+      this.reconciliation = undefined;
+      throw new WorkReadUnavailable('Zone browse authoritative cut changed during reconciliation');
+    }
+  }
+
+  private async mainStreamCoverage(deadline?: number): Promise<RelayHandoffPosition> {
+    const read = async (client: Pool | PoolClient) => (await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
       `SELECT stream_scope, data_epoch, coalesce(max(sequence),0)::text AS sequence
         FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2
         GROUP BY stream_scope, data_epoch`,
       [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch])).rows[0];
+    const row = deadline === undefined ? await read(this.relay) : await this.poolPage(this.relay, deadline, read);
     const coverage: RelayHandoffPosition = row
       ? { streamScope: row.stream_scope, dataEpoch: row.data_epoch, sequence: row.sequence }
       : { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: this.env.lineage.dataEpoch, sequence: '0' };
@@ -165,15 +251,32 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     return coverage;
   }
 
-  private async graphCut(): Promise<ReadPosition> {
-    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+  private async graphCut(): Promise<GraphCut> {
+    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence ?relaySequence WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} ; rv:sequence ?sequence .
+        ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ; rv:streamSequence ?relaySequence .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } } LIMIT 2`, 8192)).results?.bindings ?? [];
-    if (rows.length !== 1 || !/^\d+$/.test(rows[0]?.sequence?.value ?? '')) {
+    if (rows.length !== 1 || !/^\d+$/.test(rows[0]?.sequence?.value ?? '')
+      || !/^\d+$/.test(rows[0]?.relaySequence?.value ?? '')) {
       throw new WorkReadUnavailable('Zone browse graph cut is unavailable');
     }
-    return { dataEpoch: this.env.lineage.dataEpoch, sequence: rows[0]!.sequence!.value };
+    return { dataEpoch: this.env.lineage.dataEpoch, sequence: rows[0]!.sequence!.value,
+      relaySequence: rows[0]!.relaySequence!.value };
+  }
+
+  private relayGap(message: string, expected: string): never {
+    const error = new WorkReadUnavailable(message);
+    telemetryLog('worker_fault', 'error', {
+      'rezics.worker.name': 'main.zone-browse.projection',
+      'error.class': 'WorkReadUnavailable', 'error.code': error.code,
+      'rezics.relay.requested_sequence': expected,
+      'rezics.projection.checkpoint_sequence': this.checkpoint.sequence,
+      'rezics.relay.data_epoch': this.checkpoint.dataEpoch,
+    });
+    this.ready = false;
+    this.reconciliation = undefined;
+    throw error;
   }
 
   async tick(): Promise<number> {
@@ -193,7 +296,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     [this.checkpoint.streamScope, this.checkpoint.dataEpoch, this.checkpoint.sequence, coverage.sequence])).rows[0];
     if (!batch || batch.sequence !== expected || batch.stream_scope !== this.checkpoint.streamScope
       || batch.data_epoch !== this.checkpoint.dataEpoch) {
-      throw new WorkReadUnavailable('Zone browse Main relay has a missing batch');
+      this.relayGap('Zone browse Main relay has a missing batch', expected);
     }
     const batchPosition: RelayHandoffPosition = {
       streamScope: batch.stream_scope, dataEpoch: batch.data_epoch, sequence: batch.sequence,
@@ -209,7 +312,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3::numeric`,
     [batchPosition.streamScope, batchPosition.dataEpoch, batchPosition.sequence])).rows[0];
     if (!counts || counts.actual_count !== String(batch.event_count)) {
-      throw new WorkReadUnavailable('Zone browse Main relay batch is incomplete');
+      this.relayGap('Zone browse Main relay batch is incomplete', expected);
     }
 
     const rows = (await this.relay.query<{ stream_scope: string; data_epoch: string; event_id: string; envelope: {

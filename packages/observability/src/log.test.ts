@@ -93,6 +93,28 @@ test('a library backfill event carries counts and durations only', async () => {
   });
 });
 
+test('relay gap diagnostics preserve exact decimal positions and the epoch, dropping invalid values', async () => {
+  const [valid, invalid] = await capture(() => {
+    telemetryLog('worker_fault', 'error', {
+      'rezics.relay.requested_sequence': '9007199254740993',
+      'rezics.projection.checkpoint_sequence': '9007199254740992',
+      'rezics.relay.data_epoch': 'f978aab4-b7a4-434b-a961-9c7e8e728f3a',
+    });
+    telemetryLog('worker_fault', 'error', {
+      'rezics.relay.requested_sequence': '0004',
+      'rezics.projection.checkpoint_sequence': 3,
+      'rezics.relay.data_epoch': 'reader@example.com',
+    });
+  });
+  expect(logged(valid!)).toEqual({
+    level: 'error', event: 'worker_fault',
+    'rezics.relay.requested_sequence': '9007199254740993',
+    'rezics.projection.checkpoint_sequence': '9007199254740992',
+    'rezics.relay.data_epoch': 'f978aab4-b7a4-434b-a961-9c7e8e728f3a',
+  });
+  expect(logged(invalid!)).toEqual({ level: 'error', event: 'worker_fault' });
+});
+
 test('a nested checkout fault keeps bounded caller locations and drops query text', async () => {
   class NestedPoolCheckoutError extends Error {
     constructor(fields: {

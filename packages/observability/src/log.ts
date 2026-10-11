@@ -34,6 +34,9 @@ const allowed = new Set([
   'rezics.checkout.pool',
   'rezics.checkout.repeats',
   'rezics.checkout.tick',
+  'rezics.relay.requested_sequence',
+  'rezics.projection.checkpoint_sequence',
+  'rezics.relay.data_epoch',
 ]);
 const counts = new Set([
   'rezics.backfill.examined',
@@ -62,6 +65,14 @@ function publicAttributes(attributes: Attributes): Attributes {
   const result: Attributes = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (!allowed.has(key) || value === undefined) continue;
+    if (key === 'rezics.relay.requested_sequence' || key === 'rezics.projection.checkpoint_sequence') {
+      if (typeof value === 'string' && /^(0|[1-9][0-9]{0,99})$/.test(value)) result[key] = value;
+      continue;
+    }
+    if (key === 'rezics.relay.data_epoch') {
+      if (typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)) result[key] = value;
+      continue;
+    }
     if (key === 'rezics.checkout.outer') {
       if (!Array.isArray(value)) continue;
       const outers: string[] = [];
