@@ -5,6 +5,8 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const field = (value: string) => ({ type: 'literal', value });
+const streamCoverage = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' };
+const graphPosition = { dataEpoch: 'epoch', sequence: '3' };
 
 test('Discovery source advances past an unavailable classified Work without losing later candidates', async () => {
   const session = { position: { dataEpoch: 'epoch', sequence: '9' }, options: {}, deps: {},
@@ -49,13 +51,15 @@ test('metadata refresh consumes the Main position independently of its graph rec
       sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '900' },
       relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' },
       receipt: { action: 'work.edit', outcome: 'succeeded', metadata: { work: id(1) } } } };
-  const pool = { query: async () => ({ rows: [{ sequence: '4', batch_id: 'batch', routing_epoch: '1',
-    event_count: 1, event_id: 'event', envelope: event }] }) };
+  const pool = { query: async () => ({ rows: [{ after_sequence: '3',
+    coverage_stream_scope: MAIN_RELAY_STREAM_SCOPE, coverage_data_epoch: 'epoch', coverage_sequence: '4',
+    stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '4', batch_id: 'batch',
+    routing_epoch: '1', event_count: 1, event_id: 'event', envelope: event }] }) };
   const inputs = new DiscoveryRefreshInputs(pool as never, 'main');
-  expect(await inputs.read({ dataEpoch: 'epoch', sequence: '4' }, '3')).toEqual({ works: [id(1)], created: [] });
+  expect(await inputs.read(streamCoverage, graphPosition)).toEqual({ works: [id(1)], created: [] });
   event.data.relayPosition.streamScope = 'urn:rezics:stream:content';
-  expect(await inputs.read({ dataEpoch: 'epoch', sequence: '4' }, '3')).toBeNull();
+  expect(await inputs.read(streamCoverage, graphPosition)).toBeNull();
   event.data.relayPosition.streamScope = MAIN_RELAY_STREAM_SCOPE;
   event.data.relayPosition.sequence = '900';
-  expect(await inputs.read({ dataEpoch: 'epoch', sequence: '4' }, '3')).toBeNull();
+  expect(await inputs.read(streamCoverage, graphPosition)).toBeNull();
 });
