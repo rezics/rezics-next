@@ -56,9 +56,14 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
   const compose = readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'compose.env'));
   expect(compose.REZICS_STACK_STORAGE).toBe('persistent');
   const directory = join(root, '.temp/work-profiles', `seed-checkpoints-${sourceRunId}`);
-  const buildStartedAt = performance.now();
+  const qaPreparationStartedAt = Number(Bun.env.REZICS_QA_PREPARATION_STARTED_AT);
+  if (!Number.isSafeInteger(qaPreparationStartedAt) || qaPreparationStartedAt > Date.now())
+    throw new Error('QA must supply the initial stack preparation start time');
+  const stackStartupMs = Date.now() - qaPreparationStartedAt;
+  const sourceStartedAt = performance.now();
+  const buildStartedAt = sourceStartedAt - stackStartupMs;
   let source = await startMediaStack('seed-checkpoint-source', { library: true });
-  const sourceStartupMs = performance.now() - buildStartedAt;
+  const sourceStartupMs = performance.now() - sourceStartedAt;
   let sourceStopped = false;
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   let relayClosed = false;
@@ -145,7 +150,7 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
     expect(works).toHaveLength(64);
     const buildMs = performance.now() - buildStartedAt;
     expect(buildMs).toBeLessThan(600_000);
-    evidence.push({ stage: 'build', sourceStartupMs, totalMs: buildMs,
+    evidence.push({ stage: 'build', stackStartupMs, sourceStartupMs, totalMs: buildMs,
       largestCheckpointPreparationMs: checkpoints[2]!.preparationMs });
     for (const checkpoint of checkpoints) {
       verifying = checkpoint;
