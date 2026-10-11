@@ -10,9 +10,9 @@ import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
 import { exportAccessErasureRecoveryAttachment,
-  type AccessErasureRecoverySummary, type NativeAccessErasureAdmission } from '../access/erasure-recovery.ts';
-import { assertErasureJournalCoreCoverage, assertExactPublicRevisionJournalDelta,
-  captureErasureJournalCoreCoverage, verifyPublicRevisionErasureAdmissions,
+  type AccessErasureRecoverySummary } from '../access/erasure-recovery.ts';
+import { assertErasureJournalCoreCoverage, createPublicRevisionJournalDeltaVerifier,
+  captureErasureJournalCoreCoverage,
   type ErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
 import { relayCoverage, relayCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
@@ -387,6 +387,18 @@ async function readClosedAccessFence(client: PoolClient): Promise<{ generation: 
   return { generation: row.generation };
 }
 
+/** Each plaintext/encryption pass owns a fresh, paged exact journal closure. */
+export async function exportJournalBoundAccessErasureRecoveryAttachment(
+  baseAccess: PoolClient, sourceAccess: PoolClient, sourceRelay: PoolClient,
+  baseEpoch: string | null, sourceEpoch: string | null,
+  write: (chunk: Uint8Array) => Promise<void>,
+): Promise<AccessErasureRecoverySummary> {
+  const journal = await createPublicRevisionJournalDeltaVerifier(sourceRelay, baseEpoch, sourceEpoch);
+  const summary = await exportAccessErasureRecoveryAttachment(baseAccess, sourceAccess, write, journal.verifyAdmissions);
+  journal.assertComplete();
+  return summary;
+}
+
 async function captureNativeAccessErasureReference(
   accessPool: Pool,
   relayPool: Pool,
@@ -469,13 +481,9 @@ async function captureNativeAccessErasureReference(
       throw new RestoreLineageConflict('current relay journal prefix differs from signed C0 history');
     }
 
-    const admissionIds = new Set<string>();
-    const verifyAdmissions = async (admissions: readonly NativeAccessErasureAdmission[]) => {
-      for (const admission of admissions) admissionIds.add(admission.id);
-      await verifyPublicRevisionErasureAdmissions(sourceRelay, admissions, baseJournal.epoch, sourceJournal.epoch);
-    };
     const exportAttachment = (write: (chunk: Uint8Array) => Promise<void>) =>
-      exportAccessErasureRecoveryAttachment(baseAccess, sourceAccess, write, verifyAdmissions);
+      exportJournalBoundAccessErasureRecoveryAttachment(baseAccess, sourceAccess, sourceRelay,
+        baseJournal.epoch, sourceJournal.epoch, write);
     const summary = await exportAttachment(async () => {});
     if (!sameCoverage(summary.baseState, rowCoverage(custody.baseCoverage.accessStateCount,
       custody.baseCoverage.accessStateDigest))
@@ -489,7 +497,6 @@ async function captureNativeAccessErasureReference(
       || summary.sourceFenceGeneration !== sourceFence.generation) {
       throw new RestoreLineageConflict('native Access attachment does not bind the signed base and current cuts');
     }
-    await assertExactPublicRevisionJournalDelta(sourceRelay, baseJournal.epoch, sourceJournal.epoch, admissionIds);
     if (summary.rowCount === '0') return undefined;
     const encrypted = await custody.encryptAttachment(exportAttachment);
     if (JSON.stringify(encrypted.value) !== JSON.stringify(summary)) {

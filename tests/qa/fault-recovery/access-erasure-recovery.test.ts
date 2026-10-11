@@ -7,6 +7,8 @@ import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from
 import { ERASURE_JOURNAL_EPOCH } from '../../../services/main/src/modules/erasure/journal.ts';
 import { contentErasureDigest, erasureReceiptIri } from
   '../../../services/main/src/modules/erasure/request.ts';
+import { exportJournalBoundAccessErasureRecoveryAttachment } from
+  '../../../services/main/src/modules/work/restore-lineage.ts';
 import { scanAccessOutbox, scanAccessTables, accessOutboxCoverage, accessStateTables } from
   '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { ACCESS_ERASURE_RECOVERY_PAGE, AccessErasureRecoveryConflict,
@@ -67,9 +69,10 @@ async function beginSnapshot(client: PoolClient, readOnly = true): Promise<void>
 test('OPS: native Access recovery replays exact erasure admissions, receipts, outboxes and fence invalidations', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated fault/recovery QA tier');
-  const owners = await cloneQaOwnerDatabases(runId, ['access'], 'owner');
+  const owners = await cloneQaOwnerDatabases(runId, ['access', 'relay'], 'owner');
   const pools = new Set<Pool>();
   let source = pool(owners.urls.access, pools);
+  const relay = pool(owners.urls.relay, pools);
   let base: Pool | undefined;
   const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
   const actor = `https://rezics.com/id/${randomUUID()}`;
@@ -98,7 +101,9 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     const requestDigests = revisionIds.map(revisionId => contentErasureDigest({ actingSubject: actor,
       resourceId: resource, revisionIds: [revisionId] }));
     const receipts = admissionIds.map(erasureReceiptIri);
-    const sequences = admissionIds.map((_, index) => String(index + 1));
+    const baseJournalEpoch = (await relay.query<{ epoch: string | null }>(
+      'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows[0]!.epoch;
+    const sequences = admissionIds.map((_, index) => String(BigInt(baseJournalEpoch ?? '0') + BigInt(index + 1)));
     await source.query(`INSERT INTO access.admission
         (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
          authority_epoch, expires_at, state, claimed_at, graph_receipt, graph_outcome,
@@ -148,6 +153,78 @@ test('OPS: native Access recovery replays exact erasure admissions, receipts, ou
     expect(rows.filter(row => row.table === 'access.also_enjoyed_source_change')).toHaveLength(2);
     expect((rows.find(row => row.table === 'access.admission')!.values.authority_witness as object))
       .toEqual({ $rezicsNativeJson: 'sql-null' });
+
+    const readBase = await base.connect(), readSource = await source.connect(), journal = await relay.connect();
+    try {
+      await beginSnapshot(readBase);
+      await beginSnapshot(readSource);
+      await journal.query('BEGIN');
+      const baseEpoch = (await journal.query<{ epoch: string | null }>(
+        'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows[0]!.epoch;
+      expect(baseEpoch).toBe(baseJournalEpoch);
+      const erasureIds = admissionIds.map(() => randomUUID());
+      const insertJournal = async (from: number, through: number) => {
+        await journal.query(`INSERT INTO relay.erasure
+          (id, erasure_epoch, operation_id, request_digest, kind, authority, principal_id,
+           admission_id, authority_epoch, stage, suppression_status, suppressed_at)
+          SELECT item.id, item.epoch, 'erasure:' || item.admission_id, item.digest,
+            'revision', 'access_admission', $1, item.admission_id, 0, 'fenced', 'suppressed', clock_timestamp()
+          FROM unnest($2::uuid[], $3::bigint[], $4::uuid[], $5::text[])
+            AS item(id, epoch, admission_id, digest)`,
+        [principalId, erasureIds.slice(from, through), sequences.slice(from, through),
+          admissionIds.slice(from, through), requestDigests.slice(from, through)]);
+        await journal.query(`INSERT INTO relay.erasure_target (erasure_id, ordinal, owner, target_kind, target_ref)
+          SELECT item.id, 1, 'content', 'content_revision', item.revision
+          FROM unnest($1::uuid[], $2::text[]) AS item(id, revision)`,
+        [erasureIds.slice(from, through), revisionIds.slice(from, through)]);
+      };
+      const exportBoundJournal = (sourceEpoch: string) =>
+        exportJournalBoundAccessErasureRecoveryAttachment(readBase, readSource, journal,
+          baseEpoch, sourceEpoch, async () => {});
+      await insertJournal(0, admissionIds.length - 1);
+      await expect(exportBoundJournal(sequences[sequences.length - 2]!))
+        .rejects.toThrow('native admissions and current erasure journal delta differ');
+      await insertJournal(admissionIds.length - 1, admissionIds.length);
+
+      let peakRetainedCollection = 0;
+      const add = Set.prototype.add, set = Map.prototype.set;
+      Set.prototype.add = function<T>(this: Set<T>, value: T): Set<T> {
+        const result = add.call(this, value) as Set<T>;
+        peakRetainedCollection = Math.max(peakRetainedCollection, this.size);
+        return result;
+      };
+      Map.prototype.set = function<K, V>(this: Map<K, V>, key: K, value: V): Map<K, V> {
+        const result = set.call(this, key, value) as Map<K, V>;
+        peakRetainedCollection = Math.max(peakRetainedCollection, this.size);
+        return result;
+      };
+      try {
+        const exact = await exportBoundJournal(sequences[sequences.length - 1]!);
+        expect(exact).toEqual(captured.summary);
+        // Encryption runs a second export: its closure must start from the first ID again.
+        expect(await exportBoundJournal(sequences[sequences.length - 1]!)).toEqual(exact);
+      } finally {
+        Set.prototype.add = add;
+        Map.prototype.set = set;
+      }
+      expect(peakRetainedCollection).toBe(ACCESS_ERASURE_RECOVERY_PAGE);
+
+      const extraAdmission = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+      await journal.query(`INSERT INTO relay.erasure
+        (id, erasure_epoch, operation_id, request_digest, kind, authority, principal_id,
+         admission_id, authority_epoch, stage, suppression_status, suppressed_at)
+        VALUES ($1, $2, $3, $4, 'revision', 'access_admission', $5, $6, 0,
+          'fenced', 'suppressed', clock_timestamp())`,
+      [randomUUID(), String(BigInt(sequences[sequences.length - 1]!) + 1n), `erasure:${extraAdmission}`,
+        requestDigests[0], principalId, extraAdmission]);
+      await expect(exportBoundJournal(String(BigInt(sequences[sequences.length - 1]!) + 1n)))
+        .rejects.toThrow('native admissions and current erasure journal delta differ');
+    } finally {
+      await readBase.query('ROLLBACK');
+      await readSource.query('ROLLBACK');
+      await journal.query('ROLLBACK');
+      readBase.release(); readSource.release(); journal.release();
+    }
 
     const sourceState = await accessStateTables(source);
     const sourceOutbox = await accessOutboxCoverage(source);

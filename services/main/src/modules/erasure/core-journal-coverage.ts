@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { assertPublicRevisionErasureRequestDigest,
+import { ACCESS_ERASURE_RECOVERY_PAGE, assertPublicRevisionErasureRequestDigest,
   type NativeAccessErasureAdmission } from '../access/erasure-recovery.ts';
 import { GRAPH_ERASURE_KINDS } from './revision-kind.ts';
 import { ERASURE_TARGET_OWNERS } from './schema.ts';
@@ -17,6 +17,7 @@ export interface ErasureJournalCoreCoverage {
 export class ErasureJournalCoverageConflict extends Error {}
 
 interface JournalFacts { epoch: string; facts: unknown }
+interface JournalAdmission { admission_id: string | null; authority: string; kind: string }
 type Queryable = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
 async function journalEpoch(relay: Queryable): Promise<string | null> {
@@ -143,44 +144,57 @@ export async function verifyPublicRevisionErasureAdmissions(
   }
 }
 
-/** No account, resource or unrelated journal entries may share the native delta. */
-export async function assertExactPublicRevisionJournalDelta(
+/** Merge native admission pages with the journal; neither side retains the full delta. */
+export async function createPublicRevisionJournalDeltaVerifier(
   relay: PoolClient,
   baseEpoch: string | null,
   sourceEpoch: string | null,
-  admissionIds: ReadonlySet<string>,
-): Promise<void> {
-  const expected = new Set(admissionIds);
+) {
   if (baseEpoch !== null && (sourceEpoch === null || BigInt(sourceEpoch) < BigInt(baseEpoch))) {
     throw new ErasureJournalCoverageConflict('current erasure journal epoch regressed from base cut');
   }
-  if (sourceEpoch === baseEpoch) {
-    if (expected.size) throw new ErasureJournalCoverageConflict('native erasure was not added to the current journal');
-    return;
-  }
-  const after = baseEpoch ?? '0';
-  let cursor = after;
-  let count = 0n;
-  while (sourceEpoch !== null) {
-    const page = (await relay.query<{ epoch: string; admission_id: string | null; authority: string; kind: string }>(`SELECT
-        erasure_epoch::text AS epoch, admission_id::text, authority, kind FROM relay.erasure
-      WHERE erasure_epoch > $1::bigint AND erasure_epoch <= $2::bigint
-      ORDER BY erasure_epoch LIMIT ${ERASURE_JOURNAL_COVERAGE_PAGE}`, [cursor, sourceEpoch])).rows;
-    for (const row of page) {
-      if (row.authority !== 'access_admission' || row.kind !== 'revision' || !row.admission_id
-        || !expected.delete(row.admission_id)) {
-        throw new ErasureJournalCoverageConflict('current journal delta includes an unsupported erasure entry');
+  async function* journalAdmissions(): AsyncGenerator<string> {
+    let after: string | null = null;
+    while (sourceEpoch !== null && sourceEpoch !== baseEpoch) {
+      const page: JournalAdmission[] = (await relay.query<JournalAdmission>(`SELECT
+          admission_id::text, authority, kind FROM relay.erasure
+        WHERE erasure_epoch > $1::bigint AND erasure_epoch <= $2::bigint
+          AND ($3::uuid IS NULL OR admission_id > $3::uuid)
+        ORDER BY admission_id NULLS FIRST LIMIT ${ERASURE_JOURNAL_COVERAGE_PAGE}`,
+      [baseEpoch ?? '0', sourceEpoch, after])).rows;
+      for (const row of page) {
+        if (row.authority !== 'access_admission' || row.kind !== 'revision' || !row.admission_id) {
+          throw new ErasureJournalCoverageConflict('current journal delta includes an unsupported erasure entry');
+        }
+        yield row.admission_id;
       }
-      count++;
+      if (page.length < ERASURE_JOURNAL_COVERAGE_PAGE) return;
+      after = page[page.length - 1]!.admission_id;
     }
-    if (page.length < ERASURE_JOURNAL_COVERAGE_PAGE) break;
-    const lastEpoch = page[page.length - 1]?.epoch;
-    if (!lastEpoch || BigInt(lastEpoch) <= BigInt(cursor)) {
-      throw new ErasureJournalCoverageConflict('current journal delta cannot resume its native page');
-    }
-    cursor = lastEpoch;
   }
-  if (expected.size || count !== BigInt(admissionIds.size)) {
-    throw new ErasureJournalCoverageConflict('native admissions and current erasure journal delta differ');
-  }
+  const entries = journalAdmissions();
+  let next = await entries.next();
+  let previous: string | null = null;
+  return {
+    verifyAdmissions: async (admissions: readonly NativeAccessErasureAdmission[]): Promise<void> => {
+      if (admissions.length > ACCESS_ERASURE_RECOVERY_PAGE) {
+        throw new ErasureJournalCoverageConflict('native Access erasure admission page exceeds its bound');
+      }
+      // Both owners order UUID keys identically. A scalar cursor also rejects
+      // repeats across pages without an ever-growing admission ID collection.
+      for (const admission of admissions) {
+        if ((previous !== null && admission.id <= previous) || next.done || next.value !== admission.id) {
+          throw new ErasureJournalCoverageConflict('native admissions and current erasure journal delta differ');
+        }
+        previous = admission.id;
+        next = await entries.next();
+      }
+      await verifyPublicRevisionErasureAdmissions(relay, admissions, baseEpoch, sourceEpoch);
+    },
+    assertComplete: (): void => {
+      if (!next.done) {
+        throw new ErasureJournalCoverageConflict('native admissions and current erasure journal delta differ');
+      }
+    },
+  };
 }

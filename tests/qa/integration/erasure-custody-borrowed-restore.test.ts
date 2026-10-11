@@ -6,7 +6,7 @@ import { Client, Pool, type PoolClient } from 'pg';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
+import { ObjectIntegrityError, ObjectNotFound, ObjectUnavailable, type ImmutableObjects } from
   '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AdmissionUnavailable, engageAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
@@ -35,6 +35,17 @@ class DirectoryObjects implements ImmutableObjects {
     catch { throw new ObjectUnavailable('original fixture object is missing'); }
     if (hash(bytes) !== digest) throw new ObjectIntegrityError('original fixture object is corrupt');
     return bytes;
+  }
+  async probe(digest: string): Promise<void> {
+    let bytes: Buffer;
+    try { bytes = readFileSync(join(this.directory, digest)); }
+    catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        throw new ObjectNotFound('original fixture object is missing');
+      }
+      throw error;
+    }
+    if (hash(bytes) !== digest) throw new ObjectIntegrityError('original fixture object is corrupt');
   }
 }
 
