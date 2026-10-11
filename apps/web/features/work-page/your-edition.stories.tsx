@@ -57,4 +57,4 @@ export const SameTitleEditions: Story = {
 };
 
 export const SameTitleEditionsPhone: Story = { ...SameTitleEditions,
-  args: { main: createMemoryMain({ editions }) }, globals: { viewport: { value: 'mobile' } } };
+  args: { main: createMemoryMain({ editions }) }, globals: { viewport: { value: 'phone' } } };
