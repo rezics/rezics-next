@@ -1,5 +1,5 @@
 import { type AgentSummary, type ChapterSummary, failureOf, iriOf, type Loaded, type MainClient, type ModerationKind,
-  type PersonRecord, uuidOf, type WorkFacts, type WorkSummary } from './types.ts';
+  type PersonRecord, type RoleList, uuidOf, type WorkFacts, type WorkSummary } from './types.ts';
 
 // Reads shared by the server render and the browser (load more, refresh after
 // a decision). Each takes the Eden client for its side and returns `Loaded`
@@ -83,6 +83,11 @@ export function readOutgoingInvitations(main: MainClient, realm: string, actingS
 
 export function readRoles(main: MainClient, realm: string, actingSubject: string) {
   return settle(() => main.v1.realms({ realm }).roles.get({ query: { actingSubject } }), { management: true });
+}
+
+/** A route refresh may still carry the pre-save props. Keep the newer confirmed read. */
+export function newestRoleList(server: RoleList, saved: RoleList | null): RoleList {
+  return saved && BigInt(saved.generation) > BigInt(server.generation) ? saved : server;
 }
 
 export function readSettings(main: MainClient, realm: string, actingSubject: string) {

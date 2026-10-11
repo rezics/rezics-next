@@ -20,7 +20,7 @@ import { ImpactPreview } from './impact-preview.tsx';
 import { failureText } from './members-view.tsx';
 import type { ManageMessages } from './messages.ts';
 import { permissionOrder, permissionText, sortPermissions } from './permissions.ts';
-import { mergeAgents } from './read.ts';
+import { mergeAgents, newestRoleList } from './read.ts';
 import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import type { AgentSummary, RealmPermission, Role, RoleChange, RoleList } from './types.ts';
@@ -29,7 +29,7 @@ import type { AgentSummary, RealmPermission, Role, RoleChange, RoleList } from '
  * The Realm's roles as bundles of permissions in plain words. Every edit shows
  * who gains or loses what before it can be saved.
  */
-export function RolesView({ realm, address = realm, actingSubject, list, agents, locale, messages, api: givenApi }: {
+export function RolesView({ realm, address = realm, actingSubject, list: serverList, agents, locale, messages, api: givenApi }: {
   realm: string; address?: string; actingSubject: string; list: RoleList; agents: Record<string, AgentSummary>;
   locale: UiLocale; messages: ManageMessages; api?: AdminApi;
 }) {
@@ -38,6 +38,9 @@ export function RolesView({ realm, address = realm, actingSubject, list, agents,
   const router = useRouter();
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [savedList, setSavedList] = useState<{ realm: string; actingSubject: string; list: RoleList } | null>(null);
+  const list = newestRoleList(serverList,
+    savedList?.realm === realm && savedList.actingSubject === actingSubject ? savedList.list : null);
   const name = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
   const atCap = list.roles.length >= list.cap;
   return <div className="grid gap-5">
@@ -88,13 +91,18 @@ export function RolesView({ realm, address = realm, actingSubject, list, agents,
       </ul>}
     {editing ? <RoleEditor role={editing === 'new' ? null : editing} generation={list.generation} api={api}
       actingSubject={actingSubject} agents={agents} locale={locale} messages={messages} onClose={() => setEditing(null)}
-      onSaved={() => { setEditing(null); setStatus(t.roleSaved); router.refresh(); }} /> : null}
+      onSaved={async () => {
+        const refreshed = await api.roles();
+        if (refreshed.ok) setSavedList(current => ({ realm, actingSubject, list: newestRoleList(refreshed.data,
+          current?.realm === realm && current.actingSubject === actingSubject ? current.list : null) }));
+        setEditing(null); setStatus(t.roleSaved); router.refresh();
+      }} /> : null}
   </div>;
 }
 
 function RoleEditor({ role, generation, api, actingSubject, agents, locale, messages, onClose, onSaved }: {
   role: Role | null; generation: string; api: AdminApi; actingSubject: string; agents: Record<string, AgentSummary>;
-  locale: UiLocale; messages: ManageMessages; onClose: () => void; onSaved: () => void;
+  locale: UiLocale; messages: ManageMessages; onClose: () => void; onSaved: () => Promise<void>;
 }) {
   const t = materializeData(messages, { locale });
   const [roleId] = useState(() => role?.id ?? crypto.randomUUID());
@@ -115,9 +123,8 @@ function RoleEditor({ role, generation, api, actingSubject, agents, locale, mess
     if (!reason.trim()) { setError(t.reasonRequired); return; }
     setPending(true); setError(null);
     const result = await save(reason);
-    setPending(false);
-    if (!result.ok) { setError(failureText(result.failure, t, 'role')); return; }
-    onSaved();
+    if (!result.ok) { setPending(false); setError(failureText(result.failure, t, 'role')); return; }
+    await onSaved();
   }
 
   return <CommandDialog open title={role ? t.editRole : t.newRole} confirm={role ? t.saveRole : t.createRole}
