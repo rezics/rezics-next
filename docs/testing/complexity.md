@@ -107,8 +107,7 @@ The meter retains that response only when explicit query capture is enabled.
 
 [`work-profile-corpus`](../../scripts/load/work-profile-corpus.ts) defines three
 diagnostic scales (4/16/64) for unrelated Works, unrelated posts, follows,
-memberships, Realm size and Concept vocabulary, and 2/8/32 for history depth. Change one dimension and hold
-the others fixed.
+memberships, Realm size, Concept vocabulary, reading shelf entries, public Zone mounts and mounted Collection resources; history depth uses 2/8/32 and active Recipe occurrences use 100/400/1,600. Growth checks change one dimension and hold the others fixed. Preparation can co-grow several declared populations in one stopped checkpoint; each consuming check still chooses its own varying axis.
 Scenario owners supply their existing public command flows and read-back
 verification, including publication, membership consent and expected heads.
 History revisions run serially; independent entities use two seed workers.
@@ -117,6 +116,7 @@ retained manifests also check the existing load model/schema/engine compatibilit
 Stable entity ids belong to the retained backup: restoring that checkpoint
 preserves them, while a fresh API build generates new ids. The
 [seed owner contract](../../scripts/load/README.md) distinguishes those identities.
+The [retained seed command cost report](../goals/kernel/reports/seed-build-command-cost.md) records the existing request meters for the 16-Work cut; it measures preparation cost without changing owner operations.
 Preparation verifies all dimensions before retaining a stopped backup; later
 runs restore distinct writable copies. Bind the backup driver to the existing
 fixture/load backup and restore workflow, never copy live storage. Include
