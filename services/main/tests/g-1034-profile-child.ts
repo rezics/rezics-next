@@ -62,20 +62,40 @@ const instrumentRestoredFetch = () => {
 const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
 const originalQuery = prototype.query;
 let foregroundStatements = 0;
+type SqlStatement = { database: string | null; statement: string | null };
+let foregroundStatementList: SqlStatement[] | undefined;
 prototype.query = function (this: object, ...args: unknown[]) {
-  if (foregroundCounted()) foregroundStatements++;
+  if (foregroundCounted()) {
+    foregroundStatements++;
+    const query = args[0];
+    const text =
+      typeof query === 'string'
+        ? query
+        : query && typeof query === 'object' && 'text' in query && typeof query.text === 'string'
+          ? query.text
+          : null;
+    const client = this as { connectionParameters?: { database?: string } };
+    foregroundStatementList?.push({
+      database: client.connectionParameters?.database ?? null,
+      statement: text?.replace(/\s+/g, ' ').trim() ?? null,
+    });
+  }
   return originalQuery.apply(this, args);
 };
 const profileForegroundRequest = async <T>(request: (headers: Headers) => Promise<T>) => {
   let statements = 0;
+  const statementList: SqlStatement[] = [];
   const measured = await profileRequest(
     sink,
     async (headers) => {
       const before = foregroundStatements;
+      const previous = foregroundStatementList;
+      foregroundStatementList = statementList;
       try {
         return await request(headers);
       } finally {
         statements = foregroundStatements - before;
+        foregroundStatementList = previous;
       }
     },
     { service: 'main', flush: flushTelemetryTraces },
@@ -84,6 +104,7 @@ const profileForegroundRequest = async <T>(request: (headers: Headers) => Promis
     ...measured,
     profile: { ...measured.profile, postgresStatements: statements },
     tracedPostgresStatements: measured.profile.postgresStatements,
+    postgresStatementList: statementList,
   };
 };
 const evidence: Record<string, unknown>[] = [];
@@ -94,6 +115,7 @@ const profiles: {
   viewer: string;
   temperature: string;
   profile: Awaited<ReturnType<typeof profileRequest>>['profile'];
+  postgresStatementList: SqlStatement[];
 }[] = [];
 const replyWrites: {
   size: number;
@@ -682,7 +704,14 @@ try {
               }),
             { threads: size, sort, viewer, temperature },
           );
-          profiles.push({ size, operation: sort, viewer, temperature, profile: measured.profile });
+          profiles.push({
+            size,
+            operation: sort,
+            viewer,
+            temperature,
+            profile: measured.profile,
+            postgresStatementList: measured.postgresStatementList,
+          });
         }
       for (const after of [false, true]) {
         const pivot = (
