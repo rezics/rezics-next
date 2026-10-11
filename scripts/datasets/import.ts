@@ -200,6 +200,50 @@ export interface DatasetImportResult {
   limitations: string[];
   completed: boolean;
   nativeRelationships: number;
+  /** Bounded outcomes for each elected cover; record is a stable hash, not a source URL. */
+  coverResults: DatasetCoverImportResult[];
+}
+
+export type DatasetCoverImportStep =
+  | 'target-work'
+  | 'evidence-capture'
+  | 'source-evidence'
+  | 'reservation'
+  | 'upload'
+  | 'selection-read'
+  | 'selection';
+
+export type DatasetCoverImportReasonCode =
+  | 'work-receipt-unavailable'
+  | 'source-evidence-unavailable'
+  | 'capture-unavailable'
+  | 'cover-descriptor-invalid'
+  | 'source-capture-invalid'
+  | 'image-capture-invalid'
+  | 'image-digest-mismatch'
+  | 'holder-evidence-invalid'
+  | 'source-evidence-too-large'
+  | 'source-evidence-rejected'
+  | 'source-evidence-invalid'
+  | 'reservation-refused'
+  | 'reservation-invalid'
+  | 'upload-failed'
+  | 'selection-intent-invalid'
+  | 'selection-read-failed'
+  | 'selection-refused'
+  | 'fence-refused'
+  | 'selection-receipt-invalid'
+  | 'cover-api-unavailable';
+
+export interface DatasetCoverImportResult {
+  /** SHA-256 of the local record key; source identifiers and URLs stay out of diagnostics. */
+  record: string;
+  status: 'imported' | 'pending';
+  step?: DatasetCoverImportStep;
+  reasonCode?: DatasetCoverImportReasonCode;
+  httpStatus?: number;
+  /** Redacted problem type token, never the response URL or arbitrary response text. */
+  problemType?: string;
 }
 
 async function request(
@@ -219,6 +263,36 @@ async function request(
 }
 
 type ApiResponse = { status: number; body: Record<string, unknown> };
+
+function responseCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value)
+    ? value
+    : undefined;
+}
+
+/** Keep only the safe terminal token from a problem type; never persist or print its URL. */
+function redactedProblemType(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 2048) return undefined;
+  let token = value;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      token = parsed.pathname.split('/').filter(Boolean).at(-1) ?? '';
+    } else {
+      token = value.split(':').at(-1) ?? '';
+    }
+  } catch {
+    token = value.split(':').at(-1) ?? value;
+  }
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(token) ? token : undefined;
+}
+
+function refusalDetails(response?: ApiResponse): Pick<DatasetCoverImportResult, 'httpStatus' | 'problemType'> {
+  if (!response || !Number.isInteger(response.status) || response.status < 300 || response.status > 599)
+    return {};
+  const problemType = redactedProblemType(response.body.type);
+  return { httpStatus: response.status, ...(problemType ? { problemType } : {}) };
+}
 
 /** Retries uncertain replies with the same exact request identity and body. */
 async function responseWithRetry(
@@ -264,14 +338,12 @@ async function transferWithRetry(api: DatasetApi, path: string, bytes: Uint8Arra
 }
 
 function responseReason(response: ApiResponse): string {
-  const code = typeof response.body.code === 'string' ? response.body.code : '';
-  const reason = typeof response.body.reason === 'string' ? response.body.reason : '';
+  const code = responseCode(response.body.code) ?? '';
   if (code === 'stale_head') return 'stale selection';
   if (/suppress|restrict|fenc/i.test(code)) return `restricted${code ? ` (${code})` : ''}`;
   if ([401, 403].includes(response.status)) return `denied${code ? ` (${code})` : ''}`;
   if ([502, 503, 504].includes(response.status)) return `owner unavailable${code ? ` (${code})` : ''}`;
   if (response.status === 413) return 'cover exceeds the Main upload limit';
-  if (reason) return `upload refused (${reason})`;
   if (code) return `${code} (HTTP ${response.status})`;
   return `HTTP ${response.status}`;
 }
@@ -787,6 +859,7 @@ export async function importDataset(
     const selected =
       options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
     const urlsFile = join(root, 'urls.md');
+    const coverResults = new Map<string, DatasetCoverImportResult>();
     try {
       options.progress?.(
         `Retaining ${selected.length} source records and their complete outgoing relationships through the public intake API`,
@@ -1120,20 +1193,30 @@ export async function importDataset(
         if (image.captureRole !== 'cover') continue;
         const record = byKey.get(image.record);
         if (!record || !selectedKeys.has(image.record)) continue;
-        const pending = (reason: string) => note(`${record.key}: cover pending (${reason})`);
+        const recordDigest = sha256(record.key);
+        const pending = (reason: string, step: DatasetCoverImportStep,
+          reasonCode: DatasetCoverImportReasonCode, response?: ApiResponse) => {
+          const details = refusalDetails(response);
+          coverResults.set(record.key, { record: recordDigest, status: 'pending', step, reasonCode, ...details });
+          const log = `Imported cover ${recordDigest.slice(0, 16)} pending step=${step} reason=${reasonCode}`
+            + (details.httpStatus ? ` HTTP ${details.httpStatus}` : '')
+            + (details.problemType ? ` problem=${details.problemType}` : '');
+          (options.progress ?? console.info)(log);
+          note(`cover ${recordDigest.slice(0, 16)} pending (${reason})`);
+        };
         const mapped = journal.native[image.record];
         if (mapped?.kind !== 'work' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(mapped.id)) {
-          pending('native Work receipt unavailable');
+          pending('native Work receipt unavailable', 'target-work', 'work-receipt-unavailable');
           continue;
         }
         const source = image.sourceEvidence;
         if (!source) {
-          pending('source evidence unavailable');
+          pending('source evidence unavailable', 'source-evidence', 'source-evidence-unavailable');
           continue;
         }
         const capture = image.capture;
         if (image.missing || image.unavailable || !capture) {
-          pending(image.missing ? 'capture missing' : 'capture unavailable');
+          pending(image.missing ? 'capture missing' : 'capture unavailable', 'evidence-capture', 'capture-unavailable');
           continue;
         }
         if (!SHA256.test(snapshot.digest) || !SHA256.test(capture.digest) || !SHA256.test(source.recordDigest)
@@ -1151,24 +1234,25 @@ export async function importDataset(
           || typeof capture.mediaType !== 'string' || !capture.mediaType.startsWith('image/')
           || !Number.isSafeInteger(capture.bytes) || capture.bytes < 1
           || capture.bytes > MAX_COVER_BYTES) {
-          pending(capture.bytes > MAX_COVER_BYTES ? 'capture exceeds the Work cover limit' : 'cover descriptor is invalid');
+          pending(capture.bytes > MAX_COVER_BYTES ? 'capture exceeds the Work cover limit' : 'cover descriptor is invalid',
+            'evidence-capture', capture.bytes > MAX_COVER_BYTES ? 'image-capture-invalid' : 'cover-descriptor-invalid');
           continue;
         }
         try {
           verifyCoverSourceCapture(root, snapshot.captures, image);
         } catch {
-          pending('source record capture is unavailable or corrupt');
+          pending('source record capture is unavailable or corrupt', 'evidence-capture', 'source-capture-invalid');
           continue;
         }
         let frozenBytes: Buffer;
         try {
           frozenBytes = verifiedBlob(root, capture.digest);
         } catch {
-          pending('frozen capture is unavailable or corrupt');
+          pending('frozen capture is unavailable or corrupt', 'evidence-capture', 'image-capture-invalid');
           continue;
         }
         if (frozenBytes.byteLength !== capture.bytes || sha256(frozenBytes) !== capture.digest) {
-          pending('frozen capture digest differs');
+          pending('frozen capture digest differs', 'evidence-capture', 'image-digest-mismatch');
           continue;
         }
         const holderEvidence = source.holder
@@ -1178,7 +1262,7 @@ export async function importDataset(
           || typeof holderEvidence.fieldLocator !== 'string'
           || (!holderEvidence.fieldLocator.startsWith('/') && holderEvidence.fieldLocator !== '')
           || /~(?![01])/.test(holderEvidence.fieldLocator))) {
-          pending('holder evidence is invalid');
+          pending('holder evidence is invalid', 'evidence-capture', 'holder-evidence-invalid');
           continue;
         }
         const envelope = {
@@ -1205,7 +1289,7 @@ export async function importDataset(
         };
         const envelopeBytes = Buffer.from(canonical(envelope));
         if (envelopeBytes.byteLength > 65_536) {
-          pending('cover evidence exceeds the Source intake limit');
+          pending('cover evidence exceeds the Source intake limit', 'source-evidence', 'source-evidence-too-large');
           continue;
         }
         const candidate = sha256(canonical({
@@ -1229,17 +1313,18 @@ export async function importDataset(
           coverage: { scope: 'cover-evidence', complete: false, omittedFields: ['description'] },
           rightsEvidence: sourceEvidence(record),
         };
+        let activeStep: DatasetCoverImportStep = 'source-evidence';
         try {
           const evidenceReply = await coverCall(`${label}:evidence`, 'cover-evidence', 'POST',
             '/v1/sources/intakes', evidenceBody);
           if (evidenceReply.status >= 300) {
-            pending(responseReason(evidenceReply));
+            pending(responseReason(evidenceReply), 'source-evidence', 'source-evidence-rejected', evidenceReply);
             continue;
           }
           const retained = evidenceReply.body.observation as Record<string, unknown> | undefined;
           if (!retained || typeof retained.byteDigest !== 'string'
             || retained.byteDigest !== sha256(envelopeBytes)) {
-            pending('Source did not return the retained cover evidence digest');
+            pending('Source did not return the retained cover evidence digest', 'source-evidence', 'source-evidence-invalid');
             continue;
           }
           const sourceRecordId = nativeId(retained, 'record');
@@ -1281,10 +1366,11 @@ export async function importDataset(
             actingSubject,
             importedCover: provenance,
           };
+          activeStep = 'reservation';
           const reserve = await coverCall(`${label}:reserve`, 'cover-reserve', 'POST',
             '/v1/media/uploads', reserveBody);
           if (reserve.status >= 300) {
-            pending(responseReason(reserve));
+            pending(responseReason(reserve), 'reservation', 'reservation-refused', reserve);
             continue;
           }
           const asset = reserve.body.asset;
@@ -1293,14 +1379,15 @@ export async function importDataset(
           if (typeof asset !== 'string' || !UUID.test(asset)
             || typeof upload !== 'string' || !UUID.test(upload)
             || uploadUrl !== `/v1/media/uploads/${upload}/bytes`) {
-            pending('Main returned an invalid upload reservation');
+            pending('Main returned an invalid upload reservation', 'reservation', 'reservation-invalid');
             continue;
           }
+          activeStep = 'upload';
           const transferred = await coverTransfer(`${label}:transfer`, uploadUrl, capture.digest, capture.bytes);
           if (transferred.status >= 300 || transferred.body.status !== 'activated'
             || transferred.body.clearance === 'rejected'
             || typeof transferred.body.representation !== 'string') {
-            pending(responseReason(transferred));
+            pending(responseReason(transferred), 'upload', 'upload-failed', transferred);
             continue;
           }
           const selectionLabel = `${label}:selection`;
@@ -1309,7 +1396,7 @@ export async function importDataset(
           if (priorSelection) {
             if (!priorSelection.body || typeof priorSelection.body !== 'object'
               || Array.isArray(priorSelection.body)) {
-              pending('saved cover selection intent is invalid');
+              pending('saved cover selection intent is invalid', 'selection', 'selection-intent-invalid');
               continue;
             }
             selectionBody = priorSelection.body as Record<string, unknown>;
@@ -1317,14 +1404,16 @@ export async function importDataset(
               || selectionBody.asset !== asset || selectionBody.actingSubject !== actingSubject
               || (selectionBody.expectedSelection !== null
                 && (typeof selectionBody.expectedSelection !== 'string' || !UUID.test(selectionBody.expectedSelection)))) {
-              pending('saved cover selection intent does not match its asset or target');
+              pending('saved cover selection intent does not match its asset or target', 'selection', 'selection-intent-invalid');
               continue;
             }
           } else {
+            activeStep = 'selection-read';
             const read = await coverCall(`${label}:read`, 'cover-read', 'GET',
               `/v1/resources/${short(mapped.id)}?actingSubject=${encodeURIComponent(actingSubject)}`);
             if (read.status >= 300 || read.body.status !== 'available') {
-              pending(read.status >= 300 ? responseReason(read) : 'Work summary unavailable');
+              pending(read.status >= 300 ? responseReason(read) : 'Work summary unavailable', 'selection-read',
+                'selection-read-failed', read.status >= 300 ? read : undefined);
               continue;
             }
             const avatar = read.body.avatar as Record<string, unknown> | undefined;
@@ -1333,7 +1422,7 @@ export async function importDataset(
             else if (avatar?.kind === 'image' && typeof avatar.selection === 'string'
               && UUID.test(avatar.selection)) expectedSelection = avatar.selection;
             else {
-              pending('current Work cover selection is unavailable');
+              pending('current Work cover selection is unavailable', 'selection-read', 'selection-read-failed');
               continue;
             }
             selectionBody = {
@@ -1343,17 +1432,22 @@ export async function importDataset(
               actingSubject,
             };
           }
+          activeStep = 'selection';
           const selectedCover = await coverCall(selectionLabel, 'cover-selection', 'PUT',
             `/v1/resources/${short(mapped.id)}/avatar`, selectionBody);
           if (selectedCover.status === 409 && selectedCover.body.code === 'stale_head') {
-            pending('stale selection; the current editor cover was preserved');
+            pending('stale selection; the current editor cover was preserved', 'selection', 'fence-refused', selectedCover);
             continue;
           }
           if (selectedCover.status >= 300 || typeof selectedCover.body.selection !== 'string') {
-            pending(selectedCover.status >= 300 ? responseReason(selectedCover) : 'Main returned no selection receipt');
+            pending(selectedCover.status >= 300 ? responseReason(selectedCover) : 'Main returned no selection receipt',
+              'selection', selectedCover.status >= 300 ? 'selection-refused' : 'selection-receipt-invalid',
+              selectedCover.status >= 300 ? selectedCover : undefined);
+          } else {
+            coverResults.set(record.key, { record: recordDigest, status: 'imported' });
           }
-        } catch (error) {
-          pending(error instanceof Error ? error.message : 'cover API unavailable');
+        } catch {
+          pending('cover API unavailable', activeStep, 'cover-api-unavailable');
         }
       }
       journal.completed = selected.length === records.length;
@@ -1376,6 +1470,7 @@ export async function importDataset(
       receiptFile,
       limitations: journal.limitations,
       completed: journal.completed,
+      coverResults: [...coverResults.values()],
     };
     atomicJson(join(root, 'import-latest.json'), result);
     return result;

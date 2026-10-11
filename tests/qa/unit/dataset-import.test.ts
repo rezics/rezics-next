@@ -80,7 +80,7 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
     lost = false,
     loseAfterCommit = false,
     lostCoverReplies = new Set<string>(),
-    coverRefusal: { status: number; code: string } | null = null,
+    coverRefusal: { status: number; code: string; type: string } | null = null,
     editorBeforeSelection = options.editorBeforeSelection ?? false;
   const api: DatasetApi = {
     wait: async () => {},
@@ -104,7 +104,8 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
       if (path === '/v1/media/uploads') {
         const uploadBody = body as { sha256: string; byteLength: number; importedCover?: unknown };
         if (coverRefusal && uploadBody.importedCover)
-          return { status: coverRefusal.status, body: { code: coverRefusal.code } };
+          return { status: coverRefusal.status, body: { type: coverRefusal.type,
+            status: coverRefusal.status, code: coverRefusal.code } };
         if (!key) throw new Error('Every product mutation requires an idempotency key');
         if (receipts.has(key)) return { status: 200, body: receipts.get(key)! };
         const asset = uuid(7000 + id++), upload = uuid(7000 + id++);
@@ -211,9 +212,12 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
       loseAfterCommit = true;
     },
     useStaleSelection: () => { editorBeforeSelection = true; },
-    denyCovers: () => { coverRefusal = { status: 403, code: 'media_denied' }; },
-    suppressCovers: () => { coverRefusal = { status: 403, code: 'source_cover_suppressed' }; },
-    makeCoversUnavailable: () => { coverRefusal = { status: 503, code: 'media_unavailable' }; },
+    denyCovers: () => { coverRefusal = { status: 403, code: 'media_denied',
+      type: 'https://rezics.com/problems/authority_denied' }; },
+    suppressCovers: () => { coverRefusal = { status: 403, code: 'source_cover_suppressed',
+      type: 'https://rezics.com/problems/source_cover_suppressed' }; },
+    makeCoversUnavailable: () => { coverRefusal = { status: 503, code: 'media_unavailable',
+      type: 'https://rezics.com/problems/media_unavailable' }; },
   };
 }
 
@@ -978,7 +982,9 @@ describe('independent public-API dataset import', () => {
       const directory = root();
       const work = record(`facts-${outcome}`, 'work');
       const cover = coverSnapshot(directory, work);
-      const result = await importDataset(directory, cover.snapshot, options(fixture.api));
+      const log: string[] = [];
+      const result = await importDataset(directory, cover.snapshot,
+        { ...options(fixture.api), progress: message => log.push(message) });
 
       expect(result.completed).toBe(true);
       expect(result.nativeRecords).toBeGreaterThan(0);
@@ -989,6 +995,15 @@ describe('independent public-API dataset import', () => {
       expect(fixture.requests.some(call => call.path === '/v1/media/uploads')).toBe(true);
       expect(fixture.transfers).toHaveLength(0);
       expect(fixture.requests.some(call => call.path.endsWith('/avatar'))).toBe(false);
+      if (outcome === 'denied') {
+        expect(result.coverResults).toEqual([{
+          record: sha256(work.key), status: 'pending', step: 'reservation',
+          reasonCode: 'reservation-refused', httpStatus: 403, problemType: 'authority_denied',
+        }]);
+        expect(log).toContain(`Imported cover ${sha256(work.key).slice(0, 16)} pending step=reservation`
+          + ' reason=reservation-refused HTTP 403 problem=authority_denied');
+        expect(log.join('\n')).not.toContain('https://');
+      }
     }
   });
 
