@@ -12,31 +12,52 @@ const meta = {
   title: 'Compose/Post',
   component: PostComposer,
   args: {
-    locale: 'en', actingSubject: actor,
+    locale: 'en',
+    actingSubject: actor,
     initial: { id: realm, name: 'Fiction Harbor' },
-    target: { id: 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000001',
-      mainVersion: null, revision: 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000002',
-      title: 'The last letter' },
+    target: {
+      id: 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000001',
+      mainVersion: null,
+      revision: 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000002',
+      title: 'The last letter',
+    },
   },
-  render: args => <main className="mx-auto max-w-3xl p-6"><h1 className="mb-6 text-2xl font-semibold">
-    {postText.title[args.locale]}</h1><PostComposer {...args} /></main>,
+  render: (args) => (
+    <main className="mx-auto max-w-3xl p-6">
+      <h1 className="mb-6 text-2xl font-semibold">{postText.title[args.locale]}</h1>
+      <PostComposer {...args} />
+    </main>
+  ),
   beforeEach() {
     localStorage.removeItem(draftKey);
     forgetReadingLanguages();
     const original = window.fetch.bind(window);
     const fetch = spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
+      const path = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      ).pathname;
       if (!path.startsWith('/api/main/')) return original(input, init);
       if (path.endsWith('/person-preferences')) return Response.json({ contentLanguages: ['en'] });
-      if (path.endsWith('/member-reply-drafts')) return Response.json({ code: 'authority_denied' }, { status: 403 });
-      if (path.endsWith('/member-ban')) return Response.json({
-        realm, action: 'ban', permanent: true, bannedUntil: null, appeal: { state: 'none' },
-      });
+      if (path.endsWith('/member-reply-drafts'))
+        return Response.json({ code: 'authority_denied' }, { status: 403 });
+      if (path.endsWith('/member-ban'))
+        return Response.json({
+          realm,
+          action: 'ban',
+          permanent: true,
+          bannedUntil: null,
+          appeal: { state: 'none' },
+        });
       if (path.endsWith(`/realms/${realm.slice(-36)}`))
         return Response.json({ realm, reviewMode: 'open', rules: [] });
       throw new Error(`Unexpected composer request: ${path}`);
     });
-    return () => { fetch.mockRestore(); localStorage.removeItem(draftKey); forgetReadingLanguages(); };
+    return () => {
+      fetch.mockRestore();
+      localStorage.removeItem(draftKey);
+      forgetReadingLanguages();
+    };
   },
 } satisfies Meta<typeof PostComposer>;
 export default meta;
@@ -45,11 +66,19 @@ type Story = StoryObj<typeof meta>;
 export const BannedMember: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.type(canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }), 'A letter worth discussing');
-    await userEvent.type(canvas.getByRole('textbox', { name: postText.body[args.locale] }), 'What did you think of the ending?');
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }),
+      'A letter worth discussing',
+    );
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: postText.body[args.locale] }),
+      'What did you think of the ending?',
+    );
     await userEvent.click(canvas.getByRole('button', { name: postText.post[args.locale] }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(postText.banned[args.locale]);
-    await expect(canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] })).toHaveValue('A letter worth discussing');
+    await expect(
+      canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }),
+    ).toHaveValue('A letter worth discussing');
   },
 };
 

@@ -100,9 +100,12 @@ export async function submitPost(
       const { data } = await main.v1.realms({ realm: intent.realm.slice(-36) })['member-ban'].get({
         query: { actingSubject: intent.actingSubject },
       });
-      return !!data && data.realm === intent.realm
-        && !(data.appeal.state === 'decided' && data.appeal.outcome === 'reversed')
-        && banSchedule(data, Date.now()) !== 'ended';
+      return (
+        !!data &&
+        data.realm === intent.realm &&
+        !(data.appeal.state === 'decided' && data.appeal.outcome === 'reversed') &&
+        banSchedule(data, Date.now()) !== 'ended'
+      );
     } catch {
       return false;
     }
@@ -143,7 +146,8 @@ export async function submitPost(
     if (!step.revisionId || !step.digest) {
       // Replay also recovers older saved progress that retained the revision without its digest.
       const { data, error } = await draft(false, null, 'draft');
-      if (!data) return { kind: await banned(error?.status) ? 'banned' : 'failed', progress: step };
+      if (!data)
+        return { kind: (await banned(error?.status)) ? 'banned' : 'failed', progress: step };
       if (step.revisionId && step.revisionId !== data.revisionId)
         return { kind: 'failed', progress: step };
       step.revisionId = data.revisionId;
@@ -167,7 +171,8 @@ export async function submitPost(
         },
         keyed('identity'),
       );
-      if (!data) return { kind: await banned(error?.status) ? 'banned' : 'failed', progress: step };
+      if (!data)
+        return { kind: (await banned(error?.status)) ? 'banned' : 'failed', progress: step };
       step.identified = true;
       onProgress({ ...step });
     }

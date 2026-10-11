@@ -17,28 +17,37 @@ const postIntent = {
   work: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
   mainVersion: null,
   revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000003',
-  title: 'The ending', body: 'I loved it.', spoiler: false, language: 'en',
+  title: 'The ending',
+  body: 'I loved it.',
+  spoiler: false,
+  language: 'en',
   actingSubject: 'https://rezics.com/id/00000000-0000-4000-8000-000000000004',
 };
 const revisionId = '00000000-0000-4000-8000-000000000005';
 const revisionDigest = 'a'.repeat(64);
 const activeBan = {
-  realm: postIntent.realm, receiptId: '00000000-0000-4000-8000-000000000006',
-  action: 'ban', reason: 'Repeated posts disrupted discussion.',
-  permanent: true, bannedUntil: null, happenedAt: '2026-10-01T00:00:00.000Z',
+  realm: postIntent.realm,
+  receiptId: '00000000-0000-4000-8000-000000000006',
+  action: 'ban',
+  reason: 'Repeated posts disrupted discussion.',
+  permanent: true,
+  bannedUntil: null,
+  happenedAt: '2026-10-01T00:00:00.000Z',
   appeal: { state: 'none' },
 };
 type PostingStep = 'draft' | 'identity' | 'place';
 type WriteOptions = { headers: { 'idempotency-key': string } };
 
 /** Public reads deliberately reject: an author has no placement yet. */
-function unplacedReplyMain(options: {
-  failStep?: PostingStep;
-  failure?: 'lost' | 'denied' | 'unavailable';
-  ban?: object | null;
-  banReadFails?: boolean;
-  draftRevision?: string;
-} = {}) {
+function unplacedReplyMain(
+  options: {
+    failStep?: PostingStep;
+    failure?: 'lost' | 'denied' | 'unavailable';
+    ban?: object | null;
+    banReadFails?: boolean;
+    draftRevision?: string;
+  } = {},
+) {
   const calls: Array<{ step: PostingStep; key: string; body: Record<string, unknown> }> = [];
   const banReads: Array<{ realm: string; query: { actingSubject: string } }> = [];
   let publicReads = 0;
@@ -51,128 +60,224 @@ function unplacedReplyMain(options: {
       if (options.failure === 'lost') throw new Error('Response lost after the write');
       return { data: null, error: { status: options.failure === 'unavailable' ? 503 : 403 } };
     }
-    return { data: step === 'draft'
-      ? { revisionId: options.draftRevision ?? revisionId, revisionDigest }
-      : { reply: body.reply } };
+    return {
+      data:
+        step === 'draft'
+          ? { revisionId: options.draftRevision ?? revisionId, revisionDigest }
+          : { reply: body.reply },
+    };
   };
-  const main = { v1: {
-    'member-reply-drafts': { post: (body: Record<string, unknown>, request: WriteOptions) => write('draft', body, request) },
-    'realm-replies': { post: (body: Record<string, unknown>, request: WriteOptions) => write('identity', body, request) },
-    'realm-reply-placements': { post: (body: Record<string, unknown>, request: WriteOptions) => write('place', body, request) },
-    'member-replies': () => ({ get: async () => {
-      publicReads++;
-      return { data: null, error: { status: 404, value: { code: 'reply_unavailable' } } };
-    } }),
-    realms: ({ realm }: { realm: string }) => ({ 'member-ban': { get: async ({ query }: { query: { actingSubject: string } }) => {
-      banReads.push({ realm, query });
-      if (options.banReadFails) throw new Error('Ban read unavailable');
-      return ban ? { data: ban } : { data: null, error: { status: 404 } };
-    } } }),
-  } } as unknown as NonNullable<Parameters<typeof submitPost>[3]>;
-  return { main, calls, banReads, publicReads: () => publicReads, liftBan: () => { ban = null; } };
+  const main = {
+    v1: {
+      'member-reply-drafts': {
+        post: (body: Record<string, unknown>, request: WriteOptions) =>
+          write('draft', body, request),
+      },
+      'realm-replies': {
+        post: (body: Record<string, unknown>, request: WriteOptions) =>
+          write('identity', body, request),
+      },
+      'realm-reply-placements': {
+        post: (body: Record<string, unknown>, request: WriteOptions) =>
+          write('place', body, request),
+      },
+      'member-replies': () => ({
+        get: async () => {
+          publicReads++;
+          return { data: null, error: { status: 404, value: { code: 'reply_unavailable' } } };
+        },
+      }),
+      realms: ({ realm }: { realm: string }) => ({
+        'member-ban': {
+          get: async ({ query }: { query: { actingSubject: string } }) => {
+            banReads.push({ realm, query });
+            if (options.banReadFails) throw new Error('Ban read unavailable');
+            return ban ? { data: ban } : { data: null, error: { status: 404 } };
+          },
+        },
+      }),
+    },
+  } as unknown as NonNullable<Parameters<typeof submitPost>[3]>;
+  return {
+    main,
+    calls,
+    banReads,
+    publicReads: () => publicReads,
+    liftBan: () => {
+      ban = null;
+    },
+  };
 }
 
 test('a fresh unplaced reply gets its placement digest from the draft without a public read', async () => {
   const api = unplacedReplyMain();
   const original = newPostProgress();
   const persisted: PostProgress[] = [];
-  expect(await submitPost(postIntent, original, progress => persisted.push(progress), api.main))
-    .toEqual({ kind: 'posted', reply: original.reply });
-  expect(api.calls.map(call => call.step)).toEqual(['draft', 'identity', 'place']);
+  expect(
+    await submitPost(postIntent, original, (progress) => persisted.push(progress), api.main),
+  ).toEqual({ kind: 'posted', reply: original.reply });
+  expect(api.calls.map((call) => call.step)).toEqual(['draft', 'identity', 'place']);
   expect(api.calls[2]!.body).toMatchObject({ reply: original.reply, revisionId, revisionDigest });
-  expect(persisted.some(progress => progress.revisionId === revisionId && progress.digest === revisionDigest)).toBe(true);
+  expect(
+    persisted.some(
+      (progress) => progress.revisionId === revisionId && progress.digest === revisionDigest,
+    ),
+  ).toBe(true);
   expect(api.publicReads()).toBe(0);
 });
 
-test.each([false, true])('a saved reply missing its digest replays the draft with identified=%s', async identified => {
-  const api = unplacedReplyMain();
-  const original = { ...newPostProgress(), rootRevision: postIntent.revision, revisionId, identified };
-  let saved: PostProgress = original;
-  expect(await submitPost(postIntent, original, progress => { saved = progress; }, api.main))
-    .toEqual({ kind: 'posted', reply: original.reply });
-  expect(api.calls.map(call => call.step)).toEqual(identified ? ['draft', 'place'] : ['draft', 'identity', 'place']);
-  expect(api.calls[0]!).toMatchObject({ key: `${original.key}:draft`, body: {
-    reply: original.reply, variantId: original.variantId, expectedHead: null,
-  } });
-  expect(saved).toMatchObject({ revisionId, digest: revisionDigest, identified: true });
-  expect(api.publicReads()).toBe(0);
-});
+test.each([false, true])(
+  'a saved reply missing its digest replays the draft with identified=%s',
+  async (identified) => {
+    const api = unplacedReplyMain();
+    const original = {
+      ...newPostProgress(),
+      rootRevision: postIntent.revision,
+      revisionId,
+      identified,
+    };
+    let saved: PostProgress = original;
+    expect(
+      await submitPost(
+        postIntent,
+        original,
+        (progress) => {
+          saved = progress;
+        },
+        api.main,
+      ),
+    ).toEqual({ kind: 'posted', reply: original.reply });
+    expect(api.calls.map((call) => call.step)).toEqual(
+      identified ? ['draft', 'place'] : ['draft', 'identity', 'place'],
+    );
+    expect(api.calls[0]!).toMatchObject({
+      key: `${original.key}:draft`,
+      body: {
+        reply: original.reply,
+        variantId: original.variantId,
+        expectedHead: null,
+      },
+    });
+    expect(saved).toMatchObject({ revisionId, digest: revisionDigest, identified: true });
+    expect(api.publicReads()).toBe(0);
+  },
+);
 
 test('digest recovery fails before placement when the draft replay names another revision', async () => {
   const api = unplacedReplyMain({ draftRevision: '00000000-0000-4000-8000-000000000007' });
-  const original = { ...newPostProgress(), rootRevision: postIntent.revision, revisionId, identified: true };
-  expect(await submitPost(postIntent, original, () => undefined, api.main))
-    .toEqual({ kind: 'failed', progress: original });
-  expect(api.calls.map(call => call.step)).toEqual(['draft']);
+  const original = {
+    ...newPostProgress(),
+    rootRevision: postIntent.revision,
+    revisionId,
+    identified: true,
+  };
+  expect(await submitPost(postIntent, original, () => undefined, api.main)).toEqual({
+    kind: 'failed',
+    progress: original,
+  });
+  expect(api.calls.map((call) => call.step)).toEqual(['draft']);
   expect(api.publicReads()).toBe(0);
 });
 
 test.each(['draft', 'identity', 'place'] as const)(
-  'a lost %s response retries the same intent and operation key', async step => {
+  'a lost %s response retries the same intent and operation key',
+  async (step) => {
     const api = unplacedReplyMain({ failStep: step, failure: 'lost' });
     const original = newPostProgress();
     const first = await submitPost(postIntent, original, () => undefined, api.main);
     expect(first.kind).toBe('failed');
     if (first.kind !== 'failed') throw new Error('Lost response must retain retry progress');
-    expect(await submitPost(postIntent, first.progress, () => undefined, api.main))
-      .toEqual({ kind: 'posted', reply: original.reply });
-    const attempts = api.calls.filter(call => call.step === step);
+    expect(await submitPost(postIntent, first.progress, () => undefined, api.main)).toEqual({
+      kind: 'posted',
+      reply: original.reply,
+    });
+    const attempts = api.calls.filter((call) => call.step === step);
     expect(attempts).toHaveLength(2);
     expect(attempts[1]).toEqual(attempts[0]);
-    expect(api.calls.every(call => call.body.reply === original.reply)).toBe(true);
-    expect(api.calls.filter(call => call.step === 'draft')).toHaveLength(step === 'draft' ? 2 : 1);
-    expect(api.calls.filter(call => call.step === 'identity')).toHaveLength(step === 'identity' ? 2 : 1);
+    expect(api.calls.every((call) => call.body.reply === original.reply)).toBe(true);
+    expect(api.calls.filter((call) => call.step === 'draft')).toHaveLength(
+      step === 'draft' ? 2 : 1,
+    );
+    expect(api.calls.filter((call) => call.step === 'identity')).toHaveLength(
+      step === 'identity' ? 2 : 1,
+    );
     expect(api.publicReads()).toBe(0);
     expect(api.banReads).toHaveLength(0);
   },
 );
 
 test.each(['draft', 'identity', 'place'] as const)(
-  'a ban denied at %s retains the reply for a successful retry after unban', async step => {
+  'a ban denied at %s retains the reply for a successful retry after unban',
+  async (step) => {
     const api = unplacedReplyMain({ failStep: step, failure: 'denied', ban: activeBan });
     const original = newPostProgress();
     const first = await submitPost(postIntent, original, () => undefined, api.main);
     expect(first.kind).toBe('banned');
     if (first.kind !== 'banned') throw new Error('An active member ban must be reported');
-    expect(first.progress).toMatchObject({ key: original.key, reply: original.reply, variantId: original.variantId });
-    expect(api.calls.some(call => call.body.body === null)).toBe(false);
-    expect(api.banReads).toEqual([{ realm: postIntent.realm.slice(-36), query: { actingSubject: postIntent.actingSubject } }]);
+    expect(first.progress).toMatchObject({
+      key: original.key,
+      reply: original.reply,
+      variantId: original.variantId,
+    });
+    expect(api.calls.some((call) => call.body.body === null)).toBe(false);
+    expect(api.banReads).toEqual([
+      { realm: postIntent.realm.slice(-36), query: { actingSubject: postIntent.actingSubject } },
+    ]);
     api.liftBan();
-    expect(await submitPost(postIntent, first.progress, () => undefined, api.main))
-      .toEqual({ kind: 'posted', reply: original.reply });
-    const attempts = api.calls.filter(call => call.step === step);
+    expect(await submitPost(postIntent, first.progress, () => undefined, api.main)).toEqual({
+      kind: 'posted',
+      reply: original.reply,
+    });
+    const attempts = api.calls.filter((call) => call.step === step);
     expect(attempts[1]).toEqual(attempts[0]);
     expect(api.publicReads()).toBe(0);
   },
 );
 
 test.each(['draft', 'identity', 'place'] as const)(
-  'a different authority denial at %s keeps its ordinary failure outcome', async step => {
+  'a different authority denial at %s keeps its ordinary failure outcome',
+  async (step) => {
     const api = unplacedReplyMain({ failStep: step, failure: 'denied' });
     const result = await submitPost(postIntent, newPostProgress(), () => undefined, api.main);
     expect(result.kind).toBe(step === 'place' ? 'refused' : 'failed');
-    expect(api.calls.some(call => call.body.body === null)).toBe(step === 'place');
+    expect(api.calls.some((call) => call.body.body === null)).toBe(step === 'place');
   },
 );
 
 test.each([
   ['ended', { ...activeBan, permanent: false, bannedUntil: '2000-01-01T00:00:00.000Z' }, false],
   ['another realm', { ...activeBan, realm: postIntent.work }, false],
-  ['reversed', { ...activeBan, appeal: {
-    state: 'decided', caseId: '00000000-0000-4000-8000-000000000008', statement: 'Please reconsider.',
-    outcome: 'reversed', rationale: null, decidedAt: null, liftedAt: null,
-  } }, false],
+  [
+    'reversed',
+    {
+      ...activeBan,
+      appeal: {
+        state: 'decided',
+        caseId: '00000000-0000-4000-8000-000000000008',
+        statement: 'Please reconsider.',
+        outcome: 'reversed',
+        rationale: null,
+        decidedAt: null,
+        liftedAt: null,
+      },
+    },
+    false,
+  ],
   ['unreadable', activeBan, true],
 ] as const)('a %s ban read does not mislabel a draft denial', async (_name, ban, banReadFails) => {
   const api = unplacedReplyMain({ failStep: 'draft', failure: 'denied', ban, banReadFails });
-  expect((await submitPost(postIntent, newPostProgress(), () => undefined, api.main)).kind).toBe('failed');
+  expect((await submitPost(postIntent, newPostProgress(), () => undefined, api.main)).kind).toBe(
+    'failed',
+  );
 });
 
 test('an unavailable placement stays retryable even when the member has a ban', async () => {
   const api = unplacedReplyMain({ failStep: 'place', failure: 'unavailable', ban: activeBan });
-  expect((await submitPost(postIntent, newPostProgress(), () => undefined, api.main)).kind).toBe('failed');
+  expect((await submitPost(postIntent, newPostProgress(), () => undefined, api.main)).kind).toBe(
+    'failed',
+  );
   expect(api.banReads).toHaveLength(0);
-  expect(api.calls.some(call => call.body.body === null)).toBe(false);
+  expect(api.calls.some((call) => call.body.body === null)).toBe(false);
 });
 
 test('a lost placement response retries with the same post identity and operation key', async () => {
@@ -285,13 +390,27 @@ test('the title stays as the writer typed it, and a spoiler mark does not change
 test('a Japanese spoiler and an unmarked English title both keep the words the writer typed', () => {
   const progress = newPostProgress();
   const base = {
-    realm: 'realm', work: 'work', mainVersion: 'main-version', actingSubject: 'author',
+    realm: 'realm',
+    work: 'work',
+    mainVersion: 'main-version',
+    actingSubject: 'author',
   };
-  const japanese = postDocument({ ...base, title: '最終章の手紙', body: '本文', spoiler: true, language: 'ja' }, progress);
+  const japanese = postDocument(
+    { ...base, title: '最終章の手紙', body: '本文', spoiler: true, language: 'ja' },
+    progress,
+  );
   expect(documentText(japanese)).toBe('最終章の手紙\n本文');
-  const unmarked = postDocument({
-    ...base, title: 'Spoilers: a review of spoiler culture', body: 'The title names the subject.',
-    spoiler: false, language: 'en',
-  }, progress);
-  expect(documentText(unmarked)).toBe('Spoilers: a review of spoiler culture\nThe title names the subject.');
+  const unmarked = postDocument(
+    {
+      ...base,
+      title: 'Spoilers: a review of spoiler culture',
+      body: 'The title names the subject.',
+      spoiler: false,
+      language: 'en',
+    },
+    progress,
+  );
+  expect(documentText(unmarked)).toBe(
+    'Spoilers: a review of spoiler culture\nThe title names the subject.',
+  );
 });
