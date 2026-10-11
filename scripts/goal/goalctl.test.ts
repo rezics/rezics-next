@@ -16,7 +16,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   gateLaneStatus, gateLaneWaiters, withGateLane,
-  mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
+  mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
@@ -1920,9 +1920,16 @@ describe('goalctl runtime policy', () => {
   test('a failed reset fetch reports unavailable and still returns ordinary usage data', async () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/codex-reset-failure-test-'));
     try {
-      const report = await usageReport({ cacheFile: join(directory, 'status.json'), fetcher: async () => {
-        throw new Error('offline');
-      } });
+      const env = cliEnvironment(directory);
+      expect(spawnSync('git', ['init', '-q'], { cwd: directory, env, encoding: 'utf8' }).status).toBe(0);
+      const script = join(directory, 'usage.ts');
+      writeFileSync(script, `import { usageReport } from ${JSON.stringify(join(import.meta.dir, 'goalctl.ts'))};
+console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(directory, 'status.json'))},
+  fetcher: async () => { throw new Error('offline'); } })));
+`);
+      const result = spawnSync(process.execPath, [script], { cwd: directory, env, encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+      const report = JSON.parse(result.stdout) as Awaited<ReturnType<typeof import('./goalctl.ts').usageReport>>;
       expect(report.codex_resets).toEqual({ source: 'Data from codex-resets.com', status: 'unavailable' });
       expect(report.claude).toBeDefined();
       expect(report.codex).toHaveLength(2);
@@ -4130,6 +4137,7 @@ process.exit(0);
         const result = r.run(['dispatch', brief, ...flags], { GOAL_MEMORY_FLOOR_GIB: '1000000000' });
         expect(result.status).toBe(1);
         expect(result.stderr).toContain('Memory floor reached: host MemAvailable');
+        expect(result.stderr).toContain('64.00 GiB');
         expect(r.ledger().tasks['G-001']).toBeUndefined();
         expect(existsSync(join(r.dir, '.temp/worktrees/g-001'))).toBe(false);
       }
@@ -4139,6 +4147,7 @@ process.exit(0);
         const result = r.run(['resume', 'G-001', '-m', 'continue', ...flags], { GOAL_MEMORY_FLOOR_GIB: '1000000000' });
         expect(result.status).toBe(1);
         expect(result.stderr).toContain('Memory floor reached: host MemAvailable');
+        expect(result.stderr).toContain('64.00 GiB');
         expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
       }
     } finally { r.cleanup(); }
@@ -4764,11 +4773,13 @@ describe('gate lanes', () => {
       const primary = withGateLane(() => new Promise<void>(done => {
         again.push('primary');
         releasePrimary = done;
+        if (cleaningUp) done();
       }), { directory, command: 'merge G-4', goal: 'program' });
       const notes: string[] = [];
       const next = withGateLane(() => new Promise<void>(done => {
         again.push('next');
         releaseNext = done;
+        if (cleaningUp) done();
       }), {
         directory, command: 'merge G-5', goal: 'program', pollMs: 5,
         announce: message => notes.push(message),
