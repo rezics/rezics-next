@@ -74,7 +74,10 @@ test('a reader owns a copy, lends it overdue, extends it and returns it', async 
   test.setTimeout(240_000);
   const workPath = localizedPath(resourceHref('/w/', seed.work.slice(-36)), 'en');
   await signInAtAccounts(page, workPath, member());
-  await page.getByRole('button', { name: 'More shelves' }).click();
+  const moreShelves = page.getByRole('button', { name: 'More shelves' });
+  await (await moreShelves.count()
+    ? moreShelves
+    : page.getByRole('button', { name: /— Shelve/ })).click();
   await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
   const shelved = page.getByRole('button', { name: /^Currently reading — Shelve/ });
   await expect(shelved).toBeVisible();
