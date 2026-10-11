@@ -24,8 +24,8 @@ No kernel worktree is dirty and no task is half-done. Next step for each, when q
 
 | Task | What exists | What is missing | Next step |
 | --- | --- | --- | --- |
-| G-1630 raw-update callers classified by source, not shard luck | brief; research first (classification scan, categories, one supported way) | scan test, category table, migrations | first when quota returns; research runs beside G-1593 |
-| G-1631 three 503-for-409 races, three hung native tests | brief | find the commits, fix or re-contract, route native tests to their tier | second |
+| G-1630 raw-update callers classified by source, not shard luck | brief; research first (classification scan, categories, one supported way) | scan test, category table, migrations | dispatch with G-1631 and G-1593 together (different files); step A lands alone first |
+| G-1631 three 503-for-409 races, three hung native tests | brief | find the commits, fix or re-contract, route native tests to their tier | together with G-1630 and G-1593; prefer moving the native tests to the image tier over a skip |
 | G-1593 provider identity | brief only; attempt 1 exited at the quota error with a clean worktree | all of it: observation-plus-allowlist lookup in `source/*`, tests, proof | `resume G-1593 --fresh`; native-free, expect one image-free landing |
 | G-1618 Claims are Statements | brief; depends on G-1593 | all of it | dispatch after G-1593 lands; no compatibility layer, `/v1/claims` retired |
 | field-disposition projector | decision only (targets Statements, from `source.field_disposition`) | the brief | write after G-1618 settles |
