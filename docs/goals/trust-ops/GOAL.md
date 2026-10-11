@@ -77,10 +77,13 @@ prepared so that going live is operations work.
   and a restore replays the erasure journal first; the UI shows suppressed,
   retained, destroyed and blocked apart. Physical clean-up runs as a batched
   maintenance campaign, never as a whole-graph copy per revision.
-- **Deployment preparation.** Images, bootstrap of the launch catalogue,
-  consistent backup and timed restore, the TDB2 compaction procedure, email
-  operations, legal configuration within the zero-budget decision, safety
-  drills and named responders. Stripe stays the hard gate before any sale.
+- **Operating functions.** The images and the launch-catalogue bootstrap run
+  as functions; a consistent backup restores on a separate empty stack and the
+  restored stack passes readiness and the erased-closure checks; the TDB2
+  compaction procedure runs. What going live needs from outside the repository
+  (registrations, responders, accounts, payment) is the maintainer's list in
+  `docs/operations/external-conditions.md`; no brief here solves, prepares for or
+  works around one of its rows.
 
 ## First wave
 
@@ -138,10 +141,8 @@ external conditions from the start.
   - **Privacy-preserving measurement.** Operational measurement collects no
     personal data the privacy policy does not name. In-app telemetry stays
     closed.
-  - **Qualification exit.** No open High security finding. The registration and
-    market gates for the US, Taiwan, Singapore, Japan, South Korea and the EU
-    (`docs/operations/trust-and-safety.md`) are each decided within the
-    zero-budget decision.
+  - **Qualification exit.** No open High security finding in the landed
+    functions after a final review of what landed since the first one.
   - **Launch workloads within budget.** At the launch catalogue's size, the
     launch workloads meet `docs/storage/workload-budgets.md`, measured with
     kernel's (K5) and launch's (L8) evidence.
@@ -157,5 +158,8 @@ permission fan-out; no second identity provider. Public descriptions of roles
 
 C1 and the platform gates land with acceptance on the program's board, the
 launch matrix is approved and enforced, the inherited items are closed or
-re-verified as gone, and deployment is ready as
-`docs/operations/deployment.md#ready-to-deploy` records.
+re-verified as gone, and each trust function works end to end with checks that
+prove it: common admission, platform gates, accounts, budgets and pools, safety,
+erasure of live private copies, and independent restore with erased-closure. The
+Goal's finish line is a functionally complete first public scope (program Goal,
+Completion); external conditions are not Goal work.
