@@ -126,5 +126,40 @@
       }
     ],
     "name": "とある魔術の禁書目録 神裂編SS"
+  },
+  "2113": {
+    "id": 2113,
+    "type": 4,
+    "platform": "游戏",
+    "date": "1998-11-21",
+    "infobox": [
+      {
+        "key": "平台",
+        "value": [
+          { "v": "NGC" },
+          { "v": "N64" }
+        ]
+      },
+      {
+        "key": "发行日期",
+        "value": "1998年11月21日(日本)"
+      }
+    ],
+    "name": "ゼルダの伝説 時のオカリナ",
+    "name_cn": "塞尔达传说 -时光之笛-"
+  },
+  "636913": {
+    "id": 636913,
+    "type": 4,
+    "platform": "游戏",
+    "date": null,
+    "infobox": [
+      {
+        "key": "发行日期",
+        "value": "2021年"
+      }
+    ],
+    "name": "Minecraft Dungeons Arcade",
+    "name_cn": ""
   }
 }

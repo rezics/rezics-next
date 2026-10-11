@@ -1,6 +1,7 @@
 import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
-import { relationLexiconSeed, variantKindConcepts, canonicityConcepts, workFormatConcepts,
-  declaredCountProperties, type LexiconSeedDefinition, type WorkFormatKey } from './relation-lexicon-data.ts';
+import { relationLexiconSeed, variantKindConcepts, canonicityConcepts, workFormatConcepts, gamePlatformConcepts,
+  declaredCountProperties, type LexiconSeedDefinition, type WorkFormatKey, type GamePlatformKey }
+  from './relation-lexicon-data.ts';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
@@ -207,6 +208,10 @@ export async function seedCanonicity(client: Pick<SeedLexiconClient, 'post' | 'a
 }
 
 export interface WorkFormatConceptSeed { concept: string; definitionRevision: string }
+export interface GamePlatformSeed {
+  scheme: string;
+  concepts: Record<GamePlatformKey, WorkFormatConceptSeed>;
+}
 export interface WorkFormatSeed {
   scheme: string;
   concepts: Record<WorkFormatKey, WorkFormatConceptSeed>;
@@ -270,4 +275,23 @@ export async function seedWorkFormat(
   }
   const firstPublication = await seedFirstPublicationDate(client, actingSubject);
   return { scheme: scheme!.id, concepts, counts, firstPublication };
+}
+
+/** One shared platform scheme for the exact Bangumi game tokens admitted by the seed data. */
+export async function seedGamePlatforms(
+  client: Pick<SeedLexiconClient, 'post' | 'authorizeDefinition'> & Partial<Pick<SeedLexiconClient, 'currentDefinition'>>,
+  actingSubject: string,
+): Promise<GamePlatformSeed> {
+  const concepts = {} as GamePlatformSeed['concepts'];
+  let scheme: { id: string; expectedHead: string } | null = null;
+  for (const concept of gamePlatformConcepts) {
+    const created: { scheme: string; schemeHead: string; concept: string; definitionRevision: string } =
+      await client.post('/v1/classification-vocabulary', {
+        profile: 'classification-proposition-v2', scheme, labels: [...concept.labels], alternativeLabels: [],
+        broader: [], narrower: [], actingSubject,
+      }, `game-platform:v1:concept:${concept.key}`);
+    concepts[concept.key] = { concept: created.concept, definitionRevision: created.definitionRevision };
+    scheme = { id: created.scheme, expectedHead: created.schemeHead };
+  }
+  return { scheme: scheme!.id, concepts };
 }

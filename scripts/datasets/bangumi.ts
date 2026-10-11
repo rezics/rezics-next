@@ -1,9 +1,10 @@
 import { createReadStream } from 'node:fs';
 import { basename } from 'node:path';
 import { Unzip, UnzipInflate, type AsyncFlateStreamHandler } from 'fflate';
-import { declaredCountProperties, workFormatConcepts, type WorkFormatKey }
+import { declaredCountProperties, gamePlatformConcepts, workFormatConcepts, type GamePlatformKey, type WorkFormatKey }
   from '../dev/seed/relation-lexicon-data.ts';
 import { InvalidSemanticValue, temporalParts } from '../../services/main/src/modules/semantic/value.ts';
+import { DATE_PUBLISHED_PREDICATE } from '../../services/main/src/modules/statement/qualification.ts';
 import type { SerialStatus } from '../../services/main/src/modules/work/metadata-schema.ts';
 import { MissingRemote, type Acquisition } from './network.ts';
 import { blobPath, canonical, sha256 } from './store.ts';
@@ -924,6 +925,12 @@ export interface BangumiWorkFacts {
   format: WorkFormatKey | null;
   count: BangumiDeclaredCount | null;
   status: SerialStatus | null;
+  platforms: GamePlatformKey[];
+  date: BangumiPublicationDate | null;
+}
+export interface BangumiGameFacts {
+  subjectId: string;
+  platforms: GamePlatformKey[];
   date: BangumiPublicationDate | null;
 }
 export interface BangumiFactsClient {
@@ -1024,6 +1031,75 @@ function infoboxField(infobox: unknown, key: string): string | null {
   return textField(row.value);
 }
 
+function infoboxValues(infobox: unknown, key: string): unknown[] {
+  if (typeof infobox === 'string') {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(?:^|\\r?\\n)\\|${escaped}\\s*=([\\s\\S]*?)(?=\\r?\\n\\||$)`, 'g');
+    return [...infobox.matchAll(pattern)].map(match => match[1] ?? '');
+  }
+  if (!Array.isArray(infobox)) return [];
+  return infobox.filter(item => !!item && typeof item === 'object' && !Array.isArray(item)
+    && (item as Row).key === key).map(item => (item as Row).value);
+}
+
+function sourceTextValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(sourceTextValues);
+  if (!value || typeof value !== 'object') return [];
+  const row = value as Row;
+  if (typeof row.v === 'string') return [row.v];
+  if (typeof row.value === 'string') return [row.value];
+  return [];
+}
+
+function gamePlatformTokens(infobox: unknown): string[] {
+  const found: string[] = [];
+  for (const value of infoboxValues(infobox, '平台')) {
+    for (const raw of sourceTextValues(value)) {
+      const cleaned = raw.trim().replace(/^\{([\s\S]*)\}$/, '$1');
+      found.push(...cleaned.split(/\r?\n|<br\s*\/?\s*>|[、，,;；]/i)
+        .map(token => token.trim().replace(/^\[|\]$/g, '').trim()).filter(Boolean));
+    }
+  }
+  return found;
+}
+
+function gameDateCandidates(value: unknown): BangumiPublicationDate[] {
+  const dates: BangumiPublicationDate[] = [];
+  for (const raw of sourceTextValues(value)) {
+    const dayPattern = /(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)|(?<!\d)(\d{4})年(\d{1,2})月(\d{1,2})日(?!\d)/g;
+    const consumed: { start: number; end: number }[] = [];
+    for (const match of raw.matchAll(dayPattern)) {
+      consumed.push({ start: match.index!, end: match.index! + match[0].length });
+      const lexical = match[1]
+        ? `${match[1]}-${match[2]!.padStart(2, '0')}-${match[3]!.padStart(2, '0')}`
+        : `${match[4]}-${match[5]!.padStart(2, '0')}-${match[6]!.padStart(2, '0')}`;
+      const parsed = daysOrYear(lexical, 'day', dateDatatype);
+      if (parsed) dates.push(parsed);
+    }
+    let remainder = raw;
+    for (const range of [...consumed].reverse()) {
+      remainder = `${remainder.slice(0, range.start)}${' '.repeat(range.end - range.start)}${remainder.slice(range.end)}`;
+    }
+    const yearPattern = /(?<!\d)(\d{4})年(?!\d{1,2}月)|(?<!\d)(\d{4})(?![-/.]\d|年)/g;
+    for (const match of remainder.matchAll(yearPattern)) {
+      const parsed = daysOrYear(match[1] ?? match[2]!, 'year', yearDatatype);
+      if (parsed) dates.push(parsed);
+    }
+  }
+  return dates;
+}
+
+function earliestGameReleaseDate(candidates: readonly BangumiPublicationDate[]): BangumiPublicationDate | null {
+  if (!candidates.length) return null;
+  const unique = [...new Map(candidates.map(date => [`${date.datatype}:${date.lexical}`, date])).values()];
+  const year = Math.min(...unique.map(date => Number(date.lexical.slice(0, 4))));
+  const inEarliestYear = unique.filter(date => Number(date.lexical.slice(0, 4)) === year);
+  const yearOnly = inEarliestYear.find(date => date.datatype === yearDatatype);
+  if (yearOnly) return yearOnly;
+  return inEarliestYear.sort((left, right) => left.lexical.localeCompare(right.lexical))[0] ?? null;
+}
+
 function daysOrYear(lexical: string, precision: 'day' | 'year',
   datatype: BangumiPublicationDate['datatype']): BangumiPublicationDate | null {
   try { temporalParts(lexical, precision); }
@@ -1082,9 +1158,14 @@ function subjectId(record: BangumiFactSource, data: Row): string {
  */
 export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
   const data = subjectRow(record);
-  const archiveFormat = bangumiFormat(data.type, data.platform);
   const api = data.api_subject;
   const apiRow = api && typeof api === 'object' && !Array.isArray(api) ? api as Row : null;
+  if (data.type === 4 || apiRow?.type === 4) {
+    const game = bangumiGameFacts(record);
+    return { subjectId: game.subjectId, format: null, count: null, status: null,
+      platforms: game.platforms, date: game.date };
+  }
+  const archiveFormat = bangumiFormat(data.type, data.platform);
   let format = archiveFormat;
   if (apiRow && apiRow.platform !== undefined && apiRow.platform !== null) {
     const apiFormat = bangumiFormat(apiRow.type ?? data.type, apiRow.platform);
@@ -1115,7 +1196,32 @@ export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
     textField(data.date),
     ...publicationDateKeys.map((key) => infoboxField(box, key)),
   ]);
-  return { subjectId: subjectId(record, data), format, count, status, date };
+  return { subjectId: subjectId(record, data), format, count, status, platforms: [], date };
+}
+
+/** Game hardware comes only from explicit platform values; an unknown token is never inferred. */
+export function bangumiGameFacts(record: BangumiFactSource): BangumiGameFacts {
+  const data = subjectRow(record);
+  const api = data.api_subject;
+  const apiRow = api && typeof api === 'object' && !Array.isArray(api) ? api as Row : null;
+  if (data.type !== 4 && apiRow?.type !== 4) throw new Error('Bangumi subject is not a game');
+  const apiInfobox = apiRow && (typeof apiRow.infobox === 'string' || Array.isArray(apiRow.infobox))
+    ? apiRow.infobox : null;
+  const archiveInfobox = data.infobox;
+  const apiHasPlatform = apiInfobox !== null && infoboxValues(apiInfobox, '平台').length > 0;
+  const platformSource = apiHasPlatform ? apiInfobox : archiveInfobox;
+  const platformKeys = new Map<string, GamePlatformKey>(gamePlatformConcepts.map(item => [item.token, item.key]));
+  const platforms = [...new Set(gamePlatformTokens(platformSource)
+    .map(token => platformKeys.get(token)).filter((key): key is GamePlatformKey => key !== undefined))];
+  const dates = [
+    ...gameDateCandidates(apiRow?.date),
+    ...gameDateCandidates(data.date),
+    ...gameDateCandidates(infoboxValues(apiInfobox, '发行日期')),
+    ...gameDateCandidates(infoboxValues(apiInfobox, '发售日')),
+    ...gameDateCandidates(infoboxValues(archiveInfobox, '发行日期')),
+    ...gameDateCandidates(infoboxValues(archiveInfobox, '发售日')),
+  ];
+  return { subjectId: subjectId(record, data), platforms, date: earliestGameReleaseDate(dates) };
 }
 
 /**
@@ -1128,7 +1234,16 @@ export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
 export async function importBangumiWorkFacts(client: BangumiFactsClient, actingSubject: string,
   work: { work: string; mainVersion: string }, record: BangumiFactSource): Promise<{
   facts: BangumiWorkFacts; concept: string | null; countPredicate: string | null;
+  platformConcepts: Partial<Record<GamePlatformKey, string>>; datePredicate: string | null;
 }> {
+  const data = subjectRow(record);
+  const api = data.api_subject;
+  const apiRow = api && typeof api === 'object' && !Array.isArray(api) ? api as Row : null;
+  if (data.type === 4 || apiRow?.type === 4) {
+    const imported = await importBangumiGameFacts(client, actingSubject, work, record);
+    return { facts: bangumiWorkFacts(record), concept: null, countPredicate: null,
+      platformConcepts: imported.concepts, datePredicate: imported.datePredicate };
+  }
   const { seedWorkFormat } = await import('../dev/seed/relation-lexicon.ts');
   const helpers = await import('../dev/seed/classified-statement.ts');
   const facts = bangumiWorkFacts(record);
@@ -1169,8 +1284,10 @@ export async function importBangumiWorkFacts(client: BangumiFactsClient, actingS
       actingSubject, statement, { kind: 'global' }, 'accepted', null),
     `${prefix}:${facts.count.notation}:decision`);
   }
+  let datePredicate: string | null = null;
   if (facts.date) {
     const definition = seeded.firstPublication;
+    datePredicate = DATE_PUBLISHED_PREDICATE;
     const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
       profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work,
       predicate: definition.component, relationDefinition: definition.revision,
@@ -1190,5 +1307,56 @@ export async function importBangumiWorkFacts(client: BangumiFactsClient, actingS
       state: { kind: 'header', originalTitle: null, completionStatus: facts.status, localized: [] },
     }, `${prefix}:status`);
   }
-  return { facts, concept, countPredicate };
+  return { facts, concept, countPredicate, platformConcepts: {}, datePredicate };
+}
+
+/** Write a game's known hardware platforms as accepted Concepts and its single earliest publication date. */
+export async function importBangumiGameFacts(client: BangumiFactsClient, actingSubject: string,
+  work: { work: string; mainVersion: string }, record: BangumiFactSource): Promise<{
+  facts: BangumiGameFacts; concepts: Partial<Record<GamePlatformKey, string>>; datePredicate: string | null;
+}> {
+  const { seedGamePlatforms, seedFirstPublicationDate } = await import('../dev/seed/relation-lexicon.ts');
+  const helpers = await import('../dev/seed/classified-statement.ts');
+  const facts = bangumiGameFacts(record);
+  const prefix = `game-platform:v1:${work.work.slice(-36)}:${facts.subjectId}`;
+  const evidence = bangumiStatementEvidence('subject', facts.subjectId);
+  const concepts: Partial<Record<GamePlatformKey, string>> = {};
+  if (facts.platforms.length) {
+    const seeded = await seedGamePlatforms(client, actingSubject);
+    for (const platform of gamePlatformConcepts) {
+      concepts[platform.key] = seeded.concepts[platform.key].concept;
+    }
+    const post: <T>(path: string, body: unknown, token: string, key: string) => Promise<T> =
+      (path, body, _token, key) => client.post(path, body as object, key);
+    const context = await helpers.shareClassificationContext(post, '', actingSubject,
+      gamePlatformConcepts.map(platform => seeded.concepts[platform.key]), 'game-platform:v1:context');
+    for (const platform of gamePlatformConcepts) {
+      await helpers.discloseClassificationConcept(post, '', actingSubject, seeded.concepts[platform.key].concept,
+        `game-platform:v1:hint:${platform.key}`);
+    }
+    for (const key of facts.platforms) {
+      const concept = seeded.concepts[key].concept;
+      const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
+        ...helpers.classifiedStatementBody(actingSubject, work.mainVersion, concept, context), evidence,
+      }, `${prefix}:platform:${key}`);
+      await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
+        actingSubject, statement, { kind: 'global' }, 'accepted', null), `${prefix}:platform:${key}:decision`);
+    }
+  }
+  let datePredicate: string | null = null;
+  if (facts.date) {
+    const definition = await seedFirstPublicationDate(client, actingSubject);
+    datePredicate = DATE_PUBLISHED_PREDICATE;
+    const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work,
+      predicate: definition.component, relationDefinition: definition.revision,
+      value: { kind: 'literal', lexical: facts.date.lexical, datatype: facts.date.datatype, language: null },
+      applicability: [], interpretation: { kind: 'selected' }, evidence, actingSubject,
+    }, `${prefix}:first-publication-date`);
+    await client.post('/v1/statement-decisions', {
+      profile: 'statement-decision-v1', target: { kind: 'statement', statement: statement.statement },
+      acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject,
+    }, `${prefix}:first-publication-date:decision`);
+  }
+  return { facts, concepts, datePredicate };
 }

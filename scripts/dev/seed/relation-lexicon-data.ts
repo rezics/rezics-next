@@ -527,6 +527,13 @@ export const workFormatConcepts = [
 ] as const;
 export type WorkFormatKey = (typeof workFormatConcepts)[number]['key'];
 
+/** Bangumi game platforms observed in captured type-4 subjects. Tokens are exact source values. */
+export const gamePlatformConcepts = [
+  { key: 'n64', token: 'N64', labels: [{ language: 'en', value: 'N64' }] },
+  { key: 'ngc', token: 'NGC', labels: [{ language: 'en', value: 'NGC' }] },
+] as const;
+export type GamePlatformKey = (typeof gamePlatformConcepts)[number]['key'];
+
 /** Declared size of an anime or a manga. Chapter count, season and magazine are not properties. */
 export const declaredCountProperties = [
   { notation: 'episode-count', formats: ['tv', 'movie', 'ova', 'ona', 'special'] },
