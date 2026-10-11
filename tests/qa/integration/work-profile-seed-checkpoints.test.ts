@@ -200,4 +200,7 @@ test('API seed retains 4/16/64 Work checkpoints, preserves ids and restores isol
     if (!sourceStopped) { try { await source.stop(); } catch (error) { errors.push(error); } }
     if (errors.length) throw new AggregateError(errors, 'Seed checkpoint cleanup failed');
   }
-}, 480_000);
+// One build and three restores each enforce their own 600-second deadline.
+// The QA registry separately limits aggregate active work to 480 seconds;
+// Bun's wall timer must also permit admission waits between those stages.
+}, 4 * 600_000);
