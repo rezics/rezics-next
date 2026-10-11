@@ -12,7 +12,7 @@ import {
 } from '../work/restore-lineage.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
-import { CONTRIBUTION_CREATE_READ_COST, CONTRIBUTION_PROFILE } from '../contribution/draft.ts';
+import { admittedContributionLanguage, CONTRIBUTION_CREATE_READ_COST, CONTRIBUTION_PROFILE } from '../contribution/draft.ts';
 import { readComponentState, RevisionCorrupt, RevisionReadBudgetExceeded, RevisionUnavailable,
   type RevisionReadBudget } from '../work/history.ts';
 import type { ResolvedErasureRevision } from './revision-kind.ts';
@@ -189,7 +189,7 @@ function checkedContributionState(state: Record<string, unknown>): 'body' | 'doc
     || contentForm === 'document' && state.document === undefined
     || typeof state.work !== 'string' || !GRAPH_REVISION.test(state.work)
     || typeof state.author !== 'string' || !GRAPH_REVISION.test(state.author)
-    || typeof state.language !== 'string' || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(state.language)
+    || typeof state.language !== 'string' || !admittedContributionLanguage(state.language)
     || state.publication !== 'draft' || typeof state.body !== 'string') {
     throw new GraphErasureUnavailable('Contribution payload does not match its authored profile');
   }
@@ -233,48 +233,50 @@ export async function inventoryContributionPayloads(
   }
 
   const manifests = [...byManifest.keys()];
-  const refs = await fuseki.query(
-    `PREFIX rv: <${RV}> SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
-    VALUES ?manifest { ${manifests.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.revisions)} {
-      ?revision a rv:RevisionAnchor ; rv:component ?component ; rv:manifest ?manifest .
-    }
-    BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
-    BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?otherManifest .
-      FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
-  } ORDER BY ?manifest ?revision LIMIT ${MAX_REFERENCES + 1}`,
-    65_536,
-  );
-  const rows = refs.results?.bindings;
-  if (!rows || rows.length > MAX_REFERENCES) {
-    throw new GraphErasureUnavailable('Contribution reverse-reference fanout exceeds 64');
-  }
-
   const seenReferences = new Set<string>();
   const seenTargets = new Set<string>();
-  for (const row of rows) {
-    const revision = graphUri(row.revision, GRAPH_REVISION);
-    const component = graphUri(row.component, GRAPH_REVISION);
-    const manifest = graphUri(row.manifest, /^urn:rezics:sha256:[0-9a-f]{64}$/);
-    const erased = booleanTerm(row.erased);
-    const duplicate = booleanTerm(row.duplicate);
-    if (!revision || !component || !manifest || erased === null || duplicate === null
-      || byManifest.get(manifest) !== component || duplicate) {
-      throw new GraphErasureUnavailable('Contribution reverse-reference inventory differs');
-    }
-    const referenceKey = `${revision}\0${manifest}`;
-    if (seenReferences.has(referenceKey)) {
-      throw new GraphErasureUnavailable('Contribution reverse-reference inventory is ambiguous');
-    }
-    seenReferences.add(referenceKey);
-    const target = byRevision.get(revision);
-    if (target) {
-      if (target.manifest !== manifest || target.resourceId !== component || erased) {
-        throw new GraphErasureUnavailable('Contribution revision changed during erasure preflight');
+  for (const candidateManifest of manifests) {
+    const refs = await fuseki.query(
+      `PREFIX rv: <${RV}> SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
+      VALUES ?manifest { ${iri(candidateManifest)} }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?revision a rv:RevisionAnchor ; rv:component ?component ; rv:manifest ?manifest .
       }
-      seenTargets.add(revision);
-    } else if (!erased) {
-      throw new GraphErasureUnavailable('Contribution payload is shared by a live revision');
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?otherManifest .
+        FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
+    } ORDER BY ?revision LIMIT ${MAX_REFERENCES + 1}`,
+      65_536,
+    );
+    const rows = refs.results?.bindings;
+    if (!rows || rows.length > MAX_REFERENCES) {
+      throw new GraphErasureUnavailable('Contribution reverse-reference fanout exceeds 64');
+    }
+
+    for (const row of rows) {
+      const revision = graphUri(row.revision, GRAPH_REVISION);
+      const component = graphUri(row.component, GRAPH_REVISION);
+      const manifest = graphUri(row.manifest, /^urn:rezics:sha256:[0-9a-f]{64}$/);
+      const erased = booleanTerm(row.erased);
+      const duplicate = booleanTerm(row.duplicate);
+      if (!revision || !component || !manifest || erased === null || duplicate === null
+        || manifest !== candidateManifest || byManifest.get(manifest) !== component || duplicate) {
+        throw new GraphErasureUnavailable('Contribution reverse-reference inventory differs');
+      }
+      const referenceKey = `${revision}\0${manifest}`;
+      if (seenReferences.has(referenceKey)) {
+        throw new GraphErasureUnavailable('Contribution reverse-reference inventory is ambiguous');
+      }
+      seenReferences.add(referenceKey);
+      const target = byRevision.get(revision);
+      if (target) {
+        if (target.manifest !== manifest || target.resourceId !== component || erased) {
+          throw new GraphErasureUnavailable('Contribution revision changed during erasure preflight');
+        }
+        seenTargets.add(revision);
+      } else if (!erased) {
+        throw new GraphErasureUnavailable('Contribution payload is shared by a live revision');
+      }
     }
   }
   if (seenTargets.size !== contributions.length) {

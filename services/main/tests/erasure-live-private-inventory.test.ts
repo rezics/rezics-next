@@ -34,7 +34,8 @@ class InventoryGraph extends FusekiClient {
       return { results: { bindings: this.identityRows } };
     }
     if (sparql.includes('SELECT ?revision ?component ?manifest ?erased ?duplicate')) {
-      return { results: { bindings: this.referenceRows } };
+      const manifest = /VALUES \?manifest \{ <([^>]+)> \}/.exec(sparql)?.[1];
+      return { results: { bindings: this.referenceRows.filter(row => row.manifest?.value === manifest) } };
     }
     throw new Error('unexpected graph inventory query');
   }
@@ -218,6 +219,27 @@ test('the 65th reverse reference is refused before journal or graph mutation', a
 
   await expectRefusedBeforeMutation({ graph, revisionIds: [fixture.revision.ref] }, GraphErasureUnavailable);
   expect(graph.queries.some(query => query.includes('LIMIT 65'))).toBe(true);
+});
+
+test('reverse-reference lookahead is applied per manifest across 64 candidates', async () => {
+  const component = resource();
+  const fixtures = Array.from({ length: 64 }, (_, index) =>
+    contributionFixture('body', `candidate private body ${index}`, component));
+  const graph = new InventoryGraph();
+  const resolved = await resolveRevisionSet(graph, fixtures.map(fixture => fixture.revision));
+  graph.referenceRows = [
+    ...resolved.map(revision => referenceRow(revision)),
+    referenceRow(resolved[0]!, { graphIri: `${ID}${randomUUID()}`, erased: true }),
+  ];
+
+  const inventory = await inventoryContributionPayloads(graph, objectRoot, resolved);
+
+  expect(inventory).toHaveLength(64);
+  expect(graph.queries.filter(query => query.includes('SELECT ?revision ?component ?manifest ?erased ?duplicate')))
+    .toHaveLength(64);
+  const closureSize = resolved.length + new Set(inventory.map(item => item.payloadRef)).size;
+  expect(closureSize).toBe(128);
+  expect(closureSize).toBeLessThan(256);
 });
 
 test('the 257th journal target is rejected before any erasure command', () => {
