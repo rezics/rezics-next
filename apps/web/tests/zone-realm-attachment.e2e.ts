@@ -232,7 +232,15 @@ test('two Persons recover concurrent Zone-page discussion posts, reopen the thre
     await expect(page.getByRole('heading', { level: 2, name: 'Realm' })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('No Realm is attached.')).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
-  await page.getByRole('textbox', { name: 'Realm handle' }).fill(handle);
+  await expect(page.getByRole('button', { name: 'Account menu' }))
+    .toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
+  // SSR text can appear before this form's listener. Require the real change
+  // handler to enable submission rather than leaving an early DOM-only value.
+  await expect(async () => {
+    await page.getByRole('textbox', { name: 'Realm handle' }).fill('');
+    await page.getByRole('textbox', { name: 'Realm handle' }).fill(handle);
+    await expect(page.getByRole('button', { name: 'Attach' })).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Attach' }).click();
   await expect(page.getByText('Attached. This Zone shows that Realm.')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(realmName).or(page.getByText(handle))).toBeVisible();
