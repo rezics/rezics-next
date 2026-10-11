@@ -142,10 +142,14 @@ test('identified anime watched progress resumes across devices and rejects stale
     expect(await json(await call(second, secondToken, 'GET',
       `/v1/reading-positions/${short(show.work)}?${actorQuery}&position=mine&limit=1`)))
       .toMatchObject({ resolved: episode, scope: 'resume', items: [{ occurrence: episode, target: targets[0] }] });
+    const positionsPath = `/v1/reading-positions/${short(show.work)}?${actorQuery}&position=start&limit=1`;
+    const firstEpisode = await json<{ items: { occurrence: string }[]; nextCursor: string | null }>(
+      await call(second, secondToken, 'GET', positionsPath));
+    expect(firstEpisode.items).toMatchObject([{ occurrence: episode }]);
+    expect(firstEpisode.nextCursor).not.toBeNull();
     expect(await json(await call(second, secondToken, 'GET',
-      `/v1/reading-positions/${short(show.work)}?${actorQuery}&position=mine&around=${encodeURIComponent(episode)}`)))
-      .toMatchObject({ neighbours: { next: { status: 'found', occurrence: nextEpisode } },
-        items: [{ occurrence: nextEpisode, target: targets[1], displayLabel: 'Episode 2' }] });
+      `${positionsPath}&cursor=${encodeURIComponent(firstEpisode.nextCursor!)}`)))
+      .toMatchObject({ items: [{ occurrence: nextEpisode, target: targets[1], displayLabel: 'Episode 2' }] });
 
     expect(await json<Progress>(await write(second, secondToken, false, resumed.version)))
       .toMatchObject({ completed: false, version: 2 });
