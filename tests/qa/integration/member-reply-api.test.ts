@@ -609,9 +609,6 @@ test('revoked Person control cannot be replaced for a saved proof; terminal draf
       representations: [{ principalId, actor: h.pen, action: 'content.draft', lifetime: '8 hours' }],
       grant: { actor: h.pen, action: 'content.draft', lifetime: '8 hours' } });
 
-    const revokedReplay = await h.access.register({ ...staleRequest, idempotencyKey: staleKey });
-    expect(revokedReplay).toMatchObject({ id: registered.id, replayed: true, dispatchEligible: false });
-    await expect(h.access.claim(registered.id, digest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
     expect((await h.accessPool.query(`SELECT id FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'content.draft'
         AND active AND valid_until > clock_timestamp()`, [h.pen, staleRequest.scope])).rowCount).toBe(1);
@@ -626,10 +623,6 @@ test('revoked Person control cannot be replaced for a saved proof; terminal draf
     expect(replacementControl.id).not.toBe(savedProof.representation_id);
     expect((await h.accessPool.query('SELECT access.agent_controller_count($1) AS n', [h.pen]))
       .rows[0]!.n).toBe(1);
-    const replacementRequest = { ...staleRequest, principal: controllerPrincipal };
-    const freshAdmission = await h.access.register({ ...replacementRequest, idempotencyKey: randomUUID() });
-    expect(freshAdmission.dispatchEligible).toBe(true);
-    await h.access.claim(freshAdmission.id, digest, controllerPrincipal);
 
     await grantFixtureAuthority(h.accessPool, { scope: `reply:create:${input.rootTarget}`, requireDispatch: false,
       representations: [{ principalId, actor: h.pen, action: 'reply.create', lifetime: '8 hours' }],
@@ -644,6 +637,36 @@ test('revoked Person control cannot be replaced for a saved proof; terminal draf
     expect((await h.contentPool.query('SELECT id FROM content.reply WHERE id = $1', [input.reply])).rowCount).toBe(0);
     expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
       [identityKey])).rowCount).toBe(0);
+
+    // The new controller authorizes a new control row for the original
+    // principal through the already controlled Person h.actor. This keeps the
+    // stale admission's failure tied to its saved proof, not missing control.
+    const restoreEpoch = (await h.accessPool.query<{ authority_epoch: string }>(`
+      SELECT authority_epoch::text FROM access.scope_gate WHERE id = 'work:create:root'`)).rows[0]!.authority_epoch;
+    const restoreInvitationId = randomUUID();
+    const restoreOffered = await invitations.issue(controllerPrincipal, receipt(), {
+      invitationId: restoreInvitationId, issuerSubject: h.pen, recipientSubject: h.actor,
+      offer: 'control', issuerLifetime: 'institutional', expectedAuthorityEpoch: restoreEpoch,
+    });
+    expect(restoreOffered).toMatchObject({ offer: 'control', status: 'pending' });
+    const restoreAccepted = await invitations.accept(principal, receipt(), {
+      invitationId: restoreInvitationId, representationId: randomUUID(),
+      expectedAuthorityEpoch: restoreEpoch,
+    });
+    expect(restoreAccepted).toMatchObject({ offer: 'control', status: 'accepted' });
+    const restoredControl = (await h.accessPool.query<{ id: string }>(`SELECT id
+      FROM access.representation WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'
+        AND active AND valid_until > clock_timestamp()`, [principalId, h.pen])).rows[0]!;
+    expect(restoredControl.id).not.toBe(savedProof.representation_id);
+    expect((await h.accessPool.query('SELECT access.agent_controller_count($1) AS n', [h.pen]))
+      .rows[0]!.n).toBe(2);
+
+    const revokedReplay = await h.access.register({ ...staleRequest, idempotencyKey: staleKey });
+    expect(revokedReplay).toMatchObject({ id: registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.claim(registered.id, digest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
+    const freshAdmission = await h.access.register({ ...staleRequest, idempotencyKey: randomUUID() });
+    expect(freshAdmission.dispatchEligible).toBe(true);
+    await h.access.claim(freshAdmission.id, digest, principal);
 
     const replay = await h.post('/v1/member-reply-drafts', input, key);
     expect(replay.status, JSON.stringify(replay.body)).toBe(200);
@@ -694,30 +717,90 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
       representations: [{ principalId, actor: h.pen, action: 'content.draft', lifetime: '8 hours' }],
       grant: { actor: h.pen, action: 'content.draft', lifetime: '8 hours' },
     });
+    const makeRequest = (input: ReturnType<typeof rejected>, key: string) => ({
+      principal, actingSubject: h.pen, action: 'content.draft', scope: `content:draft:${input.reply}`,
+      requestDigest: createHash('sha256').update(JSON.stringify(input)).digest('hex'),
+      idempotencyKey: key, baselineRelatedWork: h.work.work,
+      baselineSourceRevision: h.first.draftRevision,
+    });
+    const assertNoDraft = async (input: ReturnType<typeof rejected>) => {
+      expect((await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
+        [input.variantId])).rowCount).toBe(0);
+      expect((await h.contentPool.query('SELECT id FROM content.reply WHERE id = $1',
+        [input.reply])).rowCount).toBe(0);
+    };
+    const assertGrantStillActive = async (input: ReturnType<typeof rejected>) => {
+      expect((await h.accessPool.query(`SELECT id FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'content.draft'
+          AND active AND valid_until > clock_timestamp()`, [h.pen, `content:draft:${input.reply}`])).rowCount).toBe(1);
+    };
 
     const unverified = rejected(nativeId());
     await installDraftGrant(unverified);
-    await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
     const unverifiedKey = randomUUID();
-    expect((await h.post('/v1/member-reply-drafts', unverified, unverifiedKey)).status).toBe(403);
-    expect((await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
-      [unverified.variantId])).rowCount).toBe(0);
-    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
-      [unverifiedKey])).rowCount).toBe(0);
+    const unverifiedRequest = makeRequest(unverified, unverifiedKey);
+    const unverifiedRegistered = await h.access.register(unverifiedRequest);
+    expect(unverifiedRegistered.dispatchEligible).toBe(true);
+    await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
+    const unverifiedPrincipal = await h.principal();
+    await expect(h.access.claim(unverifiedRegistered.id, unverifiedRequest.requestDigest, principal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const unverifiedReplay = await h.access.register({ ...unverifiedRequest, principal: unverifiedPrincipal });
+    expect(unverifiedReplay).toMatchObject({ id: unverifiedRegistered.id, replayed: true,
+      dispatchEligible: false, state: 'registered' });
+    await assertGrantStillActive(unverified);
+    await assertNoDraft(unverified);
+
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [h.user.id]);
     const afterVerification = rejected(nativeId());
-    const recovered = await h.post('/v1/member-reply-drafts', afterVerification);
-    expect(recovered.status, JSON.stringify(recovered.body)).toBe(201);
+    await installDraftGrant(afterVerification);
+    const verifiedPrincipal = await h.principal();
+    expect(verifiedPrincipal.emailVerified).toBe(true);
+    const verifiedRequest = { ...makeRequest(afterVerification, randomUUID()), principal: verifiedPrincipal };
+    const afterVerificationAdmission = await h.access.register(verifiedRequest);
+    expect(afterVerificationAdmission.dispatchEligible).toBe(true);
+    await h.access.claim(afterVerificationAdmission.id, verifiedRequest.requestDigest, verifiedPrincipal);
 
     const suspended = rejected(nativeId());
     await installDraftGrant(suspended);
-    await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [h.user.id]);
     const suspendedKey = randomUUID();
-    expect((await h.post('/v1/member-reply-drafts', suspended, suspendedKey)).status).toBe(401);
-    expect((await h.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
-      [suspended.variantId])).rowCount).toBe(0);
-    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
-      [suspendedKey])).rowCount).toBe(0);
+    const suspendedRequest = { ...makeRequest(suspended, suspendedKey), principal: verifiedPrincipal };
+    const suspendedRegistered = await h.access.register(suspendedRequest);
+    expect(suspendedRegistered.dispatchEligible).toBe(true);
+    await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [h.user.id]);
+    await expect(h.access.claim(suspendedRegistered.id, suspendedRequest.requestDigest, verifiedPrincipal))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(h.principal()).rejects.toThrow();
+    // A suspended Account has no fresh bearer assertion to pass back for replay.
+    // Mark the captured assertion unverified so replay eligibility is evaluated
+    // against the invalid current state, while claim uses its live callback above.
+    const suspendedReplay = await h.access.register({ ...suspendedRequest,
+      principal: { ...verifiedPrincipal, emailVerified: false } });
+    expect(suspendedReplay).toMatchObject({ id: suspendedRegistered.id, replayed: true,
+      dispatchEligible: false, state: 'registered' });
+    await assertGrantStillActive(suspended);
+    await assertNoDraft(suspended);
+
+    await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = NULL, generation = generation + 1 WHERE user_id = $1', [h.user.id]);
+    const recoveredSignin = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
+      headers: { 'content-type': 'application/json', origin: h.base },
+      body: JSON.stringify({ email: h.user.email, password: h.user.password }),
+    });
+    expect(recoveredSignin.status).toBe(200);
+    const recoveredToken = (await signIn({ account: h.base, clientId: h.client.client_id,
+      redirectUri: h.redirectUri,
+      scope: 'openid agent:create work:create work:edit work:read comment:create space:create realm:profile realm:adopt',
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, }, recoveredSignin.headers.get('set-cookie')!)).accessToken;
+    const recoveredPrincipal = await h.verifier.verify(new Request('http://main.local', {
+      headers: { authorization: `Bearer ${recoveredToken}` },
+    }), ['work:edit']);
+    expect(recoveredPrincipal.emailVerified).toBe(true);
+    const afterUnsuspension = rejected(nativeId());
+    await installDraftGrant(afterUnsuspension);
+    const recoveredRequest = { ...makeRequest(afterUnsuspension, randomUUID()), principal: recoveredPrincipal };
+    const recoveredAdmission = await h.access.register(recoveredRequest);
+    expect(recoveredAdmission.dispatchEligible).toBe(true);
+    await h.access.claim(recoveredAdmission.id, recoveredRequest.requestDigest, recoveredPrincipal);
   } finally { await h.close(); }
 }, 180_000);
 
