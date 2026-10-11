@@ -7,7 +7,7 @@ const templateTable = '__ACCESS_FIXTURE_TABLE_TEMPLATE__';
 const tableNames = ['permission_grant', 'representation', 'scope_gate'] as const;
 const tableNameSet = new Set<string>(tableNames);
 
-export type AccessFixtureWriteTable = `access.${(typeof tableNames)[number]}` | 'access.<template table>';
+export type AccessFixtureWriteTable = `access.${(typeof tableNames)[number]}`;
 
 export interface AccessFixtureWrite {
   file: string;
@@ -199,7 +199,6 @@ function accessFixtureTable(reference: { schema?: string; name: string }): Acces
   if (tableNameSet.has(normalized)) {
     return `access.${normalized as (typeof tableNames)[number]}`;
   }
-  if (reference.name === templateTable) return 'access.<template table>';
   return undefined;
 }
 
@@ -233,9 +232,12 @@ function writesInLiteral(sql: string): AccessFixtureWriteTable[] {
       const table = accessFixtureTable(target);
       if (table && (kind !== 'copy' || copyHasFrom(sql, target.end))) writes.push(table);
       if (kind !== 'truncate') break;
+      // Each entry of a TRUNCATE list may carry its own ONLY before the name and * after it.
       cursor = skipSqlTrivia(sql, target.end);
+      if (sql[cursor] === '*') cursor = skipSqlTrivia(sql, cursor + 1);
       if (sql[cursor] !== ',') break;
       cursor = skipSqlTrivia(sql, cursor + 1);
+      cursor = skipSqlTrivia(sql, sqlWord(sql, cursor, 'only') ?? cursor);
     }
   }
   return writes;

@@ -9,18 +9,22 @@ import {
 const fixtures = resolve(import.meta.dir, 'fixtures/access-fixture-writes');
 const readFixture = (name: string) => readFileSync(resolve(fixtures, name), 'utf8');
 
-test('finds direct access writes, including an inline-schema template, and allows fixture authority calls', () => {
+test('finds direct access writes, ignores an interpolated table name, and allows fixture authority calls', () => {
   const lines = readFixture('direct-write.fixture').trim().split('\n');
   const findings = scanAccessFixtureWriteText(lines.join('\n'), 'direct-write.fixture');
   expect(findings).toEqual([
-    { file: 'direct-write.fixture', table: 'access.<template table>' },
     { file: 'direct-write.fixture', table: 'access.permission_grant' },
     { file: 'direct-write.fixture', table: 'access.representation' },
     { file: 'direct-write.fixture', table: 'access.scope_gate' },
   ]);
-  expect(lines.slice(0, 5).map((line, index) => scanAccessFixtureWriteText(line, `write-${index}`)[0]?.table)).toEqual([
-    'access.permission_grant', 'access.<template table>', 'access.representation', 'access.scope_gate', 'access.permission_grant',
+  expect(lines.slice(0, 5).map((line, index): string => scanAccessFixtureWriteText(line, `write-${index}`)[0]?.table ?? 'none')).toEqual([
+    'access.permission_grant', 'none', 'access.representation', 'access.scope_gate', 'access.permission_grant',
   ]);
+  // Each entry of a TRUNCATE list may carry ONLY before its name and * after it.
+  expect(scanAccessFixtureWriteText('const q = `TRUNCATE content.work, ONLY access.permission_grant, access.scope_gate`;', 'only.fixture')
+    .map(finding => finding.table)).toEqual(['access.permission_grant', 'access.scope_gate']);
+  expect(scanAccessFixtureWriteText('const q = `TRUNCATE content.work *, access.permission_grant, access.scope_gate`;', 'star.fixture')
+    .map(finding => finding.table)).toEqual(['access.permission_grant', 'access.scope_gate']);
   expect(scanAccessFixtureWriteText(lines[5]!, 'copy-to.fixture')).toEqual([]);
   expect(scanAccessFixtureWriteText(lines[6]!, 'read-only.fixture')).toEqual([]);
   expect(scanAccessFixtureWriteText(lines[7]!, 'truncate-list.fixture')).toEqual([
