@@ -132,6 +132,13 @@ test('GOV01/GOV02/GOV24: public notices bind exact Content revisions and retries
         statement: 'Anonymous reports cannot bind unpublished private bytes.', contentLanguage: 'en',
       }, key: `rights-private-anonymous-${randomUUID()}` });
       expect(anonymousPrivate.status, await anonymousPrivate.clone().text()).toBe(404);
+      const anonymousPrivateProblem = await anonymousPrivate.clone().json() as Record<string, unknown>;
+      expect(anonymousPrivateProblem).toEqual({
+        type: 'https://rezics.com/problems/case_unavailable',
+        title: 'Case is unavailable',
+        status: 404,
+        code: 'case_unavailable',
+      });
       const authorizedPrivate = await author.send('POST', '/v1/public-reports', {
         profile: 'public-report-v1', target: privateUrl, category: 'harassment',
         statement: 'An authorized reader can report this exact private revision.', contentLanguage: 'en',
@@ -148,5 +155,9 @@ test('GOV01/GOV02/GOV24: public notices bind exact Content revisions and retries
         category: 'harassment', statement: 'A missing Content revision is unavailable.', contentLanguage: 'en',
       }, key: `rights-unavailable-${randomUUID()}` });
       expect(unavailable.status).toBe(404);
+      const unavailableProblem = await unavailable.clone().json() as Record<string, unknown>;
+      expect(anonymousPrivate.status).toBe(unavailable.status);
+      expect(anonymousPrivateProblem).toEqual(unavailableProblem);
+      expect(Object.keys(anonymousPrivateProblem).sort()).toEqual(Object.keys(unavailableProblem).sort());
     } finally { await stack.stop(); }
   }, 180_000);
