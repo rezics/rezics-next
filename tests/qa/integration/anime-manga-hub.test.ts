@@ -225,7 +225,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     const savedManga = await json<Preference & { replayed: boolean }>(raced[winnerIndex]!);
     expect(savedManga).toMatchObject({ work: manga.work, version: 1, language: 'ja',
       edition: winnerChoice.body.edition, replayed: false });
-    const stale = await json<{ current: Preference }>(raced[1 - winnerIndex]!);
+    const stale = await json<{ current: Preference }>(raced[1 - winnerIndex]!, 409);
     expect(stale.current).toMatchObject(persistedPreference(savedManga));
     expect(await json<Preference>(await readPreference(manga, person, a.token)))
       .toMatchObject(persistedPreference(savedManga));
