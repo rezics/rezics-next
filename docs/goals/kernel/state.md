@@ -58,6 +58,7 @@ Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recip
 - [Claims into Statements: bounded work and the cutover boundary](reports/G-1698-specification.md): scheduled after opening.
 - [Public disclosure cursors and the explicit read mode](reports/G-1713-specification.md): 17 slices, the Launch web handoff.
 - [Two races that survive the retryable-refusal fix](reports/G-1679-specification.md): test hook and fixture repairs.
+- [Where local consistency is persisted](reports/G-1642-specification.md): defer; eight position-domain slices pending reproducers.
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
 
 ## Open
