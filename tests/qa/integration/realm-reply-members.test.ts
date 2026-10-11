@@ -77,6 +77,21 @@ async function placementEffects(h: VisibilityFixture, revisionId: string, reply:
     replyPlacements: binding?.replyPlacements?.value };
 }
 
+async function waitForBlockedRealmPolicyWrite(h: VisibilityFixture) {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    const blocked = await h.accessPool.query(`SELECT 1 FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid()
+        AND wait_event_type = 'Lock'
+        AND query LIKE 'SELECT 1 FROM access.scope_gate WHERE id = $1%'
+        AND query LIKE '%FOR UPDATE'
+        AND cardinality(pg_blocking_pids(pid)) > 0`);
+    if (blocked.rowCount) return;
+    await Bun.sleep(10);
+  }
+  throw new Error('Realm policy write did not wait behind the in-flight placement');
+}
+
 test('public open replies allow an unjoined Person; trusted replies require a joined Person', async () => {
   const h = await realmVisibilityFixture();
   try {
@@ -279,6 +294,9 @@ test('Realm member direct policy respects membership and vetoes; policy changes 
     expect((await h.post('/v1/realm-reply-placements', direct, key)).body.placement).toBe(accepted.body.placement);
     expect((await h.contentPool.query('SELECT method FROM content.realm_review_decision WHERE id = $1',
       [accepted.body.reviewDecisionId])).rows[0].method).toBe('policy');
+    const preChangeDecision = (await h.contentPool.query<{ policy: string; policy_revision: string }>(`
+      SELECT policy, policy_revision FROM content.realm_review_decision WHERE id = $1`,
+    [accepted.body.reviewDecisionId])).rows[0]!;
     const revoked = await h.post('/v1/realm-reply-reviews', { ...review, revisionId: edited.body.revisionId,
       revisionDigest: editedDigest, expectedGeneration: '1', supersedes: accepted.body.reviewDecisionId,
       outcome: 'revoked', reasonReference: 'moderator-veto' });
@@ -304,15 +322,38 @@ test('Realm member direct policy respects membership and vetoes; policy changes 
     const latestDigest = latest.body.revisionDigest;
     const prepare = h.owner.preparePlacement.bind(h.owner);
     let policyChange: Promise<void> | undefined;
+    let policyAcknowledged = false;
     h.owner.preparePlacement = async (...args) => {
       const prepared = await prepare(...args);
-      policyChange = policy('mandatory');
+      policyChange = policy('mandatory').then(() => { policyAcknowledged = true; });
+      void policyChange.catch(() => {});
+      await waitForBlockedRealmPolicyWrite(h);
+      expect(policyAcknowledged).toBe(false);
       return prepared;
+    };
+    const settlePublication = h.content.settlePublication.bind(h.content);
+    h.content.settlePublication = async (...args: Parameters<typeof h.content.settlePublication>) => {
+      const settled = await settlePublication(...args);
+      if (args[2].outcome === 'active' && args[2].revisionId === latest.body.revisionId) {
+        expect(policyAcknowledged).toBe(false);
+      }
+      return settled;
     };
     const raced = await h.post('/v1/realm-reply-placements', { ...direct,
       revisionId: latest.body.revisionId, revisionDigest: latestDigest, expectedHead: accepted.body.placement });
     expect(raced.status, JSON.stringify(raced.body)).toBe(201);
     await policyChange;
+    expect(policyAcknowledged).toBe(true);
+    expect((await admin.settings(principal, realm, h.actor, h.env)).settings.reviewMode).toBe('mandatory');
+    const racedDecision = (await h.contentPool.query<{ method: string; policy: string;
+      policy_revision: string; direct_policy_revision: string | null }>(`SELECT d.method, d.policy, d.policy_revision,
+        placement.direct_policy_revision FROM content.realm_review_decision d
+        JOIN content.realm_placement_preparation placement ON placement.review_decision_id = d.id
+        WHERE d.id = $1 AND d.revision_id = $2 AND placement.revision_id = $2`,
+    [raced.body.reviewDecisionId, latest.body.revisionId])).rows[0];
+    expect(racedDecision).toEqual({ method: 'policy', policy: preChangeDecision.policy,
+      policy_revision: preChangeDecision.policy_revision,
+      direct_policy_revision: preChangeDecision.policy_revision });
     expect((await h.contentPool.query(`SELECT status FROM content.publication_preparation
       WHERE revision_id=$1`, [latest.body.revisionId])).rows[0].status).toBe('active');
   } finally { await h.close(); }
