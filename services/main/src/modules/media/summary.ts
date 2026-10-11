@@ -88,9 +88,9 @@ export interface SummaryInput {
   languages?: readonly string[];
   /** Zone bindings admit Collections; the existing summary-batch transport does not. */
   includeCollections?: boolean;
-  /** The caller already loaded graph types. A non-Agent then needs no name-owner
-   * probe; community pages set this so that probe is not another graph request. */
-  settleNonAgentNameOwners?: boolean;
+  /** Reuse freshly loaded non-Agent types. Page adapters also settle an absent
+   * id when that same query proves it has no current triples, including Agent type. */
+  settleNonAgentNameOwners?: boolean | 'includingAbsent';
 }
 
 export type AvatarDescriptor =
@@ -250,15 +250,18 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
 }
 
 /** One bounded graph query resolves type, labels and public disclosure for the batch. */
-async function graphRows(env: WorkActivationEnvironment, resources: readonly string[], localBasis = false) {
+async function graphRows(env: WorkActivationEnvironment, resources: readonly string[], localBasis = false,
+  proveAbsence = false) {
   // Test the owner branch, not BOUND(?work): an OPTIONAL can bind an initially
   // absent Work from its own label/head pattern and attach an unrelated owner.
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post ${proveAbsence ? '?hasCurrentIdentity' : ''} WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
+      ${proveAbsence && resources.length ? `VALUES ?r { ${resources.map(iri).join(' ')} }
+        BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r ?identityPredicate ?identityValue } } AS ?hasCurrentIdentity)` : ''}
       OPTIONAL {
         VALUES ?r { ${resources.map(iri).join(' ')} }
         { GRAPH ${iri(GRAPHS.current)} {
@@ -358,6 +361,13 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     throw new MediaUnavailable('graph lineage is unavailable');
   }
   const rows = new Map<string, GraphRow>();
+  // This proof is independent of presentation filtering: private, protected,
+  // tombstoned and incomplete Agents still have current subject triples.
+  const absentResources = new Set(resources.filter(reference => {
+    const evidence = bindings.filter(binding => binding.r?.value === reference);
+    return evidence.length > 0 && evidence.every(binding => binding.hasCurrentIdentity?.value === 'false'
+      && binding.type?.value !== 'agent');
+  }));
   const redirects = new Map<string, string>();
   const ambiguous = new Set<string>();
   // Keep protection/erasure flags until all rows are collected: dropping only
@@ -413,7 +423,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const dependencies = bindings.map(({ sequence: _sequence, ...binding }) =>
     Object.entries(binding).sort(([a], [b]) => a.localeCompare(b)))
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-  return { rows, redirects, generation: localBasis
+  return { rows, redirects, absentResources, generation: localBasis
     ? `${control.epoch.value}:${createHash('sha256').update(JSON.stringify(dependencies)).digest('hex')}`
     : `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
 }
@@ -471,7 +481,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Foreign references never enter graph, disclosure or Access queries. They
   // retain their input position and the same minimal unavailable item.
   const unique = [...new Set(input.resources.filter(resource => nativeId.test(resource)))];
-  const graph = await graphRows(env, unique, input.localBasis);
+  const graph = await graphRows(env, unique, input.localBasis, input.settleNonAgentNameOwners === 'includingAbsent');
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
   const noteNameProbe = (batch: readonly Pick<DisclosureTarget, 'owner' | 'component' | 'nameOwnerResolved'>[]) => {
     if (!hasDisclosure(env)) return;
@@ -488,16 +498,18 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Access, name or avatar hydration. A hidden row and an absent id then share
   // the media generation and the cost envelope, as well as the unavailable item.
   // The graph row's type already proves a non-Agent has no agent name owner.
-  // Absent rows and Agents still probe: a missing identity is not that proof.
-  const settledNameOwner = (row: GraphRow | undefined) =>
-    input.settleNonAgentNameOwners && row !== undefined && row.type !== 'agent'
+  // A missing presentation row alone is no proof. Only an explicit absence of
+  // current triples excludes the owner's current `a rv:Agent` pattern.
+  const settledNameOwner = (reference: string, row: GraphRow | undefined) =>
+    input.settleNonAgentNameOwners && (row !== undefined && row.type !== 'agent'
+      || row === undefined && graph.absentResources.has(reference))
       ? { nameOwnerResolved: true as const } : {};
   const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
     return { owner: 'graph' as const, resource: reference, component: 'name' as const,
       revision: reference === row?.work ? row.head : null, work: row?.work,
       workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
-      ...settledNameOwner(row) };
+      ...settledNameOwner(reference, row) };
   });
   const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
     input.channel ?? 'summary', client);
@@ -726,7 +738,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     targets.push({ owner: 'graph', resource: reference, component: 'name',
       revision: reference === row.work ? row.head : null, work: row.work,
       workRevision: row.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
-      ...settledNameOwner(row) });
+      ...settledNameOwner(reference, row) });
     const asset = avatars.get(reference)?.asset;
     if (asset) {
       assetIndexes.set(reference, targets.length);

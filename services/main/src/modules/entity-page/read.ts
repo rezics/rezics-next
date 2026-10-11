@@ -203,7 +203,7 @@ export async function resolveSummary(session: WorkReadSession, resource: string)
       context: DEFAULT_MEDIA_CONTEXT,
       language: session.options.language ?? null,
       languages: session.displayLanguages,
-      settleNonAgentNameOwners: true,
+      settleNonAgentNameOwners: 'includingAbsent',
     },
   );
   if (result.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
@@ -259,7 +259,7 @@ export async function visibleResourceReferences(
         context: DEFAULT_MEDIA_CONTEXT,
         language: session.options.language ?? null,
         languages: session.displayLanguages,
-        settleNonAgentNameOwners: true,
+        settleNonAgentNameOwners: 'includingAbsent',
       },
     );
     if (batch.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {

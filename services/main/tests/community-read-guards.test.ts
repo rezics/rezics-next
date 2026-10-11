@@ -13,6 +13,8 @@ import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import { WorkReadMissing, WorkReadSession, WorkReadUnavailable, workRead } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { recoveryAccess } from './support/recovery-access.ts';
+import { targetSummaries } from '../src/modules/target/resolve.ts';
+import { assertHiddenIdEquality, HiddenIdDifference, type HiddenIdCounters } from '../../../tests/qa/support/hidden-id-equality.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const term = (value: string) => ({ type: 'literal', value });
@@ -21,6 +23,8 @@ const agent = id(1);
 const untyped = id(2);
 const work = id(3);
 const absent = id(4);
+const hidden = id(5);
+const privateAgent = id(6);
 const privateName = 'Hidden Pen';
 const publicTitle = 'Open Title';
 
@@ -28,8 +32,9 @@ function iris(query: string) {
   return [...query.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
 }
 
-function summaryFixture() {
+function summaryFixture(absenceEvidence = true) {
   const graphCalls: string[] = [];
+  let sqlStatements = 0, bytes = 0;
   const graph = new FusekiClient('http://community-read-guards.invalid');
   graph.query = async query => {
     graphCalls.push(query);
@@ -39,12 +44,17 @@ function summaryFixture() {
       const control = { epoch: term('epoch'), sequence: term('7') };
       return { results: { bindings: [
         ...refs('r').flatMap(reference => {
-          if (reference === agent) return [{ ...control, r: uri(agent), type: term('agent'),
+          const proof = query.includes('?hasCurrentIdentity') && (reference !== absent || absenceEvidence)
+            ? { hasCurrentIdentity: term(reference === absent ? 'false' : 'true') } : {};
+          const identity = { ...control, r: uri(reference), ...proof };
+          if (reference === agent) return [{ ...identity, type: term('agent'),
             public: term('true'), head: uri(id(11)), label: term(privateName) }];
-          if (reference === untyped) return [{ ...control, r: uri(untyped) }];
-          if (reference === work) return [{ ...control, r: uri(work), type: term('work'), work: uri(work),
+          if (reference === untyped) return [identity];
+          if (reference === work) return [{ ...identity, type: term('work'), work: uri(work),
             head: uri(id(13)), public: term('true'), label: { ...term(publicTitle), 'xml:lang': 'en' } }];
-          return [];
+          if (reference === hidden) return [{ ...identity, type: term('space'),
+            public: term('true'), label: { ...term('Hidden space'), 'xml:lang': 'en' } }];
+          return query.includes('?hasCurrentIdentity') ? [identity] : [];
         }),
         control,
       ] } };
@@ -52,7 +62,7 @@ function summaryFixture() {
     if (query.includes('SELECT ?work ?head ?nameOwner')) {
       return { results: { bindings: refs('work').map(reference => ({
         work: uri(reference), head: uri(id(11)),
-        ...(reference === agent ? { nameOwner: uri(reference) } : {}),
+        ...([agent, privateAgent].includes(reference) ? { nameOwner: uri(reference) } : {}),
       })) } };
     }
     if (query.includes('?owningWork')) {
@@ -71,11 +81,13 @@ function summaryFixture() {
     throw new Error(`Unexpected summary query: ${query.slice(0, 180)}`);
   };
   const pool = { query: async (sql: string, args: unknown[]) => {
+    sqlStatements++;
     if (!sql.includes('requested AS')) throw new Error('Unexpected disclosure statement');
-    const targets = JSON.parse(String(args[0])) as Array<{ ordinal: number; nameOwner?: string | null }>;
+    const targets = JSON.parse(String(args[0])) as Array<{ ordinal: number; resource: string; nameOwner?: string | null }>;
     return { rows: targets.map(target => ({
-      ordinal: target.ordinal, open: true, restricted: false, assessments: [],
-      nameVisible: target.nameOwner !== agent, publicNameVisible: target.nameOwner !== agent,
+      ordinal: target.ordinal, open: true, restricted: target.resource === hidden, assessments: [],
+      nameVisible: ![agent, privateAgent].includes(target.nameOwner ?? ''),
+      publicNameVisible: ![agent, privateAgent].includes(target.nameOwner ?? ''),
     })) };
   } } as unknown as Pool;
   const environment = { fuseki: graph, objectDirectory: '.temp/community-read-guards',
@@ -84,7 +96,14 @@ function summaryFixture() {
   const session = new WorkReadSession({ environment, account: {} as never,
     access: recoveryAccess() as never }, new Request('http://main.test/v1/resources?position=all'),
   {}, { dataEpoch: 'epoch', sequence: '7' });
-  return { environment, session, graphCalls };
+  return { environment, session, graphCalls,
+    countResponse: async (response: Response) => {
+      bytes += (await response.clone().arrayBuffer()).byteLength;
+      return response;
+    },
+    counters: (): HiddenIdCounters => ({ graphCalls: graphCalls.length, sqlStatements, bytes,
+      mediaGenerations: 0, rateLimitCharges: 0 }),
+  };
 }
 
 test('community summaries still probe an Agent, absent identity and untyped row, and withhold a private Agent name', async () => {
@@ -129,15 +148,53 @@ const summaryAdapters = [
   } },
 ];
 
+const equalityAdapters = [...summaryAdapters,
+  { name: 'WorkReadSession.summaries', inherited: true, read: (session: WorkReadSession, resource: string) => session.summaries([resource]) },
+  { name: 'targetSummaries', inherited: true, read: async (session: WorkReadSession, resource: string) => {
+    const batch = await targetSummaries(session, [resource]);
+    return { summaries: batch.summaries, cost: batch.cost };
+  } },
+];
+
+for (const adapter of equalityAdapters) {
+  test(`${adapter.name} ${'inherited' in adapter ? 'records the inherited trust-ops cost difference' : 'gives hidden and absent ids the same response and read cost'}`, async () => {
+    const fixture = summaryFixture();
+    const observations: Array<{ id: string; counters: HiddenIdCounters }> = [];
+    try {
+      const compare = () => assertHiddenIdEquality({ operation: adapter.name, hiddenId: hidden, absentId: absent,
+        readCounters: fixture.counters,
+        call: async resource => {
+          const before = fixture.counters();
+          const result = await adapter.read(fixture.session, resource);
+          const response = await fixture.countResponse(Response.json(result));
+          const after = fixture.counters();
+          observations.push({ id: resource, counters: {
+            graphCalls: after.graphCalls - before.graphCalls, sqlStatements: after.sqlStatements - before.sqlStatements,
+            bytes: after.bytes - before.bytes, mediaGenerations: after.mediaGenerations - before.mediaGenerations,
+            rateLimitCharges: after.rateLimitCharges - before.rateLimitCharges,
+          } });
+          return response;
+        },
+      });
+      // These consumers already selected the existing-only optimization. Keep
+      // their observed mismatch as a trust-ops finding, outside this page fix.
+      if ('inherited' in adapter) await expect(compare()).rejects.toBeInstanceOf(HiddenIdDifference);
+      else await compare();
+      expect(observations.map(row => row.counters.graphCalls)).toEqual('inherited' in adapter ? [2, 3] : [2, 2]);
+      expect(observations.map(row => row.counters.sqlStatements)).toEqual([1, 1]);
+    } finally { console.log(`${adapter.name} hidden/absent ${JSON.stringify(observations.map(row => row.counters))}`); }
+  });
+}
+
 for (const adapter of summaryAdapters) {
   test(`${adapter.name} settles a freshly loaded non-Agent name owner`, async () => {
     const { session, graphCalls } = summaryFixture();
     expect(await adapter.read(session, work)).not.toBeNull();
     expect(graphCalls.some(query => query.includes('SELECT ?work ?head ?nameOwner'))).toBe(false);
   });
-  test(`${adapter.name} probes private Agents and unresolved identities without disclosing them`, async () => {
+  test(`${adapter.name} probes Agents, including a filtered private profile, and untyped identities`, async () => {
     const outputs = [];
-    for (const resource of [agent, untyped, absent]) {
+    for (const resource of [agent, privateAgent, untyped]) {
       const { session, graphCalls } = summaryFixture();
       outputs.push(await adapter.read(session, resource));
       const probes = graphCalls.filter(query => query.includes('SELECT ?work ?head ?nameOwner'));
@@ -146,6 +203,13 @@ for (const adapter of summaryAdapters) {
     }
     expect(outputs).toEqual([null, null, null]);
     expect(JSON.stringify(outputs)).not.toContain(privateName);
+  });
+  test(`${adapter.name} settles absence only with explicit current-identity evidence`, async () => {
+    for (const evidence of [true, false]) {
+      const { session, graphCalls } = summaryFixture(evidence);
+      expect(await adapter.read(session, absent)).toBeNull();
+      expect(graphCalls.some(query => query.includes('SELECT ?work ?head ?nameOwner'))).toBe(!evidence);
+    }
   });
 }
 
@@ -156,7 +220,30 @@ test('page reference batches settle only known non-Agents in a mixed inventory',
   expect(probes).toHaveLength(1);
   const probed = new Set(iris(probes[0]!));
   expect(probed.has(work)).toBe(false);
-  for (const resource of [agent, absent, untyped]) expect(probed.has(resource)).toBe(true);
+  expect(probed.has(absent)).toBe(false);
+  for (const resource of [agent, untyped]) expect(probed.has(resource)).toBe(true);
+});
+
+test('a page reference batch with only foreign ids remains unavailable without claiming absence', async () => {
+  const { session, graphCalls } = summaryFixture();
+  expect(await visibleResourceReferences(session, ['https://example.com/foreign'])).toEqual(new Set());
+  expect(graphCalls).toHaveLength(1);
+  expect(graphCalls[0]).not.toContain('BIND(EXISTS');
+});
+
+test('the page owner mode gives hidden and absent summaries identical cost fields', async () => {
+  const fixture = summaryFixture();
+  await assertHiddenIdEquality({ operation: 'page summary owner', hiddenId: hidden, absentId: absent,
+    readCounters: fixture.counters,
+    call: async resource => {
+      const batch = await readResourceSummaries(fixture.environment, undefined, { viewer: ANONYMOUS_VIEWER }, {
+        resources: [resource], context: DEFAULT_MEDIA_CONTEXT, language: null,
+        settleNonAgentNameOwners: 'includingAbsent',
+      });
+      expect(batch.cost).toEqual({ graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 1 });
+      return fixture.countResponse(Response.json({ summaries: batch.summaries, cost: batch.cost }));
+    },
+  });
 });
 
 test('a local summary re-read keeps the same dependency token when name owners stay settled', async () => {

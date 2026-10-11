@@ -34,7 +34,7 @@ function disclosureSummaries(session: WorkReadSession, resources: string[]) {
   // whose position it is resolving. No names from this batch are delivered.
   delete reader.visibleRecords;
   return readResourceSummaries(session.deps.environment, session.deps.media?.store, reader,
-    { resources, context: DEFAULT_MEDIA_CONTEXT, language: null, settleNonAgentNameOwners: true });
+    { resources, context: DEFAULT_MEDIA_CONTEXT, language: null, settleNonAgentNameOwners: 'includingAbsent' });
 }
 
 /** Explicit diagnostic inventory for conformance fixtures. Reader disclosure

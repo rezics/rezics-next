@@ -34,7 +34,7 @@ export async function readPageRelations(session: WorkReadSession, resource: stri
   const summarize = async (resources: string[]) => (await readResourceSummaries(deps.environment,
     deps.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
       language: null, languages: session.displayLanguages, includeCollections: true,
-      settleNonAgentNameOwners: true })).summaries;
+      settleNonAgentNameOwners: 'includingAbsent' })).summaries;
   const canRead = async (ref: string) => (await canReadSemantic(ref) || (await summarize([ref]))[0]?.status === 'available')
     && (await discloseInventory(deps.environment, [{ owner: 'graph', resource: ref, component: 'record' }],
       session.viewer, 'read'))[0] === 'visible' && (await visible([ref])).has(ref);
