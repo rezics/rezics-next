@@ -118,6 +118,97 @@ describe('pinned main-wide regression', () => {
     } finally { r.cleanup(); }
   });
 
+  test('a declared 900-second owner proof runs alone with the gate margin in the actual child deadline', async () => {
+    const r = repo();
+    const file = r.files.find(item => item.tier === 'owner')!.file;
+    try {
+      r.write(file, "test('native proof', () => {}, 900_000);\n");
+      for (let index = 0; index < 14; index++) {
+        const ordinary = `scripts/ops/tests/ordinary-${index}.test.ts`;
+        r.files.push({ file: ordinary, tier: 'owner', outcome: 'pending' }); r.write(ordinary, 'pass\n');
+      }
+      r.commit({ 'scripts/qa/test.ts': `import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const directory = join(process.env.REZICS_QA_ARTIFACT_ROOT!, 'owner-proof');
+mkdirSync(directory, { recursive: true });
+const args = process.argv.slice(2);
+const files = args.filter((_, index) => args[index - 1] === '--file');
+writeFileSync(join(directory, 'owner.xml'), files.map(file => '<testcase file="' + file + '" name="proof"></testcase>').join(''));
+console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
+` });
+      for (const legacy of [false, true]) {
+        const result = await r.run({ runId: legacy ? 'legacy-owner-deadline' : 'owner-deadline', only: ['owner'],
+          runner: async (checkout, batch, directory, shards, slotLimit, artifactRoot) => {
+            if (batch.tier !== 'owner') return r.runner(checkout, batch, directory, shards, slotLimit, artifactRoot);
+            const produced = await runBatch(checkout, legacy ? { ...batch, budgetMs: undefined } : batch, directory, shards, slotLimit, artifactRoot);
+            expect(readFileSync(join(directory, 'runner.log'), 'utf8')).toContain(`Owner deadline: ${batch.budgetMs}`);
+            return produced;
+          } });
+        expect(result.batches.filter(batch => batch.tier === 'owner')).toEqual([
+          expect.objectContaining({ files: [file], budgetMs: 960_000 }),
+          expect.objectContaining({ files: r.files.filter(item => item.tier === 'owner' && item.file !== file).map(item => item.file), budgetMs: 600_000 }),
+        ]);
+        expect(result.files.filter(item => item.tier === 'owner').every(item => item.outcome === 'passed')).toBe(true);
+      }
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('owner files without timeout declarations keep fifteen-file batches and the ordinary deadline', async () => {
+    const r = repo();
+    try {
+      for (let index = 0; index < 30; index++) {
+        const file = `scripts/ops/tests/ordinary-${index}.test.ts`;
+        r.files.push({ file, tier: 'owner', outcome: 'pending' }); r.write(file, 'pass\n');
+      }
+      r.commit();
+      const result = await r.run({ runId: 'ordinary-owner-deadline', only: ['owner'] });
+      const batches = result.batches.filter(batch => batch.tier === 'owner');
+      expect(batches.map(batch => batch.files.length)).toEqual([15, 15, 1]);
+      expect(batches.flatMap(batch => batch.files)).toEqual(r.files.filter(file => file.tier === 'owner').map(file => file.file));
+      expect(batches.map(batch => batch.budgetMs)).toEqual([600_000, 600_000, 600_000]);
+    } finally { r.cleanup(); }
+  });
+
+  test('an unparseable owner timeout is reported and falls back to the ordinary batch deadline', async () => {
+    const r = repo();
+    const log = spyOn(console, 'log').mockImplementation(() => {});
+    const file = r.files.find(item => item.tier === 'owner')!.file;
+    const ordinary = 'scripts/ops/tests/ordinary.test.ts';
+    try {
+      r.write(file, "test('proof', () => {}, 900_000);\ntest('dynamic proof', () => {}, proofTimeout);\n");
+      r.files.push({ file: ordinary, tier: 'owner', outcome: 'pending' }); r.write(ordinary, 'pass\n');
+      r.commit();
+      const result = await r.run({ runId: 'unparseable-owner-deadline', only: ['owner'] });
+      expect(result.batches.filter(batch => batch.tier === 'owner')).toEqual([
+        expect.objectContaining({ files: [file, ordinary], budgetMs: 600_000 }),
+      ]);
+      expect(log).toHaveBeenCalledWith(`Regression: ${file} declared a timeout that could not be parsed; using the default owner deadline`);
+    } finally { log.mockRestore(); r.cleanup(); }
+  });
+
+  test('owner isolation uses the gate margin and honors the configured ordinary deadline', async () => {
+    const r = repo();
+    const previous = process.env.REZICS_QA_OWNER_BUDGET_MS;
+    const ordinary = r.files.find(item => item.tier === 'owner')!.file;
+    const long = 'scripts/ops/tests/native-proof.test.ts';
+    try {
+      process.env.REZICS_QA_OWNER_BUDGET_MS = '700000';
+      r.write(ordinary, "test('proof', () => {}, 640_000);\n");
+      r.files.push({ file: long, tier: 'owner', outcome: 'pending' });
+      r.write(long, "setDefaultTimeout(640_001);\ntest('proof', () => {});\n");
+      r.commit();
+      const result = await r.run({ runId: 'owner-margin-boundary', only: ['owner'] });
+      expect(result.batches.filter(batch => batch.tier === 'owner')).toEqual([
+        expect.objectContaining({ files: [long], budgetMs: 700_001 }),
+        expect.objectContaining({ files: [ordinary], budgetMs: 700_000 }),
+      ]);
+    } finally {
+      if (previous === undefined) delete process.env.REZICS_QA_OWNER_BUDGET_MS;
+      else process.env.REZICS_QA_OWNER_BUDGET_MS = previous;
+      r.cleanup();
+    }
+  });
+
   test('a whole-tier deadline routes one batch event without confirming or probing its files', async () => {
     const r = repo();
     try {

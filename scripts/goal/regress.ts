@@ -10,6 +10,8 @@ import { hungTestFile, parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from 
 import { newRunId, type Tier } from '../qa/core.ts';
 import { directoryLeaseHeld, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
+import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
+import type { DeclaredTestTimeout } from './goalctl.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
 export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
@@ -27,6 +29,8 @@ export interface Execution {
 }
 export interface Batch {
   id: string; tier: RegressionTier; files: string[]; state: 'pending' | 'running' | 'done'; attempts: Execution[];
+  /** Owner harness deadline, including the gate's margin for declared test timeouts. */
+  budgetMs?: number;
 }
 /** The diagnosis fields worth carrying from an earlier run, without its probe log. */
 export interface RecordedDiagnosis {
@@ -472,7 +476,23 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
   return files;
 }
 
-function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] {
+async function ownerFileBudgets(checkout: string, files: readonly string[], defaultBudgetMs: number): Promise<Map<string, number>> {
+  // goalctl imports the regression; load its planner after the QA module graph has initialized.
+  const { declaredTestTimeout, planUnitGateShards } = await import('./goalctl.ts');
+  return new Map(files.map(file => {
+    let timeout: DeclaredTestTimeout = { unparseable: false };
+    try {
+      const path = join(checkout, file);
+      if (existsSync(path)) timeout = declaredTestTimeout(readFileSync(path, 'utf8'));
+    } catch { timeout = { unparseable: true }; }
+    // Singleton planning reuses the gate's deadline decision without changing ordinary regression batch sizes.
+    const planned = planUnitGateShards([{ file, timeout }], 1, defaultBudgetMs);
+    if (planned.unparseable.length) console.log(`Regression: ${file} declared a timeout that could not be parsed; using the default owner deadline`);
+    return [file, planned.shards[0]!.budgetMs];
+  }));
+}
+
+async function batchesFor(checkout: string, files: ExpectedFile[], options: RegressionOptions): Promise<Batch[]> {
   const batches: Batch[] = [];
   for (const tier of tiers) {
     const expected = files.filter(file => file.tier === tier && file.outcome !== 'excluded');
@@ -486,12 +506,19 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
     // The pinned-artifact check belongs to every cycle, including a restricted test selection.
     const run = tier === 'jena:check' || selected || (tier === 'integration' && options.integrationBatches !== undefined);
     const size = batchSize(tier, expected.length);
-    for (let index = 0; index < expected.length; index += size) {
-      const group = expected.slice(index, index + size);
-      if (!run || (tier === 'integration' && options.integrationBatches !== undefined && index / size >= options.integrationBatches)) {
+    const defaultBudgetMs = tier === 'owner' && run ? ownerTierBudgetMs() : undefined;
+    const budgets = defaultBudgetMs === undefined ? new Map<string, number>()
+      : await ownerFileBudgets(checkout, expected.map(file => file.file), defaultBudgetMs);
+    const long = expected.filter(file => (budgets.get(file.file) ?? 0) > (defaultBudgetMs ?? Infinity));
+    const rest = expected.filter(file => (budgets.get(file.file) ?? 0) <= (defaultBudgetMs ?? Infinity));
+    const groups = long.map(file => [file]);
+    for (let index = 0; index < rest.length; index += size) groups.push(rest.slice(index, index + size));
+    for (const [index, group] of groups.entries()) {
+      if (!run || (tier === 'integration' && options.integrationBatches !== undefined && index >= options.integrationBatches)) {
         for (const file of group) { file.outcome = 'deferred'; file.reason = 'Restricted regression selection'; }
-      } else batches.push({ id: `${tier.replaceAll(/[:/]/g, '-')}-${index / size + 1}`, tier,
-        files: group.map(file => file.file), state: 'pending', attempts: [] });
+      } else batches.push({ id: `${tier.replaceAll(/[:/]/g, '-')}-${index + 1}`, tier,
+        files: group.map(file => file.file), state: 'pending', attempts: [],
+        ...(defaultBudgetMs === undefined ? {} : { budgetMs: Math.max(defaultBudgetMs, ...group.map(file => budgets.get(file.file) ?? defaultBudgetMs)) }) });
     }
   }
   return batches;
@@ -650,8 +677,9 @@ export function regressionBatchCommand(batch: Batch, report: string, storyXmlPat
     '--result-file', report, ...args];
 }
 
-export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: number, slotLimit: number, artifactRoot?: string): NodeJS.ProcessEnv {
+export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: number, slotLimit: number, artifactRoot?: string, ownerBudgetMs?: number): NodeJS.ProcessEnv {
   return { ...env, REZICS_QA_SHARDS: String(shards), GOAL_QA_SLOTS: String(slotLimit),
+    ...(ownerBudgetMs === undefined ? {} : { REZICS_QA_OWNER_BUDGET_MS: String(ownerBudgetMs) }),
     ...(artifactRoot ? { REZICS_QA_ARTIFACT_ROOT: artifactRoot } : {}) };
 }
 
@@ -689,8 +717,12 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   const report = join(directory, 'slot.json');
   const storyXmlPath = join(directory, 'storybook.xml');
   const started = Date.now();
+  // Older resumed manifests have no budget; derive it from their pinned files while preserving their plan.
+  const budgetMs = batch.tier === 'owner' ? batch.budgetMs
+    ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values()) : undefined;
   const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
-    batch.tier === 'jena:check' ? 75_000 : undefined, regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot));
+    batch.tier === 'jena:check' ? 75_000 : Math.max(7 * 3_600_000, budgetMs ?? 0),
+    regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);
   const tests: TestResult[] = [];
@@ -1005,7 +1037,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (existsSync(path)) throw new Error(`Regression ${runId} already exists; use --resume`);
       const files = await (options.registry ?? regressionRegistry)(checkout);
       if (new Set(files.map(file => `${file.tier}:${file.file}`)).size !== files.length) throw new Error('Duplicate regression manifest files');
-      const batches = batchesFor(files, options);
+      const batches = await batchesFor(checkout, files, options);
       const shards = options.shards ?? Number(process.env.REZICS_QA_SHARDS ?? 1);
       if (!Number.isSafeInteger(shards) || shards < 1) throw new Error('REZICS_QA_SHARDS must be a positive integer');
       manifest = { version: 1, runId, atCommit: pinned, checkout, startedAt: new Date().toISOString(), shards,
@@ -1043,7 +1075,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const continueAfterHang = (parent: Batch, files: string[]) => {
       if (!files.length) return;
       const continuation: Batch = { id: continuationId(runManifest.batches, parent.id), tier: parent.tier, files,
-        state: 'pending', attempts: [] };
+        state: 'pending', attempts: [], ...(parent.budgetMs === undefined ? {} : { budgetMs: parent.budgetMs }) };
       runManifest.batches.splice(runManifest.batches.indexOf(parent) + 1, 0, continuation);
       lane?.push(continuation);
     };
