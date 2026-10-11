@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages as feedMessages } from '../feed/messages.ts';
+import feedZhHans from '../feed/messages/zh-Hans.ts';
 import { messages as workMessages } from './messages.ts';
 import { discussion } from './fixtures.ts';
 import { DiscussionList } from './discussion.tsx';
@@ -16,8 +17,9 @@ const items: DiscussionPage['items'] = [
 interface Args { items: DiscussionPage['items']; locale: UiLocale }
 
 function WorkDiscussionStory({ items, locale }: Args) {
+  const localizedFeedMessages = locale === 'zh-Hans' ? { ...feedMessages, ...feedZhHans } : feedMessages;
   return <div className="mx-auto max-w-3xl p-6">
-    <DiscussionList items={items} locale={locale} messages={workMessages.en} feedMessages={feedMessages}
+    <DiscussionList items={items} locale={locale} messages={workMessages[locale]} feedMessages={localizedFeedMessages}
       realmLabel={() => 'Tidewater Readers'} />
   </div>;
 }
@@ -40,5 +42,17 @@ export const Spoilers: Story = {
     await expect(within(cards[1]!).getByText('The cartographer is an unreliable narrator.')).toBeVisible();
     await userEvent.click(within(cards[0]!).getByRole('button', { name: 'Show spoiler' }));
     await expect(within(cards[0]!).getByText('The city sinks in the final chapter.')).toBeVisible();
+  },
+};
+
+/** The hidden reply and its translated reveal control remain readable on a phone. */
+export const SpoilerVeilPhoneChinese: Story = {
+  args: { locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const card = within(within(canvasElement).getAllByRole('listitem')[0]!);
+    await expect(card.queryByText('The city sinks in the final chapter.')).toBeNull();
+    await expect(card.getByText(feedZhHans.spoilerAnnounced)).toBeVisible();
+    await expect(card.getByRole('button', { name: feedZhHans.showSpoiler })).toBeVisible();
   },
 };
