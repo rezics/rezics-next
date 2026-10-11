@@ -5,9 +5,8 @@ import { readFileSync } from 'node:fs';
 import { expect, type Page, test } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 
-// A reader records a copy of an exact edition, lends it with a due date already
-// past, then extends and returns it. The loan stays private to that reader and
-// is still there after a reload. Other books already in the library stay put.
+// A reader records a copy of an exact edition and an overdue loan. One journey
+// extends it before returning; another returns it directly and checks availability.
 
 interface Seed { work: string; title: string; release: string }
 
@@ -157,4 +156,71 @@ test('a reader owns a copy, lends it overdue, extends it and returns it', async 
   await page.reload();
   await interactive(page);
   await expect(page.getByRole('heading', { name: seed.title })).toHaveCount(0);
+});
+
+test('a reader returns an overdue copy directly and it is available again', async ({ page }) => {
+  test.setTimeout(240_000);
+  const workPath = localizedPath(resourceHref('/w/', seed.work.slice(-36)), 'en');
+  await signInAtAccounts(page, workPath, member());
+  await page.getByRole('button', { name: 'More shelves' }).click();
+  await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
+  const shelved = page.getByRole('button', { name: /^Currently reading — Shelve/ });
+  await expect(shelved).toBeVisible();
+  await expect(shelved).not.toHaveAttribute('aria-busy', 'true', { timeout: 20_000 });
+  await expect(async () => {
+    await page.goto('/en/library?shelf=reading');
+    await expect(page.getByRole('heading', { level: 3, name: seed.title })).toBeVisible({ timeout: 4_000 });
+  }).toPass({ timeout: 20_000 });
+  await interactive(page);
+
+  const own = page.getByRole('button', { name: `I own a copy, ${seed.title}` });
+  await expect(own).toHaveAttribute('data-hydrated', 'true');
+  const copy = page.getByRole('dialog', { name: `A copy of “${seed.title}”` });
+  await expect(async () => {
+    await own.click();
+    await expect(copy).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 15_000 });
+  await expect(copy.getByRole('radio', { name: /Paperback library edition/ })).toBeVisible({ timeout: 15_000 });
+  await copy.getByLabel('Format').fill('Pocket paperback');
+  await copy.getByRole('textbox', { name: 'Name', exact: true }).fill('City Library');
+  await copy.getByLabel('Acquired on').fill('2024-02-01');
+  await copy.getByLabel('Owned since').fill('2024-03-01');
+  await copy.getByRole('button', { name: 'Save copy' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Copy saved' })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole('button', { name: `Lend, ${seed.title}` }).click();
+  const lend = page.getByRole('dialog', { name: `Lend “${seed.title}”` });
+  const lentCopy = lend.getByRole('radio', { name: /Pocket paperback/ });
+  await expect(lentCopy).toBeVisible();
+  await lentCopy.click();
+  await lend.getByRole('textbox', { name: 'Name', exact: true }).fill('City Library');
+  await lend.getByLabel('Started').fill(await localStamp(page, Date.now() - 3 * 86_400_000));
+  await lend.getByLabel('Due').fill(await page.evaluate(() => new Date(Date.now() - 2 * 86_400_000).toISOString()
+    .slice(0, 10)));
+  await lend.getByRole('button', { name: 'Save loan' }).click();
+  await expect(page).toHaveURL(/\/en\/library\/loans$/, { timeout: 30_000 });
+
+  const overdue = () => page.getByRole('region', { name: 'Overdue' }).getByRole('listitem')
+    .filter({ hasText: seed.title });
+  await expect(overdue()).toBeVisible({ timeout: 30_000 });
+  await expect(overdue()).toContainText('City Library');
+  await expect(overdue().getByText('Overdue', { exact: true })).toBeVisible();
+
+  await overdue().getByRole('button', { name: 'Return' }).click();
+  const returning = page.getByRole('alertdialog', { name: 'Return this loan?' });
+  await returning.getByRole('button', { name: 'Return' }).click();
+  await expect(overdue()).toHaveCount(0, { timeout: 30_000 });
+  await page.reload();
+  await interactive(page);
+  await expect(page.getByRole('heading', { name: 'Nothing is out on loan' })).toBeVisible();
+
+  await page.goto('/en/library?shelf=reading');
+  await interactive(page);
+  await expect(page.getByRole('heading', { level: 3, name: seed.title })).toBeVisible();
+  await page.reload();
+  await interactive(page);
+  await expect(page.getByRole('heading', { level: 3, name: seed.title })).toBeVisible();
+  await page.getByRole('button', { name: `Lend, ${seed.title}` }).click();
+  const available = page.getByRole('dialog', { name: `Lend “${seed.title}”` });
+  await expect(available.getByRole('radio', { name: /Pocket paperback/ })).toBeVisible();
 });
