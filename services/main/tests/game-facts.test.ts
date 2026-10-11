@@ -19,10 +19,11 @@ function platformTokens(record: BangumiFactSource): string[] {
   return typeof values === 'string' ? [values] : [];
 }
 
-test('game platform concepts match the distinct tokens in real captured type-4 subjects', () => {
+test('game platform concepts include the distinct tokens in real captured type-4 subjects', () => {
   const gameIds = ['2113', '636913'];
   const observed = [...new Set(gameIds.flatMap(id => platformTokens(subjects[id]!)))].sort();
-  expect(observed).toEqual(gamePlatformConcepts.map(concept => concept.token).sort());
+  const schemeTokens = new Set(gamePlatformConcepts.map(concept => concept.token));
+  expect(observed.every(token => schemeTokens.has(token))).toBe(true);
   for (const concept of gamePlatformConcepts) {
     expect(vocabularyDigest({ actingSubject: actor, scheme: null, labels: [...concept.labels],
       alternativeLabels: [], broader: [], narrower: [] })).toMatch(/^[0-9a-f]{64}$/);
@@ -49,5 +50,5 @@ test('captured game facts keep multiple platforms, leave a missing platform empt
 
 test('the platform scheme remains separate from the single-valued anime and manga formats', () => {
   const keys: GamePlatformKey[] = gamePlatformConcepts.map(concept => concept.key);
-  expect(keys).toEqual(['n64', 'ngc']);
+  expect(keys).toEqual(['n64', 'ngc', 'pc', 'ps5', 'xbox-series-xs']);
 });

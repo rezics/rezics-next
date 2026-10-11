@@ -1,8 +1,14 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { parseArgs, readLockedFixture, type FixtureLock } from '../../../scripts/fixtures/pull.ts';
+import {
+  parseArgs,
+  pullFixtures,
+  readLockedFixture,
+  type FixtureAdapter,
+  type FixtureLock,
+} from '../../../scripts/fixtures/pull.ts';
 import {
   openLibrary,
   openLibraryLibrarySlice,
@@ -161,4 +167,45 @@ test('Wikidata normalization rejects an id whose English label does not match th
       author.id,
     ),
   ).toThrow(`not labelled ${author.labels.en} (en)`);
+});
+
+test('fixture pull delegates archive acquisition to a source adapter before normalizing and locking', async () => {
+  const directory = mkdtempSync(join(root, '.temp/fixture-capture-'));
+  let captures = 0;
+  const adapter: FixtureAdapter = {
+    name: 'archive-test',
+    minimumIntervalMs: 0,
+    requests: [{ id: 'archive-2026', url: 'https://example.org/archive.zip' }],
+    reuseBasis: 'Test archive source with a custom streaming capture.',
+    capture: async (captureRoot, request, _fetcher) => {
+      captures++;
+      expect(captureRoot).toBe(directory);
+      expect(request.url).toBe('https://example.org/archive.zip');
+      return { content: 'captured archive rows' };
+    },
+    normalize: (raw, id) => {
+      expect(id).toBe('archive-2026');
+      expect(raw).toEqual({ content: 'captured archive rows' });
+      return { id, content: 'captured archive rows' };
+    },
+  };
+  try {
+    const result = await pullFixtures(directory, {
+      adapters: [adapter],
+      mode: 'live',
+      updateLock: true,
+      now: () => new Date('2026-10-12T00:00:00.000Z'),
+      fetcher: async () => {
+        throw new Error('the adapter performs its own streamed capture');
+      },
+    });
+    expect(captures).toBe(1);
+    expect(result[0]?.status).toBe('updated');
+    expect(readLockedFixture(directory, 'archive-test', 'archive-2026')).toEqual({
+      id: 'archive-2026',
+      content: 'captured archive rows',
+    });
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
 });

@@ -2,6 +2,16 @@
   "version": 1,
   "entries": [
     {
+      "id": "l21-2026-10-06",
+      "source": "bangumi",
+      "requestUrl": "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-06.210359Z.zip",
+      "fetchedAt": "2026-10-11T19:43:14.707Z",
+      "sha256": "7102695a8c071619d0a9aa7254abac56d0fa394a2322d73b0ee6e463b1eb56d1",
+      "size": 1915783,
+      "reuseBasis": "Bangumi Archive data under CC BY-SA 3.0; subject summaries are included, covers and other image fields are excluded. The committed seed contains only the three pinned subjects, their direct subject-relations, and all episodes of the pinned anime. https://github.com/bangumi/Archive https://creativecommons.org/licenses/by-sa/3.0/",
+      "seed": "tests/fixtures/seeds/bangumi/7102695a8c071619d0a9aa7254abac56d0fa394a2322d73b0ee6e463b1eb56d1.json"
+    },
+    {
       "id": "pepys-diary",
       "source": "gutenberg",
       "requestUrl": "https://www.gutenberg.org/cache/epub/4125/pg4125.txt",

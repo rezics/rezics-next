@@ -18,8 +18,12 @@ import {
 } from '../../tests/fixtures/sources/wikidata.ts';
 import { openLibrary } from '../../tests/fixtures/sources/open-library.ts';
 import { gutenberg } from '../../tests/fixtures/sources/gutenberg.ts';
+import { bangumi } from '../../tests/fixtures/sources/bangumi.ts';
 
-type Source = FixtureSource & { responseFormat?: 'json' | 'text' };
+export interface FixtureAdapter extends FixtureSource {
+  responseFormat?: 'json' | 'text';
+  capture?: (root: string, request: FixtureRequest, fetcher: typeof fetch) => Promise<unknown>;
+}
 
 export interface FixtureEntry {
   id: string;
@@ -44,7 +48,7 @@ export interface PullOptions {
   updateLock?: boolean;
   offline?: boolean;
   fetcher?: typeof fetch;
-  adapters?: readonly Source[];
+  adapters?: readonly FixtureAdapter[];
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -145,7 +149,7 @@ export function readLockedFixture(root: string, source: string, id: string): unk
 }
 
 async function fetchNormalized(
-  adapter: Source,
+  adapter: FixtureAdapter,
   request: FixtureRequest,
   fetcher: typeof fetch,
   clock: Pace,
@@ -206,7 +210,7 @@ async function fetchNormalized(
 }
 
 export async function pullFixtures(root: string, options: PullOptions = {}): Promise<PullResult[]> {
-  const adapters = options.adapters ?? [...sources, openLibrary, gutenberg];
+  const adapters = options.adapters ?? [...sources, openLibrary, gutenberg, bangumi];
   const selected = options.source
     ? adapters.filter((item) => item.name === options.source)
     : adapters;
@@ -275,7 +279,10 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
         throw new Error(
           `No locked fixture ${adapter.name}/${request.id}; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} --update-lock`,
         );
-      const payload = await fetchNormalized(adapter, request, options.fetcher ?? fetch, clock);
+      const fetcher = options.fetcher ?? fetch;
+      const payload = adapter.capture
+        ? canonical(adapter.normalize(await adapter.capture(root, request, fetcher), request.id))
+        : await fetchNormalized(adapter, request, fetcher, clock);
       const sha256 = fileSha256(payload);
       putImmutable(cachePath(root, adapter.name, sha256), payload, sha256);
       const drift = prior?.sha256 !== sha256;

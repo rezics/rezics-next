@@ -531,6 +531,9 @@ export type WorkFormatKey = (typeof workFormatConcepts)[number]['key'];
 export const gamePlatformConcepts = [
   { key: 'n64', token: 'N64', labels: [{ language: 'en', value: 'N64' }] },
   { key: 'ngc', token: 'NGC', labels: [{ language: 'en', value: 'NGC' }] },
+  { key: 'pc', token: 'PC', labels: [{ language: 'en', value: 'PC' }] },
+  { key: 'ps5', token: 'PS5', labels: [{ language: 'en', value: 'PlayStation 5' }] },
+  { key: 'xbox-series-xs', token: 'Xbox Series X/S', labels: [{ language: 'en', value: 'Xbox Series X/S' }] },
 ] as const;
 export type GamePlatformKey = (typeof gamePlatformConcepts)[number]['key'];
 
