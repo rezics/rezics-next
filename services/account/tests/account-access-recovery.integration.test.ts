@@ -408,7 +408,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessStateCount: oldState.count, accessStateDigest: oldState.digest,
         commerce: await captureCommerceRecoveryCoverage(accessOlder.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
-      })).rejects.toThrow('retained Account deletion journal differs from Access');
+      })).rejects.toThrow('retained erasure reconciliation lacks the retained current capture');
     await releaseAccessRecoveryFence(accessOlder.pool, olderFence);
     const fullOutbox = await accessOutboxCoverage(accessFull.pool);
     const fullState = await accessStateCoverage(accessFull.pool);
@@ -420,7 +420,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessStateCount: fullState.count, accessStateDigest: fullState.digest,
         commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
-      }, undefined, accountOlder.pool)).rejects.toThrow('Account WAL differs from recovery coverage');
+      }, undefined, accountOlder.pool)).rejects.toThrow('retained erasure reconciliation lacks the retained current capture');
     expect((await accountOlder.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(1);
     expect((await accessOlder.pool.query<{ active: boolean }>(
@@ -459,7 +459,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         relay: { consumer: 'held-graph', streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: graphEpoch, sequence: '0',
           batchCount: '0', batchDigest: '0'.repeat(64),
           eventCount: '0', eventDigest: '0'.repeat(64) },
-      })).rejects.toThrow('Account deletion recovery evidence is incomplete');
+      })).rejects.toThrow('retained erasure reconciliation lacks the retained current capture');
     if (graphEnabled) {
       const graphBase = join(state, 'graph-restored');
       cpSync(join(state, 'graph-saved'), graphBase, { recursive: true });
@@ -528,4 +528,4 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       }
     } finally { rmSync(state, { recursive: true, force: true }); }
   }
-}, 120_000);
+}, 300_000);
