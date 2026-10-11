@@ -124,6 +124,14 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
     store: 'postgresql', custody: 'live' });
   await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
     store: 'postgresql_wal', custody: 'live' });
+  const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
+    journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
+  if (hasCustody) {
+    for (const [store, label] of [['postgresql', 'access:postgresql:live'],
+      ['postgresql_wal', 'access:postgresql-wal:live']] as const) {
+      await ensureRetentionDomain(service.relay, { label, owner: 'access', store, custody: 'live' });
+    }
+  }
   for (const [store, label] of [
     ['tdb2_generation', `graph:tdb2:live:${graph.lineage.dataEpoch}`],
     ['lucene', `graph:lucene:live:${graph.lineage.dataEpoch}`],
@@ -138,7 +146,7 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
     await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason });
   }
   await recordErasureInventory(service.relay, erasureId,
-    { owners: ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
+    { owners: hasCustody ? ['content', 'graph', 'access'] : ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
       liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
 }
 

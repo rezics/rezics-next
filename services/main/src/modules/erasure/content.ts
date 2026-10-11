@@ -34,6 +34,7 @@ export interface TargetRow {
   active_pin: boolean;
   erasure_id: string | null;
   erasure_epoch: string | null;
+  payload_present?: boolean;
 }
 
 function checkIds(revisionIds: readonly string[], limit = MAX_CONTENT_ERASURE_TARGETS): void {
@@ -47,6 +48,7 @@ type Queryable = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
 function targetSql(ids: string, lock: boolean): string {
   return `SELECT r.id::text AS id, v.resource_id, r.availability,
+      (r.serialized_bytes IS NOT NULL OR r.body IS NOT NULL) AS payload_present,
       EXISTS (SELECT 1 FROM content.publication_preparation p
         WHERE p.revision_id = r.id AND p.pin_active AND p.status = 'pending') AS pending_pin,
       EXISTS (SELECT 1 FROM content.publication_preparation p
@@ -86,6 +88,9 @@ function assertTargets(rows: readonly TargetRow[], revisionIds: readonly string[
     ? row.erasure_id !== erasureId || (erasureEpoch !== null && row.erasure_epoch !== erasureEpoch)
     : row.availability !== 'available')) {
     throw new ContentErasureStale('Content revision is no longer available to erase');
+  }
+  if (rows.some(row => row.erasure_id && row.payload_present)) {
+    throw new ContentErasureStale('live SQL erasure completion is unavailable');
   }
   if (rows.some(row => row.pending_pin || row.active_pin && !allowActivePin
     && !(erasureId && row.erasure_id === erasureId))) {

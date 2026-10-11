@@ -300,7 +300,7 @@ test('P4 a foreign Content tombstone refuses journal replay before object deleti
     const entry = await journalErasure(f.pool, { operationId: `erasure:${admitted.id}`, requestDigest: admitted.requestDigest,
       kind: 'revision', principalId: admitted.principalId, admissionId: admitted.id, authorityEpoch: admitted.authorityEpoch,
       targets: [{ kind: 'content_revision', ref: revision }, { kind: 'object', ref: `sha256:${payload}` }] });
-    await applyContentErasure(f.pool, { preservationAccess: f.pool, resourceId: owner, revisionIds: [revision],
+    await applyContentErasure(f.pool, { preservationAccess: f.accessPool, resourceId: owner, revisionIds: [revision],
       erasureId: randomUUID(), erasureEpoch: entry.erasureEpoch });
     admitted.state = 'sealed';
     await expect(f.call(input)).rejects.toBeInstanceOf(ContentErasureStale);
@@ -462,6 +462,10 @@ test('P2/P4 the existing ReceiptCustody owner clears a journaled command before 
     const first = await f.call(input);
     expect(first.report.stage).toBe('deleting');
     expect(first.report.targets.some(target => target.kind === 'object' && target.ref === `sha256:${original.payload_sha256}`)).toBe(true);
+    expect(first.report.dispositions.filter(disposition => disposition.owner === 'access')
+      .map(disposition => [disposition.domain, disposition.destruction]).sort()).toEqual([
+      ['access:postgresql-wal:live', 'retained'], ['access:postgresql:live', 'retained'],
+    ]);
     const cleared = (await f.pool.query(`SELECT receipt,revision,request_digest,payload_sha256,terminal,outbox,
       data_epoch,stream_sequence::text,payload,payload_erasure_id::text,payload_erasure_epoch::text
       FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0]!;
