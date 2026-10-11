@@ -221,7 +221,7 @@ test('restricted Work reply roots require exact live read authority through draf
   } finally { await h.close(); }
 }, 180_000);
 
-test('restricted semantic reply roots require semantic.read and keep target selection bounded', async () => {
+test('Account evidence changes Suitability eligibility for a semantic reply root while admission stays unchanged', async () => {
   const h = await memberFixture({ liveContentEvidence: true });
   try {
     const reader = await h.agent('Restricted semantic reader');
@@ -354,8 +354,10 @@ test('restricted semantic reply roots require semantic.read and keep target sele
     const adultRead = await readSuitability();
     expect(adultRead.status, JSON.stringify(adultRead.body)).toBe(200);
     expect(adultRead.body.viewer).toMatchObject({ age: 'adult', country: 'US', optIns: { sexual: true } });
-    expect(adultRead.body.items[0]).toMatchObject({ assessment: { status: 'assessed', labels: ['r18'] } });
-    // False premise: reply-root admission uses the summary channel (services/main/src/modules/media/summary.ts); suitability defaults apply only to digest, preview, seo, sitemap, email, and push (services/main/src/modules/disclosure/read.ts).
+    expect(adultRead.body.items[0]).toMatchObject({
+      assessment: { status: 'assessed', labels: ['r18'] }, eligible: true, reasons: [],
+    });
+    // Suitability reads use live Account evidence; interactive reply-root admission still uses the summary channel, so Account preferences do not change admission itself.
     expect(adultRead.observations.length).toBeGreaterThan(0);
 
     const unrelated: string[] = [];
@@ -375,6 +377,10 @@ test('restricted semantic reply roots require semantic.read and keep target sele
     const restrictedRead = await readSuitability();
     expect(restrictedRead.status, JSON.stringify(restrictedRead.body)).toBe(200);
     expect(restrictedRead.body.viewer).toMatchObject({ age: 'adult', country: 'US', optIns: { sexual: false } });
+    expect(restrictedRead.body.items[0]).toMatchObject({
+      assessment: { status: 'assessed', labels: ['r18'] }, eligible: false,
+      reasons: ['sexual_opt_in_required'],
+    });
 
     for (const observation of [...adultRead.observations, ...restrictedRead.observations]) {
       expect(observation.query).toContain(`VALUES ?r { <${root.component}> }`);
