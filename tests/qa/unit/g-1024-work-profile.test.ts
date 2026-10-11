@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   assertWorkCost,
   assertWorkCostAtScales,
@@ -6,6 +8,8 @@ import {
   startWorkProfileSink,
   type WorkProfile,
   type WorkSpan,
+  type WorkCostContract,
+  type WorkCostGrowthClass,
 } from '../support/work-profile.ts';
 import { workProfileProbe } from '../support/work-profile-probe.ts';
 import { aspireWorkProfileSource } from '../support/work-profile-aspire.ts';
@@ -67,6 +71,103 @@ function span(
   };
 }
 const root = span('3', parent, { 'http.route': '/v1/feed', 'http.response.status_code': 503 }, 1);
+
+const successfulRoot = {
+  ...root,
+  attributes: { ...root.attributes, 'http.response.status_code': 200 },
+};
+
+function costProfiles(values: (number | null)[], scales = [4, 16, 64]): WorkProfile[] {
+  return values.map((value, index) => ({
+    ...summarizeWorkProfile([successfulRoot], traceId, parent, 60),
+    mainCalls: scales[index]!,
+    fusekiRequests: value,
+  }));
+}
+
+function growthContract(growthClass: WorkCostGrowthClass, maximum = 10_000): WorkCostContract {
+  return {
+    fusekiRequests: maximum,
+    growth: { fusekiRequests: { class: growthClass, dimension: 'mainCalls' } },
+  };
+}
+
+function assertGrowth(
+  values: (number | null)[],
+  growthClass: WorkCostGrowthClass,
+  label: string,
+): void {
+  assertWorkCostAtScales(costProfiles(values), growthContract(growthClass), label);
+}
+
+test('work cost contracts enforce declared counter growth and retain absolute-only bounds', () => {
+  expect(() => assertGrowth([7, 7, 7], 'constant', 'constant-growth')).not.toThrow();
+  expect(() => assertGrowth([4, 16, 64], 'linear', 'linear-growth')).not.toThrow();
+  expect(() => assertGrowth([4, 16, 64], 'constant', 'linear-as-constant')).toThrow(
+    'Cost growth contract failed',
+  );
+  expect(() => assertGrowth([4, 16, 64], 'logarithmic', 'linear-as-logarithmic')).toThrow(
+    'Cost growth contract failed',
+  );
+
+  expect(() => assertGrowth([16, 256, 4096], 'linear', 'quadratic-as-linear')).toThrow(
+    'Cost growth contract failed',
+  );
+  expect(() => assertGrowth([16, 256, 4096], 'linearithmic', 'quadratic-as-linearithmic')).toThrow(
+    'Cost growth contract failed',
+  );
+  expect(() => assertGrowth([12, 80, 448], 'linearithmic', 'nlogn-growth')).not.toThrow();
+  expect(() => assertGrowth([12, 80, 448], 'linear', 'nlogn-as-linear')).toThrow(
+    'Cost growth contract failed',
+  );
+
+  expect(() => assertGrowth([0, 1, 2], 'linear', 'zero-to-positive')).toThrow(
+    'Cost growth contract failed',
+  );
+  expect(() => assertGrowth([4, null, 64], 'linear', 'unobserved-growth')).toThrow(
+    'fusekiRequests: unobserved',
+  );
+  expect(() =>
+    assertWorkCostAtScales(costProfiles([4, 16, 64]), { fusekiRequests: 64 }, 'absolute-only'),
+  ).not.toThrow();
+  expect(() =>
+    assertWorkCostAtScales(costProfiles([4, 16, 65]), { fusekiRequests: 64 }, 'absolute-cap'),
+  ).toThrow('fusekiRequests: 65 > 64');
+});
+
+test('work cost growth breaches report and write their comparison facts', () => {
+  const directory = mkdtempSync(join(process.cwd(), '.temp', 'work-cost-growth-'));
+  const previousArtifactDir = process.env.REZICS_QA_ARTIFACT_DIR;
+  try {
+    process.env.REZICS_QA_ARTIFACT_DIR = directory;
+    let message = '';
+    try {
+      assertGrowth([4, 16, 64], 'constant', 'constant-growth-breach');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('fusekiRequests (constant) by mainCalls');
+    expect(message).toContain('scales 4 and 16, values 4 and 16');
+    expect(message).toContain('allowed ratio 1.2, observed ratio 4');
+    expect(
+      JSON.parse(readFileSync(join(directory, 'constant-growth-breach.json'), 'utf8')),
+    ).toEqual({
+      counter: 'fusekiRequests',
+      dimension: 'mainCalls',
+      growthClass: 'constant',
+      smallerScale: 4,
+      largerScale: 16,
+      smallerValue: 4,
+      largerValue: 16,
+      allowedRatio: 1.2,
+      observedRatio: 4,
+    });
+  } finally {
+    if (previousArtifactDir === undefined) delete process.env.REZICS_QA_ARTIFACT_DIR;
+    else process.env.REZICS_QA_ARTIFACT_DIR = previousArtifactDir;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('G1024: deduplication, sibling traces and missing/cancelled byte observations cannot pass a cost bound', () => {
   const fetch = span('4', root.spanId, {

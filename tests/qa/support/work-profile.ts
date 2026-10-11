@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   commandCounters,
   commandPhases,
@@ -379,11 +381,38 @@ export async function profileRequest<T>(
 export type WorkCostField = {
   [K in keyof WorkProfile]: WorkProfile[K] extends number | null ? K : never;
 }[keyof WorkProfile];
-export type WorkCostContract = Partial<Record<WorkCostField, number>>;
+export type WorkCostGrowthClass = 'constant' | 'logarithmic' | 'linear' | 'linearithmic';
+type WorkCostGrowthDeclaration = { class: WorkCostGrowthClass; dimension: WorkCostField };
+export type WorkCostContract = Partial<Record<WorkCostField, number>> & {
+  growth?: Partial<Record<WorkCostField, WorkCostGrowthDeclaration>>;
+};
+export const WORK_COST_GROWTH_MARGIN = 1.2;
+
+type WorkCostGrowthBreach = {
+  counter: WorkCostField;
+  dimension: WorkCostField;
+  growthClass: WorkCostGrowthClass;
+  smallerScale: number;
+  largerScale: number;
+  smallerValue: number;
+  largerValue: number;
+  allowedRatio: number;
+  observedRatio: number | 'Infinity';
+};
+
+function writeWorkCostGrowthArtifact(label: string, facts: WorkCostGrowthBreach): void {
+  const directory = process.env.REZICS_QA_ARTIFACT_DIR;
+  if (!directory) return;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(label))
+    throw new Error(`Invalid work cost artifact label: ${label}`);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, `${label}.json`), `${JSON.stringify(facts, null, 2)}\n`);
+}
+
 /** Absolute maxima compose caller fan-out. Unknown evidence fails an asserted bound. */
 export function assertWorkCost(
   profile: WorkProfile,
-  contract: WorkCostContract,
+  contract: Partial<Record<WorkCostField, number>>,
   options: { statuses?: readonly number[] } = {},
 ): void {
   const failures: string[] = [];
@@ -412,8 +441,90 @@ export function assertWorkCost(
   if (failures.length) throw new Error(`Request cost contract failed: ${failures.join('; ')}`);
 }
 
-/** Every scale must satisfy the same cap; callers also assert each scale's correct result. */
-export function assertWorkCostAtScales(profiles: WorkProfile[], contract: WorkCostContract): void {
+/** Absolute maxima and optional growth classes apply across every measured scale. */
+export function assertWorkCostAtScales(
+  profiles: WorkProfile[],
+  contract: WorkCostContract,
+  label = 'work-cost',
+): void {
   if (profiles.length < 3) throw new Error('Cost growth checks require at least three scales');
-  for (const profile of profiles) assertWorkCost(profile, contract);
+  const { growth = {}, ...maxima } = contract;
+  for (const profile of profiles) assertWorkCost(profile, maxima);
+
+  const factor = (growthClass: WorkCostGrowthClass, n: number) => {
+    const logarithmic = 1 + Math.log2(n);
+    switch (growthClass) {
+      case 'constant':
+        return 1;
+      case 'logarithmic':
+        return logarithmic;
+      case 'linear':
+        return n;
+      case 'linearithmic':
+        return n * logarithmic;
+    }
+  };
+
+  for (const [counter, declaration] of Object.entries(growth)) {
+    if (!declaration) continue;
+    const field = counter as WorkCostField;
+    if (maxima[field] === undefined)
+      throw new Error(`Growth contract for ${field} requires an absolute maximum`);
+    const scales = profiles.map((profile, index) => {
+      const observed = profile[declaration.dimension];
+      if (observed === null || !Number.isFinite(observed) || observed <= 0)
+        throw new Error(
+          `Cost growth contract requires an observed positive ${declaration.dimension} scale at profile ${index}`,
+        );
+      return observed;
+    });
+    const values = profiles.map((profile) => profile[field]);
+
+    for (let i = 0; i < profiles.length; i++) {
+      for (let j = i + 1; j < profiles.length; j++) {
+        const smallerValue = values[i];
+        const largerValue = values[j];
+        if (
+          smallerValue === null ||
+          largerValue === null ||
+          !Number.isFinite(smallerValue) ||
+          !Number.isFinite(largerValue)
+        )
+          throw new Error(`Cost growth contract failed: ${field} is unobserved`);
+        if (smallerValue < 0 || largerValue < 0)
+          throw new Error(`Cost growth contract failed: ${field} has a negative observed value`);
+        if (smallerValue === 0 && largerValue === 0) continue;
+
+        const smallerScale = scales[i]!;
+        const largerScale = scales[j]!;
+        const allowedRatio =
+          WORK_COST_GROWTH_MARGIN *
+          (factor(declaration.class, largerScale) / factor(declaration.class, smallerScale));
+        if (!Number.isFinite(allowedRatio) || allowedRatio < 0)
+          throw new Error(
+            `Cost growth contract requires finite growth factors for ${declaration.dimension}`,
+          );
+        const rawObservedRatio = smallerValue === 0 ? Infinity : largerValue / smallerValue;
+        if (rawObservedRatio <= allowedRatio) continue;
+
+        const facts: WorkCostGrowthBreach = {
+          counter: field,
+          dimension: declaration.dimension,
+          growthClass: declaration.class,
+          smallerScale,
+          largerScale,
+          smallerValue,
+          largerValue,
+          allowedRatio,
+          observedRatio: Number.isFinite(rawObservedRatio) ? rawObservedRatio : 'Infinity',
+        };
+        writeWorkCostGrowthArtifact(label, facts);
+        throw new Error(
+          `Cost growth contract failed: ${field} (${declaration.class}) by ${declaration.dimension} ` +
+            `at scales ${smallerScale} and ${largerScale}, values ${smallerValue} and ${largerValue}; ` +
+            `allowed ratio ${allowedRatio}, observed ratio ${facts.observedRatio}`,
+        );
+      }
+    }
+  }
 }
