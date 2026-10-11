@@ -626,6 +626,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
+      '-c', `model_auto_compact_token_limit=${codexCompactTokens()}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
     return ['codex', resume ? ['exec', 'resume', session, ...common, '--', prompt]
@@ -634,6 +635,15 @@ export function launchCommand(options: { id: string; effort: string; session: st
   return ['claude', ['-p', '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json', '--', prompt]];
+}
+
+/** A worker compacts its context at this size. The account's own limit is 900,000 tokens, and every
+ * model call resends the whole context: over 949 attempts to 2026-10-10, resumed sessions averaged
+ * 780,000 tokens a call and took 73% of all input tokens. `GOAL_CODEX_COMPACT_TOKENS` overrides it. */
+export const CODEX_COMPACT_TOKENS = 200_000;
+function codexCompactTokens(): number {
+  const override = Number(process.env.GOAL_CODEX_COMPACT_TOKENS);
+  return Number.isSafeInteger(override) && override > 0 ? override : CODEX_COMPACT_TOKENS;
 }
 
 /** The manager switches Codex between `fast` and `default` by writing this state file (fast when

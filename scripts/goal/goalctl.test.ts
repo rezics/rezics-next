@@ -1928,6 +1928,19 @@ describe('goalctl runtime policy', () => {
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', '/r/last.md', '-C', '/w']));
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1]
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
+    // Fresh and resumed sessions both compact far below the account's window.
+    expect(args).toContain('model_auto_compact_token_limit=200000');
+    const resumed = launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'luna' })[1];
+    expect(resumed).toContain('model_auto_compact_token_limit=200000');
+    const previous = process.env.GOAL_CODEX_COMPACT_TOKENS;
+    try {
+      process.env.GOAL_CODEX_COMPACT_TOKENS = '120000';
+      expect(launchCommand({ id: 'G-081', effort: 'high', session: '', prompt: 'p', resume: false, engine: 'codex-1' })[1])
+        .toContain('model_auto_compact_token_limit=120000');
+    } finally {
+      if (previous === undefined) delete process.env.GOAL_CODEX_COMPACT_TOKENS;
+      else process.env.GOAL_CODEX_COMPACT_TOKENS = previous;
+    }
   });
 
   test('runs Sol on the second Codex account with the same flags; its account is chosen by environment', () => {
