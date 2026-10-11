@@ -82,20 +82,28 @@ test(
             forgeFinding(copy, key, `restore-qualification:${'b'.repeat(64)}`),
         },
       ];
+      let attemptOrdinal = 0;
       for (const { label, reason, tamper } of refusals) {
-        const copy = await fixture.copy();
-        try {
-          const { key, lost } = await lostOutcome(fixture, copy);
-          await tamper(copy, key);
-          const held = await expectRefusedCompletion(fixture, copy, key, reason);
-          expect(held.erasures).toEqual(lost.erasures);
-          console.info('owner restore erasure case passed', {
-            case: 'completion-refused-' + label,
-            reason: held.hold_reason?.slice(0, 200),
-          });
-        } finally {
-          await copy.dispose();
-        }
+        const ordinal = ++attemptOrdinal;
+        await fixture.timing.phase(
+          `completion.refusal.${label}`,
+          async () => {
+            const copy = await fixture.copy();
+            try {
+              const { key, lost } = await lostOutcome(fixture, copy);
+              await tamper(copy, key);
+              const held = await expectRefusedCompletion(fixture, copy, key, reason);
+              expect(held.erasures).toEqual(lost.erasures);
+              console.info('owner restore erasure case passed', {
+                case: 'completion-refused-' + label,
+                reason: held.hold_reason?.slice(0, 200),
+              });
+            } finally {
+              await copy.dispose();
+            }
+          },
+          ordinal,
+        );
       }
     } finally {
       await fixture.close();

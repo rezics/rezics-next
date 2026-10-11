@@ -7,7 +7,10 @@ import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync 
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
-import { ContentComments, contentCommentIntentDigest } from '../../../services/content/src/comments.ts';
+import {
+  ContentComments,
+  contentCommentIntentDigest,
+} from '../../../services/content/src/comments.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
@@ -96,6 +99,10 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { copyRecoveryTree } from '../../../tests/qa/support/recovery-copy.ts';
+import {
+  createRestoreFixtureTiming,
+  type RestoreFixturePhaseHandle,
+} from '../../../tests/qa/support/restore-fixture-timing.ts';
 import { seedContent } from '../../../tests/qa/load/corpus.ts';
 import {
   freePort,
@@ -133,12 +140,15 @@ class DirectoryObjects implements ImmutableObjects {
 /** One real owner/native cut, one physical backup, isolated writable replay copies. */
 export async function ownerRestoreErasureFixture() {
   const preparationStarted = Date.now();
-  const { runId } = requireFaultTier();
+  const { runId, artifacts } = requireFaultTier();
+  const timing = createRestoreFixtureTiming({ artifactDirectory: artifacts });
   const root = resolve(import.meta.dir, '../../..');
   const qa = qaStack(runId);
   const image = pinnedImage();
   const apps = readEnv(join(qa.directory, 'apps.env'));
-  const databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
+  const databases = await timing.phase('source.owner-database-clone', () =>
+    cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner'),
+  );
   const suffix = randomBytes(6).toString('hex');
   const directory = join(root, '.temp', `owner-erasure-restore-${suffix}`);
   const socketDirectory = join(root, '.temp', 's');
@@ -209,37 +219,42 @@ export async function ownerRestoreErasureFixture() {
   };
   const objects = new DirectoryObjects(join(directory, 'objects-live'));
   let authenticated: Awaited<ReturnType<typeof ratingAccount>> | undefined;
-  const close = async () => {
-    await authenticated?.close();
-    for (const container of containers) container.remove();
-    await Promise.allSettled([...pools].map((value) => value.end()));
-    for (const data of pgCopies) {
-      if (spawnSync('pg_ctl', ['-D', data, 'status'], { timeout: 5_000 }).status === 0) {
-        execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
-          timeout: 15_000,
-        });
+  const close = () =>
+    timing.phase('fixture.final-disposal', async () => {
+      await authenticated?.close();
+      for (const container of containers) container.remove();
+      await Promise.allSettled([...pools].map((value) => value.end()));
+      for (const data of pgCopies) {
+        if (spawnSync('pg_ctl', ['-D', data, 'status'], { timeout: 5_000 }).status === 0) {
+          execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
+            timeout: 15_000,
+          });
+        }
       }
-    }
-    for (const name of copies.reverse())
-      await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-    await databases.close();
-    for (const name of volumes) docker(['volume', 'rm', '-f', name], 30_000);
-    rmSync(directory, { recursive: true, force: true });
-  };
+      for (const name of copies.reverse())
+        await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      await databases.close();
+      for (const name of volumes) docker(['volume', 'rm', '-f', name], 30_000);
+      rmSync(directory, { recursive: true, force: true });
+    });
+  let sourceApiPhase: RestoreFixturePhaseHandle | undefined;
+  let sourceProofPhase: RestoreFixturePhaseHandle | undefined;
   try {
-    await migrateContent(source.content);
+    await timing.phase('source.content-migration', () => migrateContent(source.content));
     expect(
       (await source.content.query("SELECT to_regclass('content.receipt') IS NOT NULL AS present"))
         .rows,
     ).toEqual([{ present: true }]);
     const liveVolume = volume('live'),
       cutVolume = volume('cut');
-    const live = await standaloneFuseki(qa.dockerEnv, {
-      name: `rezics-owner-erasure-${suffix}-live`,
-      image: image,
-      volume: liveVolume,
-      secrets: fusekiSecrets(qa.composeEnv),
-    });
+    const live = await timing.phase('source.first-fuseki-readiness', () =>
+      standaloneFuseki(qa.dockerEnv, {
+        name: `rezics-owner-erasure-${suffix}-live`,
+        image: image,
+        volume: liveVolume,
+        secrets: fusekiSecrets(qa.composeEnv),
+      }),
+    );
     containers.push(live);
     const native = new FusekiClient(
       live.url,
@@ -247,6 +262,7 @@ export async function ownerRestoreErasureFixture() {
       qa.composeEnv.FUSEKI_COMMAND_TOKEN,
     );
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
+    sourceApiPhase = timing.begin('source.actual-api-fixture-work');
     await initializeFreshGraph(native, lineage);
     authenticated = await ratingAccount(
       { ...apps, ACCOUNT_DATABASE_URL: databases.urls.account },
@@ -532,61 +548,101 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     // The quote is part of the signed original cut: the cited revision's own
     // text, before the recovery fence, coverage capture and physical backup.
     const cited = JSON.parse(availableBeforeErasure.serializedJson) as { body?: unknown };
-    if (typeof cited.body !== 'string' || cited.body.includes('\n')
-      || !cited.body.includes('erased native HTTP fixture payload')) {
+    if (
+      typeof cited.body !== 'string' ||
+      cited.body.includes('\n') ||
+      !cited.body.includes('erased native HTTP fixture payload')
+    ) {
       throw new Error('cited revision is not one quotable paragraph of the published source');
     }
     const quotedExact = cited.body;
     const quotedBody = 'authored annotation stays';
-    const quotedInput = { revisionId, resourceId: created.work, author: actor,
-      exact: quotedExact, body: quotedBody };
-    const quoted = await new ContentComments(source.content).create({ ...quotedInput,
-      admissionId: randomUUID(), authorityEpoch: '1', scope: `content:comment:${created.work}`,
-      requestDigest: contentCommentIntentDigest(quotedInput) });
+    const quotedInput = {
+      revisionId,
+      resourceId: created.work,
+      author: actor,
+      exact: quotedExact,
+      body: quotedBody,
+    };
+    const quoted = await new ContentComments(source.content).create({
+      ...quotedInput,
+      admissionId: randomUUID(),
+      authorityEpoch: '1',
+      scope: `content:comment:${created.work}`,
+      requestDigest: contentCommentIntentDigest(quotedInput),
+    });
     if (!('selector' in quoted.target) || quoted.target.selector.exact !== quotedExact) {
       throw new Error('comment core did not quote the cited revision');
     }
     const claim = `https://rezics.com/id/${randomUUID()}`;
     const claimRevision = `https://rezics.com/id/${randomUUID()}`;
-    await new VerificationStore(source.content).recordEvidence(principalId, `quote:${randomUUID()}`, claim, {
-      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: revisionId,
-        selector: { exact: quotedExact, start: 0, end: quotedExact.length }, availability: 'available' }],
-    });
-    const evidence = (await source.content.query<{ id: string; manifest_digest: string;
-      request_digest: string }>(`SELECT e.id::text AS id, e.manifest_digest, r.request_digest
+    await new VerificationStore(source.content).recordEvidence(
+      principalId,
+      `quote:${randomUUID()}`,
+      claim,
+      {
+        claimRevision,
+        expectedHead: null,
+        items: [
+          {
+            stance: 'supports',
+            contentRevision: revisionId,
+            selector: { exact: quotedExact, start: 0, end: quotedExact.length },
+            availability: 'available',
+          },
+        ],
+      },
+    );
+    const evidence = (
+      await source.content.query<{ id: string; manifest_digest: string; request_digest: string }>(
+        `SELECT e.id::text AS id, e.manifest_digest, r.request_digest
         FROM verification.evidence_set_revision e
         JOIN verification.receipt r ON r.id = e.operation_id
-        WHERE e.claim = $1`, [claim])).rows[0];
+        WHERE e.claim = $1`,
+        [claim],
+      )
+    ).rows[0];
     if (!evidence) throw new Error('cited evidence receipt is unavailable');
     const quotedCommentId = quoted.comment.split('/').at(-1)!;
-    const quotedSource = { commentId: quotedCommentId, revisionId, exact: quotedExact, body: quotedBody,
-      prefix: quoted.target.selector.prefix, suffix: quoted.target.selector.suffix,
-      evidenceRevisionId: evidence.id, manifestDigest: evidence.manifest_digest,
-      requestDigest: evidence.request_digest, start: 0, end: quotedExact.length };
+    const quotedSource = {
+      commentId: quotedCommentId,
+      revisionId,
+      exact: quotedExact,
+      body: quotedBody,
+      prefix: quoted.target.selector.prefix,
+      suffix: quoted.target.selector.suffix,
+      evidenceRevisionId: evidence.id,
+      manifestDigest: evidence.manifest_digest,
+      requestDigest: evidence.request_digest,
+      start: 0,
+      end: quotedExact.length,
+    };
     await drain(source.relay);
     const generation = await engageAccessRecoveryFence(source.access);
     let coverage: RecoveryCoverage | undefined;
-    for (let attempt = 0; attempt < 8 && !coverage; attempt++) {
-      try {
-        coverage = await captureGraphRecoveryCoverage(
-          native,
-          source.account,
-          source.access,
-          source.relay,
-          consumer,
-          source.content,
-          { directory: objects.directory, workObjects: objects },
-        );
-      } catch (error) {
-        if (
-          !(error instanceof RestoreLineageConflict) ||
-          !error.message.includes('Account WAL frontier') ||
-          attempt === 7
-        )
-          throw error;
-        await Bun.sleep(100);
+    await timing.phase('source.recovery-authority-capture', async () => {
+      for (let attempt = 0; attempt < 8 && !coverage; attempt++) {
+        try {
+          coverage = await captureGraphRecoveryCoverage(
+            native,
+            source.account,
+            source.access,
+            source.relay,
+            consumer,
+            source.content,
+            { directory: objects.directory, workObjects: objects },
+          );
+        } catch (error) {
+          if (
+            !(error instanceof RestoreLineageConflict) ||
+            !error.message.includes('Account WAL frontier') ||
+            attempt === 7
+          )
+            throw error;
+          await Bun.sleep(100);
+        }
       }
-    }
+    });
     if (!coverage?.objects) throw new Error('fixture signed owner coverage is unavailable');
     const authority = {
       sealedCoverage: JSON.stringify(
@@ -599,14 +655,16 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     // Retaining the first signed capture advances the real cluster WAL while
     // the quiesced owner rows and graph cut remain unchanged. Capture the
     // second frontier before erasure makes historical Content unavailable.
-    const newerCoverage = await captureGraphRecoveryCoverage(
-      native,
-      source.account,
-      source.access,
-      source.relay,
-      consumer,
-      source.content,
-      { directory: objects.directory, workObjects: objects },
+    const newerCoverage = await timing.phase('source.newer-authority-capture', () =>
+      captureGraphRecoveryCoverage(
+        native,
+        source.account,
+        source.access,
+        source.relay,
+        consumer,
+        source.content,
+        { directory: objects.directory, workObjects: objects },
+      ),
     );
     const { accountPg: capturedPg, ...capturedOwners } = coverage;
     const { accountPg: newerPg, ...newerOwners } = newerCoverage;
@@ -626,41 +684,48 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       ),
       hmacKey: restoreKey,
     };
-    cpSync(objects.directory, backupObjects, { recursive: true });
-    live.runner.stop();
-    copyGraph(liveVolume, cutVolume);
-    await live.runner.start();
+    timing.finish(sourceApiPhase);
+    sourceApiPhase = undefined;
+    await timing.phase('source.cut-stop-copy-restart', async () => {
+      cpSync(objects.directory, backupObjects, { recursive: true });
+      live.runner.stop();
+      copyGraph(liveVolume, cutVolume);
+      await live.runner.start();
+    });
     // Reuse the owner-cut drill's physical backup mechanism. The graph cut is
     // copied separately, so its original live graph can produce genuine later proof.
     const remote = `/tmp/rezics-owner-erasure-${suffix}`;
-    try {
-      const copied = qa.compose(
-        [
-          'exec',
-          '-T',
-          '-u',
-          'postgres',
-          'postgres',
-          'sh',
-          '-ec',
-          `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`,
-        ],
-        65_000,
-      );
-      if (copied.status !== 0)
-        throw new Error(`physical fixture backup failed: ${copied.output.slice(-2000)}`);
-      const container = qa.compose(['ps', '-q', 'postgres']).output.trim();
-      if (!/^[0-9a-f]{12,64}$/.test(container))
-        throw new Error('QA PostgreSQL container is unavailable');
-      docker(['cp', `${container}:${remote}`, pgBackup]);
-      execFileSync('pg_verifybackup', ['--no-parse-wal', pgBackup], { timeout: 15_000 });
-    } finally {
-      const removed = qa.compose(
-        ['exec', '-T', '-u', 'postgres', 'postgres', 'rm', '-rf', remote],
-        10_000,
-      );
-      if (removed.status !== 0) throw new Error('physical fixture backup cleanup failed');
-    }
+    await timing.phase('source.pg-basebackup-export-verification', async () => {
+      try {
+        const copied = qa.compose(
+          [
+            'exec',
+            '-T',
+            '-u',
+            'postgres',
+            'postgres',
+            'sh',
+            '-ec',
+            `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`,
+          ],
+          65_000,
+        );
+        if (copied.status !== 0)
+          throw new Error(`physical fixture backup failed: ${copied.output.slice(-2000)}`);
+        const container = qa.compose(['ps', '-q', 'postgres']).output.trim();
+        if (!/^[0-9a-f]{12,64}$/.test(container))
+          throw new Error('QA PostgreSQL container is unavailable');
+        docker(['cp', `${container}:${remote}`, pgBackup]);
+        execFileSync('pg_verifybackup', ['--no-parse-wal', pgBackup], { timeout: 15_000 });
+      } finally {
+        const removed = qa.compose(
+          ['exec', '-T', '-u', 'postgres', 'postgres', 'rm', '-rf', remote],
+          10_000,
+        );
+        if (removed.status !== 0) throw new Error('physical fixture backup cleanup failed');
+      }
+    });
+    sourceProofPhase = timing.begin('source.erasure-proof-and-retained-authority');
     const erased = await journalErasure(source.relay, {
       operationId: randomUUID(),
       requestDigest: hash(revisionId),
@@ -727,81 +792,114 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       liveRetentionReason: 'Original physical cut remains retained after logical suppression',
     });
     const retainedRelayTemplate = await databases.snapshot('relay', () => closePool(source.relay));
+    timing.finish(sourceProofPhase!);
+    sourceProofPhase = undefined;
     let index = 0;
     const copy = async () => {
       const copyStarted = Date.now(),
         ordinal = ++index;
       const retainedDatabase = `qa_owner_erasure_${suffix}_${ordinal}`;
       const relayTemplate = new URL(retainedRelayTemplate).pathname.slice(1);
-      if (!/^[a-z0-9_]+$/.test(relayTemplate)) throw new Error('invalid retained relay template');
-      await admin(`CREATE DATABASE ${retainedDatabase} WITH TEMPLATE ${relayTemplate} OWNER relay`);
-      copies.push(retainedDatabase);
-      const relayUrl = new URL(retainedRelayTemplate);
+      const { retainedRelay, relayUrl } = await timing.phase(
+        'candidate.retained-relay-clone',
+        async () => {
+          if (!/^[a-z0-9_]+$/.test(relayTemplate))
+            throw new Error('invalid retained relay template');
+          await admin(
+            `CREATE DATABASE ${retainedDatabase} WITH TEMPLATE ${relayTemplate} OWNER relay`,
+          );
+          copies.push(retainedDatabase);
+          const relayUrl = new URL(retainedRelayTemplate);
+          relayUrl.pathname = `/${retainedDatabase}`;
+          return { retainedRelay: pool(relayUrl.toString()), relayUrl };
+        },
+        ordinal,
+      );
       relayUrl.pathname = `/${retainedDatabase}`;
-      const retainedRelay = pool(relayUrl.toString());
       const data = join(directory, `postgres-${ordinal}`);
       pgCopies.push(data);
-      copyRecoveryTree(pgBackup, data);
-      appendFileSync(
-        join(data, 'postgresql.auto.conf'),
-        "\narchive_mode = off\nrestore_command = 'false'\n",
+      await timing.phase(
+        'candidate.postgres-filesystem-copy',
+        () => {
+          copyRecoveryTree(pgBackup, data);
+          appendFileSync(
+            join(data, 'postgresql.auto.conf'),
+            "\narchive_mode = off\nrestore_command = 'false'\n",
+          );
+          writeFileSync(join(data, 'recovery.signal'), '');
+        },
+        ordinal,
       );
-      writeFileSync(join(data, 'recovery.signal'), '');
-      const port = await freePort();
-      execFileSync(
-        'pg_ctl',
-        [
-          '-D',
-          data,
-          '-l',
-          join(directory, `postgres-${ordinal}.log`),
-          '-o',
-          `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`,
-          '-t',
-          '60',
-          '-w',
-          'start',
-        ],
-        { timeout: 65_000 },
+      let port = 0;
+      let owners!: { account: Pool; access: Pool; content: Pool; relay: Pool };
+      await timing.phase(
+        'candidate.postgres-startup-recovery',
+        async () => {
+          port = await freePort();
+          execFileSync(
+            'pg_ctl',
+            [
+              '-D',
+              data,
+              '-l',
+              join(directory, `postgres-${ordinal}.log`),
+              '-o',
+              `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`,
+              '-t',
+              '60',
+              '-w',
+              'start',
+            ],
+            { timeout: 65_000 },
+          );
+          const restoredPool = (owner: keyof typeof source) => {
+            const url = new URL(databases.urls[owner]);
+            url.hostname = '127.0.0.1';
+            url.port = String(port);
+            url.username = 'postgres';
+            url.password = qa.composeEnv.POSTGRES_PASSWORD!;
+            return pool(url.toString());
+          };
+          owners = {
+            account: restoredPool('account'),
+            access: restoredPool('access'),
+            content: restoredPool('content'),
+            relay: restoredPool('relay'),
+          };
+          let recovering = true;
+          for (let attempt = 0; attempt < 100 && recovering; attempt++) {
+            recovering =
+              (
+                await owners.account.query<{ recovering: boolean }>(
+                  'SELECT pg_is_in_recovery() AS recovering',
+                )
+              ).rows[0]?.recovering ?? true;
+            if (recovering) await Bun.sleep(100);
+          }
+          expect(recovering).toBe(false);
+          // Recovery connects as postgres while ordinary owner roles stay offline.
+          await owners.account.query(
+            'ALTER ROLE account NOLOGIN; ALTER ROLE access NOLOGIN; ALTER ROLE content NOLOGIN; ALTER ROLE relay NOLOGIN',
+          );
+        },
+        ordinal,
       );
-      const restoredPool = (owner: keyof typeof source) => {
-        const url = new URL(databases.urls[owner]);
-        url.hostname = '127.0.0.1';
-        url.port = String(port);
-        url.username = 'postgres';
-        url.password = qa.composeEnv.POSTGRES_PASSWORD!;
-        return pool(url.toString());
-      };
-      const owners = {
-        account: restoredPool('account'),
-        access: restoredPool('access'),
-        content: restoredPool('content'),
-        relay: restoredPool('relay'),
-      };
-      let recovering = true;
-      for (let attempt = 0; attempt < 100 && recovering; attempt++) {
-        recovering =
-          (
-            await owners.account.query<{ recovering: boolean }>(
-              'SELECT pg_is_in_recovery() AS recovering',
-            )
-          ).rows[0]?.recovering ?? true;
-        if (recovering) await Bun.sleep(100);
-      }
-      expect(recovering).toBe(false);
-      // Recovery connects as postgres while ordinary owner roles stay offline.
-      await owners.account.query(
-        'ALTER ROLE account NOLOGIN; ALTER ROLE access NOLOGIN; ALTER ROLE content NOLOGIN; ALTER ROLE relay NOLOGIN',
+      let graph!: Awaited<ReturnType<typeof standaloneFuseki>>;
+      await timing.phase(
+        'candidate.graph-copy-startup',
+        async () => {
+          const restoredVolume = volume(`copy-${ordinal}`);
+          copyGraph(cutVolume, restoredVolume);
+          graph = await standaloneFuseki(qa.dockerEnv, {
+            name: `rezics-owner-erasure-${suffix}-copy-${ordinal}`,
+            image: image,
+            volume: restoredVolume,
+            secrets: fusekiSecrets(qa.composeEnv),
+          });
+          containers.push(graph);
+        },
+        ordinal,
       );
-      const restoredVolume = volume(`copy-${ordinal}`);
-      copyGraph(cutVolume, restoredVolume);
-      const graph = await standaloneFuseki(qa.dockerEnv, {
-        name: `rezics-owner-erasure-${suffix}-copy-${ordinal}`,
-        image: image,
-        volume: restoredVolume,
-        secrets: fusekiSecrets(qa.composeEnv),
-      });
-      containers.push(graph);
       const fuseki = new FusekiClient(
         graph.url,
         qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN,
@@ -813,126 +911,150 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
           ? (BigInt(lineage.routingEpoch) + 1n).toString()
           : randomUUID(),
       };
-      await cutoverRestoredGraphLineage(fuseki, {
-        prior: { ...lineage, sequence: coverage!.priorSequence },
-        next: restoredLineage,
-      });
-      const restoredDirectory = join(directory, `objects-${ordinal}`);
-      cpSync(backupObjects, restoredDirectory, { recursive: true });
-      const restoredObjects = new DirectoryObjects(restoredDirectory);
-      const restoredCustody = new ReceiptCustody(
-        new PostgresReceiptCustodyStore(owners.access),
-        restoredObjects,
-        fuseki,
-        qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
-        proofRetirementSender(graph.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!),
-      );
-      const restoredEnv: WorkActivationEnvironment = {
-        fuseki,
-        lineage: restoredLineage,
-        objectDirectory: restoredDirectory,
-        workObjects: restoredObjects,
-        receiptCustody: restoredCustody,
-      };
-      const resources: RestoreResources = {
-        accountPool: owners.account,
-        accessPool: owners.access,
-        contentPool: owners.content,
-        restoredRelayPool: owners.relay,
-        hmacKey: restoreKey,
-        objectStore: { directory: restoredDirectory, workObjects: restoredObjects },
-        erasures: {
-          authority,
-          originalSource: 'retained-native-event',
-          signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
-          maintenance: heldErasureMaintenanceClient(
-            graph.url,
-            qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!,
-          ),
-        },
-      };
-      const operations = new OwnerOperations(retainedRelay, restoredEnv, resources);
-      const work: MainWorkDependencies = {
-        environment: restoredEnv,
-        account: authenticated!.verifier,
-        access: new AccessAdmissionRegistry(owners.access),
-        content: new ContentCore(owners.content),
-        ownerOperations: operations,
-      };
-      const app = new Elysia().use(ownerRoutes(work)).use(healthRoutes(fuseki, work));
-      const request = async (
-        key: string = randomUUID(),
-        token?: string,
-        body: Parameters<RestoreChecks['reconcile']>[1] = {
-          profile: 'owner-reconciliation-v1',
-          kind: 'restore',
-          sealedCoverage: authority.sealedCoverage,
-          sealedDeletionSets: [],
-        },
-      ) => {
-        const bearer = token ?? (await currentOwnerToken());
-        return app.handle(
-          new Request('http://main.local/v1/owners/reconciliations', {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${bearer}`,
-              'content-type': 'application/json',
-              'idempotency-key': key,
-            },
-            body: JSON.stringify(body),
+      await timing.phase(
+        'candidate.lineage-cutover',
+        () =>
+          cutoverRestoredGraphLineage(fuseki, {
+            prior: { ...lineage, sequence: coverage!.priorSequence },
+            next: restoredLineage,
           }),
+        ordinal,
+      );
+      const restoredDirectory = join(directory, `objects-${ordinal}`);
+      await timing.phase(
+        'candidate.object-filesystem-copy',
+        () => cpSync(backupObjects, restoredDirectory, { recursive: true }),
+        ordinal,
+      );
+      const bound = await timing.phase(
+        'candidate.remaining-runtime-binding',
+        async () => {
+          const restoredObjects = new DirectoryObjects(restoredDirectory);
+          const restoredCustody = new ReceiptCustody(
+            new PostgresReceiptCustodyStore(owners.access),
+            restoredObjects,
+            fuseki,
+            qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
+            proofRetirementSender(graph.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!),
+          );
+          const restoredEnv: WorkActivationEnvironment = {
+            fuseki,
+            lineage: restoredLineage,
+            objectDirectory: restoredDirectory,
+            workObjects: restoredObjects,
+            receiptCustody: restoredCustody,
+          };
+          const resources: RestoreResources = {
+            accountPool: owners.account,
+            accessPool: owners.access,
+            contentPool: owners.content,
+            restoredRelayPool: owners.relay,
+            hmacKey: restoreKey,
+            objectStore: { directory: restoredDirectory, workObjects: restoredObjects },
+            erasures: {
+              authority,
+              originalSource: 'retained-native-event',
+              signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
+              maintenance: heldErasureMaintenanceClient(
+                graph.url,
+                qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!,
+              ),
+            },
+          };
+          const operations = new OwnerOperations(retainedRelay, restoredEnv, resources);
+          const work: MainWorkDependencies = {
+            environment: restoredEnv,
+            account: authenticated!.verifier,
+            access: new AccessAdmissionRegistry(owners.access),
+            content: new ContentCore(owners.content),
+            ownerOperations: operations,
+          };
+          const app = new Elysia().use(ownerRoutes(work)).use(healthRoutes(fuseki, work));
+          const request = async (
+            key: string = randomUUID(),
+            token?: string,
+            body: Parameters<RestoreChecks['reconcile']>[1] = {
+              profile: 'owner-reconciliation-v1',
+              kind: 'restore',
+              sealedCoverage: authority.sealedCoverage,
+              sealedDeletionSets: [],
+            },
+          ) => {
+            const bearer = token ?? (await currentOwnerToken());
+            return app.handle(
+              new Request('http://main.local/v1/owners/reconciliations', {
+                method: 'POST',
+                headers: {
+                  authorization: `Bearer ${bearer}`,
+                  'content-type': 'application/json',
+                  'idempotency-key': key,
+                },
+                body: JSON.stringify(body),
+              }),
+            );
+          };
+          const ready = () => app.handle(new Request('http://main.local/health/ready'));
+          const faultRetained = async (
+            sql: string | readonly { sql: string; values?: unknown[] }[],
+            values: unknown[] = [],
+          ) => {
+            const url = new URL(relayUrl);
+            url.username = 'postgres';
+            url.password = qa.composeEnv.POSTGRES_PASSWORD!;
+            const client = new Client({ connectionString: url.toString() });
+            await client.connect();
+            try {
+              await client.query('BEGIN');
+              await client.query('SET LOCAL session_replication_role = replica');
+              const statements = typeof sql === 'string' ? [{ sql, values }] : sql;
+              if (!statements.length) throw new Error('retained test fault has no SQL statements');
+              const first = await client.query(statements[0]!.sql, statements[0]!.values ?? []);
+              for (const statement of statements.slice(1))
+                await client.query(statement.sql, statement.values ?? []);
+              await client.query('COMMIT');
+              return first;
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
+            } finally {
+              await client.end();
+            }
+          };
+          return {
+            app,
+            owners,
+            retainedRelay,
+            resources,
+            fuseki,
+            lineage: restoredLineage,
+            directory: restoredDirectory,
+            custody: restoredCustody,
+            request,
+            ready,
+            faultRetained,
+          };
+        },
+        ordinal,
+      );
+      const dispose = () =>
+        timing.phase(
+          'candidate.disposal',
+          async () => {
+            graph.remove();
+            for (const owner of [...Object.values(owners), retainedRelay]) await closePool(owner);
+            execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
+              timeout: 15_000,
+            });
+            pgCopies.splice(pgCopies.indexOf(data), 1);
+          },
+          ordinal,
         );
-      };
-      const ready = () => app.handle(new Request('http://main.local/health/ready'));
-      const faultRetained = async (
-        sql: string | readonly { sql: string; values?: unknown[] }[],
-        values: unknown[] = [],
-      ) => {
-        const url = new URL(relayUrl);
-        url.username = 'postgres';
-        url.password = qa.composeEnv.POSTGRES_PASSWORD!;
-        const client = new Client({ connectionString: url.toString() });
-        await client.connect();
-        try {
-          await client.query('BEGIN');
-          await client.query('SET LOCAL session_replication_role = replica');
-          const statements = typeof sql === 'string' ? [{ sql, values }] : sql;
-          if (!statements.length) throw new Error('retained test fault has no SQL statements');
-          const first = await client.query(statements[0]!.sql, statements[0]!.values ?? []);
-          for (const statement of statements.slice(1))
-            await client.query(statement.sql, statement.values ?? []);
-          await client.query('COMMIT');
-          return first;
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        } finally {
-          await client.end();
-        }
-      };
-      const dispose = async () => {
-        graph.remove();
-        for (const owner of [...Object.values(owners), retainedRelay]) await closePool(owner);
-        execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
-          timeout: 15_000,
-        });
-        pgCopies.splice(pgCopies.indexOf(data), 1);
-      };
       const copyElapsedMs = Date.now() - copyStarted;
       console.info('owner restore erasure copy ready', { ordinal, elapsedMs: copyElapsedMs });
       expect(copyElapsedMs).toBeLessThan(600_000);
       return {
-        app,
-        owners,
-        retainedRelay,
-        resources,
-        fuseki,
-        lineage: restoredLineage,
-        directory: restoredDirectory,
-        custody: restoredCustody,
-        request,
-        ready,
-        faultRetained,
+        ...bound,
+        ordinal,
         dispose,
       };
     };
@@ -966,10 +1088,19 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       principalId: principalId,
       leaseTemplates,
       stopOriginal: () => live.runner.stop(),
+      timing,
       copy,
       close,
     };
   } catch (error) {
+    for (const handle of [sourceApiPhase, sourceProofPhase]) {
+      if (!handle) continue;
+      try {
+        timing.fail(handle);
+      } catch {
+        // Preserve the fixture's original failure if writing timing evidence also fails.
+      }
+    }
     await close();
     throw error;
   }

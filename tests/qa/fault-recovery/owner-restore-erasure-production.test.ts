@@ -177,7 +177,12 @@ test(
       });
       try {
         await assertHeld(fixture, good);
-        expect((await good.request(randomUUID(), 'invalid-authentication')).status).toBe(401);
+        const invalidAuthentication = await fixture.timing.phase(
+          'production.invalid-authentication-refusal',
+          () => good.request(randomUUID(), 'invalid-authentication'),
+          good.ordinal,
+        );
+        expect(invalidAuthentication.status).toBe(401);
         await assertHeld(fixture, good);
         const copiedBytes = (
           await new ContentCore(good.owners.content).readExactBatch(
@@ -201,46 +206,53 @@ test(
         );
         let beforeReconcile = 0;
         let afterOwner: Awaited<ReturnType<typeof contentEpochs>> | undefined;
-        await finishOperatorRestore(
-          operatorContext(fixture, good),
-          {
-            reconcile: async (_context, body, key) => {
-              const response = await good.request(key, undefined, body);
-              expect(response.status).toBe(201);
-              expect(await response.clone().json()).toMatchObject({
-                kind: 'restore',
-                state: 'reconciled',
-                disposition: 'matched',
-              });
-              expect((await good.ready()).status).toBe(200);
-              expect(
-                (
-                  await good.owners.access.query(
-                    'SELECT open,generation::text AS generation FROM access.recovery_fence WHERE id=true',
-                  )
-                ).rows,
-              ).toEqual([{ open: true, generation: (BigInt(fixture.generation) + 1n).toString() }]);
-              expect(
-                (
-                  await good.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> {
+        await fixture.timing.phase(
+          'production.authenticated-owner-release-control',
+          () =>
+            finishOperatorRestore(
+              operatorContext(fixture, good),
+              {
+                reconcile: async (_context, body, key) => {
+                  const response = await good.request(key, undefined, body);
+                  expect(response.status).toBe(201);
+                  expect(await response.clone().json()).toMatchObject({
+                    kind: 'restore',
+                    state: 'reconciled',
+                    disposition: 'matched',
+                  });
+                  expect((await good.ready()).status).toBe(200);
+                  expect(
+                    (
+                      await good.owners.access.query(
+                        'SELECT open,generation::text AS generation FROM access.recovery_fence WHERE id=true',
+                      )
+                    ).rows,
+                  ).toEqual([
+                    { open: true, generation: (BigInt(fixture.generation) + 1n).toString() },
+                  ]);
+                  expect(
+                    (
+                      await good.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> {
                 <${DATASET}> rv:dataEpoch "${good.lineage.dataEpoch}" ; rv:sequence 0 .
                 FILTER NOT EXISTS { <${DATASET}> rv:restoreHold true } } }`)
-                ).boolean,
-              ).toBe(true);
-              expect((await ownerLogins(good)).map((row) => row.rolcanlogin)).toEqual([
-                false,
-                false,
-                false,
-                false,
-              ]);
-              afterOwner = await contentEpochs(good);
-              return response;
-            },
-          },
-          randomUUID(),
-          () => {
-            beforeReconcile++;
-          },
+                    ).boolean,
+                  ).toBe(true);
+                  expect((await ownerLogins(good)).map((row) => row.rolcanlogin)).toEqual([
+                    false,
+                    false,
+                    false,
+                    false,
+                  ]);
+                  afterOwner = await contentEpochs(good);
+                  return response;
+                },
+              },
+              randomUUID(),
+              () => {
+                beforeReconcile++;
+              },
+            ),
+          good.ordinal,
         );
         expect(beforeReconcile).toBe(1);
         expect(lostGraphResponse).toBe(true);
@@ -367,13 +379,18 @@ test(
       try {
         const epochs = await contentEpochs(partial);
         await expect(
-          finishOperatorRestore(
-            operatorContext(fixture, partial),
-            {
-              reconcile: (_context, body, key) => partial.request(key, undefined, body),
-            },
-            randomUUID(),
-            () => {},
+          fixture.timing.phase(
+            'production.post-graph-access-interruption',
+            () =>
+              finishOperatorRestore(
+                operatorContext(fixture, partial),
+                {
+                  reconcile: (_context, body, key) => partial.request(key, undefined, body),
+                },
+                randomUUID(),
+                () => {},
+              ),
+            partial.ordinal,
           ),
         ).rejects.toThrow('Owner reconciliation did not verify the restore');
         expect(graphCommitted).toBe(true);
@@ -484,33 +501,41 @@ test(
           }
         };
         await assertAccessBase();
+        let controlOrdinal = 0;
         const controlledFault = async (
           label: string,
           mutate: () => void | Promise<void>,
           restore: () => void | Promise<void>,
         ) => {
-          heldCommands.mockClear();
-          graphCommands.mockClear();
-          await mutate();
-          try {
-            await expectHeldOperation(fixture, shared, label);
-            expect(await indexedUnits()).toEqual(unitsBefore);
-            expect(await contentState()).toEqual(contentBefore);
-            expect(heldCommands.mock.calls).toHaveLength(0);
-            expect(graphCommands.mock.calls).toHaveLength(0);
-            for (const owner of [shared.retainedRelay, ...Object.values(shared.owners)]) {
-              expect(owner.options.max).toBe(1);
-              expect(owner.totalCount).toBeLessThanOrEqual(1);
-              expect(owner.waitingCount).toBe(0);
-            }
-          } finally {
-            await restore();
-          }
-          await assertHeld(fixture, shared);
-          expect(await indexedUnits()).toEqual(unitsBefore);
-          expect(await contentState()).toEqual(contentBefore);
-          await assertAccessBase();
-          console.info('owner restore erasure case passed', { case: label });
+          const ordinal = ++controlOrdinal;
+          await fixture.timing.phase(
+            `production.control.${label}`,
+            async () => {
+              heldCommands.mockClear();
+              graphCommands.mockClear();
+              await mutate();
+              try {
+                await expectHeldOperation(fixture, shared, label);
+                expect(await indexedUnits()).toEqual(unitsBefore);
+                expect(await contentState()).toEqual(contentBefore);
+                expect(heldCommands.mock.calls).toHaveLength(0);
+                expect(graphCommands.mock.calls).toHaveLength(0);
+                for (const owner of [shared.retainedRelay, ...Object.values(shared.owners)]) {
+                  expect(owner.options.max).toBe(1);
+                  expect(owner.totalCount).toBeLessThanOrEqual(1);
+                  expect(owner.waitingCount).toBe(0);
+                }
+              } finally {
+                await restore();
+              }
+              await assertHeld(fixture, shared);
+              expect(await indexedUnits()).toEqual(unitsBefore);
+              expect(await contentState()).toEqual(contentBefore);
+              await assertAccessBase();
+              console.info('owner restore erasure case passed', { case: label });
+            },
+            ordinal,
+          );
         };
         let interruptedAttempts = 0;
         await controlledFault(
@@ -769,17 +794,23 @@ test(
 
       const newerJournal = await fixture.copy();
       try {
-        await journalErasure(newerJournal.retainedRelay, {
-          operationId: randomUUID(),
-          requestDigest: '17'.repeat(32),
-          kind: 'revision',
-          principalId: fixture.principalId,
-          admissionId: randomUUID(),
-          authorityEpoch: fixture.generation,
-          targets: [{ kind: 'content_revision', ref: fixture.laterRevisionId }],
-        });
-        await expectHeldOperation(fixture, newerJournal);
-        console.info('owner restore erasure case passed', { case: 'newer-erasure-journal' });
+        await fixture.timing.phase(
+          'production.newer-erasure-journal-refusal',
+          async () => {
+            await journalErasure(newerJournal.retainedRelay, {
+              operationId: randomUUID(),
+              requestDigest: '17'.repeat(32),
+              kind: 'revision',
+              principalId: fixture.principalId,
+              admissionId: randomUUID(),
+              authorityEpoch: fixture.generation,
+              targets: [{ kind: 'content_revision', ref: fixture.laterRevisionId }],
+            });
+            await expectHeldOperation(fixture, newerJournal);
+            console.info('owner restore erasure case passed', { case: 'newer-erasure-journal' });
+          },
+          newerJournal.ordinal,
+        );
       } finally {
         await newerJournal.dispose();
       }
@@ -797,21 +828,27 @@ test(
         );
         const commands = spyOn(copy.fuseki, 'commandWithReceipt');
         try {
-          await expectHeldOperation(fixture, copy);
-          expect(inserted).toBe(true);
-          expect(
-            commands.mock.calls.some((call) => call[0].update.includes('restore-release')),
-          ).toBe(false);
-          expect(
-            (
-              await copy.owners.access.query(`SELECT count(*)::text AS count
+          await fixture.timing.phase(
+            `production.delivering-${kind}-lease-refusal`,
+            async () => {
+              await expectHeldOperation(fixture, copy);
+              expect(inserted).toBe(true);
+              expect(
+                commands.mock.calls.some((call) => call[0].update.includes('restore-release')),
+              ).toBe(false);
+              expect(
+                (
+                  await copy.owners.access.query(`SELECT count(*)::text AS count
             FROM ${kind === 'search' ? 'access.search_read_lease' : 'access.download_read_lease'}
             WHERE state='delivering'`)
-            ).rows,
-          ).toEqual([{ count: '0' }]);
-          console.info('owner restore erasure case passed', {
-            case: 'delivering-' + kind + '-lease',
-          });
+                ).rows,
+              ).toEqual([{ count: '0' }]);
+              console.info('owner restore erasure case passed', {
+                case: 'delivering-' + kind + '-lease',
+              });
+            },
+            copy.ordinal,
+          );
         } finally {
           commands.mockRestore();
           veto.mockRestore();
