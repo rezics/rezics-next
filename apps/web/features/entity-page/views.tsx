@@ -19,6 +19,7 @@ import { realmLabel } from '../work-page/scope-labels.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import { idOf } from '../work-page/route.ts';
 import type { DiscussionPage, Loaded } from '../work-page/types.ts';
+import { messages as defaultFeedMessages, type FeedMessages } from '../feed/messages.ts';
 import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
 import type { Copy } from './messages.ts';
 import type { PredicateLabels } from './predicate-labels.ts';
@@ -402,6 +403,7 @@ export function DiscussionView({
   locale,
   t,
   messages,
+  feedMessages = defaultFeedMessages,
   anchor = 'discussion',
 }: {
   /** The region's id; a host that already uses `discussion` for its own anchor names another. */
@@ -416,6 +418,7 @@ export function DiscussionView({
   locale: UiLocale;
   t: Copy;
   messages: WorkPageMessages;
+  feedMessages?: FeedMessages;
 }) {
   const compose = `/submit?target=${idOf(resource) ?? resource}`;
   const start = (
@@ -447,6 +450,7 @@ export function DiscussionView({
           items={page.data.items}
           locale={locale}
           messages={messages}
+          feedMessages={feedMessages}
           realmLabel={(realm) =>
             realmLabel({ id: realm, name: realms.get(realm) ?? null }, messages, locale)
           }

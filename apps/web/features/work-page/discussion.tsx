@@ -4,6 +4,10 @@ import { MessagesSquareIcon, UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
+import { markedSpoiler } from '../feed/discussion.ts';
+import { SpoilerVeil } from '../feed/discussion-card.tsx';
+import { FeedProvider } from '../feed/feed-context.tsx';
+import { messages as defaultFeedMessages, type FeedMessages } from '../feed/messages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { formatDate, mintedAt, paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
@@ -19,17 +23,22 @@ import type { DiscussionPage, Loaded } from './types.ts';
  * release, a chapter or a character. `realmHref` makes the Realm a link where
  * the caller has a view of just that Realm.
  */
-export function DiscussionList({ items, realmLabel: label, realmHref, locale, messages }: {
+export function DiscussionList({ items, realmLabel: label, realmHref, locale, messages,
+  feedMessages = defaultFeedMessages }: {
   items: DiscussionPage['items']; locale: UiLocale; messages: WorkPageMessages;
+  feedMessages?: FeedMessages;
   realmLabel: (realm: string) => string; realmHref?: (realm: string) => string;
 }) {
   const t = materializeData(messages, { locale });
-  return <ol className="grid gap-3">
+  return <FeedProvider locale={locale} messages={feedMessages} now={0} signedIn={false} actingSubject={null}
+    signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={[]}>
+    <ol className="grid gap-3">
     {items.map(item => {
       const realm = idOf(item.realm);
       const name = realm ? label(realm) : item.realm;
       // A reply is dated by its placement, which Main minted when the community placed it.
       const placed = mintedAt(item.placement);
+      const words = paragraphs(item.body).map((line, index) => <p key={index}>{line}</p>);
       // Home links a discussion here by its reply; its thread lives in the Realm that placed it.
       const reply = idOf(item.reply);
       const replyIn = realm && realmHref
@@ -46,7 +55,7 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
               {formatDate(placed, locale)}</time> : null}
           </header>
           <div className="grid gap-2 text-pretty break-words text-sm/7">
-            {paragraphs(item.body).map((line, index) => <p key={index}>{line}</p>)}
+            {markedSpoiler(item.spoiler) ? <SpoilerVeil>{words}</SpoilerVeil> : words}
           </div>
           {realm && reply ? <Link href={threadHref(spaceHref(realm, 'community'), reply)} className="inline-flex w-fit items-center
             gap-1.5 font-medium text-primary text-sm underline-offset-4 hover:underline">
@@ -54,7 +63,8 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
         </article>
       </li>;
     })}
-  </ol>;
+    </ol>
+  </FeedProvider>;
 }
 
 /**
@@ -62,10 +72,10 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
  * Global, from one Realm in its scope. Main shows no author yet and keeps
  * unreviewed replies out. Mine has no discussion of its own.
  */
-export function DiscussionRegion({ discussion, view, cursor, locale, messages }: {
+export function DiscussionRegion({ discussion, view, cursor, locale, messages, feedMessages = defaultFeedMessages }: {
   /** Null in Mine. */
   discussion: Loaded<DiscussionPage> | null; view: ScopeView; cursor: string | undefined; locale: UiLocale;
-  messages: WorkPageMessages;
+  messages: WorkPageMessages; feedMessages?: FeedMessages;
 }) {
   const t = materializeData(messages, { locale });
   const name = scopeName(view, messages, locale);
@@ -84,7 +94,7 @@ export function DiscussionRegion({ discussion, view, cursor, locale, messages }:
   const { items, nextCursor } = discussion.data;
   return <Region id="work-discussion" title={t.discussion}>
     <p className="text-muted-foreground text-sm">{t.discussionNote}</p>
-    {items.length ? <DiscussionList items={items} locale={locale} messages={messages}
+    {items.length ? <DiscussionList items={items} locale={locale} messages={messages} feedMessages={feedMessages}
       realmLabel={realm => realmLabel(view.realms.find(entry => entry.id === realm) ?? { id: realm, name: null },
         messages, locale)}
       realmHref={view.scope.kind !== 'realm'

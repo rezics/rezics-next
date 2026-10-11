@@ -34,6 +34,16 @@ function checkedRows(rows: Record<string, { value: string } | undefined>[]) {
     throw new WorkReadUnavailable('Activity order is ambiguous');
   }
 }
+function declaredReplySpoiler(body: Record<string, unknown>): boolean | undefined {
+  if (!Object.hasOwn(body, 'spoiler') || body.spoiler == null) return undefined;
+  if (typeof body.spoiler !== 'boolean') throw new WorkReadUnavailable('Reply spoiler declaration is invalid');
+  return body.spoiler;
+}
+export function workDiscussionText(body: Record<string, unknown>): { body: string; spoiler?: boolean } {
+  if (typeof body.body !== 'string') throw new WorkReadUnavailable('Reply body differs from its identity');
+  const spoiler = declaredReplySpoiler(body);
+  return { body: body.body, ...(spoiler === undefined ? {} : { spoiler }) };
+}
 function nextCursor(session: WorkReadSession, binding: unknown,
   rows: Record<string, { value: string } | undefined>[], limit: number) {
   const last = rows[limit - 1];
@@ -99,12 +109,13 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
       || review !== `urn:rezics:realm-review:${visible.reviewDecisionId}`
       || body?.status === 'erased' || body?.status === 'missing' || body?.status === 'denied') continue;
     if (body?.status !== 'available') throw new WorkReadUnavailable('Reply bytes are unavailable');
-    if (body.reference.resourceId !== reply || typeof body.body.body !== 'string') {
+    if (body.reference.resourceId !== reply) {
       throw new WorkReadUnavailable('Reply body differs from its identity');
     }
-    if (Buffer.byteLength(body.body.body, 'utf8') > 1_048_576) throw new WorkReadLimit('Reply body exceeds its budget');
+    const text = workDiscussionText(body.body);
+    if (Buffer.byteLength(text.body, 'utf8') > 1_048_576) throw new WorkReadLimit('Reply body exceeds its budget');
     items.push({ reply, realm: realmId, placement: field(row, 'id'), revisionId,
-      body: body.body.body, dataEpoch: field(row, 'revisionEpoch'), sequence: field(row, 'sequence') });
+      ...text, dataEpoch: field(row, 'revisionEpoch'), sequence: field(row, 'sequence') });
   }
   await resolveTargets(session, [work], 'discussion');
   return pageResult(session, items, nextCursor(session, binding, rows, limit));

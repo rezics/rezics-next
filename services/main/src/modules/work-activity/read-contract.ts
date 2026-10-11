@@ -5,6 +5,7 @@ export const discussionItem = t.Object({
   reply: readId, realm: readId, placement: readId,
   revisionId: t.String({ pattern: '^[0-9a-f-]{36}$' }),
   body: t.String({ maxLength: 1_048_576 }),
+  spoiler: t.Optional(t.Boolean()),
   dataEpoch: t.String(), sequence: t.String(),
 });
 export const historyKind = t.Union([

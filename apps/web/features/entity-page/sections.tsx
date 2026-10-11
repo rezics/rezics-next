@@ -12,6 +12,7 @@ import { DiscussionView, RelationsView, type SectionProps, StatementsView } from
 import { ProjectionFactsView } from './projection-views.tsx';
 import { readIdentityDefinitions } from './identity-read.ts';
 import { readPredicateLabels } from './predicate-labels.ts';
+import { getMessages } from '../../i18n/server.ts';
 
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
@@ -60,7 +61,7 @@ export async function DiscussionSection({ section, cursor, resource, registry, s
   /** Show only the first few replies and no paging, for a host that links to the full list (the Work hub). */
   preview?: number;
 }) {
-  const read = await readDiscussion(section, cursor);
+  const [read, feedMessages] = await Promise.all([readDiscussion(section, cursor), getMessages('feed', rest.locale)]);
   const page = preview !== undefined && read.ok
     ? { ok: true as const, data: { ...read.data, items: read.data.items.slice(0, preview), nextCursor: null } } : read;
   const ids = page.ok ? [...new Set(page.data.items.flatMap(item => idOf(item.realm) ?? []))] : [];
@@ -70,7 +71,7 @@ export async function DiscussionSection({ section, cursor, resource, registry, s
   })));
   return <DiscussionView page={page} realms={realms} cursor={cursor} resource={resource} anchor={anchor}
     subject={noun ?? inSentence(entryLabel(registry, rest.locale), rest.locale)} signedIn={signedIn} hrefFor={rest.hrefFor}
-    locale={rest.locale} t={rest.t} messages={rest.messages} />;
+    locale={rest.locale} t={rest.t} messages={rest.messages} feedMessages={feedMessages} />;
 }
 
 /** Everyone's ratings of the resource, named by what it is ("Ratings for this release"). */

@@ -413,8 +413,8 @@ export async function WorkHistory({ workRef, id, query, locale, messages }: Comm
 
 async function Discussion(props: ScopedProps & { cursor: string | undefined }) {
   const { id, scope, cursor } = props;
-  const [scopeView, discussion] = await Promise.all([view(props), scope.kind === 'mine' ? null
-    : readDiscussion(id, scope.kind === 'realm' ? scope.realm : undefined, cursor)]);
+  const [scopeView, discussion, feedMessages] = await Promise.all([view(props), scope.kind === 'mine' ? null
+    : readDiscussion(id, scope.kind === 'realm' ? scope.realm : undefined, cursor), getMessages('feed', props.locale)]);
   // Replies from Realms the adoption page did not name are named by their own public read.
   const unnamed = discussion?.ok ? [...new Set(discussion.data.items.flatMap(item => {
     const realm = idOf(item.realm);
@@ -425,7 +425,7 @@ async function Discussion(props: ScopedProps & { cursor: string | undefined }) {
     return { id: realm, name: header.ok ? header.data.name : null };
   }));
   return <DiscussionRegion discussion={discussion} view={{ ...scopeView, realms: [...scopeView.realms, ...named] }}
-    cursor={cursor} locale={props.locale} messages={props.messages} />;
+    cursor={cursor} locale={props.locale} messages={props.messages} feedMessages={feedMessages} />;
 }
 
 /** Discussion: the scope bar, then reviewed replies from every public Realm or the chosen one. */
