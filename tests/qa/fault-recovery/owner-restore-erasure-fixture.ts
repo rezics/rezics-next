@@ -1041,8 +1041,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       sequence: original.sequence,
     });
     expect(retainedProof[0]!.relay_position.streamScope).toBe(MAIN_RELAY_STREAM_SCOPE);
-    expect(BigInt(retainedProof[0]!.relay_position.sequence)).toBeGreaterThan(
-      BigInt(coverage.relay.sequence),
+    expect(BigInt(retainedProof[0]!.relay_position.sequence)).toBe(
+      BigInt(coverage.relay.sequence) + 1n,
     );
     expect(retainedProof[0]!.relay_position.dataEpoch).toBe(original.dataEpoch);
     expect(original.sequence).not.toBe(retainedProof[0]!.relay_position.sequence);
