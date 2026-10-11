@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import * as filesystem from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { artifactRoots, parseArgs } from '../qa/core.ts';
 import { parseJUnit, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
@@ -75,6 +75,17 @@ function repo(extraIntegration = 0) {
 }
 
 describe('pinned main-wide regression', () => {
+  // The merge gate runs this file with its own owner deadline in the environment; the regression's
+  // default must not come from whoever started the test.
+  let inheritedOwnerBudget: string | undefined;
+  beforeEach(() => {
+    inheritedOwnerBudget = process.env.REZICS_QA_OWNER_BUDGET_MS;
+    delete process.env.REZICS_QA_OWNER_BUDGET_MS;
+  });
+  afterEach(() => {
+    if (inheritedOwnerBudget === undefined) delete process.env.REZICS_QA_OWNER_BUDGET_MS;
+    else process.env.REZICS_QA_OWNER_BUDGET_MS = inheritedOwnerBudget;
+  });
   test('each routine regression schedules the pinned Jena check as its own entry', async () => {
     const r = repo();
     try {
