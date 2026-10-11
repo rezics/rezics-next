@@ -7,6 +7,7 @@ import {
   disposeIndependentRestoreSource,
   inspectIndependentRestoreTarget,
   recordIndependentRestoreSourceInventory,
+  RecoveryRefusal,
   type IsolationContainer,
   type IsolationInspector,
   type IsolationNetwork,
@@ -52,6 +53,19 @@ function sourceFixture(state = 'running') {
         : []),
     ],
     networkIds: [sourceNetwork.id],
+    networkAliases: [`${project}-${service}-1`, service],
+    links: [],
+    publishedPorts: [{
+      containerPort: service === 'postgres' ? '5432/tcp' : service === 'fuseki' ? '3030/tcp' : '9000/tcp',
+      hostIp: '127.0.0.1',
+      hostPort: service === 'postgres' ? '25432' : service === 'fuseki' ? '23030' : '29000',
+    }],
+    environment: [],
+    command: [],
+    labels: {
+      'com.docker.compose.project': project,
+      'com.docker.compose.service': service,
+    },
   }));
   const stateData: FakeState = {
     containers,
@@ -124,6 +138,15 @@ function targetContainers(project: string, networkId: string) {
         : []),
     ],
     networkIds: [networkId],
+    networkAliases: [`${project}-${service}-1`, service],
+    links: [],
+    publishedPorts: [],
+    environment: [],
+    command: [],
+    labels: {
+      'com.docker.compose.project': project,
+      'com.docker.compose.service': service,
+    },
   }));
 }
 
@@ -160,6 +183,19 @@ function installedTargetFixture() {
   const validNetwork = { ...network, containerIds: containers.map((container) => container.id) };
   installTargetInspection(fixture, target, containers, validNetwork);
   return { fixture, target, containers, network: validNetwork };
+}
+
+function expectTargetRefusal(fixture: ReturnType<typeof sourceFixture>, target: string): RecoveryRefusal {
+  let failure: unknown;
+  try {
+    inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(RecoveryRefusal);
+  const refusal = failure as RecoveryRefusal;
+  expect(refusal.code).toBe('TARGET_IDENTITY_REFUSED');
+  return refusal;
 }
 
 test('source inventory blocks both live and stopped sources while their volumes remain', () => {
@@ -199,6 +235,15 @@ test('fixture-restored source inventory records and removes unlabeled volumes th
     service: 'postgres',
     mounts: [],
     networkIds: [],
+    networkAliases: [],
+    links: [],
+    publishedPorts: [],
+    environment: [],
+    command: [],
+    labels: {
+      'com.docker.compose.project': 'rezics-fixture-retained',
+      'com.docker.compose.service': 'postgres',
+    },
   } satisfies IsolationContainer;
   fixture.stateData.containers.push(unrelated);
   fixture.stateData.volumes.push({
@@ -262,6 +307,15 @@ test('source disposal refuses resources added after the recorded inventory', () 
     service: 'unexpected',
     mounts: [],
     networkIds: [],
+    networkAliases: [],
+    links: [],
+    publishedPorts: [],
+    environment: [],
+    command: [],
+    labels: {
+      'com.docker.compose.project': fixture.project,
+      'com.docker.compose.service': 'unexpected',
+    },
   };
   fixture.stateData.containers.push(unexpected);
   let ownerCalled = false;
@@ -391,12 +445,176 @@ test('local target inspection accepts new storage and rejects source aliases and
       .toThrow('aliases a source bind path');
 
     fixture.stateData.containers = containers;
+    const foreignPeer: IsolationContainer = {
+      id: 'b'.repeat(64),
+      name: 'rezics-fixture-retained-worker-1',
+      state: 'running',
+      project: 'rezics-fixture-retained',
+      service: 'worker',
+      mounts: [],
+      networkIds: [validNetwork.id],
+      networkAliases: ['retained-worker'],
+      links: [],
+      publishedPorts: [],
+      environment: [],
+      command: [],
+      labels: {
+        'com.docker.compose.project': 'rezics-fixture-retained',
+        'com.docker.compose.service': 'worker',
+      },
+    };
+    fixture.stateData.containers.push(foreignPeer);
     fixture.stateData.networks = fixture.stateData.networks.map((candidate) =>
       candidate.name === validNetwork.name
-        ? { ...candidate, containerIds: [...validNetwork.containerIds, fixture.inventory.containers[0]!.id] }
+        ? { ...candidate, containerIds: [...validNetwork.containerIds, foreignPeer.id] }
         : candidate);
     expect(() => inspectIndependentRestoreTarget(target, fixture.inventory, fixture.inspector))
-      .toThrow('includes a recorded source peer');
+      .toThrow('peer set differs from its storage containers');
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses a target container attached to an extra network', () => {
+  const { fixture, target, containers, network } = installedTargetFixture();
+  const extraNetwork: IsolationNetwork & { project: string } = {
+    id: 'd'.repeat(64),
+    name: `${target}_extra`,
+    project: target,
+    containerIds: [containers[0]!.id],
+  };
+  try {
+    fixture.stateData.networks.push(extraNetwork);
+    fixture.stateData.containers = containers.map((container) => container.id === containers[0]!.id
+      ? { ...container, networkIds: [network.id, extraNetwork.id] }
+      : container);
+    expectTargetRefusal(fixture, target);
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses a foreign peer on the default network', () => {
+  const { fixture, target, containers, network } = installedTargetFixture();
+  const foreign: IsolationContainer = {
+    id: 'b'.repeat(64),
+    name: 'rezics-fixture-retained-worker-1',
+    state: 'running',
+    project: 'rezics-fixture-retained',
+    service: 'worker',
+    mounts: [],
+    networkIds: [network.id],
+    networkAliases: ['retained-worker'],
+    links: [],
+    publishedPorts: [],
+    environment: [],
+    command: [],
+    labels: {
+      'com.docker.compose.project': 'rezics-fixture-retained',
+      'com.docker.compose.service': 'worker',
+    },
+  };
+  try {
+    fixture.stateData.containers.push(foreign);
+    fixture.stateData.networks = fixture.stateData.networks.map((candidate) => candidate.id === network.id
+      ? { ...candidate, containerIds: [...containers.map((container) => container.id), foreign.id] }
+      : candidate);
+    expectTargetRefusal(fixture, target);
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses attachment to the retained fixture network', () => {
+  const { fixture, target, containers, network } = installedTargetFixture();
+  const retainedNetwork: IsolationNetwork & { project: string } = {
+    id: 'c'.repeat(64),
+    name: 'rezics-fixture-retained_default',
+    project: 'rezics-fixture-retained',
+    containerIds: [containers[1]!.id],
+  };
+  try {
+    fixture.stateData.networks.push(retainedNetwork);
+    fixture.stateData.containers = containers.map((container) => container.id === containers[1]!.id
+      ? { ...container, networkIds: [network.id, retainedNetwork.id] }
+      : container);
+    expectTargetRefusal(fixture, target);
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses source host ports, links and network aliases', () => {
+  const { fixture, target, containers } = installedTargetFixture();
+  const sourceContainer = fixture.inventory.containers[0]!;
+  const sourcePort = fixture.inventory.publishedPorts[0]!;
+  const cases: { service: string; change: Partial<IsolationContainer> }[] = [
+    {
+      service: 'postgres',
+      change: {
+        publishedPorts: [{
+          containerPort: sourcePort.containerPort,
+          hostIp: sourcePort.hostIp,
+          hostPort: sourcePort.hostPort,
+        }],
+      },
+    },
+    { service: 'fuseki', change: { links: [`/${sourceContainer.name}:source`] } },
+    { service: 'rustfs', change: { networkAliases: [sourceContainer.name] } },
+  ];
+  try {
+    for (const candidate of cases) {
+      const original = containers.find((container) => container.service === candidate.service)!;
+      fixture.stateData.containers = containers.map((container) =>
+        container.id === original.id ? { ...container, ...candidate.change } : container);
+      expectTargetRefusal(fixture, target);
+    }
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses source identities in environment, command and labels', () => {
+  const { fixture, target, containers } = installedTargetFixture();
+  const cases: { change: Partial<IsolationContainer> }[] = [
+    { change: { environment: [`RESTORE_SOURCE_PROJECT=${fixture.inventory.project}`] } },
+    { change: { command: [`--volume=${fixture.inventory.volumes[0]}`] } },
+    {
+      change: {
+        labels: {
+          ...containers[0]!.labels,
+          'restore.source-network': fixture.inventory.networks[0]!.name,
+        },
+      },
+    },
+  ];
+  try {
+    for (const candidate of cases) {
+      fixture.stateData.containers = containers.map((container, index) =>
+        index === 0 ? { ...container, ...candidate.change } : container);
+      expectTargetRefusal(fixture, target);
+    }
+  } finally {
+    rmSync(fixture.stackDirectory, { recursive: true, force: true });
+  }
+});
+
+test('local target inspection refuses a still-running recorded source container', () => {
+  const fixture = sourceFixture('running');
+  const target = 'rezics-qa-isolation-successor';
+  const network: IsolationNetwork = {
+    id: 'e'.repeat(64),
+    name: `${target}_default`,
+    containerIds: [],
+  };
+  const containers = targetContainers(target, network.id);
+  try {
+    installTargetInspection(fixture, target, containers, {
+      ...network,
+      containerIds: containers.map((container) => container.id),
+    });
+    const refusal = expectTargetRefusal(fixture, target);
+    expect(refusal.message).toContain('recorded source container remains');
   } finally {
     rmSync(fixture.stackDirectory, { recursive: true, force: true });
   }
