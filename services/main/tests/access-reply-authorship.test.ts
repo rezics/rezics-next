@@ -1,0 +1,276 @@
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import type { AdmissionRequest, VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+
+const authorBaseline = await import('../src/modules/access/author-baseline.ts');
+const zoneAuthority = await import('../src/modules/space/create-authority.ts');
+const replyRoot = await import('../src/modules/realm-reply/root.ts');
+const authoredWorks = new Map<string, string>();
+const zoneOwnerships = new Set<string>();
+const graph = { query: async () => ({ boolean: true, results: { bindings: [] } }) };
+
+await mock.module('../src/modules/access/author-baseline.ts', () => ({
+  ...authorBaseline,
+  authorWorkGeneration: async (_client: unknown, _graph: unknown, principal: string,
+    actor: string, work: string) => authoredWorks.get(`${principal}:${actor}:${work}`) ?? null,
+}));
+await mock.module('../src/modules/space/create-authority.ts', () => ({
+  ...zoneAuthority,
+  zoneSpaceCreatorAllowed: async (_client: unknown, _graph: unknown, principal: string,
+    actor: string, zone: string) => zoneOwnerships.has(`${principal}:${actor}:${zone}`),
+}));
+await mock.module('../src/modules/realm-reply/root.ts', () => ({
+  ...replyRoot,
+  publicReplyRoot: async () => true,
+}));
+
+const { AccessAdmissionRegistry, AdmissionDenied } = await import('../src/modules/access/admission.ts');
+const { resolveZonePageContent } = await import('../src/modules/access/zone-content-authority.ts');
+const root = resolve(import.meta.dir, '../../..');
+const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
+const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+let cluster: PostgresCluster | undefined;
+let pool: Pool;
+
+beforeAll(async () => {
+  cluster = await startPostgresCluster();
+  pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 1000 });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const file of schemaFiles(root, 'access')) {
+      await client.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}, 60_000);
+
+afterAll(async () => {
+  await pool?.end();
+  cluster?.remove();
+  await mock.module('../src/modules/access/author-baseline.ts', () => authorBaseline);
+  await mock.module('../src/modules/space/create-authority.ts', () => zoneAuthority);
+  await mock.module('../src/modules/realm-reply/root.ts', () => replyRoot);
+});
+
+function principal(): VerifiedPrincipal {
+  const identity = { issuer: 'https://account.reply-authorship.test', subject: randomUUID(), emailVerified: true };
+  return { ...identity, currentAssertion: async () => identity };
+}
+
+async function actor(identity: VerifiedPrincipal, kind: 'person' | 'organization' | 'service',
+  provisioned = true) {
+  const found = await pool.query<{ id: string }>(`SELECT id FROM access.principal
+    WHERE account_issuer = $1 AND account_subject = $2`, [identity.issuer, identity.subject]);
+  const principalId = found.rows[0]?.id ?? (await pool.query<{ id: string }>(`INSERT INTO access.principal
+    (id, account_issuer, account_subject) VALUES ($1,$2,$3) RETURNING id`,
+  [randomUUID(), identity.issuer, identity.subject])).rows[0]!.id;
+  const agent = nativeId();
+  const controlId = randomUUID();
+  await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [agent]);
+  await pool.query(`INSERT INTO access.representation
+    (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1,$2,$3,'agent.control','infinity')`, [controlId, principalId, agent]);
+  let provisionId: string | null = null;
+  if (provisioned) {
+    provisionId = randomUUID();
+    await pool.query(`INSERT INTO access.agent_provision
+      (id, principal_id, idempotency_key, request_digest, agent_id, agent_kind, display_name,
+       principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,0,'active','reply-authorship-test',1,$8)`,
+    [provisionId, principalId, `fixture-${randomUUID()}`, digest(randomUUID()), agent, kind, kind, controlId]);
+  }
+  const access = new AccessAdmissionRegistry(pool);
+  access.configureBaseline(graph as never);
+  return { identity, principalId, agent, controlId, provisionId, access };
+}
+
+async function grant(principalId: string, actingSubject: string,
+  action: string, scope: string) {
+  const representationId = randomUUID();
+  const grantId = randomUUID();
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+  await pool.query(`INSERT INTO access.representation
+    (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1,$2,$3,$4,'infinity')`, [representationId, principalId, actingSubject, action]);
+  await pool.query(`INSERT INTO access.permission_grant
+    (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+    VALUES ($1,$2,$3,$4,$5,'infinity')`, [grantId, actingSubject, actingSubject, scope, action]);
+  return { representationId, grantId };
+}
+
+function request(identity: VerifiedPrincipal, actingSubject: string, action: string, scope: string,
+  extra: Partial<AdmissionRequest> = {}): AdmissionRequest {
+  const key = `reply-authorship-${randomUUID()}`;
+  return { principal: identity, actingSubject, action, scope, idempotencyKey: key,
+    requestDigest: digest(key), ...extra };
+}
+
+test('Person reply proof selection revalidates while ordinary and Zone drafts retain steward authority', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const organization = await actor(identity, 'organization');
+  const rootTarget = nativeId();
+  const rootRevision = randomUUID();
+  const draft = request(identity, person.agent, 'content.draft', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision,
+  });
+  const personReply = await person.access.register(draft);
+  const proof = (await pool.query(`SELECT b.provision_id, b.representation_id, b.related_work, b.source_revision,
+      p.agent_kind FROM access.baseline_admission b JOIN access.agent_provision p ON p.id = b.provision_id
+      WHERE b.admission_id = $1`, [personReply.id])).rows[0];
+  expect(proof).toMatchObject({ provision_id: person.provisionId, representation_id: person.controlId,
+    related_work: rootTarget, source_revision: rootRevision, agent_kind: 'person' });
+  expect(await person.access.register(draft)).toMatchObject({ id: personReply.id, dispatchEligible: true, replayed: true });
+
+  for (const label of ['Work', 'Post']) {
+    const resource = nativeId();
+    authoredWorks.set(`${organization.principalId}:${organization.agent}:${resource}`, '4');
+    const ordinary = await organization.access.register(request(identity, organization.agent,
+      'content.draft', `content:draft:${resource}`));
+    const saved = (await pool.query(`SELECT b.provision_id, b.related_work, b.author_work,
+        b.author_generation FROM access.baseline_admission b WHERE b.admission_id = $1`, [ordinary.id])).rows[0];
+    expect(saved).toEqual({ provision_id: organization.provisionId, related_work: null,
+      author_work: resource, author_generation: '4' });
+    expect(ordinary.dispatchEligible, `${label} draft remains steward-authorized`).toBe(true);
+  }
+
+  const zone = nativeId();
+  const page = nativeId();
+  zoneOwnerships.add(`${organization.principalId}:${organization.agent}:${zone}`);
+  const zoneDraft = await organization.access.register(request(identity, organization.agent,
+    'content.draft', `content:draft:${page}`, { resolvedZonePage: zone }));
+  expect((await pool.query(`SELECT b.provision_id, b.realm_membership, b.author_work
+    FROM access.baseline_admission b WHERE b.admission_id = $1`, [zoneDraft.id])).rows[0])
+    .toEqual({ provision_id: organization.provisionId, realm_membership: 'zone-page', author_work: zone });
+
+  await person.access.claim(personReply.id, draft.requestDigest, identity);
+  await person.access.recordGraphOutcome(personReply.id, { admissionId: personReply.id,
+    requestDigest: personReply.requestDigest, authorityEpoch: personReply.authorityEpoch,
+    scope: personReply.scope, receipt: `urn:rezics:receipt:${digest(`${personReply.id}\0content-draft-save`)}`,
+    dataEpoch: 'reply-authorship-test', sequence: '1', outcome: 'succeeded' });
+  const pendingDraft = request(identity, person.agent, 'content.draft', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: nativeId(), baselineSourceRevision: randomUUID(),
+  });
+  const pendingReply = await person.access.register(pendingDraft);
+  const replacementPrincipalId = randomUUID();
+  await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+    VALUES ($1,'https://replacement.reply-authorship.test',$2)`, [replacementPrincipalId, randomUUID()]);
+  await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+    VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), replacementPrincipalId, person.agent]);
+  await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [person.controlId]);
+  expect(await person.access.register(draft)).toMatchObject({ id: personReply.id, replayed: true });
+  expect(await person.access.register(pendingDraft)).toMatchObject({ id: pendingReply.id,
+    dispatchEligible: false, replayed: true });
+  await expect(person.access.claim(pendingReply.id, pendingDraft.requestDigest, identity))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+
+  expect(resolveZonePageContent({ action: 'content.draft', scope: `content:draft:${page}`,
+    resolvedZonePage: zone, baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision }))
+    .toEqual({ kind: 'refused' });
+  await expect(organization.access.register(request(identity, organization.agent, 'content.draft',
+    `content:draft:${nativeId()}`, { resolvedZonePage: zone,
+      baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision }))).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('explicit draft and create grants cannot replace Person proof for Org or legacy PenName', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const organization = await actor(identity, 'organization');
+  const legacyPenName = await actor(identity, 'person', false);
+
+  for (const selected of [organization, legacyPenName]) {
+    const rootTarget = nativeId();
+    const rootRevision = randomUUID();
+    const draft = request(identity, selected.agent, 'content.draft', `content:draft:${nativeId()}`, {
+      baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision,
+    });
+    await grant(selected.principalId, selected.agent, 'content.draft', draft.scope);
+    await expect(selected.access.register(draft)).rejects.toBeInstanceOf(AdmissionDenied);
+
+    const create = request(identity, selected.agent, 'reply.create', `reply:create:${rootTarget}`, {
+      baselineSourceRevision: rootRevision,
+    });
+    await grant(selected.principalId, selected.agent, 'reply.create', create.scope);
+    await expect(selected.access.register(create)).rejects.toBeInstanceOf(AdmissionDenied);
+  }
+
+  const malformed = request(identity, person.agent, 'content.draft', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: nativeId(),
+  });
+  await grant(person.principalId, person.agent, 'content.draft', malformed.scope);
+  await expect(person.access.register(malformed)).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('an installed authoring policy refuses baseline and explicit-grant substitution', async () => {
+  const identity = principal();
+  const member = await actor(identity, 'person');
+  const target = nativeId();
+  const scope = `content:draft:${target}`;
+  const sources = await grant(member.principalId, member.agent, 'content.draft', scope);
+  const policyId = randomUUID();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = $1', [scope]);
+    const epoch = (await client.query<{ authority_epoch: string }>(
+      'SELECT authority_epoch::text FROM access.scope_gate WHERE id = $1', [scope])).rows[0]!.authority_epoch;
+    await client.query(`INSERT INTO access.policy (id, scope_id, owner_subject, head_revision)
+      VALUES ($1,$2,$3,1)`, [policyId, scope, member.agent]);
+    await client.query(`INSERT INTO access.policy_revision
+      (policy_id, revision, scope_id, profile, combining_algorithm, default_effect,
+       mandatory_count, ordered_count, reference_count, max_states, max_input_rows, deadline_ms, digest,
+       published_by_principal, publisher_subject, publisher_representation_id,
+       publisher_representation_generation, publisher_grant_id, publisher_grant_generation,
+       result_authority_epoch)
+      VALUES ($1,1,$2,'access-policy-v1','first-applicable','deny',0,0,0,100,100,500,$3,
+        $4,$5,$6,0,$7,0,$8)`, [policyId, scope, digest(policyId), member.principalId, member.agent,
+      sources.representationId, sources.grantId, epoch]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  const input = request(identity, member.agent, 'content.draft', scope,
+    { baselineRelatedWork: nativeId(), baselineSourceRevision: randomUUID() });
+  await expect(member.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('a pending legacy reply.create without Person proof remains nondispatchable', async () => {
+  const identity = principal();
+  const member = await actor(identity, 'person');
+  const rootTarget = nativeId();
+  const rootRevision = randomUUID();
+  const input = request(identity, member.agent, 'reply.create', `reply:create:${rootTarget}`, {
+    baselineSourceRevision: rootRevision,
+  });
+  const id = randomUUID();
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [input.scope]);
+  await pool.query(`INSERT INTO access.admission
+    (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
+     authority_epoch, expires_at, state, authority_witness)
+    SELECT $1,$2,$3,$4,$5,$6,$7,g.authority_epoch,clock_timestamp() + interval '1 minute','registered',
+      jsonb_build_array(jsonb_build_object('table','principal','id',($2::uuid)::text,'generation','0'),
+        jsonb_build_object('table','authority_subject','id',$3::text,'generation','0'))
+    FROM access.scope_gate g WHERE g.id = $4`,
+  [id, member.principalId, member.agent, input.scope, input.action, input.idempotencyKey, input.requestDigest]);
+  await pool.query(`INSERT INTO access.admission_receipt
+    (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
+    VALUES ($1,$2,$3,$4,$5,'registered')`,
+  [id, member.principalId, input.action, input.idempotencyKey, input.requestDigest]);
+
+  expect(await member.access.register(input)).toMatchObject({ id, replayed: true, dispatchEligible: false });
+  await expect(member.access.claim(id, input.requestDigest, identity)).rejects.toBeInstanceOf(AdmissionDenied);
+});

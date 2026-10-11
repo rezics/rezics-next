@@ -201,7 +201,7 @@ test('a canonical child draft uses the opener retained root after the about reso
   expect(fx.saveCalls).toBe(1);
 });
 
-test.skip('a steward cannot draft canonically as a controlled Org (pending Trust-ops Access Person-author change)', async () => {
+test('a steward cannot draft canonically as a controlled Org', async () => {
   const realm = id(), about = id(), targetRevision = id(), organization = id();
   rootState(targetRevision);
   const steward = principal;

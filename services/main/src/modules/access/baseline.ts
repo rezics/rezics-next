@@ -54,7 +54,8 @@ export type BaselineTarget = { kind: 'root' }
 
 // Resource management belongs to a provisioned steward Agent of any kind.
 // Ordinary member creation remains bound to a provisioned Person Agent.
-function controllerProofFor(target: BaselineTarget) {
+function controllerProofFor(target: BaselineTarget, relatedWork?: string | null) {
+  if (target.kind === 'reply-draft' && relatedWork != null) return baselineMemberProof;
   return ['maintainer', 'author-work', 'reply-draft', 'avatar', 'definition', 'zone', 'submission', 'realm-attach'].includes(target.kind)
     ? maintainerControllerProof : baselineMemberProof;
 }
@@ -302,7 +303,8 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   // An installed resource policy owns its stricter decision. Baseline never
   // overrides it, including when that resource happens to be publicly readable.
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
-  const proof = await controllerProofFor(target)(client, principalId, request.actingSubject);
+  const proof = await controllerProofFor(target, request.baselineRelatedWork ?? null)(
+    client, principalId, request.actingSubject);
   if (!proof) return null;
   const avatarControl = target.kind === 'avatar'
     ? await avatarControllerProof(client, graph, principalId, target.id) : null;
@@ -347,7 +349,8 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   const target = baselineTarget(admission.action, admission.scope_id);
   if (!target) return false;
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [admission.scope_id])).rowCount) return false;
-  const current = await controllerProofFor(target)(client, admission.principal_id, admission.acting_subject);
+  const current = await controllerProofFor(target, saved.related_work ?? null)(
+    client, admission.principal_id, admission.acting_subject);
   if (!current || current.policy_generation !== saved.policy_generation
     || current.provision_id !== saved.provision_id || current.principal_epoch !== saved.principal_epoch
     || current.representation_id !== saved.representation_id

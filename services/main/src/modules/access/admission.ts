@@ -82,6 +82,37 @@ export interface AdmissionRequest {
   workSemanticTypes?: readonly string[];
 }
 
+interface MemberReplyAuthoringIntent {
+  valid: boolean;
+}
+
+const nativeMemberReplyResource = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const memberReplyRevision = /^(?:[0-9a-f-]{36}|https:\/\/rezics\.com\/id\/[0-9a-f-]{36})$/;
+
+/** Reply drafts carry their root only in owner-bound admission metadata. Keep
+ * malformed or partial metadata out of ordinary draft authority. */
+function memberReplyAuthoringIntent(request: AdmissionRequest): MemberReplyAuthoringIntent | null {
+  const hasReplyRootMetadata = request.baselineRelatedWork !== undefined
+    || request.baselineSourceRevision !== undefined;
+  if (request.action === 'reply.create') {
+    return { valid: /^reply:create:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)
+      && request.baselineRelatedWork === undefined
+      && memberReplyRevision.test(request.baselineSourceRevision ?? '')
+      && request.baselineContribution === undefined
+      && request.baselineCollectionCreate !== true
+      && request.resolvedZonePage === undefined };
+  }
+  if (request.action !== 'content.draft' || !hasReplyRootMetadata) return null;
+  const prefix = 'content:draft:';
+  const reply = request.scope.startsWith(prefix) ? request.scope.slice(prefix.length) : '';
+  return { valid: nativeMemberReplyResource.test(reply)
+    && nativeMemberReplyResource.test(request.baselineRelatedWork ?? '')
+    && memberReplyRevision.test(request.baselineSourceRevision ?? '')
+    && request.baselineContribution === undefined
+    && request.baselineCollectionCreate !== true
+    && request.resolvedZonePage === undefined };
+}
+
 export interface RegisteredAdmission {
   id: string;
   principalId: string;
@@ -978,6 +1009,10 @@ export class AccessAdmissionRegistry {
   }
 
   private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false): Promise<RegisteredAdmission> {
+    const memberReply = memberReplyAuthoringIntent(request);
+    if (memberReply && (!memberReply.valid || request.editorialPermit)) {
+      throw new AdmissionDenied('member reply intent is malformed');
+    }
     if (request.editorialPermit) {
       const principalId = await this.activePrincipalId(request.principal);
       if (!principalId) throw new AdmissionDenied('principal is not admitted');
@@ -1140,6 +1175,18 @@ export class AccessAdmissionRegistry {
           state: existing.state as RegisteredAdmission['state'], dispatchEligible, replayed: true };
       }
 
+      // Older reply admissions may have only a generic action grant witness.
+      // Preserve their receipt, but never let that witness authorize dispatch.
+      if (existing && memberReply) {
+        if (!transaction) await client.query('COMMIT');
+        return { id: existing.id, principalId: existing.principal_id,
+          actingSubject: existing.acting_subject, authorityPath: existing.authority_path,
+          scope: existing.scope_id, action: existing.action, idempotencyKey: existing.idempotency_key,
+          requestDigest: existing.request_digest, authorityEpoch: existing.authority_epoch,
+          registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
+          state: existing.state as RegisteredAdmission['state'], dispatchEligible: false, replayed: true };
+      }
+
       // A retry may recover the immutable receipt after authority changes. Its
       // saved proof, rather than a newly selected alternative, decides dispatch.
       if (existing && authorityPath === 'represented-agent'
@@ -1264,6 +1311,9 @@ export class AccessAdmissionRegistry {
       const rating = !existing && authorityPath === 'represented-agent' && ratingConfiguration
         ? await realmRatingProof(client, this.baselineGraph, principalId, request.actingSubject,
           request.action, request.scope) : null;
+      if (memberReply && (!baseline || administrator)) {
+        throw new AdmissionDenied('member reply authoring requires a Person baseline proof');
+      }
       if (administrator || baseline || rating) {
         // A named grant source with its own pinned proof, recorded below in the
         // same transaction as the ordinary admission, receipt and audit outbox.
@@ -1607,6 +1657,9 @@ export class AccessAdmissionRegistry {
       }
       if (row.action === 'publication.reject.organization') {
         throw new AdmissionDenied('organization moderation cannot use generic claim');
+      }
+      if (row.action === 'reply.create' && !await savedBaselineProof(client, row.id)) {
+        throw new AdmissionDenied('reply creation requires a Person baseline admission');
       }
       if (row.authority_epoch !== gateResult.rows[0]?.authority_epoch) {
         throw new AdmissionDenied('admission scope epoch is stale');

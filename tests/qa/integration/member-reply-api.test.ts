@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { memberFixture, nativeId } from '../../../services/main/tests/member-reply-fixture.ts';
 
-test('G265: members and pen names author exact contribution comments, edit/delete their own replies, and replay without resurrection', async () => {
+test('G265: controlled Persons author exact contribution comments and replay without resurrection', async () => {
   const h = await memberFixture();
   try {
+    const organization = await h.agent('Managed organization', 'organization');
     expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
     const input = { profile: 'member-reply-draft-v1', reply: nativeId(), variantId: `urn:rezics:variant:${randomUUID()}`,
       rootTarget: h.work.work, rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr',
@@ -26,9 +27,14 @@ test('G265: members and pen names author exact contribution comments, edit/delet
     const pagePath = `/v1/member-replies?${new URLSearchParams({ rootTarget: input.rootTarget, rootRevision: input.rootRevision })}`;
     expect((await h.get(pagePath)).body.items).toHaveLength(1);
     const provenance = (await h.contentPool.query('SELECT provenance FROM content.revision WHERE id = $1', [draft.body.revisionId])).rows[0].provenance;
-    const admission = (await h.accessPool.query(`SELECT a.acting_subject, a.state, b.source_revision
-      FROM access.admission a JOIN access.baseline_admission b ON b.admission_id = a.id WHERE a.id = $1`, [provenance.admissionId])).rows[0];
-    expect(admission).toEqual({ acting_subject: h.pen, state: 'sealed', source_revision: input.rootRevision });
+    const admission = (await h.accessPool.query(`SELECT a.acting_subject, a.state, b.source_revision,
+        b.representation_id, p.agent_kind AS selected_kind
+      FROM access.admission a JOIN access.baseline_admission b ON b.admission_id = a.id
+      JOIN access.agent_provision p ON p.id = b.provision_id WHERE a.id = $1`, [provenance.admissionId])).rows[0];
+    expect(admission).toMatchObject({ acting_subject: h.pen, state: 'sealed',
+      source_revision: input.rootRevision, selected_kind: 'person' });
+    expect((await h.accessPool.query(`SELECT agent_kind FROM access.agent_provision
+      WHERE agent_id = $1`, [organization])).rows[0].agent_kind).toBe('organization');
     const edit = { ...input, expectedHead: draft.body.revisionId, body: 'An edited comment.' };
     expect((await h.post('/v1/member-reply-drafts', { ...edit, actingSubject: h.actor })).status).toBe(409);
     expect((await h.post('/v1/member-reply-drafts', { ...input, variantId: `urn:rezics:variant:${randomUUID()}`, actingSubject: h.actor })).status).toBe(409);
@@ -40,7 +46,9 @@ test('G265: members and pen names author exact contribution comments, edit/delet
     const eraseKey = randomUUID();
     expect((await h.post('/v1/member-reply-drafts', erase, eraseKey)).status).toBe(201);
     expect((await h.post('/v1/member-reply-drafts', erase, eraseKey)).body.replayed).toBe(true);
-    expect((await h.post('/v1/member-reply-drafts', input, key)).body.revisionId).toBe(draft.body.revisionId);
+    await h.accessPool.query('UPDATE access.authority_subject SET active = false WHERE id = $1', [h.pen]);
+    const replay = await h.post('/v1/member-reply-drafts', input, key);
+    expect(replay.body).toMatchObject({ revisionId: draft.body.revisionId, replayed: true });
     expect((await h.get(readPath)).status).toBe(404);
     expect((await h.get(pagePath)).body.items).toEqual([]);
     expect((await h.accessPool.query(`SELECT id FROM access.permission_grant WHERE recipient_subject = ANY($1)
@@ -50,6 +58,50 @@ test('G265: members and pen names author exact contribution comments, edit/delet
     expect(JSON.stringify(plan.rows)).toContain('Limit');
     expect((await h.contentPool.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'content'
       AND indexname = 'reply_exact_root_page'`)).rows[0].indexdef).toContain('(root_target, root_revision, id)');
+  } finally { await h.close(); }
+}, 180_000);
+
+test('G265: Org and legacy PenName action grants cannot author member reply drafts', async () => {
+  const h = await memberFixture();
+  try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
+    const organization = await h.agent('Controlled organization', 'organization');
+    const legacyPenName = nativeId();
+    const principal = await h.principal();
+    const principalId = (await h.accessPool.query(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0].id;
+    await h.accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [legacyPenName]);
+    await h.accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), principalId, legacyPenName]);
+    await h.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:current> { <${legacyPenName}> a rv:Agent ; rv:agentKind rv:PenNameAgent . }
+    }`);
+
+    async function grantReplyDraft(actor: string, reply: string) {
+      const scope = `content:draft:${reply}`;
+      await h.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await h.accessPool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,'content.draft','infinity')`, [randomUUID(), principalId, actor]);
+      await h.accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,'content.draft','infinity')`, [randomUUID(), h.actor, actor, scope]);
+    }
+
+    for (const actor of [organization, legacyPenName]) {
+      const input = { profile: 'member-reply-draft-v1', reply: nativeId(),
+        variantId: `urn:rezics:variant:${randomUUID()}`, rootTarget: h.work.work,
+        rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr',
+        expectedHead: null, body: 'Must not be drafted by this Agent.', actingSubject: actor };
+      await grantReplyDraft(actor, input.reply);
+      const before = (await h.contentPool.query('SELECT count(*)::int AS count FROM content.revision')).rows[0].count;
+      const response = await h.post('/v1/member-reply-drafts', input);
+      expect(response.status, JSON.stringify(response.body)).toBe(403);
+      expect((await h.contentPool.query('SELECT count(*)::int AS count FROM content.revision')).rows[0].count).toBe(before);
+      expect((await h.accessPool.query(`SELECT id FROM access.admission
+        WHERE scope_id = $1 AND action = 'content.draft'`, [`content:draft:${input.reply}`])).rowCount).toBe(0);
+    }
   } finally { await h.close(); }
 }, 180_000);
 
