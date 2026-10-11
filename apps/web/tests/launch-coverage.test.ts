@@ -1,0 +1,123 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { expect, test } from 'bun:test';
+import { launchCoverage, type Proof } from '../../../scripts/qa/cases/launch-coverage.ts';
+
+const repositoryRoot = resolve(import.meta.dir, '../../..');
+const kinds = ['books', 'recipes', 'visual-novels', 'anime', 'manga', 'games', 'realm', 'zone'] as const;
+const hardCases = [
+  'ambiguous-editions',
+  'mixed-formats',
+  'non-ui-languages',
+  'thousand-chapters',
+  'revoked-editors',
+  'interrupted-exports',
+  'two-device-progress',
+  'expired-loans',
+] as const;
+const missingItems = new Set([
+  'L10',
+  'L11',
+  'L12',
+  'L13',
+  'L17',
+  'L19',
+  'L20',
+  'L21',
+  'L26',
+  'gap',
+]);
+
+function escaped(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function namedTestExists(source: string, title: string): boolean {
+  const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
+  for (const match of source.matchAll(declaration)) {
+    const rawTitle = match[2]!;
+    const pattern = rawTitle
+      .split(/(\$\{[^}]+\})/g)
+      .map((part) => (part.startsWith('${') ? '.*' : escaped(part)))
+      .join('');
+    if (new RegExp(`^${pattern}$`).test(title)) return true;
+  }
+  return false;
+}
+
+function proofMissing(proof: Proof): proof is Extract<Proof, { missing: string }> {
+  return 'missing' in proof;
+}
+
+function rowLabel(row: (typeof launchCoverage)[number]): string {
+  return `${row.kind} / ${row.capability}${row.hardCase ? ` (${row.hardCase})` : ''}`;
+}
+
+function missingForRow(row: (typeof launchCoverage)[number]): string[] {
+  return [row.api, row.browser]
+    .filter(proofMissing)
+    .map((proof) => proof.missing);
+}
+
+function missingSlots(row: (typeof launchCoverage)[number]): string[] {
+  return [
+    ...(proofMissing(row.api) ? [`API ${row.api.missing}`] : []),
+    ...(proofMissing(row.browser) ? [`browser ${row.browser.missing}`] : []),
+  ];
+}
+
+test('launch coverage names existing tests and reports remaining rows', () => {
+  const errors: string[] = [];
+  const provedPairs = launchCoverage.filter((row) => !proofMissing(row.api) && !proofMissing(row.browser));
+  const missingRows = launchCoverage.filter((row) => proofMissing(row.api) || proofMissing(row.browser));
+  const missingCounts = new Map([...missingItems].map((item) => [item, 0]));
+
+  for (const row of launchCoverage) {
+    if (!proofMissing(row.api) &&
+      !/^(?:tests\/qa\/integration\/|services\/[^/]+\/tests\/).+\.test\.ts$/.test(row.api.file)) {
+      errors.push(`${rowLabel(row)}: API proof must name an integration test file: ${row.api.file}`);
+    }
+    if (!proofMissing(row.browser) &&
+      (!row.browser.file.startsWith('apps/web/tests/') || !row.browser.file.endsWith('.e2e.ts'))) {
+      errors.push(`${rowLabel(row)}: browser proof must name an apps/web/tests/*.e2e.ts file: ${row.browser.file}`);
+    }
+
+    for (const proof of [row.api, row.browser]) {
+      if (proofMissing(proof)) {
+        if (!missingItems.has(proof.missing)) errors.push(`${rowLabel(row)}: unknown missing item ${proof.missing}`);
+        continue;
+      }
+
+      const filePath = resolve(repositoryRoot, proof.file);
+      if (!existsSync(filePath)) {
+        errors.push(`${rowLabel(row)}: missing file ${proof.file}`);
+        continue;
+      }
+      const source = readFileSync(filePath, 'utf8');
+      if (!namedTestExists(source, proof.test)) errors.push(`${rowLabel(row)}: test not found in ${proof.file}: ${proof.test}`);
+    }
+
+    for (const item of new Set(missingForRow(row))) {
+      missingCounts.set(item, (missingCounts.get(item) ?? 0) + 1);
+    }
+  }
+
+  const remaining = missingRows.length
+    ? missingRows.map((row) => `- ${rowLabel(row)}: ${missingSlots(row).join('; ')}`).join('\n')
+    : '- none';
+  const byItem = [...missingCounts.entries()].sort(([left], [right]) => left.localeCompare(right));
+  console.log(
+    `Launch coverage: ${provedPairs.length}/${launchCoverage.length} proved pairs; ${missingRows.length} rows still missing.\n` +
+      `Missing rows per item: ${byItem.map(([item, count]) => `${item} ${count}`).join(', ') || 'none'}\n` +
+      remaining,
+  );
+
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('every launch kind and hard case has a coverage row', () => {
+  for (const kind of kinds) expect(launchCoverage.some((row) => row.kind === kind), `${kind} has a row`).toBe(true);
+  for (const hardCase of hardCases) {
+    expect(launchCoverage.some((row) => row.hardCase === hardCase), `${hardCase} has a row`).toBe(true);
+  }
+});

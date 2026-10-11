@@ -1,0 +1,353 @@
+export type Proof = { file: string; test: string } | { missing: string };
+
+export interface LaunchCoverage {
+  kind: 'books' | 'recipes' | 'visual-novels' | 'anime' | 'manga' | 'games' | 'realm' | 'zone';
+  capability: string;
+  hardCase?:
+    | 'ambiguous-editions'
+    | 'mixed-formats'
+    | 'non-ui-languages'
+    | 'thousand-chapters'
+    | 'revoked-editors'
+    | 'interrupted-exports'
+    | 'two-device-progress'
+    | 'expired-loans';
+  api: Proof;
+  browser: Proof;
+}
+
+const api = (file: string, test: string): Proof => ({ file, test });
+const browser = api;
+const missing = (item: string): Proof => ({ missing: item });
+
+export const launchCoverage: readonly LaunchCoverage[] = [
+  {
+    kind: 'books',
+    capability: 'Work hub and edition choice',
+    api: api('tests/qa/integration/g-851-release-query.test.ts',
+      'G851: one usable release supplies every condition and every explanation; denied releases supply neither'),
+    browser: browser('apps/web/tests/g-743-hub.e2e.ts',
+      'work-hub: a reader chooses an edition with the keyboard alone, under reduced motion, in the Latin locale'),
+  },
+  {
+    kind: 'books',
+    capability: 'Catalogue browse and search in its Zone',
+    api: api('tests/qa/integration/g-828-zone-browse.test.ts',
+      'G828: HTTP traverses 1,000 adopted Works in every sort and Condition; public counts, relay, backfill and serial recovery'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'books',
+    capability: 'Collection tracking and progress',
+    api: api('tests/qa/integration/g-892-collection-grain.test.ts',
+      'G-892: SAO Collection selects series or volumes, traverses all cursors and never discloses releases/private members'),
+    browser: browser('apps/web/tests/work-page.e2e.ts',
+      'a signed-in reader shelves and rates a Work, sees their rating in Mine and continues from saved progress'),
+  },
+  {
+    kind: 'books',
+    capability: 'Library import',
+    api: api('tests/qa/integration/g-854-library-bundle.test.ts',
+      'G-854: API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
+    browser: browser('apps/web/tests/library-import.e2e.ts',
+      'G428: a reader imports a Goodreads file, then a 200-row export, and Main reports every row'),
+  },
+  {
+    kind: 'books',
+    capability: 'Library export',
+    api: api('tests/qa/integration/library-export-resume.test.ts',
+      'a 1,200-record library export resumes after a dropped page and a new export repeats it'),
+    browser: browser('apps/web/tests/g-743-library.e2e.ts',
+      'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale'),
+  },
+  {
+    kind: 'books',
+    capability: 'Loans',
+    api: api('tests/qa/integration/library-copies-loans.test.ts',
+      'private exact-release copies and overdue loans preserve replay, CAS, concurrent transitions, paging, export and erasure'),
+    browser: browser('apps/web/tests/library-loans.e2e.ts',
+      'a reader owns a copy, lends it overdue, extends it and returns it'),
+  },
+  {
+    kind: 'recipes',
+    capability: 'Work hub and edition choice',
+    api: missing('L21'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'recipes',
+    capability: 'Catalogue browse and search in its Zone',
+    api: missing('L21'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'recipes',
+    capability: 'Collection tracking and progress',
+    api: missing('L21'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'recipes',
+    capability: 'Author a recipe',
+    api: api('tests/qa/integration/recipe-structure.test.ts',
+      'RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scales exactly and imports source'),
+    browser: browser('apps/web/tests/recipe-authoring.e2e.ts',
+      'a cook writes a recipe with sections and linked steps, edits it from two tabs, publishes it and reads it back'),
+  },
+  {
+    kind: 'recipes',
+    capability: 'Read a recipe',
+    api: api('tests/qa/integration/recipe-work-page.test.ts',
+      'G-415: a visible Recipe Work page scales the pinned ingredient revision and fences private reads'),
+    browser: browser('apps/web/tests/recipe-authoring.e2e.ts',
+      'a cook writes a recipe with sections and linked steps, edits it from two tabs, publishes it and reads it back'),
+  },
+  {
+    kind: 'recipes',
+    capability: 'Exchange recipes',
+    api: api('tests/qa/integration/recipe-structure.test.ts',
+      'RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scales exactly and imports source'),
+    browser: missing('L20'),
+  },
+  {
+    kind: 'visual-novels',
+    capability: 'Work hub and edition choice',
+    api: api('tests/qa/integration/g-851-release-query.test.ts',
+      'G851: one usable release supplies every condition and every explanation; denied releases supply neither'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'visual-novels',
+    capability: 'Catalogue browse and search in its Zone',
+    api: api('tests/qa/integration/g-852-zones.test.ts',
+      'G852: two Zones share one catalogue Work and one usable visual-novel release'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'visual-novels',
+    capability: 'Collection tracking and progress',
+    api: missing('L21'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'anime',
+    capability: 'Work hub and edition choice',
+    api: missing('L13'),
+    browser: missing('L13'),
+  },
+  {
+    kind: 'anime',
+    capability: 'Catalogue browse and search in its Zone',
+    api: api('tests/qa/integration/anime-manga-zones.test.ts',
+      'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first'),
+    browser: browser('apps/web/tests/anime-manga-zones.e2e.ts',
+      'en at 390px: filter the long anime and manga by format and year'),
+  },
+  {
+    kind: 'anime',
+    capability: 'Collection tracking and progress',
+    api: api('tests/qa/integration/long-series-progress.test.ts',
+      'a thousand grouped Episode occurrences resume with bounded disclosed progress and explicit unavailable number seek'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'manga',
+    capability: 'Work hub and edition choice',
+    api: missing('L13'),
+    browser: missing('L13'),
+  },
+  {
+    kind: 'manga',
+    capability: 'Catalogue browse and search in its Zone',
+    api: api('tests/qa/integration/anime-manga-zones.test.ts',
+      'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first'),
+    browser: browser('apps/web/tests/anime-manga-zones.e2e.ts',
+      'en at 390px: filter the long anime and manga by format and year'),
+  },
+  {
+    kind: 'manga',
+    capability: 'Collection tracking and progress',
+    api: missing('L19'),
+    browser: missing('L19'),
+  },
+  {
+    kind: 'games',
+    capability: 'Work hub and edition choice',
+    api: missing('L12'),
+    browser: missing('L12'),
+  },
+  {
+    kind: 'games',
+    capability: 'Catalogue browse and search in its Zone',
+    api: missing('L12'),
+    browser: missing('L12'),
+  },
+  {
+    kind: 'games',
+    capability: 'Collection tracking and progress',
+    api: missing('L19'),
+    browser: missing('L19'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Create a Realm',
+    api: api('tests/qa/integration/realm-create.test.ts',
+      'Community creation reserves one handle and filters the directory by global Concept'),
+    browser: browser('apps/web/tests/realm-create.e2e.ts',
+      'Each privacy choice opens a Realm that reads as chosen, with an empty discussion list for its founder'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Membership and admission',
+    api: api('tests/qa/integration/g-946-join-requests.test.ts',
+      'G-946: requests stay immutable, have one pending episode, paginate, withdraw, decline and accept exactly once without consent'),
+    browser: missing('gap'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Roles and team',
+    api: api('tests/qa/integration/realm-admin-api.test.ts',
+      'Realm roles: exact impact matches enforced grants; retries, stale and concurrent changes stay atomic'),
+    browser: missing('gap'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Rules',
+    api: api('tests/qa/integration/realm-admin-api.test.ts',
+      'Realm settings: atomic rule CAS, localization, submission restrictions and stale policy changes'),
+    browser: missing('gap'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Boards',
+    api: missing('L11'),
+    browser: missing('L11'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Threads and replies',
+    api: api('tests/qa/integration/realm-reply-api.test.ts',
+      'SUB05/SUB06: exact reviewed revisions place independently in two Realms and revocation suppresses one'),
+    browser: missing('gap'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Ranking',
+    api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
+      'G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history'),
+    browser: missing('gap'),
+  },
+  {
+    kind: 'realm',
+    capability: 'Moderation and appeal',
+    api: api('tests/qa/integration/realm-sanction-appeal.test.ts',
+      'a banned member appeals once, a reversal lifts the ban, and the read hides the decider'),
+    browser: browser('apps/web/tests/realm-appeal.e2e.ts',
+      'a banned member sees the reason, appeals once, and sees the resolution'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Site pages',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'Realm-less site binds exact revisions; drafts stay outside and republishing moves public membership'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      'an author writes, previews and publishes a zone home page, and a second tab keeps a stale draft'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Navigation and theme',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'lost publish acknowledgement replays one receipt and original page, route, navigation and theme cuts'),
+    browser: missing('L17'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Publication',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'lost publish acknowledgement replays one receipt and original page, route, navigation and theme cuts'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      'an author writes, previews and publishes a zone home page, and a second tab keeps a stale draft'),
+  },
+  {
+    kind: 'zone',
+    capability: 'A Zone without a Realm',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'Realm-less site binds exact revisions; drafts stay outside and republishing moves public membership'),
+    browser: missing('L17'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Attached Realm discussion',
+    api: missing('L10'),
+    browser: missing('L10'),
+  },
+  {
+    kind: 'books',
+    capability: 'Disambiguate imported editions',
+    hardCase: 'ambiguous-editions',
+    api: api('tests/qa/integration/g-854-library-bundle.test.ts',
+      'G-854: API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import'),
+    browser: browser('apps/web/tests/g-743-library.e2e.ts',
+      'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale'),
+  },
+  {
+    kind: 'books',
+    capability: 'Choose among mixed formats',
+    hardCase: 'mixed-formats',
+    api: api('tests/qa/integration/g-851-release-query.test.ts',
+      'G851: one usable release supplies every condition and every explanation; denied releases supply neither'),
+    browser: browser('apps/web/tests/g-743-hub.e2e.ts',
+      'work-hub: a reader chooses an edition with the keyboard alone, under reduced motion, in the Latin locale'),
+  },
+  {
+    kind: 'books',
+    capability: 'Read non-UI languages',
+    hardCase: 'non-ui-languages',
+    api: api('tests/qa/integration/g-704-contribution-loop.test.ts',
+      'CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted'),
+    browser: browser('apps/web/tests/g-841-q10-translations.e2e.ts',
+      'query 10: translations name their source continuity and language; unverified ones stay unverified'),
+  },
+  {
+    kind: 'books',
+    capability: 'Navigate a thousand-chapter inventory',
+    hardCase: 'thousand-chapters',
+    api: api('tests/qa/integration/g-954-reading-position.test.ts',
+      'G954: 1000-chapter chooser searches CJK and chapter numbers before paging and keeps disclosure and cursor fences'),
+    browser: missing('L21'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Publish after editor revocation',
+    hardCase: 'revoked-editors',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'revocation after the Content pin prevents the final site bundle switch'),
+    browser: missing('L17'),
+  },
+  {
+    kind: 'books',
+    capability: 'Resume an interrupted export',
+    hardCase: 'interrupted-exports',
+    api: api('tests/qa/integration/library-export-resume.test.ts',
+      'a 1,200-record library export resumes after a dropped page and a new export repeats it'),
+    browser: missing('gap'),
+  },
+  {
+    kind: 'books',
+    capability: 'Continue progress across devices',
+    hardCase: 'two-device-progress',
+    api: api('tests/qa/integration/partless-progress.test.ts',
+      'a partless Work is marked on one device and read, undone and refused when stale on another'),
+    browser: browser('apps/web/tests/g-743-library.e2e.ts',
+      'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale'),
+  },
+  {
+    kind: 'books',
+    capability: 'Return an expired loan',
+    hardCase: 'expired-loans',
+    api: api('tests/qa/integration/library-loans-expiry.test.ts',
+      'a loan past its due date reads as overdue, an extension clears that, and returning ends the hold'),
+    browser: browser('apps/web/tests/library-loans.e2e.ts',
+      'a reader owns a copy, lends it overdue, extends it and returns it'),
+  },
+];
