@@ -257,4 +257,5 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
     }
 
   });
-}, qaStartupTestTimeout(420_000));
+// Hang detector: measured 221 s unloaded, 325/338 s busy; well above 221 s on a quiet host is still a regression.
+}, qaStartupTestTimeout(600_000));

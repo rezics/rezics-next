@@ -218,4 +218,5 @@ test('OPS11/OPS12/IAM11/SEARCH20: retained erasure restores refuse stale authori
     await secondCandidate.dispose();
     await currentCandidate.dispose();
   });
-}, qaStartupTestTimeout(420_000));
+// Hang detector: measured 178 s unloaded, 272/321 s busy; well above 178 s on a quiet host is still a regression.
+}, qaStartupTestTimeout(600_000));

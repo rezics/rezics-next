@@ -87,4 +87,5 @@ test('OPS11/OPS12/IAM11/SEARCH20: retained erasure release refuses resurrected p
     }, 'retained erasure reconciliation failed: restored publication supersession differs from erasure proof');
 
   });
-}, qaStartupTestTimeout(420_000));
+// Hang detector: measured 237 s unloaded, 304/358 s busy; well above 237 s on a quiet host is still a regression.
+}, qaStartupTestTimeout(600_000));

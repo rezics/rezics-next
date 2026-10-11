@@ -492,8 +492,9 @@ async function runShardWork(
     ...(persistent ? ['--persistent'] : []), ...(rawUpdate ? ['--raw-update'] : [])];
   const started = persistent ? startedFixtureProjects : startedProjects;
   const record: ShardRecord = { project: shardProjectRunId, files, status: 'failed', stage: 'stack',
+    budgetMs: budget,
     ...(isolated ? { isolation: true } : {}),
-    ...(resourceClass ? { resourceClass, budgetMs: budget } : {}) };
+    ...(resourceClass ? { resourceClass } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
     if (record.stage !== 'test') {
       const results = completeFileResults(run.xml ?? '', files, tier, {
@@ -903,8 +904,15 @@ async function runStackTier(tier: StackTier): Promise<void> {
       const rest = group.filter(file => !campaignQualificationShard([file]));
       return [...(rest.length ? [rest] : []), [group.find(file => campaignQualificationShard([file]))!]];
     });
+    // Hang detectors, not quiet-host gates: held/corruption/release measured 178/237/221 s
+    // unloaded and 272/304/325 s, then 321/358/338 s busy; quiet-host regressions still matter.
     const projectBudget = (files: readonly string[]) =>
-      campaignQualificationShard(files) ? campaignShardActiveMs() : budget;
+      campaignQualificationShard(files) ? campaignShardActiveMs()
+        : tier === 'fault/recovery' && files.length === 1 && [
+          'tests/qa/fault-recovery/erasure-restore.test.ts',
+          'tests/qa/fault-recovery/erasure-restore-corruption.test.ts',
+          'tests/qa/fault-recovery/erasure-restore-release.test.ts',
+        ].includes(files[0]!) ? 600_000 : budget;
     // Integration and fault/recovery queue more projects than slots; each keeps its own deadline.
     // The campaign project's wall is the sum of its two measured phases.
     if (integration) integrationBudgetNotes.push(...integrationBudgetSummary(integrationOverBudgetFiles(estimates)));
@@ -916,8 +924,8 @@ async function runStackTier(tier: StackTier): Promise<void> {
     if (warning) console.warn(warning);
     // Local workers bound the plan; each project takes its global lease only after admission.
     const startInitialStack = concurrencyGate(tier === 'integration' ? capacity : Math.min(capacity, 3));
-    const runs = await runQueuedProjects(projects, capacity, budget, (index, files, commandBudget) => runShard(
-      tier, `${runId}-${prefix}${index + 1}`, files, flags, commandBudget, false, startInitialStack,
+    const runs = await runQueuedProjects(projects, capacity, budget, (index, files) => runShard(
+      tier, `${runId}-${prefix}${index + 1}`, files, flags, projectBudget(files), false, startInitialStack,
       integration?.[index]?.batches,
     ));
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
