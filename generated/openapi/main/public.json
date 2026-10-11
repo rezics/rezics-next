@@ -436429,27 +436429,55 @@
                     "type": "string"
                   },
                   "selection": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "component": {
-                        "const": "body",
-                        "type": "string"
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "body",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "maxLength": 64,
+                            "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
                       },
-                      "locator": {
-                        "type": "null"
-                      },
-                      "revision": {
-                        "maxLength": 64,
-                        "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                        "type": "string"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "media_use",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maxLength": 64,
+                            "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
                       }
-                    },
-                    "required": [
-                      "component",
-                      "revision",
-                      "locator"
-                    ],
-                    "type": "object"
+                    ]
                   },
                   "statement": {
                     "maxLength": 4000,
@@ -436619,27 +436647,55 @@
                     "type": "string"
                   },
                   "selection": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "component": {
-                        "const": "body",
-                        "type": "string"
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "body",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "maxLength": 64,
+                            "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
                       },
-                      "locator": {
-                        "type": "null"
-                      },
-                      "revision": {
-                        "maxLength": 64,
-                        "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                        "type": "string"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "media_use",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maxLength": 64,
+                            "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
                       }
-                    },
-                    "required": [
-                      "component",
-                      "revision",
-                      "locator"
-                    ],
-                    "type": "object"
+                    ]
                   },
                   "statement": {
                     "maxLength": 4000,
@@ -436809,27 +436865,55 @@
                     "type": "string"
                   },
                   "selection": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "component": {
-                        "const": "body",
-                        "type": "string"
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "body",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "maxLength": 64,
+                            "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
                       },
-                      "locator": {
-                        "type": "null"
-                      },
-                      "revision": {
-                        "maxLength": 64,
-                        "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                        "type": "string"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "media_use",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maxLength": 64,
+                            "pattern": "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
                       }
-                    },
-                    "required": [
-                      "component",
-                      "revision",
-                      "locator"
-                    ],
-                    "type": "object"
+                    ]
                   },
                   "statement": {
                     "maxLength": 4000,
@@ -586166,6 +586250,14 @@
                           "component": {
                             "type": "string"
                           },
+                          "locator": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "ordinal": {
                             "type": "number"
                           },
@@ -586263,6 +586355,14 @@
                         "properties": {
                           "component": {
                             "type": "string"
+                          },
+                          "locator": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "ordinal": {
                             "type": "number"
@@ -586820,6 +586920,14 @@
                         "properties": {
                           "component": {
                             "type": "string"
+                          },
+                          "locator": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "ordinal": {
                             "type": "number"
