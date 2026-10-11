@@ -75,6 +75,44 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
       expect(rolledBack.payload).toEqual(payload);
       expect(rolledBack.payload_erasure_id).toBeNull();
       expect(rolledBack.payload_erasure_epoch).toBeNull();
+
+      const transactionPool = new Pool({ ...cluster.connection, max: 2, connectionTimeoutMillis: 1_000 });
+      const transactionStore = new PostgresReceiptCustodyStore(transactionPool);
+      let transactionClient: PoolClient | undefined;
+      let lockProbeClient: PoolClient | undefined;
+      try {
+        transactionClient = await transactionPool.connect();
+        lockProbeClient = await transactionPool.connect();
+        const pids = await Promise.all([transactionClient, lockProbeClient].map(async connection =>
+          (await connection.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid));
+        expect(pids[0]).not.toBe(pids[1]);
+
+        await transactionClient.query('BEGIN');
+        await expect(transactionStore.withReceipt(receipt, session => clearPayload(session, erasure),
+          transactionClient)).rejects.toThrow('fixture rejects custody payload clear');
+        await transactionClient.query('ROLLBACK');
+
+        let acquired = false;
+        const lockAttempt = transactionStore.withReceipt(receipt, async () => { acquired = true; }, lockProbeClient);
+        const acquiredBeforeTimeout = await Promise.race([
+          lockAttempt.then(() => true),
+          new Promise<boolean>(resolveTimeout => setTimeout(() => resolveTimeout(false), 500)),
+        ]);
+        if (!acquiredBeforeTimeout) {
+          // Unblock the probe on a failing implementation so cleanup completes;
+          // the assertion below still records that it missed the deadline.
+          transactionClient.release(true);
+          transactionClient = undefined;
+          await lockAttempt;
+        }
+        expect(acquiredBeforeTimeout).toBe(true);
+        expect(acquired).toBe(true);
+      } finally {
+        transactionClient?.release();
+        lockProbeClient?.release();
+        await transactionPool.end();
+      }
+
       await client.query('DROP TRIGGER zz_fixture_reject_custody_clear ON access.command_custody');
       await client.query('DROP FUNCTION access.reject_fixture_custody_clear()');
 

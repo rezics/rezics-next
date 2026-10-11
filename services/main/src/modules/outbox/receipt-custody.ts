@@ -140,10 +140,12 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
     client?: PoolClient): Promise<T> {
     const owned = client === undefined;
     const held = client ?? await this.sessions.connect();
+    const transactionScoped = !owned;
     let locked = false;
     let destroyed = false;
     try {
-      await held.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [`command-custody:${receipt}`]);
+      await held.query(`SELECT pg_advisory_${transactionScoped ? 'xact_' : ''}lock(hashtextextended($1, 0))`,
+        [`command-custody:${receipt}`]);
       locked = true;
       const durable = async <T>(write: () => Promise<T>): Promise<T> => {
         // A borrowed client belongs to its caller, including its transaction
@@ -223,12 +225,13 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
         }),
       });
     } finally {
-      if (locked) {
+      if (locked && !transactionScoped) {
         try { await held.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [`command-custody:${receipt}`]); }
         catch {
-          // A borrowed client belongs to its caller. Destroying it would drop
-          // that caller's transaction; only a session we opened can be discarded.
-          if (owned) { held.release(true); destroyed = true; }
+          // A failed unlock leaves a session lock behind. Dispose of that
+          // connection so it cannot return to the pool with the receipt held.
+          held.release(true);
+          destroyed = true;
         }
       }
       if (owned && !destroyed) held.release();
