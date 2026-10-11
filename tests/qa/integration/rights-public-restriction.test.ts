@@ -183,6 +183,8 @@ async function decideAfterLostEffectAcknowledgement(f: Fixture, input: DecisionI
     return result;
   };
   try {
+    const accepted = await body<DecisionResult>(await f.decide(input), 202);
+    expect(accepted.operation.status).toBe('accepted');
     const uncertain = await f.decide(input);
     const pending = await body<DecisionResult>(uncertain, 202);
     expect(pending.operation.status).toBe('partial');
