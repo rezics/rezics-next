@@ -119,9 +119,9 @@ export const AtTheCap: Story = {
 };
 
 export const NewRole: Story = {
-  args: { list: { generation: '12', cap: 1, roles: [] }, api: {
+  args: { list: { generation: '12', cap: 32, roles: [] }, api: {
     ...adminApi({ record }),
-    roles: async () => ({ ok: true, data: { generation: '13', cap: 1, roles: [{
+    roles: async () => ({ ok: true, data: { generation: '13', cap: 32, roles: [{
       id: '00000000-0000-4000-8000-000000002003', name: 'Translators 译者',
       permissions: ['rating.question-presentation.review'], holders: [], moreHolders: false,
     }] } }),
@@ -141,7 +141,7 @@ export const NewRole: Story = {
       change: expect.objectContaining({ kind: 'role', name: 'Translators 译者', permissions: ['rating.question-presentation.review'] }) })]));
     await expect(await canvas.findByRole('heading', { name: 'Translators 译者' })).toBeVisible();
     await expect(canvas.queryByText('No roles yet')).not.toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'New role' })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'New role' })).toBeEnabled();
     await userEvent.click(canvas.getByRole('button', { name: 'Edit role: Translators 译者' }));
     const edit = within(await body().findByRole('dialog', { name: 'Edit role' }));
     await expect(edit.getByRole('textbox', { name: 'Role name' })).toHaveValue('Translators 译者');
