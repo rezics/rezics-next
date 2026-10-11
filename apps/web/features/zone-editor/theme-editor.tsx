@@ -7,6 +7,7 @@ import { cn } from '@rezics/ui/utils';
 import { useRef, useState } from 'react';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { useZoneEditorDraft } from './draft-provider.tsx';
 import {
   browserZoneTheme,
   commitCommand,
@@ -35,28 +36,32 @@ interface ThemeSaveIntent {
 }
 
 /** Edit the Zone's two structural tokens without replacing its saved presentation. */
-export function ZoneThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, api }: {
+export function ZoneThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, previewHref, siteHref, api }: {
   zoneId: string;
   actingSubject: string;
   copy: ZoneEditorMessages;
   initial: ThemeEditorStart;
   signInHref: string;
+  previewHref?: string;
+  siteHref?: string;
   api?: ZoneThemeClient;
 }) {
   if (initial.kind !== 'ready') return <ThemeUnavailable kind={initial.kind} copy={copy} />;
   return <EditableThemeEditor zoneId={zoneId} actingSubject={actingSubject} copy={copy}
-    initial={initial.state} signInHref={signInHref} api={api} />;
+    initial={initial.state} signInHref={signInHref} previewHref={previewHref} siteHref={siteHref} api={api} />;
 }
 
-function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, api }: {
+function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, previewHref, siteHref, api }: {
   zoneId: string;
   actingSubject: string;
   copy: ZoneEditorMessages;
   initial: ThemeEditorState;
   signInHref: string;
+  previewHref?: string;
+  siteHref?: string;
   api?: ZoneThemeClient;
 }) {
-  const [state, setState] = useState(initial);
+  const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState);
   const [busy, setBusy] = useState<null | 'save' | 'review'>(null);
   const client = useRef<ZoneThemeClient | null>(null);
   const saveLane = useRef<ReturnType<typeof commandLane<ThemeSaveIntent, WriteResult<SavedZoneTheme>>> | null>(null);
@@ -87,7 +92,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   }
 
   async function save() {
-    if (busy || state.needsReview || !isThemeDirty(state)) return;
+    if (busy || !draftReady || state.needsReview || !isThemeDirty(state)) return;
     const choice = intentFor(state);
     if (!choice) return;
     setBusy('save');
@@ -99,7 +104,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   }
 
   async function reviewLatest() {
-    if (busy || !state.needsReview) return;
+    if (busy || !draftReady || !state.needsReview) return;
     setBusy('review');
     try {
       const current = await client.current!.readConfiguration(zoneId, actingSubject);
@@ -121,7 +126,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
     <ThemeNotice state={state} copy={copy} signInHref={signInHref} busy={busy}
       onReview={() => { void reviewLatest(); }} />
     <div className="grid min-w-0 gap-5 sm:grid-cols-2">
-      <RadioGroup name="zone-density" value={state.choice.density} disabled={busy !== null}
+      <RadioGroup name="zone-density" value={state.choice.density} disabled={!draftReady || busy !== null}
         onValueChange={({ value }) => {
           if (value === 'compact' || value === 'comfortable') put({ type: 'edit', choice: { ...state.choice, density: value } });
         }}>
@@ -133,7 +138,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
           <span>{copy.themeCompact}</span>
         </RadioGroupItem>
       </RadioGroup>
-      <RadioGroup name="zone-page-surface" value={state.choice.pageSurface} disabled={busy !== null}
+      <RadioGroup name="zone-page-surface" value={state.choice.pageSurface} disabled={!draftReady || busy !== null}
         onValueChange={({ value }) => {
           if (value === 'flat' || value === 'cards') put({ type: 'edit', choice: { ...state.choice, pageSurface: value } });
         }}>
@@ -146,11 +151,24 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
         </RadioGroupItem>
       </RadioGroup>
     </div>
-    <Button variant="secondary" size="sm" className="justify-self-start" disabled={!dirty || state.needsReview || busy !== null}
-      isLoading={busy === 'save'} onClick={() => void save()}>
-      {busy === 'save' ? copy.themeSaving : copy.themeSave}
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="secondary" size="sm" disabled={!draftReady || !dirty || state.needsReview || busy !== null}
+        isLoading={busy === 'save'} onClick={() => void save()}>
+        {busy === 'save' ? copy.themeSaving : copy.themeSave}
+      </Button>
+      {previewHref ? <LocalizedLink href={previewHref} documentNavigation
+        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), actionClass)}>{copy.preview}</LocalizedLink> : null}
+      {siteHref ? <LocalizedLink href={siteHref} documentNavigation
+        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), actionClass)}>{copy.viewSite}</LocalizedLink> : null}
+    </div>
   </section>;
+}
+
+function isThemeEditorState(value: unknown): value is ThemeEditorState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as Partial<ThemeEditorState>;
+  return typeof state.expectedHead === 'string' && !!state.choice && !!state.saved
+    && !!state.presentation && !!state.configuration && typeof state.needsReview === 'boolean';
 }
 
 function ThemeNotice({ state, copy, signInHref, busy, onReview }: {

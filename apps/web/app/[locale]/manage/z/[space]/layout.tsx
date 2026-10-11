@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { ZoneEditorFrame } from '../../../../../features/zone-editor/frame.tsx';
+import { ZoneEditorDraftProvider } from '../../../../../features/zone-editor/draft-provider.tsx';
 import { messages } from '../../../../../features/zone-editor/messages.ts';
 import { loadZoneAuthoring } from '../../../../../features/zone-editor/read.ts';
 import { zoneEditorPath } from '../../../../../features/zone-editor/routes.ts';
@@ -22,10 +23,13 @@ export default async function ZoneEditorLayout({ children, params }: {
   ]);
   if (loaded.kind === 'missing') notFound();
   const copy = messages[locale];
-  return <ZoneEditorFrame name={loaded.kind === 'ready' ? loaded.model.name : space} editorPath={zoneEditorPath(space)}
+  const frame = <ZoneEditorFrame name={loaded.kind === 'ready' ? loaded.model.name : space} editorPath={zoneEditorPath(space)}
     agent={agent} locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel}
     sectionHome={copy.sectionHome} sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm}
-    sectionTheme={copy.sectionTheme}>
+    sectionTheme={copy.sectionTheme} unsavedWork={copy.unsavedWork}>
     {children}
   </ZoneEditorFrame>;
+  return loaded.kind === 'ready'
+    ? <ZoneEditorDraftProvider zoneId={loaded.model.zoneId} actingSubject={actingSubject}>{frame}</ZoneEditorDraftProvider>
+    : frame;
 }

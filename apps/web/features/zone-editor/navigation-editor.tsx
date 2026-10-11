@@ -10,17 +10,24 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import {
   browserZoneAuthoring,
   browserZoneNavigation,
+  browserZoneTheme,
   commitCommand,
   pageSearchReady,
   type PageChoice,
   type WriteResult,
   type ZoneAuthoringClient,
   type ZoneNavigationClient,
+  type ZoneThemeClient,
 } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
+import { useZoneEditorDraft } from './draft-provider.tsx';
+import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
+  type PublicationReview } from './publication-review.ts';
+import { PublicationReviewPanel } from './publication-review-panel.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
   canPublish,
+  isDirty,
   publicationChoice,
   reduceEditor,
   type EditorState,
@@ -76,10 +83,11 @@ export function ZoneNavigationEditor({
   api?: ZoneNavigationClient;
   authoring?: ZoneAuthoringClient;
 }) {
-  const [state, dispatch] = useState(initial);
-  const [page, setPage] = useState(home);
+  const [state, dispatch, draftReady] = useZoneEditorDraft('navigation', initial, isNavigationDirty, isNavigationState);
+  const [page, setPage, pageReady] = useZoneEditorDraft('home', home, isDirty, isEditorState);
   const [busy, setBusy] = useState<null | 'save' | 'publish' | 'load' | 'continue'>(null);
-  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load' | 'continue'>(null);
+  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load' | 'continue' | 'review'>(null);
+  const [review, setReview] = useState<PublicationReview | null>(null);
   const [query, setQuery] = useState('');
   const [choices, setChoices] = useState<PageChoice[]>([]);
   const [picked, setPicked] = useState<PageChoice | null>(null);
@@ -111,8 +119,10 @@ export function ZoneNavigationEditor({
   }
   const client = useRef<ZoneNavigationClient | null>(null);
   const pages = useRef<ZoneAuthoringClient | null>(null);
+  const theme = useRef<ZoneThemeClient | null>(null);
   if (!client.current) client.current = api ?? browserZoneNavigation();
   if (!pages.current) pages.current = authoring ?? browserZoneAuthoring();
+  if (!theme.current) theme.current = browserZoneTheme();
   const saveLane = useRef<ReturnType<
     typeof commandLane<
       NavigationState,
@@ -243,7 +253,7 @@ export function ZoneNavigationEditor({
             zoneHead: result.data.zoneHead,
             replayed: result.data.replayed,
           });
-        else if (result.failure === 'stale') putPage({ type: 'publish-stale' });
+        else if (result.failure === 'stale') { setReview(null); putPage({ type: 'publish-stale' }); }
         else put({ type: 'failed', failure: result.failure });
         return result;
       },
@@ -251,7 +261,7 @@ export function ZoneNavigationEditor({
   }
 
   function save(next: NavigationState = stateRef.current) {
-    if (busy || !next.complete || !isNavigationDirty(next)) return;
+    if (busy || !draftReady || !pageReady || !next.complete || !isNavigationDirty(next)) return;
     track(
       'save',
       saveLane
@@ -275,7 +285,7 @@ export function ZoneNavigationEditor({
   function siteChoice(navHead: string): PublicationChoice | null {
     const choice = publicationChoice(pageRef.current, zoneIri);
     if (
-      !choice ||
+      !choice || !draftReady || !pageReady ||
       !stateRef.current.complete ||
       saveSession.current ||
       isNavigationDirty(stateRef.current)
@@ -286,7 +296,7 @@ export function ZoneNavigationEditor({
 
   function publish() {
     const choice = siteChoice(stateRef.current.head);
-    if (!choice || busy) return;
+    if (!choice || busy || !draftReady || !pageReady) return;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
@@ -323,13 +333,13 @@ export function ZoneNavigationEditor({
   }
 
   function reviewAgain() {
-    if (busy) return;
+    if (busy || !draftReady || !pageReady) return;
     track('load', reloadForReview());
   }
 
   function continueLoading() {
     const current = stateRef.current;
-    if (busy || current.complete || !current.after) return;
+    if (busy || !draftReady || !pageReady || current.complete || !current.after) return;
     track(
       'continue',
       client
@@ -357,53 +367,39 @@ export function ZoneNavigationEditor({
 
   function refreshAndPublish() {
     if (
-      busy ||
+      busy || !draftReady || !pageReady ||
       !stateRef.current.complete ||
       isNavigationDirty(stateRef.current) ||
       saveSession.current
     )
       return;
-    track(
-      'publish',
-      pages.current!.readHeads(zoneId, actingSubject).then(async (heads) => {
-        if (!heads.ok) {
-          put({ type: 'failed', failure: heads.failure === 'stale' ? 'conflict' : heads.failure });
-          return;
-        }
-        const nextPage = reduceEditor(pageRef.current, {
-          type: 'heads',
-          zoneHead: heads.data.zoneHead,
-          navigationRevision: heads.data.navigationRevision,
-        });
-        pageRef.current = nextPage;
-        putPage({
-          type: 'heads',
-          zoneHead: heads.data.zoneHead,
-          navigationRevision: heads.data.navigationRevision,
-        });
-        if (
-          !isNavigationDirty(stateRef.current) &&
-          stateRef.current.head !== heads.data.navigationRevision
-        ) {
-          const next = reduceNavigation(stateRef.current, {
-            type: 'revision',
-            head: heads.data.navigationRevision,
-          });
-          stateRef.current = next;
-          put({ type: 'revision', head: heads.data.navigationRevision });
-        }
-        const choice = siteChoice(stateRef.current.head);
-        if (!choice) {
-          put({ type: 'failed', failure: 'unavailable' });
-          return;
-        }
-        await publishLane.current!.submit(choice, applyPublish);
-      }),
-    );
+    setReview(null);
+    const work = readSavedPublicationSelection(zoneId, actingSubject, {
+      authoring: pages.current!, navigation: client.current!, theme: theme.current!,
+    }).then(result => {
+      if (result.ok) setReview(stagePublicationReview(result.data));
+      else if (result.failure === 'stale') putPage({ type: 'publish-stale' });
+      else putPage({ type: 'failed', failure: result.failure });
+    }).catch(() => putPage({ type: 'failed', failure: 'unavailable' }));
+    track('load', work);
+    setIntent('review');
+  }
+
+  function publishReviewed() {
+    if (!review || busy || !publishable) return;
+    const confirmed = confirmPublicationReview(review);
+    const choice = reviewedPublicationChoice(pageRef.current, zoneIri, confirmed);
+    if (!choice) return;
+    setReview(null);
+    putPage({ type: 'heads', zoneHead: review.selection.zoneHead, navigationRevision: review.selection.navigationRevision });
+    put({ type: 'review', links: review.selection.navigation, head: review.selection.navigationRevision,
+      navigation: review.selection.navigationId });
+    track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
   function tryAgain() {
-    if (page.notice.kind === 'publish-stale') refreshAndPublish();
+    if (intent === 'review') refreshAndPublish();
+    else if (page.notice.kind === 'publish-stale') refreshAndPublish();
     else if (intent === 'publish') publish();
     else if (intent === 'load') reviewAgain();
     else if (intent === 'continue') continueLoading();
@@ -463,7 +459,7 @@ export function ZoneNavigationEditor({
       : null;
   const publishable = Boolean(siteChoice(state.head));
   const resumable = !!saveSession.current && !busy;
-  const editingDisabled = !!busy || resumable || !state.complete || state.notice.kind === 'stale';
+  const editingDisabled = !draftReady || !!busy || resumable || !state.complete || state.notice.kind === 'stale';
 
   return (
     <section className="grid min-w-0 gap-3" aria-labelledby="zone-navigation-title">
@@ -479,10 +475,9 @@ export function ZoneNavigationEditor({
             copy={resumable ? { ...copy, save: copy.navResume } : copy}
             canEdit
             busy={busy === 'continue' ? null : busy}
-            dirty={dirty}
-            saveDisabled={!!busy || !dirty || !state.complete || state.notice.kind === 'stale'}
+            saveDisabled={!draftReady || !!busy || !dirty || !state.complete || state.notice.kind === 'stale'}
             publishDisabled={
-              !!busy || !publishable || !state.complete || page.notice.kind === 'publish-stale'
+              !draftReady || !pageReady || !!busy || !publishable || !state.complete || page.notice.kind === 'publish-stale'
             }
             onSave={() => save()}
             onPublish={() => publish()}
@@ -554,8 +549,12 @@ export function ZoneNavigationEditor({
         page={page}
         busy={busy}
         signInHref={signInHref}
+        ready={draftReady && pageReady}
+        review={review}
+        reviewPublishDisabled={!!busy || !publishable}
         onReview={reviewAgain}
         onRefresh={refreshAndPublish}
+        onPublishReviewed={publishReviewed}
         onRetry={tryAgain}
       />
       {state.links.length ? (
@@ -703,8 +702,12 @@ function NavNotice({
   page,
   busy,
   signInHref,
+  ready,
+  review,
+  reviewPublishDisabled,
   onReview,
   onRefresh,
+  onPublishReviewed,
   onRetry,
 }: {
   copy: ZoneEditorMessages;
@@ -712,8 +715,12 @@ function NavNotice({
   page: EditorState;
   busy: string | null;
   signInHref: string;
+  ready: boolean;
+  review: PublicationReview | null;
+  reviewPublishDisabled: boolean;
   onReview: () => void;
   onRefresh: () => void;
+  onPublishReviewed: () => void;
   onRetry: () => void;
 }) {
   if (state.notice.kind === 'stale') {
@@ -756,17 +763,22 @@ function NavNotice({
   }
   if (page.notice.kind === 'publish-stale') {
     return (
-      <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
-        <Button
-          variant="outline"
-          size="sm"
-          className={choiceClass}
-          disabled={!!busy || !state.complete || isNavigationDirty(state)}
-          onClick={onRefresh}
-        >
-          {copy.refreshAndPublish}
-        </Button>
-      </NoticeAlert>
+      <>
+        <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
+          {!review ? <Button
+            variant="outline"
+            size="sm"
+            className={choiceClass}
+            disabled={!ready || !!busy || !state.complete || isNavigationDirty(state)}
+            isLoading={busy === 'load'}
+            onClick={onRefresh}
+          >
+            {copy.refreshAndPublish}
+          </Button> : null}
+        </NoticeAlert>
+        {review ? <PublicationReviewPanel selection={review.selection} copy={copy} busy={reviewPublishDisabled}
+          onPublish={onPublishReviewed} /> : null}
+      </>
     );
   }
   const failure = failureCopy(copy, state.notice.kind);
@@ -849,4 +861,20 @@ function failureCopy(
     default:
       return null;
   }
+}
+
+function isNavigationState(value: unknown): value is NavigationState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as Partial<NavigationState>;
+  return Array.isArray(state.links) && Array.isArray(state.saved) && Array.isArray(state.pending)
+    && typeof state.head === 'string' && typeof state.navigation === 'string'
+    && typeof state.complete === 'boolean' && !!state.notice && typeof state.notice === 'object';
+}
+
+function isEditorState(value: unknown): value is EditorState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as Partial<EditorState>;
+  return typeof state.value === 'string' && typeof state.zoneHead === 'string'
+    && typeof state.navigationRevision === 'string' && typeof state.expectedHead !== 'undefined'
+    && !!state.notice && typeof state.notice === 'object';
 }

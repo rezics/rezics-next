@@ -3,6 +3,7 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   sectionsLabel: 'Bereiche der Website',
+  unsavedWork: 'Ungespeicherte Änderungen',
   sectionHome: 'Start',
   homeTitle: 'Startseite',
   homeHelp:
@@ -38,8 +39,14 @@ const messages: ZoneEditorMessages = {
   loaded: 'Die gespeicherte Seite wurde geladen. Ihr ungespeicherter Text wurde ersetzt.',
   publishStaleTitle: 'Die Website hat sich vor dem Veröffentlichen geändert',
   publishStaleBody:
-    'Ihr Entwurf ist noch hier. Aktualisieren Sie die Website und veröffentlichen Sie erneut. Leser behalten die Seite, die sie schon haben.',
-  refreshAndPublish: 'Aktualisieren und veröffentlichen',
+    'Ihr Entwurf ist noch hier. Prüfen Sie die aktuell gespeicherten Links und das Layout, bevor Sie erneut veröffentlichen.',
+  refreshAndPublish: 'Gespeicherte Auswahl prüfen',
+  publishReviewTitle: 'Die gespeicherte Website-Auswahl hat sich geändert',
+  publishReviewBody: 'Prüfen Sie die gespeicherte Navigation und das Layout unten, bevor Sie erneut veröffentlichen. Ihr Text der Startseite bleibt hier.',
+  publishReviewNavigation: 'Gespeicherte Navigation',
+  publishReviewTheme: 'Gespeichertes Layout',
+  publishReviewNoNavigation: 'Keine gespeicherten Links.',
+  publishReviewed: 'Diese Auswahl veröffentlichen',
   deniedTitle: 'Sie können diese Zone nicht bearbeiten',
   deniedBody: 'Diese Zone steht Ihnen zum Ändern nicht zur Verfügung.',
   unavailableTitle: 'Die Seite war nicht erreichbar',

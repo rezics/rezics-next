@@ -29,5 +29,6 @@ export default async function ZoneThemePage({ params }: { params: Promise<{ spac
   if (typeof read.data.revision !== 'string') return <ZoneAuthoringFailure failure="unavailable" copy={copy} />;
 
   return <ZoneThemeEditor zoneId={loaded.model.zoneId} actingSubject={actingSubject} copy={copy}
-    initial={initialThemeState(read.data.configuration, read.data.revision)} signInHref={signInHref} />;
+    initial={initialThemeState(read.data.configuration, read.data.revision)} signInHref={signInHref}
+    previewHref={loaded.previewPath} siteHref={loaded.sitePath} />;
 }

@@ -10,12 +10,13 @@ import type { ZoneEditorMessages } from './messages.ts';
 const linkClass = 'h-auto min-h-9 w-full whitespace-normal sm:w-auto';
 
 /** The saved draft, as readers will see it. Unsaved keystrokes are not part of this view. */
-export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status }: {
+export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status, pageSurface }: {
   copy: ZoneEditorMessages;
   document: DocumentSnapshot | null;
   editorPath: string;
   sitePath: string;
   status: 'private' | 'live' | 'behind';
+  pageSurface?: 'flat' | 'cards';
 }) {
   const statusText = status === 'live' ? copy.statusLive : status === 'behind' ? copy.statusBehind : copy.statusPrivate;
   return <section className="grid min-w-0 gap-4" aria-labelledby="zone-draft-preview">
@@ -31,7 +32,10 @@ export function ZoneDraftPreview({ copy, document, editorPath, sitePath, status 
       </div>
     </div>
     {document
-      ? <ZoneHomeDocument document={document} className="max-w-3xl text-pretty leading-7" />
+      ? <article data-zone-preview-page-surface={pageSurface ?? 'flat'}
+        className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
+        <ZoneHomeDocument document={document} className="text-pretty leading-7" />
+      </article>
       : <EmptyState icon={FileTextIcon} title={copy.previewEmptyTitle} description={copy.previewEmptyBody} headingLevel={3} />}
   </section>;
 }

@@ -3,6 +3,7 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   sectionsLabel: 'サイトの項目',
+  unsavedWork: '未保存の変更',
   sectionHome: 'ホーム',
   homeTitle: 'ホームページ',
   homeHelp: '読者が最初に見るページを書きます。下書きは公開するまで非公開のままです。',
@@ -36,8 +37,14 @@ const messages: ZoneEditorMessages = {
   loaded: '保存済みのページを読み込みました。未保存の文章は置き換わりました。',
   publishStaleTitle: '公開の前にサイトが変わりました',
   publishStaleBody:
-    '下書きはここに残っています。サイトを読み直して、もう一度公開してください。読者は、すでに見ているページのままです。',
-  refreshAndPublish: '読み直して公開',
+    '下書きはここに残っています。もう一度公開する前に、最新の保存済みリンクとレイアウトを確認してください。',
+  refreshAndPublish: '保存済みの選択を確認',
+  publishReviewTitle: '保存済みのサイト選択が変わりました',
+  publishReviewBody: 'もう一度公開する前に、以下の保存済みナビゲーションとレイアウトを確認してください。ホームページの文章はここに残っています。',
+  publishReviewNavigation: '保存済みナビゲーション',
+  publishReviewTheme: '保存済みレイアウト',
+  publishReviewNoNavigation: '保存済みリンクはありません。',
+  publishReviewed: 'この選択で公開',
   deniedTitle: 'このゾーンは編集できません',
   deniedBody: 'このゾーンは、あなたが変更できる状態ではありません。',
   unavailableTitle: 'ページに届きませんでした',

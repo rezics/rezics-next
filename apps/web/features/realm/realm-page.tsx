@@ -1,4 +1,3 @@
-import { direction } from '@rezics/main/language';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import { cookies, headers } from 'next/headers';
@@ -33,6 +32,7 @@ import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { PositionBar } from '../wiki/position-bar.tsx';
 import { withContinuity } from '../wiki/continuity.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
+import { savedSiteCuts } from '../zones/site-cuts.ts';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmBanPanel } from '../realm-appeal/panel.tsx';
 import { readOwnRealmBan } from '../realm-appeal/read.ts';
@@ -44,7 +44,7 @@ import { readPresentation, type RealmResolution, resolveRealm } from './read.ts'
 import type { ZoneMount, ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { type RealmTab, realmHref } from './route.ts';
-import { siteHref, zoneNavigationHref } from './route.ts';
+import { siteHref } from './route.ts';
 import { surfaceText } from '../address/messages.ts';
 import type { RealmHeader } from './types.ts';
 import { spaceHref } from '../address/path.ts';
@@ -266,6 +266,7 @@ export async function RealmFrame({
   search,
   address,
   crumbs,
+  structuralPreview = false,
   children,
 }: {
   view: RealmView;
@@ -275,13 +276,17 @@ export async function RealmFrame({
   children: ReactNode;
   address?: string;
   crumbs?: readonly SiteCrumb[];
+  /** The editor preview always shows its saved structural theme, independent of a reader's standard-look choice. */
+  structuralPreview?: boolean;
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, data, zone, messages, zoneMessages, lookEnabled } = view;
   const site = tab === null;
-  const theme = zoneTheme(presentation.tokens, {
+  const siteCuts = site ? savedSiteCuts({ tokens: presentation.tokens, navigation: presentation.navigation },
+    view.mounts.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })), realm.ref, locale, messages.home) : null;
+  const theme = zoneTheme(siteCuts?.tokens ?? presentation.tokens, {
     reader: parseTheme(jar.get(THEME_COOKIE)?.value),
-    enabled: lookEnabled,
+    enabled: structuralPreview || lookEnabled,
   });
   const members = membersText(realm.header.membership.count, locale, messages);
   const here = localizedPath(address ?? realmHref(locale, realm.ref, tab ?? 'home'), locale);
@@ -364,23 +369,10 @@ export async function RealmFrame({
           )
         }
         site={
-          site
+          siteCuts
             ? {
                 label: surfaceText.site[locale],
-                links: [
-                  {
-                    href: siteHref(locale, realm.ref, []),
-                    label: { value: messages.home, lang: locale, dir: direction(locale, messages.home) },
-                  },
-                  ...presentation.navigation.map((item) => ({
-                    href: zoneNavigationHref(item.href, realm.ref),
-                    label: { value: item.label, lang: locale, dir: direction(locale, item.label) },
-                  })),
-                  ...mountLinks(view),
-                ].filter(
-                  (link, index, links) =>
-                    links.findIndex((other) => other.href === link.href) === index,
-                ),
+                links: siteCuts.navigation,
               }
             : undefined
         }

@@ -11,6 +11,7 @@ import zhHant from './messages/zh-Hant.ts';
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
   sectionsLabel: 'Site sections',
+  unsavedWork: 'Unsaved work',
   sectionHome: 'Home',
   homeTitle: 'Home page',
   homeHelp: 'Write the page readers see first. A draft stays private until you publish it.',
@@ -43,8 +44,14 @@ const en = {
   loaded: 'Loaded the saved page. Your unsaved text was replaced.',
   publishStaleTitle: 'The site changed before this publish',
   publishStaleBody:
-    'Your draft is still here. Refresh the site and publish again. Readers keep the page they already have.',
-  refreshAndPublish: 'Refresh and publish',
+    'Your draft is still here. Review the latest saved links and layout before publishing again.',
+  refreshAndPublish: 'Review saved selection',
+  publishReviewTitle: 'The saved site selection changed',
+  publishReviewBody: 'Review the saved navigation and layout below before publishing again. Your home page text stays here.',
+  publishReviewNavigation: 'Saved navigation',
+  publishReviewTheme: 'Saved layout',
+  publishReviewNoNavigation: 'No saved links.',
+  publishReviewed: 'Publish this selection',
   deniedTitle: 'You can’t edit this Zone',
   deniedBody: 'This Zone isn’t available for you to change.',
   unavailableTitle: 'The page couldn’t be reached',

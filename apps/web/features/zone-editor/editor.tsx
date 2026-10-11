@@ -9,9 +9,13 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { browserZoneAuthoring, choiceWire, commitCommand, type SavedDraft, type WriteResult, type ZoneAuthoringClient } from './api.ts';
+import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, choiceWire, commitCommand, type SavedDraft, type WriteResult, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
 import { ZoneHomeDocument } from './home-document.tsx';
+import { useZoneEditorDraft } from './draft-provider.tsx';
+import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
+  type PublicationReview } from './publication-review.ts';
+import { PublicationReviewPanel } from './publication-review-panel.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
   canPublish, draftChoice, isDirty, publicationChoice, publicationStatus, reduceEditor,
@@ -38,12 +42,13 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   signInHref: string;
   api?: ZoneAuthoringClient;
 }) {
-  const [state, dispatch] = useState(initial);
+  const [state, dispatch, draftReady] = useZoneEditorDraft('home', initial, isDirty, isEditorState);
   const [canEdit, setCanEdit] = useState(editable);
   const [reading, setReading] = useState(document);
   const [generation, setGeneration] = useState(0);
   const [busy, setBusy] = useState<null | 'save' | 'publish' | 'load'>(null);
-  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load'>(null);
+  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load' | 'review'>(null);
+  const [review, setReview] = useState<PublicationReview | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const inflight = useRef(0);
@@ -55,7 +60,11 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
     });
   }
   const client = useRef<ZoneAuthoringClient | null>(null);
+  const navigation = useRef<ZoneNavigationClient | null>(null);
+  const theme = useRef<ZoneThemeClient | null>(null);
   if (!client.current) client.current = api ?? browserZoneAuthoring();
+  if (!navigation.current) navigation.current = browserZoneNavigation();
+  if (!theme.current) theme.current = browserZoneTheme();
   const saveLane = useRef<ReturnType<typeof commandLane<DraftChoice, WriteResult<SavedDraft>>> | null>(null);
   const publishLane = useRef<ReturnType<typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>> | null>(null);
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
@@ -95,20 +104,20 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   function applyPublish(chosen: PublicationChoice, round: WriteRound) {
     return commitCommand(round, key => client.current!.publish(chosen, actingSubject, key)).then(result => {
       if (result.ok) put({ type: 'published', zoneHead: result.data.zoneHead, replayed: result.data.replayed });
-      else if (result.failure === 'stale') put({ type: 'publish-stale' });
+      else if (result.failure === 'stale') { setReview(null); put({ type: 'publish-stale' }); }
       else put({ type: 'failed', failure: result.failure });
       return result;
     });
   }
 
   function save(next: EditorState = stateRef.current) {
-    if (!canEdit || busy) return;
+    if (!canEdit || busy || !draftReady) return;
     track('save', saveLane.current!.submit(draftChoice(next, zoneIri, actingSubject), applySave));
   }
 
   function publish(next: EditorState = stateRef.current) {
     const choice = publicationChoice(next, zoneIri);
-    if (!choice || busy) return;
+    if (!choice || busy || !draftReady) return;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
@@ -122,7 +131,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   }
 
   function loadTheirs() {
-    if (busy) return;
+    if (busy || !draftReady) return;
     track('load', client.current!.readDraft(zoneId, actingSubject).then(result => {
       if (!result.ok) {
         put({ type: 'failed', failure: result.failure === 'stale' ? 'conflict' : result.failure });
@@ -136,26 +145,33 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   }
 
   function refreshAndPublish() {
-    if (busy) return;
-    track('publish', client.current!.readHeads(zoneId, actingSubject).then(async heads => {
-      if (!heads.ok) {
-        put({ type: 'failed', failure: heads.failure === 'stale' ? 'conflict' : heads.failure });
-        return;
-      }
-      const next = reduceEditor(stateRef.current, { type: 'heads', zoneHead: heads.data.zoneHead, navigationRevision: heads.data.navigationRevision });
-      stateRef.current = next;
-      put({ type: 'heads', zoneHead: heads.data.zoneHead, navigationRevision: heads.data.navigationRevision });
-      const choice = publicationChoice(next, zoneIri);
-      if (!choice) {
-        put({ type: 'failed', failure: 'unavailable' });
-        return;
-      }
-      await publishLane.current!.submit(choice, applyPublish);
-    }));
+    if (busy || !draftReady) return;
+    setReview(null);
+    const work = readSavedPublicationSelection(zoneId, actingSubject, {
+      authoring: client.current!, navigation: navigation.current!, theme: theme.current!,
+    }).then(result => {
+      if (result.ok) setReview(stagePublicationReview(result.data));
+      else if (result.failure === 'stale') put({ type: 'publish-stale' });
+      else put({ type: 'failed', failure: result.failure });
+    }).catch(() => put({ type: 'failed', failure: 'unavailable' }));
+    track('load', work);
+    setIntent('review');
+  }
+
+  function publishReviewed() {
+    if (!review || busy) return;
+    const confirmed = confirmPublicationReview(review);
+    const choice = reviewedPublicationChoice(stateRef.current, zoneIri, confirmed);
+    if (!choice) return;
+    setReview(null);
+    put({ type: 'heads', zoneHead: review.selection.zoneHead,
+      navigationRevision: review.selection.navigationRevision });
+    track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
   function tryAgain() {
-    if (state.notice.kind === 'publish-stale') refreshAndPublish();
+    if (intent === 'review') refreshAndPublish();
+    else if (state.notice.kind === 'publish-stale') refreshAndPublish();
     else if (intent === 'publish') publish();
     else if (intent === 'load') loadTheirs();
     else save();
@@ -171,9 +187,9 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
     <div className="min-w-0 space-y-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id="zone-home-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.homeTitle}</h2>
-        <EditorActions copy={copy} canEdit={canEdit} busy={busy} dirty={dirty}
-          saveDisabled={!!busy || !dirty || state.notice.kind === 'stale'}
-          publishDisabled={!!busy || !canPublish(state) || state.notice.kind === 'publish-stale'}
+        <EditorActions copy={copy} canEdit={canEdit} busy={busy}
+          saveDisabled={!draftReady || !!busy || !dirty || state.notice.kind === 'stale'}
+          publishDisabled={!draftReady || !!busy || !canPublish(state) || state.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
       </div>
       <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{copy.homeHelp}</p>
@@ -185,8 +201,9 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
       <AlertTitle>{copy.protectedTitle}</AlertTitle>
       <AlertDescription>{copy.protectedBody}</AlertDescription>
     </Alert> : null}
-    <EditorNotice copy={copy} state={state} busy={busy} signInHref={signInHref} onSaveOver={saveOver} onLoad={loadTheirs} onRefresh={refreshAndPublish} onRetry={tryAgain} />
-    {canEdit ? <BodyEditor key={generation} label={copy.editorLabel} locale={locale} allowAdvanced value={state.value}
+    <EditorNotice copy={copy} state={state} busy={busy} signInHref={signInHref} review={review}
+      onSaveOver={saveOver} onLoad={loadTheirs} onRefresh={refreshAndPublish} onPublishReviewed={publishReviewed} onRetry={tryAgain} />
+    {canEdit ? <BodyEditor key={generation} label={copy.editorLabel} locale={locale} allowAdvanced disabled={!draftReady} value={state.value}
       lang={state.language.tag === 'und' ? undefined : state.language.tag}
       dir={state.direction === 'none' ? undefined : state.direction}
       onChange={value => put({ type: 'edit', value })} />
@@ -194,14 +211,24 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   </section>;
 }
 
-function EditorNotice({ copy, state, busy, signInHref, onSaveOver, onLoad, onRefresh, onRetry }: {
+function isEditorState(value: unknown): value is EditorState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as Partial<EditorState>;
+  return typeof state.value === 'string' && typeof state.zoneHead === 'string'
+    && typeof state.navigationRevision === 'string' && typeof state.expectedHead !== 'undefined'
+    && !!state.notice && typeof state.notice === 'object';
+}
+
+function EditorNotice({ copy, state, busy, signInHref, review, onSaveOver, onLoad, onRefresh, onPublishReviewed, onRetry }: {
   copy: ZoneEditorMessages;
   state: EditorState;
   busy: string | null;
   signInHref: string;
+  review: PublicationReview | null;
   onSaveOver: () => void;
   onLoad: () => void;
   onRefresh: () => void;
+  onPublishReviewed: () => void;
   onRetry: () => void;
 }) {
   const notice = state.notice;
@@ -212,9 +239,13 @@ function EditorNotice({ copy, state, busy, signInHref, onSaveOver, onLoad, onRef
     </NoticeAlert>;
   }
   if (notice.kind === 'publish-stale') {
-    return <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
-      <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy} onClick={onRefresh}>{copy.refreshAndPublish}</Button>
-    </NoticeAlert>;
+    return <>
+      <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
+        {!review ? <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy}
+          isLoading={busy === 'load'} onClick={onRefresh}>{copy.refreshAndPublish}</Button> : null}
+      </NoticeAlert>
+      {review ? <PublicationReviewPanel selection={review.selection} copy={copy} busy={!!busy || !canPublish(state)} onPublish={onPublishReviewed} /> : null}
+    </>;
   }
   const failure = failureCopy(copy, notice.kind);
   if (!failure) return null;

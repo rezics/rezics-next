@@ -18,7 +18,7 @@ import {
 import { parseCursor, siteHref } from '../realm/route.ts';
 import { RealmBrowseRoute, SiteHomeRoute } from '../realm/routes.tsx';
 import { RealmUnavailable } from '../realm/states.tsx';
-import type { ReadFailure, ZoneRouteRead } from '../realm/types.ts';
+import type { ReadFailure, ZonePresentationRead, ZoneRouteRead } from '../realm/types.ts';
 import { ListFailure, Pager } from '../realm/views.tsx';
 import { shownZoneFailure, zoneFailureView } from './failure.ts';
 import { PageContainer } from '../shell/page.tsx';
@@ -46,6 +46,7 @@ import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { zoneTheme } from './theme.ts';
+import { savedSiteCuts } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
 import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneHomeDocument, zoneHomeDocument } from '../zone-editor/home-document.tsx';
@@ -400,13 +401,11 @@ async function standaloneSite(
   path: readonly string[],
   search: Search,
 ): Promise<ReactNode> {
-  const [route, presentation, messages, workMessages, jar, incoming] = await Promise.all([
+  const [route, presentation, messages, workMessages] = await Promise.all([
     readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)),
     readPresentation(resolved.zone),
     getMessages('realm', locale),
     getMessages('workPage', locale),
-    cookies(),
-    headers(),
   ]);
   if (!route.ok && route.failure === 'missing') notFound();
   if (!route.ok || !presentation.ok) {
@@ -437,36 +436,9 @@ async function standaloneSite(
       about: '',
     },
   };
-  const theme = zoneTheme(zone.tokens, {
-    reader: parseTheme(jar.get(THEME_COOKIE)?.value),
-    enabled: true,
-  });
   const mounts = presentation.data.navigation;
-  const frame = (children: ReactNode) => (
-    <ZoneFrame
-      zone={zone}
-      dataZone={resolved.zone}
-      theme={theme}
-      pkg={null}
-      nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined}
-      members={null}
-      actions={<ZoneEditLink zoneId={resolved.zone} space={ref} locale={locale} />}
-      masthead={<ZoneMasthead zone={zone} members={null} actions={<ZoneEditLink zoneId={resolved.zone} space={ref} locale={locale} />} />}
-      tabs={null}
-      site={{
-        label: zone.name.value,
-        links: [
-          { href: siteHref(locale, ref, []), label: zoneContentText(messages.home, locale) },
-          ...mounts.map((mount) => ({
-            href: siteHref(locale, ref, [mount.segment]),
-            label: zoneText(mount.name),
-          })),
-        ],
-      }}
-    >
-      {children}
-    </ZoneFrame>
-  );
+  const frame = (children: ReactNode) => <StandaloneZoneSiteFrame zone={zone} zoneId={resolved.zone} ref={ref}
+    locale={locale} messages={messages} presentation={presentation.data}>{children}</StandaloneZoneSiteFrame>;
   const read = route.data;
   if (read.kind === 'home') {
     // The published home page is its Content document. Mounts stay in the site navigation.
@@ -533,4 +505,27 @@ async function standaloneSite(
     );
   }
   return frame(<EntityPage resource={id} locale={locale} cursors={{}} />);
+}
+
+/** The common standalone Zone frame used by its public site and the editor's saved preview. */
+export async function StandaloneZoneSiteFrame({ zone, zoneId, ref, locale, messages, presentation, children }: {
+  zone: ZoneContext;
+  zoneId: string;
+  ref: string;
+  locale: import('../../i18n/define.ts').UiLocale;
+  messages: RealmMessages;
+  presentation: ZonePresentationRead;
+  children: ReactNode;
+}) {
+  const [jar, incoming] = await Promise.all([cookies(), headers()]);
+  const cuts = savedSiteCuts({ tokens: presentation.presentation.tokens, navigation: presentation.presentation.navigation },
+    presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })), ref, locale, messages.home);
+  const theme = zoneTheme(cuts.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value), enabled: true });
+  const actions = <ZoneEditLink zoneId={zoneId} space={ref} locale={locale} />;
+  return <ZoneFrame zone={zone} dataZone={zoneId} theme={theme} pkg={null}
+    nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined} members={null} actions={actions}
+    masthead={<ZoneMasthead zone={zone} members={null} actions={actions} />} tabs={null}
+    site={{ label: zone.name.value, links: cuts.navigation }}>
+    {children}
+  </ZoneFrame>;
 }

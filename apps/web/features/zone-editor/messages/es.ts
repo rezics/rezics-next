@@ -3,6 +3,7 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   sectionsLabel: 'Secciones del sitio',
+  unsavedWork: 'Cambios sin guardar',
   sectionHome: 'Inicio',
   homeTitle: 'Página de inicio',
   homeHelp:
@@ -36,8 +37,14 @@ const messages: ZoneEditorMessages = {
   loaded: 'Se cargó la página guardada. Tu texto sin guardar fue reemplazado.',
   publishStaleTitle: 'El sitio cambió antes de esta publicación',
   publishStaleBody:
-    'Tu borrador sigue aquí. Actualiza el sitio y publica de nuevo. Los lectores conservan la página que ya tienen.',
-  refreshAndPublish: 'Actualizar y publicar',
+    'Tu borrador sigue aquí. Revisa los enlaces y el diseño guardados más recientes antes de volver a publicar.',
+  refreshAndPublish: 'Revisar selección guardada',
+  publishReviewTitle: 'La selección guardada del sitio ha cambiado',
+  publishReviewBody: 'Revisa la navegación y el diseño guardados antes de volver a publicar. El texto de tu página de inicio sigue aquí.',
+  publishReviewNavigation: 'Navegación guardada',
+  publishReviewTheme: 'Diseño guardado',
+  publishReviewNoNavigation: 'No hay enlaces guardados.',
+  publishReviewed: 'Publicar esta selección',
   deniedTitle: 'No puedes editar esta zona',
   deniedBody: 'Esta zona no está disponible para que la cambies.',
   unavailableTitle: 'No se pudo alcanzar la página',

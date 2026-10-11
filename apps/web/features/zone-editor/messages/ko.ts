@@ -3,6 +3,7 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   sectionsLabel: '사이트 구역',
+  unsavedWork: '저장하지 않은 변경',
   sectionHome: '홈',
   homeTitle: '홈 페이지',
   homeHelp: '독자가 가장 먼저 보는 페이지를 씁니다. 초고는 공개하기 전까지 비공개로 남습니다.',
@@ -36,8 +37,14 @@ const messages: ZoneEditorMessages = {
   loaded: '저장된 페이지를 불러왔습니다. 저장하지 않은 글은 바뀌었습니다.',
   publishStaleTitle: '공개하기 전에 사이트가 바뀌었습니다',
   publishStaleBody:
-    '초고는 여기에 남아 있습니다. 사이트를 다시 읽고 공개하세요. 독자는 이미 보고 있는 페이지를 유지합니다.',
-  refreshAndPublish: '다시 읽고 공개',
+    '초고는 여기에 남아 있습니다. 다시 공개하기 전에 최신 저장 링크와 레이아웃을 확인하세요.',
+  refreshAndPublish: '저장된 선택 검토',
+  publishReviewTitle: '저장된 사이트 선택이 바뀌었습니다',
+  publishReviewBody: '다시 공개하기 전에 아래에 표시된 저장된 탐색과 레이아웃을 확인하세요. 홈 페이지 글은 여기에 남아 있습니다.',
+  publishReviewNavigation: '저장된 탐색',
+  publishReviewTheme: '저장된 레이아웃',
+  publishReviewNoNavigation: '저장된 링크가 없습니다.',
+  publishReviewed: '이 선택으로 공개',
   deniedTitle: '이 존을 편집할 수 없습니다',
   deniedBody: '이 존은 내가 바꿀 수 있는 상태가 아닙니다.',
   unavailableTitle: '페이지에 닿지 못했습니다',

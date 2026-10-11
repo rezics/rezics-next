@@ -3,6 +3,7 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   sectionsLabel: 'Sections du site',
+  unsavedWork: 'Modifications non enregistrées',
   sectionHome: 'Accueil',
   homeTitle: 'Page d’accueil',
   homeHelp:
@@ -37,8 +38,14 @@ const messages: ZoneEditorMessages = {
   loaded: 'La page enregistrée a été chargée. Votre texte non enregistré a été remplacé.',
   publishStaleTitle: 'Le site a changé avant cette publication',
   publishStaleBody:
-    'Votre brouillon est encore ici. Actualisez le site et publiez à nouveau. Les lecteurs gardent la page qu’ils ont déjà.',
-  refreshAndPublish: 'Actualiser et publier',
+    'Votre brouillon est encore ici. Vérifiez les liens et la mise en page enregistrés les plus récents avant de publier à nouveau.',
+  refreshAndPublish: 'Vérifier la sélection enregistrée',
+  publishReviewTitle: 'La sélection enregistrée du site a changé',
+  publishReviewBody: 'Vérifiez la navigation et la mise en page enregistrées ci-dessous avant de publier à nouveau. Le texte de votre page d’accueil reste ici.',
+  publishReviewNavigation: 'Navigation enregistrée',
+  publishReviewTheme: 'Mise en page enregistrée',
+  publishReviewNoNavigation: 'Aucun lien enregistré.',
+  publishReviewed: 'Publier cette sélection',
   deniedTitle: 'Vous ne pouvez pas modifier cette zone',
   deniedBody: 'Cette zone n’est pas disponible pour que vous la changiez.',
   unavailableTitle: 'La page n’a pas pu être jointe',

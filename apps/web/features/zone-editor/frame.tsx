@@ -7,12 +7,13 @@ import { ActingAs } from '../manage/realm-frame.tsx';
 import type { ManageMessages } from '../manage/messages.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { ZoneEditorSections } from './sections.tsx';
+import { useUnsavedZoneEditorSections } from './draft-provider.tsx';
 
 /**
  * The Zone an author is working on: its name, who is acting, and the site sections.
  * Authors can move between home, navigation, Realm and structural theme settings.
  */
-export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation, sectionRealm, sectionTheme, children }: {
+export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation, sectionRealm, sectionTheme, unsavedWork, children }: {
   name: string;
   editorPath: string;
   agent: AgentOption;
@@ -23,9 +24,12 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
   sectionNavigation: string;
   sectionRealm: string;
   sectionTheme: string;
+  unsavedWork?: string;
   children: ReactNode;
 }) {
   const manage = materializeData(manageMessages, { locale });
+  const unsaved = useUnsavedZoneEditorSections();
+  const sectionLabels = { home: sectionHome, navigation: sectionNavigation, theme: sectionTheme };
   return <div className="grid min-w-0 grid-cols-1">
     <div className="border-border/60 border-b bg-background/80">
       <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 pt-3 sm:px-6 lg:px-10">
@@ -39,6 +43,9 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
           <ActingAs agent={agent} locale={locale} messages={manageMessages} />
         </div>
         <h1 className="min-w-0 break-words font-semibold text-xl tracking-tight sm:text-3xl">{name}</h1>
+        {unsaved.length && unsavedWork ? <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          <span className="font-medium">{unsavedWork}: </span>{unsaved.map(section => sectionLabels[section]).join(', ')}
+        </p> : null}
         <ZoneEditorSections editorPath={editorPath} sectionsLabel={sectionsLabel} sectionHome={sectionHome} sectionNavigation={sectionNavigation} sectionRealm={sectionRealm} sectionTheme={sectionTheme} />
       </div>
     </div>
