@@ -211,6 +211,14 @@ async function retargetRestoredGraphRoute(apps: Record<string, string>): Promise
 const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts,
   retargetGraphRoute: retargetRestoredGraphRoute, now: Date.now };
 
+/** Wall time includes startup admission, storage copy and readiness. */
+export interface CorpusPreparationTiming {
+  restoreMs: number;
+  startupMs: number;
+  readinessMs: number;
+  totalMs: number;
+}
+
 /** Restore into a distinct project under the QA slot; the caller closes it in
  * finally. The containing .temp directory may move with preserved worker
  * artifacts; recorded absolute directories are provenance, not restore keys.
@@ -279,17 +287,28 @@ export async function restoreCatalogueBackup(path: string, runId: string,
       checkSignal();
     }
     cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
+    const copiedAt = now();
     stackAttempted = true;
     const startup = await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+    const startedUpAt = now();
     checkSignal();
     await retargetGraphRoute(apps);
     checkSignal();
     const admissionWaitMs = admissionWaitDuration(startup);
-    if (now() - startedAt - admissionWaitMs > 600_000) throw new Error('Catalogue restore exceeded 600 seconds');
+    const readyAt = now();
+    const preparation: CorpusPreparationTiming = {
+      restoreMs: copiedAt - startedAt,
+      startupMs: startedUpAt - copiedAt,
+      readinessMs: readyAt - startedUpAt,
+      totalMs: readyAt - startedAt,
+    };
+    if (preparation.totalMs - admissionWaitMs > 600_000)
+      throw new Error('Catalogue restore exceeded 600 seconds');
     return {
       apps,
       elapsedMs: now() - startedAt - admissionWaitMs,
       admissionWaitMs,
+      preparation,
       stop: async () => {
         const errors = await cleanup();
         if (errors.length) throw new AggregateError(errors, 'Catalogue restore cleanup failed');

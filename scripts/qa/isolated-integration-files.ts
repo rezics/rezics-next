@@ -22,6 +22,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   // Profile corpus checkpoints retain stopped owner stores for independent restores.
   'tests/qa/integration/profile-corpus-restore.test.ts',
+  // Seed checkpoints retain one API-built population and restore independent owner stores.
+  'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
   // M6 replays reference suites that require fresh rating and catalogue inventories.
@@ -205,6 +207,7 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/growth-search-refresh.test.ts',
   // API-built corpus backups need the product assembler and a closed raw-update endpoint.
   'tests/qa/integration/profile-corpus-restore.test.ts',
+  'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
   // Original title custody needs the exclusive product writer so startup can finish the Work-name directory.

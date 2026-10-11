@@ -28,10 +28,10 @@ const sizes: Record<WorkProfileDimension, readonly [number, number, number]> = {
   unrelatedWorks: [4, 16, 64],
   unrelatedPosts: [4, 16, 64],
   follows: [4, 16, 64],
-  memberships: [2, 8, 32],
+  memberships: [4, 16, 64],
   historyDepth: [2, 8, 32],
   realmSize: [4, 16, 64],
-  conceptVocabulary: [8, 32, 128],
+  conceptVocabulary: [4, 16, 64],
 };
 export function workProfileDimensions(
   dimension: WorkProfileDimension,
@@ -178,8 +178,12 @@ function checkDimensions(actual: CorpusDimensions, expected: CorpusDimensions): 
       throw new Error(`Corpus dimension ${key}: ${actual[key]} != ${expected[key]}`);
 }
 
-/** Build one dimension once, then let each measurement restore its own copy.
- * Recipe methods receive only the public client; no storage seeding is done here. */
+/** Build one dimension through public APIs and retain each scale's stopped cut.
+ * Stable entity identities belong to the retained backup: restoring it preserves
+ * ids; a fresh API build generates new ids. The corpus id identifies the recipe
+ * and storage cut, not deterministic entity ids across fresh builds.
+ * Scales share command keys, so growing a live source replays earlier commands
+ * instead of creating a second population. Readers restore their own copies. */
 export async function prepareWorkProfileCorpus(input: {
   recipe: WorkProfileCorpusRecipe;
   api: CorpusApi;

@@ -5,7 +5,7 @@ import { restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.t
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
 
-async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
+async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'timing' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
   const directory = mkdtempSync(join(root, '.temp/catalogue-restore-'));
   const runId = directory.split('/').at(-1)!.toLowerCase();
   const project = `rezics-qa-${runId}`;
@@ -32,8 +32,8 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ad
     const operation = restoreCatalogueBackup(join(directory, 'backup.json'), runId, {
       now: () => elapsed,
       dockerEnvironment: () => ({}), projectRunning: () => false,
-      freshPorts: async () => ({}),
-      retargetGraphRoute: async apps => { retargeted.push(apps); },
+      freshPorts: async () => { if (mode === 'timing') elapsed += 10; return {}; },
+      retargetGraphRoute: async apps => { retargeted.push(apps); if (mode === 'timing') elapsed += 50; },
       run: (_program, args) => {
         commands.push(args);
         if (args[0] === 'volume' && args[1] === 'ls') {
@@ -44,12 +44,14 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ad
         return '';
       },
       copyVolume: async (_source, destination) => {
+        if (mode === 'timing') elapsed += 20;
         volumes.add(destination);
         if (mode === 'copy-failure') throw failure;
       },
       task: async args => {
         commands.push(args);
         if (args[0] === 'stack:up') {
+          if (mode === 'timing') elapsed += 100;
           running = true;
           if (mode === 'startup-failure') throw new Error('injected startup failure');
           if (mode === 'cleanup-failure') throw failure;
@@ -67,12 +69,18 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ad
         return '';
       },
     });
-    if (mode === 'success' || mode === 'admission-wait') {
+    if (mode === 'success' || mode === 'timing' || mode === 'admission-wait') {
       const restored = await operation;
       if (mode === 'admission-wait') {
         expect(restored.elapsedMs).toBe(300_000);
         expect(restored.admissionWaitMs).toBe(700_000);
+        expect(restored.preparation).toEqual({ restoreMs: 0, startupMs: 1_000_000,
+          readinessMs: 0, totalMs: 1_000_000 });
       }
+      if (mode === 'timing') expect(restored.preparation).toEqual({
+        restoreMs: 10 + 20 * VOLUME_KINDS.length, startupMs: 100, readinessMs: 50,
+        totalMs: 160 + 20 * VOLUME_KINDS.length,
+      });
       expect(running).toBe(true);
       expect(volumes.size).toBe(VOLUME_KINDS.length);
       expect(retargeted).toHaveLength(1);
@@ -117,6 +125,9 @@ test('catalogue restore: exceeding the budget after startup removes the stack, v
 });
 test('catalogue restore: memory admission does not consume the preparation budget', async () => {
   await restoreScenario('admission-wait');
+});
+test('catalogue restore: preparation records copy, startup and readiness wall time separately', async () => {
+  await restoreScenario('timing');
 });
 test('catalogue restore: preexisting storage and directories survive rejection', async () => {
   await restoreScenario('existing-volume');

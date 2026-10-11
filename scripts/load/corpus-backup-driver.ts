@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
-import { restoreCatalogueBackup, retainStoppedOwnerBackup } from './catalogue-backup.ts';
+import { restoreCatalogueBackup, retainStoppedOwnerBackup,
+  type CorpusPreparationTiming } from './catalogue-backup.ts';
 import type { CorpusBackupDriver } from './work-profile-corpus.ts';
 import { dockerEnvironment, root, stream } from '../fixture/stack.ts';
 
@@ -26,10 +27,13 @@ export interface CorpusBackupDriverOptions {
 
 interface RestoredCopy {
   backup: Awaited<ReturnType<typeof restoreCatalogueBackup>>;
+  preparation: CorpusPreparationTiming;
   stopSmokeRead?: () => Promise<void>;
 }
 
 export interface ManagedCorpusBackupDriver extends CorpusBackupDriver {
+  /** Measured wall time through migrations and API smoke readiness. */
+  preparation(target: string): CorpusPreparationTiming | undefined;
   /** Stop the in-process smoke reader and remove this restored QA project. */
   stop(target: string): Promise<void>;
 }
@@ -83,6 +87,7 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
       if (restored.has(target)) throw new Error('Corpus restore target is already open');
       signal.throwIfAborted();
       const runId = restoreRunId(target);
+      const startedAt = performance.now();
       const backup = await restoreCatalogueBackup(backupPath, runId, { signal });
       let stopSmokeRead: (() => Promise<void>) | undefined;
       try {
@@ -90,7 +95,11 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
         await migrateRestoredCopy(runId, signal);
         stopSmokeRead = (await options.smokeRead({ target, runId, apps: backup.apps, signal })) ?? undefined;
         signal.throwIfAborted();
-        restored.set(target, { backup, stopSmokeRead });
+        const totalMs = performance.now() - startedAt;
+        const preparation = { ...backup.preparation,
+          readinessMs: totalMs - backup.preparation.restoreMs - backup.preparation.startupMs,
+          totalMs };
+        restored.set(target, { backup, stopSmokeRead, preparation });
       } catch (error) {
         const cleanup: unknown[] = [];
         try {
@@ -109,6 +118,11 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
           });
         throw error;
       }
+    },
+
+    preparation(target) {
+      const timing = restored.get(target)?.preparation;
+      return timing ? { ...timing } : undefined;
     },
 
     async stop(target) {
