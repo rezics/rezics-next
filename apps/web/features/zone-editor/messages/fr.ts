@@ -5,7 +5,8 @@ const messages: ZoneEditorMessages = {
   sectionsLabel: 'Sections du site',
   sectionHome: 'Accueil',
   homeTitle: 'Page d’accueil',
-  homeHelp: 'Écrivez la page que les lecteurs voient en premier. Un brouillon reste privé jusqu’à sa publication.',
+  homeHelp:
+    'Écrivez la page que les lecteurs voient en premier. Un brouillon reste privé jusqu’à sa publication.',
   editorLabel: 'Page d’accueil',
   statusPrivate: 'Vous seul pouvez voir ce brouillon.',
   statusLive: 'Les lecteurs voient cette page.',
@@ -16,7 +17,8 @@ const messages: ZoneEditorMessages = {
   savedReplayed: 'Brouillon enregistré. L’enregistrement précédent était déjà passé.',
   preview: 'Aperçu',
   previewTitle: 'Aperçu du brouillon',
-  previewHelp: 'Voici le brouillon enregistré, tel que les lecteurs le verront. Seules les personnes qui peuvent modifier cette zone peuvent ouvrir cet aperçu.',
+  previewHelp:
+    'Voici le brouillon enregistré, tel que les lecteurs le verront. Seules les personnes qui peuvent modifier cette zone peuvent ouvrir cet aperçu.',
   previewEmptyTitle: 'Pas encore de brouillon',
   previewEmptyBody: 'Enregistrez la page d’accueil, puis revenez ici pour la lire.',
   backToEditor: 'Retour à l’éditeur',
@@ -25,19 +27,23 @@ const messages: ZoneEditorMessages = {
   publishing: 'Publication…',
   published: 'Publié. Les lecteurs voient cette page.',
   publishedReplayed: 'Publié. La publication précédente était déjà passée.',
-  saveFirst: 'Enregistrez le brouillon avant de publier. Les lecteurs reçoivent la page enregistrée, pas les modifications non enregistrées.',
+  saveFirst:
+    'Enregistrez le brouillon avant de publier. Les lecteurs reçoivent la page enregistrée, pas les modifications non enregistrées.',
   staleTitle: 'Cette page a été enregistrée ailleurs',
-  staleBody: 'Votre texte est encore ici. Vous pouvez l’enregistrer par-dessus l’autre version, ou charger cette version.',
+  staleBody:
+    'Votre texte est encore ici. Vous pouvez l’enregistrer par-dessus l’autre version, ou charger cette version.',
   saveOver: 'Enregistrer mon texte',
   loadTheirs: 'Charger la page enregistrée',
   loaded: 'La page enregistrée a été chargée. Votre texte non enregistré a été remplacé.',
   publishStaleTitle: 'Le site a changé avant cette publication',
-  publishStaleBody: 'Votre brouillon est encore ici. Actualisez le site et publiez à nouveau. Les lecteurs gardent la page qu’ils ont déjà.',
+  publishStaleBody:
+    'Votre brouillon est encore ici. Actualisez le site et publiez à nouveau. Les lecteurs gardent la page qu’ils ont déjà.',
   refreshAndPublish: 'Actualiser et publier',
   deniedTitle: 'Vous ne pouvez pas modifier cette zone',
   deniedBody: 'Cette zone n’est pas disponible pour que vous la changiez.',
   unavailableTitle: 'La page n’a pas pu être jointe',
-  unavailableBody: 'REZICS n’a pas répondu. Réessayez. Une publication déjà passée ne sera pas répétée.',
+  unavailableBody:
+    'REZICS n’a pas répondu. Réessayez. Une publication déjà passée ne sera pas répétée.',
   missingTitle: 'Cette zone n’est pas disponible',
   missingBody: 'Elle a peut-être été retirée, ou elle ne vous est pas ouverte.',
   invalidTitle: 'Ce changement n’a pas été accepté',
@@ -45,15 +51,19 @@ const messages: ZoneEditorMessages = {
   conflictTitle: 'Cet enregistrement est entré en conflit avec un autre',
   conflictBody: 'Votre texte est encore ici. Réessayez.',
   signInTitle: 'Connectez-vous pour continuer à modifier',
-  signInBody: 'Votre session est terminée. Connectez-vous à nouveau, puis enregistrez. Votre texte est encore dans cet onglet.',
+  signInBody:
+    'Votre session est terminée. Connectez-vous à nouveau, puis enregistrez. Votre texte est encore dans cet onglet.',
   tryAgain: 'Réessayer',
   protectedTitle: 'Ce brouillon ne peut pas être modifié ici',
-  protectedBody: 'La page enregistrée utilise un contenu que cet éditeur ne change pas. Elle est montrée telle qu’elle sera lue, et elle ne sera pas écrasée.',
+  protectedBody:
+    'La page enregistrée utilise un contenu que cet éditeur ne change pas. Elle est montrée telle qu’elle sera lue, et elle ne sera pas écrasée.',
   sectionNavigation: 'Navigation',
   navTitle: 'Navigation',
-  navHelp: 'Choisissez les pages que les lecteurs peuvent ouvrir depuis cette zone, et leur ordre. Chaque lien porte le nom de la page.',
+  navHelp:
+    'Choisissez les pages que les lecteurs peuvent ouvrir depuis cette zone, et leur ordre. Chaque lien porte le nom de la page.',
   linksLabel: 'Liens',
-  emptyLinks: 'Pas encore de lien. L’accueil reste en premier. Ajoutez une page pour offrir une autre entrée.',
+  emptyLinks:
+    'Pas encore de lien. L’accueil reste en premier. Ajoutez une page pour offrir une autre entrée.',
   addPage: 'Page',
   addPagePlaceholder: 'Trouver une page',
   addLink: 'Ajouter un lien',
@@ -62,28 +72,41 @@ const messages: ZoneEditorMessages = {
   moveDown: 'Descendre',
   removeLink: 'Retirer',
   noPageMatches: 'Aucune page avec ce nom.',
-  navSaveFirst: 'Enregistrez le brouillon avant de publier. Les lecteurs reçoivent les liens enregistrés, pas les modifications non enregistrées.',
+  navSaveFirst:
+    'Enregistrez le brouillon avant de publier. Les lecteurs reçoivent les liens enregistrés, pas les modifications non enregistrées.',
   navSaved: 'Brouillon enregistré.',
   navSaveProgress: 'Modifications enregistrées :',
-  navSaveRemaining: 'Certaines modifications sont enregistrées. Reprenez l’enregistrement pour sauvegarder les autres avant de publier.',
+  navSaveRemaining:
+    'Certaines modifications sont enregistrées. Reprenez l’enregistrement pour sauvegarder les autres avant de publier.',
   navResume: 'Reprendre l’enregistrement',
   navSavedHint: 'Publiez le site pour que les lecteurs voient ces liens.',
   navStatus: 'Les lecteurs voient ces liens une fois le site publié.',
   navStaleTitle: 'Ces liens ont été enregistrés ailleurs',
-  navStaleBody: 'Vos liens sont encore ici. Vous pouvez les enregistrer par-dessus l’autre version, ou charger cette version.',
-  saveLinks: 'Enregistrer mes liens',
+  navStaleBody:
+    'Les liens actuels n’ont pas pu être chargés pour vérification. Rechargez-les avant de modifier ou d’enregistrer.',
+  saveLinks: 'Vérifier les liens actuels',
+  navReview:
+    'Les liens actuels sont chargés. Vérifiez vos modifications restantes, puis enregistrez à nouveau.',
+  navDropped: 'Ces modifications ont été abandonnées car leurs liens ont été supprimés ailleurs :',
+  navMove: 'Déplacer',
+  navReviewClean:
+    'Les liens actuels sont chargés. Il ne reste aucune modification non enregistrée.',
   loadLinks: 'Charger la navigation enregistrée',
-  navLoaded: 'Les liens enregistrés ont été chargés. Vos modifications non enregistrées ont été remplacées.',
+  navLoaded:
+    'Les liens enregistrés ont été chargés. Vos modifications non enregistrées ont été remplacées.',
   privateLink: 'Privé',
   pathInvalid: 'Utilisez un chemin court en lettres minuscules, chiffres et traits d’union.',
   duplicatePath: 'Ce chemin est déjà un lien.',
-  navIncomplete: 'Tous les liens ne sont pas encore chargés. L’enregistrement reste indisponible jusqu’à la liste complète. Chargez davantage pour continuer.',
+  navIncomplete:
+    'Tous les liens ne sont pas encore chargés. Chargez plus de liens avant de modifier ou d’enregistrer.',
   navContinue: 'Charger plus de liens',
-  pathEditLimited: 'Le chemin d’un lien enregistré ne peut pas encore être modifié ici. Gardez ce chemin, ou retirez le lien et ajoutez-le à nouveau.',
+  pathEditLimited:
+    'Le chemin d’un lien enregistré ne peut pas encore être modifié ici. Gardez ce chemin, ou retirez le lien et ajoutez-le à nouveau.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Communauté',
   realmTitle: 'Communauté',
-  realmHelp: 'Rattachez une communauté par son identifiant. Elle s’affiche sur cette zone, et ses responsables peuvent la retirer.',
+  realmHelp:
+    'Rattachez une communauté par son identifiant. Elle s’affiche sur cette zone, et ses responsables peuvent la retirer.',
   realmHandle: 'Identifiant de la communauté',
   realmAttach: 'Rattacher',
   realmAttaching: 'Rattachement…',

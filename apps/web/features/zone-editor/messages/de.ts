@@ -5,7 +5,8 @@ const messages: ZoneEditorMessages = {
   sectionsLabel: 'Bereiche der Website',
   sectionHome: 'Start',
   homeTitle: 'Startseite',
-  homeHelp: 'Schreiben Sie die Seite, die Leser zuerst sehen. Ein Entwurf bleibt privat, bis Sie ihn veröffentlichen.',
+  homeHelp:
+    'Schreiben Sie die Seite, die Leser zuerst sehen. Ein Entwurf bleibt privat, bis Sie ihn veröffentlichen.',
   editorLabel: 'Startseite',
   statusPrivate: 'Nur Sie können diesen Entwurf sehen.',
   statusLive: 'Leser sehen diese Seite.',
@@ -16,28 +17,34 @@ const messages: ZoneEditorMessages = {
   savedReplayed: 'Entwurf gespeichert. Das frühere Speichern war bereits durch.',
   preview: 'Vorschau',
   previewTitle: 'Entwurfsvorschau',
-  previewHelp: 'Dies ist der gespeicherte Entwurf, so wie Leser ihn sehen werden. Nur Personen, die diese Zone bearbeiten dürfen, können diese Vorschau öffnen.',
+  previewHelp:
+    'Dies ist der gespeicherte Entwurf, so wie Leser ihn sehen werden. Nur Personen, die diese Zone bearbeiten dürfen, können diese Vorschau öffnen.',
   previewEmptyTitle: 'Noch kein Entwurf',
-  previewEmptyBody: 'Speichern Sie die Startseite und kehren Sie dann hierher zurück, um sie zu lesen.',
+  previewEmptyBody:
+    'Speichern Sie die Startseite und kehren Sie dann hierher zurück, um sie zu lesen.',
   backToEditor: 'Zurück zum Editor',
   viewSite: 'Website ansehen',
   publish: 'Veröffentlichen',
   publishing: 'Wird veröffentlicht…',
   published: 'Veröffentlicht. Leser sehen diese Seite.',
   publishedReplayed: 'Veröffentlicht. Das frühere Veröffentlichen war bereits durch.',
-  saveFirst: 'Speichern Sie den Entwurf, bevor Sie veröffentlichen. Leser erhalten die gespeicherte Seite, nicht ungespeicherte Änderungen.',
+  saveFirst:
+    'Speichern Sie den Entwurf, bevor Sie veröffentlichen. Leser erhalten die gespeicherte Seite, nicht ungespeicherte Änderungen.',
   staleTitle: 'Diese Seite wurde an anderer Stelle gespeichert',
-  staleBody: 'Ihr Text ist noch hier. Sie können ihn über die andere Fassung speichern oder jene Fassung laden.',
+  staleBody:
+    'Ihr Text ist noch hier. Sie können ihn über die andere Fassung speichern oder jene Fassung laden.',
   saveOver: 'Meinen Text speichern',
   loadTheirs: 'Gespeicherte Seite laden',
   loaded: 'Die gespeicherte Seite wurde geladen. Ihr ungespeicherter Text wurde ersetzt.',
   publishStaleTitle: 'Die Website hat sich vor dem Veröffentlichen geändert',
-  publishStaleBody: 'Ihr Entwurf ist noch hier. Aktualisieren Sie die Website und veröffentlichen Sie erneut. Leser behalten die Seite, die sie schon haben.',
+  publishStaleBody:
+    'Ihr Entwurf ist noch hier. Aktualisieren Sie die Website und veröffentlichen Sie erneut. Leser behalten die Seite, die sie schon haben.',
   refreshAndPublish: 'Aktualisieren und veröffentlichen',
   deniedTitle: 'Sie können diese Zone nicht bearbeiten',
   deniedBody: 'Diese Zone steht Ihnen zum Ändern nicht zur Verfügung.',
   unavailableTitle: 'Die Seite war nicht erreichbar',
-  unavailableBody: 'REZICS hat nicht geantwortet. Versuchen Sie es erneut. Ein Veröffentlichen, das schon durch war, wird nicht wiederholt.',
+  unavailableBody:
+    'REZICS hat nicht geantwortet. Versuchen Sie es erneut. Ein Veröffentlichen, das schon durch war, wird nicht wiederholt.',
   missingTitle: 'Diese Zone ist nicht verfügbar',
   missingBody: 'Sie wurde vielleicht entfernt oder ist für Sie nicht geöffnet.',
   invalidTitle: 'Diese Änderung wurde nicht angenommen',
@@ -45,15 +52,19 @@ const messages: ZoneEditorMessages = {
   conflictTitle: 'Dieses Speichern stand im Konflikt mit einem anderen',
   conflictBody: 'Ihr Text ist noch hier. Versuchen Sie es erneut.',
   signInTitle: 'Melden Sie sich an, um weiter zu bearbeiten',
-  signInBody: 'Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an und speichern Sie dann. Ihr Text bleibt in diesem Tab.',
+  signInBody:
+    'Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an und speichern Sie dann. Ihr Text bleibt in diesem Tab.',
   tryAgain: 'Erneut versuchen',
   protectedTitle: 'Dieser Entwurf lässt sich hier nicht bearbeiten',
-  protectedBody: 'Die gespeicherte Seite enthält Inhalt, den dieser Editor nicht verändert. Sie wird so gezeigt, wie sie gelesen wird, und nicht überschrieben.',
+  protectedBody:
+    'Die gespeicherte Seite enthält Inhalt, den dieser Editor nicht verändert. Sie wird so gezeigt, wie sie gelesen wird, und nicht überschrieben.',
   sectionNavigation: 'Navigation',
   navTitle: 'Navigation',
-  navHelp: 'Wählen Sie die Seiten, die Leser von dieser Zone aus öffnen können, und die Reihenfolge. Jeder Link trägt den Namen der Seite.',
+  navHelp:
+    'Wählen Sie die Seiten, die Leser von dieser Zone aus öffnen können, und die Reihenfolge. Jeder Link trägt den Namen der Seite.',
   linksLabel: 'Links',
-  emptyLinks: 'Noch keine Links. Start bleibt zuerst. Fügen Sie eine Seite hinzu, damit Leser einen weiteren Weg haben.',
+  emptyLinks:
+    'Noch keine Links. Start bleibt zuerst. Fügen Sie eine Seite hinzu, damit Leser einen weiteren Weg haben.',
   addPage: 'Seite',
   addPagePlaceholder: 'Seite finden',
   addLink: 'Link hinzufügen',
@@ -62,28 +73,41 @@ const messages: ZoneEditorMessages = {
   moveDown: 'Nach unten',
   removeLink: 'Entfernen',
   noPageMatches: 'Keine Seite mit diesem Namen.',
-  navSaveFirst: 'Speichern Sie den Entwurf vor dem Veröffentlichen. Leser erhalten die gespeicherten Links, nicht ungespeicherte Änderungen.',
+  navSaveFirst:
+    'Speichern Sie den Entwurf vor dem Veröffentlichen. Leser erhalten die gespeicherten Links, nicht ungespeicherte Änderungen.',
   navSaved: 'Entwurf gespeichert.',
   navSaveProgress: 'Gespeicherte Änderungen:',
-  navSaveRemaining: 'Einige Änderungen sind gespeichert. Setzen Sie das Speichern fort, um die restlichen Änderungen vor dem Veröffentlichen zu speichern.',
+  navSaveRemaining:
+    'Einige Änderungen sind gespeichert. Setzen Sie das Speichern fort, um die restlichen Änderungen vor dem Veröffentlichen zu speichern.',
   navResume: 'Speichern fortsetzen',
   navSavedHint: 'Veröffentlichen Sie die Website, damit Leser diese Links sehen.',
   navStatus: 'Leser sehen diese Links, wenn die Website veröffentlicht ist.',
   navStaleTitle: 'Diese Links wurden anderswo gespeichert',
-  navStaleBody: 'Ihre Links sind noch hier. Sie können sie über die andere Fassung speichern oder diese Fassung laden.',
-  saveLinks: 'Meine Links speichern',
+  navStaleBody:
+    'Die aktuellen Links konnten nicht zur Prüfung geladen werden. Laden Sie sie erneut, bevor Sie bearbeiten oder speichern.',
+  saveLinks: 'Aktuelle Links prüfen',
+  navReview:
+    'Die aktuellen Links sind geladen. Prüfen Sie Ihre verbleibenden Änderungen und speichern Sie erneut.',
+  navDropped: 'Diese Änderungen wurden verworfen, weil ihre Links anderswo entfernt wurden:',
+  navMove: 'Verschieben',
+  navReviewClean:
+    'Die aktuellen Links sind geladen. Es gibt keine ungespeicherten Änderungen mehr.',
   loadLinks: 'Gespeicherte Navigation laden',
-  navLoaded: 'Die gespeicherten Links wurden geladen. Ihre ungespeicherten Änderungen wurden ersetzt.',
+  navLoaded:
+    'Die gespeicherten Links wurden geladen. Ihre ungespeicherten Änderungen wurden ersetzt.',
   privateLink: 'Privat',
   pathInvalid: 'Verwenden Sie einen kurzen Pfad aus Kleinbuchstaben, Zahlen und Bindestrichen.',
   duplicatePath: 'Diesen Pfad gibt es schon als Link.',
-  navIncomplete: 'Noch sind nicht alle Links geladen. Speichern bleibt aus, bis die vollständige Liste da ist. Laden Sie mehr, um fortzufahren.',
+  navIncomplete:
+    'Noch sind nicht alle Links geladen. Laden Sie weitere Links, bevor Sie bearbeiten oder speichern.',
   navContinue: 'Weitere Links laden',
-  pathEditLimited: 'Der Pfad eines gespeicherten Links lässt sich hier noch nicht ändern. Behalten Sie diesen Pfad, oder entfernen Sie den Link und fügen Sie ihn erneut hinzu.',
+  pathEditLimited:
+    'Der Pfad eines gespeicherten Links lässt sich hier noch nicht ändern. Behalten Sie diesen Pfad, oder entfernen Sie den Link und fügen Sie ihn erneut hinzu.',
   // Machine-drafted; needs native review.
   sectionRealm: 'Community',
   realmTitle: 'Community',
-  realmHelp: 'Hängen Sie eine Community über ihren Handle an. Sie erscheint in dieser Zone, und ihre Verwalter können sie zurückziehen.',
+  realmHelp:
+    'Hängen Sie eine Community über ihren Handle an. Sie erscheint in dieser Zone, und ihre Verwalter können sie zurückziehen.',
   realmHandle: 'Community-Handle',
   realmAttach: 'Anhängen',
   realmAttaching: 'Wird angehängt…',

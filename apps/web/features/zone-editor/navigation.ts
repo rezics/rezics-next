@@ -6,7 +6,15 @@ const segmentPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  * Segments the Zone already uses for its own pages. A mount cannot take one.
  * Kept beside the editor so a path is refused before the command is sent.
  */
-const reservedSegments = new Set(['browse', 'discussions', 'decisions', 'about', 'works', 'submit', 'w']);
+const reservedSegments = new Set([
+  'browse',
+  'discussions',
+  'decisions',
+  'about',
+  'works',
+  'submit',
+  'w',
+]);
 
 /** One Zone read page; Main's default and the editor's continuation size. */
 export const NAV_PAGE_SIZE = 50;
@@ -38,13 +46,14 @@ export type NavNotice =
   | { kind: 'saved'; replayed: boolean }
   | { kind: 'stale'; currentHead: string | null }
   | { kind: 'loaded' }
+  | { kind: 'review'; dropped: { kind: NavigationEdit['kind']; name: string }[] }
   | { kind: AuthoringFailure };
 
 export interface NavigationState {
   links: SiteLink[];
   /** The list the server last confirmed, in its order. */
   saved: SiteLink[];
-  /** Author operations projected over the server baseline, including while loading. */
+  /** Identity-keyed operations authored only against a complete list. */
   pending: NavigationEdit[];
   /** Navigation Structure revision the next command names. */
   head: string;
@@ -58,10 +67,9 @@ export interface NavigationState {
 }
 
 export type NavigationEdit =
-  | { kind: 'remove'; id: string }
-  | { kind: 'move'; id: string; after: string | null }
-  | { kind: 'add'; link: SiteLink; after: string | null }
-  | { kind: 'segment'; id: string; segment: string };
+  | { kind: 'remove'; occurrence: string; name: string }
+  | { kind: 'move'; occurrence: string; name: string; position: number }
+  | { kind: 'add'; link: SiteLink; position: number };
 
 export type NavEvent =
   | { type: 'move'; index: number; direction: -1 | 1 }
@@ -71,9 +79,17 @@ export type NavEvent =
   | { type: 'stale'; currentHead: string | null }
   | { type: 'saved'; links: SiteLink[]; head: string; replayed: boolean }
   | { type: 'progress'; progress: NavigationSaveProgress }
-  | { type: 'loaded'; links: SiteLink[]; head: string; navigation: string; complete: boolean; after: string | null }
+  | {
+      type: 'loaded';
+      links: SiteLink[];
+      head: string;
+      navigation: string;
+      complete: boolean;
+      after: string | null;
+    }
   | { type: 'continued'; links: SiteLink[]; complete: boolean; after: string | null }
-  | { type: 'retarget'; head: string; saved: SiteLink[]; links: SiteLink[]; pending?: NavigationEdit[]; navigation: string; complete: boolean; after: string | null }
+  | { type: 'review'; links: SiteLink[]; head: string; navigation: string }
+  | { type: 'revision'; head: string }
   | { type: 'failed'; failure: AuthoringFailure };
 
 /** Live Zone read for the first page; revision-specific read for every later page. */
@@ -85,7 +101,10 @@ export type NavigationReadTarget =
  * Pin continuation (and resume) pages to the revision from the first page so a
  * concurrent write cannot mix heads across the inventory.
  */
-export function navigationReadTarget(pinnedHead: string | null, after: string | undefined): NavigationReadTarget {
+export function navigationReadTarget(
+  pinnedHead: string | null,
+  after: string | undefined,
+): NavigationReadTarget {
   if (after && pinnedHead) return { kind: 'revision', revision: pinnedHead, after };
   return { kind: 'current' };
 }
@@ -94,12 +113,17 @@ export type NavPosition = 'first' | 'last' | { after: string };
 
 export type NavOp =
   | { kind: 'remove'; occurrence: string }
-  | { kind: 'insert'; target: string; segment: string; disclosure: 'public' | 'private'; position: NavPosition }
+  | {
+      kind: 'insert';
+      clientId: string;
+      target: string;
+      segment: string;
+      disclosure: 'public' | 'private';
+      position: NavPosition;
+    }
   | { kind: 'move'; occurrence: string; position: 'first' | { after: string } };
 
-export type NavigationPlan =
-  | { ok: true; ops: NavOp[] }
-  | { ok: false; reason: 'path-edit' };
+export type NavigationPlan = { ok: true; ops: NavOp[] } | { ok: false; reason: 'path-edit' };
 
 export interface NavWriteResult {
   ok: true;
@@ -114,14 +138,21 @@ export type NavWriteFailure =
 
 /** A path a mount can use: lowercase words, not one of the Zone's own pages. */
 export function segmentFor(name: string, taken: readonly string[]): string | null {
-  const folded = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const base = folded.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+  const folded = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const base = folded
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
   const root = !base || reservedSegments.has(base) ? 'page' : base;
   const used = new Set(taken);
   for (let n = 1; n < 100; n += 1) {
     const suffix = n === 1 ? '' : `-${n}`;
     const candidate = `${root.slice(0, 64 - suffix.length)}${suffix}`.replace(/-+$/g, '');
-    if (segmentPattern.test(candidate) && !reservedSegments.has(candidate) && !used.has(candidate)) return candidate;
+    if (segmentPattern.test(candidate) && !reservedSegments.has(candidate) && !used.has(candidate))
+      return candidate;
   }
   return null;
 }
@@ -134,59 +165,61 @@ export function isNavigationDirty(state: NavigationState): boolean {
   return state.pending.length > 0;
 }
 
-/** Replay stable identities, never loaded-list indices, over an extended baseline. */
+/** Place only named identities. Untouched server entries retain their relative order. */
 function applyEdits(saved: readonly SiteLink[], edits: readonly NavigationEdit[]): SiteLink[] {
-  let links = saved.map(link => ({ ...link }));
-  for (const edit of edits) {
-    if (edit.kind === 'remove') links = links.filter(link => link.id !== edit.id);
-    else if (edit.kind === 'segment') links = links.map(link => link.id === edit.id ? { ...link, segment: edit.segment } : link);
-    else {
-      const link = edit.kind === 'add' ? edit.link : links.find(item => item.id === edit.id);
-      if (!link) continue;
-      links = links.filter(item => item.id !== link.id);
-      const anchor = edit.after === null ? -1 : links.findIndex(item => item.id === edit.after);
-      const at = edit.after === null ? 0 : anchor < 0 ? links.length : anchor + 1;
-      links.splice(at, 0, link);
-    }
+  const named = new Set(edits.flatMap((edit) => (edit.kind === 'add' ? [] : [edit.occurrence])));
+  const links = saved
+    .filter((link) => !link.occurrence || !named.has(link.occurrence))
+    .map((link) => ({ ...link }));
+  const placements = edits
+    .flatMap((edit) => {
+      if (edit.kind === 'remove') return [];
+      const link =
+        edit.kind === 'add' ? edit.link : saved.find((link) => link.occurrence === edit.occurrence);
+      return link ? [{ link, position: edit.position }] : [];
+    })
+    .sort((left, right) => left.position - right.position);
+  for (const { link, position } of placements) {
+    links.splice(Math.min(position, links.length), 0, { ...link });
   }
   return links;
 }
 
-/** Author events modify operations, never infer them from the currently visible slice. */
-function edited(state: NavigationState, pending: NavigationEdit[]): NavigationState {
-  return { ...state, pending, links: applyEdits(state.saved, pending), notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
-}
-
-function sameOrder(left: readonly SiteLink[], right: readonly SiteLink[]): boolean {
-  return left.length === right.length && left.every((link, index) => link.id === right[index]!.id);
-}
-
-/** Cancel this unsaved entry while retaining other entries' ordering intentions. */
-function cancelAddedEntry(state: NavigationState, id: string): NavigationEdit[] {
-  // Other operations may use this entry as an anchor. Keep its transient position
-  // in the journal and remove it afterwards; an incomplete baseline cannot tell
-  // us its actual predecessor. The complete save plan never inserts this entry.
-  if (state.pending.some(edit => (edit.kind === 'add' || edit.kind === 'move') && edit.after === id)) {
-    return [...state.pending, { kind: 'remove', id }];
-  }
-  return state.pending.filter(edit => (edit.kind === 'add' ? edit.link.id : edit.id) !== id);
-}
-
-/** Apply only the author's edits to a fresh baseline, including a partial stale reload. */
-export function rebaseNavigationEdits(state: NavigationState, server: readonly SiteLink[]): { links: SiteLink[]; pending: NavigationEdit[] } {
-  const matched = new Map<string, SiteLink>();
-  for (const edit of state.pending) {
-    if (edit.kind !== 'add') continue;
-    const found = server.find(link => link.occurrence && link.target === edit.link.target && link.segment === edit.link.segment);
-    if (found) matched.set(edit.link.id, found);
-  }
-  const identity = (id: string) => matched.get(id)?.id ?? id;
-  const edits = state.pending.map((edit): NavigationEdit => {
-    if (edit.kind === 'add') return { ...edit, link: matched.get(edit.link.id) ?? edit.link, after: edit.after === null ? null : identity(edit.after) };
-    if (edit.kind === 'move') return { ...edit, id: identity(edit.id), after: edit.after === null ? null : identity(edit.after) };
-    return { ...edit, id: identity(edit.id) };
+/** Settle acknowledged operations and update visible positions without inventing touched identities. */
+function remainingEdits(
+  saved: readonly SiteLink[],
+  links: readonly SiteLink[],
+  edits: readonly NavigationEdit[],
+): NavigationEdit[] {
+  const visible = new Set(links.flatMap((link) => (link.occurrence ? [link.occurrence] : [])));
+  const persisted = new Set(saved.flatMap((link) => (link.occurrence ? [link.occurrence] : [])));
+  const removals = edits.filter(
+    (edit): edit is Extract<NavigationEdit, { kind: 'remove' }> =>
+      edit.kind === 'remove' && persisted.has(edit.occurrence) && !visible.has(edit.occurrence),
+  );
+  const moved = new Set(edits.flatMap((edit) => (edit.kind === 'move' ? [edit.occurrence] : [])));
+  const retained = saved.filter((link) => link.occurrence && visible.has(link.occurrence));
+  const desired = links.filter((link) => link.occurrence);
+  const inOrder =
+    retained.length === desired.length &&
+    retained.every((link, index) => link.occurrence === desired[index]!.occurrence);
+  const placements = links.flatMap((link, position): NavigationEdit[] => {
+    if (!link.occurrence) return [{ kind: 'add', link, position }];
+    return !inOrder && moved.has(link.occurrence)
+      ? [{ kind: 'move', occurrence: link.occurrence, name: link.name, position }]
+      : [];
   });
-  return { links: applyEdits(server, edits), pending: edits };
+  return [...removals, ...placements];
+}
+
+function edited(state: NavigationState, links: SiteLink[], edits = state.pending): NavigationState {
+  const pending = remainingEdits(state.saved, links, edits);
+  return {
+    ...state,
+    pending,
+    links,
+    notice: clears(state.notice) ? { kind: 'idle' } : state.notice,
+  };
 }
 
 /** A saved mount's path cannot change without a qualifier update; the editor must not invent one. */
@@ -195,26 +228,38 @@ export function pathEditBlocked(link: SiteLink): boolean {
 }
 
 /**
- * Commands that turn the saved list into the author's list.
- * Removals, then moves that keep occurrence identity, then inserts in author order.
+ * The next authored command. Each insertion must be acknowledged before planning
+ * another, because its returned occurrence is the next insertion's possible anchor.
  */
-export function planNavigation(saved: readonly SiteLink[], desired: readonly SiteLink[], firstOnly = false): NavigationPlan {
-  const savedByOccurrence = new Map(saved.flatMap(link => link.occurrence ? [[link.occurrence, link] as const] : []));
-  for (const link of desired) {
-    if (!link.occurrence) continue;
-    const prior = savedByOccurrence.get(link.occurrence);
+export function planNavigation(
+  saved: readonly SiteLink[],
+  desired: readonly SiteLink[],
+  edits: readonly NavigationEdit[],
+): NavigationPlan {
+  const retainedLinks = desired.filter((link) => link.occurrence);
+  const savedByOccurrence = retainedLinks.length
+    ? new Map(saved.flatMap((link) => (link.occurrence ? [[link.occurrence, link] as const] : [])))
+    : new Map<string, SiteLink>();
+  for (const link of retainedLinks) {
+    const prior = savedByOccurrence.get(link.occurrence!);
     if (!prior) return { ok: false, reason: 'path-edit' };
     if (!sameMount(prior, link)) return { ok: false, reason: 'path-edit' };
   }
-  const desiredOccurrences = new Set(desired.flatMap(link => link.occurrence ? [link.occurrence] : []));
-  const ops: NavOp[] = saved.flatMap(link => (
-    link.occurrence && !desiredOccurrences.has(link.occurrence)
-      ? [{ kind: 'remove' as const, occurrence: link.occurrence }]
-      : []
-  ));
-  if (firstOnly && ops.length) return { ok: true, ops: [ops[0]!] };
-  let order = saved.flatMap(link => link.occurrence && desiredOccurrences.has(link.occurrence) ? [link.occurrence] : []);
-  const retained = desired.flatMap(link => link.occurrence ? [link.occurrence] : []);
+  const desiredOccurrences = new Set(
+    desired.flatMap((link) => (link.occurrence ? [link.occurrence] : [])),
+  );
+  const removal = edits.find(
+    (edit) => edit.kind === 'remove' && saved.some((link) => link.occurrence === edit.occurrence),
+  );
+  if (removal?.kind === 'remove')
+    return { ok: true, ops: [{ kind: 'remove', occurrence: removal.occurrence }] };
+  const moves = new Set(edits.flatMap((edit) => (edit.kind === 'move' ? [edit.occurrence] : [])));
+  const additions = new Set(edits.flatMap((edit) => (edit.kind === 'add' ? [edit.link.id] : [])));
+  const ops: NavOp[] = [];
+  const order = saved.flatMap((link) =>
+    link.occurrence && desiredOccurrences.has(link.occurrence) ? [link.occurrence] : [],
+  );
+  const retained = desired.flatMap((link) => (link.occurrence ? [link.occurrence] : []));
   let previous: string | null = null;
   // Most resumed insert plans already have the retained mounts in order.
   const ordered = order.every((occurrence, index) => occurrence === retained[index]);
@@ -223,18 +268,19 @@ export function planNavigation(saved: readonly SiteLink[], desired: readonly Sit
     const at = order.indexOf(link.occurrence);
     const expectedAt = previous === null ? 0 : order.indexOf(previous) + 1;
     if (at < 0) return { ok: false, reason: 'path-edit' };
-    if (at !== expectedAt) {
-      ops.push({ kind: 'move', occurrence: link.occurrence, position: previous ? { after: previous } : 'first' });
-      if (firstOnly) return { ok: true, ops };
-      order.splice(at, 1);
-      const insertAt = previous === null ? 0 : order.indexOf(previous) + 1;
-      order.splice(insertAt, 0, link.occurrence);
+    if (moves.has(link.occurrence) && at !== expectedAt) {
+      ops.push({
+        kind: 'move',
+        occurrence: link.occurrence,
+        position: previous ? { after: previous } : 'first',
+      });
+      return { ok: true, ops };
     }
     previous = link.occurrence;
   }
   for (let index = 0; index < desired.length; index += 1) {
     const link = desired[index]!;
-    if (link.occurrence) continue;
+    if (link.occurrence || !additions.has(link.id)) continue;
     let position: NavPosition = 'first';
     for (let seen = index - 1; seen >= 0; seen -= 1) {
       const prior = desired[seen]!;
@@ -248,17 +294,16 @@ export function planNavigation(saved: readonly SiteLink[], desired: readonly Sit
       if (!prior.occurrence) position = 'last';
     }
     ops.push({
-      kind: 'insert', target: link.target, segment: link.segment, disclosure: link.disclosure, position,
+      kind: 'insert',
+      clientId: link.id,
+      target: link.target,
+      segment: link.segment,
+      disclosure: link.disclosure,
+      position,
     });
-    if (firstOnly) return { ok: true, ops };
+    return { ok: true, ops };
   }
   return { ok: true, ops };
-}
-
-/** Ops when the plan is safe; empty when a path edit would drop mount metadata. */
-export function navigationOps(saved: readonly SiteLink[], desired: readonly SiteLink[]): NavOp[] {
-  const plan = planNavigation(saved, desired);
-  return plan.ok ? plan.ops : [];
 }
 
 export interface NavigationSaveProgress {
@@ -266,27 +311,10 @@ export interface NavigationSaveProgress {
   head: string;
   saved: SiteLink[];
   links: SiteLink[];
+  pending: NavigationEdit[];
   /** Acknowledged operations; the next operation keeps its key until acknowledged. */
   completed: number;
   replayed: boolean;
-}
-
-/**
- * A save starts only from a complete baseline. Its remaining command plan settles
- * acknowledged operations and carries new occurrence identities into the journal.
- * This is save acknowledgement, not reconstruction after an author edits a loaded slice.
- */
-function unfinishedSaveEdits(progress: NavigationSaveProgress): NavigationEdit[] | null {
-  const plan = planNavigation(progress.saved, progress.links);
-  if (!plan.ok) return null;
-  return plan.ops.map((op): NavigationEdit => {
-    if (op.kind === 'remove') return { kind: 'remove', id: op.occurrence.slice(-36) };
-    if (op.kind === 'move') return {
-      kind: 'move', id: op.occurrence.slice(-36), after: op.position === 'first' ? null : op.position.after.slice(-36),
-    };
-    const at = progress.links.findIndex(link => !link.occurrence && link.target === op.target && link.segment === op.segment);
-    return { kind: 'add', link: progress.links[at]!, after: at === 0 ? null : progress.links[at - 1]!.id };
-  });
 }
 
 /**
@@ -295,16 +323,36 @@ function unfinishedSaveEdits(progress: NavigationSaveProgress): NavigationEdit[]
  * replays a confirmed command. Only a response lost before acknowledgement is replayed.
  */
 export async function commitNavigation(
-  saved: readonly SiteLink[], desired: readonly SiteLink[], head: string, key: string,
-  write: (op: NavOp, key: string, expectedHead: string) => Promise<NavWriteResult | NavWriteFailure>,
+  saved: readonly SiteLink[],
+  desired: readonly SiteLink[],
+  head: string,
+  key: string,
+  write: (
+    op: NavOp,
+    key: string,
+    expectedHead: string,
+  ) => Promise<NavWriteResult | NavWriteFailure>,
+  edits: readonly NavigationEdit[],
   resume?: NavigationSaveProgress,
   onProgress?: (progress: NavigationSaveProgress) => void,
 ): Promise<
-  | { ok: true; head: string; links: SiteLink[]; replayed: boolean; progress: NavigationSaveProgress }
+  | {
+      ok: true;
+      head: string;
+      links: SiteLink[];
+      replayed: boolean;
+      progress: NavigationSaveProgress;
+    }
   | ({ head: string; links: SiteLink[]; progress: NavigationSaveProgress } & NavWriteFailure)
 > {
   let progress: NavigationSaveProgress = resume ?? {
-    key, head, saved: saved.map(link => ({ ...link })), links: desired.map(link => ({ ...link })), completed: 0, replayed: false,
+    key,
+    head,
+    saved: saved.map((link) => ({ ...link })),
+    links: desired.map((link) => ({ ...link })),
+    pending: [...edits],
+    completed: 0,
+    replayed: false,
   };
   let currentSaved = progress.saved;
   let links = progress.links;
@@ -315,7 +363,7 @@ export async function commitNavigation(
     return { ...failure, head: current, links, progress };
   };
   for (;;) {
-    const plan = planNavigation(currentSaved, links, true);
+    const plan = planNavigation(currentSaved, links, progress.pending);
     if (!plan.ok) return fail({ ok: false, failure: 'invalid' });
     if (!plan.ops.length) return { ok: true, head: current, links, replayed, progress };
     const op = plan.ops[0]!;
@@ -324,117 +372,165 @@ export async function commitNavigation(
     const batchKey = batch === 0 ? progress.key : `${progress.key}.batch-${batch}`;
     const commandKey = offset === 0 ? batchKey : `${batchKey}.${offset}`;
     let result: NavWriteResult | NavWriteFailure;
-    try { result = await write(op, commandKey, current); }
-    catch { return fail({ ok: false, failure: 'unavailable' }); }
+    try {
+      result = await write(op, commandKey, current);
+    } catch {
+      return fail({ ok: false, failure: 'unavailable' });
+    }
     if (!result.ok) return fail(result);
     if (op.kind === 'remove') {
-      currentSaved = currentSaved.filter(link => link.occurrence !== op.occurrence);
+      currentSaved = currentSaved.filter((link) => link.occurrence !== op.occurrence);
     } else if (op.kind === 'insert') {
       // Without an occurrence the acknowledgement cannot safely anchor later inserts.
       if (!result.occurrence) return fail({ ok: false, failure: 'unavailable' });
-      const at = links.findIndex(link => !link.occurrence && link.target === op.target && link.segment === op.segment);
+      const at = links.findIndex((link) => !link.occurrence && link.id === op.clientId);
       if (at < 0) return fail({ ok: false, failure: 'unavailable' });
-      const next = { ...links[at]!, occurrence: result.occurrence, id: result.occurrence.slice(-36) };
-      links = links.map((link, index) => index === at ? next : link);
+      const next = {
+        ...links[at]!,
+        occurrence: result.occurrence,
+        id: result.occurrence.slice(-36),
+      };
+      links = links.map((link, index) => (index === at ? next : link));
       currentSaved = placeSaved(currentSaved, next, op.position);
     } else {
       currentSaved = moveSaved(currentSaved, op.occurrence, op.position);
     }
     current = result.head;
     replayed = replayed || result.replayed;
-    progress = { key: progress.key, head: current, saved: currentSaved, links, completed: progress.completed + 1, replayed };
+    const unacknowledged = progress.pending.filter((edit) => {
+      if (op.kind === 'insert') return edit.kind !== 'add' || edit.link.id !== op.clientId;
+      return edit.kind === 'add' || edit.occurrence !== op.occurrence || edit.kind !== op.kind;
+    });
+    progress = {
+      key: progress.key,
+      head: current,
+      saved: currentSaved,
+      links,
+      pending:
+        op.kind === 'move' ? remainingEdits(currentSaved, links, unacknowledged) : unacknowledged,
+      completed: progress.completed + 1,
+      replayed,
+    };
     // Retain every acknowledgement in the caller; rendering can coalesce these updates.
     onProgress?.(progress);
   }
 }
 
 function placeSaved(saved: SiteLink[], link: SiteLink, position: NavPosition): SiteLink[] {
-  const next = saved.filter(item => item.occurrence !== link.occurrence);
+  const next = saved.filter((item) => item.occurrence !== link.occurrence);
   if (position === 'first') return [link, ...next];
   if (position === 'last') return [...next, link];
-  const at = next.findIndex(item => item.occurrence === position.after);
+  const at = next.findIndex((item) => item.occurrence === position.after);
   if (at < 0) return [...next, link];
   return [...next.slice(0, at + 1), link, ...next.slice(at + 1)];
 }
 
-function moveSaved(saved: SiteLink[], occurrence: string, position: 'first' | { after: string }): SiteLink[] {
-  const index = saved.findIndex(link => link.occurrence === occurrence);
+function moveSaved(
+  saved: SiteLink[],
+  occurrence: string,
+  position: 'first' | { after: string },
+): SiteLink[] {
+  const index = saved.findIndex((link) => link.occurrence === occurrence);
   if (index < 0) return saved;
   const link = saved[index]!;
-  return placeSaved(saved.filter((_, at) => at !== index), link, position);
-}
-
-/** Match the author's links to a freshly read list, without dropping a link the server does not have yet. */
-export function alignLinks(author: readonly SiteLink[], server: readonly SiteLink[]): SiteLink[] {
-  const used = new Set<string>();
-  return author.map(link => {
-    const found = server.find(item => item.occurrence && !used.has(item.occurrence)
-      && item.segment === link.segment && item.target === link.target);
-    if (!found?.occurrence) return { ...link, occurrence: null };
-    used.add(found.occurrence);
-    return {
-      ...link,
-      occurrence: found.occurrence,
-      id: found.occurrence.slice(-36),
-      name: link.name || found.name,
-      disclosure: found.disclosure,
-      routeKey: found.routeKey,
-      presentation: found.presentation,
-    };
-  });
+  return placeSaved(
+    saved.filter((_, at) => at !== index),
+    link,
+    position,
+  );
 }
 
 export function reduceNavigation(state: NavigationState, event: NavEvent): NavigationState {
+  if (
+    !state.complete &&
+    (event.type === 'move' ||
+      event.type === 'add' ||
+      event.type === 'remove' ||
+      event.type === 'segment')
+  )
+    return state;
   switch (event.type) {
     case 'move': {
       const next = event.index + event.direction;
-      if (next < 0 || next >= state.links.length) return state;
+      if (
+        event.index < 0 ||
+        event.index >= state.links.length ||
+        next < 0 ||
+        next >= state.links.length
+      )
+        return state;
       const links = state.links.slice();
       const [item] = links.splice(event.index, 1);
       links.splice(next, 0, item!);
-      // Undo only this entry's latest move. Operations for unloaded entries must
-      // remain even when their effect is absent from the current projection.
-      const prior = state.pending.findLastIndex(edit => edit.kind === 'move' && edit.id === item!.id);
-      if (prior >= 0) {
-        const cancelled = state.pending.filter((_, index) => index !== prior);
-        if (sameOrder(applyEdits(state.saved, cancelled), links)) return edited(state, cancelled);
-      }
-      return edited(state, [...state.pending, { kind: 'move', id: item!.id, after: next === 0 ? null : links[next - 1]!.id }]);
+      const edits: NavigationEdit[] = item!.occurrence
+        ? [
+            ...state.pending,
+            { kind: 'move', occurrence: item!.occurrence, name: item!.name, position: next },
+          ]
+        : state.pending;
+      return edited(state, links, edits);
     }
     case 'add':
-      if (state.links.some(link => link.segment === event.link.segment || link.target === event.link.target)) return state;
-      return edited(state, [...state.pending, { kind: 'add', link: event.link, after: state.links.at(-1)?.id ?? null }]);
+      if (
+        state.links.some(
+          (link) => link.segment === event.link.segment || link.target === event.link.target,
+        )
+      )
+        return state;
+      return edited(state, [...state.links, event.link]);
     case 'remove': {
-      const link = state.links.find(link => link.id === event.id);
+      const link = state.links.find((link) => link.id === event.id);
       if (!link) return state;
-      const added = !link.occurrence && state.pending.some(edit => edit.kind === 'add' && edit.link.id === event.id);
-      return edited(state, added ? cancelAddedEntry(state, event.id) : [...state.pending, { kind: 'remove', id: event.id }]);
+      const edits: NavigationEdit[] = link.occurrence
+        ? [...state.pending, { kind: 'remove', occurrence: link.occurrence, name: link.name }]
+        : state.pending.filter((edit) => edit.kind !== 'add' || edit.link.id !== link.id);
+      return edited(
+        state,
+        state.links.filter((item) => item.id !== event.id),
+        edits,
+      );
     }
     case 'segment': {
-      const link = state.links.find(link => link.id === event.id);
+      const link = state.links.find((link) => link.id === event.id);
       if (!link || pathEditBlocked(link)) return state;
-      if (!isSegment(event.segment) || state.links.some(link => link.id !== event.id && link.segment === event.segment)) return state;
-      const added = state.pending.find((edit): edit is Extract<NavigationEdit, { kind: 'add' }> =>
-        edit.kind === 'add' && edit.link.id === event.id);
-      const original = state.saved.find(link => link.id === event.id) ?? added?.link;
-      const pending = state.pending.filter(edit => edit.kind !== 'segment' || edit.id !== event.id);
-      if (original?.segment !== event.segment) pending.push({ kind: 'segment', id: event.id, segment: event.segment });
-      return edited(state, pending);
+      if (
+        !isSegment(event.segment) ||
+        state.links.some((link) => link.id !== event.id && link.segment === event.segment)
+      )
+        return state;
+      return edited(
+        state,
+        state.links.map((item) =>
+          item.id === event.id ? { ...item, segment: event.segment } : item,
+        ),
+      );
     }
     case 'stale':
       return { ...state, notice: { kind: 'stale', currentHead: event.currentHead } };
     case 'saved':
-      return { ...state, links: event.links, saved: event.links.map(link => ({ ...link })), pending: [], head: event.head, notice: { kind: 'saved', replayed: event.replayed } };
+      return {
+        ...state,
+        links: event.links,
+        saved: event.links.map((link) => ({ ...link })),
+        pending: [],
+        head: event.head,
+        notice: { kind: 'saved', replayed: event.replayed },
+      };
     case 'progress': {
       if (!state.complete) return state;
-      const pending = unfinishedSaveEdits(event.progress);
-      return pending ? edited({ ...state, saved: event.progress.saved, head: event.progress.head }, pending) : state;
+      return {
+        ...state,
+        saved: event.progress.saved,
+        links: event.progress.links,
+        head: event.progress.head,
+        pending: event.progress.pending,
+      };
     }
     case 'loaded':
       return {
         ...state,
         links: event.links,
-        saved: event.links.map(link => ({ ...link })),
+        saved: event.links.map((link) => ({ ...link })),
         pending: [],
         head: event.head,
         navigation: event.navigation,
@@ -443,30 +539,47 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         notice: { kind: 'loaded' },
       };
     case 'continued': {
-      const seen = new Set(state.saved.flatMap(link => link.occurrence ? [link.occurrence] : []));
-      const added = event.links.filter(link => !link.occurrence || !seen.has(link.occurrence));
+      const seen = new Set(
+        state.saved.flatMap((link) => (link.occurrence ? [link.occurrence] : [])),
+      );
+      const added = event.links.filter((link) => !link.occurrence || !seen.has(link.occurrence));
       const saved = [...state.saved, ...added];
       return {
         ...state,
-        links: applyEdits(saved, state.pending),
+        links: saved,
         saved,
+        pending: [],
         complete: event.complete,
         after: event.after,
         notice: clears(state.notice) ? { kind: 'idle' } : state.notice,
       };
     }
-    case 'retarget':
+    case 'review': {
+      const occurrences = new Set(
+        event.links.flatMap((link) => (link.occurrence ? [link.occurrence] : [])),
+      );
+      const pending = state.pending.filter(
+        (edit) => edit.kind === 'add' || occurrences.has(edit.occurrence),
+      );
+      const dropped = state.pending.flatMap((edit) =>
+        edit.kind !== 'add' && !occurrences.has(edit.occurrence)
+          ? [{ kind: edit.kind, name: edit.name }]
+          : [],
+      );
       return {
         ...state,
+        saved: event.links,
+        links: applyEdits(event.links, pending),
+        pending,
         head: event.head,
-        saved: event.saved,
-        links: applyEdits(event.saved, event.pending ?? state.pending),
-        pending: event.pending ?? state.pending,
         navigation: event.navigation,
-        complete: event.complete,
-        after: event.after,
-        notice: { kind: 'idle' },
+        complete: true,
+        after: null,
+        notice: { kind: 'review', dropped },
       };
+    }
+    case 'revision':
+      return isNavigationDirty(state) ? state : { ...state, head: event.head };
     case 'failed':
       return { ...state, notice: { kind: event.failure } };
   }
@@ -485,7 +598,10 @@ export function zoneMountPage(zone: unknown): {
   const navigation = row?.navigation;
   if (typeof head !== 'string' || !iriPattern.test(head)) return null;
   if (typeof navigation !== 'string' || !iriPattern.test(navigation)) return null;
-  const zoneHead = typeof row?.ownerRevision === 'string' && iriPattern.test(row.ownerRevision) ? row.ownerRevision : null;
+  const zoneHead =
+    typeof row?.ownerRevision === 'string' && iriPattern.test(row.ownerRevision)
+      ? row.ownerRevision
+      : null;
   const mounts = Array.isArray(row?.mounts) ? row.mounts : [];
   const links: SiteLink[] = [];
   for (const item of mounts) {
@@ -494,14 +610,20 @@ export function zoneMountPage(zone: unknown): {
     const occurrence = mount?.occurrence;
     const target = mount?.target;
     const segment = qualifier?.routeSegment;
-    if (mount?.state === 'removed' || mount?.role !== 'mount' || qualifier?.type !== 'zone-mount') continue;
+    if (mount?.state === 'removed' || mount?.role !== 'mount' || qualifier?.type !== 'zone-mount')
+      continue;
     if (typeof occurrence !== 'string' || !iriPattern.test(occurrence)) continue;
     if (typeof target !== 'string' || !iriPattern.test(target)) continue;
     if (typeof segment !== 'string' || !segmentPattern.test(segment)) continue;
-    const labels = Array.isArray(mount?.labels) ? mount.labels.find(label => typeof label === 'string' && label.trim()) : undefined;
-    const routeKey = qualifier?.key === 'alias' || qualifier?.key === 'id' ? qualifier.key : undefined;
-    const presentation = typeof qualifier?.presentation === 'string' && iriPattern.test(qualifier.presentation)
-      ? qualifier.presentation : undefined;
+    const labels = Array.isArray(mount?.labels)
+      ? mount.labels.find((label) => typeof label === 'string' && label.trim())
+      : undefined;
+    const routeKey =
+      qualifier?.key === 'alias' || qualifier?.key === 'id' ? qualifier.key : undefined;
+    const presentation =
+      typeof qualifier?.presentation === 'string' && iriPattern.test(qualifier.presentation)
+        ? qualifier.presentation
+        : undefined;
     links.push({
       id: occurrence.slice(-36),
       occurrence,
@@ -519,8 +641,21 @@ export function zoneMountPage(zone: unknown): {
 
 /** Fold continued Zone pages into one snapshot. A trailing next is kept so loading can resume. */
 export function foldMountPages(
-  pages: readonly { head: string; navigation: string; links: SiteLink[]; next: string | null; zoneHead: string | null }[],
-): { head: string; navigation: string; links: SiteLink[]; complete: boolean; after: string | null; zoneHead: string | null } | null {
+  pages: readonly {
+    head: string;
+    navigation: string;
+    links: SiteLink[];
+    next: string | null;
+    zoneHead: string | null;
+  }[],
+): {
+  head: string;
+  navigation: string;
+  links: SiteLink[];
+  complete: boolean;
+  after: string | null;
+  zoneHead: string | null;
+} | null {
   if (!pages.length) return null;
   const first = pages[0]!;
   const links: SiteLink[] = [];
@@ -541,7 +676,11 @@ export function foldMountPages(
 
 /** Mounts on the Zone's current navigation revision. A mount this shape does not understand is left untouched. */
 export function linksFromZone(zone: unknown): {
-  head: string; links: SiteLink[]; navigation: string; next: string | null; zoneHead: string | null;
+  head: string;
+  links: SiteLink[];
+  navigation: string;
+  next: string | null;
+  zoneHead: string | null;
 } | null {
   return zoneMountPage(zone);
 }
@@ -556,11 +695,13 @@ export function pageNameOf(value: unknown): string | null {
 }
 
 function sameMount(prior: SiteLink, link: SiteLink): boolean {
-  return prior.target === link.target
-    && prior.segment === link.segment
-    && prior.disclosure === link.disclosure
-    && (prior.routeKey ?? 'id') === (link.routeKey ?? 'id')
-    && (prior.presentation ?? null) === (link.presentation ?? null);
+  return (
+    prior.target === link.target &&
+    prior.segment === link.segment &&
+    prior.disclosure === link.disclosure &&
+    (prior.routeKey ?? 'id') === (link.routeKey ?? 'id') &&
+    (prior.presentation ?? null) === (link.presentation ?? null)
+  );
 }
 
 function text(value: unknown): string | null {
@@ -570,7 +711,12 @@ function text(value: unknown): string | null {
   if (typeof row.value === 'string' && row.value.trim()) return row.value.trim();
   const labels = record(row.labels);
   const original = row.original;
-  if (typeof original === 'string' && labels && typeof labels[original] === 'string' && labels[original].trim()) {
+  if (
+    typeof original === 'string' &&
+    labels &&
+    typeof labels[original] === 'string' &&
+    labels[original].trim()
+  ) {
     return labels[original].trim();
   }
   return null;
@@ -581,5 +727,5 @@ function clears(notice: NavNotice): boolean {
 }
 
 function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' ? value as Record<string, unknown> : null;
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 }
