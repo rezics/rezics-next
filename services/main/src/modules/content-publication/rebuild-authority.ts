@@ -64,6 +64,8 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
   }
   let after = BigInt(frozen.graphSequence);
   const end = BigInt(before.graphSequence);
+  // UNION filters see their own arm's bindings before the surrounding joins.
+  // Each maintenance arm must bind its receipt locally to prove its family.
   while (after < end) {
     const page = await bounded('maintenance page', () => env.fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?batch ?sequence ?allowed WHERE {
@@ -76,10 +78,10 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
           GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:eventCount 1 ; rv:event ?event .
             ?event rv:ordinal 0 ; rv:receipt ?operation .
             FILTER NOT EXISTS { ?batch rv:event ?otherEvent . FILTER(?otherEvent != ?event) }
-            { ?event a rv:ContentRebuildEvent ; rv:action ?action .
+            { ?event a rv:ContentRebuildEvent ; rv:action ?action ; rv:receipt ?operation .
               FILTER(REGEX(STR(?action), "^content[.]rebuild[.](quarantine|profile|clear|cleared|activate)$"))
               FILTER(REGEX(STR(?operation), "^urn:rezics:receipt:content-rebuild:(quarantine|profile|clear|cleared|activate):[0-9a-f]{64}$")) }
-            UNION { ?event a rv:ContentProjectionEvent ; rv:action "content.project" .
+            UNION { ?event a rv:ContentProjectionEvent ; rv:action "content.project" ; rv:receipt ?operation .
               FILTER(REGEX(STR(?operation), "^urn:rezics:receipt:content-projection:[0-9a-f]{64}$"))
               GRAPH ${iri(GRAPHS.receipts)} { ?operation rv:ownerDataEpoch ${lit(cut.dataEpoch)} ; rv:ownerSequence ?ownerSequence .
                 FILTER(?ownerSequence > 0 && ?ownerSequence <= ${cut.sequence}) } }
@@ -101,7 +103,8 @@ export async function assertFrozenContentRebuildAuthority(env: WorkActivationEnv
     for (const row of rows) {
       if (!row.batch?.value || !DECIMAL.test(row.sequence?.value ?? '')
         || BigInt(row.sequence!.value) !== after + 1n || row.allowed?.value !== 'true') {
-        throw new ContentRebuildUnavailable('graph authority moved after frozen rebuild cut');
+        throw new ContentRebuildUnavailable(`graph authority moved after frozen rebuild cut at ${after + 1n}`
+          + ` (retained position ${row.sequence?.value ?? 'absent'}, maintenance ${row.allowed?.value ?? 'unproved'})`);
       }
       after++;
     }

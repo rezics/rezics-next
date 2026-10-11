@@ -26,7 +26,6 @@ import { contentRebuildDelivery, type ContentRebuildFrontier }
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, quarantinePublicContentSearch,
   replayQuarantinedContentCut, verifyQuarantinedContentIndex } from '../src/modules/content-publication/rebuild.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
-import { migrateTracked } from '../../../scripts/ops/migrate.ts';
 import { qaStack } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
 import { assertPinnedState, inspectFusekiState, offlineTextIndex, rebuildPublicContentSearch,
   repositoryPins, type FusekiStateRunner } from '../../../scripts/operations/search-state.ts';
@@ -165,7 +164,6 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
   const consumer = `content-native-${randomUUID()}`;
   try {
     await migrateContent(contentPool);
-    await migrateTracked(MAIN_RELAY_DATABASE_URL, root, 'services/main/migrations/relay');
     const content = new ContentCore(contentPool);
     const delivery = contentRebuildDelivery(env, content, relayPool, MAIN_RELAY_CONSUMER);
     const cursor = new ContentProjectionCursor(contentPool);

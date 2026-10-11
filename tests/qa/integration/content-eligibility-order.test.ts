@@ -29,6 +29,10 @@ import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { assertFrozenContentRebuildAuthority }
+  from '../../../services/main/src/modules/content-publication/rebuild-authority.ts';
+import { clearQuarantinedContentUnits, quarantinePublicContentSearch }
+  from '../../../services/main/src/modules/content-publication/rebuild.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -313,6 +317,29 @@ test('SEARCH19: closed eligibility completes and a stale worker cannot replace n
     expect(served.status).toBe(200);
     expect(await served.json()).toMatchObject({ complete: true, total: 1,
       results: [{ revision: `urn:rezics:content:revision:${v3.revision}` }] });
+
+    // Freeze actual native owner control. Maintenance is permitted to advance
+    // it, while a later owner publication must invalidate the retained cut.
+    const main = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH <${GRAPHS.control}> { <${MAIN_RELAY_STREAM_SCOPE}> rv:streamSequence ?sequence } }`);
+    const frozen = { dataEpoch: env.lineage.dataEpoch, routingEpoch: env.lineage.routingEpoch,
+      graphSequence: await graphSequence(), mainSequence: main.results!.bindings![0]!.sequence!.value };
+    await assertFrozenContentRebuildAuthority(env, frozen);
+    const job = await quarantinePublicContentSearch(env, content, randomUUID(), undefined, ownerBeforeDuplicates);
+    await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
+    expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(503);
+    expect(await clearQuarantinedContentUnits(env, job)).toBe(1);
+    await assertFrozenContentRebuildAuthority(env, frozen, job.cut);
+    const movedTitle = `Frozen rebuild owner moved ${randomUUID()}`;
+    await activateMetadataWork(env, { title: movedTitle, admission: {
+      id: randomUUID(), scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: randomUUID(), requestDigest: metadataWorkRequestDigest(movedTitle), authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    } });
+    await expect(assertFrozenContentRebuildAuthority(env, frozen, job.cut))
+      .rejects.toThrow('graph authority moved after frozen rebuild cut');
+    expect(await content.ownerPosition()).toEqual(job.cut);
+    expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(503);
   } finally {
     await accessPool.end();
     await pool.end();
