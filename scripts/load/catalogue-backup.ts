@@ -180,7 +180,7 @@ export async function retainStoppedOwnerBackup(
   return result!;
 }
 
-/** G-1038's catalogue caller keeps its established naming and resumes the source. */
+/** The catalogue caller keeps its established naming and resumes the source. */
 export async function retainCatalogueBackup(
   runId: string,
   works: number,
