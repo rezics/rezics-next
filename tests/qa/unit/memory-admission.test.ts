@@ -9,6 +9,7 @@ import { startRestoredFixture } from '../../../scripts/fixture/restore.ts';
 import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
+import { processStartTime } from '../../../scripts/qa/process/identity.ts';
 import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup, withQaStackStartup,
   type MemoryReading } from '../../../scripts/qa/memory-admission.ts';
@@ -140,7 +141,8 @@ test('independent QA processes measure after the preceding startup and wait for 
     import { join } from 'node:path';
     const [dir, name] = process.argv.slice(2);
     await withMemoryStartup(${JSON.stringify(need)}, {
-      env: ${JSON.stringify(qaEnv)}, deadline: Date.now() + 5_000, lockFile: join(dir, 'mutex.sqlite'), pollMs: 5,
+      env: { ...${JSON.stringify(qaEnv)}, GOAL_QA_SLOT_DIRECTORY: join(dir, 'qa-slots') },
+      deadline: Date.now() + 5_000, lockFile: join(dir, 'mutex.sqlite'), pollMs: 5,
       announce: message => {
         if (message.startsWith('Waiting for another')) writeFileSync(join(dir, name + '-queued'), message);
         if (message.startsWith('Waiting;')) writeFileSync(join(dir, name + '-short'), message);
@@ -166,7 +168,7 @@ test('independent QA processes measure after the preceding startup and wait for 
     const second = Bun.spawn(['bun', script, dir, 'second'], { stdout: 'pipe', stderr: 'pipe' });
     children.push(second);
     await untilFile(join(dir, 'second-queued'));
-    expect(readFileSync(join(dir, 'reads'), 'utf8')).not.toContain('second:');
+    expect(existsSync(join(dir, 'second-started'))).toBe(false);
     writeFileSync(join(dir, 'release'), 'ready');
     expect(await first.exited).toBe(0);
     await untilFile(join(dir, 'second-short'));
@@ -180,6 +182,147 @@ test('independent QA processes measure after the preceding startup and wait for 
     rmSync(dir, { recursive: true, force: true });
   }
 }, 10_000);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+function assertStartupUnlocked(lockFile: string) {
+  const competitor = new Database(lockFile);
+  try { competitor.exec('BEGIN IMMEDIATE'); competitor.exec('ROLLBACK'); }
+  finally { competitor.close(true); }
+}
+
+async function startupScenario(concurrency?: string) {
+  const directory = mkdtempSync(join(scratch, 'qa-startup-promises-'));
+  const lockFile = join(directory, 'mutex.sqlite');
+  if (concurrency !== undefined) writeFileSync(join(directory, 'qa-startup-concurrency'), concurrency);
+  const env = { ...qaEnv, GOAL_QA_SLOT_DIRECTORY: join(directory, 'qa-slots') };
+  let now = 0;
+  const sleeping = deferred<void>();
+  const wake = deferred<void>();
+  const lines: string[] = [];
+  const options = { env, lockFile, deadline: 100, pollMs: 5, now: () => now,
+    read: async () => plenty, announce: (message: string) => { lines.push(message); },
+    sleep: async (ms: number) => {
+      assertStartupUnlocked(lockFile);
+      sleeping.resolve();
+      await wake.promise;
+      now += ms;
+    } };
+  return { directory, lockFile, options, sleeping, wake, lines };
+}
+
+for (const concurrency of [undefined, '0', '-2', '1.5', 'invalid', '9007199254740992', '1']) {
+test(`startup concurrency ${concurrency ?? 'absent'} serializes starts and never holds the lock while sleeping`, async () => {
+  const scenario = await startupScenario(concurrency);
+  const firstReady = deferred<void>(), finishFirst = deferred<void>();
+  let secondStarted = false;
+  try {
+    const first = withMemoryStartup(need, scenario.options, async () => {
+      assertStartupUnlocked(scenario.lockFile);
+      firstReady.resolve();
+      await finishFirst.promise;
+    });
+    await firstReady.promise;
+    const second = withMemoryStartup(need, scenario.options, () => {
+      assertStartupUnlocked(scenario.lockFile);
+      secondStarted = true;
+    });
+    await scenario.sleeping.promise;
+    expect(secondStarted).toBe(false);
+    expect(scenario.lines.some(line => line.startsWith('Waiting for another QA startup; QA memory:'))).toBe(true);
+    finishFirst.resolve();
+    await first;
+    scenario.wake.resolve();
+    await second;
+    expect(secondStarted).toBe(true);
+  } finally { rmSync(scenario.directory, { recursive: true, force: true }); }
+});
+}
+
+test('two startup promises overlap at K=2 and a third begins after either resolves', async () => {
+  const scenario = await startupScenario('2');
+  const firstReady = deferred<void>(), secondReady = deferred<void>();
+  const finishFirst = deferred<void>(), finishSecond = deferred<void>();
+  let thirdStarted = false;
+  try {
+    const first = withMemoryStartup(need, scenario.options, async () => {
+      assertStartupUnlocked(scenario.lockFile);
+      firstReady.resolve(); await finishFirst.promise;
+    });
+    await firstReady.promise;
+    const second = withMemoryStartup(need, scenario.options, async () => {
+      assertStartupUnlocked(scenario.lockFile);
+      secondReady.resolve(); await finishSecond.promise;
+    });
+    await secondReady.promise;
+    const third = withMemoryStartup(need, scenario.options, () => {
+      assertStartupUnlocked(scenario.lockFile); thirdStarted = true;
+    });
+    await scenario.sleeping.promise;
+    expect(thirdStarted).toBe(false);
+    finishSecond.resolve(); await second;
+    scenario.wake.resolve(); await third;
+    expect(thirdStarted).toBe(true);
+    finishFirst.resolve(); await first;
+  } finally { rmSync(scenario.directory, { recursive: true, force: true }); }
+});
+
+for (const constrained of ['vm', 'host'] as const) {
+test(`live promises subtract ${constrained} need while memory readings include completed startups`, async () => {
+  const scenario = await startupScenario('3');
+  const firstReady = deferred<void>(), finishFirst = deferred<void>();
+  const smallNeed = { vm: 4 * GiB, host: 3 * GiB, vmReserve: GiB, hostReserve: 2 * GiB };
+  let firstFinished = false, secondStarted = false, readings = 0;
+  const options = { ...scenario.options, read: async () => {
+    readings++;
+    return { vmTotal: 10 * GiB, vmUsed: constrained === 'vm' ? (firstFinished ? 5 : 4) * GiB : 0,
+      hostAvailable: constrained === 'host' ? (firstFinished ? 6 : 7) * GiB : 20 * GiB };
+  } };
+  try {
+    const first = withMemoryStartup(smallNeed, options, async () => {
+      firstReady.resolve(); await finishFirst.promise; firstFinished = true;
+    });
+    await firstReady.promise;
+    const second = withMemoryStartup(smallNeed, options, () => { secondStarted = true; });
+    await scenario.sleeping.promise;
+    expect(secondStarted).toBe(false);
+    expect(scenario.lines.some(line => line.startsWith('Waiting; QA memory:'))).toBe(true);
+    finishFirst.resolve(); await first;
+    scenario.wake.resolve(); await second;
+    expect(firstFinished).toBe(true);
+    expect(secondStarted).toBe(true);
+    expect(readings).toBe(3);
+  } finally { rmSync(scenario.directory, { recursive: true, force: true }); }
+});
+}
+
+test('old lock files gain the promise table; gone, reused and expired owners are removed', async () => {
+  const scenario = await startupScenario('1');
+  const db = new Database(scenario.lockFile, { create: true });
+  try {
+    db.exec('CREATE TABLE old_lock (id INTEGER)');
+    await withMemoryStartup(need, scenario.options, () => {});
+    for (const [id, pid, startTime, admitted] of [
+      ['gone', 2_147_483_647, '1', 0],
+      ['reused', process.pid, `${processStartTime(process.pid)}-different`, 0],
+      ['expired', process.pid, processStartTime(process.pid)!, -900_001],
+    ] as const) {
+      db.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, pid, startTime, 100 * GiB, 100 * GiB, admitted);
+    }
+    await withMemoryStartup(need, scenario.options, () => {
+      expect(db.query('SELECT id FROM startup_promises').all()).toHaveLength(1);
+    });
+    expect(db.query('SELECT id FROM startup_promises').all()).toHaveLength(0);
+    await expect(withMemoryStartup(need, scenario.options, () => { throw new Error('Compose readiness failed'); }))
+      .rejects.toThrow('Compose readiness failed');
+    expect(db.query('SELECT id FROM startup_promises').all()).toHaveLength(0);
+  } finally { db.close(true); rmSync(scenario.directory, { recursive: true, force: true }); }
+});
 
 test('startup mutex obeys deadlines and releases after memory shortage and startup failure', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-memory-release-'));
@@ -205,7 +348,7 @@ test('startup mutex obeys deadlines and releases after memory shortage and start
   } finally { holder.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('process death releases the startup mutex without stale-owner bookkeeping', async () => {
+test('process death discards startup promises before the next admission', async () => {
   for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
     const dir = mkdtempSync(join(scratch, 'qa-memory-death-'));
     const lockFile = join(dir, 'mutex.sqlite');
@@ -392,7 +535,7 @@ test('unavailable readings fail closed, retry and retain the reason at the deadl
 });
 
 for (const outcome of ['retry', 'failed', 'late'] as const) {
-  test(`startup slot ${outcome} preserves the guard, deadline and fresh admission`, async () => {
+  test(`startup slot ${outcome} preserves the deadline and fresh admission without locking waits`, async () => {
     const directory = mkdtempSync(join(scratch, 'qa-startup-slot-'));
     const path = join(directory, 'gate.json'), lockFile = join(directory, 'mutex.sqlite');
     const token = 'startup-test';
@@ -413,6 +556,7 @@ for (const outcome of ['retry', 'failed', 'late'] as const) {
         const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
         if (!match) return;
         attempts++;
+        if (outcome === 'late') now = 100;
         const competitor = new Database(lockFile);
         try { expect(() => competitor.exec('BEGIN IMMEDIATE')).toThrow(); }
         finally { competitor.close(true); }
@@ -429,7 +573,7 @@ for (const outcome of ['retry', 'failed', 'late'] as const) {
         expect(attempts).toBe(2);
         expect(unlocked).toBe(true);
       } else {
-        await expect(work).rejects.toThrow(outcome === 'failed' ? 'slot allocation failed' : 'slot deadline reached');
+        await expect(work).rejects.toThrow(outcome === 'failed' ? 'slot allocation failed' : 'deadline reached');
         expect(started).toBe(false);
       }
       const recovered = new Database(lockFile);
@@ -448,7 +592,7 @@ test('a startup ignores another process grant with the same sequence', async () 
   try {
     expect(await withMemoryStartup(need, {
       env: { ...qaEnv, REZICS_QA_STARTUP_SLOT_GATE: path }, lockFile, deadline: 100,
-      now: () => now, read: async () => plenty,
+      now: () => now, pollMs: 25, read: async () => plenty,
       announce: message => {
         const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
         if (!match) return;
@@ -466,5 +610,31 @@ test('a startup ignores another process grant with the same sequence', async () 
     }, () => { started = true; return 'started'; })).toBe('started');
     expect(now).toBe(25);
     expect(started).toBe(true);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a startup requests a new acknowledgement when a sibling overwrites its slot reply', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-startup-overwritten-grant-'));
+  const path = join(directory, 'gate.json'), lockFile = join(directory, 'mutex.sqlite');
+  const token = 'startup-test';
+  writeFileSync(path, JSON.stringify({ token, status: 'pending' }));
+  let now = 0;
+  const sequences: number[] = [];
+  try {
+    expect(await withMemoryStartup(need, {
+      env: { ...qaEnv, REZICS_QA_STARTUP_SLOT_GATE: path }, lockFile, deadline: 100, pollMs: 5,
+      now: () => now, read: async () => plenty,
+      announce: message => {
+        const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
+        if (!match) return;
+        sequences.push(Number(match[3]));
+        writeFileSync(path, JSON.stringify({ token, requester: sequences.length === 1 ? 'sibling-startup' : match[2],
+          sequence: Number(match[3]), status: 'granted' }));
+      },
+      sleep: async ms => { assertStartupUnlocked(lockFile); now += ms; },
+    }, () => { assertStartupUnlocked(lockFile); return 'started'; })).toBe('started');
+    expect(now).toBe(5);
+    expect(sequences).toHaveLength(2);
+    expect(sequences[1]).toBeGreaterThan(sequences[0]!);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

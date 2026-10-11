@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Database } from 'bun:sqlite';
 import { preserveReapEnvironment } from './container-reaper.ts';
+import { processStartTime } from './process/identity.ts';
 import { qaResourceClasses, type QaResourceClass } from './resource-classes.ts';
 
 export const GiB = 1024 ** 3;
@@ -170,34 +171,60 @@ export interface StartupSlotGate {
 
 const startupSlotRequester = randomUUID();
 let startupSlotSequence = 0;
-/** The startup child retains the guard while its runner attempts the lifetime lease. */
-async function waitForStartupSlot(options: StartupMemoryOptions): Promise<boolean> {
+/** Request the lifetime lease under admission, but poll it between transactions. */
+function waitForStartupSlot(options: StartupMemoryOptions): () => boolean {
   const path = (options.env ?? process.env).REZICS_QA_STARTUP_SLOT_GATE;
-  if (!path) return true;
+  if (!path) return () => true;
   const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;
-  const sequence = ++startupSlotSequence;
+  let sequence = ++startupSlotSequence;
   let announced = false;
-  for (;;) {
+  return () => {
     if (now() >= options.deadline) throw new Error('QA startup slot deadline reached; no work started');
-    const gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
-    if (gate.requester === startupSlotRequester && gate.sequence === sequence) {
-      if (gate.status === 'granted') return true;
-      if (gate.status === 'retry') return false;
-      if (gate.status === 'failed') throw new Error(gate.error ?? 'QA startup slot acquisition failed');
+    let gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
+    // Sibling startups can share the mailbox. A completed foreign reply may have
+    // overwritten ours; a new sequence asks the runner to acknowledge us again.
+    if (announced && gate.requester && gate.status !== 'pending'
+      && (gate.requester !== startupSlotRequester || gate.sequence !== sequence)) {
+      sequence = ++startupSlotSequence;
+      announced = false;
     }
     if (!announced) {
       announce(`QA_STARTUP_SLOT_READY ${gate.token} ${startupSlotRequester} ${sequence}`);
       announced = true;
+      gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
     }
-    await sleep(Math.min(25, options.deadline - now()));
-  }
+    if (gate.requester === startupSlotRequester && gate.sequence === sequence) {
+      if (gate.status === 'granted') return true;
+      if (gate.status === 'retry') {
+        sequence = ++startupSlotSequence;
+        announced = false;
+        return false;
+      }
+      if (gate.status === 'failed') throw new Error(gate.error ?? 'QA startup slot acquisition failed');
+    }
+    return false;
+  };
 }
 
-/** All QA processes share one SQLite writer lock, released automatically on death.
- * Keep it through Compose readiness, so the next process measures the containers
- * created by this startup instead of sharing its pre-start memory snapshot. */
+async function startupConcurrency(options: StartupMemoryOptions): Promise<number> {
+  const directory = (options.env ?? process.env).GOAL_QA_SLOT_DIRECTORY
+    ?? (await import('./core.ts')).goalSlotDirectory(options.root ?? resolve(import.meta.dir, '../..'));
+  if (!directory) return 1;
+  try {
+    const value = readFileSync(join(dirname(directory), 'qa-startup-concurrency'), 'utf8').trim();
+    const count = Number(value);
+    return /^[1-9]\d*$/.test(value) && Number.isSafeInteger(count) ? count : 1;
+  } catch { return 1; }
+}
+
+interface StartupPromise { id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number }
+function sqliteBusy(error: unknown): boolean {
+  return ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '');
+}
+
+/** A short host-wide transaction promises memory until Compose readiness makes
+ * the startup's containers visible to the next measured reading. */
 export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMemoryOptions,
   start: () => T | Promise<T>): Promise<T> {
   if (!await isLocalQaRun(options.root, options.env)) return await start();
@@ -211,44 +238,81 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   if (pollMs <= 0) { mutex.close(); throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive'); }
   const reportWait = admissionAccounting(options, now);
   const publishWait = memoryWaitStatus(options.env ?? process.env, now);
-  let held = false, announced = false;
+  const slotReady = waitForStartupSlot(options);
+  const read = options.read ?? (need.vm + need.vmReserve > 0 ? readMemory : async () => readHostMemory());
+  const promiseId = randomUUID();
+  let held = false, promised = false;
+  let message = `Waiting for another QA startup; ${admissionMessage(need)}`;
   try {
     mutex.exec('PRAGMA busy_timeout=0');
     for (;;) {
-      announced = false;
-      for (;;) {
-        if (now() >= options.deadline)
-          throw new Error(`Memory admission deadline reached waiting for another QA startup; ${admissionMessage(need)}; no work started`);
+      const concurrency = await startupConcurrency(options);
+      if (now() >= options.deadline)
+        throw new Error(`Memory admission deadline reached${message.startsWith('Waiting for another')
+          ? ' waiting for another QA startup' : ''}; ${message}; no work started`);
+      try {
+        mutex.exec('BEGIN IMMEDIATE');
+        held = true;
+        mutex.exec(`CREATE TABLE IF NOT EXISTS startup_promises (
+          id TEXT PRIMARY KEY, pid INTEGER NOT NULL, start_time TEXT NOT NULL,
+          vm REAL NOT NULL, host REAL NOT NULL, admitted_at REAL NOT NULL
+        )`);
+        const promises = mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all();
+        const live: StartupPromise[] = [];
+        for (const promise of promises) {
+          if (now() - promise.admitted_at > 15 * 60_000 || processStartTime(promise.pid) !== promise.start_time)
+            mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promise.id);
+          else live.push(promise);
+        }
+        let reading: MemoryReading | undefined;
+        let measured = admissionMessage(need);
         try {
-          mutex.exec('BEGIN IMMEDIATE');
-          held = true;
-          break;
+          reading = await read(options.deadline - now());
+          measured = measuredAdmissionMessage(need, reading);
         } catch (error) {
-          if (!['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '')) throw error;
+          measured += `; measurement failed: ${error instanceof Error ? error.message : String(error)}`;
+          reading = undefined;
         }
-        if (!announced) {
-          const message = `Waiting for another QA startup; ${admissionMessage(need)}`;
-          publishWait(message);
-          announce(message);
-          announced = true;
+        message = `Waiting; ${measured}`;
+        if (live.length >= concurrency) {
+          message = `Waiting for another QA startup; ${measured}`;
+        } else if (reading && now() < options.deadline
+          && reading.vmTotal - reading.vmUsed - live.reduce((sum, promise) => sum + promise.vm, 0) >= need.vm + need.vmReserve
+          && reading.hostAvailable - live.reduce((sum, promise) => sum + promise.host, 0) >= need.host + need.hostReserve
+          && slotReady() && now() < options.deadline) {
+          const startTime = processStartTime(process.pid);
+          if (!startTime) throw new Error('Cannot read QA startup process start time');
+          mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(promiseId, process.pid, startTime, need.vm, need.host, now());
+          mutex.exec('COMMIT');
+          held = false;
+          promised = true;
+          publishWait();
+          announce(`Admitted; ${measured}`);
+          reportWait();
+          break;
         }
-        await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
+      } catch (error) {
+        if (!sqliteBusy(error)) throw error;
+        message = `Waiting for another QA startup; ${admissionMessage(need)}`;
+      } finally {
+        if (held) { mutex.exec('ROLLBACK'); held = false; }
       }
-      publishWait();
-      await waitForMemory(need, { ...options, emitEvents: false, onAdmissionWait: undefined });
-      if (await waitForStartupSlot(options)) {
-        reportWait();
-        return await start();
-      }
-      // No slot is free. Drop the guard and repeat both admissions with a fresh reading.
-      mutex.exec('ROLLBACK');
-      held = false;
+      publishWait(message);
+      announce(message);
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
     }
+    return await start();
   } finally {
     try { publishWait(); reportWait(); }
     finally {
-      try { if (held) mutex.exec('ROLLBACK'); }
+      try {
+        if (promised) for (;;) {
+          try { mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promiseId); break; }
+          catch (error) { if (!sqliteBusy(error)) throw error; }
+          await sleep(pollMs);
+        }
+      }
       finally { mutex.close(true); }
     }
   }
