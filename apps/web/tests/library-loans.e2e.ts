@@ -199,7 +199,7 @@ test('a reader returns an overdue copy directly and it is available again', asyn
   const lend = page.getByRole('dialog', { name: `Lend “${seed.title}”` });
   const lentCopy = lend.getByRole('radio', { name: /Pocket paperback/ });
   await expect(lentCopy).toBeVisible();
-  await lentCopy.click();
+  await lentCopy.locator('xpath=..').click();
   await lend.getByRole('textbox', { name: 'Name', exact: true }).fill('City Library');
   await lend.getByLabel('Started').fill(await localStamp(page, Date.now() - 3 * 86_400_000));
   await lend.getByLabel('Due').fill(await page.evaluate(() => new Date(Date.now() - 2 * 86_400_000).toISOString()
