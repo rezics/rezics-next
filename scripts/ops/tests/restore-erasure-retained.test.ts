@@ -66,3 +66,13 @@ test('operator recovery adapter derives maintenance from the restored target gra
   ).rejects.toThrow('invalid maintenance capability');
   expect(accesses()).toBe(0);
 });
+
+test('operator recovery serving verification requires the reconciled restored target', async () => {
+  const { relayPool, erasures, accesses } = incompleteOwner();
+  const checks = recoveryChecks(probes, 'ef'.repeat(32), { relayPool, erasures });
+  expect(checks.verifyServing).toBeFunction();
+  await expect(checks.verifyServing(null as unknown as RestoredContext)).rejects.toThrow(
+    'Owner reconciliation did not establish the restored target',
+  );
+  expect(accesses()).toBe(0);
+});

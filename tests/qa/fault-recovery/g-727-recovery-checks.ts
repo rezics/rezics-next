@@ -265,6 +265,7 @@ export function recoveryChecks(
     );
   }
   let verifiedBeforeRelease = false;
+  let targetApp: ReturnType<typeof createMainApp> | undefined;
   return {
     verify: async (context) => {
       expect(
@@ -372,6 +373,7 @@ export function recoveryChecks(
         content: new ContentCore(context.pools.content),
         ownerOperations: operations,
       });
+      targetApp = app;
       expect((await app.handle(new Request('http://localhost/health/ready'))).status).toBe(503);
       const request = (authorization: string) =>
         new Request('http://localhost/v1/owners/reconciliations', {
@@ -405,6 +407,12 @@ export function recoveryChecks(
         );
       if (reason) throw new Error(`Owner reconciliation remained held: ${reason}`);
       return response;
+    },
+    verifyServing: async () => {
+      if (!targetApp) throw new Error('Owner reconciliation did not establish the restored target');
+      const response = await targetApp.handle(new Request('http://localhost/health/ready'));
+      if (response.status !== 200)
+        throw new Error(`Restored target readiness returned ${response.status}`);
     },
   };
 }

@@ -6,9 +6,12 @@ import type {
   MembershipPreparationResult,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
 import {
+  finishAndVerifyRestore,
   finishOperatorRestore,
+  recordRestoreFailure,
   restoreRecoverySet,
   type OperatorRestoreReleaseContext,
+  type RestoreEvidence,
   type RestoreChecks,
 } from '../restore.ts';
 import { RecoveryBudget } from '../recovery-set.ts';
@@ -103,6 +106,10 @@ function restored(
   };
   const checks: RestoreChecks<OperatorRestoreReleaseContext> = {
     verify: async () => {},
+    verifyServing: async (received) => {
+      expect(received).toBe(context);
+      events.push('serving-verification');
+    },
     reconcile: async (received, body, key) => {
       expect(received).toBe(context);
       expect(body).toEqual({
@@ -116,17 +123,38 @@ function restored(
       return Response.json({ state: 'reconciled', disposition: 'matched' });
     },
   };
+  const finishOnlyChecks: Pick<RestoreChecks<OperatorRestoreReleaseContext>, 'reconcile'> = {
+    get reconcile() {
+      return checks.reconcile;
+    },
+  };
   const finish = () =>
-    finishOperatorRestore(context, checks, 'recovery-cut-successor', () => {
+    finishOperatorRestore(context, finishOnlyChecks, 'recovery-cut-successor', () => {
       events.push('independent-frontier-and-source-check');
     });
-  return { context, checks, events, preparationCalls, finish };
+  const proof: RestoreEvidence = {
+    project: 'rezics-qa-erasure-successor',
+    state: 'held',
+    phases: context.budget.phases,
+    elapsedMs: 0,
+    admissionWaitMs: 0,
+    budgetMs: 600_000,
+  };
+  const finishAndVerify = () =>
+    finishAndVerifyRestore(context, checks, 'recovery-cut-successor', () => {
+      events.push('independent-frontier-and-source-check');
+    }, proof);
+  return { context, checks, events, preparationCalls, finish, finishAndVerify, proof };
 }
 
 test('operator restore default and incomplete adapters hold before reading or creating a target', async () => {
   for (const checks of [
     undefined,
     { verify: async () => {} } as unknown as RestoreChecks,
+    {
+      verify: async () => {},
+      reconcile: async () => Response.json({}),
+    } as unknown as RestoreChecks,
     { reconcile: async () => Response.json({}) } as unknown as RestoreChecks,
   ]) {
     await expect(
@@ -138,9 +166,105 @@ test('operator restore default and incomplete adapters hold before reading or cr
         checks,
       }),
     ).rejects.toThrow(
-      'configure exact read/search/takeout checks and authenticated owner reconciliation',
+      'configure exact read/search/takeout checks, authenticated owner reconciliation, and post-release serving verification',
     );
   }
+});
+
+test('full restore verifies serving after release on the same budget before marking evidence verified', async () => {
+  const fixture = restored();
+  const budget = fixture.context.budget;
+  await fixture.finishAndVerify();
+  expect(fixture.events).toEqual([
+    'independent-frontier-and-source-check',
+    'authenticated-reconciliation',
+    'graph-release-observation',
+    'access-release-observation',
+    'membership-status',
+    'membership-prepare',
+    'membership-status',
+    'advance-owner-epochs',
+    'enable-owner-logins',
+    'serving-verification',
+  ]);
+  expect(fixture.proof.state).toBe('verified');
+  expect(fixture.proof.phases).toHaveProperty('serving-verification');
+  expect(fixture.context.budget).toBe(budget);
+  expect(Object.keys(budget.phases)).toEqual([
+    'owner-reconciliation-api',
+    'release-observation',
+    'membership-preparation',
+    'epoch-advancement-and-logins',
+    'serving-verification',
+  ]);
+});
+
+test('readiness failure leaves released evidence and records successful stop after owner LOGIN', async () => {
+  const fixture = restored();
+  fixture.checks.verifyServing = async (context) => {
+    expect(context).toBe(fixture.context);
+    expect(fixture.proof.state).toBe('released');
+    fixture.events.push('serving-verification');
+    throw new Error('restored target is not ready');
+  };
+  let failure: unknown;
+  try {
+    await fixture.finishAndVerify();
+  } catch (error) {
+    failure = error;
+    recordRestoreFailure(fixture.proof, error, () => fixture.events.push('stop-target'));
+  }
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toBe(
+    'Full restore serving verification failed after release: restored target is not ready',
+  );
+  expect(fixture.proof).toMatchObject({
+    state: 'released',
+    targetStopped: true,
+    failure: 'Full restore serving verification failed after release: restored target is not ready',
+  });
+  expect(fixture.events.slice(-3)).toEqual([
+    'enable-owner-logins',
+    'serving-verification',
+    'stop-target',
+  ]);
+});
+
+test('serving verification shares the recovery deadline and reports failed target cleanup', async () => {
+  let now = 0;
+  const fixture = restored();
+  fixture.context.budget = new RecoveryBudget(() => now);
+  fixture.proof.phases = fixture.context.budget.phases;
+  fixture.checks.verifyServing = async () => {
+    fixture.events.push('serving-verification');
+    now = 600_000;
+  };
+  let failure: unknown;
+  try {
+    await fixture.finishAndVerify();
+  } catch (error) {
+    failure = error;
+    recordRestoreFailure(fixture.proof, error, () => {
+      fixture.events.push('stop-target');
+      throw new Error('docker recovery step failed (exit 1); serving remains held');
+    });
+  }
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toBe(
+    'Full restore serving verification failed after release: Recovery exceeded its 600-second budget',
+  );
+  expect(fixture.proof).toMatchObject({
+    state: 'released',
+    targetStopped: false,
+    cleanupFailure: 'docker recovery step failed (exit 1)',
+  });
+  expect(fixture.proof.state).not.toBe('verified');
+  expect(fixture.events.slice(-3)).toEqual([
+    'enable-owner-logins',
+    'serving-verification',
+    'stop-target',
+  ]);
+  expect(fixture.proof.phases['serving-verification']).toBe(600_000);
 });
 
 test('operator finish observes both owner releases before enabling logins, using exact bigint generations', async () => {

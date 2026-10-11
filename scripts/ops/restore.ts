@@ -70,6 +70,8 @@ export interface RestoreChecks<Context extends OperatorRestoreReleaseContext = R
   /** Exact samples, authorized/denied reads, deleted subjects, revoked grants,
    * representative search and Account/library takeout; any failure keeps held. */
   verify(context: Context): Promise<void>;
+  /** Read-only serving check after reconciliation and owner login release. */
+  verifyServing(context: Context): Promise<void>;
   /** Adapter to POST /v1/owners/reconciliations on this isolated Main instance.
    * Account owns authentication; a local recovery command must not forge it.
    * A matched operation owns retained-erasure reconciliation and both graph
@@ -97,18 +99,24 @@ export interface RestoreOptions {
 export interface RestoreEvidence {
   id?: string;
   project: string;
-  state: 'held' | 'verified';
+  state: 'held' | 'released' | 'verified';
   phases: Record<string, number>;
   elapsedMs: number;
   admissionWaitMs: number;
   budgetMs: number;
   failure?: string;
+  targetStopped?: boolean;
+  cleanupFailure?: string;
 }
 
 function requireRestoreChecks(checks?: RestoreChecks): RestoreChecks {
-  if (typeof checks?.verify !== 'function' || typeof checks.reconcile !== 'function')
+  if (
+    typeof checks?.verify !== 'function' ||
+    typeof checks.verifyServing !== 'function' ||
+    typeof checks.reconcile !== 'function'
+  )
     throw new Error(
-      'Restore is held: configure exact read/search/takeout checks and authenticated owner reconciliation',
+      'Restore is held: configure exact read/search/takeout checks, authenticated owner reconciliation, and post-release serving verification',
     );
   return checks;
 }
@@ -200,10 +208,53 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
   });
 }
 
+/** Full recovery adds serving verification after the narrower operator finish.
+ * Evidence records the committed release before the read-only check can fail. */
+export async function finishAndVerifyRestore<Context extends OperatorRestoreReleaseContext>(
+  context: Context,
+  checks: RestoreChecks<Context>,
+  idempotencyKey: string,
+  beforeReconcile: () => void,
+  evidence: RestoreEvidence,
+): Promise<void> {
+  await finishOperatorRestore(context, checks, idempotencyKey, beforeReconcile);
+  evidence.state = 'released';
+  try {
+    await context.budget.phase('serving-verification', () => checks.verifyServing(context));
+  } catch (error) {
+    const phaseCause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+    const detail = phaseCause instanceof Error ? phaseCause.message : String(phaseCause);
+    throw new Error(
+      `Full restore serving verification failed after release: ${detail.replace(/; serving remains held$/, '')}`,
+      { cause: error },
+    );
+  }
+  evidence.state = 'verified';
+}
+
+/** Preserve the restore failure while recording whether post-failure cleanup
+ * actually stopped the target; release may already have enabled owner logins. */
+export function recordRestoreFailure(
+  evidence: RestoreEvidence,
+  error: unknown,
+  stopTarget?: () => void,
+): void {
+  evidence.failure = error instanceof Error ? error.message : String(error);
+  if (!stopTarget) return;
+  try {
+    stopTarget();
+    evidence.targetStopped = true;
+  } catch (cleanupError) {
+    evidence.targetStopped = false;
+    const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+    evidence.cleanupFailure = message.replace(/; serving remains held$/, '');
+  }
+}
+
 /** Always new volumes, never the original. O(encrypted bytes + restored owner rows
  * + referenced object bytes + indexed RDF); per-table pages and native commands
- * have bounded memory/time. Verification precedes the only hold-release API.
- * A failed pass stops all target services but preserves fenced volumes/evidence. */
+ * have bounded memory/time. Sample checks precede release; serving checks follow
+ * it. A failed pass stops target services where possible and preserves evidence. */
 export async function restoreRecoverySet(options: RestoreOptions): Promise<RestoreEvidence> {
   const checks = requireRestoreChecks(options.checks);
   const budget = new RecoveryBudget();
@@ -496,7 +547,7 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       fuseki,
     };
     await budget.phase('samples-reads-search-takeout', () => checks.verify(restored));
-    await finishOperatorRestore(
+    await finishAndVerifyRestore(
       restored,
       checks,
       `recovery-${manifest.id}-${options.project}`,
@@ -504,19 +555,17 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
         assertCurrentFrontier(index, readFileSync(options.frontier, 'utf8'), options.key);
         sourceStopped();
       },
+      evidence,
     );
-    evidence.state = 'verified';
     return evidence;
   } catch (error) {
-    evidence.failure = error instanceof Error ? error.message : String(error);
-    if (created && context) {
-      try {
-        // Cleanup must still run after the operation's deadline has expired.
-        stackContext(target, new RecoveryBudget()).compose(['stop']);
-      } catch {
-        /* durable NOLOGIN and Access/graph holds remain */
-      }
-    }
+    recordRestoreFailure(
+      evidence,
+      error,
+      created && context
+        ? () => stackContext(target, new RecoveryBudget()).compose(['stop'])
+        : undefined,
+    );
     throw error;
   } finally {
     await Promise.allSettled(Object.values(pools ?? {}).map((pool) => pool.end()));
