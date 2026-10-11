@@ -44,7 +44,7 @@ function SlideThumbnail({ slide }: { slide: ZoneShowcaseSlide }) {
           sizes="80px"
         />
       ) : slide.work ? (
-        <CatalogueCover work={catalogueWork(slide.work)} size="fill" showCredit={false} />
+        <CatalogueCover work={catalogueWork(slide.work)} size="fill" />
       ) : null}
     </span>
   );

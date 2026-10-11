@@ -26,7 +26,7 @@ export function CoverLink({ work, avatarQuery, size, className, children, locale
 }) {
   return <div className={cn('relative', className)}>
     <Link href={work.href} tabIndex={-1} aria-hidden="true" className="block outline-none">
-      <CatalogueCover work={work} avatarQuery={avatarQuery} size={size} showCredit={false}
+      <CatalogueCover work={work} avatarQuery={avatarQuery} size={size}
         className="transition-[translate,box-shadow] duration-300 ease-out group-hover/tile:-translate-y-1
           group-hover/tile:shadow-[0_2px_4px_rgb(0_0_0/0.1),0_16px_32px_-12px_rgb(0_0_0/0.4)]
           motion-reduce:transition-none" />

@@ -13,7 +13,7 @@ import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './form
 import { auditAgents, auditDetail, auditKindLabel, auditOutcome, auditRuns, auditWorks,
   publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { AgentMark, Pill, WorkThumb } from './parts.tsx';
+import { AgentMark, Pill, WorkThumb, WorkThumbCredit } from './parts.tsx';
 import { SubjectName } from './queue-context.tsx';
 import { subjectOf, targetWork } from './queue-subject.ts';
 import { mergeAgents, readAgents, readAudit, readPublicDecisions, readSubjects, type SubjectNames } from './read.ts';
@@ -128,12 +128,16 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
                   className="text-muted-foreground text-xs">{relativeTime(latest, now, locale)}</time>
               </div>
               <p className="text-muted-foreground text-sm">{t.byAgent({ agent: name })}{handle ? ` ${handle}` : ''}</p>
-              {subject ? <LocalizedLink href={subject.href} className="flex min-w-0 items-center gap-2 justify-self-start
-                rounded-md text-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
-                <WorkThumb iri={subject.cover.iri} work={subject.cover.work} label={subject.book?.value ?? subject.text}
-                  className="w-6" />
-                <SubjectName subject={subject} fallback={t.workFallback} className="truncate text-primary" />
-              </LocalizedLink> : null}
+              {subject ? <div className="grid min-w-0 gap-1.5">
+                <LocalizedLink href={subject.href} className="flex min-w-0 items-center gap-2 justify-self-start
+                  rounded-md text-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+                  <WorkThumb iri={subject.cover.iri} work={subject.cover.work} label={subject.book?.value ?? subject.text}
+                    className="w-6" />
+                  <SubjectName subject={subject} fallback={t.workFallback} className="truncate text-primary" />
+                </LocalizedLink>
+                <WorkThumbCredit iri={subject.cover.iri} work={subject.cover.work}
+                  label={subject.book?.value ?? subject.text} locale={locale} />
+              </div> : null}
               {item.reason ? <p className="text-sm" dir="auto">“{item.reason}”</p> : null}
               <div><Badge variant="secondary">{auditKindLabel(item.kind, t)}</Badge></div>
             </div>
@@ -149,6 +153,8 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
                 {subject ? <LocalizedLink href={subject.href} className="truncate text-sm hover:underline">
                   <SubjectName subject={subject} fallback={t.workFallback} className="text-primary" /></LocalizedLink>
                   : null}
+                {subject ? <WorkThumbCredit iri={subject.cover.iri} work={subject.cover.work}
+                  label={subject.book?.value ?? subject.text} locale={locale} /> : null}
               </div>
             </div>
             {item.outcome ? <Badge variant={item.outcome === 'accepted' ? 'soft' : 'secondary'}>

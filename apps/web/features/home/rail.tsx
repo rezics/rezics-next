@@ -81,7 +81,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
           className="group/trend relative grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)] items-center gap-3">
           <span className="text-center font-semibold text-muted-foreground text-sm tabular-nums">{index + 1}</span>
           <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors: [] }} avatarQuery={avatarQuery} size="xs" showCredit={false} />
+            authors: [] }} avatarQuery={avatarQuery} size="xs" />
           <span className="grid min-w-0 gap-0.5">
             <LocalizedLink href={resourceHref('/w/', item.work)} lang={item.title.language}
               className="line-clamp-2 font-medium font-work-title text-sm/snug outline-none after:absolute

@@ -156,7 +156,7 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
               disabled={!on && topics.length >= MAX_TOPICS} className={cn(tile, 'flex-1 flex-col gap-3 p-3')}
               onClick={() => setTopics(current => toggled(current, topic.id))}>
               <span aria-hidden="true" className="flex h-20 items-end gap-1.5">
-                {topic.samples.map(sample => <CatalogueCover key={sample.id} avatarQuery={avatarQuery} size="xs" showCredit={false}
+                {topic.samples.map(sample => <CatalogueCover key={sample.id} avatarQuery={avatarQuery} size="xs"
                   work={{ id: sample.id, title: sample.title, cover: sample.cover, kind: group.cover, authors: [] }} />)}
               </span>
               <span className="flex w-full items-start gap-2">
@@ -191,7 +191,7 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
                 <span className="text-muted-foreground text-xs">{[reason(item, t, names),
                   members(item, t)].filter(Boolean).join(' · ')}</span>
                 {item.sampleWorks.length ? <span aria-hidden="true" className="mt-1 flex gap-1.5">
-                  {item.sampleWorks.map(work => <CatalogueCover key={work.id} avatarQuery={avatarQuery} size="xs" showCredit={false}
+                  {item.sampleWorks.map(work => <CatalogueCover key={work.id} avatarQuery={avatarQuery} size="xs"
                     work={{ id: work.id, title: work.title, cover: work.cover, kind: 'book', authors: [] }} />)}
                 </span> : null}
               </span>

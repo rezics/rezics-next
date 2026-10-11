@@ -123,7 +123,6 @@ function AboutWork({ work }: { work: ThreadRead['work'] }) {
         }}
         avatarQuery={avatarQuery}
         size="xs"
-        showCredit={false}
       />
       <span className="grid min-w-0 gap-0.5">
         <span className="text-muted-foreground text-xs">{t.discussedWork}</span>

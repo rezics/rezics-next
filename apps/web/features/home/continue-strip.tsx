@@ -55,7 +55,7 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
             className="grid gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="relative">
               <CatalogueCover work={{ id: item.work, title: { ...item.title, value: title }, cover: item.cover,
-                kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} size="fill" showCredit={false} />
+                kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} size="fill" />
               <span className="absolute start-1.5 bottom-1.5 z-20 rounded-full bg-primary px-2 py-0.5 font-semibold
                 text-[11px] text-primary-foreground shadow">{unread}</span>
             </span>

@@ -17,7 +17,7 @@ import type { Outcome } from './commands.ts';
 import { agentLabel, isoTime, relativeTime } from './format.ts';
 import { actionLabel, componentLabel, decidedText, kindLabel, reasonLabel, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { Pill, WorkThumb } from './parts.tsx';
+import { Pill, WorkThumb, WorkThumbCredit } from './parts.tsx';
 import { bffQueueApi, mergeNames, type QueueApi, type QueueNames, reporters } from './queue-api.ts';
 import { SubjectName } from './queue-context.tsx';
 import { actionOrder, QueueDetail, type RulesState } from './queue-detail.tsx';
@@ -306,26 +306,30 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
       isCurrent ? 'border-primary/40 bg-primary/5' : 'border-transparent hover:bg-accent/50',
       selected.has(id) && !isCurrent && 'bg-accent/40')}>
       {waiting ? <Checkbox className="mt-3" checked={selected.has(id)} onCheckedChange={() => dispatch({ type: 'toggle', id })} aria-label={t.selectItem({ title })} /> : null}
-      <button type="button" ref={node => { if (node) rows.current.set(id, node); else rows.current.delete(id); }}
-        onClick={() => { dispatch({ type: 'focus', id }); setExpanded(current => !isCurrent || !current); }}
-        onFocus={() => dispatch({ type: 'focus', id })}
-        aria-current={isCurrent ? 'true' : undefined} aria-expanded={isCurrent && expanded ? true : undefined}
-        className="flex min-w-0 flex-1 items-start gap-3 rounded-lg text-start outline-none focus-visible:ring-2
-          focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-        <WorkThumb iri={subject.cover.iri} work={subject.cover.work} label={subject.book?.value ?? title} />
-        <span className="grid min-w-0 flex-1 gap-0.5">
-          <span className="flex min-w-0 items-baseline gap-2">
-            <SubjectName subject={subject} fallback={t.workFallback} className="truncate font-medium" />
-            {item.escalation ? <SirenIcon aria-label={t.escalatedBadge} className="size-3.5 shrink-0 text-warning-foreground" />
-              : null}
+      <div className="grid min-w-0 flex-1 gap-1.5">
+        <button type="button" ref={node => { if (node) rows.current.set(id, node); else rows.current.delete(id); }}
+          onClick={() => { dispatch({ type: 'focus', id }); setExpanded(current => !isCurrent || !current); }}
+          onFocus={() => dispatch({ type: 'focus', id })}
+          aria-current={isCurrent ? 'true' : undefined} aria-expanded={isCurrent && expanded ? true : undefined}
+          className="flex min-w-0 items-start gap-3 rounded-lg text-start outline-none focus-visible:ring-2
+            focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <WorkThumb iri={subject.cover.iri} work={subject.cover.work} label={subject.book?.value ?? title} />
+          <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="flex min-w-0 items-baseline gap-2">
+              <SubjectName subject={subject} fallback={t.workFallback} className="truncate font-medium" />
+              {item.escalation ? <SirenIcon aria-label={t.escalatedBadge} className="size-3.5 shrink-0 text-warning-foreground" />
+                : null}
+            </span>
+            <span className="truncate text-muted-foreground text-sm">
+              {[kindLabel(item.kind, t), reason, author].filter(Boolean).join(' · ')}</span>
+            <span className="text-muted-foreground text-xs">
+              {waiting ? <time dateTime={isoTime(item.openedAt)}>{relativeTime(item.openedAt, now, locale)}</time>
+                : stateLabel(item, t)}</span>
           </span>
-          <span className="truncate text-muted-foreground text-sm">
-            {[kindLabel(item.kind, t), reason, author].filter(Boolean).join(' · ')}</span>
-          <span className="text-muted-foreground text-xs">
-            {waiting ? <time dateTime={isoTime(item.openedAt)}>{relativeTime(item.openedAt, now, locale)}</time>
-              : stateLabel(item, t)}</span>
-        </span>
-      </button>
+        </button>
+        <WorkThumbCredit iri={subject.cover.iri} work={subject.cover.work}
+          label={subject.book?.value ?? title} locale={locale} />
+      </div>
       {outcome && outcome.kind !== 'done' ? <span className="sr-only">{outcome.kind === 'stale' ? t.staleNotice : t.failedNotice}</span>
         : null}
     </li>;

@@ -24,7 +24,7 @@ import {
 import { WorkRow } from './work-row.tsx';
 import { WorkGrid, WorkShelf } from './work-shelf.tsx';
 import { chooseMenuItem } from '../stories/choose-option.ts';
-import { CatalogueCover } from './cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from './cover.tsx';
 import { knownCoverCredit, mixedScriptCoverCredit, unknownCoverCredit } from '../rights-mark/fixtures.ts';
 import type { CatalogueWork } from './work.ts';
 
@@ -304,7 +304,8 @@ function ImportedCovers({ locale }: { locale: UiLocale }) {
     optIns: { general: true, r15: false, sexual: false, grotesque: false } }} images={images}>
     <ReaderActionsProvider signedIn={false} signInHref={signInHref}>
       <div className="grid max-w-4xl gap-8 p-4">
-        <div className="w-40"><CatalogueCover work={works[0]!} locale={locale} /></div>
+        <div className="grid w-40 gap-1.5"><CatalogueCover work={works[0]!} />
+          <CatalogueCoverCredit work={works[0]!} locale={locale} /></div>
         <WorkGrid works={works} locale={locale} />
         <WorkRow work={works[2]!} locale={locale} shelf="none" />
       </div>

@@ -244,7 +244,7 @@ function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' 
         aria-label={work.title.value} className="relative z-10 block rounded-[0.1875rem] outline-none
           focus-visible:ring-2 focus-visible:ring-ring">
         <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
-          authors: [] }} avatarQuery={avatarQuery} size="xs" showCredit={false} />
+          authors: [] }} avatarQuery={avatarQuery} size="xs" />
       </LocalizedLink>
       <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
         authors: [] }} avatarQuery={avatarQuery} locale={locale} className="relative z-10" />
@@ -361,7 +361,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
     thumbnail={about || card.kind === 'list' || !href || item.target.work === null ? null
       : <LocalizedLink href={href} tabIndex={-1} aria-hidden="true" className="block">
         <CatalogueCover work={coverWork(item, workTitle, lang)} avatarQuery={avatarQuery} size="xs"
-          className="w-14 sm:w-16" showCredit={false} />
+          className="w-14 sm:w-16" />
       </LocalizedLink>}
     thumbnailCredit={about || card.kind === 'list' || !href || item.target.work === null ? null
       : <CatalogueCoverCredit work={coverWork(item, workTitle, lang)} avatarQuery={avatarQuery} locale={locale}

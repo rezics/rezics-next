@@ -132,7 +132,7 @@ export function WorkAttachment({ work }: { work: AttachedWork }) {
     transition-colors hover:border-border hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md">
     <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
       authors: [] }} avatarQuery={avatarQuery} size="xs" className="w-6 shrink-0 rounded-[0.1875rem]"
-    alt="" loading="lazy" showCredit={false} />
+    alt="" loading="lazy" />
     <span className="min-w-0 truncate">
       <span lang={work.title.language} dir={work.title.direction} className="font-medium text-foreground">
         {work.title.value}</span>

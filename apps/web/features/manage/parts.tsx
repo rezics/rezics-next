@@ -8,8 +8,8 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
-import { CatalogueCover } from '../catalogue/cover.tsx';
-import { coverKindOf } from '../catalogue/work.ts';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
+import { type CoverWork, coverKindOf } from '../catalogue/work.ts';
 import { untaggedName } from '../language/untagged.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -54,12 +54,23 @@ export function Thumb({ image, label, fallbackKey, className }: {
  * A Work at list size: its one cover, the same as on every other page. Until
  * Main names the Work, the cover is drawn from what the queue knows of it.
  */
+function thumbWork(iri: string, work: WorkSummary | undefined, label: string): CoverWork {
+  return { id: iri, title: work?.title ?? untaggedName(label), cover: work?.cover ?? null,
+    kind: coverKindOf(work?.types ?? []), authors: [] };
+}
+
 export function WorkThumb({ iri, work, label, className }: {
   iri: string; work: WorkSummary | undefined; label: string; className?: string;
 }) {
-  return <CatalogueCover work={{ id: iri, title: work?.title ?? untaggedName(label), cover: work?.cover ?? null,
-    kind: coverKindOf(work?.types ?? []), authors: [] }}
+  return <CatalogueCover work={thumbWork(iri, work, label)}
     className={cn('w-10', className)} />;
+}
+
+/** Render beside the thumbnail, outside the link or button that opens its Work. */
+export function WorkThumbCredit({ iri, work, label, locale, className }: {
+  iri: string; work: WorkSummary | undefined; label: string; locale: UiLocale; className?: string;
+}) {
+  return <CatalogueCoverCredit work={thumbWork(iri, work, label)} locale={locale} className={className} />;
 }
 
 /** A person's initials in a circle; names come from their public profile. */

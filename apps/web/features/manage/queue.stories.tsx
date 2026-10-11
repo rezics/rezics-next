@@ -2,9 +2,11 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
+import { MediaImageProvider } from '@rezics/ui/media-image';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { acting, basisFor, book, chapterOne, decidedPage, header, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
+import { acting, basisFor, book, chapterOne, decidedPage, header, importedCoverImages, importedCoverNames, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
   type Recorded } from './fixtures.ts';
+import { knownCoverCredit } from '../rights-mark/fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
@@ -89,6 +91,30 @@ async function typeValue(field: () => HTMLInputElement | HTMLTextAreaElement, te
 const list = (canvas: ReturnType<typeof within>) => canvas.getByRole('list', { name: 'Queue items' });
 const detailTitle = (canvas: ReturnType<typeof within>) => canvas.getAllByRole('heading', { level: 3 })
   .find((heading: HTMLElement) => heading.id.startsWith('queue-detail-') && heading.checkVisibility())!;
+
+export const ImportedCoverCredits: Story = {
+  args: { initial: { ...queuePage, items: queue.slice(0, 1), nextCursor: null }, names: importedCoverNames,
+    api: { ...queueApi(), names: async () => importedCoverNames } },
+  globals: { viewport: { value: 'phone' } },
+  decorators: [Story => <MediaImageProvider viewer={{ ready: true, signedIn: false, age: 'unknown',
+    optIns: { general: true, r15: false, sexual: false, grotesque: false } }} images={importedCoverImages}>
+    <Story /></MediaImageProvider>],
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const row = within(list(canvas));
+    const credit = row.getByRole('link', { name: knownCoverCredit.source.name });
+    await expect(credit).toBeVisible();
+    await expect(credit.parentElement?.closest('a,button,[role="button"]')).toBeNull();
+    await expect(row.getByRole('button', { name: /Pride and Prejudice/ })).not.toHaveTextContent(knownCoverCredit.source.name);
+    await userEvent.click(row.getByRole('button', { name: /Pride and Prejudice/ }));
+    const detailCredits = canvas.getAllByRole('link', { name: knownCoverCredit.source.name })
+      .filter(link => link !== credit && link.checkVisibility());
+    await expect(detailCredits).toHaveLength(1);
+    await expect(detailCredits[0]).toBeVisible();
+    await expect(detailCredits[0]!.parentElement?.closest('a,button,[role="button"]')).toBeNull();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
 
 /** j/k move through one list of reports, submissions and corrections; a approves with an undo window. */
 export const KeyboardTriage: Story = {

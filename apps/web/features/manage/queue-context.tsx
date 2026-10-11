@@ -12,7 +12,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
 import { completionText, recordFacts, workTypeText } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { AgentMark, WorkThumb } from './parts.tsx';
+import { AgentMark, WorkThumb, WorkThumbCredit } from './parts.tsx';
 import type { ShownName, Subject } from './queue-subject.ts';
 import type { AgentSummary, PersonRecord, PublishedRule, WorkFacts } from './types.ts';
 
@@ -58,6 +58,8 @@ export function SubjectHeader({ subject, facts, headingId, fallback, locale, t }
       {told?.tagline ? <p className="text-pretty text-sm">
         <span className="sr-only">{t.hookLabel}: </span>
         <Shown name={told.tagline} className="italic" /></p> : null}
+      <WorkThumbCredit iri={subject.cover.iri} work={subject.cover.work}
+        label={subject.book?.value ?? subject.text} locale={locale} />
       {work || subject.book ? <LocalizedLink href={subject.href} className="inline-flex items-center gap-1 justify-self-start rounded-md
         font-medium text-primary text-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
         {subject.book ? t.readChapter : t.openWork}<ArrowUpRightIcon aria-hidden="true" className="size-3.5" /></LocalizedLink>

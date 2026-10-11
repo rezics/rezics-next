@@ -1,4 +1,6 @@
 import type { AgentOption } from '../auth/acting-identity.ts';
+import { mediaImageKey, type MediaImageMetadata } from '@rezics/ui/media-image';
+import { knownCoverCredit } from '../rights-mark/fixtures.ts';
 import type { AdminApi } from './admin-api.ts';
 import type { Outcome } from './commands.ts';
 import type { LogApi, LogNames } from './log-view.tsx';
@@ -263,6 +265,21 @@ export const logApi: LogApi = {
   names: async () => logNames,
 };
 export const logNames: LogNames = { agents, works, chapters, facts };
+
+/** Main's imported identifying cover, with matching presentation metadata. */
+const importedRepresentation = '00000000-0000-4000-8000-000000001101';
+export const importedCoverNames: QueueNames = { ...names, works: Object.fromEntries(Object.entries(works)
+  .map(([key, work]) => [key, { ...work, cover: { kind: 'image', selection: importedRepresentation,
+    url: `/v1/media/representations/${importedRepresentation}/bytes`, mediaType: 'image/svg+xml',
+    width: 300, height: 450, crop: null, basis: { policy: 'story', context: 'story' },
+    nsfw: 'sfw', ageRating: { status: 'unassessed' }, coverCredit: knownCoverCredit } }])) };
+export const importedCoverImages: Record<string, MediaImageMetadata> = {
+  [mediaImageKey({ representationId: importedRepresentation })]: {
+    representationId: importedRepresentation,
+    src: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><rect width="300" height="450" fill="#234a62"/><text x="150" y="225" fill="#f4d997" text-anchor="middle" font-size="24">Example cover</text></svg>')}`,
+    nsfw: 'sfw', ageRating: { status: 'unassessed' }, coverCredit: knownCoverCredit,
+  },
+};
 
 export const roles: Role[] = [
   { id: id(2001), name: 'Community moderators', permissions: ['governance.moderate', 'realm.members.manage'],

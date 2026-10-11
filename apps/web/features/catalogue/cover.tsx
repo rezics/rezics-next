@@ -33,20 +33,16 @@ export function CatalogueCoverCredit({ work, avatarQuery, locale, className }: {
  * A Work's one cover, as every surface draws it: home, Discover, search,
  * Library, profiles, Zones, Manage, the Work page and Studio. Build `work`
  * from any read that names the Work's id, types (`coverKindOf`), title and
- * credited authors; the same Work then looks the same everywhere.
+ * credited authors; the same Work then looks the same everywhere. This draws
+ * only the image: consumers place CatalogueCoverCredit outside their controls.
  */
-export function CatalogueCover({ work, avatarQuery, className, showCredit = true, locale, ...props }: {
-  work: CoverWork; avatarQuery?: string; showCredit?: boolean; locale?: UiLocale;
+export function CatalogueCover({ work, avatarQuery, className, ...props }: {
+  work: CoverWork; avatarQuery?: string;
 }
   & Pick<WorkCoverProps, 'size' | 'loading' | 'alt' | 'className' | 'style' | 'revealable'>) {
-  const credit = useCoverCredit(work, avatarQuery);
-  const cover = <WorkCover {...coverProps(work, avatarQuery)} {...props} className={cn(
+  return <WorkCover {...coverProps(work, avatarQuery)} {...props} className={cn(
     // Imported art fits the same kind-sized box as generated covers, without cropping its title.
     '[&_[data-slot=media-image]]:size-full [&_[data-slot=media-image]]:bg-muted [&_[data-slot=media-image]]:object-contain',
     className,
   )} />;
-  const widths = { xs: 'w-10', sm: 'w-16', md: 'w-28', lg: 'w-40', xl: 'w-56', fill: 'w-full' };
-  return showCredit && credit ? <div className={cn('grid min-w-0 content-start gap-1.5', widths[props.size ?? 'fill'], className)}>
-    {cover}<CatalogueCoverCredit work={work} avatarQuery={avatarQuery} locale={locale} />
-  </div> : cover;
 }

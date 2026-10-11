@@ -7,7 +7,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
 import type { RatingTarget, ReaderSeed } from '../catalogue/reader-store.ts';
 import { coverKindOf, type CatalogueAuthor } from '../catalogue/work.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { RelationshipControl } from '../relationships/control.tsx';
 import { ReportAction } from '../safety/report-action.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -31,9 +31,11 @@ import { type WorkExperience, showsBookControls, workExperience } from '../entit
 export function WorkPageCover({ work, authors = [], avatarQuery }: {
   work: Header; authors?: readonly CatalogueAuthor[]; avatarQuery?: string;
 }) {
-  return <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover,
-    kind: coverKindOf(work.types), authors }} avatarQuery={avatarQuery} loading="eager"
-    revealable className="w-full xl:w-60" />;
+  const coverWork = { id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types), authors };
+  return <div className="grid w-full gap-1.5 xl:w-60">
+    <CatalogueCover work={coverWork} avatarQuery={avatarQuery} loading="eager" revealable className="w-full" />
+    <CatalogueCoverCredit work={coverWork} avatarQuery={avatarQuery} />
+  </div>;
 }
 
 /**

@@ -2,13 +2,17 @@ import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
+import { MediaImageProvider } from '@rezics/ui/media-image';
 import { expect, within } from 'storybook/test';
+import { knownCoverCredit } from '../rights-mark/fixtures.ts';
 import {
   acting,
   audit,
   book,
   decisions,
   header,
+  importedCoverImages,
+  importedCoverNames,
   logApi,
   logNames,
   now,
@@ -152,6 +156,38 @@ export const PublicDecisions: Story = {
       ),
     );
     await expect(canvas.getAllByText('Rejected')).toHaveLength(1);
+  },
+};
+
+export const ImportedCoverAuditCredits: Story = {
+  args: { names: importedCoverNames },
+  decorators: [Story => <MediaImageProvider viewer={{ ready: true, signedIn: false, age: 'unknown',
+    optIns: { general: true, r15: false, sexual: false, grotesque: false } }} images={importedCoverImages}>
+    <Story /></MediaImageProvider>],
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const credits = canvas.getAllByRole('link', { name: knownCoverCredit.source.name });
+    await expect(credits).toHaveLength(2);
+    for (const credit of credits) {
+      await expect(credit).toBeVisible();
+      await expect(credit.parentElement?.closest('a,button,[role="button"]')).toBeNull();
+    }
+    await expect(canvas.getByRole('link', { name: '西游记' })).toBeVisible();
+  },
+};
+
+export const ImportedCoverPublicCredits: Story = {
+  ...ImportedCoverAuditCredits,
+  args: { ...PublicDecisions.args, names: importedCoverNames },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const credits = within(canvasElement).getAllByRole('link', { name: knownCoverCredit.source.name });
+    await expect(credits).toHaveLength(decisions.length);
+    for (const credit of credits) {
+      await expect(credit).toBeVisible();
+      await expect(credit.parentElement?.closest('a,button,[role="button"]')).toBeNull();
+    }
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

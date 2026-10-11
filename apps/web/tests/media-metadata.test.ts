@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
 import { imageReferenceFromUrl, mediaMetadataOf, resolveMediaMetadata } from '../features/api/media-metadata.ts';
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MediaImageProvider, mediaImageKey, type MediaImageViewer } from '@rezics/ui/media-image';
-import { CatalogueCover } from '../features/catalogue/cover.tsx';
+import { CatalogueCover, CatalogueCoverCredit } from '../features/catalogue/cover.tsx';
+import { WorkThumb, WorkThumbCredit } from '../features/manage/parts.tsx';
+import type { WorkSummary } from '../features/manage/types.ts';
 import { CoverLink, WorkTile } from '../features/catalogue/work-tile.tsx';
 import { classics } from '../features/catalogue/fixtures.ts';
 import { coverImage, type CatalogueWork } from '../features/catalogue/work.ts';
@@ -19,6 +21,48 @@ const imported: CatalogueWork = { ...classics[0]!, cover: {
 } };
 const viewer: MediaImageViewer = { ready: true, signedIn: false, age: 'unknown',
   optIns: { general: true, r15: false, sexual: false, grotesque: false } };
+
+/** Inspect authored markup before an HTML parser repairs invalid nested controls. */
+function expectNoNestedControls(html: string) {
+  const stack: { tag: string; interactive: boolean }[] = [];
+  for (const match of html.matchAll(/<(\/?)([a-z][\w-]*)\b([^>]*)>/gi)) {
+    const [, closing, tag, attributes] = match;
+    if (closing) { stack.pop(); continue; }
+    const interactive = tag === 'a' || tag === 'button' || /\brole="button"/.test(attributes!);
+    if (interactive) expect(stack.some(node => node.interactive)).toBe(false);
+    if (!/^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/.test(tag!)) {
+      stack.push({ tag: tag!, interactive });
+    }
+  }
+}
+
+test('imported covers inside Work links and buttons keep source credits outside every control', () => {
+  const summary: WorkSummary = { iri: imported.id, title: imported.title!, cover: imported.cover!,
+    originalTitle: null, types: ['https://schema.org/Book'] };
+  for (const control of ['a', 'button', 'div'] as const) {
+    for (const masked of [false, true]) {
+      for (const managed of [false, true]) {
+        const cover = managed ? createElement(WorkThumb, { iri: imported.id, work: summary, label: imported.title!.value })
+          : createElement(CatalogueCover, { work: imported });
+        const credit = managed ? createElement(WorkThumbCredit, { iri: imported.id, work: summary,
+          label: imported.title!.value, locale: 'en' }) : createElement(CatalogueCoverCredit, { work: imported });
+        const wrapped = createElement(control, control === 'a' ? { href: imported.href }
+          : control === 'button' ? { type: 'button' } : { role: 'button', tabIndex: 0 }, cover);
+        const reference = { representationId: id(2), mediaUseId: id(3) };
+        const props = { viewer, images: { [mediaImageKey(reference)]: { ...reference,
+          nsfw: masked ? 'unknown' as const : 'sfw' as const, ageRating: { status: 'unassessed' as const },
+          coverCredit: knownCoverCredit } } };
+        const imageOnly = renderToStaticMarkup(createElement(MediaImageProvider, { ...props, children: wrapped }));
+        expect(imageOnly).not.toContain(knownCoverCredit.source.href);
+        expectNoNestedControls(imageOnly);
+        const html = renderToStaticMarkup(createElement(MediaImageProvider, { ...props,
+          children: createElement(Fragment, null, wrapped, credit) }));
+        expect(html).toContain(`href="${knownCoverCredit.source.href}"`);
+        expectNoNestedControls(html);
+      }
+    }
+  }
+});
 
 test('cover metadata and selected props round-trip exact copyright evidence and permitted role', async () => {
   const ref = { representationId: id(2), mediaUseId: id(3) };
@@ -36,7 +80,8 @@ test('cover metadata and selected props round-trip exact copyright evidence and 
 });
 
 test('identifying covers render accessible credit beside headers and compact Work links in server output', () => {
-  for (const element of [createElement(CatalogueCover, { work: imported, locale: 'ja' }),
+  for (const element of [createElement(Fragment, null, createElement(CatalogueCover, { work: imported }),
+    createElement(CatalogueCoverCredit, { work: imported, locale: 'ja' })),
     createElement(CoverLink, { work: imported, locale: 'ja' }),
     createElement(StudioCover, { id: imported.id, title: imported.title!, cover: imported.cover,
       types: ['https://schema.org/Book'], authors: [], actingSubject: 'person' }),
@@ -57,7 +102,8 @@ test('generated, hidden and refreshed unavailable covers render no stale copyrig
     ageRating: { status: 'assessed' as const, labels: ['r18' as const] } }]) {
     const html = renderToStaticMarkup(createElement(MediaImageProvider, { viewer,
       images: { [mediaImageKey(reference)]: metadata },
-      children: createElement(CatalogueCover, { work: imported }) }));
+      children: createElement(Fragment, null, createElement(CatalogueCover, { work: imported }),
+        createElement(CatalogueCoverCredit, { work: imported })) }));
     expect(html).not.toContain('data-cover-credit');
     expect(html).not.toContain('data-slot="media-image"');
   }

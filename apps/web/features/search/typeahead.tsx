@@ -188,7 +188,7 @@ export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, 
           className={cn('flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-start',
             'aria-selected:bg-accent aria-selected:text-accent-foreground')}>
           <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors: authors.map(name => ({ name, href: null })) }} size="xs" showCredit={false} />
+            authors: authors.map(name => ({ name, href: null })) }} size="xs" />
           <span className="grid min-w-0">
             <span lang={item.title.language} dir={item.title.direction}
               className="truncate font-medium font-work-title text-[0.9375rem]">
