@@ -89,7 +89,7 @@ function eligibilityOwnerRow(record: ContentRecord): OwnerRow {
 }
 
 test('SEARCH20 rebuild verifies each Content MatchUnit with its exact model recipe', async () => {
-  const templates = [
+  const templates: Array<{ model: string; body: Record<string, string>; text: string }> = [
     { model: 'content-shape-v1', body: { body: 'single text Work source' }, text: 'single text Work source' },
     { model: 'rezics-prompt-v1', body: { content: 'Hub prompt source' }, text: 'Hub prompt source' },
     { model: 'rezics-skill-package-v1', body: { instructions: 'Hub skill source' },
