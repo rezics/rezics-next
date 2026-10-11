@@ -1302,7 +1302,8 @@ function launch(task: Task, effort: string, session: string, prompt: string, res
   const child = spawn(program, args, {
     cwd: task.worktree, detached: true,
     stdio: ['ignore', openSync(output, 'w'), openSync(join(runDir, `attempt-${n}.err`), 'w')],
-    env: { ...workerSessionEnvironment(process.env), ...engineEnv(engine), GOAL_TASK_ID: task.id, GOAL_MANAGER: manager },
+    env: { ...workerSessionEnvironment(process.env), ...engineEnv(engine), GOAL_TASK_ID: task.id,
+      GOAL_WORKTREE: resolve(task.worktree), GOAL_MANAGER: manager },
   });
   child.unref();
   if (!child.pid) throw new Error(`Could not start ${program}`);
@@ -1638,23 +1639,29 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
 }
 
 
-/** Detached children inherit the launcher's task marker even if they change cwd.
+/** Detached children inherit the launcher's task and worktree markers even if they change cwd.
+ * A task ID alone is not unique across repositories; older workers without a worktree marker stay scoped by cwd.
  * Without a task ID, sweep the worktree only when its last live worker has stopped.
  * Linux only: reads /proc. */
 export function killWorktreeProcesses(worktree: string, taskId?: string, signal: NodeJS.Signals = 'SIGTERM'): number {
   if (!existsSync('/proc')) return 0;
-  const prefix = worktree.endsWith('/') ? worktree : `${worktree}/`;
+  const origin = resolve(worktree);
+  const prefix = `${origin}/`;
   const victims: number[] = [];
   for (const entry of readdirSync('/proc')) {
     const pid = Number(entry);
     if (!Number.isInteger(pid) || pid === process.pid) continue;
     try {
       if (taskId) {
-        if (readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').includes(`GOAL_TASK_ID=${taskId}`)) victims.push(pid);
-      } else {
-        const cwd = readlinkSync(`/proc/${pid}/cwd`);
-        if (cwd === worktree || cwd.startsWith(prefix)) victims.push(pid);
+        const environment = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
+        if (!environment.includes(`GOAL_TASK_ID=${taskId}`)) continue;
+        if (environment.some(value => value.startsWith('GOAL_WORKTREE='))) {
+          if (environment.includes(`GOAL_WORKTREE=${origin}`)) victims.push(pid);
+          continue;
+        }
       }
+      const cwd = readlinkSync(`/proc/${pid}/cwd`);
+      if (cwd === origin || cwd.startsWith(prefix)) victims.push(pid);
     } catch { /* exited or not ours */ }
   }
   for (const pid of victims) { try { process.kill(pid, signal); } catch { /* gone */ } }
