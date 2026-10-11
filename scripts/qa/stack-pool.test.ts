@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import {
@@ -266,6 +266,213 @@ test('infrastructure fingerprint is stable under ordering and changes with every
   expect(qaStackFingerprint({ ...input, images: ['sha256:new'] })).not.toBe(fingerprint);
   expect(qaStackFingerprint({ ...input, assembler: 'changed' })).not.toBe(fingerprint);
   expect(qaStackFingerprint({ ...input, environment: { ...input.environment, MEMORY: '8g' } })).not.toBe(fingerprint);
+});
+
+function checkouts(f: ReturnType<typeof fixture>) {
+  const origin = join(f.root, 'checkout-a');
+  const target = join(f.root, 'checkout-b');
+  mkdirSync(origin);
+  mkdirSync(target);
+  return { origin, target, originStack: join(origin, '.temp', 'stack', 'rezics-qa-cross-checkout'),
+    targetStack: join(target, '.temp', 'stack', 'rezics-qa-cross-checkout') };
+}
+
+test('cross-checkout acquisition rebases every apps and compose value and recreates only recorded reset directories', async () => {
+  const f = fixture();
+  f.on();
+  const c = checkouts(f);
+  mkdirSync(join(c.originStack, 'objects'), { recursive: true });
+  for (const root of [c.origin, c.target]) {
+    mkdirSync(join(root, 'infra'));
+    writeFileSync(join(root, 'infra', 'fixture.ttl'), 'fixture');
+    writeFileSync(join(root, 'infra', 'fixture with spaces.ttl'), 'fixture');
+  }
+  const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+  await lease!.park({
+    ...apps,
+    GENERIC_DIRECTORY: join(c.originStack, 'objects'),
+    UNLISTED_ABSENT_DIRECTORY: join(c.originStack, 'candidates'),
+    NEW_FIXTURE: join(c.origin, 'infra', 'fixture.ttl'),
+    UNQUOTED_SPACES: join(c.origin, 'infra', 'fixture with spaces.ttl'),
+    PATH_LIST: `${c.origin}/infra/fixture.ttl:${c.origin}/infra/fixture.ttl`,
+    MIXED_ARGUMENTS: `--first=${c.origin}/infra/fixture.ttl; --second=file://${c.origin}/infra/fixture%20with%20spaces.ttl`,
+    JSON_VALUE: JSON.stringify({ fixture: `${c.origin}/infra/fixture.ttl` }),
+  }, { ...compose,
+    UNLISTED_COMPOSE_DIRECTORY: join(c.originStack, 'objects'),
+    QUOTED_SPACES: `"${c.origin}/infra/fixture with spaces.ttl"`,
+  });
+  expect(f.saved('cross-checkout').recreatableDirectories).toEqual([
+    '.temp/stack/rezics-qa-cross-checkout/objects',
+  ]);
+  expect(f.saved('cross-checkout').absentPaths).toEqual(['.temp/stack/rezics-qa-cross-checkout/candidates']);
+  rmSync(c.origin, { recursive: true });
+  const receivingPool = f.pool({ root: c.target, holder: f.identity('second') });
+  const acquired = await receivingPool.acquire('ordinary');
+  expect(acquired).toBeDefined();
+  expect(acquired!.entry.checkoutRoot).toBe(c.target);
+  expect(JSON.stringify([acquired!.entry.apps, acquired!.entry.compose])).not.toContain(c.origin);
+  expect(acquired!.entry.apps.PATH_LIST).toBe(`${c.target}/infra/fixture.ttl:${c.target}/infra/fixture.ttl`);
+  expect(acquired!.entry.compose.QUOTED_SPACES).toBe(`"${c.target}/infra/fixture with spaces.ttl"`);
+  expect(existsSync(join(c.targetStack, 'objects'))).toBe(true);
+  expect(existsSync(join(c.targetStack, 'candidates'))).toBe(false);
+  expect(receivingPool.rejections).toEqual([]);
+  await acquired!.park(acquired!.entry.apps, acquired!.entry.compose);
+  expect(f.saved('cross-checkout').checkoutRoot).toBe(c.target);
+});
+
+test('a checkout-root prefix belonging to another directory is left unchanged', async () => {
+  const f = fixture();
+  f.on();
+  const c = checkouts(f);
+  const unchanged = `${c.origin}-other/fixture.ttl`;
+  const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+  await lease!.park({ OTHER_DIRECTORY: unchanged }, { EMBEDDED_OTHER_PATH: `/outside${c.origin}/fixture.ttl` });
+  const acquired = await f.pool({ root: c.target }).acquire('ordinary');
+  expect(acquired!.entry.apps.OTHER_DIRECTORY).toBe(unchanged);
+  expect(acquired!.entry.compose.EMBEDDED_OTHER_PATH).toBe(`/outside${c.origin}/fixture.ttl`);
+});
+
+for (const kind of ['file', 'nonempty-directory'] as const) {
+  test(`a missing receiving-checkout ${kind} is refused and its candidate is destroyed with the field reason`, async () => {
+    const f = fixture();
+    f.on();
+    const c = checkouts(f);
+    mkdirSync(c.originStack, { recursive: true });
+    const state = join(c.originStack, 'retained-state');
+    if (kind === 'file') writeFileSync(state, 'must not be copied');
+    else { mkdirSync(state); writeFileSync(join(state, 'data'), 'must not be copied'); }
+    const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+    await lease!.park(apps, { UNLISTED_STATE: state });
+    const receivingPool = f.pool({ root: c.target });
+    expect(await receivingPool.acquire('ordinary')).toBeUndefined();
+    expect(f.destroyed).toEqual(['cross-checkout']);
+    expect(receivingPool.rejections).toEqual([{
+      projectRunId: 'cross-checkout', scope: 'compose', key: 'UNLISTED_STATE', value: state,
+      reason: `rebased checkout path does not exist: ${join(c.targetStack, 'retained-state')}`,
+    }]);
+    expect(existsSync(join(c.targetStack, 'retained-state'))).toBe(false);
+  });
+}
+
+test('an existing target file can be rebased after the origin checkout disappears', async () => {
+  const f = fixture();
+  f.on();
+  const c = checkouts(f);
+  for (const root of [c.origin, c.target]) writeFileSync(join(root, 'fixture'), 'local fixture');
+  const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+  await lease!.park({ OWNER_FIXTURE: join(c.origin, 'fixture') }, {});
+  rmSync(c.origin, { recursive: true });
+  const acquired = await f.pool({ root: c.target }).acquire('ordinary');
+  expect(acquired!.entry.apps.OWNER_FIXTURE).toBe(join(c.target, 'fixture'));
+});
+
+test('candidate validation finishes before any reset directories are created', async () => {
+  const f = fixture();
+  f.on();
+  const c = checkouts(f);
+  mkdirSync(join(c.originStack, 'objects'), { recursive: true });
+  const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+  await lease!.park({ FIRST_EMPTY_STATE: join(c.originStack, 'objects'), SECOND_MISSING_FILE: join(c.origin, 'fixture') }, {});
+  const receivingPool = f.pool({ root: c.target });
+  expect(await receivingPool.acquire('ordinary')).toBeUndefined();
+  expect(receivingPool.rejections[0]?.key).toBe('SECOND_MISSING_FILE');
+  expect(existsSync(c.targetStack)).toBe(false);
+});
+
+for (const kind of ['absent', 'empty-directory'] as const) {
+  test(`a reset-local ${kind} cannot expose prior state from the receiving checkout`, async () => {
+    const f = fixture();
+    f.on();
+    const c = checkouts(f);
+    const source = join(c.originStack, 'state');
+    const target = join(c.targetStack, 'state');
+    if (kind === 'empty-directory') mkdirSync(source, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, 'leftover'), 'must not be exposed');
+    const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+    await lease!.park({ GENERIC_RESET_STATE: source }, {});
+    const pool = f.pool({ root: c.target });
+    expect(await pool.acquire('ordinary')).toBeUndefined();
+    expect(pool.rejections[0]?.reason).toContain(kind === 'absent' ? 'is present' : 'is not empty');
+    expect(f.destroyed).toEqual(['cross-checkout']);
+    expect(readFileSync(join(target, 'leftover'), 'utf8')).toBe('must not be exposed');
+  });
+}
+
+test('checkout paths that traverse outside the recorded root are refused', async () => {
+  const f = fixture();
+  f.on();
+  const c = checkouts(f);
+  const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+  await lease!.park({ GENERIC_PATH: `${c.origin}/../outside` }, {});
+  const pool = f.pool({ root: c.target });
+  expect(await pool.acquire('ordinary')).toBeUndefined();
+  expect(pool.rejections[0]?.reason).toContain('escapes its recorded root');
+  expect(f.destroyed).toEqual(['cross-checkout']);
+});
+
+test('rebased target symlinks cannot reach state outside the receiving checkout', async () => {
+  const f = fixture();
+  f.on();
+  const c = checkouts(f);
+  writeFileSync(join(c.origin, 'fixture'), 'origin only');
+  symlinkSync(join(c.origin, 'fixture'), join(c.target, 'fixture'));
+  const lease = await f.pool({ root: c.origin }).register('cross-checkout', 'ordinary');
+  await lease!.park({ GENERIC_PATH: join(c.origin, 'fixture') }, {});
+  const pool = f.pool({ root: c.target });
+  expect(await pool.acquire('ordinary')).toBeUndefined();
+  expect(pool.rejections[0]?.reason).toContain('leaves the target checkout');
+});
+
+test('legacy snapshots without a checkout root are destroyed rather than leased', async () => {
+  const f = fixture();
+  f.on();
+  const lease = await f.pool().register('legacy', 'ordinary');
+  await lease!.park(apps, compose);
+  const saved = f.saved('legacy');
+  delete saved.checkoutRoot;
+  writeFileSync(join(f.state, 'legacy.json'), JSON.stringify(saved));
+  const pool = f.pool();
+  expect(await pool.acquire('ordinary')).toBeUndefined();
+  expect(pool.rejections[0]?.reason).toContain('no recorded checkout root');
+  expect(f.destroyed).toEqual(['legacy']);
+});
+
+test('unknown startup fingerprints miss parked stacks and can be recorded before parking a fresh stack', async () => {
+  const f = fixture(1);
+  f.on();
+  const parked = await f.pool().register('old', 'ordinary');
+  await parked!.park(apps, compose);
+  const fresh = await f.pool().register('fresh');
+  expect(fresh).toBeDefined();
+  expect(f.destroyed).toEqual(['old']);
+  expect(f.saved('fresh').fingerprint).toBeUndefined();
+  await fresh!.recordFingerprint('resolved-after-startup');
+  expect(f.saved('fresh').fingerprint).toBe('resolved-after-startup');
+  expect(fresh!.entry.fingerprint).toBe('resolved-after-startup');
+  expect(await fresh!.park(apps, compose)).toBe(true);
+  expect((await f.pool().acquire('resolved-after-startup'))?.entry.projectRunId).toBe('fresh');
+});
+
+test('a fresh stack without a resolved fingerprint is destroyed on release', async () => {
+  const f = fixture();
+  f.on();
+  const fresh = await f.pool().register('unresolved');
+  expect(await fresh!.park(apps, compose)).toBe(false);
+  expect(f.destroyed).toEqual(['unresolved']);
+});
+
+test('normal sweeps preserve parked fingerprints and recording cannot overwrite a newer holder', async () => {
+  const f = fixture();
+  f.on();
+  const former = await f.pool().register('original', 'ordinary');
+  await former!.park(apps, compose);
+  await f.pool().sweep();
+  expect(f.destroyed).toEqual([]);
+  const current = await f.pool({ holder: f.identity('second') }).acquire('ordinary');
+  await expect(former!.recordFingerprint('wrong')).rejects.toThrow('lost its ownership record');
+  expect(f.saved('original').fingerprint).toBe('ordinary');
+  expect(f.saved('original').token).toBe(current!.entry.token);
 });
 
 test('reducing the slot count trims parked stacks while preserving active holders', async () => {

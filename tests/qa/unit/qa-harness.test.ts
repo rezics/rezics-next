@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Script } from 'node:vm';
 import ts from 'typescript-6';
@@ -14,6 +14,7 @@ import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
 import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
   from '../../../scripts/qa/stack-ownership.ts';
+import { createQaStackPool, qaStackFingerprint, type QaStackPoolLease } from '../../../scripts/qa/stack-pool.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -38,6 +39,203 @@ function harnessAdmission(env: NodeJS.ProcessEnv, slotDirectory: string) {
     acquireQaSlots, Date, console,
   }) as (wanted: number, options?: Parameters<typeof acquireQaSlots>[4]) => ReturnType<typeof acquireQaSlots>;
 }
+
+/** Keep the real fingerprint, startup and finish branches; test execution is
+ * already proved by the stack tests and is replaced by one successful result. */
+function poolStartupBoundary(bindings: Record<string, unknown>) {
+  const source = ts.createSourceFile('cli.ts', readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = (name: string) => source.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === name)!;
+  const shard = declaration('runShardWork');
+  const testBoundary = shard.body!.statements.find(node =>
+    ts.isIfStatement(node) && node.expression.getText(source) === '!needsStack')!;
+  const boundary = ts.transpileModule(declaration('integrationInfrastructureFingerprint').getText(source) + '\n'
+    + source.text.slice(shard.getStart(source), testBoundary.getStart(source))
+    + "\nrecord.stage = 'test'; return finish({ ok: true, timedOut: false, noMatch: false, xml: '' });\n}\n"
+    + '({ runShardWork, integrationInfrastructureFingerprint });',
+    { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
+  return new Script(boundary).runInNewContext(bindings) as {
+    runShardWork(tier: string, project: string, files: string[], flags: string[], budget: number): Promise<{ ok: boolean }>;
+    integrationInfrastructureFingerprint(env: NodeJS.ProcessEnv): Promise<string | undefined>;
+  };
+}
+
+function coldPoolHarness(directory: string, inspectionError: string,
+  mode: { initialPresent?: boolean; postMissing?: boolean; rejectSnapshot?: boolean; realPool?: boolean } = {}) {
+  const events: string[] = [];
+  const errors: string[] = [];
+  const computed: string[] = [];
+  let imagesPresent = false;
+  let recordedFingerprint: string | undefined;
+  const rejections: { projectRunId: string; scope: string; key: string; value: string; reason: string }[] = [];
+  const apps = { MAIN_OBJECT_DIRECTORY: join(directory, 'objects') };
+  const compose = { REZICS_STACK_PROFILE: 'qa' };
+  let realLease: QaStackPoolLease | undefined;
+  const realPool = mode.realPool ? createQaStackPool({ root, slotDirectory: join(directory, 'slots'),
+    slots: 1, janitor: false, destroy: async () => {}, destroySync: () => {} }) : undefined;
+  if (realPool) {
+    writeFileSync(join(directory, 'qa-stack-pool'), 'on\n');
+    mkdirSync(apps.MAIN_OBJECT_DIRECTORY);
+  }
+  const result = (ok = true, output = '') => ({ ok, output, timedOut: false,
+    elapsedMs: 1, activeElapsedMs: 1, admissionWaitMs: 0 });
+  const lease = {
+    async recordFingerprint(value: string | undefined) {
+      events.push(value === undefined ? 'record pending fingerprint' : 'record fingerprint');
+      recordedFingerprint = value;
+      if (realLease && value !== undefined) await realLease.recordFingerprint(value);
+    },
+    async park(nextApps: unknown, nextCompose: unknown) {
+      events.push(recordedFingerprint === undefined ? 'refuse pending park' : 'park');
+      expect(nextApps).toEqual(apps);
+      expect(nextCompose).toEqual(compose);
+      if (recordedFingerprint !== undefined) expect(recordedFingerprint).toBe(computed.at(-1));
+      return realLease ? await realLease.park(apps, compose) : recordedFingerprint !== undefined;
+    },
+    async destroy() { events.push('destroy'); await realLease?.destroy(); },
+  };
+  const boundary = poolStartupBoundary({
+    root, directory, logs: directory, runId: 'cold-pool', Date, Bun, join,
+    process: { env: {} }, readFileSync, writeFileSync, appendFileSync, mkdirSync,
+    options: {}, faultFixtureEnvironment: {}, qaSlotDirectory: join(directory, 'slots'),
+    QA_STACK_TIER: 'REZICS_QA_STACK_TIER',
+    startedProjects: [], startedFixtureProjects: [], rawUpdateProjects: new Set(),
+    stackLeaseNotes: [], errors, runDeadline: Date.now() + 60_000,
+    qaStackPoolEnabled: () => true, integrationStackPoolEligible: () => true,
+    integrationResourceClass: () => 'ordinary', qaResourceClasses: { ordinary: { budgetMs: 60_000 } },
+    qaStackEnvironment: (environment: NodeJS.ProcessEnv) => environment, qaStackMode: () => 'test',
+    commandOnlyIntegrationFiles: new Set(), integrationStackAdmitsWorkScope: () => false,
+    tierArtifactName: (tier: string) => tier, preserveReapEnvironment: (environment: NodeJS.ProcessEnv) => environment,
+    reserveRunSlot: async () => {}, admitRun: async (work: () => Promise<unknown>) => await work(),
+    noteMemory: () => {}, assertQaResourceAllocation: () => {},
+    redactCommandOutput: (value: string) => value,
+    readEnv: (path: string) => path.endsWith('apps.env') ? apps : compose,
+    stageQaBootstrap: () => ({ apps, args: ['scripts/qa/bootstrap.ts'] }),
+    qaStackFingerprint: (input: Parameters<typeof qaStackFingerprint>[0]) => {
+      expect(input.images).toEqual(['sha256:postgres', 'sha256:fuseki',
+        imagesPresent ? 'sha256:rustfs-after-startup' : 'sha256:rustfs-before-startup', 'sha256:mailpit']);
+      const value = qaStackFingerprint(input);
+      computed.push(value);
+      return value;
+    },
+    stackPool: {
+      rejections: realPool?.rejections ?? rejections,
+      async acquire() {
+        events.push('acquire');
+        if (mode.rejectSnapshot) rejections.push({ projectRunId: 'prior-i1', scope: 'apps',
+          key: 'MAIN_EXTRA_CACHE_DIRECTORY', value: '/other-checkout/.temp/cache',
+          reason: 'snapshot path belongs to another checkout' });
+        return undefined;
+      },
+      async register(project: string, fingerprint: string | undefined) {
+        expect(project).toBe('cold-pool-i1');
+        expect(fingerprint).toBeUndefined();
+        events.push('register pending');
+        recordedFingerprint = fingerprint;
+        realLease = await realPool?.register(project, fingerprint);
+        if (realPool) expect(realLease).toBeDefined();
+        return lease;
+      },
+    },
+    startRunStack: async () => { events.push('startup'); imagesPresent = true; return result(); },
+    commandAsync: async (_root: string, command: string, args: string[]) => {
+      if (command === 'docker' && args[0] === 'image') {
+        const present = imagesPresent ? !mode.postMissing : mode.initialPresent;
+        events.push(present ? 'inspect ready images' : 'inspect missing images');
+        return present ? result(true, `sha256:postgres\nsha256:fuseki\nsha256:rustfs-${imagesPresent ? 'after' : 'before'}-startup\nsha256:mailpit\n`)
+          : result(false, inspectionError);
+      }
+      if (command === 'docker' && args[0] === 'inspect') return result(true, '{}');
+      if (args[0] === 'scripts/qa/bootstrap.ts') { events.push('bootstrap'); return result(); }
+      if (args[0] === 'scripts/qa/integration-reset.ts') { events.push('reset'); return result(); }
+      throw new Error(`Unexpected cold-pool command: ${command} ${args.join(' ')}`);
+    },
+  });
+  return { boundary, events, errors, computed, realPool, async cleanup() {
+    if (!realPool) return;
+    await realLease?.destroy();
+    writeFileSync(join(directory, 'qa-stack-pool'), 'off\n');
+    await realPool.sweep();
+  } };
+}
+
+test.each(['Error response from daemon: No such image: rustfs/rustfs:1.0.0',
+  'Error: No such object: rustfs/rustfs:1.0.0'])('a missing local image starts normally and parks under its post-startup fingerprint: %s', async error => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-cold-start-'));
+  const harness = coldPoolHarness(directory, error, { realPool: true });
+  try {
+    const run = await harness.boundary.runShardWork('integration', 'cold-pool-i1',
+      ['tests/qa/integration/shared-stack.test.ts'], [], 60_000);
+    expect(run.ok).toBe(true);
+    expect(harness.errors).toEqual([]);
+    expect(harness.events).toEqual(['inspect missing images', 'register pending', 'startup',
+      'inspect ready images', 'record fingerprint', 'bootstrap', 'reset', 'park']);
+    expect(harness.computed).toHaveLength(1);
+    const parked = JSON.parse(readFileSync(join(directory, 'qa-stack-pool-state', 'cold-pool-i1.json'), 'utf8'));
+    expect(parked.fingerprint).toBe(harness.computed[0]);
+    expect(parked.holder).toBeUndefined();
+    const reused = await harness.realPool!.acquire(harness.computed[0]!);
+    expect(reused).toBeDefined();
+    try { expect(reused!.entry.projectRunId).toBe('cold-pool-i1'); }
+    finally { await reused?.destroy(); }
+  } finally { await harness.cleanup(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a Docker daemon inspection error is not treated as a missing image or a pool miss', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-inspection-error-'));
+  try {
+    const harness = coldPoolHarness(directory, 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock');
+    await expect(harness.boundary.runShardWork('integration', 'cold-pool-i1',
+      ['tests/qa/integration/shared-stack.test.ts'], [], 60_000)).rejects.toThrow('Cannot fingerprint QA images');
+    expect(harness.events).toEqual(['inspect missing images']);
+    expect(harness.computed).toEqual([]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('startup refreshes a known fingerprint before parking pulled or rebuilt images', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-image-refresh-'));
+  try {
+    const harness = coldPoolHarness(directory, '', { initialPresent: true });
+    const run = await harness.boundary.runShardWork('integration', 'cold-pool-i1',
+      ['tests/qa/integration/shared-stack.test.ts'], [], 60_000);
+    expect(run.ok).toBe(true);
+    expect(harness.events).toEqual(['inspect ready images', 'acquire', 'register pending', 'startup',
+      'inspect ready images', 'record fingerprint', 'bootstrap', 'reset', 'park']);
+    expect(harness.computed).toHaveLength(2);
+    expect(harness.computed[1]).not.toBe(harness.computed[0]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test.each([false, true])('images still missing after startup refuse to park even with a prior identity: %s', async initialPresent => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-pending-images-'));
+  try {
+    const harness = coldPoolHarness(directory, 'No such image: rustfs/rustfs:1.0.0', { postMissing: true, initialPresent });
+    const run = await harness.boundary.runShardWork('integration', 'cold-pool-i1',
+      ['tests/qa/integration/shared-stack.test.ts'], [], 60_000);
+    expect(run.ok).toBe(true);
+    expect(harness.events).toEqual([...(initialPresent ? ['inspect ready images', 'acquire'] : ['inspect missing images']), 'register pending', 'startup',
+      'inspect missing images', 'bootstrap', 'reset', 'refuse pending park', 'destroy']);
+    expect(harness.computed).toHaveLength(initialPresent ? 1 : 0);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a refused snapshot identifies its path key and value in the run summary and starts a replacement', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-pool-snapshot-refusal-'));
+  try {
+    const harness = coldPoolHarness(directory, '', { initialPresent: true, rejectSnapshot: true });
+    const run = await harness.boundary.runShardWork('integration', 'cold-pool-i1',
+      ['tests/qa/integration/shared-stack.test.ts'], [], 60_000);
+    expect(run.ok).toBe(true);
+    const summary = readFileSync(join(directory, 'summary.md'), 'utf8');
+    expect(summary).toContain('Integration shard cold-pool-i1 pool miss: rezics-qa-prior-i1 destroyed');
+    expect(summary).toContain('apps.MAIN_EXTRA_CACHE_DIRECTORY=/other-checkout/.temp/cache');
+    expect(summary).toContain('snapshot path belongs to another checkout');
+    expect(harness.events).toEqual(['inspect ready images', 'acquire', 'register pending', 'startup',
+      'inspect ready images', 'record fingerprint', 'bootstrap', 'reset', 'park']);
+    expect(harness.errors).toEqual([]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 /** Run the CLI entrypoint; replace only disposable stack lifecycle commands. */
 function startupHarness(directory: string) {

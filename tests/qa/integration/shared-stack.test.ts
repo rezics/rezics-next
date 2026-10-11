@@ -1,11 +1,11 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import { createQaStackPool } from '../../../scripts/qa/stack-pool.ts';
+import { createQaStackPool, type QaStackPoolEntry } from '../../../scripts/qa/stack-pool.ts';
 import { qaMemoryDeadline } from '../../../scripts/qa/memory-admission.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -14,6 +14,7 @@ import { smtpSender } from '../../../services/account/src/email.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { ObjectNotFound, S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { startMediaStack } from './media-support.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const probe = Bun.env.REZICS_QA_POOL_PROBE;
@@ -24,6 +25,7 @@ interface PoolProbeEvidence {
   holderPid: number;
   apps: Record<string, string>;
   compose: Record<string, string>;
+  mediaFixtureRoot?: string;
   clean: { rows: number; objectAbsent: boolean; messages: number };
 }
 
@@ -53,6 +55,15 @@ async function runPoolProbe(): Promise<void> {
     prefix: 'semantic/work/' });
   const mailbox = `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}/api/v1/messages?limit=1`;
   try {
+    let mediaFixtureRoot: string | undefined;
+    if (probe === 'second') {
+      expect(Bun.env.MAIN_OPEN_LIBRARY_FIXTURE_ROOT).toBe(root);
+      // composeMain reads fixtures.lock.json while starting this real media stack.
+      // The parking checkout has already been removed by the enclosing proof.
+      const media = await startMediaStack('pool-leased-media');
+      try { mediaFixtureRoot = Bun.env.MAIN_OPEN_LIBRARY_FIXTURE_ROOT; }
+      finally { await media.stop(); }
+    }
     const rows = (await pool.query('SELECT 1 FROM "user" WHERE email = $1', [email])).rowCount!;
     expect(rows).toBe(0);
     await objects.initialize();
@@ -81,6 +92,7 @@ async function runPoolProbe(): Promise<void> {
     expect((await delivered.json() as { total: number }).total).toBe(1);
     const evidence: PoolProbeEvidence = { projectRunId, artifactDirectory: Bun.env.REZICS_QA_ARTIFACT_DIR!,
       pid: process.pid, holderPid: process.ppid, apps, compose,
+      ...(mediaFixtureRoot ? { mediaFixtureRoot } : {}),
       clean: { rows, objectAbsent: true, messages: inbox.total } };
     writeFileSync(join(directory, `${probe}.json`), JSON.stringify(evidence), { mode: 0o600 });
   } finally { await pool.end(); }
@@ -193,8 +205,23 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
   };
   try {
     const first = await finish('first');
+    const checkoutA = join(directory, 'parking-checkout');
+    mkdirSync(join(checkoutA, 'tests', 'fixtures'), { recursive: true });
+    // A's fixture lock deliberately differs; using it cannot pass media startup.
+    writeFileSync(join(checkoutA, 'tests', 'fixtures', 'fixtures.lock.json'), '{"version":0}');
+    const parkedPath = join(directory, 'qa-stack-pool-state', `${first.projectRunId}.json`);
+    const parked = JSON.parse(readFileSync(parkedPath, 'utf8')) as QaStackPoolEntry;
+    const parkingPool = createQaStackPool({ root: checkoutA, slotDirectory, slots: 1,
+      env: environment, janitor: false });
+    const parkingLease = await parkingPool.acquire(parked.fingerprint!);
+    expect(parkingLease).toBeDefined();
+    expect(await parkingLease!.park(parkingLease!.entry.apps, parkingLease!.entry.compose)).toBe(true);
+    expect((JSON.parse(readFileSync(parkedPath, 'utf8')) as QaStackPoolEntry).checkoutRoot).toBe(checkoutA);
+    rmSync(checkoutA, { recursive: true, force: true });
     const second = await finish('second');
     expect(second.projectRunId).toBe(first.projectRunId);
+    expect(second.mediaFixtureRoot).toBe(root);
+    for (const value of Object.values({ ...second.apps, ...second.compose })) expect(value).not.toContain(checkoutA);
     const summary = readFileSync(join(second.artifactDirectory, 'summary.md'), 'utf8');
     expect(summary).toMatch(new RegExp(`leased from rezics-qa-${first.projectRunId}, parked for \\d+ ms`));
     const crashed = start('crash');

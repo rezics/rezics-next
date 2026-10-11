@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { processAlive, processIdentity, type ProcessIdentity } from './process/identity.ts';
 import { directoryLeaseHeld, tryAcquireDirectoryLease } from './process/lease.ts';
 import { terminateProcessGroup, terminateProcessGroupSync } from './process/terminate.ts';
@@ -23,7 +23,13 @@ export function qaStackFingerprint(input: {
 }
 export interface QaStackPoolEntry {
   projectRunId: string;
-  fingerprint: string;
+  fingerprint?: string;
+  /** Older records have no root and cannot be leased safely. */
+  checkoutRoot?: string;
+  /** Relative local directories proven empty when the stack was reset. */
+  recreatableDirectories?: string[];
+  /** Missing local state remains absent: its eventual writer decides its type. */
+  absentPaths?: string[];
   apps: Record<string, string>;
   compose: Record<string, string>;
   token: string;
@@ -34,6 +40,7 @@ export interface QaStackPoolEntry {
 export interface QaStackPoolLease {
   entry: QaStackPoolEntry;
   parkedMs: number;
+  recordFingerprint(fingerprint: string): Promise<void>;
   /** The caller has reset and verified every store before releasing ownership. */
   park(apps: Record<string, string>, compose: Record<string, string>): Promise<boolean>;
   destroy(): Promise<void>;
@@ -52,9 +59,18 @@ export interface QaStackPoolOptions {
   janitor?: boolean;
 }
 export interface QaStackPool {
+  /** Refused candidates accumulate so concurrent shards can retain their evidence. */
+  rejections: QaStackPoolRejection[];
   acquire(fingerprint: string): Promise<QaStackPoolLease | undefined>;
-  register(projectRunId: string, fingerprint: string): Promise<QaStackPoolLease | undefined>;
+  register(projectRunId: string, fingerprint?: string): Promise<QaStackPoolLease | undefined>;
   sweep(): Promise<void>;
+}
+export interface QaStackPoolRejection {
+  projectRunId: string;
+  scope: 'apps' | 'compose';
+  key: string;
+  value: string;
+  reason: string;
 }
 
 const heldStacks = new Map<string, { entry: QaStackPoolEntry; state: string; cleanup: () => void }>();
@@ -112,9 +128,141 @@ function stringMap(value: unknown): value is Record<string, string> {
     && Object.values(value).every(item => typeof item === 'string');
 }
 
+interface CheckoutPath { start: number; end: number; path: string }
+
+/** One lexical rule for every environment key: standalone paths, quoted paths,
+ * file URLs and paths within argument/list values. A root prefix in another
+ * directory's name is not a reference to this checkout. */
+function checkoutPaths(value: string, root: string): CheckoutPath[] {
+  const result: CheckoutPath[] = [];
+  let cursor = 0;
+  while (cursor < value.length) {
+    const start = value.indexOf(root, cursor);
+    if (start < 0) break;
+    cursor = start + root.length;
+    const before = value.slice(0, start);
+    const previous = value[start - 1];
+    const next = value[cursor];
+    if (start > 0 && !/[\s"'=:,;([{]/.test(previous!) && !before.endsWith('file://')) continue;
+    if (next !== undefined && next !== '/' && !/[\s"'=:,;)\]}?#]/.test(next)) continue;
+    let end = cursor;
+    if (previous === '"' || previous === "'") {
+      const closing = value.indexOf(previous, cursor);
+      end = closing < 0 ? value.length : closing;
+    } else if (start === 0 && !/[:,;"'\n]/.test(value) && value.indexOf(root, cursor) < 0) {
+      end = value.trimEnd().length;
+    } else {
+      while (end < value.length && !/[\s"'=:,;()[\]{}?#]/.test(value[end]!)) end++;
+    }
+    const raw = value.slice(start, end);
+    let path = raw;
+    if (before.endsWith('file://')) {
+      try { path = decodeURIComponent(raw); }
+      catch { /* malformed escapes fail the filesystem check */ }
+    }
+    result.push({ start, end, path });
+    cursor = end;
+  }
+  return result;
+}
+
+function within(root: string, path: string): boolean {
+  const suffix = relative(root, path);
+  return suffix === '' || (!isAbsolute(suffix) && suffix !== '..' && !suffix.startsWith(`..${sep}`));
+}
+
+function pathPresent(path: string): boolean {
+  try { lstatSync(path); return true; }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ENOTDIR') return false;
+    throw error;
+  }
+}
+
+function resetLocalPaths(entry: QaStackPoolEntry): { recreatableDirectories: string[]; absentPaths: string[] } {
+  const root = resolve(entry.checkoutRoot!);
+  const stack = join(root, '.temp', 'stack', `rezics-qa-${entry.projectRunId}`);
+  const directories = new Set<string>();
+  const absent = new Set<string>();
+  for (const values of [entry.apps, entry.compose]) {
+    for (const value of Object.values(values)) {
+      for (const candidate of checkoutPaths(value, root)) {
+        const path = resolve(candidate.path);
+        if (!within(stack, path)) continue;
+        try {
+          if (statSync(path).isDirectory() && readdirSync(path).length === 0
+            && within(root, realpathSync(path))) directories.add(relative(root, path));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') absent.add(relative(root, path));
+        }
+      }
+    }
+  }
+  return { recreatableDirectories: [...directories].sort(), absentPaths: [...absent].sort() };
+}
+
+function rebaseEntry(entry: QaStackPoolEntry, targetRoot: string):
+  { entry: QaStackPoolEntry } | { rejection: QaStackPoolRejection } {
+  const reject = (scope: 'apps' | 'compose', key: string, value: string, reason: string) =>
+    ({ rejection: { projectRunId: entry.projectRunId, scope, key, value, reason } });
+  if (!entry.checkoutRoot || !isAbsolute(entry.checkoutRoot))
+    return reject('apps', 'checkoutRoot', entry.checkoutRoot ?? '', 'snapshot has no recorded checkout root');
+  const origin = resolve(entry.checkoutRoot);
+  const target = resolve(targetRoot);
+  const directories = new Set(entry.recreatableDirectories ?? []);
+  const absent = new Set(entry.absentPaths ?? []);
+  const create = new Map<string, { scope: 'apps' | 'compose'; key: string; value: string }>();
+  const rebased = { ...entry, checkoutRoot: target, apps: { ...entry.apps }, compose: { ...entry.compose } };
+  for (const scope of ['apps', 'compose'] as const) {
+    for (const [key, value] of Object.entries(entry[scope])) {
+      let rewritten = '';
+      let cursor = 0;
+      for (const candidate of checkoutPaths(value, origin)) {
+        try {
+          const source = resolve(candidate.path);
+          if (!within(origin, source)) return reject(scope, key, value, 'checkout path escapes its recorded root');
+          const local = relative(origin, source);
+          const path = join(target, local);
+          let ancestor = path;
+          while (!pathPresent(ancestor) && dirname(ancestor) !== ancestor) ancestor = dirname(ancestor);
+          if (!pathPresent(target) || !within(realpathSync(target), realpathSync(ancestor)))
+            return reject(scope, key, value, `rebased path leaves the target checkout: ${path}`);
+          const stack = join(target, '.temp', 'stack', `rezics-qa-${entry.projectRunId}`);
+          const emptyDirectory = directories.has(local) && within(stack, path);
+          const absentPath = absent.has(local) && within(stack, path);
+          if (!pathPresent(path)) {
+            if (!emptyDirectory && !absentPath)
+              return reject(scope, key, value, `rebased checkout path does not exist: ${path}`);
+            if (emptyDirectory) create.set(path, { scope, key, value });
+          } else if (absentPath) {
+            return reject(scope, key, value, `reset-local path is present in the target checkout: ${path}`);
+          } else if (emptyDirectory && (!statSync(path).isDirectory() || readdirSync(path).length !== 0)) {
+            return reject(scope, key, value, `reset-local directory is not empty in the target checkout: ${path}`);
+          }
+          rewritten += value.slice(cursor, candidate.start) + target + value.slice(candidate.start + origin.length, candidate.end);
+          cursor = candidate.end;
+        } catch (error) {
+          return reject(scope, key, value, `cannot validate rebased checkout path: ${String(error)}`);
+        }
+      }
+      rebased[scope][key] = rewritten + value.slice(cursor);
+    }
+  }
+  for (const [path, field] of create) {
+    try { mkdirSync(path, { recursive: true, mode: 0o700 }); }
+    catch (error) { return reject(field.scope, field.key, field.value, `cannot recreate reset directory ${path}: ${String(error)}`); }
+  }
+  return { entry: rebased };
+}
+
 function readEntry(path: string): QaStackPoolEntry {
   const raw = JSON.parse(readFileSync(path, 'utf8')) as QaStackPoolEntry;
-  if (!raw || typeof raw.projectRunId !== 'string' || typeof raw.fingerprint !== 'string'
+  if (!raw || typeof raw.projectRunId !== 'string' || (raw.fingerprint !== undefined && typeof raw.fingerprint !== 'string')
+    || (raw.checkoutRoot !== undefined && typeof raw.checkoutRoot !== 'string')
+    || (raw.recreatableDirectories !== undefined && (!Array.isArray(raw.recreatableDirectories)
+      || raw.recreatableDirectories.some(value => typeof value !== 'string')))
+    || (raw.absentPaths !== undefined && (!Array.isArray(raw.absentPaths)
+      || raw.absentPaths.some(value => typeof value !== 'string')))
     || typeof raw.token !== 'string' || !raw.token || !stringMap(raw.apps) || !stringMap(raw.compose)
     || (raw.holder !== undefined && (!Number.isSafeInteger(raw.holder.pid) || raw.holder.pid < 1
       || typeof raw.holder.start !== 'string' || typeof raw.holder.boot !== 'string'))
@@ -239,6 +387,7 @@ async function withPoolLock<T>(state: string, run: () => Promise<T>): Promise<T>
 
 export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
   if (options.slotDirectory === undefined) return {
+    rejections: [],
     async acquire() { return undefined; }, async register() { return undefined; }, async sweep() {},
   };
   if (!Number.isSafeInteger(options.slots) || options.slots < 1) throw new Error('QA pool needs a positive slot count');
@@ -247,6 +396,7 @@ export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
   const alive = options.alive ?? processAlive;
   const destroy = options.destroy ?? (entry => destroyStack(options, entry));
   const destroySync = options.destroySync ?? (entry => destroyStackSync(options, entry));
+  const rejections: QaStackPoolRejection[] = [];
   const holder = () => {
     const identity = options.holder ?? processIdentity(process.pid);
     if (!identity) throw new Error('QA pool holder has no live process identity');
@@ -257,11 +407,11 @@ export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
     await destroy(entry);
     rmSync(entryPath(paths.state, entry.projectRunId), { force: true });
   }
-  async function sweepLocked(fingerprint?: string): Promise<void> {
+  async function sweepLocked(fingerprint?: string, invalidateParked = false): Promise<void> {
     const enabled = poolOn(paths.switchFile);
     for (const entry of entries(paths.state)) {
       const unusable = entry.holder ? !alive(entry.holder)
-        : !enabled || now() - entry.parkedAt! >= qaStackPoolMaxParkedMs
+        : !enabled || !entry.fingerprint || invalidateParked || now() - entry.parkedAt! >= qaStackPoolMaxParkedMs
           || (fingerprint !== undefined && entry.fingerprint !== fingerprint);
       if (unusable) await remove(entry);
     }
@@ -284,18 +434,28 @@ export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
     } });
     return {
       entry, parkedMs,
+      async recordFingerprint(fingerprint) {
+        if (!fingerprint) throw new Error('QA pool fingerprint is empty');
+        await locked(async () => {
+          const saved = ownedEntry(paths.state, entry);
+          if (!saved) throw new Error('QA pool fingerprint lost its ownership record');
+          saveEntry(paths.state, { ...saved, fingerprint });
+          entry.fingerprint = fingerprint;
+        });
+      },
       async park(apps, compose) {
         return await locked(async () => {
           const saved = ownedEntry(paths.state, entry);
           if (!saved) return false;
           saved.apps = { ...apps };
           saved.compose = { ...compose };
-          if (!poolOn(paths.switchFile) || entries(paths.state).length > options.slots) {
+          saved.checkoutRoot = resolve(options.root);
+          if (!poolOn(paths.switchFile) || !saved.fingerprint || entries(paths.state).length > options.slots) {
             await remove(saved);
             forgetHeld(key, entry.token);
             return false;
           }
-          const parked = { ...saved, parkedAt: now() };
+          const parked = { ...saved, parkedAt: now(), ...resetLocalPaths(saved) };
           delete parked.holder;
           saveEntry(paths.state, parked);
           forgetHeld(key, entry.token);
@@ -313,28 +473,37 @@ export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
     };
   }
   return {
+    rejections,
     async acquire(fingerprint) {
       if (!poolOn(paths.switchFile) && !existsSync(paths.state)) return undefined;
       return await locked(async () => {
         await sweepLocked(fingerprint);
         if (!poolOn(paths.switchFile)) return undefined;
-        const parked = entries(paths.state).find(entry => !entry.holder && entry.fingerprint === fingerprint);
-        if (!parked) return undefined;
-        const parkedMs = Math.max(0, now() - parked.parkedAt!);
-        const entry = { ...parked, holder: holder(), token: randomUUID() };
-        delete entry.parkedAt;
-        saveEntry(paths.state, entry);
-        startJanitor(options);
-        return leaseFor(entry, parkedMs);
+        for (const parked of entries(paths.state).filter(entry => !entry.holder && entry.fingerprint === fingerprint)) {
+          const rebased = rebaseEntry(parked, options.root);
+          if ('rejection' in rebased) {
+            rejections.push(rebased.rejection);
+            await remove(parked);
+            continue;
+          }
+          const parkedMs = Math.max(0, now() - parked.parkedAt!);
+          const entry = { ...rebased.entry, holder: holder(), token: randomUUID() };
+          delete entry.parkedAt;
+          saveEntry(paths.state, entry);
+          startJanitor(options);
+          return leaseFor(entry, parkedMs);
+        }
+        return undefined;
       });
     },
     async register(projectRunId, fingerprint) {
       if (!poolOn(paths.switchFile)) return undefined;
       return await locked(async () => {
-        await sweepLocked(fingerprint);
+        await sweepLocked(fingerprint, fingerprint === undefined);
         if (!poolOn(paths.switchFile) || entries(paths.state).length >= options.slots) return undefined;
         if (existsSync(entryPath(paths.state, projectRunId))) throw new Error('QA pool project is already registered');
-        const entry = { projectRunId, fingerprint, apps: {}, compose: {}, holder: holder(), token: randomUUID() };
+        const entry = { projectRunId, fingerprint, checkoutRoot: resolve(options.root),
+          apps: {}, compose: {}, holder: holder(), token: randomUUID() };
         saveEntry(paths.state, entry);
         startJanitor(options);
         return leaseFor(entry, 0);

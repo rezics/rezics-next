@@ -159,7 +159,7 @@ const heavyQaRun = process.env.GOAL_QA_HEAVY_RUN === '1';
 const stackPool = createQaStackPool({ root, slotDirectory: qaSlotDirectory,
   slots: /^[1-9]\d*$/.test(process.env.GOAL_QA_SLOTS ?? '') ? Number(process.env.GOAL_QA_SLOTS) : 3 });
 
-async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessEnv): Promise<string> {
+async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessEnv): Promise<string | undefined> {
   const paths = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml',
     'infra/dev/postgres/00-owners.sh', 'scripts/qa/bootstrap.ts', 'scripts/qa/integration-reset.ts',
     'scripts/dev/config.ts', 'scripts/ops/migrate.ts', 'services/account/src/migrate.ts',
@@ -171,7 +171,11 @@ async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessE
   const images = [...compose.matchAll(/^  (?:postgres|fuseki|rustfs|mailpit):\n    image: (\S+)$/gm)].map(match => match[1]!);
   const inspected = await commandAsync(root, 'docker', ['image', 'inspect', '--format', '{{.Id}}', ...images],
     10_000, preserveReapEnvironment(environment));
-  if (!inspected.ok) throw new Error(`Cannot fingerprint QA images: ${inspected.output}`);
+  if (!inspected.ok) {
+    // An empty host or a changed image pin needs ordinary startup to pull/build it.
+    if (/\bNo such (?:image|object)\b/i.test(inspected.output)) return undefined;
+    throw new Error(`Cannot fingerprint QA images: ${inspected.output}`);
+  }
   const settings = Object.fromEntries(Object.entries(environment).filter(([key, value]) => value !== undefined
     && /^REZICS_(?:FUSEKI|POSTGRES|RUSTFS|MAILPIT|QA_STACK_MODE)/.test(key))) as Record<string, string>;
   return qaStackFingerprint({ files, images: inspected.output.trim().split('\n'),
@@ -445,7 +449,14 @@ async function runShardWork(
     keep: options.keep, backend: options.backend, persistent }) && !isolated) {
     const fingerprint = await integrationInfrastructureFingerprint(environment);
     // A warm stack needs host work admission, but no new-container startup turn.
-    lease = await admitRun(() => stackPool.acquire(fingerprint), environment, reserve);
+    const rejectionCount = stackPool.rejections.length;
+    if (fingerprint !== undefined)
+      lease = await admitRun(() => stackPool.acquire(fingerprint), environment, reserve);
+    for (const rejection of stackPool.rejections.slice(rejectionCount)) {
+      const note = `- Integration shard ${shardProjectRunId} pool miss: rezics-qa-${rejection.projectRunId} destroyed; ${rejection.scope}.${rejection.key}=${redactCommandOutput(rejection.value)} (${rejection.reason}).`;
+      stackLeaseNotes.push(note);
+      appendFileSync(join(directory, 'summary.md'), `${note}\n`);
+    }
     if (lease) {
       leased = true;
       projectRunId = lease.entry.projectRunId;
@@ -455,11 +466,10 @@ async function runShardWork(
       appendFileSync(join(directory, 'summary.md'), `${note}\n`);
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       mkdirSync(stackDir, { recursive: true, mode: 0o700 });
-      replacePrivate(join(stackDir, 'apps.env'), { ...lease.entry.apps,
-        MAIN_OBJECT_DIRECTORY: join(stackDir, 'objects'), MAIN_CANDIDATE_DIRECTORY: join(stackDir, 'candidates') });
+      replacePrivate(join(stackDir, 'apps.env'), lease.entry.apps);
       replacePrivate(join(stackDir, 'compose.env'), lease.entry.compose);
     } else {
-      lease = await stackPool.register(projectRunId, fingerprint);
+      lease = await stackPool.register(projectRunId);
     }
   }
   // Pool ownership replaces runner ancestry for these containers. Test-created
@@ -529,6 +539,11 @@ async function runShardWork(
       errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
       return finish({ ok: false, timedOut: up.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, up.elapsedMs, up.output) });
+    }
+    if (lease && !leased) {
+      // Startup may pull or rebuild images. Only its resolved images qualify a parked stack.
+      const fingerprint = await integrationInfrastructureFingerprint(environment);
+      if (fingerprint !== undefined) await lease.recordFingerprint(fingerprint);
     }
     if (resourceClass) {
       const inspected = await commandAsync(root, 'docker', ['inspect', '--format',
