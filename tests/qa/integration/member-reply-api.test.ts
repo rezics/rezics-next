@@ -706,6 +706,7 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
   try {
     expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
     const principal = await h.principal();
+    expect(principal.emailVerified).toBe(true);
     const principalId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.principal
       WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0]!.id;
     const rejected = (reply: string) => ({ profile: 'member-reply-draft-v1', reply,
@@ -742,7 +743,20 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
     const unverifiedRegistered = await h.access.register(unverifiedRequest);
     expect(unverifiedRegistered.dispatchEligible).toBe(true);
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
+    const unverifiedState = (await h.accountPool.query<{ email_verified: boolean; suspended_at: Date | null }>(`
+      SELECT "user"."emailVerified" AS email_verified, security.suspended_at
+      FROM "user" LEFT JOIN rezics_account_security security ON security.user_id = "user".id
+      WHERE "user".id = $1`, [h.user.id])).rows[0]!;
+    expect(unverifiedState).toEqual({ email_verified: false, suspended_at: null });
+    await assertGrantStillActive(unverified);
+    const unverifiedHttpKey = randomUUID();
+    expect((await h.post('/v1/member-reply-drafts', unverified, unverifiedHttpKey)).status).toBe(403);
+    await assertGrantStillActive(unverified);
+    await assertNoDraft(unverified);
+    expect((await h.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [unverifiedHttpKey])).rowCount).toBe(0);
     const unverifiedPrincipal = await h.principal();
+    expect(unverifiedPrincipal.emailVerified).toBe(false);
     await expect(h.access.claim(unverifiedRegistered.id, unverifiedRequest.requestDigest, principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
     const unverifiedReplay = await h.access.register({ ...unverifiedRequest, principal: unverifiedPrincipal });
@@ -760,48 +774,92 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
     const afterVerificationAdmission = await h.access.register(verifiedRequest);
     expect(afterVerificationAdmission.dispatchEligible).toBe(true);
     await h.access.claim(afterVerificationAdmission.id, verifiedRequest.requestDigest, verifiedPrincipal);
+  } finally { await h.close(); }
+
+  const suspendedFixture = await memberFixture();
+  try {
+    expect((await suspendedFixture.post('/v1/publication-selections', suspendedFixture.selection)).status).toBe(201);
+    const suspendedPrincipal = await suspendedFixture.principal();
+    expect(suspendedPrincipal.emailVerified).toBe(true);
+    const suspendedPrincipalId = (await suspendedFixture.accessPool.query<{ id: string }>(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2`, [suspendedPrincipal.issuer, suspendedPrincipal.subject])).rows[0]!.id;
+    const rejected = (reply: string) => ({ profile: 'member-reply-draft-v1', reply,
+      variantId: `urn:rezics:variant:${randomUUID()}`, rootTarget: suspendedFixture.work.work,
+      rootRevision: suspendedFixture.first.draftRevision, language: 'en', direction: 'ltr' as const,
+      expectedHead: null, body: 'A reply with a current Account assertion.', actingSubject: suspendedFixture.pen });
+    const installDraftGrant = async (input: ReturnType<typeof rejected>) => grantFixtureAuthority(suspendedFixture.accessPool, {
+      scope: `content:draft:${input.reply}`, requireDispatch: false,
+      representations: [{ principalId: suspendedPrincipalId, actor: suspendedFixture.pen, action: 'content.draft', lifetime: '8 hours' }],
+      grant: { actor: suspendedFixture.pen, action: 'content.draft', lifetime: '8 hours' },
+    });
+    const makeRequest = (input: ReturnType<typeof rejected>, key: string) => ({
+      principal: suspendedPrincipal, actingSubject: suspendedFixture.pen, action: 'content.draft', scope: `content:draft:${input.reply}`,
+      requestDigest: createHash('sha256').update(JSON.stringify(input)).digest('hex'),
+      idempotencyKey: key, baselineRelatedWork: suspendedFixture.work.work,
+      baselineSourceRevision: suspendedFixture.first.draftRevision,
+    });
+    const assertNoDraft = async (input: ReturnType<typeof rejected>) => {
+      expect((await suspendedFixture.contentPool.query('SELECT id FROM content.revision WHERE variant_id = $1',
+        [input.variantId])).rowCount).toBe(0);
+      expect((await suspendedFixture.contentPool.query('SELECT id FROM content.reply WHERE id = $1',
+        [input.reply])).rowCount).toBe(0);
+    };
+    const assertGrantStillActive = async (input: ReturnType<typeof rejected>) => {
+      expect((await suspendedFixture.accessPool.query(`SELECT id FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'content.draft'
+          AND active AND valid_until > clock_timestamp()`, [suspendedFixture.pen, `content:draft:${input.reply}`])).rowCount).toBe(1);
+    };
 
     const suspended = rejected(nativeId());
     await installDraftGrant(suspended);
     const suspendedKey = randomUUID();
-    const suspendedRequest = { ...makeRequest(suspended, suspendedKey), principal: verifiedPrincipal };
-    const suspendedRegistered = await h.access.register(suspendedRequest);
+    const suspendedRequest = makeRequest(suspended, suspendedKey);
+    const suspendedRegistered = await suspendedFixture.access.register(suspendedRequest);
     expect(suspendedRegistered.dispatchEligible).toBe(true);
-    await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [h.user.id]);
-    await expect(h.access.claim(suspendedRegistered.id, suspendedRequest.requestDigest, verifiedPrincipal))
+    await suspendedFixture.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [suspendedFixture.user.id]);
+    const suspendedState = (await suspendedFixture.accountPool.query<{ email_verified: boolean; suspended_at: Date | null }>(`
+      SELECT "user"."emailVerified" AS email_verified, security.suspended_at
+      FROM "user" JOIN rezics_account_security security ON security.user_id = "user".id
+      WHERE "user".id = $1`, [suspendedFixture.user.id])).rows[0]!;
+    expect(suspendedState.email_verified).toBe(true);
+    expect(suspendedState.suspended_at).not.toBeNull();
+    await assertGrantStillActive(suspended);
+    const suspendedHttpKey = randomUUID();
+    expect((await suspendedFixture.post('/v1/member-reply-drafts', suspended, suspendedHttpKey)).status).toBe(401);
+    await assertGrantStillActive(suspended);
+    await assertNoDraft(suspended);
+    expect((await suspendedFixture.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [suspendedHttpKey])).rowCount).toBe(0);
+    await expect(suspendedFixture.access.claim(suspendedRegistered.id, suspendedRequest.requestDigest, suspendedPrincipal))
       .rejects.toBeInstanceOf(AdmissionDenied);
-    await expect(h.principal()).rejects.toThrow();
-    // A suspended Account has no fresh bearer assertion to pass back for replay.
-    // Mark the captured assertion unverified so replay eligibility is evaluated
-    // against the invalid current state, while claim uses its live callback above.
-    const suspendedReplay = await h.access.register({ ...suspendedRequest,
-      principal: { ...verifiedPrincipal, emailVerified: false } });
+    await expect(suspendedFixture.principal()).rejects.toThrow();
+    const suspendedReplay = await suspendedFixture.access.register(suspendedRequest);
     expect(suspendedReplay).toMatchObject({ id: suspendedRegistered.id, replayed: true,
       dispatchEligible: false, state: 'registered' });
     await assertGrantStillActive(suspended);
     await assertNoDraft(suspended);
 
-    await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = NULL, generation = generation + 1 WHERE user_id = $1', [h.user.id]);
-    const recoveredSignin = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
-      headers: { 'content-type': 'application/json', origin: h.base },
-      body: JSON.stringify({ email: h.user.email, password: h.user.password }),
+    await suspendedFixture.accountPool.query('UPDATE rezics_account_security SET suspended_at = NULL, generation = generation + 1 WHERE user_id = $1', [suspendedFixture.user.id]);
+    const recoveredSignin = await fetch(`${suspendedFixture.base}/api/auth/sign-in/email`, { method: 'POST',
+      headers: { 'content-type': 'application/json', origin: suspendedFixture.base },
+      body: JSON.stringify({ email: suspendedFixture.user.email, password: suspendedFixture.user.password }),
     });
     expect(recoveredSignin.status).toBe(200);
-    const recoveredToken = (await signIn({ account: h.base, clientId: h.client.client_id,
-      redirectUri: h.redirectUri,
+    const recoveredToken = (await signIn({ account: suspendedFixture.base, clientId: suspendedFixture.client.client_id,
+      redirectUri: suspendedFixture.redirectUri,
       scope: 'openid agent:create work:create work:edit work:read comment:create space:create realm:profile realm:adopt',
       resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, }, recoveredSignin.headers.get('set-cookie')!)).accessToken;
-    const recoveredPrincipal = await h.verifier.verify(new Request('http://main.local', {
+    const recoveredPrincipal = await suspendedFixture.verifier.verify(new Request('http://main.local', {
       headers: { authorization: `Bearer ${recoveredToken}` },
     }), ['work:edit']);
     expect(recoveredPrincipal.emailVerified).toBe(true);
     const afterUnsuspension = rejected(nativeId());
     await installDraftGrant(afterUnsuspension);
     const recoveredRequest = { ...makeRequest(afterUnsuspension, randomUUID()), principal: recoveredPrincipal };
-    const recoveredAdmission = await h.access.register(recoveredRequest);
+    const recoveredAdmission = await suspendedFixture.access.register(recoveredRequest);
     expect(recoveredAdmission.dispatchEligible).toBe(true);
-    await h.access.claim(recoveredAdmission.id, recoveredRequest.requestDigest, recoveredPrincipal);
-  } finally { await h.close(); }
+    await suspendedFixture.access.claim(recoveredAdmission.id, recoveredRequest.requestDigest, recoveredPrincipal);
+  } finally { await suspendedFixture.close(); }
 }, 180_000);
 
 test('G265: member replies still require exact Realm review and placement; edits do not inherit approval and deletion suppresses placement', async () => {
