@@ -83,8 +83,10 @@ Maintainer directions of 2026-09-27, revised 2026-09-29, 2026-09-30 and
    the official reset is close, so spend each account within its own cycle.
    Usage is otherwise not the constraint: run as much in parallel as is useful,
    implement in parallel and verify together, but never waste runs. Codex
-   workers run on the fast service tier (maintainer, 2026-10-03;
-   `GOAL_CODEX_SERVICE_TIER` overrides). Token efficiency still
+   workers run on the default service tier: the maintainer chose fast on
+   2026-10-03, the state file has said `default` since that day, and fast spends
+   the included allowance at 2.5 times the rate (`GOAL_CODEX_SERVICE_TIER`
+   overrides for one run). Token efficiency still
    matters: cheap models for mechanical work, small briefs and no wasted runs. The Grok CLI and Cursor are two
    separate quotas and two full lanes of feature work, frontend included.
 5. **Human-role agents.** Opus 5.5 and GPT-6.1 Sol can take the human role: they
@@ -218,6 +220,13 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   - **Engine.** Choose the one that lands the task in the fewest tokens: Luna
     at `max` for bounded mechanical work, Sol for analysis, architecture
     defects, review and implementation that needs judgment.
+  At the published credit rates for Sol (50 uncached input, 2.5 cached input,
+  250 output per million tokens) that cycle's spend was 56% cached input, 23%
+  output and 21% uncached input: the context a session carries is the largest
+  cost, and a token of command output is paid once as new input and again on
+  every later call. `goalctl` also limits one command's output to 4,000 tokens
+  (`GOAL_CODEX_TOOL_OUTPUT_TOKENS`; Sol's default is 10,000). How the included
+  allowance weighs cached tokens is not published.
   Watch tokens per landed task and average context per call, not attempts or
   price.
 - **Host memory.** A worker process is cheap; QA stacks, browsers, Storybook

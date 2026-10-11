@@ -627,6 +627,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
       '-c', `model_auto_compact_token_limit=${codexCompactTokens()}`,
+      '-c', `tool_output_token_limit=${codexToolOutputTokens()}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
     return ['codex', resume ? ['exec', 'resume', session, ...common, '--', prompt]
@@ -644,6 +645,15 @@ export const CODEX_COMPACT_TOKENS = 200_000;
 function codexCompactTokens(): number {
   const override = Number(process.env.GOAL_CODEX_COMPACT_TOKENS);
   return Number.isSafeInteger(override) && override > 0 ? override : CODEX_COMPACT_TOKENS;
+}
+
+/** What one command's output may add to a worker's context. Sol's own default is 10,000 tokens; a token
+ * of output is paid once as new input and again on every later call. Cutting at about 16,000 characters
+ * keeps 84% of the output volume measured to 2026-10-10. `GOAL_CODEX_TOOL_OUTPUT_TOKENS` overrides it. */
+export const CODEX_TOOL_OUTPUT_TOKENS = 4_000;
+function codexToolOutputTokens(): number {
+  const override = Number(process.env.GOAL_CODEX_TOOL_OUTPUT_TOKENS);
+  return Number.isSafeInteger(override) && override > 0 ? override : CODEX_TOOL_OUTPUT_TOKENS;
 }
 
 /** The manager switches Codex between `fast` and `default` by writing this state file (fast when

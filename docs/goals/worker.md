@@ -78,7 +78,9 @@ only your paths with `git commit --only`.
 Every model call resends your whole context, so a session's cost grows with the
 square of its length. Read several files in one command. Bound what a command
 prints (`rg -m`, `sed -n` ranges, `| tail -n 40`); never print a whole log or
-list. Do not read again what you already have.
+list. Do not read again what you already have. A command's output is cut at about
+16,000 characters, so ask for the part you need. `task --summary <task>`
+describes one task; `task --list` prints every one.
 
 ## Handoff
 
