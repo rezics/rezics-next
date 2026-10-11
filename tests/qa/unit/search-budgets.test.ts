@@ -23,8 +23,10 @@ import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
 import { contentPublicationDecisionIri, contentPublicationReceiptIri }
   from '../../../services/main/src/modules/content-publication/publish.ts';
 import { projectOccurrenceLabelsOnce } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
+import { searchRoutes } from '../../../services/main/src/routes/search.ts';
 
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
+const instanceId = '11111111-1111-4111-8111-111111111111';
 
 test('occurrence maintenance names its native discovery phase without sending query text as evidence', async () => {
   const phases: (string | null)[] = [];
@@ -43,6 +45,68 @@ test('occurrence maintenance names its native discovery phase without sending qu
     expect(budgets).toEqual([null, null]);
   } finally { await server.stop(true); }
 });
+
+test('SEARCH18: typeahead timeout logs bounded Fuseki evidence without its prefix and keeps the 503 problem', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const prefix = 'unlogged typeahead prefix 7b6e3d52';
+  const errors: string[] = [];
+  let queryCalls = 0;
+  let activeSignal: AbortSignal | undefined;
+  globalThis.fetch = ((input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname.endsWith('/query')) {
+      queryCalls++;
+      if (queryCalls === 2) {
+        activeSignal = init?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          activeSignal?.addEventListener('abort', () => reject(new DOMException(prefix, 'AbortError')),
+            { once: true });
+        });
+      }
+      return Promise.resolve(Response.json({ results: { bindings: [{ epoch: binding('epoch'),
+        sequence: binding('7'), generation: binding(generation) }] } }));
+    }
+    if (url.searchParams.has('deltaSince')) {
+      return Promise.resolve(Response.json({ available: true, ordinal: '0', dataEpoch: 'epoch',
+        sequence: '7', generation, writeEpoch: '0', luceneGeneration: '1',
+        qualifiedPopulation: '1', deltas: [] }));
+    }
+    return Promise.resolve(Response.json({ moduleVersion: COMMAND_MODULE_VERSION, instanceId,
+      publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+      publicSearchDeltaAvailable: true, profiles: {} }));
+  }) as typeof fetch;
+  console.error = (...values: unknown[]) => { errors.push(values.map(String).join(' ')); };
+  try {
+    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics');
+    const work = { environment: { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } },
+      access: { assertRecoveryOpen: async () => undefined } };
+    const app = searchRoutes(fuseki, work as unknown as Parameters<typeof searchRoutes>[1]);
+    const response = await app.handle(new Request(`http://main.local/v1/search/typeahead?prefix=${encodeURIComponent(prefix)}`));
+
+    expect(queryCalls).toBe(2);
+    expect(activeSignal?.aborted).toBe(true);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      type: 'https://rezics.com/problems/search_index_unavailable',
+      title: 'Public text index is unavailable', status: 503, code: 'search_index_unavailable',
+    });
+    const events = errors.map(value => {
+      try { return JSON.parse(value) as Record<string, unknown>; } catch { return null; }
+    }).filter((value): value is Record<string, unknown> => value?.event === 'public-search-timeout');
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ event: 'public-search-timeout', route: 'typeahead',
+      diagnostics: { active: [{ family: 'query', phase: 'read', status: 'active' }] } });
+    const diagnosticOutput = JSON.stringify(events[0]?.diagnostics);
+    expect(diagnosticOutput).not.toContain(prefix);
+    const diagnostics = events[0]?.diagnostics as { history: unknown[]; active: unknown[] };
+    expect(diagnostics.history.length).toBeLessThanOrEqual(8);
+    expect(diagnostics.active.length).toBeLessThanOrEqual(8);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+}, 5_000);
 const work = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
 const main = 'https://rezics.com/id/22222222-2222-4222-8222-222222222222';
 const sense = 'https://rezics.com/id/33333333-3333-4333-8333-333333333333';
@@ -725,6 +789,37 @@ test('SEARCH18: timeout diagnostics are bounded, redacted, and retain an aborted
 
     await withStableSearchSnapshot(undefined, () => fuseki.query('ASK {}'));
     expect(timeout?.diagnostics?.active).toHaveLength(1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('SEARCH18: timeout diagnostics cap simultaneous active Fuseki calls', async () => {
+  const originalFetch = globalThis.fetch;
+  let started = 0;
+  globalThis.fetch = ((_input, init) => {
+    started++;
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('read stopped', 'AbortError')),
+        { once: true });
+    });
+  }) as typeof fetch;
+  try {
+    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics');
+    let timeout: SearchRequestTimedOut | undefined;
+    try {
+      await withStableSearchSnapshot(undefined, async () => {
+        await Promise.all(Array.from({ length: 10 }, () => fuseki.query('ASK {}')));
+      }, 100);
+    } catch (error) {
+      if (error instanceof SearchRequestTimedOut) timeout = error;
+      else throw error;
+    }
+    expect(started).toBe(10);
+    expect(timeout).toBeInstanceOf(SearchRequestTimedOut);
+    expect(timeout?.diagnostics?.history).toHaveLength(0);
+    expect(timeout?.diagnostics?.active).toHaveLength(8);
+    expect(timeout?.diagnostics?.active.every(item => item.family === 'query'
+      && item.phase === 'read' && item.status === 'active')).toBe(true);
+    expect(timeout?.diagnostics?.omitted).toBe(2);
   } finally { globalThis.fetch = originalFetch; }
 });
 

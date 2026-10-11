@@ -78,7 +78,7 @@ const groupedStatementRequest = t.Object({
   { additionalProperties: false })),
 }, { additionalProperties: false });
 
-function logSearchFailure(route: 'query' | 'query-page', error: unknown,
+function logSearchFailure(route: 'catalogue' | 'typeahead' | 'query' | 'query-page', error: unknown,
   diagnostics: SearchAttemptDiagnostic[] | undefined): void {
   if (error instanceof SearchRequestTimedOut) {
     console.error(JSON.stringify({ event: 'public-search-timeout', route, diagnostics: error.diagnostics }));
@@ -253,7 +253,10 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           return hydrated;
         }));
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        logSearchFailure('catalogue', error, undefined);
+        return commandError(error);
+      }
     })
     .get('/v1/search/typeahead', {
       query: t.Object({ prefix: t.String({ minLength: 1, maxLength: 80 }),
@@ -313,7 +316,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
-        return commandError(error instanceof WorkReadLimit ? new PublicQueryBudgetExceeded(error.message) : error);
+        const failure = error instanceof WorkReadLimit ? new PublicQueryBudgetExceeded(error.message) : error;
+        logSearchFailure('typeahead', failure, undefined);
+        return commandError(failure);
       }
     })
     .post('/v1/private-queries', {
