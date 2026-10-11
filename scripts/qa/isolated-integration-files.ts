@@ -26,6 +26,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
+  // restores the launch recipes corpus
+  'tests/qa/integration/launch-real-recipes.test.ts',
   // M6 replays reference suites that require fresh rating and catalogue inventories.
   'tests/qa/integration/g-856-wiki.test.ts',
   'tests/qa/integration/g-856-editorial.test.ts',
@@ -212,6 +214,8 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/fault-recovery/work-profile-seed-build.test.ts',
   // restores the launch books corpus
   'tests/qa/integration/launch-real-books.test.ts',
+  // API-built Gutenberg recipe corpus uses the product assembler and independent persistent restores.
+  'tests/qa/integration/launch-real-recipes.test.ts',
   // Original title custody needs the exclusive product writer so startup can finish the Work-name directory.
   'tests/qa/integration/title-candidate-original-custody.test.ts',
 ]);

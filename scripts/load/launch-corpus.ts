@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import type { Pool } from 'pg';
 import type { FixtureLock } from '../fixtures/pull.ts';
 import { prideEditionSet } from '../../tests/fixtures/sources/open-library.ts';
 import { stableId } from '../dev/seed/state.ts';
+import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { seedCatalogueProfileWorks } from './catalogue-work.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from './compatibility.ts';
 import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
@@ -11,6 +13,7 @@ import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from '.
 const root = resolve(import.meta.dir, '../..');
 const budgetMs = 600_000;
 const recipe = 'launch-books-v2';
+const launchRecipesRecipe = 'launch-real-recipes-v1';
 const short = (id: string) => id.slice(-36);
 
 interface OpenLibraryRecord {
@@ -216,6 +219,327 @@ export async function restoreLaunchBooksCorpus(corpus: LaunchBooksCorpus, target
   return restoreMs;
 }
 
+interface RecipeExtractPin {
+  id: string;
+  edition: number;
+  title: string;
+  sourceSha256: string;
+  recipesExtracted: number;
+  ingredientLineCount: number;
+  fractionCount: number;
+  rangeCount: number;
+  twoStageCaseIds: string[];
+  recipes: { id: string; titleLine: number; ingredientLines: [number, number];
+    methodLines: [number, number]; caseIds: string[] }[];
+}
+
+export interface LaunchRecipeSource {
+  pinId: string;
+  sourceId: string;
+  sourceSha256: string;
+  recipeId: string;
+  title: string;
+  language: 'en' | 'it';
+  ingredients: string[];
+  methods: string[];
+  caseIds: string[];
+}
+
+/** The pins name physical lines; only blank lines are excluded from each range. */
+export function launchRecipeSources(): LaunchRecipeSource[] {
+  const pins = JSON.parse(readFileSync(join(root, 'tests/fixtures/gutenberg/recipe-extract-pins.json'), 'utf8')) as {
+    version: number; pins: RecipeExtractPin[];
+  };
+  const lock = JSON.parse(readFileSync(join(root, 'tests/fixtures/fixtures.lock.json'), 'utf8')) as FixtureLock;
+  if (pins.version !== 1 || lock.version !== 1) throw new Error('Unsupported Gutenberg recipe pins');
+  const extracted: LaunchRecipeSource[] = [];
+  for (const pin of pins.pins) {
+    const entry = lock.entries.find(row => row.source === 'gutenberg' && row.id === `pg${pin.edition}`);
+    if (!entry || entry.reuseBasis.toLowerCase().indexOf('public-domain') < 0)
+      throw new Error(`Missing public-domain Gutenberg recipe source: ${pin.edition}`);
+    const bytes = readFileSync(join(root, entry.seed));
+    if (bytes.byteLength !== entry.size || createHash('sha256').update(bytes).digest('hex') !== entry.sha256)
+      throw new Error(`Gutenberg recipe fixture digest mismatch: ${pin.edition}`);
+    const fixture = JSON.parse(bytes.toString('utf8')) as { edition: number; sourceSha256: string; text: string };
+    if (fixture.edition !== pin.edition || fixture.sourceSha256 !== pin.sourceSha256 || typeof fixture.text !== 'string')
+      throw new Error(`Gutenberg recipe fixture differs from its approved pin: ${pin.edition}`);
+    const lines = fixture.text.split('\n');
+    for (const item of pin.recipes) {
+      const [ingredientStart, ingredientEnd] = item.ingredientLines;
+      const [methodStart, methodEnd] = item.methodLines;
+      const ingredients = lines.slice(ingredientStart - 1, ingredientEnd).filter(line => line.trim());
+      const methods = lines.slice(methodStart - 1, methodEnd).filter(line => line.trim());
+      const title = lines[item.titleLine - 1]?.trim();
+      if (!title || !ingredients.length || !methods.length) throw new Error(`Empty Gutenberg recipe extract: ${item.id}`);
+      extracted.push({ pinId: pin.id, sourceId: entry.id, sourceSha256: fixture.sourceSha256,
+        recipeId: item.id, title, language: pin.id === 'artusi' ? 'it' : 'en', ingredients,
+        methods, caseIds: item.caseIds });
+    }
+    const sourceRecipes = extracted.filter(row => row.pinId === pin.id);
+    const ingredientLines = sourceRecipes.flatMap(row => row.ingredients);
+    const fractions = ingredientLines.join('\n').match(/(?:\d+\s*)?[½¼¾⅓⅔⅛⅜⅝⅞]/gu) ?? [];
+    const ranges = ingredientLines.join('\n').match(/\b\d+\s+(?:to|or)\s+\d+\b/giu) ?? [];
+    if (sourceRecipes.length !== pin.recipesExtracted || ingredientLines.length !== pin.ingredientLineCount
+      || fractions.length !== pin.fractionCount || ranges.length !== pin.rangeCount
+      || JSON.stringify(sourceRecipes.flatMap(row => row.caseIds).sort()) !== JSON.stringify([...pin.twoStageCaseIds].sort()))
+      throw new Error(`Gutenberg recipe pins changed: ${pin.id}`);
+  }
+  if (extracted.length !== 30) throw new Error('The launch recipe corpus must contain exactly 30 extracts');
+  return extracted;
+}
+
+export interface LaunchRecipeRecord {
+  recipeId: string;
+  pinId: string;
+  title: string;
+  language: 'en' | 'it';
+  caseIds: string[];
+  sourceIngredients: string[];
+  sourceMethods: string[];
+  work: string;
+  mainVersion: string;
+  structure: string;
+  revision: string;
+}
+
+export interface LaunchRecipesCorpus {
+  recipe: typeof launchRecipesRecipe;
+  id: string;
+  compatibility: LoadCompatibility;
+  sources: { id: string; sha256: string; reuseBasis: string }[];
+  realm: string;
+  realmHandle: 'launch-recipes';
+  zone: string;
+  records: LaunchRecipeRecord[];
+  counts: { works: 30; recipes: 30; ingredientLines: 173; fractionLines: 47; rangeLines: 2;
+    englishRecipes: 20; italianRecipes: 10 };
+  backup: string;
+  buildMs: number;
+}
+
+type RecipeWorkReceipt = { work: string; mainVersion: string };
+type RecipeCompositionReceipt = { structure: string; revision: string };
+type RecipeFileImportReceipt = { structure: string; revision: string; sourceObservation: string; replayed: boolean };
+type TextDraftReceipt = { contribution: string; draftRevision: string };
+type TextPublicationReceipt = { publicationDecision: string };
+
+/** Create, import and publish each pin with Main commands; the input is never parsed here. */
+async function buildRecipes(api: CorpusApi, actor: string, key: string,
+  authorize: (scope: string, action: string) => Promise<void>,
+  importFile: (key: string, actor: string, composition: RecipeCompositionReceipt,
+    file: Record<string, unknown>, signal: AbortSignal) => Promise<RecipeFileImportReceipt>,
+  signal: AbortSignal) {
+  await authorize('space:create:root', 'space.create');
+  const space = await api.command<{ space: string; realm: string }>(`${key}:space`, {
+    method: 'POST', path: '/v1/spaces', body: { profile: 'space-realm-v2', name: 'Recipes',
+      handle: 'launch-recipes', capabilities: ['realm'], actingSubject: actor },
+  }, signal);
+  const zone = `https://rezics.com/id/${stableId(`${key}:zone`)}`;
+  await authorize(`zone:edit:${zone}`, 'zone.edit');
+  await api.command(`${key}:zone`, { method: 'POST', path: '/v1/zones', body: {
+    zone, space: space.space, disclosure: 'public', actingSubject: actor,
+  } }, signal);
+  const zoneConfig = await api.read<{ revision: string }>(
+    `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(actor)}`, signal);
+  await api.command(`${key}:zone-default-realm`, { method: 'PUT', path: `/v1/zones/${short(zone)}/configuration`,
+    body: { expectedHead: zoneConfig.revision, defaultRealm: space.realm, actingSubject: actor },
+  }, signal);
+  await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
+  await authorize('work:create:root', 'work.create');
+
+  const sources = launchRecipeSources();
+  const records: LaunchRecipeRecord[] = [];
+  for (const source of sources) {
+    signal.throwIfAborted();
+    const work = await api.command<RecipeWorkReceipt>(`${key}:work:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/works', body: { profile: 'metadata-only-v1', authoring: 'own-work',
+        title: source.title, language: source.language,
+        semanticTypes: ['https://schema.org/Recipe'], actingSubject: actor },
+    }, signal);
+    await authorize(`work:edit:${work.work}`, 'recipe.edit');
+    await authorize(`work:read:${work.work}`, 'work.read');
+    const composition = await api.command<RecipeCompositionReceipt>(
+      `${key}:composition:${source.pinId}:${source.recipeId}`, { method: 'POST', path: '/v1/compositions',
+        body: { profile: 'recipe-composition', work: work.work, mainVersion: work.mainVersion, actingSubject: actor },
+      }, signal);
+    const file: Record<string, unknown> = { '@context': 'https://schema.org', '@type': 'Recipe',
+      name: source.title, inLanguage: source.language, recipeIngredient: source.ingredients,
+      recipeInstructions: source.methods.map(text => ({ '@type': 'HowToStep', text, inLanguage: source.language })) };
+    const imported = await importFile(`${key}:file:${source.pinId}:${source.recipeId}`,
+      actor, composition, file, signal);
+
+    await authorize(`contribution:create:${work.work}`, 'contribution.create');
+    const draft = await api.command<TextDraftReceipt>(`${key}:draft:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/contributions', body: { profile: 'text-contribution-v1', work: work.work,
+        language: source.language, body: [source.title, '', 'Ingredients:',
+          ...source.ingredients.map(line => line.trim()), '', 'Method:', ...source.methods.map(line => line.trim())].join('\n'),
+        actingSubject: actor },
+    }, signal);
+    await authorize(`contribution:read:${draft.contribution}`, 'contribution.read');
+    await authorize(`contribution:publish:${draft.contribution}`, 'contribution.publish');
+    const publication = await api.command<TextPublicationReceipt>(`${key}:publication:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/contribution-publications', body: { profile: 'text-publication-v1',
+        contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
+        expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor },
+    }, signal);
+    await authorize(`publication:select:${work.mainVersion}`, 'publication.select');
+    await api.command(`${key}:main-selection:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/publication-selections', body: { profile: 'main-default-selection-v1',
+        context: { kind: 'main-version-default', id: work.mainVersion }, work: work.work,
+        contribution: draft.contribution, publicationDecision: publication.publicationDecision,
+        expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor },
+    }, signal);
+    await api.command(`${key}:zone-adoption:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/publication-selections', body: { profile: 'realm-local-selection-v1',
+        context: { kind: 'realm-local', id: space.realm }, work: work.work, mainVersion: work.mainVersion,
+        contribution: draft.contribution, publicationDecision: publication.publicationDecision,
+        expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: actor },
+    }, signal);
+    records.push({ recipeId: source.recipeId, pinId: source.pinId, title: source.title,
+      language: source.language, caseIds: source.caseIds, sourceIngredients: source.ingredients,
+      sourceMethods: source.methods, work: work.work, mainVersion: work.mainVersion,
+      structure: composition.structure, revision: imported.revision });
+  }
+  return { realm: space.realm, realmHandle: 'launch-recipes' as const, zone, records };
+}
+
+/** All Recipe corpus access comes through the guarded fixture authority helper. */
+export async function grantLaunchRecipeAuthority(pool: Pool, principalId: string, actor: string,
+  scope: string, action: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await grantFixtureAuthority(client, { scope, requireDispatch: true,
+      representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+      grant: { actor, action, lifetime: '8 hours', requireSelfIssuer: true } });
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
+
+function launchRecipeSourcesManifest() {
+  const lock = JSON.parse(readFileSync(join(root, 'tests/fixtures/fixtures.lock.json'), 'utf8')) as FixtureLock;
+  return launchRecipeSources().map(source => {
+    const entry = lock.entries.find(row => row.source === 'gutenberg' && row.id === source.sourceId);
+    if (!entry) throw new Error(`Missing Gutenberg recipe lock entry: ${source.sourceId}`);
+    return { id: entry.id, sha256: entry.sha256, reuseBasis: entry.reuseBasis };
+  }).filter((entry, index, all) => all.findIndex(candidate => candidate.id === entry.id) === index);
+}
+
+export async function prepareLaunchRecipesCorpus(input: {
+  api: CorpusApi;
+  actor: string;
+  backups: CorpusBackupDriver;
+  directory: string;
+  authorize(scope: string, action: string): Promise<void>;
+  importFile(key: string, actor: string, composition: RecipeCompositionReceipt,
+    file: Record<string, unknown>, signal: AbortSignal): Promise<RecipeFileImportReceipt>;
+}): Promise<LaunchRecipesCorpus> {
+  const sources = launchRecipeSourcesManifest();
+  const compatibility = loadCompatibility(root);
+  const id = `launch-recipes-${createHash('sha256')
+    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest])).digest('hex').slice(0, 20)}`;
+  const directory = resolve(input.directory);
+  if (!relative(root, directory).startsWith('.temp/')) throw new Error('Launch corpus must stay in this checkout .temp');
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, `${id}.json`);
+  if (existsSync(path)) {
+    const saved = JSON.parse(readFileSync(path, 'utf8')) as LaunchRecipesCorpus;
+    if (saved.id !== id || saved.recipe !== launchRecipesRecipe || JSON.stringify(saved.sources) !== JSON.stringify(sources)
+      || !compatibleLoadStorage(saved.compatibility, compatibility) || !existsSync(saved.backup)
+      || saved.records.length !== 30 || !Number.isFinite(saved.buildMs) || saved.buildMs < 0 || saved.buildMs > budgetMs)
+      throw new Error('Incompatible or incomplete launch recipes corpus');
+    console.log(JSON.stringify({ launchCorpus: id, reused: true, sources, counts: saved.counts,
+      buildMs: Math.round(saved.buildMs) }));
+    return saved;
+  }
+  const lock = `${path}.lock`;
+  mkdirSync(lock);
+  const started = performance.now();
+  const signal = AbortSignal.timeout(budgetMs);
+  try {
+    const built = await buildRecipes(input.api, input.actor, id, input.authorize, input.importFile, signal);
+    const backup = await input.backups.backup(id, signal);
+    signal.throwIfAborted();
+    const manifest: LaunchRecipesCorpus = { recipe: launchRecipesRecipe, id, compatibility, sources,
+      ...built, counts: { works: 30, recipes: 30, ingredientLines: 173, fractionLines: 47,
+        rangeLines: 2, englishRecipes: 20, italianRecipes: 10 }, backup,
+      buildMs: performance.now() - started };
+    writeFileSync(`${path}.tmp`, JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+    renameSync(`${path}.tmp`, path);
+    console.log(JSON.stringify({ launchCorpus: id, sources, counts: manifest.counts,
+      buildMs: Math.round(manifest.buildMs) }));
+    return manifest;
+  } finally {
+    rmSync(`${path}.tmp`, { force: true });
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+export async function restoreLaunchRecipesCorpus(corpus: LaunchRecipesCorpus, target: string,
+  backups: CorpusBackupDriver) {
+  const started = performance.now();
+  const signal = AbortSignal.timeout(budgetMs);
+  await backups.restore(corpus.backup, target, signal);
+  signal.throwIfAborted();
+  const restoreMs = performance.now() - started;
+  console.log(JSON.stringify({ launchCorpus: corpus.id, target, restoreMs: Math.round(restoreMs) }));
+  return restoreMs;
+}
+
+async function prepareBrowserRecipes() {
+  const runId = process.env.REZICS_QA_RUN_ID;
+  if (!runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId))
+    throw new Error('Browser recipes preparation requires an isolated QA run');
+  const directory = join(root, '.temp/launch-corpus');
+  const path = join(directory, `browser-recipes-${runId}.json`);
+  if (existsSync(path)) {
+    const saved = JSON.parse(readFileSync(path, 'utf8')) as { corpus: LaunchRecipesCorpus; restored: false };
+    if (saved.corpus.recipe !== launchRecipesRecipe || saved.restored !== false
+      || !compatibleLoadStorage(saved.corpus.compatibility, loadCompatibility(root)))
+      throw new Error('Incompatible browser recipes preparation');
+    console.log(JSON.stringify(saved));
+    return;
+  }
+  const objectDirectory = process.env.MAIN_OBJECT_DIRECTORY;
+  if (!objectDirectory) throw new Error('Browser recipes preparation needs the running stack object directory');
+  const { startMediaStack } = await import('../../tests/qa/integration/media-support.ts');
+  const stack = await startMediaStack('launch-recipes-browser-source', { library: true, profileCredits: true });
+  try {
+    const workObjects = stack.objects('semantic/work/');
+    const structureObjects = stack.objects('semantic/structure/');
+    await Promise.all([workObjects.initialize(), structureObjects.initialize()]);
+    Object.assign(stack.env, { objectDirectory, workObjects, structureObjects });
+    const editor = await stack.member('launch-recipes-browser-importer', { stable: true, verified: true });
+    const signal = AbortSignal.timeout(budgetMs);
+    const api = workProfileCorpusApi('http://main.local', editor.token, { signal,
+      fetch: ((request, init) => stack.main.handle(new Request(request, init))) as typeof fetch });
+    const started = performance.now();
+    const built = await buildRecipes(api, editor.actor, `browser-recipes:${runId}`,
+      (scope, action) => grantLaunchRecipeAuthority(stack.accessPool, editor.principalId, editor.actor, scope, action),
+      async (key, actor, composition, file, requestSignal) => {
+        const path = `/v1/recipes/${short(composition.structure)}/file-imports`
+          + `?actingSubject=${encodeURIComponent(actor)}&expectedHead=${encodeURIComponent(composition.revision)}`;
+        const response = await stack.main.handle(new Request(`http://main.local${path}`, { method: 'POST',
+          headers: { authorization: `Bearer ${editor.token}`, 'idempotency-key': key,
+            'content-type': 'application/ld+json' }, body: JSON.stringify(file), signal: requestSignal }));
+        if (![200, 201].includes(response.status)) throw new Error(`Recipe file import returned HTTP ${response.status}: ${await response.text()}`);
+        return await response.json() as RecipeFileImportReceipt;
+      }, signal);
+    const corpus: LaunchRecipesCorpus = { recipe: launchRecipesRecipe, id: `browser-recipes-${runId}`,
+      compatibility: loadCompatibility(root), sources: launchRecipeSourcesManifest(), ...built,
+      counts: { works: 30, recipes: 30, ingredientLines: 173, fractionLines: 47,
+        rangeLines: 2, englishRecipes: 20, italianRecipes: 10 }, backup: '', buildMs: performance.now() - started };
+    const prepared = { corpus, restored: false as const };
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(`${path}.tmp`, JSON.stringify(prepared, null, 2) + '\n', { mode: 0o600 });
+    renameSync(`${path}.tmp`, path);
+    console.log(JSON.stringify(prepared));
+  } finally { await stack.stop(); }
+}
+
 /** The current browser runner owns a fresh stack. Keep that preparation
  * explicit; only the API fixture's backup driver qualifies restored copies. */
 async function prepareBrowserBooks() {
@@ -273,6 +597,8 @@ async function prepareBrowserBooks() {
 }
 
 if (import.meta.main) {
-  if (process.argv.slice(2).join() !== '--browser-prepare') throw new Error('Use --browser-prepare');
-  await prepareBrowserBooks();
+  const command = process.argv.slice(2).join();
+  if (command === '--browser-prepare') await prepareBrowserBooks();
+  else if (command === '--browser-recipes-prepare') await prepareBrowserRecipes();
+  else throw new Error('Use --browser-prepare or --browser-recipes-prepare');
 }
