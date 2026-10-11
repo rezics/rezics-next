@@ -7,6 +7,7 @@ import {
   ObjectReadBudgetExceeded,
   ObjectUnavailable,
   type ImmutableObjects,
+  withoutVerifiedImmutableObjectCache,
 } from '../../infrastructure/immutable-objects.ts';
 import { GRAPHS, RV } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
@@ -171,7 +172,8 @@ async function exactBytes(
 ): Promise<Buffer> {
   if (!SHA.test(digest)) throw new ObjectRecoveryConflict('immutable object digest is malformed');
   if (kind === 'structure') {
-    if (!store.structureObjects) {
+    const objects = store.structureObjects;
+    if (!objects) {
       throw new ObjectRecoveryConflict(
         'Structure immutable object owner is unavailable',
         'unavailable',
@@ -182,7 +184,9 @@ async function exactBytes(
     try {
       // Undefined retains the object's configured maintenance deadline signal.
       // Association turns pass the bytes still left; ordinary capture keeps one page.
-      const bytes = await store.structureObjects.get(digest, structureByteCap, signal);
+      const bytes = await withoutVerifiedImmutableObjectCache(
+        () => objects.get(digest, structureByteCap, signal),
+      );
       signal?.throwIfAborted();
       if (bytes.length > structureByteCap || bytes.length > STRUCTURE_LIMITS.pageBytes)
         throw new ObjectReadBudgetExceeded('Structure object exceeds its byte bound');
@@ -210,11 +214,14 @@ async function exactBytes(
     ? fusekiReadBudget.getStore()?.signal
     : undefined;
   signal?.throwIfAborted();
-  if (store.workObjects) {
+  const workObjects = store.workObjects;
+  if (workObjects) {
     try {
       const bytes = signal
-        ? await store.workObjects.get(digest, undefined, signal)
-        : await store.workObjects.get(digest);
+        ? await withoutVerifiedImmutableObjectCache(
+          () => workObjects.get(digest, undefined, signal),
+        )
+        : await withoutVerifiedImmutableObjectCache(() => workObjects.get(digest));
       signal?.throwIfAborted();
       return Buffer.from(bytes);
     } catch (error) {

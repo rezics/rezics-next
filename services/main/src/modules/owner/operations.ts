@@ -17,7 +17,7 @@ import { captureReleaseBasis, proveReleaseTransition, readBindings, readErasures
   recordQualification, recordRelease, requireQualification }
   from './restore-release-binding.ts';
 import type { RestoredGraphCustody } from '../erasure/custody.ts';
-import { S3ImmutableObjects, type ImmutableObjects }
+import { S3ImmutableObjects, withoutVerifiedImmutableObjectCache, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 import type { ObjectRecoveryStore } from './object-coverage.ts';
@@ -702,8 +702,10 @@ export class OwnerOperations {
       let findingKind: 'anchor' | 'payload' | 'revision' = 'revision';
       try {
         const workObjects = this.configuredWorkObjects();
-        const exact = await readExactWorkRevision({ ...this.environment,
-          ...(workObjects ? { workObjects } : {}) }, input.revision, async () => true);
+        const exact = await withoutVerifiedImmutableObjectCache(() => readExactWorkRevision({
+          ...this.environment,
+          ...(workObjects ? { workObjects } : {}),
+        }, input.revision, async () => true));
         disposition = 'matched';
         findingKind = 'anchor';
         evidence = digest(exact);
