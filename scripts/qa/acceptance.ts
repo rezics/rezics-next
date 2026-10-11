@@ -239,6 +239,7 @@ const retainedUnitOwners = new Set([
   'services/main/tests/work-command.test.ts',
 ]);
 export const nativeProofOwnerFiles = [
+  'infra/jena/tests/erasure-campaign-native.test.ts',
   'infra/jena/tests/native-integer-preservation.test.ts',
   'infra/jena/tests/semantic-source-readiness-union.test.ts',
   'infra/jena/tests/work-name-scope-basis.test.ts',

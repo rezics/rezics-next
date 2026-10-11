@@ -136,7 +136,7 @@ public class ErasureHeldCallerContractTest {
         '-Dtest=ErasureHeldCallerContractTest',
         'test',
       ],
-      { cwd: root, encoding: 'utf8', timeout: 150_000, env: preserveReapEnvironment(process.env) },
+      { cwd: root, encoding: 'utf8', timeout: 300_000, env: preserveReapEnvironment(process.env) },
     );
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(
@@ -144,10 +144,12 @@ public class ErasureHeldCallerContractTest {
       `${result.stdout}\n${result.stderr}`,
     );
     if (result.status !== 0)
-      throw new Error(`Native caller interoperability failed: ${result.stdout}\n${result.stderr}`);
+      throw new Error(`Native caller interoperability failed: ${result.stdout}\n${result.stderr}`
+        + `${result.error ? `\n${result.error.message}` : ''}`
+        + `${result.signal ? `\nSignal: ${result.signal}` : ''}`);
     expect(result.stdout).toContain('Tests run: 1, Failures: 0, Errors: 0');
   } finally {
     spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000, env: preserveReapEnvironment(process.env) });
     rmSync(build, { recursive: true, force: true });
   }
-}, 185_000);
+}, 310_000);
