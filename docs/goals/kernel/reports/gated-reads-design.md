@@ -92,3 +92,7 @@ PROPOSED TASKS: Dispatch native capture/probe first; migrate both private adapte
 BLOCKERS: none for this design pass. Native composition, count-contract changes and scale acceptance remain implementation proofs.
 
 NEXT: kernel-sonnet to assign those steps with the acceptance checks above and share the Realm admission rule with launch.
+
+## Additional consumer of the consistent capture: Zone browse reconciliation
+
+Added 2026-10-12 from Launch's relay gap recovery. The Zone browse reconciliation (a hole or a late batch reconciled from the authoritative graph at a validated cut) keeps being invalidated under sustained unrelated writes: after three invalidations it waits 30 seconds, shows `waiting-for-cut` (bounded, observable, reads unavailable). It completes under continuous writes only with the scoped consistent capture: it is a consumer of the native capture step, with the Zone's own scope (Zone, mounted resources) as the capture key instead of a global cut. The implementer of the capture step lists it in the acceptance table (unrelated writes during reconciliation do not invalidate its cut).
