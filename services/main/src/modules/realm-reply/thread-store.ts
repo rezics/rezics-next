@@ -15,6 +15,7 @@ import type { RealmHistoryFloor } from '../realm-admin/history.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import { RealmAboutThreadStore } from './about-store.ts';
+import { requireMainFeedCoverage } from '../feed/frame.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -104,6 +105,9 @@ export class RealmReplyThreadStore {
   }
   /** Source readiness is checked before and after a window; an incomplete projection is never an empty branch. */
   async assertThreadProjection(session: WorkReadSession): Promise<void> {
+    // The projector checkpoints the acknowledged Main stream. A graph cut
+    // can advance independently and is never a position in that stream.
+    const main = requireMainFeedCoverage(await session.deps.relayPosition?.read(), session.position.dataEpoch);
     const source = (await this.content.query<{ data_epoch: string; sequence: string }>(
       'SELECT data_epoch::text,sequence::text FROM content.owner_control WHERE singleton')).rows[0];
     if (!source) throw new WorkReadUnavailable('Thread source is unavailable');
@@ -116,7 +120,7 @@ export class RealmReplyThreadStore {
         ORDER BY kind,resource LIMIT 1),true)
       AS ready FROM access.recovery_fence f
       LEFT JOIN access.realm_thread_checkpoint c ON c.data_epoch=$1 WHERE f.id`,
-    [session.position.dataEpoch, source.data_epoch, source.sequence, session.position.sequence])).rows[0];
+    [session.position.dataEpoch, source.data_epoch, source.sequence, main.sequence])).rows[0];
     if (!ready?.ready) throw new WorkReadUnavailable('Realm replies are projecting');
   }
 

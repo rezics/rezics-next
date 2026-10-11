@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
 import { allocateAgentHandle } from '../src/modules/agent/handle.ts';
 import { discussionParts } from '../src/modules/realm-reply/discussion-text.ts';
 import { readRealmThread, readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
 import { bestKey } from '../src/modules/feed/ranking.ts';
 import { RealmRankingsIncomplete, type RealmRankKey } from '../src/modules/rankings/realm-threads.ts';
-import type { PlacedHead, ThreadNode, ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
+import { RealmReplyThreadStore, type PlacedHead, type ThreadNode, type ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
+import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modules/outbox/relay-position.ts';
 import { RV } from '../src/modules/work/activate.ts';
 import { decodeReadCursor, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
@@ -430,4 +432,56 @@ test('a discussion is titled by its first line, and a first line too long for a 
   const { title, body } = discussionParts(`${line}\nsecond`);
   expect(Array.from(title)).toHaveLength(301);
   expect(`${title.slice(0, -1)}${body}`).toBe(`${line}\nsecond`);
+});
+
+function projectionReadiness(mainSequence = '3', contentSequence = '7') {
+  let coverage: RelayHandoffPosition | null = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '3' };
+  const positions: unknown[][] = [];
+  const content = { query: async () => ({ rows: [{ data_epoch: 'content-epoch', sequence: '7' }] }) } as unknown as Pool;
+  const access = { query: async (_sql: string, values: unknown[]) => {
+    positions.push(values);
+    return { rows: [{ ready: values[0] === 'epoch' && values[1] === 'content-epoch'
+      && values[2] === contentSequence && values[3] === mainSequence }] };
+  } } as unknown as Pool;
+  const session = { position: { dataEpoch: 'epoch', sequence: '100' },
+    deps: { relayPosition: { read: async () => coverage } } } as unknown as WorkReadSession;
+  return { store: new RealmReplyThreadStore(content, access), session, positions,
+    cover: (next: RelayHandoffPosition | null) => { coverage = next; } };
+}
+
+test('thread readiness admits Main stream 3 and Content 7 when the graph cut is 100', async () => {
+  const fixture = projectionReadiness();
+  await fixture.store.assertThreadProjection(fixture.session);
+  expect(fixture.positions).toEqual([['epoch', 'content-epoch', '7', '3']]);
+  fixture.session.position.sequence = '101';
+  await fixture.store.assertThreadProjection(fixture.session);
+  expect(fixture.positions[1]).toEqual(fixture.positions[0]);
+});
+
+test('thread readiness refuses incomplete Main or Content coverage', async () => {
+  for (const [main, content] of [['2', '7'], ['4', '7'], ['3', '6']]) {
+    const fixture = projectionReadiness(main, content);
+    await expect(fixture.store.assertThreadProjection(fixture.session))
+      .rejects.toThrow('Realm replies are projecting');
+  }
+});
+
+test('thread readiness refuses absent, foreign and malformed Main coverage before reading its index', async () => {
+  for (const coverage of [null,
+    { streamScope: 'urn:other:stream', dataEpoch: 'epoch', sequence: '3' },
+    { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'old-epoch', sequence: '3' },
+    { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: 'invalid' }]) {
+    const fixture = projectionReadiness();
+    fixture.cover(coverage);
+    await expect(fixture.store.assertThreadProjection(fixture.session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    expect(fixture.positions).toEqual([]);
+  }
+});
+
+test('thread readiness rechecks acknowledged coverage when the window closes', async () => {
+  const fixture = projectionReadiness();
+  await fixture.store.assertThreadProjection(fixture.session);
+  fixture.cover({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' });
+  await expect(fixture.store.assertThreadProjection(fixture.session)).rejects.toThrow('Realm replies are projecting');
+  expect(fixture.positions.map(position => position[3])).toEqual(['3', '4']);
 });

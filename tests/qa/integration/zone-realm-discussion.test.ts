@@ -5,6 +5,7 @@ import type { Static } from 'typebox';
 import type { SaveDraftCommand } from '../../../services/content/src/core.ts';
 import type { realmAboutThread, realmThread } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import type { TitleControlState } from '../../../services/main/src/modules/work/title-control.ts';
+import { relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { arrange, local, threeWriteDebits, type Page, type Posted } from './zone-realm-discussion-support.ts';
 
@@ -19,6 +20,13 @@ test('a published Zone page opens one canonical discussion and preserves indepen
     const lookup = (about: string) => home.call('GET',
       `/v1/realms/${local(a.realm.realm)}/about-thread?${new URLSearchParams({ about })}`);
     const thread = async (reply: string) => {
+      // Native title edits retain their outbox in receipt custody. Deliver it
+      // through the same relay before the shared fixture runs the projector.
+      for (let batch = 0; ; batch++) {
+        if (batch === 400) throw new Error('Discussion relay exceeded its fixture budget');
+        if (!await relayMainOutboxOnce(home.stack.fuseki, home.relay, home.deps.relayPosition.consumer,
+          { ownerOutbox: home.stack.env.receiptCustody })) break;
+      }
       await home.project();
       return home.json<Static<typeof realmThread>>(await home.call('GET',
         `/v1/realms/${local(a.realm.realm)}/threads/${local(reply)}?sort=new`));
@@ -153,17 +161,18 @@ test('a published Zone page opens one canonical discussion and preserves indepen
       const winner = await home.json<Posted>(await winnerRequest, 201);
       const child = await home.json<Posted>(await a.post(concurrent, a.reader,
         'Concurrent child', home.reader.token, childKey), 201);
-      expect(winner.author).toBe(a.author);
-      expect(child.author).toBe(a.reader);
+      expect(winner).toMatchObject({ author: a.author, realm: a.realm.realm, about: concurrent.about });
+      expect(child).toMatchObject({ author: a.reader, realm: a.realm.realm, about: concurrent.about });
       expect(await home.json(await a.post(concurrent, a.author, 'Concurrent opener', home.author.token, winnerKey), 200)).toEqual(winner);
       expect(await home.json(await a.post(concurrent, a.reader, 'Concurrent child', home.reader.token, childKey), 200)).toEqual(child);
       const contributions = await a.rows(concurrent.about);
       expect(contributions).toHaveLength(2);
       expect(contributions.filter(row => row.parent_reply === null)).toHaveLength(1);
       expect(contributions.find(row => row.reply === winner.reply)).toMatchObject({ author: a.author,
-        root_revision: concurrent.targetRevision, body: { body: 'Concurrent opener' } });
+        origin_realm: a.realm.realm, root_revision: concurrent.targetRevision, body: { body: 'Concurrent opener' } });
       expect(contributions.find(row => row.reply === child.reply)).toMatchObject({ author: a.reader,
-        parent_reply: winner.reply, root_revision: concurrent.targetRevision, body: { body: 'Concurrent child' } });
+        origin_realm: a.realm.realm, parent_reply: winner.reply,
+        root_revision: concurrent.targetRevision, body: { body: 'Concurrent child' } });
       const concurrentCanonical = await home.stack.contentPool.query(`SELECT opener_reply FROM content.realm_about_thread
         WHERE realm=$1 AND about=$2`, [a.realm.realm, concurrent.about]);
       expect(concurrentCanonical.rows).toEqual([{ opener_reply: winner.reply }]);

@@ -245,10 +245,12 @@ export class RealmReplyStore {
         throw new RealmReplyDenied('reply admission was cancelled');
       }
       // The route already disclosed the root. A lost-response retry keeps its
-      // identity after a target edit; only a new identity binds the current
-      // root. A visible root that cannot take this reply is a refusal.
+      // identity after a target edit. A new opener binds the current root;
+      // a child inherits its parent's retained root, whose exact coordinates
+      // Content checks before creating the identity.
       const readable = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
-        session => boundReplyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision, !saved));
+        session => boundReplyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision,
+          !saved && input.parentReply === null));
       if (!readable) throw new RealmReplyDenied('Reply root is unavailable');
       const create = async (client?: PoolClient) => {
         if (!saved) await this.fence(admission, principal, client);
