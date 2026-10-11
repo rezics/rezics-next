@@ -386,11 +386,13 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     expect(large.content.calls).toBe(small.content.calls);
     expect(large.relay.rows).toBe(small.relay.rows);
     const wide = await measure(costTargets.slice(3, 11));
-    expect(wide.relay.calls).toBe(small.relay.calls);
+    // Each additional journal target adds one locked completion read and update.
+    expect(wide.relay.calls).toBe(small.relay.calls + (costTargets.slice(3, 11).length - 1) * 2);
     expect(wide.content.calls).toBe(small.content.calls);
-    expect(wide.relay.rows).toBeLessThanOrEqual(small.relay.rows + 7 * 2);
+    // Each additional target also appears in the report, graph proof and completion lock reads.
+    expect(wide.relay.rows).toBeLessThanOrEqual(small.relay.rows + (costTargets.slice(3, 11).length - 1) * 3);
     // Five graph copy classes add constant inventory registration work.
-    expect(small.relay.calls).toBeLessThanOrEqual(80);
+    expect(small.relay.calls).toBeLessThanOrEqual(82);
     expect(small.content.calls).toBeLessThanOrEqual(12);
     relayCosts.calls = relayCosts.rows = 0;
     expect((await call('GET', `/v1/erasures/${report.erasureId}`, account.tokenA)).status).toBe(200);

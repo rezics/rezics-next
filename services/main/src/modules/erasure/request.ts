@@ -6,13 +6,14 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequired,
+  probeContentErasure,
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
 import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from './revision-kind.ts';
 import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
   inventoryContributionPayloads, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
   findErasureByOperation,
-  journalErasure, markErasureBlocked, markErasureSuppressed, readErasure,
+  completeErasureTarget, journalErasure, markErasureBlocked, markErasureSuppressed, readErasure,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
   sha256 } from './journal.ts';
 
@@ -100,6 +101,25 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
           await applyContentErasure(service.content, { erasureId, erasureEpoch: journaled.erasureEpoch,
             resourceId, revisionIds: contentIds, graphProof, preservationAccess: fence });
         }
+        const contentProofs = contentIds.length
+          ? await probeContentErasure(service.content, erasureId, contentIds, journaled.erasureEpoch)
+          : new Map<string, 'erased' | 'absent' | 'available' | 'foreign'>();
+        if (contentIds.some(id => contentProofs.get(id) !== 'erased')) {
+          throw new ErasureUnavailable('Content erasure target completion is unavailable');
+        }
+        await relayTransaction(service.relay, async client => {
+          for (const target of journaled.targets) {
+            const contentState = target.kind === 'content_revision' ? contentProofs.get(target.ref) : undefined;
+            const evidenceDigest = sha256(canonical({
+              erasureId,
+              erasureEpoch: journaled.erasureEpoch,
+              target: { ordinal: target.ordinal, owner: target.owner, kind: target.kind, ref: target.ref },
+              graphProof,
+              ...(contentState ? { contentState } : {}),
+            }));
+            await completeErasureTarget(service.relay, erasureId, target.ordinal, evidenceDigest, client);
+          }
+        });
         await markErasureSuppressed(service.relay, erasureId);
       };
       const held = (await withPreservationFence(service.preservationAccess, resourceId, erasureId, erase)).held;
