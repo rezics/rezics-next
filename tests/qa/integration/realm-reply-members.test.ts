@@ -4,6 +4,192 @@ import { memberFixture, nativeId } from '../../../services/main/tests/member-rep
 import { publishRealmProfile } from '../../../services/main/src/modules/realm-profile/commands.ts';
 import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
 import { realmReplyDigest } from '../../../services/main/src/modules/realm-reply/store.ts';
+import { realmVisibilityFixture } from '../../../services/main/tests/realm-visibility-fixture.ts';
+import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+
+type VisibilityFixture = Awaited<ReturnType<typeof realmVisibilityFixture>>;
+
+async function joinPen(h: VisibilityFixture) {
+  const authority = await h.accessPool.query(`SELECT 1 FROM access.permission_grant
+    WHERE recipient_subject = $1 AND scope_id = 'work:create:root'
+      AND action = 'access.membership.consent' AND active AND valid_until > clock_timestamp()`, [h.pen]);
+  if (!authority.rowCount) await h.grant(h.pen, 'work:create:root', 'access.membership.consent');
+
+  const member = (await h.accessPool.query<{ generation: string; state: string }>(`SELECT generation::text, state
+    FROM access.membership WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`,
+  [h.realm, h.pen])).rows[0];
+  const expectedGeneration = member?.generation ?? '0';
+  expect(member?.state).not.toBe('joined');
+  const membershipPolicy = (await h.accessPool.query<{ revision: string; terms_revision: string }>(`SELECT
+    revision::text, terms_revision FROM access.membership_policy WHERE kind = 'realm' AND owner_subject = $1`,
+  [h.realm])).rows[0]!;
+  const consent = await new AccessMembershipConsents(h.accessPool).issue({ principal: h.principal,
+    kind: 'realm', ownerSubject: h.realm, memberSubject: h.pen, expectedGeneration,
+    expectedPolicyRevision: membershipPolicy.revision, termsRevision: membershipPolicy.terms_revision,
+    idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+  const settings = await h.call('GET', `${h.root}/settings`);
+  expect(settings.status, JSON.stringify(settings.body)).toBe(200);
+  const joined = await h.call('POST', `${h.root}/members`, { actingSubject: h.actor, member: h.pen,
+    action: 'add', expectedGeneration: settings.body.generation,
+    expectedMembershipGeneration: expectedGeneration, reason: 'Join the Realm conversation',
+    consent: consent.consentReference, durationSeconds: null });
+  expect(joined.status, JSON.stringify(joined.body)).toBe(201);
+  return joined.body;
+}
+
+async function leavePen(h: VisibilityFixture) {
+  const member = (await h.accessPool.query<{ generation: string; state: string }>(`SELECT generation::text, state
+    FROM access.membership WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`,
+  [h.realm, h.pen])).rows[0]!;
+  expect(member.state).toBe('joined');
+  const settings = await h.call('GET', `${h.root}/settings`);
+  expect(settings.status, JSON.stringify(settings.body)).toBe(200);
+  const removed = await h.call('POST', `${h.root}/members`, { actingSubject: h.actor, member: h.pen,
+    action: 'remove', expectedGeneration: settings.body.generation,
+    expectedMembershipGeneration: member.generation, reason: 'Leave the Realm conversation',
+    consent: null, durationSeconds: null });
+  expect(removed.status, JSON.stringify(removed.body)).toBe(201);
+}
+
+async function placementEffects(h: VisibilityFixture, revisionId: string, reply: string) {
+  const counts = (await h.contentPool.query<{ reviews: string; preparations: string; placementPreparations: string;
+    revisionReviews: string; revisionPreparations: string; revisionPlacementPreparations: string }>(`SELECT
+      (SELECT count(*)::text FROM content.realm_review_decision WHERE realm = $2) AS reviews,
+      (SELECT count(*)::text FROM content.publication_preparation prep
+        JOIN content.realm_placement_preparation placement USING (operation_id) WHERE placement.realm = $2) AS preparations,
+      (SELECT count(*)::text FROM content.realm_placement_preparation WHERE realm = $2) AS "placementPreparations",
+      (SELECT count(*)::text FROM content.realm_review_decision WHERE realm = $2 AND revision_id = $1::uuid) AS "revisionReviews",
+      (SELECT count(*)::text FROM content.publication_preparation WHERE revision_id = $1::uuid) AS "revisionPreparations",
+      (SELECT count(*)::text FROM content.realm_placement_preparation WHERE realm = $2 AND revision_id = $1::uuid)
+        AS "revisionPlacementPreparations"`, [revisionId, h.realm])).rows[0]!;
+  const graphCounts = await h.fuseki.query(`PREFIX rv: <${RV}> SELECT
+    (COUNT(DISTINCT ?placement) AS ?realmPlacements)
+    (COUNT(DISTINCT ?replyPlacement) AS ?replyPlacements) WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(h.realm)} ; rv:placementOutcome rv:Accepted .
+        OPTIONAL { ?replyPlacement a rv:RealmReplyPlacement ; rv:realm ${iri(h.realm)} ;
+          rv:reply ${iri(reply)} ; rv:placementOutcome rv:Accepted . }
+      }
+    }`);
+  const binding = graphCounts.results?.bindings[0];
+  return { ...counts, realmPlacements: binding?.realmPlacements?.value,
+    replyPlacements: binding?.replyPlacements?.value };
+}
+
+test('public open replies allow an unjoined Person; trusted replies require a joined Person', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'open');
+    expect((await h.accessPool.query(`SELECT 1 FROM access.membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2
+      UNION ALL SELECT 1 FROM access.private_membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $3`,
+    [h.realm, h.pen, h.principalId])).rowCount).toBe(0);
+    const placementGrants = () => h.accessPool.query(`SELECT 1 FROM access.permission_grant
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'reply.place' AND active`,
+    [h.pen, `reply:place:${h.realm}`]);
+    expect((await placementGrants()).rowCount).toBe(0);
+
+    const openReply = await h.reply(h.pen);
+    expect((await h.contentPool.query('SELECT author FROM content.reply WHERE id = $1',
+      [openReply.input.reply])).rows[0]?.author).toBe(h.pen);
+    const openPlaced = await h.call('POST', '/v1/realm-reply-placements', openReply.placement, h.pen);
+    expect(openPlaced.status, JSON.stringify(openPlaced.body)).toBe(201);
+    expect((await h.contentPool.query('SELECT method, outcome FROM content.realm_review_decision WHERE id = $1',
+      [openPlaced.body.reviewDecisionId])).rows[0]).toEqual({ method: 'policy', outcome: 'approved' });
+    expect((await placementGrants()).rowCount).toBe(0);
+
+    await h.policy('public', 'trusted-members');
+    const outsiderReply = await h.reply(h.pen);
+    expect((await h.call('POST', '/v1/realm-reply-placements', outsiderReply.placement, h.pen)).status).toBe(403);
+    expect((await placementGrants()).rowCount).toBe(0);
+    await joinPen(h);
+    const memberReply = await h.reply(h.pen);
+    const memberPlaced = await h.call('POST', '/v1/realm-reply-placements', memberReply.placement, h.pen);
+    expect(memberPlaced.status, JSON.stringify(memberPlaced.body)).toBe(201);
+    expect((await h.contentPool.query('SELECT method, outcome FROM content.realm_review_decision WHERE id = $1',
+      [memberPlaced.body.reviewDecisionId])).rows[0]).toEqual({ method: 'policy', outcome: 'approved' });
+    expect((await placementGrants()).rowCount).toBe(0);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('private open and trusted replies refuse outsiders and admit joined non-owners', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('private', 'open');
+    const openDraft = h.draftInput(h.pen);
+    expect((await h.call('POST', '/v1/member-reply-drafts', openDraft, h.pen)).status).toBe(403);
+    expect((await h.contentPool.query('SELECT 1 FROM content.variant WHERE id = $1',
+      [openDraft.variantId])).rowCount).toBe(0);
+    await joinPen(h);
+    const openReply = await h.reply(h.pen);
+    const openPlaced = await h.call('POST', '/v1/realm-reply-placements', openReply.placement, h.pen);
+    expect(openPlaced.status, JSON.stringify(openPlaced.body)).toBe(201);
+
+    await leavePen(h);
+    await h.policy('private', 'trusted-members');
+    const trustedDraft = h.draftInput(h.pen);
+    expect((await h.call('POST', '/v1/member-reply-drafts', trustedDraft, h.pen)).status).toBe(403);
+    expect((await h.contentPool.query('SELECT 1 FROM content.variant WHERE id = $1',
+      [trustedDraft.variantId])).rowCount).toBe(0);
+    await joinPen(h);
+    const trustedReply = await h.reply(h.pen);
+    const trustedPlaced = await h.call('POST', '/v1/realm-reply-placements', trustedReply.placement, h.pen);
+    expect(trustedPlaced.status, JSON.stringify(trustedPlaced.body)).toBe(201);
+  } finally { await h.close(); }
+}, 180_000);
+
+test('mandatory review refuses member and owner direct placement without creating review or placement effects', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'mandatory');
+    await joinPen(h);
+    const refuseWithoutEffects = async (actor: string) => {
+      const candidate = await h.reply(actor);
+      const before = await placementEffects(h, candidate.draft.body.revisionId, candidate.input.reply);
+      const refused = await h.call('POST', '/v1/realm-reply-placements', candidate.placement, actor);
+      expect(refused.status, JSON.stringify(refused.body)).toBe(403);
+      const after = await placementEffects(h, candidate.draft.body.revisionId, candidate.input.reply);
+      expect(after).toEqual(before);
+      expect(after.revisionReviews).toBe('0');
+      expect(after.revisionPreparations).toBe('0');
+      expect(after.revisionPlacementPreparations).toBe('0');
+      expect(after.replyPlacements).toBe('0');
+      return candidate;
+    };
+    const memberReply = await refuseWithoutEffects(h.pen);
+    const ownerReply = await refuseWithoutEffects(h.actor);
+
+    await h.grant(h.actor, `review:decide:${h.realm}`, 'review.decide');
+    const reviewed = await h.reply(h.pen);
+    const review = await h.call('POST', '/v1/realm-reply-reviews', { profile: 'realm-reply-review-v1',
+      realm: h.realm, reply: reviewed.input.reply, revisionId: reviewed.draft.body.revisionId,
+      revisionDigest: reviewed.draft.body.revisionDigest, expectedGeneration: '0', supersedes: null,
+      outcome: 'approved', method: 'human', methodRevision: 'realm-manager-v1',
+      dependencyDigest: 'a'.repeat(64), reasonReference: null, actingSubject: h.actor });
+    expect(review.status, JSON.stringify(review.body)).toBe(201);
+    const exact = await h.call('POST', '/v1/realm-reply-placements', {
+      ...reviewed.placement, reviewDecisionId: review.body.decisionId }, h.pen);
+    expect(exact.status, JSON.stringify(exact.body)).toBe(201);
+    expect(exact.body.reviewDecisionId).toBe(review.body.decisionId);
+    expect((await h.contentPool.query(`SELECT revision_id::text, revision_digest, outcome
+      FROM content.realm_review_decision WHERE id = $1`, [review.body.decisionId])).rows[0]).toEqual({
+      revision_id: reviewed.draft.body.revisionId, revision_digest: reviewed.draft.body.revisionDigest, outcome: 'approved' });
+
+    const edited = await h.call('POST', '/v1/member-reply-drafts', { ...reviewed.input,
+      body: 'An edit needs its own review.', expectedHead: reviewed.draft.body.revisionId }, h.pen);
+    expect(edited.status, JSON.stringify(edited.body)).toBe(201);
+    const reused = await h.call('POST', '/v1/realm-reply-placements', { ...reviewed.placement,
+      revisionId: edited.body.revisionId, revisionDigest: edited.body.revisionDigest,
+      reviewDecisionId: review.body.decisionId, expectedHead: exact.body.placement }, h.pen);
+    expect(reused.status, JSON.stringify(reused.body)).toBe(409);
+    expect((await h.contentPool.query(`SELECT 1 FROM content.realm_review_decision
+      WHERE realm = $1 AND revision_id = $2`, [h.realm, edited.body.revisionId])).rowCount).toBe(0);
+    expect((await h.replies.visible(h.realm, reviewed.input.reply))?.revisionId).toBe(reviewed.draft.body.revisionId);
+    expect(memberReply.input.reply).not.toBe(ownerReply.input.reply);
+  } finally { await h.close(); }
+}, 180_000);
 
 test('G-277: members place reviewed replies; direct policy respects membership, moderator veto and policy races', async () => {
   const h = await memberFixture();
