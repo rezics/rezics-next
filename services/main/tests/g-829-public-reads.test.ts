@@ -46,6 +46,7 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
   const revisions = new Map(rows.map(row => [row.whole.value, id()]));
   const graph = new FusekiClient('http://graph.invalid');
   const summaryBatches: string[][] = [], exactBatches: string[][] = [], hydrated: string[][] = [];
+  const publicationSourceBatches: string[][] = [];
   let scans = 0, scalarProbes = 0, privateGrantProbes = 0;
   graph.query = async query => {
     let bindings: NonNullable<SparqlResult['results']>['bindings'];
@@ -55,6 +56,14 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
       // must pass the actual summary and exact-head resolver below.
       expect(query).toContain(`<${resource}>`);
       bindings = [{ main: uri(id()), public: value('true') }];
+    } else if (query.includes('SELECT ?work ?main ?structuredDecision')) {
+      // The contained Work now also admits its exact structured publication
+      // source. This fixture uses the existing catalogue/text public branch.
+      const resources = [...query.matchAll(/VALUES \?work \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(match => match[1]!));
+      expect(resources).toEqual([resource]);
+      publicationSourceBatches.push(resources);
+      bindings = [];
     } else if (query.includes('SELECT ?whole ?main ?structure')) {
       expect(query).toContain('LIMIT 101');
       if (scans === 1) expect(query).toContain(`FILTER(?key > "${rows[100]!.whole.value}|${rows[100]!.occurrence.value}")`);
@@ -95,6 +104,7 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
   const page = await readWorkWholes(session, resource, { limit: 1 });
   expect(scans).toBe(2);
   expect(scalarProbes).toBe(1);
+  expect(publicationSourceBatches).toEqual([[resource]]);
   expect(privateGrantProbes).toBe(0);
   expect(summaryBatches.map(batch => batch.length)).toEqual([64, 37, 3]);
   expect(summaryBatches.flat()).toEqual(rows.map(row => row.whole.value));
