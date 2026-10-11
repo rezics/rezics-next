@@ -65,6 +65,14 @@ task ast-grep -- scan <changed files>
 task goal -- test --affected --list | tail -n 40   # what else your change reaches; do not run it
 ```
 
+Tests are what this host runs short of, not workers. Name every file a step
+needs in one `task goal -- test` call: one call starts one stack, and a stack
+costs about half a minute and a turn in a host-wide queue before any test runs.
+Prove a change at the lowest tier that proves it: a unit or owner test needs no
+stack. Run a passing file again only after a change that could affect it. A web
+build, `depcruise`, type-aware lint or a fresh install takes 2 to 3 GiB: run
+one at a time and not during your own QA run.
+
 List affected tests outside your claim in the handoff; the manager and the
 program regression run them. Do not run whole tiers, `task qa`, Storybook suites
 or browser journeys unless the brief asks. Backend work starts no dev server.
