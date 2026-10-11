@@ -247,7 +247,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/realm-admin-api.test.ts',
       'Realm roles: exact impact matches enforced grants; retries, stale and concurrent changes stay atomic',
       'Creates a Realm role, assigns and removes a team member through Main and checks enforced grants, stale impact and concurrent edits.'),
-    browser: missing('gap'),
+    browser: browser('apps/web/tests/realm-community.e2e.ts',
+      'a manager creates a role, assigns it to a member, and sees the public team after reload',
+      'Creates and assigns a moderator role in Manage, then reloads both the member roster and the opted-in public Realm team.'),
   },
   {
     kind: 'realm',
@@ -271,7 +273,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1042-community-cost-follows-threads.test.ts',
       'threads API profiles keep bounded hydration as follows grows',
       'Runs the Main API corpus child to create an opening and nested reply, then checks discussion lists and a two-item thread as follows grow.'),
-    browser: missing('gap'),
+    browser: browser('apps/web/tests/realm-community.e2e.ts',
+      'a member opens a thread and nested replies that another person sees after reload',
+      'A joined member posts from Realm discussions, adds a comment and nested reply, and a second person reads both after reload.'),
   },
   {
     kind: 'realm',
@@ -279,7 +283,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
       'complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history',
       'Reads Realm Best and Top through Main at 100, 1000 and 10000 real threads and checks ordering, disclosure and bounded hydration.'),
-    browser: missing('gap'),
+    browser: browser('apps/web/tests/realm-community.e2e.ts',
+      'Best, Top and New reorder every Realm discussion after a reader votes',
+      'Seeds three threads through Main, votes in the product, and checks complete Best, New and Top orders.'),
   },
   {
     kind: 'realm',
