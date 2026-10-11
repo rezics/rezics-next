@@ -129,8 +129,9 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
     let fixture: Awaited<ReturnType<typeof safetyFixture>> | undefined;
     let restoreDiscovery: (() => void) | undefined;
     try {
-      fixture = await safetyFixture('imported-cover-lifecycle', true, owners.urls);
+      fixture = await safetyFixture('imported-cover-lifecycle', true, owners.urls, { contentProjection: true });
       const stack = fixture.stack;
+      await stack.contentCursor.initialize(stack.contentConsumer);
       const owner = fixture.author;
       const moderator = fixture.staff;
       await owner.grant('work:create:root', 'work.create');

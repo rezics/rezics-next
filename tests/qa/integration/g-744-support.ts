@@ -46,8 +46,10 @@ export async function json<T>(response: Response, status = 200): Promise<T> {
  * Bearer mapping isolates staff authority; SAFETY01 separately uses real Account introspection.
  * No alert, mail or scanning result is manufactured by this fixture. */
 export async function safetyFixture(label: string, autoClearUploads = true,
-  ownerUrls?: { access: string; content: string; relay: string }) {
-  const stack = await startMediaStack(label, { autoClearUploads, ownerUrls });
+  ownerUrls?: { access: string; content: string; relay: string },
+  options: { contentProjection?: boolean } = {}) {
+  const stack = await startMediaStack(label, { autoClearUploads, ownerUrls,
+    ...(options.contentProjection ? { contentProjection: true } : {}) });
   try {
     const staff = await stack.member('primary-responder');
     const backup = await stack.member('backup-responder');
