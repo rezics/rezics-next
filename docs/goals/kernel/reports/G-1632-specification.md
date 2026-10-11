@@ -59,6 +59,19 @@ the original behavioral assertions after correcting setup or observation.
 No session may reopen a retired writer or weaken native qualification to get
 a fixture through.
 
+Short source names below resolve as follows: native Java files live under
+`infra/jena/command-module/src/main/java/com/rezics/jena/`, and native tests
+under its corresponding `src/test/java/com/rezics/jena/`. Unqualified
+integration test names live under `tests/qa/integration/`; fault tests are
+explicitly identified. Main source names resolve under `services/main/src/`:
+`classification/*` is `modules/classification/*`, `qualification.ts` and
+`statement/graph.ts` are in `modules/statement/`, `admission.ts` is in
+`modules/access/`, `search-readiness.ts` is in `modules/work/`,
+`search-private.ts` and `history.ts` are in `modules/contribution/`,
+`label-index-*` is in `modules/structure/`, and `relay.ts`/`rebuild.ts` are in
+`modules/content-publication/`. `composition.ts` is the root composition;
+`routes/search.ts` is the Search route. The shell scripts are in `infra/jena/`.
+
 ### Public scale counters
 
 **Cause:** stale expectation following native delta qualification,
@@ -165,6 +178,22 @@ migration. Hand it to that owner; do not add another fixture write endpoint
 or independently classify the same seed mechanism. Green grouped IDs depend
 on that migration as well as the Definition and meter corrections.
 
+Both run 9 and the fresh mixed batch pass this disclosure case; their
+standalone isolation retries fail it. The source/title and Studio companions
+deny the exclusive assembler, whereas the grouped file's indirect raw seed
+is absent from `rawSparqlIntegrationFiles`. A mixed-stack pass therefore does
+not qualify the fixture on its own. Classify this transitive seed with G-1630,
+then migrate it through the supported owner identified by that work.
+
+The same Definition assumption is reproduced in
+`graph-query-cases.test.ts:412–436,491,527`: invented personal/Realm/private
+link Definitions, invalid Statement DefinitionRef in batch and alone. Add a
+separate B fixture session with real property Definitions and retained canon,
+evidence and disclosure assertions. This affects GRAPH01–05, not an additional
+SEARCH dependency. The scan also found pure facet-mapping unit fixtures and
+the reviewed event-time-v1 profile; neither establishes this native-admission
+defect. The latter has an explicit special case in `qualification.ts:505–512`.
+
 ### Current classification fixture through the existing owners
 
 **Cause:** obsolete fixture writer, retired by `392c629b6`.
@@ -212,6 +241,12 @@ Run both scale and oracle together and alone after migration. Any other
 classification fixture using the same retired setter is a proposed follow-up
 to this shared helper, not an independent production writer.
 
+The source audit finds one additional integration caller:
+`query-read.test.ts:158`. Include its accept helper in a separate B follow-up
+using the same fixture helper; retain included/excluded Concept filtering.
+That file was not run in this analysis. Scale, oracle and query-read are the
+three integration files still calling the retired setter.
+
 ### Candidate overflow bootstrap
 
 Standalone `20261011t072632-f3e00f` reproduces
@@ -224,13 +259,27 @@ afterwards. This is **not evidence of a native text qualification refusal**.
 
 The self-managed test starts storage and initializes RDF at lines 29–38,
 then supplies an Access pool at lines 39–42 without applying owner SQL
-migrations. Its route uses real default SQL dependencies. A supported
-bootstrap correction and the exact first SQL dependency are specified from
-the source trace below once the investigation is complete. Owner Kernel;
-B harness assumption; no native build; candidate IDs SEARCH02/10. Preserve
+migrations. `routes/search.ts:182` calls `work.access.assertRecoveryOpen()` before
+native readiness; `admission.ts:419–422` first queries access.recovery_fence,
+created and seeded by `services/main/migrations/access/003_recovery_fence.sql:3–8`.
+The recovery fence added by `2c170ab16` is correct. The test's missing schema
+is the harness assumption; the background directory encounters that same
+fence before its own index reads.
+
+One small session imports applyQaSqlMigrations from
+`scripts/qa/bootstrap.ts` and schemaFiles from `scripts/qa/schema-files.ts`.
+Before constructing the pool/app, apply the complete Access migration
+inventory to apps.ACCESS_DATABASE_URL using the worktree-local
+services/main/migrations/access directory. Follow
+`tests/qa/fault-recovery/search-raw-import.test.ts:37–38,61–64`, an existing
+supported bootstrap.
+Owner Kernel; B; no native build; candidate IDs SEARCH02/10. Preserve
 512 candidates => complete empty 200, actual Lucene count 513, and the
 513th candidate => typed 422 budget outcome. Do not increase the candidate
 limit or seed missing SQL tables individually.
+The runtime SQL code plus the first foreground SQL and absent bootstrap
+establish the first cause. The correction and later 512/513 assertions remain
+unexecuted in this read-only session.
 
 ### Private original source fixture
 
@@ -253,6 +302,14 @@ Keep exact original source validation, stale-send withholding, expiry,
 recovery fence, and durable read receipt checks. Public search must still
 exclude private bytes. Do not relax the production Access check.
 
+Fresh batch `20261011t082849-df84a1` and its standalone `-r1` both reproduce
+line 476 with the inner Access error, with source stable. The first standalone
+attempt instead timed out during an earlier private query and then exceeded
+its 120-second teardown timeout. Its test duration is not request latency.
+That additional timeout's phase is unestablished; no idle-public causality is
+inferred from it. Recheck it after fixture migration and reuse the existing
+private budget's diagnostics if it persists (`search-private.ts:212–234`).
+
 ### Deferred Content projection observations
 
 **Cause:** stale rejected-promise expectations after `8e7740c9f` introduced
@@ -260,7 +317,7 @@ independent failed-target retention. Owner Kernel; B; no native build.
 IDs SEARCH03/19, subject to the other ID dependencies.
 
 `tests/qa/integration/content-publication-native.test.ts:143` expects a
-rejection. `services/main/src/modules/content/relay.ts:402–410` catches the
+rejection. `services/main/src/modules/content-publication/relay.ts:402–410` catches the
 missing-eligibility failure and returns `deferred` with retained pending
 coverage. One session changes the test to assert deferred, completed cursor
 still 2, scan advanced to 3, and the pending target retained. The public
@@ -285,6 +342,42 @@ added the anchor ASK (`relay.ts:345–366`). Launch should assert exactly one
 bounded anchor read and no body/projection write. This is needed for
 SEARCH15; coordinate the explicit file with Launch rather than changing it
 under an unrelated claim.
+
+Audit the same producer/reader distinction in
+`services/main/tests/content-projection.integration.test.ts`,
+`tests/qa/fault-recovery/content-rebuild-positive.test.ts`,
+`tests/qa/fault-recovery/erasure-search-rebuild.test.ts`, the crash file, and
+integration `content-variant-order`, `content-eligibility-order`,
+`content-publication-native`, and `erasure-published-search`. Public-reader
+refusals and terminal rebuild/cleanup failures remain valid rejection proofs;
+only a producer expectation contradicted by retained deferred coverage should
+change. Additional instances belong in separate focused sessions.
+
+### Content projection integration allocation
+
+**Cause:** the harness allocates tmpfs to a physical restart/rebuild fixture.
+Run 9 fails `services/main/tests/content-projection.integration.test.ts:261`,
+expected persistent / observed tmpfs. Owner Program for allocation, coordinated
+with Kernel G-1630's assembler classification; B; no native image build.
+This omitted dependency is required for SEARCH19.
+
+The file is already an integration gate (`scripts/qa/integration-gate-files.ts:20`).
+`scripts/qa/cli.ts:408–412` selects persistent storage only for scale mode or
+command-only files. One small session adds this file to the existing
+`integrationResourceClasses` map in `scripts/qa/resource-classes.ts:42` as
+`catalogue-disk`, following local-read-basis. That class selects scale storage
+and its own project. Preserve the deliberate raw fault updates at fixture
+lines 438 and 496; making this a command-only file would close that capability.
+Do not introduce another storage-selection mechanism.
+
+Proof: allocation planning in `tests/qa/unit/g-1031-stack.test.ts` and
+`g-1062-cost-isolation.test.ts`, then the original integration file's actual
+volume/source-pin assertions, physical restart, fresh rebuild receipts and
+injected interruptions. The proposed allocation was not applied or rerun here.
+Lookup confirms resource-classes is unclaimed in Program's area and the
+integration-file catalogue is claimed by G-1630 (exited). Media, the disclosure
+fixture and erasure-search-rebuild are unclaimed in the ledger; the brief's
+Launch/Trust-ops coordination still applies. No claims were changed.
 
 ### Crash scenario pins a generation too late
 
@@ -358,6 +451,9 @@ occurrence discovery at 07:24:17; that does not connect it to the incidents.
 | Phase | Evidence | What it does and does not establish |
 | --- | --- | --- |
 | Ranked reader opening/parsing | `FilteredGraphTextIndex.java:318–364` | The native one-second timer starts after opening/parsing; those phases consume Main's budget outside that timer. Their actual incident duration is unknown. |
+| Occurrence reader opening/parsing | `FilteredGraphTextIndex.java:475–485` | The same one-second timer starts after reader opening and parsing. |
+| Named-graph readiness text read | `FilteredGraphTextIndex.java:1169–1200` | Opens a committed reader at 1183; this path has no local one-second timer. |
+| Template preparation/transaction | `TemplateQueryService.java:141–178` | Its ten-second deadline starts after preparation and READ transaction entry; actual public-request phase duration is unknown. |
 | Delta proof readers | `SearchDeltaJournal.java:572,604,988,996` | qualifiedProof(-1) proves twice; each proof opens two committed readers. Avoidable work exists; its latency is unmeasured. |
 | Recovery audit | `SearchDeltaJournal.java:146–157,321–397` | Whole-generation audit holds the writer monitor. Public reads do not take that monitor; a direct read-lock claim is unsupported. |
 | Post-commit qualification | `CommandService.java:933–956` | Writer epoch remains odd through qualification; concurrent public searches may wait. No historical incident overlap is available. |
@@ -369,10 +465,12 @@ occurrence discovery at 07:24:17; that does not connect it to the incidents.
 
 The rustfs scanner is Program's scope and is not a Kernel remedy.
 
-### Session: bounded phase evidence (A prerequisite; native build)
+### Two sessions: bounded phase evidence (A prerequisite)
 
 Instrument the existing read-budget and native request machinery, not a
 second owner for deciding search readiness.
+Dispatch Main steps 1–2 first (no native build), then native steps 3–4 with
+their native tests and image build. Each is a separate implementation session.
 
 1. `services/main/src/infrastructure/fuseki.ts:3–30`: extend
    FusekiReadBudget with the shared deadline and capped in-flight call
@@ -387,20 +485,42 @@ second owner for deciding search readiness.
    phrase, resource/actor identifiers, body, request payload or exception
    bodies. Propagate a validated remaining budget in the range 1–1,500 ms
    and existing traceparent (`packages/observability/src/runtime.ts:309–316`).
-3. Native request entry and the above phase sites: track reader open,
+3. At `CommandModule.java:63–70`, register
+   `builder.addFilter("/*", new PublicSearchPhaseEvidence(...))`. Pinned Jena's
+   builder puts this Jakarta filter before Fuseki dispatch. Install bounded
+   request state and ThreadLocal before `chain.doFilter`, clean up in finally,
+   and shut down observers in destroy. Ignore malformed/missing diagnostic
+   headers; never inspect bodies or query parameters to name a phase.
+   Native request entry and the above phase sites track reader open,
    parse/rank/witness work, proof, text prepare/commit, qualification/audit,
    occurrence discovery/project and merge activity. Existing CommandWork
    covers commands only; queries and independent maintenance need evidence
-   too. Reuse its duration conventions without putting readiness decisions
-   in a diagnostic registry.
+   too. Publish active fixed phases from `CommandWork.java:32–51`, retaining
+   its overlapping-duration convention; do not sum nested phases as disjoint.
+   Additional anchors: `FilteredGraphTextIndex.java:1053–1055`,
+   `CommandService.java:88–104,933–956`, and
+   `SearchDeltaJournal.java:321–397,952–1020`. Read scopes must work without
+   CommandWork. Readiness and cancellation remain with their existing owners.
 4. Emit a deadline snapshot while the request is still active. A completion
    log alone misses hung work. Bounds: 128 active requests, eight phase
    durations per request, eight active background phase entries, one event
    per request, <=2 KiB event, process emission cap plus suppressed count.
-   Remove request state in finally; no dataset transaction/lock or inventory
+   Use one periodic daemon scanning at most 128 records, rather than one
+   scheduled task per request. A 10 ms scan interval and a process token bucket
+   of eight events with one token/second refill are concrete initial caps;
+   aggregate suppression counts at most once per minute. Check expiry in
+   finally too. Remove request state; no dataset transaction/lock or inventory
    scan while producing evidence. Saturation must be visible. For a merge
    observed by sampling, report observed activity/interval, not an invented
    exact merge duration or causal conclusion.
+
+   A separate bounded maintenance sampler can use the current
+   `lucene.getIndexWriter().getConfig().getMergeScheduler()` and, when it is
+   ConcurrentMergeScheduler, `mergeThreadCount()`. Sample at most once/second;
+   deadline snapshots only read its published atomic observation. Handle the
+   null/replaced writer during rollback; pinned Jena recreates it at lines
+   202–214. Sampling must not replace the scheduler or block the deadline
+   observer. Destroy shuts down both fixed observers.
 
 Proof: extend `tests/qa/unit/search-budgets.test.ts:487–512` for ordinary
 diagnostics, decreasing remaining budgets, bounded/redacted output, abort
@@ -417,7 +537,11 @@ Choose one remedy from the measured phase. Do not dispatch this as a
 speculative multi-mechanism architecture task.
 
 - If reader opening dominates, share committed-directory readers with
-  acquire/release lifetimes and refresh outside foreground reads. Preserve
+  acquire/release lifetimes and refresh outside foreground reads. Each request
+  needs its own IndexSearcher because its timeout is mutable. Refresh/publish
+  the committed reader before the writer epoch becomes admissible, or fail
+  closed. Acquiring the same stale cached reader twice cannot replace the
+  final latest-commit fence at `SearchDeltaJournal.java:996`. Preserve
   committed generation checks, source revocation/deletion visibility and
   writer-epoch fences. An IndexWriter near-real-time reader can expose
   uncommitted data and is not a replacement for this contract.
@@ -442,13 +566,34 @@ Retain `g1048PublicSearchAvailabilityTest.java:121–171` label-lag/schema
 availability checks. SEARCH18 directly exercises the request budget;
 SEARCH15/20 still require their recovery scenarios.
 
-### Session: occurrence maintenance work bounds (B until causally established)
+### Two sessions: occurrence maintenance bounds (B until causally established)
 
 Bound examined records rather than just 64 mutations or LIMIT-1 output.
-Under the existing Structure owner, replace full-population idle discovery
-and repeated completed-prefix scans with pending work and durable seek
-progress; add deadline checks. One session must cover both discovery and
-the resume cursor, or split those into two explicit steps if necessary.
+Under the existing Structure owner, use its existing pending state, not a
+second queue. Dispatch these separately; both require a native build when
+changing the native owner:
+
+1. Discovery: `label-index-backfill.ts:38–49` should read the indexed pending
+   marker set by `OccurrenceLabelIndex.java:65–97`, rather than scanning all
+   completed active structures every second. Preserve head-change capture.
+   Text-generation changes also need bounded resumable discovery that queues
+   affected generations through that same owner, then records discovery
+   completion. Bound examined stale/inactive pending rows and remove them;
+   neither a no-work poll nor stale-row cleanup may scan a whole population.
+2. Placement traversal: replace `OccurrenceLabelIndex.java:140–156`'s skip
+   offset with a retained seek over the generation prefix. Reuse the bounded
+   GPOS range pattern at `TemplateIndexService.java:305–335`; bind continuation
+   to revision, text generation and physical storage lifetime. On a changed
+   storage incarnation, reset through the existing bounded clear/index phases
+   rather than reusing NodeIds. Cap examined tuples (initially 128) as well as
+   mutations (64), including removed rows. A short mutation batch does not
+   prove exhaustion when the examination bound stopped it; validate completion
+   only after exhausting the physical prefix. Keep placementCount as the
+   existing point-read population authority (`OccurrenceLabelIndex.java:48–51`).
+
+Add deadline checks to both steps. Extend
+`g1022OccurrenceLabelsTest.java`, `g1044OccurrenceSchemaTest.java`, and
+`tests/qa/integration/g-1056-occurrence-projection.test.ts`.
 Tests: large completed populations with no pending work, growing pending
 generations, bounded visited records, restart, stale revision, text generation
 change, removed placements and no lost work. This is not yet an established
@@ -463,13 +608,20 @@ restore/clone procedure; never mount the shared volume writable or stop the
 shared stack. Qualify/rebuild the copy through product operations and record
 that preparation and the resulting native pin/generation. Preparation,
 startup and readiness must meet the existing 10-minute budget.
+No coordinated Access/Content backup was verified here. Obtain matching owner
+cuts before calling the copy a shared-dataset Main baseline. A native-only
+profile cannot substitute for the full public route measurement.
 
 On isolated Main/Fuseki, with ordinary relays enabled and no other workers or
 QA load, send 200 sequential requests for one documented, stable public
 query. Record every HTTP status, monotonic wall latency, trace and timeout
 phase; separate cold-start preparation from the measured workload. Run the
-identical workload before and after the chosen change, including enough
-maintenance overlap to reproduce the diagnosed obstruction.
+identical idle workload before and after the chosen change. Separately run a
+controlled maintenance-overlap experiment to reproduce the diagnosed
+obstruction; do not label forced load an idle percentile sample. A clean
+200-request window alone cannot explain four intermittent breaches across
+seven hours. Preserve observation over the diagnosed maintenance cycle as
+well as the required 200-probe reporting windows.
 
 Report nearest-rank p50/p95/p99 over the 200 requests (sorted ranks
 100/190/198), maximum, count of non-200 responses and count above 1,500 ms.
@@ -484,8 +636,8 @@ deadline breaches. A fast p99 cannot excuse an over-budget maximum.
 
 Active QA and other workers were present during this analysis. A sample now
 would not reproduce Program's idle workload. G-1587's older rebuild-read
-measurements (84 variants/346 MatchUnits; paged reads 571 ms, slowest 273 ms)
-are not substituted for public-search percentiles.
+measurements of a different read workload are not substituted for
+public-search percentiles.
 
 ### Primary mechanism references
 
@@ -494,6 +646,7 @@ are not substituted for public-search percentiles.
 - [IndexSearcher](https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/search/IndexSearcher.html): search timeout scope does not cover reader construction.
 - [ConcurrentMergeScheduler](https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/index/ConcurrentMergeScheduler.html): background merges, producer stalls and I/O throttling are possible mechanisms, not incident evidence.
 - [Pinned Jena 6.2.0 TextIndexLucene source](https://raw.githubusercontent.com/apache/jena/jena-6.2.0/jena-text/src/main/java/org/apache/jena/query/text/TextIndexLucene.java): writer construction and rollback must retain any selected instrumentation/configuration.
+- [Pinned Jena FusekiServer builder](https://raw.githubusercontent.com/apache/jena/jena-6.2.0/jena-fuseki2/jena-fuseki-main/src/main/java/org/apache/jena/fuseki/main/FusekiServer.java): addFilter at 1170–1178 installs the filter before Fuseki dispatch at 1662–1667.
 - [TDB2 administration](https://jena.apache.org/documentation/tdb2/tdb2_admin.html): upstream live compaction serves reads while holding writes; the repository further restricts its supported compactor to a stopped owner.
 
 Any native implementation needs its pinned image built and qualified. The
@@ -514,8 +667,8 @@ refresh of the shared stack remains Program's action.
 All fresh QA uses `bun scripts/goal/goalctl.ts test <files>` with isolated
 stacks. No shared backend or dev server was started. Artifacts after the
 first run are under this worktree's `.temp/goal/qa/` and
-`.temp/goal/qa-order/`. Fresh run results and unresolved causes are completed
-below before handoff.
+`.temp/goal/qa-order/`; the first run's retained tool artifact is
+`.artifacts/qa/20261011t072252-d0d76b`. No test or product source changed.
 
 | File | Standalone QA | Observed first failure |
 | --- | --- | --- |
@@ -523,3 +676,93 @@ below before handoff.
 | search-grouped-native | `20261011t072448-34cce0`, fail | :138/:598 expected201/400; disclosure raw seed404 |
 | search-candidate-overflow | `20261011t072632-f3e00f`, fail | :58 expected200/503; foreground SQL42P01 |
 | growth-search-context | `20261011t072731-4745c8`, fail | stale cost meter at :133 |
+| private-search-native | `20261011t072825-47bad8`, fail | earlier PrivateSearchBudgetExceeded, then 120 s teardown timeout; original cause not reached |
+| content-publication-native | `20261011t073432-98ac72`, fail | :143, expected rejection but relay returned deferred |
+| content-projection-crash | `20261011t073818-151fa7`, fail | :170, pin requested after heads withdrew qualification |
+| erasure-search-rebuild | `20261011t073927-56bb36`, fail | :274, replay stopped; inner refusal still unestablished |
+| public-selection-oracle | `20261011t074351-c7d19b`, fail | :248, legacy classification cancellation |
+| private-search-native, stable retry | `20261011t082849-df84a1-r1` in the batch artifact, fail | :476, exact source unavailable; inner Access admission store error |
+
+The first private run reports source stable **no**, because the initial report
+was authored and committed while it ran. That was a documentation-only change;
+nevertheless this run is not qualification evidence. All other standalone
+runs and all five completed batch runs report source stable **yes**. Stable
+private batch/retry evidence independently reproduces run 9's exact failure.
+The later report edits happened only after all QA had completed.
+
+Each fresh batch uses the original manifest's explicit file selection and
+`REZICS_QA_SHARDS=1`. Actual XML process order, listed below, matches run 9;
+the separate growth-refresh project also matches run 9's separate project.
+The current harness retains resets/fresh-owner batches where declared and
+automatically repeats failing files alone. The command's argument order is
+not substituted for the observed process order.
+
+| Run-9 batch | Fresh QA, all failed | Observed initial process order and result |
+| --- | --- | --- |
+| integration-30 | `20261011t075024-7786e2` | content-document-recovery → content-search-disclosure-native → content-eligibility-order → content-public-domain → content-publication-native. Eligibility :181 and publication :143 fail in batch and isolation. |
+| integration-82 | `20261011t080535-5fb0f6` | graph-query-cases → group-protection-concurrency → growth-search-context → hidden-id-equality. Growth :133 and graph :491/:527 fail in batch and isolation. Separate growth-search-refresh passes. |
+| integration-98 | `20261011t082849-df84a1` | principal-budget-pool → private-contribution-native → private-name-disclosure → private-original-source → private-search-native. Private :476 with inner Access error in batch and isolation; other cases pass. |
+| integration-102 | `20261011t083319-10ceff` | public-search-unsupported → publication-selection-members → public-search-cjk → public-search-scale → public-selection-oracle. Batch scale :442 and oracle :248 cancel; isolated scale returns to :227 and oracle still cancels. |
+| integration-118 | `20261011t085209-529562` | search-grouped-native → search-source-title → search-statement-query → search-studio-chapter-content → search-title-body-native. Grouped :138/:598 fail in both contexts; disclosure passes in batch and adds raw 404 in isolation. Companions pass. |
+
+Run 9's fault processes are singletons: crash is fault-recovery-1/f3,
+erasure rebuild is fault-recovery-2/f7, candidate overflow is
+fault-recovery-4/f7. The fresh single-file runs therefore reproduce the actual
+process context as well as the alone selection. Other fault files, including
+Trust-ops' retained-erasure files, were not rerun or edited.
+
+Batch summaries report integration active times 89.2 / 186.5 / 158.8 / 195.2 /
+81.9 seconds respectively. Startup/slot admission waited much longer in some
+projects (public oracle retry records 875,798 ms admission wait). These are
+QA lifecycle measurements, not public-request latency or evidence about
+Program's earlier idle incidents. No full acceptance qualification passed.
+
+## Checks and dispatch handoff
+
+- `task main:typecheck`: pass.
+- `task gen:check`: pass; no generated/pin files changed.
+- `task ast-grep -- scan docs/goals/kernel/reports/G-1632-specification.md`: pass.
+- `bun scripts/goal/goalctl.ts test --affected --list`: pass; documentation
+  change selects docs checking, no backend tests or native COPY change.
+  A redundant request after the final report edits was cancelled while all
+  three QA slots were busy, before work started; the changed path was identical.
+- `task docs:check`: fail solely because this new report is unreachable from
+  `docs/README.md`; the checker's 13 tests pass. The brief allows only this
+  report to be written, so the manager must add an inbound link in Kernel's
+  navigable state/report index and rerun docs checking. No navigation file
+  was silently changed outside scope.
+- Type-aware oxlint and the Maven image build are not applicable to the
+  Markdown-only diff. The exact native build/test obligation is specified
+  above for the implementation sessions. `git diff --check`: pass.
+
+Dispatch the following bounded sessions; the details and proof obligations
+above are their specifications. Fixing a fixture does not independently
+qualify its whole acceptance ID.
+
+| Session | Owner | Class | Native build | Dependence/result |
+| --- | --- | --- | --- | --- |
+| Scale counter observation | Kernel | B | No | Scale IDs, also require classification fixture |
+| Context meter and missing-chain injector | Kernel | B | No | SEARCH10; grouped negative proof |
+| Grouped property Definitions and detector | Kernel | B | No | SEARCH01/04/10, also require raw-seed migration |
+| Shared current classification fixture; scale/oracle | Kernel | B | No | SEARCH07/19 and scale dependencies |
+| Candidate Access bootstrap | Kernel | B | No | SEARCH02/10 |
+| Private source admission fixture | Kernel | B | No | SEARCH11/12 |
+| Deferred Content observations and stale-worker injector | Kernel | B | No | SEARCH03/19 |
+| Crash pin placement | Kernel | B | No | SEARCH15/OPS16, SEARCH15 also needs Launch media |
+| Erasure replay refusal capture, then identity repair if proved | Trust-ops with Kernel | Provisional B | No if fixture cause confirmed | SEARCH08/20; coordinate G-1634, preserve retained-erasure work |
+| Media anchor-read counter | Launch | B | No | Omitted SEARCH15 dependency |
+| Content physical fixture allocation | Program with G-1630 | B | No | Omitted SEARCH19 dependency |
+| Main ordinary-timeout diagnostics | Kernel | A prerequisite | No | Evidence for deadline remedy, no ID green alone |
+| Native active-phase evidence | Kernel | A prerequisite | Yes | After Main diagnostic propagation |
+| One measured foreground obstruction remedy | Kernel | A | If Java changes | Requires phase evidence and valid before/after workload |
+| Occurrence pending discovery | Kernel/Structure owner | B until causal | Yes for native owner changes | Reuse pending owner; preserve text-generation recovery |
+| Occurrence placement seek | Kernel/Structure owner | B until causal | Yes | Examined-work bound, durable storage/revision fence |
+| Graph Definition fixture; query-read classification fixture | Kernel, separate sessions | B | No | Adjacent class instances; GRAPH01–05 and query-read, not new SEARCH dependencies |
+| Wider search/scheduler redesign | Kernel | C | Undecided | Defer unless measured obstruction requires it |
+
+Unestablished at handoff: the native phase behind the four idle breaches,
+any before/after idle percentiles, a coordinated shared-dataset restore,
+the erasure replay's inner native refusal, and end-to-end success of any
+proposed correction. The report supplies causes where reproduced, conditional
+repairs where evidence is incomplete, and the next evidence steps without
+claiming the 14 IDs green.
