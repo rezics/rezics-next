@@ -712573,6 +712573,15 @@
           },
           {
             "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "actingSubject",
             "required": false,
             "schema": {
@@ -712587,6 +712596,15 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -712844,6 +712862,8 @@
                     "rankingVersion",
                     "window",
                     "items",
+                    "hasMore",
+                    "cursor",
                     "sourcePosition"
                   ],
                   "type": "object"
