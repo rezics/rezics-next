@@ -192,7 +192,8 @@ export type IndependentRestoreSourceInventory = Readonly<{
 
 export interface IsolationInspector {
   projectContainers(project: string): readonly IsolationContainer[];
-  projectVolumes(project: string): readonly string[];
+  /** Docker label lookup; source ownership comes from the recorded container mounts. */
+  projectLabeledVolumes(project: string): readonly string[];
   projectNetworks(project: string): readonly IsolationNetwork[];
   containerPresent(idOrName: string): boolean;
   volumePresent(name: string): boolean;
@@ -215,6 +216,27 @@ function pathContains(parent: string, candidate: string): boolean {
   const back = relative(resolve(parent), resolve(candidate));
   return back === '' ||
     (back !== '..' && !back.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(back));
+}
+
+/** Fixture-restored source volumes may lack labels; container mounts retain their exact identities. */
+function sourceVolumeMountNames(project: string, containers: readonly IsolationContainer[]): string[] {
+  const mounts = containers.flatMap((container) => container.mounts
+    .filter((mount) => mount.type === 'volume')
+    .map((mount) => ({ service: container.service, name: mount.name ?? '', destination: mount.destination })));
+  const volumes = exactUnique(mounts.map((mount) => mount.name), 'Source volume mount');
+  const expected = [
+    { service: 'postgres', name: `${project}_postgres_data`, destination: '/var/lib/postgresql' },
+    { service: 'fuseki', name: `${project}_fuseki_data`, destination: '/fuseki/databases' },
+    { service: 'rustfs', name: `${project}_rustfs_data`, destination: '/data' },
+  ];
+  if (
+    mounts.length !== expected.length ||
+    expected.some((required) => !mounts.some((mount) =>
+      mount.service === required.service && mount.name === required.name && mount.destination === required.destination))
+  ) {
+    throw new Error('Source volume inventory is incomplete or belongs to another project');
+  }
+  return volumes;
 }
 
 function assertPrivateSourceDirectory(path: string, root: string, label: string): string {
@@ -269,9 +291,12 @@ export function recordIndependentRestoreSourceInventory(
       throw new Error(`Source ${service} container is missing from the inventory`);
     }
   }
-  const volumes = exactUnique(inspector.projectVolumes(project), 'Source volume');
-  const requiredVolumes = ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => `${project}_${kind}`);
-  if (requiredVolumes.some((name) => !volumes.includes(name)) || volumes.some((name) => !name.startsWith(`${project}_`))) {
+  const volumes = sourceVolumeMountNames(project, containers);
+  const labeledVolumes = exactUnique(inspector.projectLabeledVolumes(project), 'Labeled source volume');
+  if (
+    volumes.some((name) => !inspector.volumePresent(name)) ||
+    labeledVolumes.some((name) => !volumes.includes(name))
+  ) {
     throw new Error('Source volume inventory is incomplete or belongs to another project');
   }
   const networks = inspector.projectNetworks(project);
@@ -301,17 +326,21 @@ function assertIndependentRestoreSourceInventoryCurrent(
   inventory: IndependentRestoreSourceInventory,
   inspector: IsolationInspector,
 ): void {
-  const containers = inspector.projectContainers(inventory.project)
+  const currentContainers = inspector.projectContainers(inventory.project);
+  const containers = currentContainers
     .map(({ id, name }) => `${id}\0${name}`).sort();
   const recordedContainers = inventory.containers
     .map(({ id, name }) => `${id}\0${name}`).sort();
-  const volumes = exactUnique(inspector.projectVolumes(inventory.project), 'Current source volume');
+  const volumes = sourceVolumeMountNames(inventory.project, currentContainers);
+  const labeledVolumes = exactUnique(inspector.projectLabeledVolumes(inventory.project), 'Current labeled source volume');
   const networks = inspector.projectNetworks(inventory.project)
     .map(({ id, name }) => `${id}\0${name}`).sort();
   const recordedNetworks = inventory.networks.map(({ id, name }) => `${id}\0${name}`).sort();
   if (
     JSON.stringify(containers) !== JSON.stringify(recordedContainers) ||
     JSON.stringify(volumes) !== JSON.stringify(inventory.volumes) ||
+    labeledVolumes.some((name) => !inventory.volumes.includes(name)) ||
+    inventory.volumes.some((name) => !inspector.volumePresent(name)) ||
     JSON.stringify(networks) !== JSON.stringify(recordedNetworks) ||
     !existsSync(inventory.stackDirectory) ||
     !existsSync(inventory.objectDirectory)
@@ -339,7 +368,7 @@ function assertIndependentRestoreSourceDockerAbsent(
   }
   if (
     inspector.projectContainers(inventory.project).length > 0 ||
-    inspector.projectVolumes(inventory.project).length > 0 ||
+    inspector.projectLabeledVolumes(inventory.project).length > 0 ||
     inspector.projectNetworks(inventory.project).length > 0
   ) {
     throw new Error('Unrecorded source project resources remain');
@@ -419,7 +448,7 @@ export function createIsolationInspector(environment: NodeJS.ProcessEnv = proces
     ], environment).split(/\r?\n/).filter(Boolean);
     return ids.map(inspectContainer);
   };
-  const projectVolumes = (project: string) => isolationDockerOutput([
+  const projectLabeledVolumes = (project: string) => isolationDockerOutput([
     'volume', 'ls', '--quiet', '--filter', `label=com.docker.compose.project=${project}`,
   ], environment).split(/\r?\n/).filter(Boolean);
   const projectNetworks = (project: string): IsolationNetwork[] => {
@@ -454,7 +483,7 @@ export function createIsolationInspector(environment: NodeJS.ProcessEnv = proces
     return isolationDockerOutput(['network', 'ls', '--no-trunc', '--format', '{{.ID}}\t{{.Name}}', '--filter', filter], environment)
       .split(/\r?\n/).some((line) => line.split('\t').some((candidate) => candidate === idOrName));
   };
-  return { projectContainers, projectVolumes, projectNetworks, containerPresent, volumePresent, networkPresent };
+  return { projectContainers, projectLabeledVolumes, projectNetworks, containerPresent, volumePresent, networkPresent };
 }
 
 /** Assert that the target storage containers use new volumes and an isolated project network. */

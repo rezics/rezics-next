@@ -17,7 +17,7 @@ const repositoryRoot = resolve(import.meta.dir, '../../..');
 
 type FakeState = {
   containers: IsolationContainer[];
-  volumes: { project: string; name: string }[];
+  volumes: { project?: string; name: string }[];
   networks: (IsolationNetwork & { project: string })[];
 };
 
@@ -55,12 +55,14 @@ function sourceFixture(state = 'running') {
   }));
   const stateData: FakeState = {
     containers,
-    volumes: ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => ({ project, name: `${project}_${kind}` })),
+    // Fixture-restored volumes were created by `docker volume create`, so they
+    // have no Compose project label even though these containers mount them.
+    volumes: ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => ({ name: `${project}_${kind}` })),
     networks: [{ ...sourceNetwork, project, containerIds: containers.map((container) => container.id) }],
   };
   const inspector: IsolationInspector = {
     projectContainers: (name) => stateData.containers.filter((container) => container.project === name),
-    projectVolumes: (name) => stateData.volumes.filter((volume) => volume.project === name).map((volume) => volume.name),
+    projectLabeledVolumes: (name) => stateData.volumes.filter((volume) => volume.project === name).map((volume) => volume.name),
     projectNetworks: (name) => stateData.networks.filter((network) => network.project === name),
     containerPresent: (idOrName) => stateData.containers.some((container) =>
       container.id === idOrName || container.name === idOrName),
@@ -80,8 +82,8 @@ function disposeSource(fixture: ReturnType<typeof sourceFixture>): void {
         expect(args).toEqual(['down', '--volumes', '--remove-orphans']);
         fixture.stateData.containers = fixture.stateData.containers.filter((container) =>
           container.project !== fixture.project);
-        fixture.stateData.volumes = fixture.stateData.volumes.filter((volume) =>
-          volume.project !== fixture.project);
+        const ownedVolumes = new Set(fixture.inventory.volumes);
+        fixture.stateData.volumes = fixture.stateData.volumes.filter((volume) => !ownedVolumes.has(volume.name));
         fixture.stateData.networks = fixture.stateData.networks.filter((network) =>
           network.project !== fixture.project);
       },
@@ -154,7 +156,7 @@ test('source inventory rejects detached containers when a retained source volume
   }
 });
 
-test('source disposal uses its stack owner and preserves an unrelated retained project', () => {
+test('fixture-restored source inventory records and removes unlabeled volumes through its stack owner', () => {
   const fixture = sourceFixture('exited');
   const unrelated = {
     id: 'f'.repeat(64),
@@ -175,12 +177,22 @@ test('source disposal uses its stack owner and preserves an unrelated retained p
   };
   fixture.stateData.networks.push(unrelatedNetwork);
   try {
+    expect(fixture.inspector.projectLabeledVolumes(fixture.project)).toEqual([]);
+    expect(fixture.inventory.volumes).toEqual([
+      `${fixture.project}_fuseki_data`,
+      `${fixture.project}_postgres_data`,
+      `${fixture.project}_rustfs_data`,
+    ]);
+    expect(fixture.inventory.volumes.every((volume) => fixture.inspector.volumePresent(volume))).toBe(true);
+
     disposeSource(fixture);
+    expect(fixture.inventory.volumes.every((volume) => !fixture.inspector.volumePresent(volume))).toBe(true);
+    expect(() => assertIndependentRestoreSourceAbsent(fixture.inventory, fixture.inspector)).not.toThrow();
     expect(fixture.inspector.containerPresent(unrelated.id)).toBe(true);
     expect(fixture.inspector.volumePresent('rezics-fixture-retained_postgres_data')).toBe(true);
     expect(fixture.inspector.networkPresent(unrelatedNetwork.id)).toBe(true);
     expect(fixture.inspector.projectContainers(fixture.project)).toEqual([]);
-    expect(fixture.inspector.projectVolumes(fixture.project)).toEqual([]);
+    expect(fixture.inspector.projectLabeledVolumes(fixture.project)).toEqual([]);
     expect(fixture.inspector.projectNetworks(fixture.project)).toEqual([]);
   } finally {
     rmSync(fixture.stackDirectory, { recursive: true, force: true });
