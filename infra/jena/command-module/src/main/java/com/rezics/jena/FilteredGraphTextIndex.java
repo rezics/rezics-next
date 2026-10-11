@@ -17,6 +17,7 @@ import org.apache.jena.query.text.TextQueryFuncs;
 import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.ResourceFactory;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.ConcurrentMergeScheduler;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -36,6 +37,8 @@ import org.apache.jena.atlas.json.JsonArray;
 public final class FilteredGraphTextIndex implements TextIndex {
     private static final int DEFAULT_LIMIT = 10_000;
     private static final int MAX_ADMITTED_LIMIT = 50_001;
+    private static final java.util.concurrent.atomic.AtomicReference<java.lang.ref.WeakReference<FilteredGraphTextIndex>> mergeIndex =
+        new java.util.concurrent.atomic.AtomicReference<>(new java.lang.ref.WeakReference<>(null));
     private final TextIndexLucene lucene;
     static final String RANK_CONTEXT = "rankContext", RANK_GROUP = "rankGroup", RANK_SCHEMA = "rankMetadataVersion";
     private java.lang.ref.WeakReference<org.apache.jena.sparql.core.DatasetGraph> rankData = new java.lang.ref.WeakReference<>(null);
@@ -58,7 +61,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
     /** The existing writer owns these exact terms, alongside its text values.
      * A startup replay seeds old/offline generations before reads open. */
     boolean rankMetadataMissing() {
-        try (var reader = DirectoryReader.open(lucene.getIndexWriter())) {
+        try (var reader = openWriterReader()) {
             var missing = new BooleanQuery.Builder()
                 .add(new BooleanQuery.Builder().add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.SHOULD)
                     .add(new org.apache.lucene.search.FieldExistsQuery("publicTitle"), BooleanClause.Occur.SHOULD).build(), BooleanClause.Occur.FILTER)
@@ -247,7 +250,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             rank == null ? null : rank.context(), rank == null ? null : rank.group());
         // Include legacy untagged body documents in membership: a tagged copy
         // alongside a legacy row is not a successful replacement.
-        try (var reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (var reader = openReader(lucene)) {
             var identity = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term(lucene.getDocDef().getEntityField(), id)), BooleanClause.Occur.FILTER)
                 .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
@@ -277,7 +280,42 @@ public final class FilteredGraphTextIndex implements TextIndex {
             throw new IllegalStateException("Content source type is missing: " + type);
     }
 
-    public FilteredGraphTextIndex(TextIndexLucene lucene) { this.lucene = lucene; }
+    public FilteredGraphTextIndex(TextIndexLucene lucene) {
+        this.lucene = lucene;
+        mergeIndex.set(new java.lang.ref.WeakReference<>(this));
+    }
+
+    /** A maintenance sampler reads the current writer; deadline evidence only
+     * reads that sampler's published observation. Rollback can replace it. */
+    static int mergeThreadCount() {
+        var index = mergeIndex.get().get();
+        if (index == null) return 0;
+        try {
+            var writer = index.lucene.getIndexWriter();
+            if (writer == null) return 0;
+            var scheduler = writer.getConfig().getMergeScheduler();
+            return scheduler instanceof ConcurrentMergeScheduler concurrent ? concurrent.mergeThreadCount() : 0;
+        } catch (RuntimeException unavailable) { return 0; }
+    }
+
+    private DirectoryReader openReader() throws IOException {
+        return openReader(lucene);
+    }
+    private static DirectoryReader openReader(TextIndexLucene lucene) throws IOException {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
+            return DirectoryReader.open(lucene.getDirectory());
+        }
+    }
+    private DirectoryReader openWriterReader() throws IOException {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
+            return DirectoryReader.open(lucene.getIndexWriter());
+        }
+    }
+    private static Query parseQuery(QueryParser parser, String text) throws ParseException {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PARSE)) {
+            return parser.parse(text);
+        }
+    }
     public TextIndexLucene lucene() { return lucene; }
 
     public record RankHit(String id, float score, String key, Integer document, String unit) {
@@ -315,14 +353,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
         String field = lucene.getDocDef().getField(property);
         if (!"body".equals(field) && !"publicTitle".equals(field))
             throw new TextIndexException("ranked field is not public");
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
+             DirectoryReader reader = openReader()) {
             long commit = reader.getIndexCommit().getGeneration();
             if (after != null && (after.commit() != commit || !Float.isFinite(after.score())
                 || after.id() == null || after.id().length() > 2048))
                 throw new RankRestart();
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             // The API supplies a literal phrase, never Lucene operators.
-            Query body = parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            Query body = parseQuery(parser, "\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
             boolean names = scope != null && scope.names() != null;
             boolean catalogue = scope != null && scope.catalogue();
             Query text = body;
@@ -335,7 +374,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 String words = java.util.Arrays.stream(phrase.split("\\s+"))
                     .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
                     .collect(java.util.stream.Collectors.joining(" "));
-                Query title = titles.parse(words);
+                Query title = parseQuery(titles, words);
                 // A name tier above BM25's bounded 80-character query scores
                 // preserves body relevance while putting names first. Lucene
                 // documents/term frequencies are bounded by signed integers.
@@ -349,7 +388,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 String words = java.util.Arrays.stream(phrase.split("\\s+"))
                     .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
                     .collect(java.util.stream.Collectors.joining(" "));
-                Query completeNames = new BooleanQuery.Builder().add(complete.parse(words), BooleanClause.Occur.MUST)
+                Query completeNames = new BooleanQuery.Builder().add(parseQuery(complete, words), BooleanClause.Occur.MUST)
                     .add(new org.apache.lucene.search.PrefixQuery(new Term(lucene.getDocDef().getEntityField(),
                         PublicNameProjection.PREFIX + "work:")), BooleanClause.Occur.FILTER).build();
                 text = new org.apache.lucene.search.DisjunctionMaxQuery(List.of(text,
@@ -436,25 +475,27 @@ public final class FilteredGraphTextIndex implements TextIndex {
             List<RankHit> ordered = new ArrayList<>();
             var stored = searcher.storedFields();
             var proof = new RankProof();
-            for (int n = 0; n < Math.min(size, top.scoreDocs.length); n++) {
-                if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
-                var hit = top.scoreDocs[n];
-                String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
-                if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("ranked document is incomplete");
-                String witness = catalogue && id.startsWith(PublicNameProjection.PREFIX + "work:")
-                    ? nameWitness(data, id, scope, proof) : null;
-                String key = names ? id : scope == null ? id : admittedMain(data, witness == null ? id : witness, scope, proof);
-                if (names) {
-                    proof.charge();
-                    Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
-                        .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
-                    var best = searcher.search(entity, 1);
-                    if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc
-                        || !PublicNameProjection.visibleUnit(data, id)) key = null;
+            try (var witnessPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.WITNESS)) {
+                for (int n = 0; n < Math.min(size, top.scoreDocs.length); n++) {
+                    if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
+                    var hit = top.scoreDocs[n];
+                    String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
+                    if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("ranked document is incomplete");
+                    String witness = catalogue && id.startsWith(PublicNameProjection.PREFIX + "work:")
+                        ? nameWitness(data, id, scope, proof) : null;
+                    String key = names ? id : scope == null ? id : admittedMain(data, witness == null ? id : witness, scope, proof);
+                    if (names) {
+                        proof.charge();
+                        Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                            .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
+                        var best = searcher.search(entity, 1);
+                        if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc
+                            || !PublicNameProjection.visibleUnit(data, id)) key = null;
+                    }
+                    if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
+                        witness == null ? id : witness, hit.doc, entityField, proof)) key = null;
+                    ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null, witness));
                 }
-                if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
-                    witness == null ? id : witness, hit.doc, entityField, proof)) key = null;
-                ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null, witness));
             }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
@@ -472,14 +513,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
             throw new TextIndexException("occurrence search exceeds its input budget");
         if (!"occurrenceLabel".equals(lucene.getDocDef().getField(OccurrenceLabelIndex.p("occurrenceSearchLabels"))))
             throw new TextIndexException("occurrence label field is not installed");
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
+             DirectoryReader reader = openReader()) {
             String field = lucene.getDocDef().getEntityField(), scope = OccurrenceLabelIndex.scope(generation, revision, parent);
             String lower = scope + after.replace('\u0001', '!').replace("https://rezics.com/id/", "");
             Query scopeQuery = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), OccurrenceLabelIndex.TEXT.getURI())), BooleanClause.Occur.FILTER)
                 .add(new TermQuery(new Term("occurrenceScope", scope)), BooleanClause.Occur.FILTER).build();
             QueryParser parser = new QueryParser("occurrenceLabel", lucene.getQueryAnalyzer());
-            Query text = parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            Query text = parseQuery(parser, "\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
             IndexSearcher searcher = new IndexSearcher(reader);
             long deadline = System.nanoTime() + 1_000_000_000L;
             searcher.setTimeout(() -> System.nanoTime() >= deadline);
@@ -637,7 +679,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         boolean identity = order.equals("identity");
         String prefix = identity ? PublicNameProjection.PREFIX + kind + ":"
             : PublicNameProjection.DIRECTORY + kind + ":" + order + ":";
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
+             DirectoryReader reader = openReader()) {
             long commit = reader.getIndexCommit().getGeneration();
             if (after != null && (after.commit() != commit || !after.id().startsWith(prefix))) throw new RankRestart();
             var terms = org.apache.lucene.index.MultiTerms.getTerms(reader, lucene.getDocDef().getEntityField());
@@ -649,14 +692,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
             var term = iterator.term();
             if (after != null && term.utf8ToString().equals(after.id())) term = iterator.next();
             List<RankHit> hits = new ArrayList<>();
-            while (term != null && term.utf8ToString().startsWith(prefix) && hits.size() < size) {
-                String id = term.utf8ToString();
-                var members = data.find(PUBLIC_GRAPH, uri(id), uri(RV + (identity ? "resource" : "nameDirectoryResource")), Node.ANY);
-                Node resource = null;
-                try { if (members.hasNext()) resource = members.next().getObject(); }
-                finally { org.apache.jena.atlas.iterator.Iter.close(members); }
-                hits.add(new RankHit(id, 0f, resource != null && resource.isURI() && PublicNameProjection.visible(data, resource) ? resource.getURI() : null));
-                term = iterator.next();
+            try (var witnessPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.WITNESS)) {
+                while (term != null && term.utf8ToString().startsWith(prefix) && hits.size() < size) {
+                    String id = term.utf8ToString();
+                    var members = data.find(PUBLIC_GRAPH, uri(id), uri(RV + (identity ? "resource" : "nameDirectoryResource")), Node.ANY);
+                    Node resource = null;
+                    try { if (members.hasNext()) resource = members.next().getObject(); }
+                    finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                    hits.add(new RankHit(id, 0f, resource != null && resource.isURI() && PublicNameProjection.visible(data, resource) ? resource.getURI() : null));
+                    term = iterator.next();
+                }
             }
             boolean more = term != null && term.utf8ToString().startsWith(prefix);
             return new RankPage(List.copyOf(hits), hits.size(), more ? "lower-bound" : "exact", commit, more);
@@ -1053,7 +1098,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
     @Override public void prepareCommit() { CommandWork.timed("text_prepare", lucene::prepareCommit); }
     @Override public void commit() { CommandWork.timed("text_commit", lucene::commit); }
     @Override public void rollback() { lucene.rollback(); }
-    @Override public void close() { lucene.close(); }
+    @Override public void close() {
+        try { lucene.close(); }
+        finally {
+            var observed = mergeIndex.get();
+            if (observed.get() == this) mergeIndex.compareAndSet(observed, new java.lang.ref.WeakReference<>(null));
+        }
+    }
     @Override public void addEntity(Entity entity) {
         CommandWork.count("text_adds", 1);
         CommandWork.timed("text_index", () -> addMeasuredEntity(entity));
@@ -1168,7 +1219,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     @Override public List<TextHit> query(String subject, List<Resource> properties, String qs,
                                          String graph, String lang, int limit, String highlight) {
-        if (graph == null) return lucene.query(subject, properties, qs, null, lang, limit, highlight);
+        if (graph == null) return PublicSearchPhaseEvidence.timed(PublicSearchPhaseEvidence.Phase.RANK,
+            () -> lucene.query(subject, properties, qs, null, lang, limit, highlight));
         // Legacy complete readers and the offline rebuild audit retain their
         // explicit limits. Ranked pages and generation qualification use the
         // bounded collector and streaming audit above.
@@ -1180,10 +1232,11 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (field == null || definition.getGraphField() == null) {
             throw new TextIndexException("named-graph text field is unavailable");
         }
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
+             DirectoryReader reader = openReader()) {
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             parser.setAllowLeadingWildcard(true);
-            Query body = parser.parse(qs);
+            Query body = parseQuery(parser, qs);
             BooleanQuery.Builder filtered = new BooleanQuery.Builder()
                 .add(body, BooleanClause.Occur.MUST)
                 .add(new TermQuery(new Term(definition.getGraphField(), graph)), BooleanClause.Occur.FILTER);

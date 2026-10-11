@@ -1087,7 +1087,8 @@ final class CommandService extends ActionService {
                 if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             }
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
-            occurrenceLabels.refresh(receipt);
+            PublicSearchPhaseEvidence.timed(PublicSearchPhaseEvidence.Phase.OCCURRENCE_PROJECT,
+                () -> occurrenceLabels.refresh(receipt));
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");

@@ -144,6 +144,11 @@ final class SearchDeltaJournal {
             java.util.concurrent.TimeUnit.MILLISECONDS);
     }
     private static void recover(Recovery recovery) {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RECOVERY)) {
+            recoverBody(recovery);
+        }
+    }
+    private static void recoverBody(Recovery recovery) {
         DatasetGraph data = recovery.dataset.get();
         if (data == null) return;
         boolean ready = false;
@@ -175,9 +180,11 @@ final class SearchDeltaJournal {
      * its empty baseline before traffic; qualification still audits every RDF
      * and Lucene body. No caller-provided unit inventory is accepted. */
     static boolean qualifyAtStartup(DatasetGraph data) {
-        startupAudit.set(true);
-        try { return qualifyAtStartupBody(data); }
-        finally { startupAudit.remove(); }
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUALIFICATION)) {
+            startupAudit.set(true);
+            try { return qualifyAtStartupBody(data); }
+            finally { startupAudit.remove(); }
+        }
     }
     private static boolean qualifyAtStartupBody(DatasetGraph data) {
         boolean nativeScope = TemplateIndexService.workScopeNativeStorage(data);
@@ -286,7 +293,7 @@ final class SearchDeltaJournal {
         Qualification baseline;
         synchronized (qualified) { baseline = qualified.get(data); }
         if (baseline == null) return;
-        try (DirectoryReader reader = DirectoryReader.open(lucene(data).getDirectory())) {
+        try (DirectoryReader reader = openReader(lucene(data))) {
             if (reader.getIndexCommit().getGeneration() != baseline.luceneGeneration())
                 invalidate(data, "lucene generation drifted", "fenceBeforeWrite");
         } catch (IOException | RuntimeException unavailable) {
@@ -298,6 +305,11 @@ final class SearchDeltaJournal {
      * collector streams documents; no top-N inventory can silently truncate it.
      * Native deltas maintain this baseline between generation qualifications. */
     static boolean qualify(DatasetGraph data) {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUALIFICATION)) {
+            return qualifyBody(data);
+        }
+    }
+    private static boolean qualifyBody(DatasetGraph data) {
         synchronized (qualified) { qualified.remove(data); }
         TextIndexLucene index = lucene(data);
         Qualification baseline = auditGeneration(data, index);
@@ -319,6 +331,11 @@ final class SearchDeltaJournal {
     }
 
     private static Qualification auditGeneration(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.AUDIT)) {
+            return auditGenerationBody(data, lucene, requireAnchor);
+        }
+    }
+    private static Qualification auditGenerationBody(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
         boolean ownsTransaction = !data.isInTransaction();
         if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
         try {
@@ -331,7 +348,7 @@ final class SearchDeltaJournal {
                 return refuse("public anchor absent", null);
             CanonicalPolicy.RealmOwnerRefusal realm = CanonicalPolicy.auditRealmOwnerRefusal(data);
             if (realm != null) return refuse(realm.reason(), realm.subject());
-            try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            try (DirectoryReader reader = openReader(lucene)) {
                 IndexSearcher searcher = new IndexSearcher(reader);
                 boolean rankMetadata = org.apache.lucene.index.FieldInfos.getMergedFieldInfos(reader).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null;
                 Set<String> seen = new LinkedHashSet<>();
@@ -566,6 +583,11 @@ final class SearchDeltaJournal {
     /** A request consumes an already-qualified generation and bounded native
      * deltas. Missing/gapped baselines are unavailable, never an on-demand scan. */
     static Map<String, Object> qualifiedProof(DatasetGraph data, long since, long writeEpoch) {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PROOF)) {
+            return qualifiedProofBody(data, since, writeEpoch);
+        }
+    }
+    private static Map<String, Object> qualifiedProofBody(DatasetGraph data, long since, long writeEpoch) {
         Qualification baseline;
         synchronized (qualified) { baseline = qualified.get(data); }
         if (baseline == null) return Map.of("available", false);
@@ -950,6 +972,11 @@ final class SearchDeltaJournal {
     }
 
     static Map<String, Object> proof(DatasetGraph data, long since, long writeEpoch) {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PROOF)) {
+            return proofBody(data, since, writeEpoch);
+        }
+    }
+    private static Map<String, Object> proofBody(DatasetGraph data, long since, long writeEpoch) {
         boolean ownsTransaction = !data.isInTransaction();
         if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
         try {
@@ -985,7 +1012,7 @@ final class SearchDeltaJournal {
             if (lucene == null) return Map.of("available", false);
             // A committed Lucene reader and the TDB snapshot must agree for every
             // changed subject. The process write epoch fences intervening native writes.
-            try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            try (DirectoryReader reader = openReader(lucene)) {
                 IndexSearcher searcher = new IndexSearcher(reader);
                 for (var source : contentSources.entrySet()) {
                     TextEntityDocuments.Source current = FilteredGraphTextIndex.contentBodyMetadataSource(data, source.getKey());
@@ -993,7 +1020,7 @@ final class SearchDeltaJournal {
                         throw new IllegalStateException("Content source delta differs from current authority");
                 }
                 for (String subject : subjects) verifySubject(data, lucene, searcher, subject);
-                try (DirectoryReader latest = DirectoryReader.open(lucene.getDirectory())) {
+                try (DirectoryReader latest = openReader(lucene)) {
                     if (latest.getIndexCommit().getGeneration() != reader.getIndexCommit().getGeneration())
                         return Map.of("available", false);
                 }
@@ -1079,7 +1106,7 @@ final class SearchDeltaJournal {
     }
     /** Historical body rows store uri, graph, body, language and uid only. */
     private static boolean plainStoredContentDocument(TextIndexLucene lucene, String subject) {
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (DirectoryReader reader = openReader(lucene)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             BooleanQuery exact = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
@@ -1130,7 +1157,7 @@ final class SearchDeltaJournal {
         if (!data.contains(PUBLIC, unit, RDF.type.asNode(), MATCH_UNIT)
             || body == null || !body.isLiteral())
             throw new IllegalStateException("public index differs from RDF");
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+        try (DirectoryReader reader = openReader(lucene)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             BooleanQuery exact = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
@@ -1158,6 +1185,12 @@ final class SearchDeltaJournal {
         AuditRefusal(String reason, String subject) {
             super(reason);
             this.subject = subject;
+        }
+    }
+
+    private static DirectoryReader openReader(TextIndexLucene lucene) throws IOException {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
+            return DirectoryReader.open(lucene.getDirectory());
         }
     }
 

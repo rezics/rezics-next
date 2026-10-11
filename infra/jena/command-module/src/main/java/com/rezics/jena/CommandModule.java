@@ -18,6 +18,7 @@ public final class CommandModule implements FusekiAutoModule {
     static final String VERSION = version();
     private static final Operation COMMAND = Operation.alloc("https://rezics.com/fuseki/command", "command", "REZICS transactional command");
     private final ProfileRegistry profiles = profiles();
+    private final PublicSearchPhaseEvidence searchEvidence = new PublicSearchPhaseEvidence();
 
     private static String version() {
         try (InputStream in = CommandModule.class.getResourceAsStream("module.properties")) {
@@ -61,6 +62,8 @@ public final class CommandModule implements FusekiAutoModule {
     }
 
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
+        searchEvidence.install();
+        builder.addFilter("/*", searchEvidence);
         builder.registerOperation(COMMAND, new CommandService(profiles));
         builder.registerOperation(Operation.Update, new TemplateIndexService.RawMembershipUpdate());
         // No endpoint is added. Product assemblers remain command-only; unsafe
@@ -120,6 +123,7 @@ public final class CommandModule implements FusekiAutoModule {
     }
 
     @Override public void serverStopped(FusekiServer server) {
+        searchEvidence.destroy();
         server.getDataAccessPointRegistry().accessPoints().forEach(point ->
             SearchDeltaJournal.stopRecovery(point.getDataService().getDataset()));
     }

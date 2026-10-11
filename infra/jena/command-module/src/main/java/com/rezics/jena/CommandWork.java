@@ -24,6 +24,7 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
     CommandWork() {
         if (CURRENT.get() != null) throw new IllegalStateException("nested native command");
         CURRENT.set(this);
+        PublicSearchPhaseEvidence.enter(PublicSearchPhaseEvidence.Phase.PARSE);
         for (String name : java.util.List.of("current_adds", "current_deletes", "current_literal_bytes",
             "revisions_adds", "revisions_deletes", "revisions_literal_bytes", "other_adds", "other_deletes",
             "other_literal_bytes", "max_literal_bytes", "text_adds", "text_updates", "text_deletes", "validation_focuses", "durable_commits"))
@@ -33,6 +34,8 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
         nanos.merge(phase, System.nanoTime() - phaseStarted, Long::sum);
         phase = next;
         phaseStarted = System.nanoTime();
+        var evidence = evidencePhase(next);
+        if (evidence != null) PublicSearchPhaseEvidence.enter(evidence);
     }
     static void enter(String next) {
         CommandWork current = CURRENT.get();
@@ -44,10 +47,29 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
     }
     static <T> T timed(String name, Supplier<T> work) {
         CommandWork current = CURRENT.get();
-        if (current == null) return work.get();
         long start = System.nanoTime();
-        try { return work.get(); }
-        finally { current.nanos.merge(name, System.nanoTime() - start, Long::sum); }
+        // Graph and per-entity timers stay local; registering their background
+        // scopes for every quad would make evidence scale with mutation volume.
+        var evidence = switch (name) {
+            case "text_prepare" -> PublicSearchPhaseEvidence.Phase.TEXT_PREPARE;
+            case "text_commit" -> PublicSearchPhaseEvidence.Phase.TEXT_COMMIT;
+            case "validation", "commit" -> PublicSearchPhaseEvidence.Phase.COMMAND;
+            default -> null;
+        };
+        try {
+            return evidence == null ? work.get() : PublicSearchPhaseEvidence.timed(evidence, work);
+        } finally {
+            if (current != null) current.nanos.merge(name, System.nanoTime() - start, Long::sum);
+        }
+    }
+    private static PublicSearchPhaseEvidence.Phase evidencePhase(String name) {
+        return switch (name) {
+            case "parse" -> PublicSearchPhaseEvidence.Phase.PARSE;
+            case "qualification" -> PublicSearchPhaseEvidence.Phase.QUALIFICATION;
+            case "queue", "preflight", "update", "commit", "invariants", "projections", "journal", "response" ->
+                PublicSearchPhaseEvidence.Phase.COMMAND;
+            default -> null;
+        };
     }
     static void timed(String name, Runnable work) { timed(name, () -> { work.run(); return null; }); }
     static void count(String name, long value) {
@@ -102,5 +124,8 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
             .collect(java.util.stream.Collectors.joining(","));
     }
     private static String ms(long nanos) { return String.format(java.util.Locale.ROOT, "%.3f", nanos / 1_000_000.0); }
-    @Override public void close() { CURRENT.remove(); }
+    @Override public void close() {
+        try { PublicSearchPhaseEvidence.endPhase(); }
+        finally { CURRENT.remove(); }
+    }
 }

@@ -3,9 +3,14 @@ package com.rezics.jena;
 import static org.junit.Assert.*;
 
 import java.math.BigInteger;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.jena.datatypes.xsd.XSDDatatype;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
@@ -22,6 +27,10 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FilterDirectory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
 import org.junit.Test;
 
 /** Startup qualification names why it refused, and never writes a document body into that line. */
@@ -58,14 +67,15 @@ public class SearchDeltaJournalStartupTest {
     private static final class Fixture implements AutoCloseable {
         final TextIndexLucene index;
         final DatasetGraphText data;
-        Fixture() {
+        Fixture() { this(new ByteBuffersDirectory()); }
+        Fixture(Directory directory) {
             EntityDefinition definition = new EntityDefinition("uri", "label", "graph");
             definition.set("body", BODY);
             definition.setLangField("lang");
             definition.setUidField("uid");
             TextIndexConfig config = new TextIndexConfig(definition);
             config.setValueStored(true);
-            index = new TextIndexLucene(new ByteBuffersDirectory(), config);
+            index = new TextIndexLucene(directory, config);
             data = new DatasetGraphText(org.apache.jena.sparql.core.DatasetGraphFactory.createTxnMem(), index,
                 new TextDocProducerTriples(index));
             data.begin(ReadWrite.WRITE);
@@ -86,6 +96,27 @@ public class SearchDeltaJournalStartupTest {
             } finally { data.end(); }
         }
         @Override public void close() { data.close(); index.close(); }
+    }
+
+    private static final class BlockedReaderDirectory extends FilterDirectory {
+        final AtomicBoolean armed = new AtomicBoolean();
+        final CountDownLatch entered = new CountDownLatch(1);
+        final CountDownLatch released = new CountDownLatch(1);
+
+        BlockedReaderDirectory() { super(new ByteBuffersDirectory()); }
+
+        @Override public IndexInput openInput(String name, IOContext context) throws IOException {
+            if (name.startsWith("segments_") && armed.compareAndSet(true, false)) {
+                entered.countDown();
+                try {
+                    if (!released.await(5, TimeUnit.SECONDS)) throw new IOException("reader release timed out");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("reader interrupted", interrupted);
+                }
+            }
+            return super.openInput(name, context);
+        }
     }
 
     private static void seedLegacyContent(DatasetGraph data, String body, String pinnedSource, boolean commit) {
@@ -293,6 +324,76 @@ public class SearchDeltaJournalStartupTest {
                     + "SearchDeltaJournalStartupTest.directInvalidationNamesItsCaller]"));
             } finally { release(fixture.data); }
         }
+    }
+
+    @Test public void blockedStartupAuditPublishesQualificationAuditAndReaderOpening() throws Exception {
+        BlockedReaderDirectory directory = new BlockedReaderDirectory();
+        PublicSearchPhaseEvidence evidence = new PublicSearchPhaseEvidence(System::nanoTime, ignored -> {}, false);
+        evidence.install();
+        try (Fixture fixture = new Fixture(directory)) {
+            fixture.anchor();
+            directory.armed.set(true);
+            CompletableFuture<Boolean> result = CompletableFuture.supplyAsync(() -> SearchDeltaJournal.qualifyAtStartup(fixture.data));
+            try {
+                assertTrue("startup reader did not block", directory.entered.await(2, TimeUnit.SECONDS));
+                List<String> active = evidence.backgroundPhases();
+                assertTrue(active.contains("QUALIFICATION"));
+                assertTrue(active.contains("AUDIT"));
+                assertTrue(active.contains("READER_OPEN"));
+            } finally {
+                directory.released.countDown();
+                try { assertTrue(result.get(3, TimeUnit.SECONDS)); }
+                finally { release(fixture.data); }
+            }
+            assertTrue(evidence.backgroundPhases().isEmpty());
+        } finally { evidence.destroy(); }
+    }
+
+    @Test public void blockedProofPublishesProofAndReaderOpeningWithoutCommandWork() throws Exception {
+        BlockedReaderDirectory directory = new BlockedReaderDirectory();
+        PublicSearchPhaseEvidence evidence = new PublicSearchPhaseEvidence(System::nanoTime, ignored -> {}, false);
+        evidence.install();
+        try (Fixture fixture = new Fixture(directory)) {
+            fixture.anchor();
+            assertTrue(SearchDeltaJournal.qualifyAtStartup(fixture.data));
+            directory.armed.set(true);
+            CompletableFuture<java.util.Map<String, Object>> result = CompletableFuture.supplyAsync(
+                () -> SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0));
+            try {
+                assertTrue("proof reader did not block", directory.entered.await(2, TimeUnit.SECONDS));
+                List<String> active = evidence.backgroundPhases();
+                assertTrue(active.contains("PROOF"));
+                assertTrue(active.contains("READER_OPEN"));
+                assertFalse(active.contains("AUDIT"));
+            } finally {
+                directory.released.countDown();
+                try { assertEquals(true, result.get(3, TimeUnit.SECONDS).get("available")); }
+                finally { release(fixture.data); }
+            }
+            assertTrue(evidence.backgroundPhases().isEmpty());
+        } finally { evidence.destroy(); }
+    }
+
+    @Test public void recoveryPublishesItsPhaseBeforeWaitingForTheWriterMonitor() throws Exception {
+        PublicSearchPhaseEvidence evidence = new PublicSearchPhaseEvidence(System::nanoTime, ignored -> {}, false);
+        evidence.install();
+        try (Fixture fixture = new Fixture()) {
+            fixture.anchor();
+            try {
+                synchronized (fixture.data) {
+                    SearchDeltaJournal.invalidate(fixture.data);
+                    long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                    while (!evidence.backgroundPhases().contains("RECOVERY") && System.nanoTime() < until)
+                        Thread.sleep(10);
+                    assertTrue("recovery wait was not published", evidence.backgroundPhases().contains("RECOVERY"));
+                    assertFalse(evidence.backgroundPhases().contains("AUDIT"));
+                }
+                long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                while (!evidence.backgroundPhases().isEmpty() && System.nanoTime() < until) Thread.sleep(10);
+                assertTrue("recovery phases leaked", evidence.backgroundPhases().isEmpty());
+                assertEquals(true, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+            } finally { release(fixture.data); }
+        } finally { evidence.destroy(); }
     }
 
 }

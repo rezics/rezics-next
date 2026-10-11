@@ -139,7 +139,8 @@ final class TemplateQueryService {
     }
 
     static JsonObject select(DatasetGraph dataset, JsonObject body) {
-        Prepared prepared = prepare(body);
+        Prepared prepared = PublicSearchPhaseEvidence.timed(PublicSearchPhaseEvidence.Phase.PARSE, () -> prepare(body));
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUERY)) {
         dataset.begin(ReadWrite.READ);
         try {
             List<Binding> candidates=prepared.candidates().isEmpty()?List.of(org.apache.jena.sparql.engine.binding.BindingFactory.empty()):prepared.candidates();
@@ -176,6 +177,7 @@ final class TemplateQueryService {
             JSON.write(output,result);
             return JSON.parse(output.toString(java.nio.charset.StandardCharsets.UTF_8));
         } finally { dataset.end(); }
+        }
     }
 
     private static int integer(JsonValue value, int minimum, int maximum) {
