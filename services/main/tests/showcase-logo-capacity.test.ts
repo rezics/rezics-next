@@ -52,7 +52,7 @@ beforeAll(async () => {
       byteLength: 32, sha256: 'b'.repeat(64), disclosure: 'public' });
     asset = upload.asset;
     await store.settleUpload(upload.upload, { status: 'activated', sha256: 'b'.repeat(64),
-      byteLength: 32, mediaType: 'image/png', width: 640, height: 480 });
+      byteLength: 32, mediaType: 'image/png', width: 640, height: 480 }, async () => 'b'.repeat(64));
     await store.recordAssetRevision(upload.upload);
     legacy = { active: native(), removed: native(), empty: native(), trailer: native(), avatar: native() };
     const cutout: ShowcaseSelectionInput = { target: legacy.active, context: DEFAULT_MEDIA_CONTEXT,
@@ -252,7 +252,7 @@ test('context fallback resolves each tone through retained removals, empty slots
     const upload = await store.reserveUpload(admission(), { asset: null, mediaType: 'image/png',
       byteLength: 32, sha256: 'c'.repeat(64), disclosure: 'private' });
     await store.settleUpload(upload.upload, { status: 'activated', sha256: 'c'.repeat(64),
-      byteLength: 32, mediaType: 'image/png', width: 640, height: 480 });
+      byteLength: 32, mediaType: 'image/png', width: 640, height: 480 }, async () => 'c'.repeat(64));
     await store.recordAssetRevision(upload.upload);
     const french = (await read()).find(image => image.language === 'fr' && image.tone === 'dark')!;
     await selected(store, { ...logo(target, 'fr', 'dark', context), asset: upload.asset, expectedSelection: french.selection });

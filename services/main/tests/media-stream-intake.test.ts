@@ -42,7 +42,8 @@ function fixture() {
     media: {
       store: {
         readUpload: async () => { events.push('reservation'); return state.row ? { ...state.row } : null; },
-        settleUpload: async (_id: string, verdict: Parameters<MediaStore['settleUpload']>[1]) => {
+        settleUpload: async (_id: string, verdict: Parameters<MediaStore['settleUpload']>[1], persist?: () => Promise<string>) => {
+          if (verdict.status === 'activated') expect(await persist!()).toBe(verdict.sha256);
           state.settlements++;
           state.row!.status = verdict.status;
           state.row!.reason = verdict.status === 'rejected' ? verdict.reason : null;

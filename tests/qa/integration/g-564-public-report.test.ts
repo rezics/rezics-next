@@ -220,7 +220,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
       actingSubject: f.actor, authorityEpoch: '0', requestDigest: sha256(randomUUID()) },
     { asset: null, mediaType: 'image/png', byteLength: 32, sha256: bytesDigest, disclosure: 'public' });
     await mediaStore.settleUpload(media.upload, { status: 'activated', sha256: bytesDigest,
-      byteLength: 32, mediaType: 'image/png', width: 1, height: 1 });
+      byteLength: 32, mediaType: 'image/png', width: 1, height: 1 }, async () => bytesDigest);
     const activated = await mediaStore.recordAssetRevision(media.upload);
     const resource = `https://rezics.com/id/${media.asset}`;
     await json<Receipt>(await call('POST', '/v1/public-reports', { ...base,

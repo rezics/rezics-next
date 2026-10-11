@@ -613,9 +613,11 @@ export class MediaStore {
     return provenance.targetWork;
   }
 
-  /** Activate verified bytes already present in the asset namespace, or record a rejection. */
+  /** Persist quarantine and original bytes under the asset -> upload fence, then
+   * activate their exact representation. A replay never invokes persistence. */
   async settleUpload(upload: string, verdict: { status: 'activated'; sha256: string; byteLength: number;
     mediaType: MediaType; width: number; height: number } | { status: 'rejected'; reason: string },
+    persist?: () => Promise<string>,
   ): Promise<ActivatedUpload> {
     const current = await this.readUpload(upload);
     if (!current) throw new MediaMissing('media upload is unavailable');
@@ -632,6 +634,21 @@ export class MediaStore {
           status: previous.outcome === 'succeeded' ? 'activated' : 'rejected', reason: previous.reason,
           replayed: true };
       }
+      // Originals can also advance moderation state. Take the exclusive owner
+      // lock up front so concurrent settlements never upgrade shared locks.
+      await client.query('SELECT id FROM media.asset WHERE id=$1 FOR UPDATE', [current.asset]);
+      const asset = (await client.query<{ lifecycle: string; erasure_epoch: string }>(`
+        SELECT s.lifecycle,s.erasure_epoch::text FROM media.asset a
+        JOIN media.asset_state s ON s.id=a.state_head WHERE a.id=$1`,
+      [current.asset])).rows[0];
+      const reservation = (await client.query<{ status: string; expired: boolean; erasure_epoch: string;
+        declared_digest: string | null; declared_byte_length: number; declared_media_type: string }>(`
+        SELECT status,expires_at<=clock_timestamp() AS expired,erasure_epoch::text,
+          declared_digest,declared_byte_length,declared_media_type
+        FROM media.upload WHERE id=$1 AND asset_id=$2 FOR UPDATE`, [upload,current.asset])).rows[0];
+      if (!asset || asset.lifecycle !== 'active' || !reservation || reservation.status !== 'reserved'
+        || reservation.expired || reservation.erasure_epoch !== asset.erasure_epoch)
+        throw new MediaStale('media upload reservation has lapsed');
       if (verdict.status === 'rejected') {
         await receipt(client, { operationId, digest, action: 'media.upload.settle',
           outcome: 'rejected', reason: verdict.reason, eventType: 'media.upload.rejected',
@@ -642,6 +659,16 @@ export class MediaStore {
         return { asset: current.asset, upload, representation: '', sha256: '', status: 'rejected',
           reason: verdict.reason, replayed: false };
       }
+      if (reservation.declared_byte_length !== verdict.byteLength
+        || reservation.declared_media_type !== verdict.mediaType
+        || reservation.declared_digest !== null && reservation.declared_digest !== verdict.sha256)
+        throw new MediaInvalid('media upload does not admit these bytes');
+      if (!persist) throw new MediaInvalid('media activation requires fenced persistence');
+      if (await persist() !== verdict.sha256) throw new MediaInvalid('media object digest differs');
+      // Persistence may outlive the reservation; metadata stays uncommitted and
+      // any orphan remains inside the asset/upload namespace that erasure owns.
+      if (!(await client.query('SELECT id FROM media.upload WHERE id=$1 AND expires_at>clock_timestamp()',
+        [upload])).rowCount) throw new MediaStale('media upload reservation has lapsed');
       const representation = randomUUID();
       await receipt(client, { operationId, digest, action: 'media.upload.settle',
         outcome: 'succeeded', eventType: 'media.upload.activated',
@@ -678,8 +705,9 @@ export class MediaStore {
       byte_length: number; media_type: string; pixel_width: number; pixel_height: number;
       cover_only: boolean; imported_cover_intent: unknown }>(
       `SELECT r.asset_id,r.id,r.byte_digest,r.byte_length,r.media_type,r.pixel_width,r.pixel_height,
-        a.cover_only,u.imported_cover_intent FROM media.representation r
-        JOIN media.asset a ON a.id=r.asset_id JOIN media.upload u ON u.id=r.upload_id
+        a.cover_only,u.imported_cover_intent
+        FROM media.asset a
+        JOIN media.upload u ON u.asset_id=a.id JOIN media.representation r ON r.upload_id=u.id
        WHERE r.upload_id = $1 AND r.kind = 'original'`, [upload])).rows[0];
     if (!row) throw new MediaMissing('activated original is unavailable');
     const importedCover = row.imported_cover_intent == null ? null
@@ -688,7 +716,23 @@ export class MediaStore {
     if (row.cover_only !== (importedCover !== null)) {
       throw new MediaUnavailable('imported cover intent is unavailable');
     }
-    if (importedCover) await verifyImportedCoverEvidence(this.pool, importedCover);
+    const transactionFence = async (client: PoolClient) => {
+      // Read state only after acquiring the owner lock: a waiter must observe
+      // an erasure that committed while the Content save was delayed.
+      await client.query('SELECT id FROM media.asset WHERE id=$1 FOR SHARE', [row.asset_id]);
+      const current = (await client.query<{ lifecycle: string; availability: string;
+        current_epoch: string; upload_epoch: string }>(`SELECT s.lifecycle,r.availability,
+          s.erasure_epoch::text AS current_epoch,u.erasure_epoch::text AS upload_epoch
+        FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head
+        JOIN media.upload u ON u.asset_id=a.id
+        JOIN media.representation r ON r.upload_id=u.id AND r.asset_id=a.id
+        WHERE a.id=$1 AND u.id=$2 AND r.id=$3 AND r.kind='original' AND u.status='activated'
+        FOR SHARE OF u,r`, [row.asset_id, upload, row.id])).rows[0];
+      if (!current || current.lifecycle !== 'active' || current.availability !== 'available'
+        || current.current_epoch !== current.upload_epoch)
+        throw new MediaStale('activated original is no longer current');
+      if (importedCover) await verifyImportedCoverEvidence(client, importedCover);
+    };
     const operationId = `media-asset-revision:${upload}`;
     const manifest = assetManifest(row.asset_id, { id: row.id, sha256: row.byte_digest,
       byteLength: row.byte_length, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height },
@@ -696,15 +740,26 @@ export class MediaStore {
     const attempts = [0, 1, 2, 3].map(attempt => attempt ? `${operationId}:${attempt}` : operationId);
     for (;;) {
       // A stale attempt keeps its receipt; each retry uses the next derived operation.
-      const receipts = await this.pool.query<{ operation_id: string; outcome: string; revision_id: string | null }>(
-        `SELECT operation_id, outcome, revision_id FROM content.receipt
-         WHERE operation_id = ANY($1::text[]) AND action = 'draft.save'`, [attempts]);
-      const done = receipts.rows.find(receipt => receipt.outcome === 'succeeded' && receipt.revision_id);
+      const receipts = await transaction(this.pool, async client => {
+        await transactionFence(client);
+        const result = await client.query<{ operation_id: string; outcome: string; revision_id: string | null }>(
+          `SELECT operation_id, outcome, revision_id FROM content.receipt
+           WHERE operation_id = ANY($1::text[]) AND action = 'draft.save'`, [attempts]);
+        const done = result.rows.find(receipt => receipt.outcome === 'succeeded' && receipt.revision_id);
+        if (done) {
+          const revision = (await client.query<{ availability: string }>(
+            'SELECT availability FROM content.revision WHERE id=$1 FOR SHARE', [done.revision_id])).rows[0];
+          if (revision?.availability !== 'available') throw new MediaStale('asset revision is no longer available');
+        }
+        return result.rows;
+      });
+      const done = receipts.find(receipt => receipt.outcome === 'succeeded' && receipt.revision_id);
       if (done) {
-        await this.repairImportedCoverProjection(done.revision_id!);
+        if (!await this.repairImportedCoverProjection(done.revision_id!))
+          throw new MediaStale('asset revision is no longer available');
         return { revision: done.revision_id!, replayed: true };
       }
-      const next = attempts.find(id => !receipts.rows.some(receipt => receipt.operation_id === id));
+      const next = attempts.find(id => !receipts.some(receipt => receipt.operation_id === id));
       if (!next) break;
       const head = (await this.pool.query<{ draft_head: string | null }>(
         'SELECT draft_head FROM content.variant WHERE id = $1', [assetVariant(row.asset_id)])).rows[0];
@@ -713,27 +768,38 @@ export class MediaStore {
           language: { kind: 'zxx' }, direction: 'none' },
         expectedHead: head?.draft_head ?? null, model: 'media-asset-v1', sourceRevision: null,
         provenance: { kind: 'media-upload-activation-v1', upload, representation: row.id },
-        serializedJson: manifest });
+        serializedJson: manifest }, transactionFence);
       if (saved.outcome === 'succeeded' && saved.revisionId) {
-        await this.repairImportedCoverProjection(saved.revisionId);
+        if (!await this.repairImportedCoverProjection(saved.revisionId))
+          throw new MediaStale('asset revision is no longer available');
         return { revision: saved.revisionId, replayed: saved.replayed };
       }
     }
     throw new MediaStale('asset head kept moving');
   }
 
-  /** Rebuild the derived source lookup only from a sealed, available owner manifest. */
+  /** Validate the available owner manifest and repair its source lookup when present.
+   * False means recording is refused, including for an ordinary erased asset. */
   async repairImportedCoverProjection(assetRevision: string): Promise<boolean> {
     if (!uuid.test(assetRevision)) throw new MediaInvalid('invalid asset revision id');
     return transaction(this.pool, async client => {
+      // Erasure takes the asset lock before clearing its derived lookups. Keep
+      // that order, then hold the exact revision and original through repair.
+      await client.query(`SELECT a.id FROM media.asset a JOIN content.revision v ON v.variant_id=a.variant_id
+        WHERE v.id=$1 FOR SHARE OF a`, [assetRevision]);
+      await client.query('SELECT id FROM content.revision WHERE id=$1 FOR SHARE', [assetRevision]);
+      await client.query(`SELECT p.id FROM media.representation p JOIN media.asset a ON a.id=p.asset_id
+        JOIN content.revision v ON v.variant_id=a.variant_id
+        WHERE v.id=$1 AND p.id::text=v.body->'representations'->0->>'id' FOR SHARE OF p`, [assetRevision]);
       const result = await client.query<{ model: string; availability: string; body: unknown;
         asset_id: string; cover_only: boolean; lifecycle: string; representation_id: string | null;
         original_digest: string | null; original_length: number | null; original_media_type: string | null;
-        representation_availability: string | null; imported_cover_intent: unknown }>(`
+        representation_availability: string | null; imported_cover_intent: unknown;
+        current_epoch: string; upload_epoch: string | null }>(`
         SELECT v.model,v.availability,v.body,a.id AS asset_id,a.cover_only,s.lifecycle,
           p.id AS representation_id,p.byte_digest AS original_digest,p.byte_length AS original_length,
           p.media_type AS original_media_type,p.availability AS representation_availability,
-          u.imported_cover_intent
+          u.imported_cover_intent,s.erasure_epoch::text AS current_epoch,u.erasure_epoch::text AS upload_epoch
         FROM content.revision v JOIN media.asset a ON a.variant_id=v.variant_id
         JOIN media.asset_state s ON s.id=a.state_head
         LEFT JOIN media.representation p ON p.asset_id=a.id AND p.kind='original'
@@ -742,8 +808,9 @@ export class MediaStore {
         WHERE v.id=$1`, [assetRevision]);
       const row = result.rows[0];
       if (!row) throw new MediaUnavailable('asset revision is unavailable');
-      if (row.availability !== 'available' || row.lifecycle === 'erased'
-        || row.representation_availability === 'erased') {
+      if (row.availability !== 'available' || row.lifecycle !== 'active'
+        || row.representation_availability === 'erased'
+        || (row.upload_epoch !== null && row.current_epoch !== row.upload_epoch)) {
         await client.query('DELETE FROM media.imported_cover_revision WHERE asset_revision_id=$1', [assetRevision]);
         return false;
       }
@@ -769,7 +836,7 @@ export class MediaStore {
           throw new MediaUnavailable('cover-only asset revision lacks provenance');
         }
         await client.query('DELETE FROM media.imported_cover_revision WHERE asset_revision_id=$1', [assetRevision]);
-        return false;
+        return true;
       }
       const uploadIntent = validateImportedCoverProvenance(row.imported_cover_intent, {
         sha256: row.original_digest, byteLength: row.original_length, mediaType: row.original_media_type,

@@ -91,7 +91,7 @@ async function storeCover(fixture: CoverFixture, asset: string | null = null) {
   const actingSubject = iri(randomUUID());
   const reserved = await store.reserveUpload(admission(input, randomUUID(), actingSubject), input);
   const settled = await store.settleUpload(reserved.upload, { status: 'activated', sha256: sha(fixture.bytes),
-    byteLength: fixture.bytes.byteLength, mediaType: 'image/png', width: 640, height: 480 });
+    byteLength: fixture.bytes.byteLength, mediaType: 'image/png', width: 640, height: 480 }, async () => sha(fixture.bytes));
   const revision = await store.recordAssetRevision(reserved.upload);
   return { store, input, reserved, settled, revision, actingSubject };
 }
@@ -158,7 +158,7 @@ test('replacement cannot clear imported cover purpose', async () => {
 
   const reserved = await first.store.reserveUpload(admission(replacement, randomUUID(), first.actingSubject), replacement);
   await first.store.settleUpload(reserved.upload, { status: 'activated', sha256: sha(secondFixture.bytes),
-    byteLength: secondFixture.bytes.byteLength, mediaType: 'image/png', width: 640, height: 480 });
+    byteLength: secondFixture.bytes.byteLength, mediaType: 'image/png', width: 640, height: 480 }, async () => sha(secondFixture.bytes));
   const revision = await first.store.recordAssetRevision(reserved.upload);
   const body = (await pool.query<{ body: Record<string, unknown> }>(
     'SELECT body FROM content.revision WHERE id=$1', [revision.revision])).rows[0]!.body;
@@ -176,12 +176,12 @@ test('provenance reconstruction keeps digests and refuses absent evidence', asyn
   const reserved = await store.reserveUpload(admission(input), input);
   const verdict = { status: 'activated' as const, sha256: sha(fixture.bytes), byteLength: fixture.bytes.byteLength,
     mediaType: 'image/png' as const, width: 640, height: 480 };
-  await store.settleUpload(reserved.upload, verdict);
+  await store.settleUpload(reserved.upload, verdict, async () => verdict.sha256);
 
   const save = content.saveDraft.bind(content);
   let loseReply = true;
-  content.saveDraft = async command => {
-    const result = await save(command);
+  content.saveDraft = async (command, transactionFence) => {
+    const result = await save(command, transactionFence);
     if (loseReply) { loseReply = false; throw new Error('simulated lost Content reply'); }
     return result;
   };
@@ -249,7 +249,7 @@ test('ordinary non-imported assets keep the legacy manifest and replacement beha
   const input = ordinaryInput(fixture);
   const reserved = await store.reserveUpload(admission(input), input);
   await store.settleUpload(reserved.upload, { status: 'activated', sha256: sha(fixture.bytes),
-    byteLength: fixture.bytes.byteLength, mediaType: 'image/png', width: 640, height: 480 });
+    byteLength: fixture.bytes.byteLength, mediaType: 'image/png', width: 640, height: 480 }, async () => sha(fixture.bytes));
   const revision = await store.recordAssetRevision(reserved.upload);
   const body = (await pool.query<{ body: Record<string, unknown> }>(
     'SELECT body FROM content.revision WHERE id=$1', [revision.revision])).rows[0]!.body;

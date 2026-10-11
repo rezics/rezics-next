@@ -183,23 +183,28 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
   }
   const digest = sha256(bytes);
   let verdict: Parameters<MediaStore['settleUpload']>[1];
+  let persist: (() => Promise<string>) | undefined;
   if (bytes.length !== upload.byteLength) verdict = { status: 'rejected', reason: 'size-mismatch' };
   else if (upload.sha256 && digest !== upload.sha256) verdict = { status: 'rejected', reason: 'digest-mismatch' };
   else {
     try {
       const image = verifyImage(bytes, upload.mediaType);
-      // Stage in quarantine, read back through the adapter, then create the active object.
-      const quarantine = media.objects(`${upload.quarantineKey}/`);
-      const staged = await quarantine.get(await quarantine.put(bytes));
-      await media.objects(upload.objectNamespace).put(staged);
       verdict = { status: 'activated', sha256: digest, byteLength: bytes.length,
         mediaType: image.mediaType, width: image.width, height: image.height };
+      persist = async () => {
+        // The owner holds the asset and reservation fence across both writes.
+        const quarantine = media.objects(`${upload.quarantineKey}/`);
+        const staged = await quarantine.get(await quarantine.put(bytes));
+        if (staged.length !== bytes.length || sha256(staged) !== digest)
+          throw new MediaUnavailable('quarantined media integrity differs');
+        return media.objects(upload.objectNamespace).put(staged);
+      };
     } catch (error) {
       if (!(error instanceof ImageFormatRejected)) throw error;
       verdict = { status: 'rejected', reason: 'format-rejected' };
     }
   }
-  return finish(media, uploadId, await media.store.settleUpload(uploadId, verdict));
+  return finish(media, uploadId, await media.store.settleUpload(uploadId, verdict, persist));
 }
 
 async function finish(media: MediaDependencies, uploadId: string,
