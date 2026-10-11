@@ -3,7 +3,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
-  renameSync, readlinkSync, realpathSync, rmSync, statSync, lstatSync, writeFileSync } from 'node:fs';
+  renameSync, readlinkSync, realpathSync, rmSync, statSync, lstatSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -4161,6 +4161,32 @@ export function addGateWorktree(mainRoot: string, directory: string, commit: str
   mkdirSync(join(directory, '.temp'), { recursive: true });
 }
 
+/** True when the lockfile or a dependency patch is newer than the worktree's last install: a rebase rewrote them. */
+export function dependencyInstallIsStale(worktree: string): boolean {
+  const state = join(worktree, 'node_modules', '.yarn-state.yml');
+  if (!existsSync(state)) return false;
+  const installedAt = statSync(state).mtimeMs;
+  const patches = join(worktree, '.yarn', 'patches');
+  const inputs = [join(worktree, 'yarn.lock'),
+    ...(existsSync(patches) ? readdirSync(patches).map(name => join(patches, name)) : [])];
+  return inputs.some(file => existsSync(file) && statSync(file).mtimeMs > installedAt);
+}
+
+/** A rebase past a dependency change leaves the worktree's installed packages behind the tree it now holds,
+ * and the gate would test new code against old packages. Install again before any gate runs. */
+function reinstallStaleDependencies(worktree: string): string | undefined {
+  if (!dependencyInstallIsStale(worktree)) return;
+  console.log('Pre-merge install: the lockfile or a dependency patch changed under this branch; running task install');
+  const install = spawnSync('task', ['install'], { cwd: worktree, encoding: 'utf8', timeout: 300_000 });
+  if (install.status === 0) {
+    // Yarn leaves its state file alone when nothing changed; mark the install as current either way.
+    const now = new Date();
+    utimesSync(join(worktree, 'node_modules', '.yarn-state.yml'), now, now);
+    return;
+  }
+  return `Dependency install failed in ${worktree}; not merging:\n${`${install.stdout ?? ''}\n${install.stderr ?? ''}`.trim().slice(-2000)}`;
+}
+
 /** Type-checks the workspaces the branch touched before the unit gate, within the unit gate's per-side budget.
  * `only` narrows a rerun to workspaces whose `main` sources changed under the branch. */
 async function preMergeTypecheckGate(worktree: string, mainRoot: string, before: string, files: readonly string[],
@@ -4881,6 +4907,8 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   // budget starts inside that work, after the wait.
   const onLane = <T>(work: () => Promise<T>): Promise<T> => withGateLane(() => work(), { command: laneCommand });
   const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
+    const installed = reinstallStaleDependencies(merge.worktree);
+    if (installed) return installed;
     const generated = regenerateGeneratedOutputs(merge);
     if (generated) return generated;
     const run = () => typecheck(merge).then(refusal => refusal ?? unitGate(merge));
