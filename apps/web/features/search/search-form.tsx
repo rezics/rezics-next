@@ -21,10 +21,10 @@ export interface RealmOption { id: string; label: string; lang?: string }
  * Enter that commits an IME composition (Chinese, Japanese, Korean input)
  * never submits.
  */
-export function SearchForm({ state, realm, load, locale, messages }: {
+export function SearchForm({ state, realm, signedIn = true, load, locale, messages }: {
   state: SearchState; realm: RealmOption | null;
   /** Title suggestions; Main's typeahead through the BFF by default, a fixture in stories. */
-  load?: TypeaheadLoader;
+  signedIn?: boolean; load?: TypeaheadLoader;
   locale: UiLocale; messages: SearchMessages;
 }) {
   const t = materializeData(messages, { locale });
@@ -74,7 +74,7 @@ export function SearchForm({ state, realm, load, locale, messages }: {
     <div className="relative flex-1">
       <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-4 top-1/2 z-10 size-5 -translate-y-1/2
         text-muted-foreground" />
-      <TypeaheadInput ref={input} key={state.phrase} locale={locale} load={load} name="q" type="search"
+      <TypeaheadInput ref={input} key={state.phrase} locale={locale} signedIn={signedIn} load={load} name="q" type="search"
         defaultValue={state.phrase} required minLength={PHRASE.min} maxLength={PHRASE.max} aria-label={t.phraseLabel}
         placeholder={t.placeholder} autoComplete="off" enterKeyHint="search" onKeyDown={keyDown}
         onCompositionStart={() => { composing.current = true; }}

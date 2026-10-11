@@ -13,6 +13,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
+import { readPublicRealmChoices } from '../discover/browser.ts';
+import { readBrowserTypeahead } from '../search/browser.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
@@ -139,13 +141,7 @@ export function PostComposer({
       void (async () => {
         setCommunityState('loading');
         try {
-          const { data } = await browserMainApi(undefined, { anonymous: true }).v1.realms.get({
-            query: {
-              limit: 20,
-              sort: 'activity',
-              ...(communityQuery.trim() ? { q: communityQuery.trim() } : {}),
-            },
-          });
+          const { data } = await readPublicRealmChoices(communityQuery.trim());
           if (!current) return;
           if (!data) {
             setCommunityState('failed');
@@ -176,9 +172,7 @@ export function PostComposer({
         setWorkState('loading');
         try {
           // The server personalises this read from the credential.
-          const { data } = await browserMainApi().v1.search.typeahead.get({
-            query: { prefix: workQuery.trim() },
-          });
+          const { data } = await readBrowserTypeahead(workQuery.trim());
           if (!current) return;
           if (!data) {
             setWorkState('failed');

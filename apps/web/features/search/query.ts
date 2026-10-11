@@ -10,10 +10,10 @@ export class SearchError extends Error {
 
 export type SearchLoader = (continuation: SearchContinuation | undefined) => Promise<SearchLoaded>;
 
-/** Later pages through the BFF, which carries the session and so the same mutes as page one. */
-export function bffSearch(state: SearchState, language: string, actingSubject?: string): SearchLoader {
+/** Later pages keep page one's public or viewer transport, including delegated names. */
+export function bffSearch(state: SearchState, language: string, actingSubject?: string, signedIn = true): SearchLoader {
   return continuation => {
-    const main = browserMainApi();
+    const main = browserMainApi(undefined, { anonymous: !signedIn });
     return readSearchPage({ search: main, names: main }, state, { language, actingSubject, continuation });
   };
 }
@@ -24,9 +24,9 @@ export function bffSearch(state: SearchState, language: string, actingSubject?: 
  * for a restart when it moves.
  */
 export function searchPagesOptions(state: SearchState, language: string, actingSubject: string | undefined,
-  first: SearchResultPage, load: SearchLoader) {
+  first: SearchResultPage, load: SearchLoader, signedIn = true) {
   return infiniteQueryOptions({
-    queryKey: ['public-search', state, language, actingSubject ?? null, first.indexGeneration, first.sequence],
+    queryKey: ['public-search', state, language, actingSubject ?? null, signedIn, first.indexGeneration, first.sequence],
     queryFn: async ({ pageParam }) => {
       const read = await load(pageParam ?? undefined);
       if (!read.ok) throw new SearchError(read.failure);

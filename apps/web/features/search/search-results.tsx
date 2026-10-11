@@ -181,7 +181,7 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
   const { state, scopeLabel, signedIn, avatarQuery, locale } = props;
   const client = useQueryClient();
   const options = searchPagesOptions(state, locale, props.actingSubject, first,
-    props.load ?? bffSearch(state, locale, props.actingSubject));
+    props.load ?? bffSearch(state, locale, props.actingSubject, signedIn), signedIn);
   const pages = useInfiniteQuery(options);
   const list = useRef<HTMLOListElement>(null);
   const loaded = pages.data?.pages ?? [first];

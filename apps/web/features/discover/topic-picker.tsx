@@ -35,9 +35,10 @@ export function topicLoader(
   locale: UiLocale,
   actingSubject?: string,
   realm?: string,
+  signedIn = true,
 ): EntityPickerLoad<TopicItem> {
   return async ({ q, cursor }) => {
-    const page = await discoveryApi(browserMainApi(), locale, actingSubject).concepts({
+    const page = await discoveryApi(browserMainApi(undefined, { anonymous: !signedIn }), locale, actingSubject).concepts({
       q,
       ...(cursor ? { cursor } : {}),
       ...(realm ? { realm } : {}),
@@ -51,6 +52,7 @@ export function TopicPicker({
   value,
   onChange,
   actingSubject,
+  signedIn = true,
   realm,
   load,
   max = 8,
@@ -61,6 +63,7 @@ export function TopicPicker({
   value: EntityPickerSelection<TopicItem>[];
   onChange: (value: EntityPickerSelection<TopicItem>[]) => void;
   actingSubject?: string;
+  signedIn?: boolean;
   realm?: string;
   load?: EntityPickerLoad<TopicItem>;
   max?: number;
@@ -69,10 +72,10 @@ export function TopicPicker({
 }) {
   const t = browseMessages[locale];
   const counts = materializeData(browseCounts[locale], { locale });
-  const read = load ?? topicLoader(locale, actingSubject, realm);
+  const read = load ?? topicLoader(locale, actingSubject, realm, signedIn);
   return (
     <EntityPicker
-      key={`${locale}:${actingSubject ?? ''}:${realm ?? ''}`}
+      key={`${locale}:${signedIn}:${actingSubject ?? ''}:${realm ?? ''}`}
       label={t.topics}
       placeholder={t.topics}
       locale={locale}

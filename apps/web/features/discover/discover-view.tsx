@@ -1,7 +1,7 @@
 import { buttonVariants } from '@rezics/ui/button';
 import type { EntityPickerLoad } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
-import { DiscoverBrowseConditions } from '../query/condition-bar.tsx';
+import { BrowseConditions } from './browse-conditions.tsx';
 import { browseCategories } from '../catalogue/registry.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
@@ -70,6 +70,7 @@ export function DiscoverView({
   results,
   chapterText,
   actingSubject,
+  signedIn = true,
   avatarQuery,
   locale,
   topicLoad,
@@ -94,10 +95,11 @@ export function DiscoverView({
     <PageContainer className="grid min-w-0 gap-7">
       <header className="grid min-w-0 gap-4">
         <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{copy.title}</h1>
-        <DiscoverBrowseConditions
+        <BrowseConditions
           state={state}
           locale={locale}
           actingSubject={actingSubject}
+          signedIn={signedIn}
           topics={topics}
           load={topicLoad}
         />

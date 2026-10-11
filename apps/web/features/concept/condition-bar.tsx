@@ -2,6 +2,8 @@
 
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
+import { topicLoader } from '../discover/topic-picker.tsx';
+import { iriOf } from '../discover/scope.ts';
 import { ConditionBar as SharedConditionBar, type ValueSearch }
   from '../query/condition-bar.tsx';
 import type { ConceptMessages } from './messages.ts';
@@ -13,9 +15,10 @@ export type ConceptSearch = ValueSearch;
 
 /** A Concept page edits the same Query Conditions while keeping its page Concept fixed. */
 export function ConditionBar({ state, page, values, suggestions, maxValues = DEFAULT_MAX_VALUES, search,
-  locale, actingSubject, messages }: {
+  locale, signedIn = true, actingSubject, messages }: {
   state: ConceptState; page: BarValue; values: readonly BarValue[]; suggestions: readonly BarValue[];
-  maxValues?: number; search?: ConceptSearch; locale: UiLocale; actingSubject?: string; messages: ConceptMessages;
+  maxValues?: number; search?: ConceptSearch; locale: UiLocale; signedIn?: boolean;
+  actingSubject?: string; messages: ConceptMessages;
 }) {
   const t = materializeData(messages, { locale });
   const named = [page, ...values, ...suggestions].flatMap(value => value.name ? [{ id: value.id,
@@ -23,9 +26,12 @@ export function ConditionBar({ state, page, values, suggestions, maxValues = DEF
   const offered = suggestions.flatMap(value => value.name ? [{ id: value.id,
     name: value.name.value, language: value.name.language }] : []);
   return <div className="grid gap-2">
-    <SharedConditionBar selection={{ include: [state.concept, ...state.include], exclude: state.exclude,
+    <SharedConditionBar key={`${signedIn}:${actingSubject ?? ''}`}
+      selection={{ include: [state.concept, ...state.include], exclude: state.exclude,
       match: state.match }} fixed={state.concept} values={named} suggestions={offered}
       maxValues={maxValues} search={search} actingSubject={actingSubject}
+      load={search ? undefined : topicLoader(locale, actingSubject,
+        state.scope.kind === 'realm' ? iriOf(state.scope.realm) : undefined, signedIn)}
       realm={state.scope.kind === 'realm' ? state.scope.realm : null} locale={locale}
       href={next => conceptHref({ ...state, include: next.include.filter(id => id !== state.concept),
         exclude: next.exclude, match: next.match })} />

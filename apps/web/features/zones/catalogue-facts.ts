@@ -1,5 +1,6 @@
 import type { ZoneCatalogueFacts, ZoneText } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
+import { mainApiWithToken } from '../api/main.ts';
 import { readEntityProjection, readStatements, sectionOf } from '../entity-page/read.ts';
 import type { StatementItem, StatementPage } from '../entity-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
@@ -177,7 +178,8 @@ export interface PublicationYearRow { id: string; year: number; statement: strin
 /** One page of the publication-year template, newest first. A failed read is unavailable, never an empty year. */
 export async function readPublicationYears(parameters: { fromYear?: number; toYear?: number },
   cursor?: string): Promise<Loaded<{ items: PublicationYearRow[]; nextCursor: string | null }>> {
-  const { main } = await reader();
+  // The year facet is intersected with an anonymous Realm roster, including continuations.
+  const main = mainApiWithToken(undefined);
   const answer = await settle(async () => {
     const result = await main.v1.query.post({
       profile: 'template-query-v1', query: 'https://rezics.com/query/work-publication-years', revision: 1,

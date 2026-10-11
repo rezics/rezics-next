@@ -146,7 +146,7 @@ export function SearchPage({ parsed, realm, initial, fallback, signedIn, actingS
     actingSubject={actingSubject} actions={readerActions}><PageContainer className="grid gap-6">
     <header className="grid gap-4">
       <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{t.title}</h1>
-      <SearchForm state={state} realm={realm} load={suggest} locale={locale} messages={messages} />
+      <SearchForm state={state} realm={realm} signedIn={signedIn} load={suggest} locale={locale} messages={messages} />
       {searching ? <p className="text-pretty break-words text-lg">{state.scope.kind === 'realm'
         ? t.resultsForIn({ phrase: state.phrase, scope: scopeLabel }) : t.resultsFor({ phrase: state.phrase })}</p> : null}
     </header>

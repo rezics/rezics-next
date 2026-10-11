@@ -8,7 +8,6 @@ import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useId, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { browserMainApi } from '../api/browser.ts';
 import { WorkGrid } from '../catalogue/work-shelf.tsx';
 import { discoveryWork } from '../discover/cards.ts';
 import { Notice } from '../discover/notice.tsx';
@@ -16,17 +15,13 @@ import Link from '../shell/localized-link.tsx';
 import type { ConceptMessages } from './messages.ts';
 import { type ConceptState, conceptHref } from './state.ts';
 import type { ConceptWorksPage, Loaded, ReadFailure } from './types.ts';
-import { readConceptWorks } from './works-read.ts';
+import { conceptWorksLoader } from './browser.ts';
 
 type Text = ReturnType<typeof materializeData<ConceptMessages>>;
 
 /** Reads a page, the first again after "Start over"; the BFF by default, a fixture in stories. */
 export type ConceptWorksLoader = (state: ConceptState, locale: UiLocale, cursor?: string) =>
   Promise<Loaded<ConceptWorksPage>>;
-// publicWorkRead applies age and category opt-ins from the bearer. Show more keeps the session
-// the server used for the first page.
-const bffWorks: ConceptWorksLoader = (state, locale, cursor) =>
-  readConceptWorks(browserMainApi(), state, locale, cursor);
 
 class ReadError extends Error {
   constructor(readonly failure: ReadFailure) { super(`Concept Works read failed: ${failure}`); }
@@ -56,9 +51,9 @@ function failureNotice(failure: ReadFailure, t: Text): { icon: LucideIcon; title
  * then "Show more" through the BFF. A list that cannot load says why in its
  * place and offers the way back to the Concept's own Works.
  */
-export function ConceptWorks({ state, name, initial, avatarQuery, load = bffWorks, locale, messages }: {
+export function ConceptWorks({ state, name, initial, avatarQuery, signedIn = true, load, locale, messages }: {
   state: ConceptState; name: string; initial: Loaded<ConceptWorksPage>; avatarQuery?: string;
-  load?: ConceptWorksLoader; locale: UiLocale; messages: ConceptMessages;
+  signedIn?: boolean; load?: ConceptWorksLoader; locale: UiLocale; messages: ConceptMessages;
 }) {
   const t = materializeData(messages, { locale });
   const headingId = useId();
@@ -91,19 +86,20 @@ export function ConceptWorks({ state, name, initial, avatarQuery, load = bffWork
     </section>;
   }
   return <Pages state={state} first={initial.data} filtered={filtered} plain={plain} name={name} heading={heading}
-    avatarQuery={avatarQuery} load={load} locale={locale} messages={messages} headingId={headingId} />;
+    avatarQuery={avatarQuery} signedIn={signedIn} load={load ?? conceptWorksLoader(signedIn)}
+    locale={locale} messages={messages} headingId={headingId} />;
 }
 
-function Pages({ state, first, filtered, plain, name, heading, headingId, avatarQuery, load, locale, messages }: {
+function Pages({ state, first, filtered, plain, name, heading, headingId, avatarQuery, signedIn, load, locale, messages }: {
   state: ConceptState; first: ConceptWorksPage; filtered: boolean; plain: string; name: string;
   heading: (extra?: ReactNode) => ReactNode; headingId: string; avatarQuery?: string; load: ConceptWorksLoader;
-  locale: UiLocale; messages: ConceptMessages;
+  signedIn: boolean; locale: UiLocale; messages: ConceptMessages;
 }) {
   const t = materializeData(messages, { locale });
   const client = useQueryClient();
   const options = infiniteQueryOptions({
     // The first page's source position is in the key, so a fresh server render starts a new list.
-    queryKey: ['concept-works', state, locale, first.sourcePosition.dataEpoch, first.sourcePosition.sequence],
+    queryKey: ['concept-works', state, locale, signedIn, first.sourcePosition.dataEpoch, first.sourcePosition.sequence],
     queryFn: async ({ pageParam }) => {
       const read = await load(state, locale, pageParam ?? undefined);
       if (!read.ok) throw new ReadError(read.failure);

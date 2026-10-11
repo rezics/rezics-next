@@ -1,4 +1,5 @@
 import type { UiLocale } from '../../i18n/define.ts';
+import { browserMainApi } from '../api/browser.ts';
 import type { CatalogueWork } from '../catalogue/work.ts';
 import { discoveryWork } from '../discover/cards.ts';
 import { readDiscovery, readStandingContext } from '../discover/read.ts';
@@ -10,6 +11,11 @@ import { nearMatches, type Suggestion, suggestionPrefixes, type TypeaheadItem } 
 export interface SearchFallback { suggestions: Suggestion[]; popular: CatalogueWork[] }
 
 const POPULAR = 10;
+
+/** The browser fallback is public even beside a signed-in search's empty results. */
+export function bffSearchFallback(phrase: string, locale: UiLocale): Promise<SearchFallback> {
+  return readSearchFallback(browserMainApi(undefined, { anonymous: true }), phrase, locale);
+}
 
 async function typeahead(main: MainClient, prefix: string, language: string): Promise<TypeaheadItem[]> {
   try {

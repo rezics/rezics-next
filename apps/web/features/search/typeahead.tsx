@@ -9,7 +9,7 @@ import { type CompositionEvent, type FocusEvent, type InputEvent, type KeyboardE
   useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { browserMainApi } from '../api/browser.ts';
+import { readBrowserTypeahead } from './browser.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { typeLabel } from '../catalogue/types.ts';
 import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
@@ -20,12 +20,12 @@ import { typeaheadMessages } from './typeahead-messages.ts';
 /** Suggestions for one prefix; the stories and tests supply their own. */
 export type TypeaheadLoader = (prefix: string, locale: UiLocale) => Promise<TypeaheadItem[]>;
 
-const mainTypeahead: TypeaheadLoader = async (prefix, language) => {
-  // The server personalises this read from the credential.
-  const { data } = await browserMainApi().v1.search.typeahead.get({
-    query: { prefix, language } });
-  return data?.items ?? [];
-};
+export function browserTypeaheadLoader(signedIn: boolean): TypeaheadLoader {
+  return async (prefix, language) => {
+    const { data } = await readBrowserTypeahead(prefix, language, signedIn);
+    return data?.items ?? [];
+  };
+}
 
 /** A prefix worth asking for: one CJK character already names a title's start; Latin text needs two letters. */
 export function typeaheadPrefix(value: string): string | null {
@@ -66,9 +66,9 @@ const composingKey = (event: KeyboardEvent<HTMLInputElement>) =>
  * composes CJK text nothing is asked and no key is taken, so the reader sees
  * suggestions for the characters they commit, not for the romanization.
  */
-export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, onCompositionStart, onCompositionEnd,
+export function TypeaheadInput({ locale, signedIn = true, load, ref, onKeyDown, onCompositionStart, onCompositionEnd,
   onFocus, onBlur, onInput, className, ...props }: Omit<InputProps, 'role'> & {
-  locale: UiLocale; load?: TypeaheadLoader; ref?: Ref<HTMLInputElement>;
+  locale: UiLocale; signedIn?: boolean; load?: TypeaheadLoader; ref?: Ref<HTMLInputElement>;
 }) {
   const t = materializeData(typeaheadMessages[locale], { locale });
   const router = useRouter();
@@ -81,6 +81,15 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const asked = useRef(0);
   const answers = useRef(new Map<string, readonly TypeaheadItem[]>());
+  const read = load ?? browserTypeaheadLoader(signedIn);
+  useEffect(() => {
+    // Discard in-flight and cached suggestions when the reader changes audience.
+    asked.current++;
+    clearTimeout(timer.current);
+    answers.current.clear();
+    setItems([]);
+    setOpen(false);
+  }, [signedIn]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   function show(next: readonly TypeaheadItem[], typed = '') {
@@ -98,7 +107,8 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
     if (known) { show(known, prefix); return; }
     // Wait for a pause in typing; an answer to an older prefix is dropped.
     timer.current = setTimeout(() => {
-      load(prefix, locale).then(found => {
+      read(prefix, locale).then(found => {
+        if (request !== asked.current) return;
         answers.current.set(`${locale}\u0000${prefix}`, found);
         if (request === asked.current && !composing.current) show(found, prefix);
       }, () => { if (request === asked.current) show([]); });

@@ -27,6 +27,7 @@ export interface LoadedBrowse {
   results: BrowseResult<ListPage<ResourceCard>> | null;
   chapterText?: SearchLoaded | null;
   actingSubject?: string;
+  signedIn?: boolean;
   avatarQuery?: string;
   locale: UiLocale;
 }
@@ -78,6 +79,7 @@ export async function loadDiscoverState(
     results,
     chapterText,
     actingSubject: reader.actingSubject,
+    signedIn: reader.signedIn,
     avatarQuery: reader.avatarQuery,
   };
 }
