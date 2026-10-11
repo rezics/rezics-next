@@ -804,6 +804,128 @@ test('public home resolves published Showcase and unknown placeholders while dra
   } finally { await f.close(); }
 }, 120_000);
 
+test('Navigation and theme publish together with home Content; drafts, stale cuts and non-editors cannot change the public bundle', async () => {
+  const f = await fixture();
+  try {
+    const editorQuery = `?actingSubject=${encodeURIComponent(f.actor)}`;
+    const configuration = async () => f.json<{ revision: string; configuration: { presentation: ZonePresentation } }>(
+      await f.call('GET', `${f.path}/configuration${editorQuery}`), 200);
+    const presentation = async () => f.json<{ realm: string | null; presentation: ZonePresentation;
+      renderTokens: ZonePresentation['tokens']; navigation: Array<{ occurrence: string; segment: string }>;
+      home?: Home['page'] }>(await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null), 200);
+    const collection = nativeId();
+    await f.grant(`collection:edit:${collection}`, 'collection.edit');
+    await f.grant(`semantic:read:${collection}`, 'semantic.read');
+    await f.json(await f.call('POST', '/v1/collections', {
+      collection, name: 'Site references', disclosure: 'public', actingSubject: f.actor,
+    }), 201);
+    const first = await f.json<{ navigation: string; revision: string; occurrences: string[] }>(
+      await f.call('POST', `${f.path}/mounts`, {
+        expectedHead: f.navigationRevision, target: collection, routeSegment: 'library',
+        disclosure: 'public', actingSubject: f.actor,
+      }), 200);
+    const second = await f.json<{ revision: string; occurrences: string[] }>(
+      await f.call('POST', `${f.path}/mounts`, {
+        expectedHead: first.revision, target: collection, routeSegment: 'highlights',
+        disclosure: 'public', actingSubject: f.actor,
+      }), 200);
+    const changesPath = `/v1/compositions/${shortId(first.navigation)}/changes`;
+    const move = (expectedHead: string, occurrence: string) => ({
+      profile: 'zone-navigation', expectedHead, actingSubject: f.actor,
+      operations: [{ op: 'move', occurrence, parent: first.navigation, position: 'first' }],
+    });
+    const initialPage = f.selection.pages[0]!;
+    const initialPublication = await f.json<ZoneSitePublicationReceipt>(
+      await f.publish([initialPage], randomUUID(), undefined, second.revision), 201);
+    const before = await presentation();
+    expect(before.realm).toBeNull();
+    expect(before.presentation.tokens).toMatchObject({ density: 'comfortable', pageSurface: 'flat' });
+    expect(before.renderTokens).toMatchObject({ density: 'comfortable', pageSurface: 'flat' });
+    expect(before.navigation.map(item => item.segment)).toEqual(['library', 'highlights']);
+    expect(before.home).toMatchObject({ reference: { revisionId: initialPage.revisionId }, document: f.initialDocument });
+    const draftPresentation: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
+      tokens: { ...DEFAULT_ZONE_PRESENTATION.tokens, density: 'compact', pageSurface: 'cards' } };
+    const configured = await f.json<{ revision: string }>(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: initialPublication.revision, presentation: draftPresentation, actingSubject: f.actor,
+    }), 200);
+    expect((await configuration()).configuration.presentation.tokens).toEqual(draftPresentation.tokens);
+    expect(await presentation()).toEqual(before);
+    const document = fromPlainText('New published home', 'blocks');
+    const page = await f.save(document, initialPage.revisionId, initialPage.variantId);
+    expect(await presentation()).toEqual(before);
+    const reordered = await f.json<{ revision: string }>(await f.call('POST', changesPath,
+      move(second.revision, second.occurrences[0]!)), 200);
+    const draftNavigation = await f.json<{ revision: string; mounts: Array<{ occurrence: string }> }>(
+      await f.call('GET', `${f.path}${editorQuery}`), 200);
+    expect(draftNavigation.revision).toBe(reordered.revision);
+    expect(draftNavigation.mounts.map(item => item.occurrence)).toEqual([second.occurrences[0]!, first.occurrences[0]!]);
+    expect(await presentation()).toEqual(before);
+
+    const staleConfiguration = await f.json<{ code: string }>(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: initialPublication.revision, presentation: DEFAULT_ZONE_PRESENTATION, actingSubject: f.actor,
+    }), 409);
+    expect(staleConfiguration.code).toBe('stale_zone_head');
+    expect((await f.json<{ code: string }>(await f.publish([page], randomUUID(),
+      initialPublication.revision, reordered.revision), 409)).code).toBe('stale_zone_head');
+    expect((await f.json<{ code: string }>(await f.publish([page], randomUUID(),
+      configured.revision, second.revision), 409)).code).toBe('stale_zone_head');
+    expect((await f.json<{ code: string }>(await f.call('POST', changesPath,
+      move(second.revision, first.occurrences[0]!)), 409)).code).toBe('stale_composition_head');
+    expect((await configuration()).revision).toBe(configured.revision);
+    expect(await presentation()).toEqual(before);
+
+    const published = await f.json<ZoneSitePublicationReceipt>(
+      await f.publish([page], randomUUID(), configured.revision, reordered.revision), 201);
+    expect(published).toMatchObject({ outcome: 'succeeded', themeRevision: configured.revision,
+      navigationRevision: reordered.revision, routesRevision: reordered.revision, pages: boundPages([page]) });
+    const delivered = await presentation();
+    expect(delivered.realm).toBeNull();
+    expect(delivered.presentation.tokens).toEqual(draftPresentation.tokens);
+    expect(delivered.renderTokens).toMatchObject(draftPresentation.tokens);
+    expect(delivered.navigation.map(item => item.segment)).toEqual(['highlights', 'library']);
+    expect(delivered.navigation.map(item => item.occurrence)).toEqual([second.occurrences[0]!, first.occurrences[0]!]);
+    expect(delivered.home).toMatchObject({ reference: { revisionId: page.revisionId }, document });
+    expect((await f.home()).page).toEqual(delivered.home);
+
+    const furtherConfiguration = await f.json<{ revision: string }>(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: published.revision, presentation: DEFAULT_ZONE_PRESENTATION, actingSubject: f.actor,
+    }), 200);
+    const furtherDocument = fromPlainText('Private next home', 'blocks');
+    const furtherPage = await f.save(furtherDocument, page.revisionId, page.variantId);
+    const furtherNavigation = await f.json<{ revision: string }>(await f.call('POST', changesPath,
+      move(reordered.revision, first.occurrences[0]!)), 200);
+    expect((await configuration()).configuration.presentation.tokens).toEqual(DEFAULT_ZONE_PRESENTATION.tokens);
+    expect((await f.json<{ mounts: Array<{ occurrence: string }> }>(await f.call('GET', `${f.path}${editorQuery}`), 200))
+      .mounts.map(item => item.occurrence)).toEqual([first.occurrences[0]!, second.occurrences[0]!]);
+    expect((await f.json<{ body: { document: DocumentSnapshot } }>(await f.exact(furtherPage.revisionId, true), 200))
+      .body.document).toEqual(furtherDocument);
+    expect(await presentation()).toEqual(delivered);
+    expect((await f.home()).page).toEqual(delivered.home);
+
+    const deniedConfiguration = await f.json<{ code: string }>(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: furtherConfiguration.revision, presentation: draftPresentation, actingSubject: f.actor,
+    }, randomUUID(), f.account.tokenB), 403);
+    expect(deniedConfiguration.code).toBe('authority_denied');
+    expect((await f.call('POST', changesPath, move(furtherNavigation.revision, second.occurrences[0]!),
+      randomUUID(), f.account.tokenB)).status).toBe(403);
+    expect((await f.call('POST', '/v1/content-drafts', {
+      profile: 'content-text-v1', resourceId: f.zone, variantId: page.variantId,
+      expectedHead: furtherPage.revisionId, document: fromPlainText('Unauthorized home', 'blocks'),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor,
+    }, randomUUID(), f.account.tokenB)).status).toBe(403);
+    expect((await f.call('POST', `${f.path}/site-publications`, {
+      expectedHead: furtherConfiguration.revision, routesRevision: furtherNavigation.revision,
+      navigationRevision: furtherNavigation.revision, pages: [furtherPage], actingSubject: f.actor,
+    }, randomUUID(), f.account.tokenB)).status).toBe(403);
+    expect((await configuration()).revision).toBe(furtherConfiguration.revision);
+    expect((await f.json<{ revision: string }>(await f.call('GET', `${f.path}${editorQuery}`), 200)).revision)
+      .toBe(furtherNavigation.revision);
+    expect((await f.json<{ draft: { revisionId: string } }>(
+      await f.call('GET', `${f.path}/showcase-editor${editorQuery}`), 200)).draft.revisionId).toBe(furtherPage.revisionId);
+    expect(await presentation()).toEqual(delivered);
+  } finally { await f.close(); }
+}, 120_000);
+
 test('publication proofs cover the full bounded page set and fail closed on an incomplete receipt', async () => {
   const f = await fixture();
   try {
