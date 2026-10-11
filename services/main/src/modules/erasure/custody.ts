@@ -8,7 +8,9 @@ import type { HistoricalReceiptResult } from '../outbox/receipt-custody.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import { readExactModelGeneration } from '../semantic/model-custody.ts';
 import { GRAPHS, RV, hash, iri } from '../work/activate.ts';
-import { MAX_ERASURE_TARGETS, readErasure } from './journal.ts';
+import { isValidErasureTargetList, readErasure } from './journal.ts';
+import { ERASURE_TARGET_OWNERS } from './schema.ts';
+import { isGraphErasureKind } from './revision-kind.ts';
 import { canonicalErasureTargets, GraphErasureConflict, GraphErasureUnavailable, graphErasureReceipt,
   type GraphSuppressionProof, type HeldGraphErasureReplay } from './graph.ts';
 import { protectedObjectDigests } from './replay-objects.ts';
@@ -220,19 +222,38 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
           throw new Error('erased command custody differs from its journal identity');
         }
         const journal = await readErasure(relayClient, exact.erasureId);
-        const targetKeys = journal.targets.map(target => `${target.owner}\0${target.kind}\0${target.ref}`);
-        const revisionKinds = new Set(['content_revision', 'semantic_revision', 'resource',
-          'text_contribution_draft', 'release_revision', 'work_head', 'composition_revision']);
+        const ownerPairsValid = journal.targets.every(target => Object.hasOwn(ERASURE_TARGET_OWNERS, target.kind)
+          && ERASURE_TARGET_OWNERS[target.kind] === target.owner);
         const revisionTarget = journal.targets.some(target => target.ref === revision
-          && ((target.owner === 'content' && target.kind === 'content_revision')
-            || (target.owner === 'graph' && revisionKinds.has(target.kind))));
+          && (target.kind === 'content_revision' && target.owner === 'content'
+            || isGraphErasureKind(target.kind) && target.owner === 'graph'));
+        const journaledObjectDigests = new Set(journal.targets.flatMap(target => {
+          if (target.owner !== 'object' || target.kind !== 'object') return [];
+          const digest = /^sha256:([0-9a-f]{64})$/.exec(target.ref)?.[1];
+          return digest ? [digest] : [];
+        }));
         const commandObjectTarget = journal.targets.some(target => target.owner === 'object'
           && target.kind === 'object' && target.ref === `sha256:${exact.payloadSha256}`);
         if (journal.erasureId !== exact.erasureId || journal.erasureEpoch !== exact.erasureEpoch
           || !['revision', 'resource'].includes(journal.kind) || journal.suppression !== 'suppressed'
-          || journal.targets.length === 0 || journal.targets.length > MAX_ERASURE_TARGETS
-          || new Set(targetKeys).size !== targetKeys.length || !revisionTarget || !commandObjectTarget) {
+          || !isValidErasureTargetList(journal.targets) || !ownerPairsValid
+          || !revisionTarget || !commandObjectTarget
+          || !exact.objectDigests.has(exact.payloadSha256)
+          || [...exact.objectDigests].some(digest => !/^[0-9a-f]{64}$/.test(digest))) {
           throw new Error('erased command custody is not authorized by its exact erasure journal');
+        }
+        // Journal authorization can release only exact object targets in this command's closure.
+        // Every other root stays protected and is reread from the selected restored object source.
+        for (const digest of exact.objectDigests) {
+          if (journaledObjectDigests.has(digest)) continue;
+          const workObjects = objects.workObjects;
+          const bytes = workObjects
+            ? await withoutVerifiedImmutableObjectCache(() => workObjects.get(digest))
+            : await readFile(join(objects.directory, digest));
+          if (hash(bytes) !== digest) {
+            throw new Error('erased command custody object differs from its exact digest');
+          }
+          retained.add(digest);
         }
         continue;
       }

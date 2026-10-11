@@ -73,6 +73,8 @@ export interface ErasedHistoricalReceiptSource {
   erasureEpoch: string;
   terminal: CustodiedReceipt;
   outbox: CustodiedOutbox;
+  /** Exact object closure retained beside the terminal receipt before payload erasure. */
+  objectDigests: ReadonlySet<string>;
 }
 export type HistoricalReceiptResult = HistoricalReceiptSource | ErasedHistoricalReceiptSource;
 export const CUSTODY_RECOVERY_COST = { commandBytes: 2_097_152, stateBytes: 65_536,
@@ -290,6 +292,7 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
             WHERE receipt = $1 AND revision = $2 AND payload_sha256 = $3
               AND payload IS NOT NULL AND payload_erasure_id IS NULL AND payload_erasure_epoch IS NULL
               AND reconciled_at IS NOT NULL AND terminal IS NOT NULL AND outbox IS NOT NULL
+              AND outbox ? 'custodyObjectReferences'
               AND data_epoch IS NOT NULL AND stream_sequence IS NOT NULL`,
           [receipt, erasure.revision, erasure.payloadSha256, erasure.erasureId, erasure.erasureEpoch]);
           if (updated.rowCount === 1) return;
@@ -353,7 +356,9 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
 }
 
 interface CommitProof { digest: string; payloadSha256: string; dataEpoch: string; sequence: string; streamSequence: string }
-type CustodiedOutboxRecord = Omit<MainOutboxBatch, 'eventIds'> & { eventCount: number; events: CustodiedOutbox['events'] };
+type CustodyObjectReference = { digest: string; kind: 'command' | 'manifest' | 'payload' | 'shape' };
+type CustodiedOutboxRecord = Omit<MainOutboxBatch, 'eventIds'> & { eventCount: number; events: CustodiedOutbox['events'];
+  custodyObjectReferences?: CustodyObjectReference[] };
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, member: unknown) =>
   member && typeof member === 'object' && !Array.isArray(member)
     ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a.localeCompare(b))) : member);
@@ -395,12 +400,21 @@ function exactKeys(value: unknown, keys: readonly string[]): value is Record<str
   return !!value && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
 }
+function exactCustodyObjectReference(value: unknown): value is CustodyObjectReference {
+  return exactKeys(value, ['digest', 'kind']) && typeof value.digest === 'string'
+    && /^[0-9a-f]{64}$/.test(value.digest) && typeof value.kind === 'string'
+    && ['command', 'manifest', 'payload', 'shape'].includes(value.kind);
+}
 function erasedOutbox(row: ErasedCustodyRow, terminal: CustodiedReceipt): CustodiedOutboxRecord {
   const value: unknown = row.outbox;
   const batchId = `urn:rezics:outbox:${sha256(row.receipt)}`;
   const eventId = `urn:rezics:event:${sha256(row.receipt)}`;
-  if (!exactKeys(value, ['batchId', 'streamScope', 'dataEpoch', 'sequence', 'graphSequence',
-    'routingEpoch', 'eventCount', 'events']) || value.batchId !== batchId
+  const outboxKeys = ['batchId', 'streamScope', 'dataEpoch', 'sequence', 'graphSequence',
+    'routingEpoch', 'eventCount', 'events'];
+  const hasObjectReferences = !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.hasOwn(value, 'custodyObjectReferences');
+  if (!exactKeys(value, hasObjectReferences ? [...outboxKeys, 'custodyObjectReferences'] : outboxKeys)
+    || value.batchId !== batchId
     || value.streamScope !== MAIN_RELAY_STREAM_SCOPE || value.dataEpoch !== terminal.dataEpoch
     || value.sequence !== terminal.streamSequence || value.graphSequence !== terminal.sequence
     || typeof value.routingEpoch !== 'string' || !value.routingEpoch || value.eventCount !== 1
@@ -451,6 +465,20 @@ function erasedOutbox(row: ErasedCustodyRow, terminal: CustodiedReceipt): Custod
     || (editionIdentity ? event.type !== 'com.rezics.work.metadata-revised.v1'
       : event.type !== 'com.rezics.work.metadata-changed.v1')) {
     throw new ObjectIntegrityError('Erased command outbox receipt identity differs');
+  }
+  if (hasObjectReferences) {
+    const rawReferences = (value as Record<string, unknown>).custodyObjectReferences;
+    const references = Array.isArray(rawReferences) ? rawReferences as CustodyObjectReference[] : [];
+    if (!Array.isArray(rawReferences) || references.length < 3
+      || references.length > CUSTODY_RECOVERY_COST.selectedProfiles + 3
+      || !references.every(exactCustodyObjectReference)
+      || new Set(references.map(reference => `${reference.digest}\0${reference.kind}`)).size
+        !== references.length
+      || !references.some(reference => reference.kind === 'command' && reference.digest === row.payloadSha256)
+      || !references.some(reference => reference.kind === 'manifest')
+      || !references.some(reference => reference.kind === 'payload')) {
+      throw new ObjectIntegrityError('Erased command object closure differs from its retained receipt');
+    }
   }
   return value as unknown as CustodiedOutboxRecord;
 }
@@ -670,6 +698,69 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     return prepared;
   }
 
+  /** Persist the bounded object roots alongside the terminal outbox before payload erasure can occur. */
+  private async exactObjectReferences(row: RetainedCustodyRow, prepared: PreparedCommand): Promise<{
+    manifestSha256: string; componentPayloadSha256: string; model: string;
+    shapeDigests: Set<string>; objectReferences: CustodyObjectReference[];
+  }> {
+    const manifestSha256 = prepared.manifest.replace(/^urn:rezics:sha256:/, '');
+    if (!/^[0-9a-f]{64}$/.test(manifestSha256)) throw new ObjectIntegrityError('Invalid component manifest digest');
+    const manifestBytes = await this.objects.get(manifestSha256);
+    if (sha256(manifestBytes) !== manifestSha256) throw new ObjectIntegrityError('Retained component manifest differs');
+    let manifest: unknown;
+    try { manifest = JSON.parse(Buffer.from(manifestBytes).toString('utf8')); }
+    catch { throw new ObjectIntegrityError('Retained component manifest is not JSON'); }
+    const manifestRecord = manifest && typeof manifest === 'object' && !Array.isArray(manifest)
+      ? manifest as Record<string, unknown> : null;
+    if (!manifestRecord || typeof manifestRecord.model !== 'string' || typeof manifestRecord.payload !== 'string'
+      || !/^sha256:[0-9a-f]{64}$/.test(manifestRecord.payload)) {
+      throw new ObjectIntegrityError('Retained component manifest roots differ');
+    }
+    const model = manifestRecord.model;
+    const componentPayloadSha256 = manifestRecord.payload.slice(7);
+    const validations = prepared.envelope.validations;
+    if (!Array.isArray(validations) || validations.length === 0
+      || validations.some(validation => !validation || typeof validation !== 'object'
+        || !/^[0-9a-f]{64}$/.test(validation.sha256))) {
+      throw new ObjectIntegrityError('Retained command validation roots differ');
+    }
+    const profile = model.slice('https://rezics.com/definition/'.length);
+    const expected = [
+      { profile: 'work-metadata-details-v1', role: 'work', focus: prepared.receipt.work },
+      { profile, role: 'component', focus: prepared.component },
+      { profile, role: 'revision', focus: prepared.revision },
+    ];
+    if (validations.length !== expected.length
+      || expected.some(entry => validations.filter(validation => validation.profile === entry.profile
+        && validation.shape === `https://rezics.com/definition/${entry.profile}/${entry.role}-shape`
+        && Array.isArray(validation.focus) && validation.focus.length === 1 && validation.focus[0] === entry.focus
+        && Array.isArray(validation.graphs) && validation.graphs.length === 2
+        && new Set(validation.graphs).size === 2 && validation.graphs.includes('urn:rezics:graph:current')
+        && validation.graphs.includes('urn:rezics:graph:revisions')
+        && validation.binding === undefined).length !== 1)) {
+      throw new ObjectIntegrityError('Retained command validation roots differ');
+    }
+    const shapeDigests = new Set(validations.map(validation => validation.sha256));
+    if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles) {
+      throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
+    }
+    for (const digest of shapeDigests) {
+      const bytes = await this.objects.get(digest);
+      if (bytes.byteLength > CUSTODY_RECOVERY_COST.shapeBytes || sha256(bytes) !== digest) {
+        throw new ObjectIntegrityError('Retained profile artifact differs from its exact pin');
+      }
+    }
+    return {
+      manifestSha256, componentPayloadSha256, model, shapeDigests,
+      objectReferences: [
+        { digest: row.payloadSha256, kind: 'command' as const },
+        { digest: manifestSha256, kind: 'manifest' as const },
+        { digest: componentPayloadSha256, kind: 'payload' as const },
+        ...[...shapeDigests].sort().map(digest => ({ digest, kind: 'shape' as const })),
+      ],
+    };
+  }
+
   private async proof(receipt: string): Promise<CommitProof | null> {
     const rows = (await this.fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?payload ?epoch ?sequence ?streamSequence WHERE {
       GRAPH <${RECEIPTS}> { ${nativeIri(receipt)} a rv:CommitProof ; rv:requestDigest ?digest ;
@@ -714,10 +805,11 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   private committedTerminal(row: RetainedCustodyRow): CustodiedReceipt {
     if (!row.reconciled || !row.terminal || !row.outbox) throw new ObjectIntegrityError('Reconciled owner receipt is incomplete');
     const prepared = this.prepared(row);
+    const { custodyObjectReferences: _custodyObjectReferences, ...durableOutbox } = row.outbox;
     if (!/^[1-9][0-9]*$/.test(row.terminal.sequence) || !/^[1-9][0-9]{0,99}$/.test(row.terminal.streamSequence)
       || Object.entries(prepared.receipt).some(([key, value]) =>
         row.terminal![key as keyof CustodiedReceipt] !== value)
-      || canonicalJson(row.outbox) !== canonicalJson(this.outbox(row, prepared, row.terminal))) {
+      || canonicalJson(durableOutbox) !== canonicalJson(this.outbox(row, prepared, row.terminal))) {
       throw new ObjectIntegrityError('Durable receipt or outbox differs from the prepared command');
     }
     return row.terminal;
@@ -736,7 +828,8 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     const prepared = await this.exactObject(row);
     this.matched(row, prepared, proof);
     const terminal = { ...prepared.receipt, sequence: proof.sequence, streamSequence: proof.streamSequence };
-    const outbox = this.outbox(row, prepared, terminal);
+    const closure = await this.exactObjectReferences(row, prepared);
+    const outbox = { ...this.outbox(row, prepared, terminal), custodyObjectReferences: closure.objectReferences };
     await session.reconcile(terminal, outbox);
     return terminal;
   }
@@ -803,10 +896,14 @@ export class ReceiptCustody implements CustodiedOutboxSource {
         || terminal.dataEpoch !== dataEpoch || terminal.streamSequence !== streamSequence) {
         throw new ObjectIntegrityError('Historical erased custody position differs from its exact terminal');
       }
+      const outbox = erasedOutbox(row, terminal);
+      const references = outbox.custodyObjectReferences;
+      if (!references) throw new ObjectIntegrityError('Historical erased command object closure is unavailable');
       return { kind: 'erased', receipt: row.receipt, requestDigest: row.requestDigest,
         payloadSha256: row.payloadSha256, revision: row.revision,
         erasureId: row.payloadErasure.erasureId, erasureEpoch: row.payloadErasure.erasureEpoch,
-        terminal, outbox: this.deliveredOutbox(row.receipt, erasedOutbox(row, terminal)) };
+        terminal, outbox: this.deliveredOutbox(row.receipt, outbox),
+        objectDigests: new Set(references.map(reference => reference.digest)) };
     }
     const source = await this.verifyCommitted(row);
     if (value.data_epoch !== dataEpoch || value.stream_sequence !== streamSequence
@@ -826,16 +923,15 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     }
     const terminal = this.committedTerminal(row);
     const prepared = await this.exactObject(row);
+    const closure = await this.exactObjectReferences(row, prepared);
+    if (row.outbox.custodyObjectReferences !== undefined
+      && canonicalJson(row.outbox.custodyObjectReferences) !== canonicalJson(closure.objectReferences)) {
+      throw new ObjectIntegrityError('Retained command object closure differs from its exact source');
+    }
     if (Buffer.byteLength(JSON.stringify(prepared.state)) > CUSTODY_RECOVERY_COST.stateBytes) {
       throw new ObjectIntegrityError('Retained edition state exceeds its byte bound');
     }
-    const manifestSha256 = prepared.manifest.slice(-64);
-    const manifestBytes = await this.objects.get(manifestSha256);
-    if (sha256(manifestBytes) !== manifestSha256) throw new ObjectIntegrityError('Retained component manifest differs');
-    const manifest = JSON.parse(Buffer.from(manifestBytes).toString('utf8')) as {
-      payload: string; model: string;
-    };
-    const model = manifest.model;
+    const { manifestSha256, componentPayloadSha256, model, shapeDigests, objectReferences } = closure;
     const state = model.endsWith('-v2') ? checkedEditionV2(prepared.state) : checkedMetadataState(prepared.state);
     const expectedHead = terminal.predecessor === prepared.component ? null : terminal.predecessor;
     if (state.kind !== 'edition' || expectedHead === undefined || canonicalJson(state) !== canonicalJson(prepared.state)
@@ -863,28 +959,17 @@ export class ReceiptCustody implements CustodiedOutboxSource {
         && validation.binding === undefined && /^[0-9a-f]{64}$/.test(validation.sha256)).length !== 1)) {
       throw new ObjectIntegrityError('Retained edition validation pins differ from their exact source');
     }
-    const shapeDigests = new Set(validations.map(validation => validation.sha256));
     if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles
       || expected.some(entry => new Set(validations.filter(validation => validation.profile === entry.profile)
         .map(validation => validation.sha256)).size !== 1)) {
       throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
     }
-    for (const digest of shapeDigests) {
-      const bytes = await this.objects.get(digest);
-      if (bytes.byteLength > CUSTODY_RECOVERY_COST.shapeBytes || sha256(bytes) !== digest) {
-        throw new ObjectIntegrityError('Retained profile artifact differs from its exact pin');
-      }
-    }
     return {
-      prepared, terminal: structuredClone(terminal), outbox: this.outbox(row, prepared, terminal),
+      prepared, terminal: structuredClone(terminal), outbox: {
+        ...this.outbox(row, prepared, terminal), custodyObjectReferences: objectReferences,
+      },
       payloadSha256: row.payloadSha256, manifestSha256,
-      componentPayloadSha256: manifest.payload.slice(7), model,
-      objectReferences: [
-        { digest: row.payloadSha256, kind: 'command' },
-        { digest: manifestSha256, kind: 'manifest' },
-        { digest: manifest.payload.slice(7), kind: 'payload' },
-        ...[...shapeDigests].sort().map(digest => ({ digest, kind: 'shape' as const })),
-      ],
+      componentPayloadSha256, model, objectReferences,
     };
   }
 

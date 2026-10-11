@@ -202,6 +202,8 @@ test('terminal erased custody serves receipt retries without restoring the comma
         erasureId: erasure.erasureId, erasureEpoch: erasure.erasureEpoch,
         terminal: { dataEpoch: 'epoch-a', sequence: '17', streamSequence: '4' },
         outbox: { batch: { custodiedReceipt: fixture.receipt, dataEpoch: 'epoch-a', sequence: '4', graphSequence: '17' } } });
+      expect([...historical!.objectDigests].sort()).toEqual([...new Set(
+        source!.objectReferences.map(reference => reference.digest))].sort());
     } finally { historicalClient.release(); }
 
     const outbox = await custody.read('epoch-a', '4');

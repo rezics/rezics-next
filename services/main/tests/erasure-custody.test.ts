@@ -289,7 +289,8 @@ function erasedHistorical(c: Awaited<ReturnType<typeof command>>): ErasedHistori
     component: 'https://rezics.com/id/00000000-0000-4000-8000-000000000003', revision: c.row.revision };
   return { kind: 'erased', receipt: c.row.receipt, requestDigest: c.row.request_digest,
     payloadSha256: c.row.payload_sha256, revision: c.row.revision,
-    erasureId: c.row.payload_erasure_id!, erasureEpoch: c.row.payload_erasure_epoch!, terminal, outbox: c.result };
+    erasureId: c.row.payload_erasure_id!, erasureEpoch: c.row.payload_erasure_epoch!, terminal,
+    outbox: c.result, objectDigests: new Set(Object.values(c.roots)) };
 }
 
 const commandErasureId = '10000000-0000-4000-8000-000000000001';
@@ -395,14 +396,44 @@ for (const state of ['changed', 'vanished'] as const) {
   });
 }
 
-test('journal-bound terminal command erasure omits only its exact raw root from restored custody', async () => {
+test('journal-bound terminal command erasure protects every non-journaled root in its closure', async () => {
   const f = fixture();
   const c = await command(f);
   f.setJournal(journalForCommand(c));
   f.graph.receiptCustody = erasedReader(f, c);
   const retained = await f.read(f.relayClient);
   expect(retained.has(c.row.payload_sha256)).toBe(false);
+  for (const root of ['manifest', 'payload', 'selectedShape'] as const) {
+    expect(retained.has(c.roots[root])).toBe(true);
+    expect(await replayObjectErasure(f.store, `sha256:${c.roots[root]}`, retained, true)).toBe('conflict');
+  }
+});
+
+test('a journaled exact metadata root may leave restored custody', async () => {
+  const f = fixture();
+  const c = await command(f);
+  f.setJournal(journalForCommand(c, '12', [
+    { owner: 'graph', target_kind: 'work_head', target_ref: c.row.revision.slice('https://rezics.com/id/'.length) },
+    { owner: 'object', target_kind: 'object', target_ref: `sha256:${c.row.payload_sha256}` },
+    { owner: 'object', target_kind: 'object', target_ref: `sha256:${c.roots.manifest}` },
+  ]));
+  f.graph.receiptCustody = erasedReader(f, c);
+  const retained = await f.read(f.relayClient);
+  expect(retained.has(c.row.payload_sha256)).toBe(false);
   expect(retained.has(c.roots.manifest)).toBe(false);
+  expect(retained.has(c.roots.payload)).toBe(true);
+  expect(retained.has(c.roots.selectedShape)).toBe(true);
+});
+
+test('a graph-owned content revision target cannot authorize command erasure', async () => {
+  const f = fixture();
+  const c = await command(f);
+  f.setJournal(journalForCommand(c, '12', [
+    { owner: 'graph', target_kind: 'content_revision', target_ref: c.row.revision.slice('https://rezics.com/id/'.length) },
+    { owner: 'object', target_kind: 'object', target_ref: `sha256:${c.row.payload_sha256}` },
+  ]));
+  f.graph.receiptCustody = erasedReader(f, c);
+  await expect(f.read(f.relayClient)).rejects.toThrow('not authorized by its exact erasure journal');
 });
 
 test('terminal command erasure cannot be accepted without the exact journal epoch', async () => {
