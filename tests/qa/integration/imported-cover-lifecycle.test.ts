@@ -438,9 +438,8 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
 
       const sameBytesAnotherRecord = await frozenCover(root, bytes, `Second record ${randomUUID().replaceAll('-', '')}`);
       const otherRecord = sameBytesAnotherRecord.sources[0]!.records[0]!;
-      const refusedOtherRecord = await importDataset(root, sameBytesAnotherRecord, importOptions);
-      expect(refusedOtherRecord.limitations.find(item => item.startsWith('cover pending ')))
-        .toBeDefined();
+      const anotherRecordImport = await importDataset(root, sameBytesAnotherRecord, importOptions);
+      expect(anotherRecordImport.coverResults.map(result => result.status)).toEqual(['imported']);
 
       // The subsequent stages exercise the same owner paths after the digest fence is admitted.
       const beforeRestore = await decide(publicReceipt, target, 'restore', decisionReceipt.decisionId, '0');
