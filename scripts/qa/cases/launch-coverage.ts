@@ -255,7 +255,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/realm-admin-api.test.ts',
       'Realm settings: atomic rule CAS, localization, submission restrictions and stale policy changes',
       'Writes and rereads localized Realm rules through Main settings, rejecting stale revisions and enforcing submission restrictions.'),
-    browser: missing('gap'),
+    browser: browser('apps/web/tests/realm-create.e2e.ts',
+      'A lost private-Realm response reloads into the one Realm the founder created',
+      'Adds a rule through the founding form and reads its title and body on the persisted Realm About page in English and Simplified Chinese.'),
   },
   {
     kind: 'realm',
