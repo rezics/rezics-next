@@ -30,11 +30,11 @@ afterAll(async () => {
 
 /** Deterministic counts per owner and command reject growth and omitted owner checks.
  * SQL shares are Content persistence, Access authority/disclosure, and Account live verification.
- * Production composition totals 64 Content + 520 Access + 198 Account = 782 SQL.
+ * Production composition totals 64 Content + 516 Access + 198 Account = 778 SQL.
  * Guard calls retain the legacy convention, including nested graph command wrappers. */
 export const REALM_REPLY_WRITE_COST = {
-  draft: { content: 14, access: 114, account: 54, statements: 182, fusekiReads: 27, guardCalls: 27 },
-  identity: { content: 14, access: 127, account: 54, statements: 195, fusekiReads: 30, guardCalls: 32 },
+  draft: { content: 14, access: 111, account: 54, statements: 179, fusekiReads: 27, guardCalls: 27 },
+  identity: { content: 14, access: 126, account: 54, statements: 194, fusekiReads: 30, guardCalls: 32 },
   review: { content: 12, access: 77, account: 18, statements: 107, fusekiReads: 3, guardCalls: 5 },
   placement: { content: 24, access: 202, account: 72, statements: 298, fusekiReads: 10, guardCalls: 13 },
 } as const;
@@ -737,6 +737,46 @@ async function expectRefusedPlacement(fx: Awaited<ReturnType<typeof realmVisibil
     'SELECT state, graph_outcome FROM access.admission WHERE id = $1', [admission.rows[0]!.id]);
   expect(again.rows[0]).toMatchObject({ state: 'sealed', graph_outcome: 'cancelled' });
 }
+
+test('a nested reply identity requires the same Realm origin as its exact parent', async () => {
+  const fx = await realmVisibilityFixture();
+  try {
+    const parent = await fx.reply(fx.actor, fx.realm);
+    await fx.grant(fx.actor, `review:decide:${fx.realm}`, 'review.decide');
+    await fx.grant(fx.actor, `reply:place:${fx.realm}`, 'reply.place');
+    const review = await fx.call('POST', '/v1/realm-reply-reviews', {
+      profile: 'realm-reply-review-v1', realm: fx.realm, reply: parent.input.reply,
+      revisionId: parent.draft.body.revisionId, revisionDigest: parent.draft.body.revisionDigest,
+      expectedGeneration: '0', supersedes: null, outcome: 'approved', method: 'human',
+      methodRevision: 'realm-manager-v1', dependencyDigest: sha(fx.work.work), reasonReference: null,
+      actingSubject: fx.actor,
+    });
+    expect(review.status, JSON.stringify(review.body)).toBe(201);
+    const placed = await fx.call('POST', '/v1/realm-reply-placements', {
+      ...parent.placement, reviewDecisionId: review.body.decisionId,
+    });
+    expect(placed.status, JSON.stringify(placed.body)).toBe(201);
+
+    const nested = async (originRealm: string | null) => {
+      const input = fx.draftInput(fx.actor, originRealm);
+      const draft = await fx.call('POST', '/v1/member-reply-drafts', input);
+      expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+      return fx.call('POST', '/v1/realm-replies', {
+        profile: 'realm-reply-identity-v1', reply: input.reply, variantId: input.variantId,
+        revisionId: draft.body.revisionId, author: fx.actor, rootTarget: input.rootTarget,
+        rootRevision: input.rootRevision, parentReply: parent.input.reply,
+        parentRevision: parent.draft.body.revisionId, contextRevision: null,
+      });
+    };
+
+    const matching = await nested(fx.realm);
+    expect(matching.status, JSON.stringify(matching.body)).toBe(201);
+    const mismatched = await nested(null);
+    expect(mismatched.status, JSON.stringify(mismatched.body)).toBe(403);
+  } finally {
+    await fx.close();
+  }
+});
 
 test('an expired admission retry is refused and sealed with the placement pin released', async () => {
   const fx = await realmVisibilityFixture();

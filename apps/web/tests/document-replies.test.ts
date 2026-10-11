@@ -30,11 +30,11 @@ function recordingApi(refused = false) {
       'member-reply-drafts': {
         post: async (draft: (typeof drafts)[number]) => {
           drafts.push(draft);
-          return { data: { revisionId: 'revision' } };
+          return { data: { revisionId: 'revision', revisionDigest: 'digest' } };
         },
       },
       'realm-replies': { post: async () => ({ data: { reply: 'reply' } }) },
-      'member-replies': () => ({ get: async () => ({ data: { revisionDigest: 'digest' } }) }),
+      'member-replies': () => ({ get: async () => ({ data: { originRealm: null } }) }),
       'realm-reply-placements': {
         post: async () => {
           if (refused) return { data: null, error: { status: 403 } };

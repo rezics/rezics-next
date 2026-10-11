@@ -28,6 +28,8 @@ export interface ReplyProgress {
   key: string;
   reply: string;
   variantId: string;
+  /** Canonical origin inherited from the exact parent reply; null for independent replies. */
+  originRealm?: string | null;
   revisionId?: string;
   identified?: boolean;
   digest?: string;
@@ -71,6 +73,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
         variantId: step.variantId,
         rootTarget: input.work,
         rootRevision: input.rootRevision,
+        ...(step.originRealm !== undefined ? { originRealm: step.originRealm } : {}),
         language: input.language,
         direction: direction(input.language, bodyText(body ?? input.body)),
         expectedHead,
@@ -88,15 +91,44 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
     withdraw,
     async reply(input, progress) {
       const api = main().v1;
-      const step = { ...progress };
+      let step = { ...progress };
       try {
+        if (step.originRealm === undefined) {
+          const { data } = await api['member-replies']({ reply: input.parent.reply.slice(-36) }).get({
+            query: { actingSubject: input.actingSubject },
+          });
+          if (!data) return { kind: 'failed', progress: step };
+          const parentOriginRealm = data.originRealm ?? null;
+          // A legacy draft was authored with null origin. Its immutable draft and
+          // identity keys cannot be changed to inherit a Realm origin.
+          if (step.revisionId && (step.originRealm ?? null) !== parentOriginRealm) {
+            await withdraw(input, step);
+            step = replyProgress();
+          }
+          step.originRealm = parentOriginRealm;
+        }
         if (!step.revisionId) {
-          const { data } = await draft(input, step, input.body, null, 'draft');
+          const { data, error } = await draft(input, step, input.body, null, 'draft');
+          if (!data && error?.status === 403) {
+            await withdraw(input, step);
+            return { kind: 'refused' };
+          }
           if (!data) return { kind: 'failed', progress: step };
           step.revisionId = data.revisionId;
+          step.digest = data.revisionDigest;
+        } else if (!step.digest) {
+          // Same-key replay recovers the digest from older saved progress.
+          const { data, error } = await draft(input, step, input.body, null, 'draft');
+          if (!data && error?.status === 403) {
+            await withdraw(input, step);
+            return { kind: 'refused' };
+          }
+          if (!data || data.revisionId !== step.revisionId)
+            return { kind: 'failed', progress: step };
+          step.digest = data.revisionDigest;
         }
         if (!step.identified) {
-          const { data } = await api['realm-replies'].post(
+          const { data, error } = await api['realm-replies'].post(
             {
               profile: 'realm-reply-identity-v1',
               reply: step.reply,
@@ -112,15 +144,12 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
             },
             headers(step.key, 'identity'),
           );
+          if (!data && error?.status === 403) {
+            await withdraw(input, step);
+            return { kind: 'refused' };
+          }
           if (!data) return { kind: 'failed', progress: step };
           step.identified = true;
-        }
-        if (!step.digest) {
-          const { data } = await api['member-replies']({ reply: step.reply.slice(-36) }).get({
-            query: { actingSubject: input.actingSubject },
-          });
-          if (!data) return { kind: 'failed', progress: step };
-          step.digest = data.revisionDigest;
         }
         const { data, error } = await api['realm-reply-placements'].post(
           {

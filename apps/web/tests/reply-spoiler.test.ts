@@ -10,9 +10,9 @@ function recording() {
   const calls: unknown[] = [];
   const main = {
     v1: {
-      'member-reply-drafts': { post: async (body: unknown) => { calls.push(body); return { data: { revisionId: 'revision' } }; } },
+      'member-reply-drafts': { post: async (body: unknown) => { calls.push(body); return { data: { revisionId: 'revision', revisionDigest: 'digest' } }; } },
       'realm-replies': { post: async (body: unknown) => { calls.push(body); return { data: { reply: 'reply' } }; } },
-      'member-replies': () => ({ get: async () => ({ data: { revisionDigest: 'digest' } }) }),
+      'member-replies': () => ({ get: async () => ({ data: { originRealm: null } }) }),
       'realm-reply-placements': { post: async () => ({ data: { reply: 'reply', placement: 'placed' } }) },
     },
   };
