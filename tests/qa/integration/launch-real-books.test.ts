@@ -37,7 +37,8 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
 
 interface ReleasePage {
   items: { id: string; revision: string; title: { value: string }; publisher: string | null;
-    contentLanguages: string[]; editionStatement: string | null }[];
+    contentLanguages: string[]; editionStatement: string | null; platform: string | null;
+    coverage: { realization: string | null; revision: string | null; language: string | null }[] }[];
   nextCursor: string | null;
 }
 interface Preference {
@@ -90,6 +91,12 @@ test('books / An exact pinned edition choice persists on an isolated restored co
         expect(new Set(page.items.map(item => item.id))).toEqual(new Set(corpus.editions.map(item => item.release)));
         // Owner startup, migrations and the actual public reads are included in restoreMs.
         for (const edition of corpus.editions) {
+          const release = page.items.find(item => item.id === edition.release)!;
+          expect(release.platform).toBe(edition.platform);
+          expect(release.contentLanguages).toEqual(edition.contentLanguages);
+          if (edition.realization) expect(release.coverage).toContainEqual(expect.objectContaining({
+            realization: edition.realization, revision: edition.realizationRevision, language: edition.language,
+          }));
           const observation = await api.read<{ byteDigest: string; rawBytesBase64: string }>(
             `/v1/sources/observations/${short(edition.observation)}`);
           expect(observation.byteDigest).toBe(corpus.sources.find(row => row.id === `edition-${edition.externalId}`)!.sha256);
@@ -114,7 +121,7 @@ test('books / An exact pinned edition choice persists on an isolated restored co
       directory: join(root, '.temp/launch-corpus/books/manifests'),
       authorize: async (work: string) => { await importer.grant(`work:edit:${work}`, 'work.edit'); } };
     corpus = await prepareLaunchBooksCorpus(input);
-    expect(corpus.counts).toEqual({ works: 1, releases: 6, contentObservations: 7, librarySlice: 0, wikidataLabels: 0, covers: 0 });
+    expect(corpus.counts).toEqual({ works: 1, realizations: 1, releases: 6, contentObservations: 7, librarySlice: 0, wikidataLabels: 0, covers: 0 });
     expect(corpus.sources.map(row => row.sha256)).toEqual(launchBookSources().map(row => row.entry.sha256));
     expect(corpus.buildMs).toBeLessThan(600_000);
     // A retained build must be reused without issuing any command or retaining another backup.
@@ -142,8 +149,11 @@ test('books / An exact pinned edition choice persists on an isolated restored co
     expect(page.items.map(item => item.publisher)).toContain('Dell Publishing Co. Inc.');
     expect(page.items.map(item => item.publisher)).toContain('Cambridge University Press');
     expect(page.items.flatMap(item => item.contentLanguages)).toContain('fr');
-    const chosen = corpus.editions.find(item => item.externalId === 'OL29868651M')!;
-    expect(chosen.title).toBe('Pride & Prejudice Annotated');
+    expect(page.items.map(item => item.platform).filter(Boolean).sort()).toEqual(['audiobook', 'ebook', 'paperback']);
+    const chosen = corpus.editions.find(item => item.externalId === 'OL26394110M')!;
+    expect(chosen.title).toBe('Pride and Prejudice');
+    expect(chosen.platform).toBe('audiobook');
+    expect(page.items.filter(item => item.title.value === chosen.title).length).toBeGreaterThan(1);
     const path = `/v1/me/edition-preferences/${short(corpus.work)}` as const;
     const readPath = `${path}?actingSubject=${encodeURIComponent(reader.agent)}` as const;
     expect(await reader.api.read(readPath)).toBeNull();

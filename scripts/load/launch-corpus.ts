@@ -6,11 +6,11 @@ import { prideEditionSet } from '../../tests/fixtures/sources/open-library.ts';
 import { stableId } from '../dev/seed/state.ts';
 import { seedCatalogueProfileWorks } from './catalogue-work.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from './compatibility.ts';
-import type { CorpusApi, CorpusBackupDriver } from './work-profile-corpus.ts';
+import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const budgetMs = 600_000;
-const recipe = 'launch-books-v1';
+const recipe = 'launch-books-v2';
 const short = (id: string) => id.slice(-36);
 
 interface OpenLibraryRecord {
@@ -53,8 +53,16 @@ export interface LaunchBookEdition {
   revision: string;
   observation: string;
   title: string;
-  /** Retained source fact; the current release API cannot represent it. */
   sourceFormat: string | null;
+  /** Catalogue seeds expose their medium through release-v2.platform. */
+  platform: string | null;
+  format: string | null;
+  language: string;
+  contentLanguages: string[];
+  publisher: string | null;
+  publicationYear: number | null;
+  realization: string | null;
+  realizationRevision: string | null;
 }
 
 export interface LaunchBooksCorpus {
@@ -62,7 +70,7 @@ export interface LaunchBooksCorpus {
   id: string;
   compatibility: LoadCompatibility;
   sources: { id: string; sha256: string; reuseBasis: string }[];
-  counts: { works: 1; releases: 6; contentObservations: 7; librarySlice: 0; wikidataLabels: 0; covers: 0 };
+  counts: { works: 1; realizations: 1; releases: 6; contentObservations: 7; librarySlice: 0; wikidataLabels: 0; covers: 0 };
   work: string;
   editions: LaunchBookEdition[];
   backup: string;
@@ -102,6 +110,15 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
     state: { kind: 'header', originalTitle: { value: source.record.title, language: 'en' },
       localized: [{ language: 'en', title: source.record.title, description: null, mainVersionLabel: null }] },
   } }, signal);
+  const realization = `https://rezics.com/id/${stableId(`${recipe}:OL66554W:en`)}`;
+  const original = await api.command<{ realization: string; revision: string }>(`${key}:original:en`, {
+    method: 'PUT', path: `/v1/works/${short(created.work)}/realizations/${short(realization)}`, body: {
+      profile: 'realization-v1', expectedHead: null, actingSubject: actor, id: realization,
+      language: 'en', kind: 'original', translators: [], publishers: [],
+      source: { kind: 'main-version', work: created.work, mainVersion: created.mainVersion, revision: created.mainRevision },
+      status: 'official', verification: 'verified', evidence: observations.get('OL66554W'),
+    },
+  }, signal);
   const editions: LaunchBookEdition[] = [];
   for (const { externalId, record } of sources.slice(1)) {
     // This bounded source selection has only English and French records. Unknown
@@ -112,20 +129,31 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
       throw new Error(`Unmapped edition language: ${language}`);
     });
     const release = `https://rezics.com/id/${stableId(`${recipe}:${externalId}`)}`;
+    const language = contentLanguages[0];
+    if (!language || contentLanguages.length !== 1) throw new Error(`Unexpected pinned edition languages: ${externalId}`);
+    const sourceFormat = record.physical_format ?? null;
+    const platform = sourceFormat === 'Audiobook' ? 'audiobook' : sourceFormat === 'E-book' ? 'ebook' : sourceFormat;
+    const publisher = record.publishers?.join('; ') ?? null;
+    const publicationYear = record.publish_date ? Number(record.publish_date.slice(0, 4)) : null;
+    // The French pin supplies no translator attribution. Preserve its legacy
+    // release language instead of fabricating an Agent to admit v2 coverage.
+    const coverage = language === 'en' ? {
+      profile: 'release-v2', identifiers: [], platform, territory: null,
+      coverage: [{ realization, revision: original.revision, completeness: 'complete' }],
+    } : { profile: 'release-v1', contentLanguages, isTranslation: true, originalLanguages: ['en'], coverage: null };
     const written = await api.command<{ release: string; revision: string }>(`${key}:release:${externalId}`, {
       method: 'PUT', path: `/v1/works/${short(created.work)}/releases/${short(release)}`, body: {
-        profile: 'release-v1', expectedHead: null, actingSubject: actor, id: release,
-        kind: 'formal', status: 'official', contentLanguages,
-        isTranslation: contentLanguages.includes('fr'), originalLanguages: contentLanguages.includes('fr') ? ['en'] : [],
+        ...coverage, expectedHead: null, actingSubject: actor, id: release,
+        kind: 'formal', status: 'official',
         titleLanguage: null, tracklistLanguage: null, title: { value: record.title, language: 'en' },
-        editionStatement: record.edition_name ?? null, publisher: record.publishers?.join('; ') ?? null,
-        publicationYear: record.publish_date ? Number(record.publish_date.slice(0, 4)) : null,
-        isbn13: record.isbn_13?.[0] ?? null, originalUrl: null, fixedRelease: null, coverage: null, evidence: null,
+        editionStatement: record.edition_name ?? null, publisher, publicationYear,
+        isbn13: record.isbn_13?.[0] ?? null, originalUrl: null, fixedRelease: null, evidence: null,
       },
     }, signal);
     if (written.release !== release) throw new Error('Release receipt differs from pinned edition identity');
     editions.push({ externalId, release, revision: written.revision, observation: observations.get(externalId)!,
-      title: record.title, sourceFormat: record.physical_format ?? null });
+      title: record.title, sourceFormat, platform, format: platform, language, contentLanguages, publisher, publicationYear,
+      realization: language === 'en' ? realization : null, realizationRevision: language === 'en' ? original.revision : null });
   }
   return { work: created.work, editions };
 }
@@ -166,7 +194,7 @@ export async function prepareLaunchBooksCorpus(input: {
     const backup = await input.backups.backup(id, signal);
     signal.throwIfAborted();
     const manifest: LaunchBooksCorpus = { recipe, id, compatibility, sources, ...built,
-      counts: { works: 1, releases: 6, contentObservations: 7, librarySlice: 0, wikidataLabels: 0, covers: 0 },
+      counts: { works: 1, realizations: 1, releases: 6, contentObservations: 7, librarySlice: 0, wikidataLabels: 0, covers: 0 },
       backup, buildMs: performance.now() - started };
     writeFileSync(`${path}.tmp`, JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
@@ -186,4 +214,63 @@ export async function restoreLaunchBooksCorpus(corpus: LaunchBooksCorpus, target
   const restoreMs = performance.now() - started;
   console.log(JSON.stringify({ launchCorpus: corpus.id, target, restoreMs: Math.round(restoreMs) }));
   return restoreMs;
+}
+
+/** The current browser runner owns a fresh stack. Keep that preparation
+ * explicit; only the API fixture's backup driver qualifies restored copies. */
+async function prepareBrowserBooks() {
+  const runId = process.env.REZICS_QA_RUN_ID;
+  if (!runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId))
+    throw new Error('Browser books preparation requires an isolated QA run');
+  const directory = join(root, '.temp/launch-corpus');
+  const path = join(directory, `browser-${runId}.json`);
+  if (existsSync(path)) {
+    const saved = JSON.parse(readFileSync(path, 'utf8')) as { corpus: LaunchBooksCorpus; restored: false };
+    if (saved.corpus.recipe !== recipe || saved.restored !== false
+      || !compatibleLoadStorage(saved.corpus.compatibility, loadCompatibility(root)))
+      throw new Error('Incompatible browser books preparation');
+    console.log(JSON.stringify(saved));
+    return;
+  }
+  const { platformAdministratorSession, grantPlatformUse, grantPlatformResource } =
+    await import('../../tests/qa/fixtures/platform-grant.ts');
+  const editor = await platformAdministratorSession(process.env,
+    'openid access:grant source:intake source:read work:create work:edit work:read');
+  await grantPlatformUse(editor, editor.principalId, 'catalogue-import');
+  for (const scope of ['work:create:root', 'work:create:catalogue-import'])
+    await grantPlatformResource(editor, editor.principalId, 'work.create', scope);
+  const started = performance.now();
+  const signal = AbortSignal.timeout(budgetMs);
+  const api = workProfileCorpusApi(editor.mainOrigin, editor.token, { signal,
+    fetch: (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      for (let attempt = 0; ; attempt++) {
+        const response = await fetch(input, init);
+        // Observe accepted native commands with their original key, as the
+        // existing browser catalogue seed does, until the receipt is terminal.
+        if (response.status !== 202 || attempt === 63) return response;
+        await response.body?.cancel();
+      }
+    }) as typeof fetch,
+  });
+  const built = await buildBooks(api, editor.actingSubject, `browser-books:${runId}`,
+    work => grantPlatformResource(editor, editor.principalId, 'work.edit', `work:edit:${work}`).then(() => {}), signal);
+  const listed = await api.read<{ items: { id: string; revision: string; platform: string | null }[]; nextCursor: string | null }>(
+    `/v1/works/${short(built.work)}/releases`, signal);
+  if (listed.nextCursor || listed.items.length !== built.editions.length || built.editions.some(edition =>
+    !listed.items.some(item => item.id === edition.release && item.revision === edition.revision && item.platform === edition.platform)))
+    throw new Error('Browser books release read differs from API build');
+  const sources = launchBookSources().map(({ entry }) => ({ id: entry.id, sha256: entry.sha256, reuseBasis: entry.reuseBasis }));
+  const corpus: LaunchBooksCorpus = { recipe, id: `browser-books-${runId}`, compatibility: loadCompatibility(root), sources,
+    ...built, counts: { works: 1, realizations: 1, releases: 6, contentObservations: 7, librarySlice: 0, wikidataLabels: 0, covers: 0 },
+    backup: '', buildMs: performance.now() - started };
+  const prepared = { corpus, restored: false as const };
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(`${path}.tmp`, JSON.stringify(prepared, null, 2) + '\n', { mode: 0o600 });
+  renameSync(`${path}.tmp`, path);
+  console.log(JSON.stringify(prepared));
+}
+
+if (import.meta.main) {
+  if (process.argv.slice(2).join() !== '--browser-prepare') throw new Error('Use --browser-prepare');
+  await prepareBrowserBooks();
 }
