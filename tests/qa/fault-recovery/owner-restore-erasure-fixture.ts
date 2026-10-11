@@ -23,6 +23,9 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { StructureGroupRootStore } from '../../../services/main/src/modules/structure/group-root.ts';
+import { StructureQualifierRootStore } from '../../../services/main/src/modules/structure/qualifier-index.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import {
   ObjectIntegrityError,
   ObjectUnavailable,
@@ -107,6 +110,14 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { copyRecoveryTree } from '../../../tests/qa/support/recovery-copy.ts';
+import { provisionFixtureAuthor } from '../../../tests/qa/fixtures/authored-work.ts';
+import {
+  createRecipeApiRequest,
+  readMembershipCompletionProof,
+  type BeforeCutRecipeSeedContext,
+  type MembershipCompletionProof,
+  type RecipeApiRequest,
+} from './operator-restore-recipe-support.ts';
 import {
   createRestoreFixtureTiming,
   type RestoreFixturePhaseHandle,
@@ -123,6 +134,11 @@ import {
 } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
 
 export const restoreKey = 'e6'.repeat(32);
+
+export interface OwnerRestoreErasureFixtureOptions {
+  /** Optional foreground API population performed before owner coverage capture. */
+  beforeCutApiSeed?: (context: BeforeCutRecipeSeedContext) => Promise<unknown>;
+}
 
 class DirectoryObjects implements ImmutableObjects {
   constructor(readonly directory: string) {
@@ -260,7 +276,9 @@ export function createRestoreCopyDisposal(
 }
 
 /** One real owner/native cut, one physical backup, isolated writable replay copies. */
-export async function ownerRestoreErasureFixture() {
+export async function ownerRestoreErasureFixture(
+  options: OwnerRestoreErasureFixtureOptions = {},
+) {
   const preparationStarted = Date.now();
   const { runId, artifacts } = requireFaultTier();
   const timing = createRestoreFixtureTiming({ artifactDirectory: artifacts });
@@ -715,6 +733,40 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       }
       throw new Error('fixture relay handoff exceeded its bound');
     };
+    let beforeCutMembershipProof: MembershipCompletionProof | undefined;
+    if (options.beforeCutApiSeed) {
+      await provisionFixtureAuthor(env, actor);
+      env.structureGroupRoots = new StructureGroupRootStore(source.content, objects);
+      env.structureQualifierRoots = new StructureQualifierRootStore(source.content, objects);
+      const recipeWork: MainWorkDependencies = {
+        environment: env,
+        structureObjects: objects,
+        account: authenticated.verifier,
+        access: registry,
+        content: core,
+      };
+      const request: RecipeApiRequest = createRecipeApiRequest(
+        native,
+        recipeWork,
+        currentOwnerToken,
+      );
+      await options.beforeCutApiSeed({ request, actor, grant });
+      const preparedMembership = await normalizeStoredMembership(
+        env,
+        256,
+        Date.now() + 540_000,
+      );
+      if (!preparedMembership.complete) {
+        throw new Error('Source Recipe membership preparation did not complete before capture');
+      }
+      beforeCutMembershipProof = await readMembershipCompletionProof(native);
+      if (
+        beforeCutMembershipProof?.dataEpoch !== lineage.dataEpoch ||
+        beforeCutMembershipProof.revision !== 'ordered-membership-v1'
+      ) {
+        throw new Error('Source Recipe membership preparation has no current native completion proof');
+      }
+    }
     await drain(source.relay);
     await grant(`work:read:${created.work}`, 'work.read');
     const leaseTemplates = {
@@ -836,7 +888,11 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             source.relay,
             consumer,
             source.content,
-            { directory: objects.directory, workObjects: objects },
+            {
+              directory: objects.directory,
+              workObjects: objects,
+              structureObjects: objects,
+            },
           );
         } catch (error) {
           if (
@@ -869,7 +925,11 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         source.relay,
         consumer,
         source.content,
-        { directory: objects.directory, workObjects: objects },
+        {
+          directory: objects.directory,
+          workObjects: objects,
+          structureObjects: objects,
+        },
       ),
     );
     const { accountPg: capturedPg, ...capturedOwners } = coverage;
@@ -951,7 +1011,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       erased.erasureEpoch,
       [revisionId],
     );
-    expect(original.sequence).toBe('900');
+    expect(original.sequence).toBe((BigInt(coverage.priorSequence) + 1n).toString());
     await applyContentErasure(source.content, {
       erasureId: erased.erasureId,
       erasureEpoch: erased.erasureEpoch,
@@ -981,7 +1041,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       sequence: original.sequence,
     });
     expect(retainedProof[0]!.relay_position.streamScope).toBe(MAIN_RELAY_STREAM_SCOPE);
-    expect(retainedProof[0]!.relay_position.sequence).toBe('4');
+    expect(BigInt(retainedProof[0]!.relay_position.sequence)).toBeGreaterThan(
+      BigInt(coverage.relay.sequence),
+    );
     expect(retainedProof[0]!.relay_position.dataEpoch).toBe(original.dataEpoch);
     expect(original.sequence).not.toBe(retainedProof[0]!.relay_position.sequence);
     expect(original.sequence).not.toBe(erased.erasureEpoch);
@@ -1147,12 +1209,15 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
             proofRetirementSender(graph.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!),
           );
-          const restoredEnv: WorkActivationEnvironment = {
+          const restoredEnv: WorkActivationEnvironment & { structureObjects: DirectoryObjects } = {
             fuseki,
             lineage: restoredLineage,
             objectDirectory: restoredDirectory,
             workObjects: restoredObjects,
+            structureObjects: restoredObjects,
             receiptCustody: restoredCustody,
+            structureGroupRoots: new StructureGroupRootStore(owners.content, restoredObjects),
+            structureQualifierRoots: new StructureQualifierRootStore(owners.content, restoredObjects),
           };
           const resources: RestoreResources = {
             accountPool: owners.account,
@@ -1160,7 +1225,13 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             contentPool: owners.content,
             restoredRelayPool: owners.relay,
             hmacKey: restoreKey,
-            objectStore: { directory: restoredDirectory, workObjects: restoredObjects },
+            objectStore: {
+              directory: restoredDirectory,
+              workObjects: restoredObjects,
+              structureObjects: restoredObjects,
+              structureGroupRoots: restoredEnv.structureGroupRoots,
+              structureQualifierRoots: restoredEnv.structureQualifierRoots,
+            },
             erasures: {
               authority,
               originalSource: 'retained-native-event',
@@ -1174,11 +1245,13 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
           const operations = new OwnerOperations(retainedRelay, restoredEnv, resources);
           const work: MainWorkDependencies = {
             environment: restoredEnv,
+            structureObjects: restoredObjects,
             account: authenticated!.verifier,
             access: new AccessAdmissionRegistry(owners.access),
             content: new ContentCore(owners.content),
             ownerOperations: operations,
           };
+          const recipeRequest = createRecipeApiRequest(fuseki, work, currentOwnerToken);
           const app = new Elysia().use(ownerRoutes(work)).use(healthRoutes(fuseki, work));
           const request = async (
             key: string = randomUUID(),
@@ -1239,6 +1312,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             lineage: restoredLineage,
             directory: restoredDirectory,
             custody: restoredCustody,
+            recipeRequest,
             request,
             ready,
             faultRetained,
@@ -1307,6 +1381,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     return {
       source,
       native,
+      sourceLineage: lineage,
+      beforeCutMembershipProof,
       custody,
       coverage,
       authority,
