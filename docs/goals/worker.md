@@ -26,7 +26,11 @@ makes, stop and report that instead of building it.
 - Name files, tests and identifiers by capability or acceptance ID, never by
   task ID; comments state reasons, not task IDs.
 - Never push, never touch the main checkout or `.temp/vault/`, never rebase or
-  merge `main`: the manager rebases and merges.
+  merge `main`: the manager rebases and merges. Edit with paths relative to
+  your worktree root. An absolute path that starts at the main checkout and
+  does not pass through `.temp/worktrees/<id>/` writes into the checkout the
+  shared stack hot-reloads from; a patch tool accepted three such paths on
+  2026-10-11 and the stack served them for an hour.
 - `/tmp` on this host is RAM: never put checkouts, `node_modules` or bulk data
   there. Use your worktree's `.temp` (or a short directory on disk when a path
   must be short).
