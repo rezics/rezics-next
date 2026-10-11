@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { hungTestFile, inputSelectedNativeTests, parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
+import { forgetChildScope, noteChildScope, reapChildEnvironment, reapChildScope, settleReap } from '../qa/container-reaper.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
 import { directoryLeaseHeld, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
@@ -625,9 +626,15 @@ async function command(checkout: string, args: string[], logPath: string, timeou
   diskDirectory(dirname(logPath), 'log directory');
   mkdirSync(dirname(logPath), { recursive: true });
   const log = openSync(logPath, 'w', 0o600);
+  const bunTest = args[0] === 'bun' && args[1] === 'test';
+  const commandEnvironment = bunTest
+    ? reapChildEnvironment({ ...env, REZICS_REAP_PRELOAD: '1' })
+    : env;
+  const scope = bunTest ? commandEnvironment.REZICS_REAP_SCOPE : undefined;
+  noteChildScope(scope);
   try {
     const child = spawn(args[0]!, args.slice(1), { cwd: checkout, detached: true, stdio: ['ignore', log, log],
-      env: { ...env, TMPDIR: temporary } });
+      env: { ...commandEnvironment, TMPDIR: temporary } });
     const exited = new Promise<number>((done, reject) => {
       child.once('error', reject);
       child.once('exit', code => done(code ?? 1));
@@ -649,7 +656,15 @@ async function command(checkout: string, args: string[], logPath: string, timeou
       return timedOut ? 124 : code;
     }
     finally { clearTimeout(timer); process.off('SIGINT', forward); process.off('SIGTERM', forward); }
-  } finally { closeSync(log); }
+  } finally {
+    if (scope) {
+      try { reapChildScope(commandEnvironment); } catch { /* command status still stands */ }
+      settleReap();
+      try { reapChildScope(commandEnvironment); } catch { /* command status still stands */ }
+    }
+    forgetChildScope(scope);
+    closeSync(log);
+  }
 }
 
 async function prepareCheckout(checkout: string, logs: string) {
@@ -702,7 +717,8 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
 
 export function regressionBatchCommand(batch: Batch, report: string, storyXmlPath: string): string[] {
   if (batch.tier === 'jena:check') return batch.files.some(file => nativeImageProofs.has(file))
-    ? ['bun', 'test', ...batch.files] : ['task', 'jena:check'];
+    ? ['bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`, ...batch.files]
+    : ['task', 'jena:check'];
   const standaloneStories = batch.files.every(file => file.includes('.stories.'));
   const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
     : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file]),
@@ -746,7 +762,11 @@ export function regressionBatchArtifactPaths(reported: readonly string[], artifa
   return moved;
 }
 
-export async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string): Promise<Execution> {
+/** A shorter deadline cap lets the harness prove timeout cleanup without extending tier budgets. */
+export interface RegressionBatchOptions { deadlineCapMs?: number }
+
+export async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number,
+  artifactRoot?: string, options: RegressionBatchOptions = {}): Promise<Execution> {
   mkdirSync(directory, { recursive: true });
   const report = join(directory, 'slot.json');
   const storyXmlPath = join(directory, 'storybook.xml');
@@ -757,8 +777,15 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
     : batch.tier === 'jena:check' && batch.files.some(file => nativeImageProofs.has(file)) ? batch.budgetMs
       ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values())
       : undefined;
+  const deadlineMs = batch.tier === 'jena:check' ? Math.max(jenaCheckDefaultBudgetMs, budgetMs ?? 0)
+    : Math.max(7 * 3_600_000, budgetMs ?? 0);
+  if (options.deadlineCapMs !== undefined && (!Number.isSafeInteger(options.deadlineCapMs) || options.deadlineCapMs < 1)) {
+    throw new Error('Regression batch deadline cap must be a positive integer');
+  }
+  const effectiveDeadlineMs = options.deadlineCapMs === undefined
+    ? deadlineMs : Math.min(deadlineMs, options.deadlineCapMs);
   const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
-    batch.tier === 'jena:check' ? Math.max(jenaCheckDefaultBudgetMs, budgetMs ?? 0) : Math.max(7 * 3_600_000, budgetMs ?? 0),
+    effectiveDeadlineMs,
     regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);

@@ -1,10 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { inputSelectedNativeTests, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
 import { tierTestTimeoutArg } from '../qa/core.ts';
 import { formatPlan, nativeUnionTest, planAffected, type AffectedPlan } from '../qa/affected.ts';
@@ -2864,6 +2864,36 @@ child.on('close', code => process.exit(code ?? 1));
       expect(ownerFilesFromPlan(dir, typed)).toEqual(['owner.test.ts']);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+
+test('a widened owner gate discovers worktree-only tests and filters native image proofs', () => {
+  const temporaryRoot = join(import.meta.dir, '../../.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const dir = mkdtempSync(join(temporaryRoot, 'owner-gate-worktree-'));
+  const ownerFile = 'services/main/tests/worktree-only.test.ts';
+  try {
+    for (const directory of ['services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts', 'infra/dev/tests', 'infra/jena/tests']) {
+      mkdirSync(join(dir, directory), { recursive: true });
+    }
+    mkdirSync(join(dir, 'services/main/tests'), { recursive: true });
+    writeFileSync(join(dir, ownerFile), '');
+    for (const file of inputSelectedNativeTests) {
+      mkdirSync(dirname(join(dir, file)), { recursive: true });
+      writeFileSync(join(dir, file), '');
+    }
+    const widened: AffectedPlan = {
+      base: 'abc', changed: ['scripts/qa/affected.ts'], tasks: [], frontend: [],
+      tests: { unit: [], owner: [], integration: [], model: [], 'fault/recovery': [] },
+      widened: [{ tier: 'owner', because: 'test widening' }], deferred: [], ignored: [],
+    };
+    const transcript = formatPlan(widened);
+    expect(ownerFilesFromPlan(dir, widened)).toEqual([ownerFile]);
+    expect(mergeOwnerFiles(dir, transcript)).toEqual([ownerFile]);
+    for (const file of inputSelectedNativeTests) {
+      expect(ownerFilesFromPlan(dir, widened)).not.toContain(file);
+      expect(mergeOwnerFiles(dir, transcript)).not.toContain(file);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
   test('a missing report, a self-closing testcase, a spoofed transcript and an absolute path keep their files', () => {
     const file = 'services/main/tests/a.test.ts';

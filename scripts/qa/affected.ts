@@ -14,6 +14,7 @@ import {
   legacyHostJenaGateFiles,
   nativeIntegerPreservationTest,
   nativeUnionTest,
+  ownerGateFiles,
   testArgs,
   testExclusions,
   unitHarnessFiles,
@@ -140,8 +141,8 @@ export function affectedUnitTierFiles(root: string): string[] {
   return expandTestPaths(root, affectedUnitTierEntries());
 }
 /** Registered owner files in a widened affected plan, excluding native proofs selected by their image inputs. */
-export function affectedOwnerTierEntries(): string[] {
-  return testArgs('owner').filter((file) => !inputSelectedNative.has(file));
+export function affectedOwnerTierEntries(root?: string): string[] {
+  return ownerGateFiles(root).filter((file) => !inputSelectedNative.has(file));
 }
 
 // The registered unit tier: `tests/qa/unit` plus its gate files.

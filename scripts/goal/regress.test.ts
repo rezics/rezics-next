@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statfsSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statfsSync, symlinkSync, writeFileSync } from 'node:fs';
 import * as filesystem from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -12,6 +12,7 @@ import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
+import { reapScopeLabel } from '../qa/container-reaper.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl, regressionLaneLimit,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
@@ -111,6 +112,10 @@ describe('pinned main-wide regression', () => {
         r.files.push({ file, tier: 'jena:check', outcome: 'pending' });
         r.write(file, file === longProof ? "test('native proof', () => {}, 900_000);\n" : 'pass\n');
       }
+      expect(regressionBatchCommand({ id: 'native-proof', tier: 'jena:check', files: [longProof], state: 'pending', attempts: [] },
+        '/disk/report.json', '/disk/stories.xml')).toEqual([
+        'bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`, longProof,
+      ]);
       r.commit();
       const result = await r.run({ runId: 'native-jena-deadlines' });
       const batches = result.batches.filter(batch => batch.tier === 'jena:check'
@@ -324,6 +329,65 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       expect(r.calls).toHaveLength(0);
       expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(1);
     } finally { r.cleanup(); }
+  });
+
+  test('a timed-out native proof batch reaps its labelled Docker container', async () => {
+    const r = repo();
+    const file = 'infra/jena/tests/erasure-campaign-native.test.ts';
+    const directory = join(r.dir, '.temp/native-timeout');
+    const bin = join(r.dir, '.temp/native-timeout-bin');
+    const state = join(r.dir, '.temp/native-timeout-state');
+    const dockerLog = join(r.dir, '.temp/native-docker.jsonl');
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(dockerLog)}, JSON.stringify(args) + '\\n');
+if (args[0] === 'ps') console.log('native-container');
+`);
+    chmodSync(join(bin, 'docker'), 0o755);
+    r.write(file, `import { spawnSync } from 'node:child_process';
+import { test } from 'bun:test';
+test('native container work hangs until its batch deadline', async () => {
+  if (!process.env.REZICS_REAP_SCOPE || process.env.REZICS_REAP_PRELOAD !== '1') {
+    throw new Error('native proof batch did not receive the QA reaper environment');
+  }
+  const result = spawnSync('docker', ['run', '--rm', 'jena:test', 'sleep', '600']);
+  if (result.status !== 0) throw new Error('docker run failed');
+  await new Promise<void>(() => {});
+}, 60_000);
+`);
+    r.commit();
+    const envKeys = ['PATH', 'REZICS_REAP_OWNER', 'REZICS_REAP_STATE', 'REZICS_REAP_SCOPE', 'REZICS_REAP_SCOPES'] as const;
+    const saved = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+    process.env.PATH = `${bin}:${process.env.PATH ?? ''}`;
+    process.env.REZICS_REAP_OWNER = '987654321:1';
+    process.env.REZICS_REAP_STATE = state;
+    delete process.env.REZICS_REAP_SCOPE;
+    delete process.env.REZICS_REAP_SCOPES;
+    try {
+      const result = await runBatch(r.dir, {
+        id: 'native-timeout', tier: 'jena:check', files: [file], state: 'pending', attempts: [],
+      }, directory, 1, 1, undefined, { deadlineCapMs: 5_000 });
+      expect(result.code).toBe(124);
+      expect(result.outcomes[file]).toBe('failed');
+      const calls = readFileSync(dockerLog, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
+      const run = calls.find(args => args[0] === 'run');
+      expect(run).toBeDefined();
+      const scopeLabel = run!.find(arg => arg.startsWith(`${reapScopeLabel}.`))!;
+      expect(scopeLabel).toMatch(/^rezics\.reap-scope\.[A-Za-z0-9_.-]+=1$/);
+      const cleanupFilter = `label=${scopeLabel!.slice(0, -2)}`;
+      expect(calls).toContainEqual(['ps', '-aq', '--filter', cleanupFilter]);
+      expect(calls).toContainEqual(['rm', '-f', 'native-container']);
+    } finally {
+      for (const key of envKeys) {
+        const value = saved[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      r.cleanup();
+    }
   });
 
   test('a batch timeout names the hanging file and reruns only the files that never started', async () => {

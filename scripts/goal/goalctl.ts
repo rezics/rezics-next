@@ -2535,8 +2535,11 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
 /** Owner-tier files from the same transcript. Whole-tier widening uses the worktree's owner registry. */
 export function mergeOwnerFiles(worktree: string, plan: string): string[] {
   if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
-  const entries = [...plan.matchAll(/^  owner: (.+)$/gm)].map(match => match[1]!);
-  const whole = entries.some(entry => entry.startsWith('whole tier (')) ? affectedOwnerTierEntries() : [];
+  const listed = [...plan.matchAll(/^  owner: (.+)$/gm)].map(match => match[1]!);
+  const hasWholeTier = listed.some(entry => entry.startsWith('whole tier ('));
+  const widened = /^  owner tier \(/m.test(plan) || hasWholeTier;
+  const whole = widened ? affectedOwnerTierEntries(worktree) : [];
+  const entries = widened && !hasWholeTier ? ['whole tier (widened owner registry)', ...listed] : listed;
   return existingTestFiles(worktree, entries, whole).sort();
 }
 
@@ -2552,7 +2555,7 @@ export function unitFilesFromPlan(worktree: string, plan: AffectedPlan): string[
 /** Owner files from the typed plan. Whole-tier widening uses the worktree's owner registry. */
 export function ownerFilesFromPlan(worktree: string, plan: AffectedPlan): string[] {
   const widened = plan.widened.some(item => item.tier === 'owner');
-  const entries = [...(widened ? affectedOwnerTierEntries() : []), ...plan.tests.owner];
+  const entries = [...(widened ? affectedOwnerTierEntries(worktree) : []), ...plan.tests.owner];
   return existingTestFiles(worktree, entries, []).sort();
 }
 

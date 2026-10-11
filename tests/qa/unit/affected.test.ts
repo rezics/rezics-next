@@ -480,8 +480,12 @@ test('main-wide regression stages module-input native proofs with the Jena image
       { file, tier: 'jena:check', outcome: 'pending' },
     ]);
     expect(registry.some(item => item.file === file && (item.tier === 'unit' || item.tier === 'owner'))).toBe(false);
-    expect(regressionBatchCommand({ id: 'jena-check-2', tier: 'jena:check', files: [file],
-      state: 'pending', attempts: [] }, '', '')).toEqual(['bun', 'test', file]);
+    const command = regressionBatchCommand({ id: 'jena-check-2', tier: 'jena:check', files: [file],
+      state: 'pending', attempts: [] }, '', '');
+    expect(command.slice(0, 2)).toEqual(['bun', 'test']);
+    expect(command[2]?.startsWith('--preload=')).toBe(true);
+    expect(command[2]?.endsWith('/scripts/qa/container-reaper.ts')).toBe(true);
+    expect(command.slice(3)).toEqual([file]);
   }
 });
 
