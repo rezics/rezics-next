@@ -232,28 +232,27 @@ async function prepareBrowserBooks() {
     console.log(JSON.stringify(saved));
     return;
   }
-  const { platformAdministratorSession, grantPlatformUse, grantPlatformResource } =
-    await import('../../tests/qa/fixtures/platform-grant.ts');
-  const editor = await platformAdministratorSession(process.env,
-    'openid access:grant source:intake source:read work:create work:edit work:read');
-  await grantPlatformUse(editor, editor.principalId, 'catalogue-import');
-  for (const scope of ['work:create:root', 'work:create:catalogue-import'])
-    await grantPlatformResource(editor, editor.principalId, 'work.create', scope);
+  const objectDirectory = process.env.MAIN_OBJECT_DIRECTORY;
+  if (!objectDirectory) throw new Error('Browser books preparation needs the running stack object directory');
+  const { grantRecordedPlatformUse } = await import('../../tests/qa/fixtures/platform-grant.ts');
+  const { startMediaStack } = await import('../../tests/qa/integration/media-support.ts');
+  // The source-import fixture owns its bearer independently of the website's
+  // OAuth ceiling. Product records still use the same public route handlers.
+  const stack = await startMediaStack('launch-books-browser-source', { library: true, profileCredits: true });
+  try {
+  const workObjects = stack.objects('semantic/work/');
+  await workObjects.initialize();
+  Object.assign(stack.env, { objectDirectory, workObjects });
+  const editor = await stack.member('launch-books-browser-importer', { stable: true, verified: true });
+  await grantRecordedPlatformUse(stack.accessPool, editor.principalId, ['catalogue-import']);
+  for (const scope of ['work:create:root', 'work:create:catalogue-import']) await editor.grant(scope, 'work.create');
   const started = performance.now();
   const signal = AbortSignal.timeout(budgetMs);
-  const api = workProfileCorpusApi(editor.mainOrigin, editor.token, { signal,
-    fetch: (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-      for (let attempt = 0; ; attempt++) {
-        const response = await fetch(input, init);
-        // Observe accepted native commands with their original key, as the
-        // existing browser catalogue seed does, until the receipt is terminal.
-        if (response.status !== 202 || attempt === 63) return response;
-        await response.body?.cancel();
-      }
-    }) as typeof fetch,
+  const api = workProfileCorpusApi('http://main.local', editor.token, { signal,
+    fetch: ((input, init) => stack.main.handle(new Request(input, init))) as typeof fetch,
   });
-  const built = await buildBooks(api, editor.actingSubject, `browser-books:${runId}`,
-    work => grantPlatformResource(editor, editor.principalId, 'work.edit', `work:edit:${work}`).then(() => {}), signal);
+  const built = await buildBooks(api, editor.actor, `browser-books:${runId}`,
+    work => editor.grant(`work:edit:${work}`, 'work.edit').then(() => {}), signal);
   const listed = await api.read<{ items: { id: string; revision: string; platform: string | null }[]; nextCursor: string | null }>(
     `/v1/works/${short(built.work)}/releases`, signal);
   if (listed.nextCursor || listed.items.length !== built.editions.length || built.editions.some(edition =>
@@ -268,6 +267,9 @@ async function prepareBrowserBooks() {
   writeFileSync(`${path}.tmp`, JSON.stringify(prepared, null, 2) + '\n', { mode: 0o600 });
   renameSync(`${path}.tmp`, path);
   console.log(JSON.stringify(prepared));
+  } finally {
+    await stack.stop();
+  }
 }
 
 if (import.meta.main) {
