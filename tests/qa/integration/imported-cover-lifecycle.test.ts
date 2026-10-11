@@ -422,7 +422,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const editorUse = await selectAvatar(stack, owner, work, editorAsset.asset, importedUse.selection);
       const editorCover = await json<WorkPage>(await call('GET', workPath));
       expect(editorCover.cover).toMatchObject({ kind: 'image', selection: editorUse.selection, use: editorUse.use });
-      expect(editorCover.cover).not.toHaveProperty('coverCredit');
+      expect(editorCover.cover.coverCredit).toBeNull();
       expect((await call('GET', editorCover.cover.url!)).status).toBe(200);
       const staleAvatar = await owner.send('PUT', `/v1/resources/${work.slice(-36)}/avatar`, {
         profile: 'resource-avatar-selection-v1', expectedSelection: importedUse.selection,
