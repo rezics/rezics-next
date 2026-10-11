@@ -62,7 +62,8 @@ const reportReceiptFields = { profile: t.String(), reportId: t.String(), caseId:
   caseGeneration: t.String(), evidenceDigest: t.String(), replayed: t.Boolean(),
   caseState: t.Optional(t.String()), decisionHead: t.Optional(t.Nullable(t.String())),
   evidence: t.Array(t.Object({ ordinal: t.Number(), owner: t.String(), resource: t.String(), component: t.String(),
-    revision: t.Nullable(t.String()), revisionDigest: t.Nullable(t.String()), state: t.String() })) };
+    locator: t.Optional(t.Nullable(t.String())), revision: t.Nullable(t.String()),
+    revisionDigest: t.Nullable(t.String()), state: t.String() })) };
 const reportResult = t.Object(reportReceiptFields);
 const staffRightsComplaint = t.Nullable(t.Object({
   process: t.Union([t.Literal('dmca_512'), t.Literal('ordinary_dispute')]),

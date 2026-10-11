@@ -101,7 +101,7 @@ export interface ReportInput {
 export interface ReportResult {
   reportId: string; caseId: string; caseGeneration: string; evidenceDigest: string; replayed: boolean;
   evidence: Array<{ ordinal: number; owner: string; resource: string; component: string; revision: string | null;
-    revisionDigest: string | null; state: EvidenceState }>;
+    revisionDigest: string | null; state: EvidenceState; locator?: string | null }>;
 }
 
 interface StaffReportNotice {
@@ -433,18 +433,19 @@ export class GovernanceStore {
   }
 
   private async reportResult(client: PoolClient, reportId: string, replayed: boolean,
-    specialistRead = false): Promise<ReportResult> {
+    specialistRead = false, includeEvidenceLocators = false): Promise<ReportResult> {
     const report = (await client.query<{ case_id: string; generation: string; evidence_digest: string; urgent: boolean }>(
       `SELECT r.case_id, c.generation::text, r.evidence_digest, c.urgent FROM access.governance_report r
        JOIN access.governance_case c ON c.id = r.case_id WHERE r.id = $1 FOR SHARE OF c`, [reportId])).rows[0]!;
     const evidence = report.urgent && !specialistRead ? [] : (await client.query<{ ordinal: number; owner: string; resource: string; component: string;
-      revision: string | null; revision_digest: string | null; state: EvidenceState }>(`SELECT ordinal, owner,
-        resource, component, revision, revision_digest, state FROM access.governance_evidence
+      locator: string | null; revision: string | null; revision_digest: string | null; state: EvidenceState }>(`SELECT ordinal, owner,
+        resource, component, locator, revision, revision_digest, state FROM access.governance_evidence
       WHERE report_id = $1 ORDER BY ordinal`, [reportId])).rows;
     return { reportId, caseId: report.case_id, caseGeneration: report.generation,
       evidenceDigest: report.evidence_digest, replayed,
       evidence: evidence.map(row => ({ ordinal: row.ordinal, owner: row.owner, resource: row.resource,
-        component: row.component, revision: row.revision, revisionDigest: row.revision_digest, state: row.state })) };
+        component: row.component, ...(includeEvidenceLocators ? { locator: row.locator } : {}),
+        revision: row.revision, revisionDigest: row.revision_digest, state: row.state })) };
   }
 
   /**
@@ -475,7 +476,7 @@ export class GovernanceStore {
           row.urgent ? 'governance.safety.evidence' : DECIDE_ACTION[row.kind])
           .catch(() => { throw new GovernanceDenied('report is unavailable'); });
       }
-      const result = { ...await this.reportResult(client, reportId, false, row.urgent), caseState: row.state,
+      const result = { ...await this.reportResult(client, reportId, false, row.urgent, staffRead), caseState: row.state,
         decisionHead: row.decision_head };
       if (!staffRead) return result;
       const notice = (await client.query<{

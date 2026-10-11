@@ -11,6 +11,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { workRead, type WorkReadSession } from '../work/read-session.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { RealmReplyStore } from '../realm-reply/store.ts';
+import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import type { PublicReportOwners } from './store.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -141,16 +142,27 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
   const replyOwner = { pool: contentPool, core,
     reader: new RealmReplyStore(new RealmReplyContentStore(contentPool), core, deps.access, deps.environment) };
   const capture = ownerEvidenceCapture({ graph: { env: deps.environment, canReadWork: async () => false },
-    content: { core, canRead: async () => new Set() } });
+    content: { core, canRead: async () => new Set() },
+    ...(deps.media ? { media: { pool: contentPool,
+      canReadWork: (principal, actingSubject, work) => deps.access.canReadWork(principal, actingSubject, work),
+      isServedAvatar: async (work, use) => {
+        const snapshot = await deps.media!.store.avatarRows([work], DEFAULT_MEDIA_CONTEXT);
+        const avatar = snapshot.rows.get(work);
+        return avatar?.context === DEFAULT_MEDIA_CONTEXT && avatar.use === use && avatarImageEligible(avatar);
+      },
+    } } : {}) });
   return {
     async resolve(input, request, principal) {
       const revisionAddress = contentRevisionAddress(input.target);
       if (revisionAddress && input.selection) {
         throw new GovernanceInvalid('Content revision URL cannot be combined with a selection');
       }
-      const selectedRevision = revisionAddress ?? (input.selection
-        ? contentRevision.exec(input.selection.revision)?.[1] ?? null : null);
-      if (input.selection && !selectedRevision) throw new GovernanceInvalid('Content revision selection is invalid');
+      const selectedSelectionRevision = input.selection
+        ? contentRevision.exec(input.selection.revision)?.[1] ?? null : null;
+      if (input.selection && !selectedSelectionRevision) throw new GovernanceInvalid('Content revision selection is invalid');
+      const selectedRevision = revisionAddress ?? (input.selection?.component === 'body'
+        ? selectedSelectionRevision : null);
+      const selectedMediaRevision = input.selection?.component === 'media_use' ? selectedSelectionRevision : null;
       const requestedResource = revisionAddress ? null : await reportAddress(deps, input.target);
       let contentResource: string | null = null;
       if (selectedRevision) {
@@ -168,6 +180,25 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
       if (!principal || !input.actingSubject) headers.delete('authorization');
       const reading = new Request(request.url, { method: 'POST', headers });
       const resolve = async (session: WorkReadSession) => {
+          if (selectedMediaRevision && input.selection?.component === 'media_use') {
+            const [target] = await resolveTargets(session, [resource], 'report', undefined, reportOwnerTargets(contentPool));
+            if (!target) throw new GovernanceDenied('Media target is unavailable');
+            if (target.base !== 'work' || target.work !== resource || target.resource !== resource
+              || target.types.includes('https://rezics.com/vocab/MediaAsset')) {
+              throw new GovernanceInvalid('Media use selection requires an ordinary Work cover');
+            }
+            const actor = session.options.actingSubject;
+            const readable = target.disclosure === 'public' || !!session.principal && !!actor
+              && await deps.access.canReadWork(session.principal, actor, resource);
+            if (!readable) throw new GovernanceDenied('reporter cannot read the reported Work cover');
+            if (!deps.media) throw new GovernanceUnavailable('Media owner is unavailable');
+            const evidence = await capture.admitted({ owner: 'media', resource, component: 'media_use',
+              revision: selectedMediaRevision, locator: input.selection.locator },
+            { actingSubject: actor, mediaWorkRead: true, requireServedAvatar: true });
+            if (evidence.state !== 'available') throw new GovernanceDenied('Reported Work cover is unavailable');
+            const attribution = await authorAndRealm(session, resource, target.work, contentPool);
+            return { evidence, ...attribution };
+          }
           if (selectedRevision) {
             const [target] = await resolveTargets(session, [resource], 'report', undefined, reportOwnerTargets(contentPool));
             if (!target) throw new GovernanceDenied('Content target is unavailable');

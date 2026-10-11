@@ -3,6 +3,7 @@ import type { ContentCore } from '../../../../content/src/core.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { RealmReplyStore } from '../realm-reply/store.ts';
 import { GLOBAL_CONTEXT } from './schema.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../media/contract.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
@@ -34,7 +35,8 @@ export interface EvidenceOwners {
       mediaType: string } | null>;
   /** Content-owned immutable Use and its exact asset revision/representation. */
   media?: { pool: Pool;
-    canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean> };
+    canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
+    isServedAvatar?: (work: string, use: string) => Promise<boolean> };
 }
 
 export interface ReplyEvidenceOwner {
@@ -94,6 +96,62 @@ const result = (target: EvidenceTarget, state: CapturedEvidence['state'], revisi
   representation: string | null, via: string): CapturedEvidence => ({ ...target, state, revisionDigest,
   representation, provenance: { capturedBy: via } });
 
+async function captureMediaUseEvidence(owner: NonNullable<EvidenceOwners['media']>, target: EvidenceTarget,
+  actingSubject: string | null, canReadWork: () => Promise<boolean>, requireServedAvatar = false): Promise<CapturedEvidence> {
+  if (target.owner !== 'media' || target.component !== 'media_use' || !agent.test(target.resource)
+    || !target.revision || !uuid.test(target.revision) || !target.locator || !uuid.test(target.locator)) {
+    throw new GovernanceInvalid('media use evidence needs its target, exact asset revision and Use');
+  }
+  try {
+    if (!await canReadWork()) throw new GovernanceDenied('reporter cannot read the reported media target');
+    if (requireServedAvatar && (!owner.isServedAvatar
+      || !await owner.isServedAvatar(target.resource, target.locator))) {
+      throw new GovernanceDenied('reported cover is unavailable');
+    }
+    const row = (await owner.pool.query<{ asset_id: string; asset_revision_id: string;
+      representation_id: string; byte_digest: string; media_type: string; representation_availability: string;
+      revision_availability: string; context: string; role: string; crop: string | null;
+      disclosure: string; lifecycle: string; owner: string; served_use: string | null }>(
+      `SELECT u.asset_id::text, u.asset_revision_id::text, u.representation_id::text,
+         r.byte_digest, r.media_type, r.availability AS representation_availability,
+         v.availability AS revision_availability, u.context, u.role, u.crop, s.disclosure, s.lifecycle,
+         a.owner, served.use_id::text AS served_use
+       FROM media.use u JOIN media.asset a ON a.id = u.asset_id
+       JOIN media.asset_state s ON s.id = a.state_head
+       JOIN media.representation r ON r.id = u.representation_id AND r.asset_id = u.asset_id
+       JOIN content.revision v ON v.id = u.asset_revision_id AND v.variant_id = u.asset_variant_id
+       LEFT JOIN media.selection_slot slot ON slot.target = u.target AND slot.context = u.context
+         AND slot.role = 'avatar'
+       LEFT JOIN media.selection_revision served ON served.id = media.delivered_selection(slot)
+       WHERE u.id = $1 AND u.target = $2 AND u.asset_revision_id = $3`,
+    [target.locator, target.resource, target.revision])).rows[0];
+    if (!row) return result(target, 'unavailable', null, null, 'media-exact-use-v1');
+    if (requireServedAvatar && (row.role !== 'avatar' || row.context !== DEFAULT_MEDIA_CONTEXT
+      || row.served_use !== target.locator)) {
+      return result(target, 'unavailable', null, null, 'media-exact-use-v1');
+    }
+    if (row.disclosure !== 'public' && row.owner !== actingSubject) {
+      throw new GovernanceDenied('reporter cannot read the reported media asset');
+    }
+    if (row.lifecycle === 'erased' || row.revision_availability === 'erased'
+      || row.representation_availability === 'erased') {
+      return result(target, 'erased', null, null, 'media-exact-use-v1');
+    }
+    if (row.lifecycle !== 'active' || row.revision_availability !== 'available'
+      || row.representation_availability !== 'available') {
+      return result(target, 'unavailable', null, null, 'media-exact-use-v1');
+    }
+    return result(target, 'available', sha256(JSON.stringify([target.locator, target.resource,
+      row.asset_id, row.asset_revision_id, row.representation_id, row.byte_digest,
+      row.context, row.role, row.crop])), row.media_type, 'media-exact-use-v1');
+  } catch (error) {
+    if (error instanceof GovernanceInvalid || error instanceof GovernanceDenied || error instanceof GovernanceUnavailable) {
+      throw error;
+    }
+    throw new GovernanceUnavailable('Media evidence owner is unavailable', { cause: error });
+  }
+}
+
 /**
  * Captures exactly the named grain from its owner. A component without an
  * admitted exact reader is `unsupported`; no body is fabricated for
@@ -101,10 +159,11 @@ const result = (target: EvidenceTarget, state: CapturedEvidence['state'], revisi
  */
 export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & {
   /** Internal intake only, after resolveTargets has admitted this exact target. */
-  admitted(target: EvidenceTarget): Promise<CapturedEvidence>;
+  admitted(target: EvidenceTarget, admission?: { actingSubject?: string; mediaWorkRead?: boolean;
+    requireServedAvatar?: boolean }): Promise<CapturedEvidence>;
 } {
   return {
-    async admitted(target) {
+    async admitted(target, admission) {
       if (target.owner === 'graph' && owners.graph && target.revision && graphAnchor.test(target.revision)) {
         if (target.component === 'title') {
           try {
@@ -132,6 +191,10 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
           return result(target, 'available', read.reference.byteDigest, read.reference.format, 'content-exact-read-v1');
         }
         return result(target, read.status === 'erased' ? 'erased' : 'unavailable', null, null, 'content-exact-read-v1');
+      }
+      if (target.owner === 'media' && target.component === 'media_use' && owners.media) {
+        return captureMediaUseEvidence(owners.media, target, admission?.actingSubject ?? null,
+          async () => admission?.mediaWorkRead === true, admission?.requireServedAvatar === true);
       }
       return result({ ...target, revision: null }, 'unsupported', null, null, 'no-admitted-exact-reader');
     },
@@ -228,38 +291,8 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
         }
       }
       if (target.owner === 'media' && target.component === 'media_use' && owners.media) {
-        if (!agent.test(target.resource) || !target.revision || !uuid.test(target.revision)
-          || !target.locator || !uuid.test(target.locator)) {
-          throw new GovernanceInvalid('media use evidence needs its target, exact asset revision and Use');
-        }
-        if (!await owners.media.canReadWork(principal, actingSubject, target.resource)) {
-          throw new GovernanceDenied('reporter cannot read the reported media target');
-        }
-        const row = (await owners.media.pool.query<{ asset_id: string; asset_revision_id: string;
-          representation_id: string; byte_digest: string; media_type: string; context: string; role: string;
-          crop: string | null; disclosure: string; lifecycle: string; owner: string; availability: string }>(
-          `SELECT u.asset_id::text, u.asset_revision_id::text, u.representation_id::text,
-             r.byte_digest, r.media_type, u.context, u.role, u.crop, s.disclosure, s.lifecycle,
-             a.owner, v.availability
-           FROM media.use u JOIN media.asset a ON a.id = u.asset_id
-           JOIN media.asset_state s ON s.id = a.state_head
-           JOIN media.representation r ON r.id = u.representation_id AND r.asset_id = u.asset_id
-           JOIN content.revision v ON v.id = u.asset_revision_id AND v.variant_id = u.asset_variant_id
-           WHERE u.id = $1 AND u.target = $2 AND u.asset_revision_id = $3`,
-          [target.locator, target.resource, target.revision])).rows[0];
-        if (!row) return result(target, 'unavailable', null, null, 'media-exact-use-v1');
-        if (row.disclosure !== 'public' && row.owner !== actingSubject) {
-          throw new GovernanceDenied('reporter cannot read the reported media asset');
-        }
-        if (row.lifecycle === 'erased' || row.availability === 'erased') {
-          return result(target, 'erased', null, null, 'media-exact-use-v1');
-        }
-        if (row.availability !== 'available') {
-          return result(target, 'unavailable', null, null, 'media-exact-use-v1');
-        }
-        return result(target, 'available', sha256(JSON.stringify([target.locator, target.resource,
-          row.asset_id, row.asset_revision_id, row.representation_id, row.byte_digest,
-          row.context, row.role, row.crop])), row.media_type, 'media-exact-use-v1');
+        return captureMediaUseEvidence(owners.media, target, actingSubject,
+          () => owners.media!.canReadWork(principal, actingSubject, target.resource));
       }
       if (target.owner === 'source' && owners.source && ['synopsis', 'cover', 'record'].includes(target.component)) {
         const recordId = sourceId(target.resource);
