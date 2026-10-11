@@ -1,10 +1,11 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Client, Pool, type PoolClient } from 'pg';
 import type { ExactReadResult } from '../../content/src/core.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
+import { clearVerifiedImmutableObjectCache, ObjectIntegrityError, ObjectUnavailable,
+  S3ImmutableObjects, type ImmutableObjects } from
   '../src/infrastructure/immutable-objects.ts';
 import { restoredCustodyDigests, type RestoredGraphCustody } from '../src/modules/erasure/custody.ts';
 import { discloseContent } from '../src/modules/disclosure/assembly.ts';
@@ -21,7 +22,11 @@ import { GRAPHS, hash, prepareWorkComponent } from '../src/modules/work/activate
 import { RevisionCorrupt, RevisionNotFound } from '../src/modules/work/history.ts';
 
 const directories: string[] = [];
-afterEach(() => {
+const servers: ReturnType<typeof Bun.serve>[] = [];
+beforeEach(() => clearVerifiedImmutableObjectCache());
+afterEach(async () => {
+  clearVerifiedImmutableObjectCache();
+  await Promise.all(servers.splice(0).map(server => server.stop(true)));
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
@@ -38,6 +43,36 @@ class MemoryObjects implements ImmutableObjects {
     if (hash(bytes) !== digest) throw new ObjectIntegrityError('exact custody object is corrupt');
     return new Uint8Array(bytes);
   }
+}
+
+function cachedObjectStore() {
+  const bucket = 'custody-test';
+  const prefix = 'work/custody/';
+  const data = new Map<string, Uint8Array>();
+  const counts = { gets: 0 };
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    const url = new URL(request.url);
+    if (!url.pathname.startsWith(`/${bucket}/`)) return new Response(null, { status: 404 });
+    const key = decodeURIComponent(url.pathname.slice(bucket.length + 2));
+    if (request.method === 'PUT') {
+      data.set(key, new Uint8Array(await request.arrayBuffer()));
+      return new Response(null, { status: 200 });
+    }
+    if (request.method === 'GET') {
+      counts.gets++;
+      const bytes = data.get(key);
+      return bytes ? new Response(Buffer.from(bytes), { status: 200,
+        headers: { 'content-length': String(bytes.byteLength) } }) : new Response(null, { status: 404 });
+    }
+    return new Response(null, { status: 405 });
+  } });
+  servers.push(server);
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`, bucket,
+    accessKeyId: 'custody-test-key', secretAccessKey: 'custody-test-secret', prefix });
+  const keyOf = (digest: string) => `${prefix}sha256/${digest}`;
+  return { store, counts,
+    replace(digest: string, bytes: Uint8Array) { data.set(keyOf(digest), new Uint8Array(bytes)); },
+    remove(digest: string) { data.delete(keyOf(digest)); } };
 }
 
 /** Models graph metadata only; C6 verifies the actual manifest, state and shape bytes. */
@@ -131,7 +166,7 @@ function fixture() {
     throw new Error(`unexpected borrowed Relay query: ${sql}`);
   }) as typeof relayClient.query;
   const graph: RestoredGraphCustody = { fuseki, lineage: { dataEpoch: 'restored-epoch', routingEpoch: '2' } };
-  const store = { directory, workObjects: objects };
+  const store: { directory: string; workObjects: ImmutableObjects } = { directory, workObjects: objects };
   const addModel = async (commandModule: string) => {
     const shape = Buffer.from(`@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:shape:${commandModule}> a sh:NodeShape .\n`);
     const manifestBytes = Buffer.from(JSON.stringify({ commandModule, profiles: [{
@@ -341,6 +376,24 @@ test('missing command adapter, terminal position, owner result or exact bytes ca
     c.row[field] = before;
   }
 });
+
+for (const state of ['changed', 'vanished'] as const) {
+  test(`restored historical custody rereads the selected command object when its cached copy has ${state}`, async () => {
+    const f = fixture();
+    const c = await command(f);
+    const remote = cachedObjectStore();
+    f.store.workObjects = remote.store;
+    for (const digest of Object.values(c.roots)) await remote.store.put(f.objects.data.get(digest)!);
+    const getsBeforeRead = remote.counts.gets;
+    f.graph.receiptCustody = historicalReader(f, c);
+    if (state === 'changed') remote.replace(c.row.payload_sha256, Buffer.from('changed physical command bytes'));
+    else remote.remove(c.row.payload_sha256);
+
+    if (state === 'changed') await expect(f.read()).rejects.toBeInstanceOf(ObjectIntegrityError);
+    else await expect(f.read()).rejects.toBeInstanceOf(ObjectUnavailable);
+    expect(remote.counts.gets).toBe(getsBeforeRead + 1);
+  });
+}
 
 test('journal-bound terminal command erasure omits only its exact raw root from restored custody', async () => {
   const f = fixture();

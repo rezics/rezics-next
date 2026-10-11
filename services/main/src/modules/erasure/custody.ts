@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { withoutVerifiedImmutableObjectCache } from '../../infrastructure/immutable-objects.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
 import type { HistoricalReceiptResult } from '../outbox/receipt-custody.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
@@ -247,7 +248,9 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
       // Retired/superseded originals can be absent from every graph reference scan.
       for (const digest of exact.objectDigests) {
         if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('retained command custody digest is invalid');
-        const bytes = objects.workObjects ? await objects.workObjects.get(digest)
+        const workObjects = objects.workObjects;
+        const bytes = workObjects
+          ? await withoutVerifiedImmutableObjectCache(() => workObjects.get(digest))
           : await readFile(join(objects.directory, digest));
         if (hash(bytes) !== digest) {
           throw new Error('retained command custody object differs from its exact digest');
