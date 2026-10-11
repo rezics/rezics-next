@@ -190,6 +190,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/semantic-change-race.test.ts',
   // Post lifecycle leaves a retained synthetic migration graph and an invalidated membership completion proof (65 legacy Works without a publisher), so a later file on the same database is refused as populated without prepared membership.
   'tests/qa/integration/post-lifecycle.test.ts',
+  // Raw protection probes invalidate the membership completion proof, so later Recipe writers need a fresh project.
+  'tests/qa/integration/g-829-public-reads.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

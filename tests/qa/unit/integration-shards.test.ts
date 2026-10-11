@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { planShards, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
+import { planShards, planStackProjects, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
 import {
   integrationBudgetSummary,
   integrationOverBudgetFiles,
@@ -97,6 +97,28 @@ test('estimates that already fit leave the integration plan unchanged', () => {
     expect(integrationTierWallMs(plan.map((shard) => shard.resourceClass), slots, plan.length)).toBe(ordinaryBudgetMs);
   }
   expect(integrationOverBudgetFiles(estimates)).toEqual([]);
+});
+
+test('the membership-proof probe runs alone while ordinary Recipe files share a batch', () => {
+  const probe = 'tests/qa/integration/g-829-public-reads.test.ts';
+  const ordinaryFiles = [
+    'tests/qa/integration/realm-submission-api.test.ts',
+    'tests/qa/integration/recipe-update.test.ts',
+    'tests/qa/integration/recipe-work-page.test.ts',
+  ];
+  const files = [probe, ...ordinaryFiles];
+  const estimates = new Map(files.map((file) => [file, 10] as const));
+
+  const projects = planStackProjects(estimates, 1, 'integration');
+  expect(projects.find((project) => project.includes(probe))).toEqual([probe]);
+  expect(projects.find((project) => ordinaryFiles.every((file) => project.includes(file)))?.length)
+    .toBe(ordinaryFiles.length);
+  expect(projects.flat().sort()).toEqual([...files].sort());
+
+  const batches = planIntegrationShards(estimates, 1).flatMap((shard) => shard.batches);
+  expect(batches.find((batch) => batch.includes(probe))).toEqual([probe]);
+  expect(batches.find((batch) => ordinaryFiles.every((file) => batch.includes(file)))?.length)
+    .toBe(ordinaryFiles.length);
 });
 
 const queueFiles = [
