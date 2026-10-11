@@ -2,6 +2,7 @@ import { expect, spyOn, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modules/outbox/relay-position.ts';
+import type { CustodiedOutbox } from '../src/modules/outbox/relay.ts';
 import { ZoneBrowseProjection, ZONE_BROWSE_PROJECTION_COST } from '../src/modules/zone-browse/store.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
@@ -16,6 +17,23 @@ const adoptions = (count: number): Adoption[] => Array.from({ length: count }, (
   realm, work: id(index + 1), sequence: String(index + 1), epochOrder: '1',
 }));
 
+function slimCustody(): CustodiedOutbox {
+  const receipt = 'urn:rezics:receipt:metadata';
+  const batchId = 'urn:rezics:outbox:metadata';
+  const eventId = 'urn:rezics:event:metadata';
+  return {
+    batch: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4',
+      routingEpoch: 'routing', graphSequence: '99', batchId, eventIds: [eventId], custodiedReceipt: receipt },
+    events: [{ specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
+      type: 'com.rezics.work.metadata-changed.v1', datacontenttype: 'application/json',
+      data: { batchId, routingEpoch: 'routing', ordinal: 0,
+        sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '99' },
+        relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' },
+        receipt: { id: receipt, action: 'work.edit', outcome: 'succeeded', admissionId: 'admission',
+          requestDigest: 'a'.repeat(64), authorityEpoch: 'authority', scope: 'work', work: id(1) } } }],
+  };
+}
+
 /** Owner doubles retain graph, delivered headers and SQL transactions independently.
  * Tests drive the real projection; a missing delivery never alters graph contents. */
 function fixture(count = 65) {
@@ -24,10 +42,12 @@ function fixture(count = 65) {
   const headers = new Set(['5']);
   const headerCounts = new Map<string, number>();
   const delivered = { sequence: '5', epoch: 'epoch' };
+  const acknowledged = { sequence: '3' };
+  const custody = { value: null as CustodiedOutbox | null, reads: [] as { epoch: string; sequence: string }[] };
   let candidates = new Map<string, Candidate>();
   let transaction: Map<string, Candidate> | undefined;
   const calls = { project: [] as number[], prune: [] as number[], rollback: 0, budgets: [] as boolean[],
-    insert: 0, sql: [] as string[] };
+    insert: 0, sql: [] as string[], graph: [] as string[], relay: [] as string[] };
   const failures = { insertAt: 0 };
   let afterPage: (() => void) | undefined;
   const sql = async (statement: string, values: unknown[] = []) => {
@@ -62,7 +82,17 @@ function fixture(count = 65) {
   };
   const access = { query: sql, connect: async () => ({ query: sql, release() {} }) } as unknown as Pool;
   const relayQuery = async (statement: string, values: unknown[] = []) => {
+    calls.relay.push(statement);
     if (/^(?:BEGIN|COMMIT|ROLLBACK|SET LOCAL)/.test(statement)) return { rows: [] };
+    if (statement.includes('minimum_sequence')) {
+      expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
+      return { rows: [{ minimum_sequence: [...headers].sort((a, b) => Number(BigInt(a) - BigInt(b)))[0] ?? null,
+        newest_delivered_sequence: delivered.sequence }] };
+    }
+    if (statement.includes('FROM relay.checkpoint')) {
+      expect(values).toEqual(['test-relay']);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: acknowledged.sequence }] };
+    }
     if (statement.includes('coalesce(max(sequence),0)::text AS sequence')) {
       return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: delivered.epoch, sequence: delivered.sequence }] };
     }
@@ -78,7 +108,11 @@ function fixture(count = 65) {
   };
   const relay = { query: relayQuery, connect: async () => ({ query: relayQuery, release() {} }) } as unknown as Pool;
   const fuseki = { query: async (query: string) => {
+    calls.graph.push(query);
     calls.budgets.push(Boolean(fusekiReadBudget.getStore()));
+    if (query.includes('SELECT ?controlSequence')) return { results: { bindings: [{
+      controlSequence: { value: graph.relaySequence }, routing: { value: 'routing' },
+    }] } };
     if (query.includes('SELECT ?epoch ?prior')) return { results: { bindings: [] } };
     if (query.includes('SELECT ?sequence')) {
       expect(query).toContain('?relaySequence');
@@ -105,8 +139,8 @@ function fixture(count = 65) {
     }
     throw new Error(`unexpected graph query: ${query}`);
   } };
-  const instance = new ZoneBrowseProjection(access, relay, { fuseki,
-    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as unknown as WorkActivationEnvironment);
+  const env = { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as unknown as WorkActivationEnvironment;
+  const instance = new ZoneBrowseProjection(access, relay, env, 'test-relay');
   const state = instance as unknown as { ready: boolean; checkpoint: RelayHandoffPosition };
   state.ready = true;
   state.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '3' };
@@ -129,7 +163,14 @@ function fixture(count = 65) {
     expect(state.ready).toBe(true);
     expect(await current()).toBe(true);
   };
-  return { instance, state, graph, headers, headerCounts, delivered, calls, failures, gap, finish, current,
+  return { instance, state, graph, headers, headerCounts, delivered, acknowledged, custody, calls, failures, gap, finish, current,
+    supplyCustody: (value: CustodiedOutbox | null) => {
+      custody.value = value;
+      env.receiptCustody = { read: async (epoch: string, sequence: string) => {
+        custody.reads.push({ epoch, sequence });
+        return custody.value;
+      } } as WorkActivationEnvironment['receiptCustody'];
+    },
     candidates: () => candidates,
     seed: (row: Candidate) => { candidates.set(key(row), row); },
     afterPage: (run: () => void) => { afterPage = run; } };
@@ -150,6 +191,7 @@ test('explicit backfill waits for all pages and remains idempotent for preparati
 test('a missing header that never arrives recovers all authoritative candidates in bounded pages', async () => {
   const f = fixture(130);
   await f.gap();
+  f.calls.budgets.length = 0;
   await f.instance.tick();
   expect(f.calls.project).toEqual([64]);
   expect(f.candidates().size).toBe(64);
@@ -168,6 +210,8 @@ test('a missing header that never arrives recovers all authoritative candidates 
 
 test('the missing-batch worker fault records the requested sequence, checkpoint and relay epoch', async () => {
   const f = fixture(1);
+  f.graph.relaySequence = '8';
+  f.acknowledged.sequence = '5';
   const lines: string[] = [];
   const consoleError = spyOn(console, 'error').mockImplementation((line: unknown) => { lines.push(String(line)); });
   try {
@@ -182,7 +226,81 @@ test('the missing-batch worker fault records the requested sequence, checkpoint 
       'rezics.relay.requested_sequence': '4',
       'rezics.projection.checkpoint_sequence': '3',
       'rezics.relay.data_epoch': 'epoch',
+      'rezics.relay.routing_epoch': 'routing',
+      'rezics.relay.retention_floor': 'absent',
+      'rezics.relay.minimum_retained_sequence': '5',
+      'rezics.relay.newest_committed_sequence': '8',
+      'rezics.relay.newest_delivered_sequence': '5',
+      'rezics.relay.acknowledged_sequence': '5',
+      'rezics.relay.custody_supplied': false,
+      'rezics.relay.custody_found': false,
     });
+  } finally { consoleError.mockRestore(); }
+});
+
+test('slim receipt custody supplies a missing batch without reconstructing SQL relay delivery', async () => {
+  const f = fixture(1);
+  f.supplyCustody(slimCustody());
+  const lines: string[] = [];
+  const consoleError = spyOn(console, 'error').mockImplementation((line: unknown) => { lines.push(String(line)); });
+  try {
+    expect(await f.instance.tick()).toBe(1);
+    expect(f.state.checkpoint.sequence).toBe('4');
+    expect(f.state.ready).toBe(true);
+    expect(f.calls.project).toEqual([]);
+    expect(lines).toEqual([]);
+    expect(f.custody.reads.length).toBeGreaterThanOrEqual(2);
+    expect(f.custody.reads.every(position => position.epoch === 'epoch' && position.sequence === '4')).toBe(true);
+    expect(f.calls.relay.some(statement => /^\s*(INSERT|UPDATE|DELETE)\b/.test(statement))).toBe(false);
+    expect(await f.instance.tick()).toBe(0);
+    expect(f.state.checkpoint.sequence).toBe('5');
+    expect(await f.current()).toBe(true);
+  } finally { consoleError.mockRestore(); }
+});
+
+test('slim custody also supplies an incomplete SQL delivery without acknowledging it', async () => {
+  const f = fixture(1);
+  f.headers.add('4');
+  f.headerCounts.set('4', 1);
+  f.supplyCustody(slimCustody());
+  expect(await f.instance.tick()).toBe(1);
+  expect(f.state.checkpoint.sequence).toBe('4');
+  expect(f.calls.project).toEqual([]);
+  expect(f.calls.relay.some(statement => /^\s*(INSERT|UPDATE|DELETE)\b/.test(statement))).toBe(false);
+});
+
+test('custody from a foreign stream, epoch, routing cut or mismatched envelope cannot advance', async () => {
+  const corruptions: ((value: CustodiedOutbox) => void)[] = [
+    value => { Object.assign(value.batch, { streamScope: 'urn:rezics:stream:foreign' }); },
+    value => { value.batch.dataEpoch = 'foreign'; },
+    value => { value.batch.routingEpoch = 'foreign'; },
+    value => { value.events[0]!.data.receipt.id = 'urn:rezics:receipt:other'; },
+    value => { value.events[0]!.data.relayPosition!.sequence = '5'; },
+    value => { Object.assign(value.events[0]!, { source: 'https://rezics.com/services/foreign' }); },
+  ];
+  for (const corrupt of corruptions) {
+    const f = fixture(1);
+    const retained = slimCustody();
+    corrupt(retained);
+    f.supplyCustody(retained);
+    await expect(f.instance.tick()).rejects.toThrow();
+    expect(f.state.checkpoint.sequence).toBe('3');
+    expect(f.calls.project).toEqual([]);
+    expect(await f.current()).toBe(false);
+  }
+});
+
+test('a supplied custody owner with no requested batch is distinguished in the gap fault', async () => {
+  const f = fixture(1);
+  f.supplyCustody(null);
+  const lines: string[] = [];
+  const consoleError = spyOn(console, 'error').mockImplementation((line: unknown) => { lines.push(String(line)); });
+  try {
+    await f.gap();
+    expect(f.custody.reads).toContainEqual({ epoch: 'epoch', sequence: '4' });
+    const fault = lines.map(line => JSON.parse(line) as Record<string, unknown>)
+      .find(line => line.event === 'worker_fault');
+    expect(fault).toMatchObject({ 'rezics.relay.custody_supplied': true, 'rezics.relay.custody_found': false });
   } finally { consoleError.mockRestore(); }
 });
 
@@ -319,6 +437,60 @@ test('a graph change during a page invalidates recovery and retries from a new a
   expect(f.state.checkpoint.sequence).toBe('3');
   expect(await f.current()).toBe(false);
   await f.finish();
+});
+
+test('sustained unrelated writes defer reconciliation after three attempts and resume after bounded cooldown', async () => {
+  const f = fixture();
+  await f.gap();
+  let now = 0;
+  const clock = spyOn(performance, 'now').mockImplementation(() => now);
+  const lines: string[] = [];
+  const consoleWarn = spyOn(console, 'warn').mockImplementation((line: unknown) => { lines.push(String(line)); });
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      f.afterPage(() => { f.graph.sequence = String(BigInt(f.graph.sequence) + 1n); });
+      await expect(f.instance.tick()).rejects.toBeInstanceOf(WorkReadUnavailable);
+      expect(f.instance.recoveryStatus().attempts).toBe(attempt);
+      expect(f.state.checkpoint.sequence).toBe('3');
+      expect(await f.current()).toBe(false);
+    }
+    expect(f.instance.recoveryStatus()).toEqual({ state: 'waiting-for-cut', attempts: 3, retryAfterMs: 30_000,
+      checkpoint: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '3' } });
+    const deferred = lines.map(line => JSON.parse(line) as Record<string, unknown>)
+      .find(line => line.event === 'worker_run_deferred');
+    expect(deferred).toMatchObject({ event: 'worker_run_deferred',
+      'rezics.projection.recovery_state': 'waiting-for-cut', 'rezics.projection.recovery_attempts': 3,
+      'rezics.projection.recovery_retry_ms': 30_000, 'rezics.projection.checkpoint_sequence': '3' });
+    const queries = { graph: f.calls.graph.length, relay: f.calls.relay.length, sql: f.calls.sql.length };
+    for (let poll = 0; poll < 3; poll++) expect(await f.instance.tick()).toBe(0);
+    expect(await f.current()).toBe(false);
+    await expect(f.instance.batch(realm, 'newest', null)).rejects.toBeInstanceOf(WorkReadUnavailable);
+
+    let poll: (() => void) | undefined;
+    const interval = spyOn(globalThis, 'setInterval').mockImplementation(((callback: TimerHandler) => {
+      poll = callback as () => void;
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
+    const clear = spyOn(globalThis, 'clearInterval').mockImplementation(() => {});
+    try {
+      f.instance.start();
+      expect(poll).toBeDefined();
+      poll!();
+      await f.instance.stop();
+    } finally {
+      interval.mockRestore();
+      clear.mockRestore();
+    }
+    expect({ graph: f.calls.graph.length, relay: f.calls.relay.length, sql: f.calls.sql.length }).toEqual(queries);
+    now = 30_001;
+    await f.finish();
+    expect(f.instance.recoveryStatus()).toMatchObject({ state: 'ready', attempts: 0, retryAfterMs: 0 });
+    expect(f.candidates().size).toBe(65);
+    expect(f.state.checkpoint.sequence).toBe('5');
+  } finally {
+    clock.mockRestore();
+    consoleWarn.mockRestore();
+  }
 });
 
 test('partial SQL failures roll back the page and retry without losing candidates', async () => {

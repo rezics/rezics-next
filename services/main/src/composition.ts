@@ -283,7 +283,7 @@ export async function composeMain(input: ComposeMainInput) {
   const serialStats = recommendationRelayPool
     ? new SerialStatisticsProjection(pool, recommendationRelayPool, contentPool, environment) : undefined;
   const zoneBrowse = recommendationRelayPool
-    ? new ZoneBrowseProjection(pool, recommendationRelayPool, environment) : undefined;
+    ? new ZoneBrowseProjection(pool, recommendationRelayPool, environment, relayConsumer) : undefined;
   const partitionRoutes = new OwnerPartitionRoutes(pool);
   const graphRouteLease = await partitionRoutes.initialize({ owner: 'graph', datasetId: DATASET,
     location: fusekiUrl, routingEpoch: environment.lineage.routingEpoch });

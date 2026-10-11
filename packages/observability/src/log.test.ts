@@ -115,6 +115,40 @@ test('relay gap diagnostics preserve exact decimal positions and the epoch, drop
   expect(logged(invalid!)).toEqual({ level: 'error', event: 'worker_fault' });
 });
 
+test('relay recovery diagnostics distinguish absent owners and retain bounded recovery state', async () => {
+  const fields = {
+    'rezics.relay.routing_epoch': 'routing-epoch',
+    'rezics.relay.retention_floor': 'absent',
+    'rezics.relay.minimum_retained_sequence': '9007199254740993',
+    'rezics.relay.newest_committed_sequence': '9007199254740995',
+    'rezics.relay.newest_delivered_sequence': '9007199254740994',
+    'rezics.relay.acknowledged_sequence': 'unavailable',
+    'rezics.relay.custody_supplied': true,
+    'rezics.relay.custody_found': false,
+    'rezics.projection.recovery_state': 'waiting-for-cut',
+    'rezics.projection.recovery_attempts': 3,
+    'rezics.projection.recovery_retry_ms': 30_000,
+  };
+  const [valid, invalid] = await capture(() => {
+    telemetryLog('worker_fault', 'error', fields);
+    telemetryLog('worker_fault', 'error', {
+      'rezics.relay.routing_epoch': 'reader@example.com',
+      'rezics.relay.retention_floor': '-1',
+      'rezics.relay.minimum_retained_sequence': '0004',
+      'rezics.relay.newest_committed_sequence': 4,
+      'rezics.relay.newest_delivered_sequence': '9'.repeat(101),
+      'rezics.relay.acknowledged_sequence': 'unknown owner: reader@example.com',
+      'rezics.relay.custody_supplied': 'true',
+      'rezics.relay.custody_found': 1,
+      'rezics.projection.recovery_state': 'reader@example.com',
+      'rezics.projection.recovery_attempts': -1,
+      'rezics.projection.recovery_retry_ms': Number.POSITIVE_INFINITY,
+    });
+  });
+  expect(logged(valid!)).toEqual({ level: 'error', event: 'worker_fault', ...fields });
+  expect(logged(invalid!)).toEqual({ level: 'error', event: 'worker_fault' });
+});
+
 test('a nested checkout fault keeps bounded caller locations and drops query text', async () => {
   class NestedPoolCheckoutError extends Error {
     constructor(fields: {

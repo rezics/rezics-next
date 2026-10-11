@@ -37,11 +37,29 @@ const allowed = new Set([
   'rezics.relay.requested_sequence',
   'rezics.projection.checkpoint_sequence',
   'rezics.relay.data_epoch',
+  'rezics.relay.routing_epoch',
+  'rezics.relay.retention_floor',
+  'rezics.relay.minimum_retained_sequence',
+  'rezics.relay.newest_committed_sequence',
+  'rezics.relay.newest_delivered_sequence',
+  'rezics.relay.acknowledged_sequence',
+  'rezics.relay.custody_supplied',
+  'rezics.relay.custody_found',
+  'rezics.projection.recovery_state',
+  'rezics.projection.recovery_attempts',
+  'rezics.projection.recovery_retry_ms',
 ]);
 const counts = new Set([
   'rezics.backfill.examined',
   'rezics.backfill.skipped',
   'rezics.backfill.duration_ms',
+  'rezics.projection.recovery_attempts',
+  'rezics.projection.recovery_retry_ms',
+]);
+const relayDiagnosticPositions = new Set([
+  'rezics.relay.retention_floor', 'rezics.relay.minimum_retained_sequence',
+  'rezics.relay.newest_committed_sequence', 'rezics.relay.newest_delivered_sequence',
+  'rezics.relay.acknowledged_sequence',
 ]);
 const classToken = /^[A-Za-z_][A-Za-z0-9_]{0,80}$/;
 const codeToken = /^[A-Za-z0-9_]{1,32}$/;
@@ -69,7 +87,20 @@ function publicAttributes(attributes: Attributes): Attributes {
       if (typeof value === 'string' && /^(0|[1-9][0-9]{0,99})$/.test(value)) result[key] = value;
       continue;
     }
-    if (key === 'rezics.relay.data_epoch') {
+    if (relayDiagnosticPositions.has(key)) {
+      if (typeof value === 'string' && (value === 'absent' || value === 'unavailable'
+        || /^(0|[1-9][0-9]{0,99})$/.test(value))) result[key] = value;
+      continue;
+    }
+    if (key === 'rezics.relay.custody_supplied' || key === 'rezics.relay.custody_found') {
+      if (typeof value === 'boolean') result[key] = value;
+      continue;
+    }
+    if (key === 'rezics.projection.recovery_state') {
+      if (value === 'ready' || value === 'reconciling' || value === 'waiting-for-cut') result[key] = value;
+      continue;
+    }
+    if (key === 'rezics.relay.data_epoch' || key === 'rezics.relay.routing_epoch') {
       if (typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)) result[key] = value;
       continue;
     }
