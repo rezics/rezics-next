@@ -81,7 +81,6 @@
   "tests/qa/fault-recovery/account-erasure-frontier.test.ts",
   "tests/qa/fault-recovery/content-publication-recovery.test.ts",
   "tests/qa/fault-recovery/coordinated-owner-cut.test.ts",
-  "tests/qa/fault-recovery/erasure-restore.test.ts",
   "tests/qa/fault-recovery/erasure-search-rebuild.test.ts",
   "tests/qa/fault-recovery/fixed-release-recovery.test.ts",
   "tests/qa/fault-recovery/g-571-screen-recovery.test.ts",

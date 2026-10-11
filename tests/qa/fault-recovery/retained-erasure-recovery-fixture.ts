@@ -1,5 +1,5 @@
 import { expect, spyOn } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -20,6 +20,7 @@ import { copyRecoveryTree } from '../support/recovery-copy.ts';
 import { startPreparedPostgresCluster, type PostgresCluster } from '../support/postgres-cluster.ts';
 import { qaStack, pinnedImage, standaloneFuseki, fusekiSecrets, type StandaloneFuseki } from './search-ops-support.ts';
 import { runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
@@ -206,11 +207,10 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     expect(Date.now() - preparationStarted).toBeLessThan(600_000);
   };
 
-  const subprocess = (command: string, program: string, args: string[], timeout: number): string => {
+  const recordSubprocess = (command: string, run: () => SpawnSyncReturns<string>): string => {
     const startedAt = new Date().toISOString();
     const started = performance.now();
-    const result = spawnSync(program, args, { env: qa.dockerEnv, encoding: 'utf8', timeout,
-      maxBuffer: 2_000_000 });
+    const result = run();
     const evidence = { command, phase: [...activeTimings.keys()].at(-1)?.phase ?? null,
       startedAt, durationMs: Math.max(0, Math.round(performance.now() - started)),
       status: result.status, signal: result.signal,
@@ -224,8 +224,14 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
     }
     return result.stdout.trim();
   };
-  const docker = (args: string[], timeout = 120_000): string =>
-    subprocess(`docker ${args[0]}`, 'docker', args, timeout);
+  const subprocess = (command: string, program: string, args: string[], timeout: number): string =>
+    recordSubprocess(command, () => spawnSync(program, args, {
+      env: preserveReapEnvironment(qa.dockerEnv), encoding: 'utf8', timeout, maxBuffer: 2_000_000,
+    }));
+  const docker = (args: string[], timeout = 120_000, command = `docker ${args[0]}`): string =>
+    recordSubprocess(command, () => spawnSync('docker', args, {
+      env: preserveReapEnvironment(qa.dockerEnv), encoding: 'utf8', timeout, maxBuffer: 2_000_000,
+    }));
   const removePool = async (pool: Pool): Promise<void> => {
     if (!pools.has(pool)) return;
     await pool.end();
@@ -488,9 +494,9 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
             '--filter', 'label=com.docker.compose.service=postgres'], 10_000);
           if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('source PostgreSQL container is unavailable');
           try {
-            subprocess('pg_basebackup', 'docker', ['exec', '-u', 'postgres', container, 'sh', '-ec',
+            docker(['exec', '-u', 'postgres', container, 'sh', '-ec',
               `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast --sync-method=syncfs --verbose --progress`],
-            65_000);
+            65_000, 'pg_basebackup');
             docker(['cp', `${container}:${remote}`, backupPostgres]);
             subprocess('pg_verifybackup', 'pg_verifybackup', ['--no-parse-wal', backupPostgres], 15_000);
           } catch (error) {
