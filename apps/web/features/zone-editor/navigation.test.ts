@@ -123,6 +123,167 @@ test('stale recovery keeps operations whose mounts are beyond the fresh first lo
   expect(isNavigationDirty(continued)).toBe(true);
 });
 
+test('interleaved moves retain earlier ordering intentions when the same entry moves again', () => {
+  const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2),
+    link('Remote page', occurrence(3), 'remote-page', 3)];
+  let edited = reduceNavigation(state(saved), { type: 'move', index: 1, direction: -1 });
+  edited = reduceNavigation(edited, { type: 'move', index: 2, direction: -1 });
+  edited = reduceNavigation(edited, { type: 'move', index: 0, direction: 1 });
+  expect(edited.links.map(item => item.id)).toEqual([saved[2]!.id, saved[1]!.id, saved[0]!.id]);
+  const continued = reduceNavigation({ ...edited, complete: false, after: 'cursor:3' }, {
+    type: 'continued', links: [link('Last page', occurrence(4), 'last-page', 4)], complete: true, after: null,
+  });
+  expect(continued.links.slice(0, 3)).toEqual(edited.links);
+});
+
+test('removing an unsaved ordering anchor preserves another entry\'s move', () => {
+  const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2),
+    link('Remote page', occurrence(3), 'remote-page', 3)];
+  const added = link('New page', occurrence(4), 'new-page', null);
+  let edited = reduceNavigation(state(saved), { type: 'add', link: added });
+  edited = reduceNavigation(edited, { type: 'move', index: 1, direction: 1 });
+  edited = reduceNavigation(edited, { type: 'move', index: 2, direction: 1 });
+  expect(edited.links.map(item => item.id)).toEqual([saved[0]!.id, saved[2]!.id, added.id, saved[1]!.id]);
+  const removed = reduceNavigation(edited, { type: 'remove', id: added.id });
+  expect(removed.links).toEqual([saved[0]!, saved[2]!, saved[1]!]);
+  expect(removed.pending).toContainEqual({ kind: 'remove', id: added.id });
+  expect(removed.pending.filter(edit => edit.kind === 'move')).toEqual(edited.pending.filter(edit => edit.kind === 'move'));
+  expect(isNavigationDirty(removed)).toBe(true);
+});
+
+test('removing an addition that landed before stale recovery removes the persisted mount', () => {
+  const saved = [link('Charts', charts, 'charts', 1)];
+  const added = link('Tides', tides, 'tides', null);
+  const edited = reduceNavigation(state(saved), { type: 'add', link: added });
+  const fresh = [...saved, link('Tides', tides, 'tides', 2)];
+  const recovered = reduceNavigation(edited, {
+    type: 'retarget', ...rebaseNavigationEdits(edited, fresh), saved: fresh, head: next,
+    navigation, complete: true, after: null,
+  });
+  const removed = reduceNavigation(recovered, { type: 'remove', id: fresh[1]!.id });
+  expect(removed.links).toEqual(saved);
+  expect(navigationOps(removed.saved, removed.links)).toEqual([{ kind: 'remove', occurrence: occurrence(2) }]);
+});
+
+test('cancelling an added anchor never makes its dependent move anchor to itself', () => {
+  const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2)];
+  const anchor = link('New anchor', occurrence(3), 'new-anchor', null);
+  const tail = link('New tail', occurrence(4), 'new-tail', null);
+  let edited = reduceNavigation(state(saved), { type: 'add', link: anchor });
+  edited = reduceNavigation(edited, { type: 'add', link: tail });
+  edited = reduceNavigation(edited, { type: 'move', index: 1, direction: 1 });
+  expect(edited.links).toEqual([saved[0]!, anchor, saved[1]!, tail]);
+  const removed = reduceNavigation(edited, { type: 'remove', id: anchor.id });
+  expect(removed.links).toEqual([...saved, tail]);
+  expect(removed.pending.every(edit => edit.kind !== 'move' || edit.after !== edit.id)).toBe(true);
+});
+
+test('cancelling an added anchor retains its unloaded predecessor after stale recovery', () => {
+  const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2),
+    link('Remote page', occurrence(3), 'remote-page', 3)];
+  const anchor = link('New anchor', occurrence(4), 'new-anchor', null);
+  const tail = link('New tail', occurrence(5), 'new-tail', null);
+  let edited = reduceNavigation(state(saved), { type: 'add', link: anchor });
+  edited = reduceNavigation(edited, { type: 'add', link: tail });
+  const fresh = saved.slice(0, 2);
+  const recovered = reduceNavigation(edited, {
+    type: 'retarget', ...rebaseNavigationEdits(edited, fresh), saved: fresh, head: next,
+    navigation, complete: false, after: 'cursor:2',
+  });
+  const removed = reduceNavigation(recovered, { type: 'remove', id: anchor.id });
+  expect(removed.pending).toEqual([...recovered.pending, { kind: 'remove', id: anchor.id }]);
+  const continued = reduceNavigation(removed, { type: 'continued', links: [saved[2]!], complete: true, after: null });
+  expect(continued.links).toEqual([...saved, tail]);
+});
+
+test('cancelling an added anchor keeps ordering around an unreferenced unloaded mount', () => {
+  const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2),
+    link('Remote page', occurrence(3), 'remote-page', 3), link('Last page', occurrence(4), 'last-page', 4)];
+  const anchor = link('New anchor', occurrence(5), 'new-anchor', null);
+  const tail = link('New tail', occurrence(6), 'new-tail', null);
+  let edited = reduceNavigation(state(saved), { type: 'add', link: anchor });
+  edited = reduceNavigation(edited, { type: 'move', index: 3, direction: -1 });
+  edited = reduceNavigation(edited, { type: 'add', link: tail });
+  const fresh = saved.slice(0, 2);
+  const recovered = reduceNavigation(edited, {
+    type: 'retarget', ...rebaseNavigationEdits(edited, fresh), saved: fresh, head: next,
+    navigation, complete: false, after: 'cursor:2',
+  });
+  const removed = reduceNavigation(recovered, { type: 'remove', id: anchor.id });
+  const continued = reduceNavigation(removed, { type: 'continued', links: saved.slice(2), complete: true, after: null });
+  expect(continued.links).toEqual([saved[0]!, saved[1]!, saved[3]!, saved[2]!, tail]);
+  expect(navigationOps(continued.saved, continued.links).filter(op => op.kind === 'insert').map(op => op.segment)).toEqual(['new-tail']);
+});
+
+test('editing a loaded mount after stale recovery keeps a removal beyond the first 2,000 mounts', async () => {
+  const batchSize = NAV_LOAD_BATCH * NAV_PAGE_SIZE;
+  const saved = Array.from({ length: batchSize + 1 }, (_, index) => {
+    const n = index + 1;
+    return link(`Page ${n}`, occurrence(n), `page-${n}`, n);
+  });
+  const removed = saved[batchSize]!;
+  const edited = reduceNavigation(state(saved), { type: 'remove', id: removed.id });
+  const failed = await commitNavigation(edited.saved, edited.links, edited.head, 'stale-removal', async () => ({
+    ok: false, failure: 'stale', currentHead: next,
+  }));
+  expect(failed.ok).toBe(false);
+  if (failed.ok || failed.failure !== 'stale') throw new Error('The initial save must encounter a stale head');
+  const stale = reduceNavigation(edited, { type: 'stale', currentHead: failed.currentHead });
+  const fresh = saved.slice(0, batchSize);
+  const recovered = reduceNavigation(stale, {
+    type: 'retarget', ...rebaseNavigationEdits(stale, fresh), saved: fresh, head: next,
+    navigation, complete: false, after: `cursor:${batchSize}`,
+  });
+  const reordered = reduceNavigation(recovered, { type: 'move', index: 1, direction: -1 });
+  expect(reordered.pending).toContainEqual({ kind: 'remove', id: removed.id });
+  expect(reordered.complete).toBe(false);
+  const continued = reduceNavigation(reordered, {
+    type: 'continued', links: [removed], complete: true, after: null,
+  });
+  expect(continued.saved).toHaveLength(batchSize + 1);
+  expect(continued.links).toHaveLength(batchSize);
+  expect(continued.links.some(item => item.id === removed.id)).toBe(false);
+  expect(continued.links.slice(0, 2).map(item => item.id)).toEqual([saved[1]!.id, saved[0]!.id]);
+  expect(isNavigationDirty(continued)).toBe(true);
+
+  const removals: string[] = [];
+  const written = await commitNavigation(continued.saved, continued.links, continued.head, 'recovered-removal', async op => {
+    if (op.kind === 'remove') removals.push(op.occurrence);
+    return { ok: true, head: later, occurrence: null, replayed: false };
+  });
+  expect(written.ok).toBe(true);
+  if (!written.ok) throw new Error('Saving the completed reload must succeed');
+  expect(removals).toEqual([removed.occurrence!]);
+  const committed = reduceNavigation(continued, { type: 'saved', ...written });
+  expect(committed.saved.some(item => item.id === removed.id)).toBe(false);
+  expect(committed.saved).toEqual(continued.links);
+  expect(isNavigationDirty(committed)).toBe(false);
+});
+
+test('an unloaded move survives adding, changing a new path and removing another loaded mount', () => {
+  const saved = [link('Charts', charts, 'charts', 1), link('Tides', tides, 'tides', 2),
+    link('Remote page', occurrence(3), 'remote-page', 3)];
+  const edited = reduceNavigation(state(saved), { type: 'move', index: 2, direction: -1 });
+  const fresh = saved.slice(0, 2);
+  let recovered = reduceNavigation(edited, {
+    type: 'retarget', ...rebaseNavigationEdits(edited, fresh), saved: fresh, head: next,
+    navigation, complete: false, after: 'cursor:2',
+  });
+  const pendingMove = { kind: 'move' as const, id: saved[2]!.id, after: saved[0]!.id };
+  const added = link('New page', occurrence(4), 'new-page', null);
+  recovered = reduceNavigation(recovered, { type: 'add', link: added });
+  expect(recovered.pending).toContainEqual(pendingMove);
+  recovered = reduceNavigation(recovered, { type: 'segment', id: added.id, segment: 'new-path' });
+  expect(recovered.pending).toContainEqual(pendingMove);
+  recovered = reduceNavigation(recovered, { type: 'remove', id: saved[1]!.id });
+  expect(recovered.pending).toContainEqual(pendingMove);
+  const continued = reduceNavigation(recovered, {
+    type: 'continued', links: [saved[2]!], complete: true, after: null,
+  });
+  expect(continued.links.map(item => item.segment)).toEqual(['charts', 'remote-page', 'new-path']);
+  expect(isNavigationDirty(continued)).toBe(true);
+});
+
 test('a lost insert is retried with the same key and a stale head stops the rest', async () => {
   const desired = [link('Charts', charts, 'charts', null), link('Tides', tides, 'tides', null)];
   const keys: string[] = [];

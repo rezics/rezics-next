@@ -152,33 +152,24 @@ function applyEdits(saved: readonly SiteLink[], edits: readonly NavigationEdit[]
   return links;
 }
 
-/** Keep only the operations needed for the current intent; undoing edits clears dirtiness. */
-function editsBetween(saved: readonly SiteLink[], desired: readonly SiteLink[]): NavigationEdit[] {
-  const wanted = new Set(desired.map(link => link.id));
-  const edits: NavigationEdit[] = saved.filter(link => !wanted.has(link.id)).map(link => ({ kind: 'remove', id: link.id }));
-  const order = saved.filter(link => wanted.has(link.id));
-  for (let index = 0; index < desired.length; index += 1) {
-    const link = desired[index]!;
-    const at = order.findIndex(item => item.id === link.id);
-    const after = index === 0 ? null : desired[index - 1]!.id;
-    if (at < 0) {
-      edits.push({ kind: 'add', link, after });
-      order.splice(index, 0, link);
-    } else {
-      if (order[at]!.segment !== link.segment) edits.push({ kind: 'segment', id: link.id, segment: link.segment });
-      if (at !== index) {
-        edits.push({ kind: 'move', id: link.id, after });
-        order.splice(at, 1);
-        order.splice(index, 0, link);
-      }
-    }
-  }
-  return edits;
+/** Author events modify operations, never infer them from the currently visible slice. */
+function edited(state: NavigationState, pending: NavigationEdit[]): NavigationState {
+  return { ...state, pending, links: applyEdits(state.saved, pending), notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
 }
 
-function edited(state: NavigationState, links: SiteLink[]): NavigationState {
-  const pending = editsBetween(state.saved, links);
-  return { ...state, pending, links: applyEdits(state.saved, pending), notice: clears(state.notice) ? { kind: 'idle' } : state.notice };
+function sameOrder(left: readonly SiteLink[], right: readonly SiteLink[]): boolean {
+  return left.length === right.length && left.every((link, index) => link.id === right[index]!.id);
+}
+
+/** Cancel this unsaved entry while retaining other entries' ordering intentions. */
+function cancelAddedEntry(state: NavigationState, id: string): NavigationEdit[] {
+  // Other operations may use this entry as an anchor. Keep its transient position
+  // in the journal and remove it afterwards; an incomplete baseline cannot tell
+  // us its actual predecessor. The complete save plan never inserts this entry.
+  if (state.pending.some(edit => (edit.kind === 'add' || edit.kind === 'move') && edit.after === id)) {
+    return [...state.pending, { kind: 'remove', id }];
+  }
+  return state.pending.filter(edit => (edit.kind === 'add' ? edit.link.id : edit.id) !== id);
 }
 
 /** Apply only the author's edits to a fresh baseline, including a partial stale reload. */
@@ -278,6 +269,24 @@ export interface NavigationSaveProgress {
   /** Acknowledged operations; the next operation keeps its key until acknowledged. */
   completed: number;
   replayed: boolean;
+}
+
+/**
+ * A save starts only from a complete baseline. Its remaining command plan settles
+ * acknowledged operations and carries new occurrence identities into the journal.
+ * This is save acknowledgement, not reconstruction after an author edits a loaded slice.
+ */
+function unfinishedSaveEdits(progress: NavigationSaveProgress): NavigationEdit[] | null {
+  const plan = planNavigation(progress.saved, progress.links);
+  if (!plan.ok) return null;
+  return plan.ops.map((op): NavigationEdit => {
+    if (op.kind === 'remove') return { kind: 'remove', id: op.occurrence.slice(-36) };
+    if (op.kind === 'move') return {
+      kind: 'move', id: op.occurrence.slice(-36), after: op.position === 'first' ? null : op.position.after.slice(-36),
+    };
+    const at = progress.links.findIndex(link => !link.occurrence && link.target === op.target && link.segment === op.segment);
+    return { kind: 'add', link: progress.links[at]!, after: at === 0 ? null : progress.links[at - 1]!.id };
+  });
 }
 
 /**
@@ -383,24 +392,44 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
       const links = state.links.slice();
       const [item] = links.splice(event.index, 1);
       links.splice(next, 0, item!);
-      return edited(state, links);
+      // Undo only this entry's latest move. Operations for unloaded entries must
+      // remain even when their effect is absent from the current projection.
+      const prior = state.pending.findLastIndex(edit => edit.kind === 'move' && edit.id === item!.id);
+      if (prior >= 0) {
+        const cancelled = state.pending.filter((_, index) => index !== prior);
+        if (sameOrder(applyEdits(state.saved, cancelled), links)) return edited(state, cancelled);
+      }
+      return edited(state, [...state.pending, { kind: 'move', id: item!.id, after: next === 0 ? null : links[next - 1]!.id }]);
     }
     case 'add':
       if (state.links.some(link => link.segment === event.link.segment || link.target === event.link.target)) return state;
-      return edited(state, [...state.links, event.link]);
-    case 'remove':
-      return edited(state, state.links.filter(link => link.id !== event.id));
+      return edited(state, [...state.pending, { kind: 'add', link: event.link, after: state.links.at(-1)?.id ?? null }]);
+    case 'remove': {
+      const link = state.links.find(link => link.id === event.id);
+      if (!link) return state;
+      const added = !link.occurrence && state.pending.some(edit => edit.kind === 'add' && edit.link.id === event.id);
+      return edited(state, added ? cancelAddedEntry(state, event.id) : [...state.pending, { kind: 'remove', id: event.id }]);
+    }
     case 'segment': {
-      if (pathEditBlocked(state.links.find(link => link.id === event.id) ?? { occurrence: null } as SiteLink)) return state;
+      const link = state.links.find(link => link.id === event.id);
+      if (!link || pathEditBlocked(link)) return state;
       if (!isSegment(event.segment) || state.links.some(link => link.id !== event.id && link.segment === event.segment)) return state;
-      return edited(state, state.links.map(link => link.id === event.id ? { ...link, segment: event.segment } : link));
+      const added = state.pending.find((edit): edit is Extract<NavigationEdit, { kind: 'add' }> =>
+        edit.kind === 'add' && edit.link.id === event.id);
+      const original = state.saved.find(link => link.id === event.id) ?? added?.link;
+      const pending = state.pending.filter(edit => edit.kind !== 'segment' || edit.id !== event.id);
+      if (original?.segment !== event.segment) pending.push({ kind: 'segment', id: event.id, segment: event.segment });
+      return edited(state, pending);
     }
     case 'stale':
       return { ...state, notice: { kind: 'stale', currentHead: event.currentHead } };
     case 'saved':
       return { ...state, links: event.links, saved: event.links.map(link => ({ ...link })), pending: [], head: event.head, notice: { kind: 'saved', replayed: event.replayed } };
-    case 'progress':
-      return edited({ ...state, saved: event.progress.saved, head: event.progress.head }, event.progress.links);
+    case 'progress': {
+      if (!state.complete) return state;
+      const pending = unfinishedSaveEdits(event.progress);
+      return pending ? edited({ ...state, saved: event.progress.saved, head: event.progress.head }, pending) : state;
+    }
     case 'loaded':
       return {
         ...state,
@@ -431,8 +460,8 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         ...state,
         head: event.head,
         saved: event.saved,
-        links: event.links,
-        pending: event.pending ?? editsBetween(event.saved, event.links),
+        links: applyEdits(event.saved, event.pending ?? state.pending),
+        pending: event.pending ?? state.pending,
         navigation: event.navigation,
         complete: event.complete,
         after: event.after,
