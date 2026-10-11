@@ -45,6 +45,25 @@ export function saveFormatMarker(options: StackOptions, marker: FormatMarker): v
   renameSync(next, path);
 }
 
+export function saveInstallFormatMarker(options: StackOptions, marker: FormatMarker): void {
+  const existing = readFormatMarker(options);
+  const previousOwnerMigrations = existing?.ownerMigrations;
+  const sameInstallation = marker.state === 'ready'
+    && existing?.state === 'ready'
+    && existing.releaseDigest === marker.releaseDigest
+    && existing.fusekiImageId === marker.fusekiImageId
+    && existing.dataEpoch === marker.dataEpoch
+    && existing.routingEpoch === marker.routingEpoch;
+  const completedOwnerMigrations = marker.ownerMigrations !== undefined
+    && marker.ownerMigrations.length > 0
+    && marker.ownerMigrations.every(migration => migration.status === 'complete');
+  // Keep the migration that first qualified this marker over a later no-op run.
+  const saved = sameInstallation && completedOwnerMigrations && previousOwnerMigrations !== undefined
+    ? { ...marker, ownerMigrations: previousOwnerMigrations }
+    : marker;
+  saveFormatMarker(options, saved);
+}
+
 async function command(args: string[], timeout: number): Promise<string> {
   const result = ['stack:up', 'stack:clone'].includes(args[0]!)
     ? await runQaStartupChildAsync(root, args, timeout,
@@ -178,7 +197,7 @@ export async function installRelease(options: StackOptions,
   } finally { await content.end(); }
   const graph = await fuseki.query('ASK {}');
   if (graph.boolean !== true) throw new Error('Fuseki graph query unavailable');
-  saveFormatMarker(options, { schema: 'rezics-format-marker-v1',
+  saveInstallFormatMarker(options, { schema: 'rezics-format-marker-v1',
     formatVersion: releaseManifest.formatVersion, releaseDigest: releaseDigest(),
     fusekiImageId: imageId, dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH!,
     state: 'ready', ownerMigrations, ...(artifact ? { artifactDigest: artifact.digest } : {}) });
