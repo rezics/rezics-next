@@ -210,7 +210,9 @@ test('legacy Realm members place reviewed replies; direct policy respects member
     await admin.initialize(principal, realm, h.actor, h.env);
     await h.accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING", [realm]);
     await h.accessPool.query(`INSERT INTO access.membership_policy
-      (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms-1')`, [realm]);
+      (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms-1')
+      ON CONFLICT (kind, owner_subject) DO UPDATE SET revision = EXCLUDED.revision,
+        terms_revision = EXCLUDED.terms_revision`, [realm]);
     const consent = async (generation: number) => {
       const id = randomUUID();
       await h.accessPool.query(`INSERT INTO access.private_membership_consent
