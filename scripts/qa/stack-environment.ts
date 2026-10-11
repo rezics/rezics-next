@@ -68,8 +68,9 @@ export function qaStackEnvironment(
 /** One assembler serves a stack, so the planner must keep raw-update callers
  * together and apart from product-assembler files. */
 export function integrationStackAdmitsWorkScope(files: readonly string[], rawUpdate: boolean): boolean {
-  const hasRawSparql = files.some((file) => rawSparqlIntegrationFiles.has(file));
-  if (hasRawSparql && files.some((file) => !rawSparqlIntegrationFiles.has(file)))
+  const rawFiles = rawSparqlIntegrationFiles();
+  const hasRawSparql = files.some((file) => rawFiles.has(file));
+  if (hasRawSparql && files.some((file) => !rawFiles.has(file)))
     throw new Error('Integration shard mixes raw-SPARQL and product-assembler files');
   return !rawUpdate && !hasRawSparql;
 }

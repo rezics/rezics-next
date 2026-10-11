@@ -521,5 +521,15 @@ export function scanRawSparqlIntegrationFiles(root = resolve(import.meta.dir, '.
   return { roots: [...roots].sort(), files, sites };
 }
 
-export const rawSparqlIntegrationScan = scanRawSparqlIntegrationFiles();
-export const rawSparqlIntegrationFiles = rawSparqlIntegrationScan.files;
+let cachedRawSparqlIntegrationScan: RawSparqlIntegrationScan | undefined;
+
+/** Defer crawling integration tests until a caller needs assembler classification.
+ * Most QA CLI imports do not plan integration shards and should stay cheap. */
+export function rawSparqlIntegrationScan(): RawSparqlIntegrationScan {
+  cachedRawSparqlIntegrationScan ??= scanRawSparqlIntegrationFiles();
+  return cachedRawSparqlIntegrationScan;
+}
+
+export function rawSparqlIntegrationFiles(): ReadonlySet<string> {
+  return rawSparqlIntegrationScan().files;
+}

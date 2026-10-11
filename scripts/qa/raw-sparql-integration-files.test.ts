@@ -171,6 +171,6 @@ const ceiling = new Set<string>([
 ]);
 
 test('raw SPARQL integration files only shrink', () => {
-  const added = [...rawSparqlIntegrationFiles].filter(file => !ceiling.has(file)).sort();
+  const added = [...rawSparqlIntegrationFiles()].filter(file => !ceiling.has(file)).sort();
   expect(added).toEqual([]);
 });
