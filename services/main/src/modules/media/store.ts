@@ -841,6 +841,27 @@ export class MediaStore {
       row.original_representation_id, provenance);
   }
 
+  /** Whether an imported-cover provenance for these bytes is currently suppressed. */
+  async hasSuppressedImportedCover(provenance: ImportedCoverProvenance): Promise<boolean> {
+    const sourceRecord = provenance.source.record.startsWith(ID)
+      ? provenance.source.record.slice(ID.length) : '';
+    if (!uuid.test(sourceRecord) || !sha.test(provenance.originalDigest))
+      throw new MediaInvalid('invalid imported cover provenance');
+    const result = await this.pool.query(`SELECT 1
+      FROM media.imported_cover_revision m
+      JOIN media.asset a ON a.id = m.asset_id
+      JOIN media.asset_state s ON s.id = a.state_head
+      JOIN media.representation p ON p.id = m.original_representation_id AND p.asset_id = a.id
+        AND p.kind = 'original'
+      WHERE m.original_digest = $1 AND (
+        (m.source_record_id = $2 AND m.provider = $3 AND m.namespace = $4 AND m.external_id = $5
+          AND s.moderation = 'suppressed')
+        OR (media.delivery_clearance(p) = 'rejected' AND media.digest_suppressed(p.byte_digest))
+      ) LIMIT 1`, [provenance.originalDigest, sourceRecord, provenance.source.provider,
+      provenance.source.namespace, provenance.source.externalId]);
+    return result.rows.length > 0;
+  }
+
   /** Activated originals whose asset revision was never recorded (lost second stage). */
   async unrecordedActivations(limit = 100): Promise<string[]> {
     const result = await this.pool.query<{ upload_id: string }>(`SELECT r.upload_id FROM media.representation r

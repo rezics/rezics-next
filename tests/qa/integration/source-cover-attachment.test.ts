@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { SourceCoverEvidenceUnavailable } from '../../../services/main/src/modules/source/cover-evidence.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
+import { avatarImageEligible } from '../../../services/main/src/modules/media/store.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
@@ -29,9 +30,9 @@ async function json<T = Record<string, unknown>>(response: Response, expected: n
   return JSON.parse(body) as T;
 }
 
-async function image() {
+async function image(background = { r: 20, g: 40, b: 60, alpha: 0.5 }) {
   return sharp({ create: { width: 1280, height: 720, channels: 4,
-    background: { r: 20, g: 40, b: 60, alpha: 0.5 } } }).png().toBuffer();
+    background } }).png().toBuffer();
 }
 
 type SourceEnvelope = {
@@ -276,4 +277,77 @@ test('COVER-ROLE confines an imported cover to its Work avatar and keeps other i
       expectedSelection: null, asset: ordinary.asset, role: 'background-landscape', crop: null,
       focalArea: null, actingSubject: owner.actor }), 201);
   expect(ordinarySelection.selection).toBeTruthy();
+});
+
+test('COVER-SUPPRESSION refuses suppressed imported bytes until the notice lift restores them', async () => {
+  const f = await stack();
+  const owner = await f.member('cover-suppression-owner');
+  const work = await f.publicWork(owner.actor);
+  const bytes = await image({ r: 38, g: 117, b: 201, alpha: 1 });
+  const evidence = await coverEvidence(f, owner.principalId, work.work, bytes);
+  const { reservation } = await reserveCover(f, owner, bytes, evidence.importedCover);
+  const imported = await json<{ asset: string; representation: string; revision: string }>(
+    await transfer(f, owner, reservation.upload, bytes), 201);
+  const suppression = { id: randomUUID(), caseId: randomUUID(), decisionId: randomUUID() };
+  expect(await f.store.suppressIdenticalCopies(sha(bytes), null, 100, suppression))
+    .toMatchObject({ suppressed: 1, continuation: null });
+
+  const before = (await f.contentPool.query<{ n: number }>(`SELECT count(*)::int AS n FROM media.upload
+    WHERE declared_digest=$1`, [sha(bytes)])).rows[0]!.n;
+  await json(await owner.send('POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null,
+    mediaType: 'image/png', byteLength: bytes.length, sha256: sha(bytes), disclosure: 'public',
+    actingSubject: owner.actor, importedCover: evidence.importedCover }), 403);
+
+  const otherRecord = await coverEvidence(f, owner.principalId, work.work, bytes);
+  await json(await owner.send('POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null,
+    mediaType: 'image/png', byteLength: bytes.length, sha256: sha(bytes), disclosure: 'public',
+    actingSubject: owner.actor, importedCover: otherRecord.importedCover }), 403);
+  expect((await f.contentPool.query<{ n: number }>(`SELECT count(*)::int AS n FROM media.upload
+    WHERE declared_digest=$1`, [sha(bytes)])).rows[0]!.n).toBe(before);
+
+  const unrelated = await image({ r: 200, g: 10, b: 90, alpha: 1 });
+  const unrelatedEvidence = await coverEvidence(f, owner.principalId, work.work, unrelated);
+  const accepted = await reserveCover(f, owner, unrelated, unrelatedEvidence.importedCover);
+  expect(accepted.reservation.upload).toBeTruthy();
+
+  const state = await f.store.readAsset(imported.asset);
+  expect(state?.moderation).toBe('suppressed');
+  const lift = { ...suppression, decisionId: randomUUID(), reversesDecisionId: suppression.decisionId };
+  await f.store.moderateOriginal(`cover-notice-lift:${lift.decisionId}`, imported.representation,
+    state!.state, false, lift);
+  expect(await f.store.restoreIdenticalCopies(lift)).toMatchObject({ restored: 0, continuation: null });
+  const restored = await reserveCover(f, owner, bytes, evidence.importedCover);
+  expect(restored.reservation.upload).toBeTruthy();
+});
+
+test('COVER-REPLACEMENT gives an independent avatar upload a new Asset that survives the imported Asset takedown', async () => {
+  const f = await stack();
+  const owner = await f.member('cover-replacement-owner');
+  const work = await f.publicWork(owner.actor);
+  const originalBytes = await image({ r: 51, g: 164, b: 23, alpha: 0.8 });
+  const evidence = await coverEvidence(f, owner.principalId, work.work, originalBytes);
+  const { reservation } = await reserveCover(f, owner, originalBytes, evidence.importedCover);
+  const imported = await json<{ asset: string; representation: string; revision: string }>(
+    await transfer(f, owner, reservation.upload, originalBytes), 201);
+  const avatarPath = `/v1/resources/${work.work.slice(ID.length)}/avatar`;
+  await owner.grant(`media:avatar:${work.work}`, 'media.avatar');
+  const first = await json<{ selection: string }>(await owner.send('PUT', avatarPath, {
+    profile: 'resource-avatar-selection-v1', expectedSelection: null, asset: imported.asset,
+    actingSubject: owner.actor,
+  }), 201);
+
+  const replacementBytes = await image({ r: 230, g: 90, b: 15, alpha: 1 });
+  const replacement = await owner.upload(replacementBytes);
+  expect(replacement.asset).not.toBe(imported.asset);
+  const selected = await json<{ selection: string }>(await owner.send('PUT', avatarPath, {
+    profile: 'resource-avatar-selection-v1', expectedSelection: first.selection,
+    asset: replacement.asset, actingSubject: owner.actor,
+  }), 201);
+
+  await f.store.suppressIdenticalCopies(sha(originalBytes));
+  expect((await f.store.readAsset(imported.asset))?.moderation).toBe('suppressed');
+  const current = await f.store.avatarSelection(selected.selection);
+  expect(current).toMatchObject({ asset: replacement.asset, moderation: 'none', clearance: 'cleared' });
+  expect(avatarImageEligible(current!)).toBe(true);
+  expect((await f.call('GET', `/v1/media/avatars/${selected.selection}`)).status).toBe(200);
 });

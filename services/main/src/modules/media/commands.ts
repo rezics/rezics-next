@@ -145,6 +145,8 @@ export function reserveAdmittedUpload(env: WorkActivationEnvironment, media: Med
         if (error instanceof SourceCoverEvidenceInvalid) throw new MediaInvalid('source cover evidence is invalid');
         throw new MediaUnavailable('Source cover evidence is unavailable');
       }
+      if (await media.store.hasSuppressedImportedCover(reservation.importedCover))
+        throw new MediaDenied('source cover is suppressed');
     }
     return media.store.reserveUpload(admission, reservation);
   });
