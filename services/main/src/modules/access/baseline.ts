@@ -184,6 +184,16 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
     return zoneSpaceCreatorAllowed(client, graph, principalId, actingSubject, target.id);
   }
   if (target.kind === 'realm-attach') return realmAttachAllowed(client, graph, actingSubject, target.id);
+  if (target.kind === 'reply' || (target.kind === 'reply-draft' && relatedWork)) {
+    const work = target.kind === 'reply' ? target.id : relatedWork;
+    if (!work || !sourceRevision) return false;
+    if (replyRootDecision) return replyRootDecision(work, sourceRevision);
+    if (!graph) return false;
+    return await publicReplyRoot(graph, work, sourceRevision, {
+      canReadSemanticResource: async (_principal, _actor, resource) =>
+        (await publicInTransaction(client, graph, [resource])).has(resource),
+    });
+  }
   if (!graph) return false;
   if (target.kind === 'avatar') return !!await avatarControllerProof(client, graph, principalId, target.id)
     || await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
@@ -212,15 +222,6 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
         ${iri(relatedWork)} a schema:CreativeWork ; rv:mainVersion ${iri(target.id)} .
         ${iri(target.id)} a rv:MainVersion ; rv:work ${iri(relatedWork)} }
         ${unerased(iri(relatedWork))} }`, 1024)).boolean === true;
-  }
-  if (target.kind === 'reply' || target.kind === 'reply-draft') {
-    const work = target.kind === 'reply' ? target.id : relatedWork;
-    if (!work || !sourceRevision) return false;
-    if (replyRootDecision) return replyRootDecision(work, sourceRevision);
-    return await publicReplyRoot(graph, work, sourceRevision, {
-      canReadSemanticResource: async (_principal, _actor, resource) =>
-        (await publicInTransaction(client, graph, [resource])).has(resource),
-    });
   }
   if (relatedWork && (!native.test(relatedWork)
     || !await baselineTargetAllowed(client, graph, principalId, actingSubject,

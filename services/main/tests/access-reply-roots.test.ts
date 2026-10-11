@@ -233,6 +233,23 @@ test('reply root environment and unavailable owners fail as unavailable; graph m
   } finally { rootDecision = savedDecision; }
 });
 
+test('unconfigured baseline keeps member reply register, replay and claim unavailable', async () => {
+  const { supplied } = principal();
+  const author = await person(supplied);
+  const unconfigured = new AccessAdmissionRegistry(pool);
+  const rootTarget = nativeId();
+  const rootRevision = nativeId();
+  const newIntent = replyDraft(supplied, author.actingSubject, rootTarget, rootRevision);
+
+  await expect(unconfigured.register(newIntent)).rejects.toBeInstanceOf(AdmissionUnavailable);
+
+  const savedIntent = replyDraft(supplied, author.actingSubject, nativeId(), nativeId());
+  const registered = await author.access.register(savedIntent);
+  await expect(unconfigured.register(savedIntent)).rejects.toBeInstanceOf(AdmissionUnavailable);
+  await expect(unconfigured.claim(registered.id, savedIntent.requestDigest, supplied))
+    .rejects.toBeInstanceOf(AdmissionUnavailable);
+});
+
 test('retained semantic reply roots use live disclosure through the held Access client', async () => {
   const { supplied } = principal();
   const author = await person(supplied);
