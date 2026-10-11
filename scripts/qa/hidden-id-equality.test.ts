@@ -73,6 +73,13 @@ function document(): OpenApiDocument {
           ],
         },
       },
+      '/v1/recipes/{id}/file-imports': {
+        parameters: [{ in: 'path', name: 'id', schema: id }],
+        post: { parameters: [
+          { in: 'query', name: 'actingSubject', schema: actingSubject },
+          { in: 'query', name: 'expectedHead', schema: actingSubject },
+        ] },
+      },
       '/v1/addresses/resolve': {
         get: {
           parameters: [
@@ -93,6 +100,7 @@ test('discovery keeps resource ids and drops enumerations and vocabulary slugs',
     { operation: 'GET /v1/me/sessions', ids: ['query:actingSubject'] },
     { operation: 'GET /v1/statements/{id}', ids: ['path:id'] },
     { operation: 'GET /v1/works/{id}', ids: ['path:id'] },
+    { operation: 'POST /v1/recipes/{id}/file-imports', ids: ['path:id', 'query:actingSubject'] },
     { operation: 'POST /v1/resources/summaries', ids: ['body:resources'] },
   ]);
 });

@@ -29,6 +29,7 @@ export const registeredHiddenIdReads = [
   'GET /v1/works/{id}/realizations',
   'GET /v1/works/{id}/releases',
   'GET /v1/works/{id}/source-support',
+  'POST /v1/recipes/{id}/file-imports',
 ] as const;
 
 const BODY_ID_ARRAYS = new Set(['ids', 'resources', 'targets']);
@@ -110,6 +111,8 @@ function schemaNamesResource(schema: Schema | undefined): boolean {
 
 /** Query strings name a resource only when the schema is an id, or the name is an id or alias. */
 function queryNamesResource(path: string, name: string, schema: Schema | undefined): boolean {
+  // Compare-and-swap heads are checked only after the addressed resource is disclosed.
+  if (name === 'expectedHead') return false;
   if (name === 'id' || name === 'ids' || name === 'alias' || /Id$/.test(name) || /Ids$/.test(name)) return true;
   if (name === 'key' && path.startsWith('/v1/addresses/')) return true;
   return variants(schema).some(

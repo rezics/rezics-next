@@ -526,8 +526,8 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['work:edit']);
         const structure = `https://rezics.com/id/${params.id}`;
         const header = await readCompositionHeader(work.environment, structure);
-        if (!header || header.profile !== 'recipe-composition'
-          || !await work.access.canReadWork(principal, query.actingSubject, header.owner)) {
+        const readable = await work.access.canReadWork(principal, query.actingSubject, header?.owner ?? structure);
+        if (!header || header.profile !== 'recipe-composition' || !readable) {
           throw new CompositionUnavailable('Recipe is unavailable');
         }
         const profile = structureProfileFor(header.profile);

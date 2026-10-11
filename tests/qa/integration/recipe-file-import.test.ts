@@ -111,8 +111,11 @@ test('a Work editor retains and idempotently imports one bounded Recipe file', a
     const absent = await f.callRaw('POST', `/v1/recipes/${randomUUID()}/file-imports`
       + `?actingSubject=${encodeURIComponent(f.actor)}&expectedHead=${encodeURIComponent(imported.revision)}`,
     fileBytes, 'application/ld+json', `recipe-file-absent-${randomUUID()}`, f.account.tokenB);
+    const hiddenBody = await hidden.text();
+    const absentBody = await absent.text();
     expect(hidden.status).toBe(404);
-    expect(await hidden.json()).toMatchObject({ code: 'recipe_unavailable' });
-    expect(await absent.json()).toMatchObject({ code: 'recipe_unavailable' });
+    expect(absent.status).toBe(404);
+    expect(hiddenBody).toBe(absentBody);
+    expect(JSON.parse(hiddenBody)).toMatchObject({ code: 'recipe_unavailable' });
   } finally { await f.close(); }
 }, 180_000);

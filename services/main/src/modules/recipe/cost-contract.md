@@ -5,12 +5,13 @@ Recipe writes use the shared Structure admission and command. Each change accept
 and reports the shared Structure page and placement costs. The legacy
 source-observation import endpoint retains the existing observation. Direct
 Recipe file import retains up to 262,144 bytes of JSON or JSON-LD through the
-shared Source owner; both endpoints emit bounded insertion batches of 16
-operations, and import output is capped at 128
-occurrences. The older manual Source intake endpoint remains capped at 65,536
-decoded bytes. Use the same idempotency key to replay a completed prefix after
-a lost response. Concurrent edits can still make a later batch stale, leaving the
-earlier batches as a visible partial import for reconciliation.
+shared Source owner. The file's retained bytes are private payload and are
+erased with the Work through the existing source erasure owner. Both endpoints
+emit bounded insertion batches of 16 operations, and import output is capped at
+128 occurrences. The older manual Source intake endpoint remains capped at
+65,536 decoded bytes. Use the same idempotency key to replay a completed prefix
+after a lost response. Concurrent edits can still make a later batch stale,
+leaving the earlier batches as a visible partial import for reconciliation.
 
 Exact recipe reads page at most 100 children. Scaling walks active groups and
 occurrences through those pages and rejects after 4,096 returned occurrences.

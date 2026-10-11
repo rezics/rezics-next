@@ -32,6 +32,30 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     const owner = await stack.member('hidden-owner');
     const outsider = await stack.member('hidden-outsider');
     const hiddenWork = await stack.privateWork(owner.actor, `Hidden work ${randomUUID()}`);
+    await owner.grant('work:create:root', 'work.create');
+    const recipeWorkResponse = await owner.send('POST', '/v1/works', {
+      profile: 'metadata-only-v1', authoring: 'own-work', language: 'en',
+      title: `Hidden recipe ${randomUUID()}`, semanticTypes: ['https://schema.org/Recipe'],
+      actingSubject: owner.actor,
+    });
+    const recipeWorkText = await recipeWorkResponse.text();
+    if (recipeWorkResponse.status !== 201) {
+      throw new Error(`recipe Work ${recipeWorkResponse.status}: ${recipeWorkText}`);
+    }
+    const recipeWork = JSON.parse(recipeWorkText) as { work: string; mainVersion: string };
+    await owner.grant(`work:edit:${recipeWork.work}`, 'recipe.edit');
+    await owner.grant(`work:read:${recipeWork.work}`, 'work.read');
+    const hiddenRecipeResponse = await owner.send('POST', '/v1/compositions', {
+      profile: 'recipe-composition', work: recipeWork.work, mainVersion: recipeWork.mainVersion,
+      actingSubject: owner.actor,
+    });
+    const hiddenRecipeText = await hiddenRecipeResponse.text();
+    if (hiddenRecipeResponse.status !== 201) {
+      throw new Error(`recipe structure ${hiddenRecipeResponse.status}: ${hiddenRecipeText}`);
+    }
+    const hiddenRecipe = JSON.parse(hiddenRecipeText) as { structure: string; revision: string };
+    await owner.grant(`work:edit:${hiddenWork.work}`, 'recipe.edit');
+    await owner.grant(`work:read:${hiddenWork.work}`, 'work.read');
     const absent = randomUUID();
     const realmInput = { name: `Hidden realm ${randomUUID()}`, actingSubject: owner.actor };
     const realm = await createRealmSpace(stack.env, stack.admission(owner.actor, 'space:create:root', 'space.create',
@@ -212,6 +236,11 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       hidden: workId, absent,
       call: (id) => http('GET', `/v1/works/${id}/maintainers`),
     });
+    calls.set('POST /v1/recipes/{id}/file-imports', {
+      hidden: local(hiddenRecipe.structure), absent,
+      call: (id) => http('POST', outsiderQuery(`/v1/recipes/${id}/file-imports?expectedHead=${encodeURIComponent(
+        hiddenRecipe.revision)}`), { '@type': 'Recipe' }, outsider.token),
+    });
     const ownedClaim = await http('GET',
       `/v1/claims/${claimId}?actingSubject=${encodeURIComponent(owner.actor)}`, undefined, owner.token);
     expect(ownedClaim.status).toBe(200);
@@ -233,6 +262,14 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     expect([...calls.keys()].sort()).toEqual([...registeredHiddenIdReads]);
     for (const operation of registeredHiddenIdReads) {
       const spec = calls.get(operation)!;
+      if (operation === 'POST /v1/recipes/{id}/file-imports') {
+        const hidden = await spec.call(spec.hidden);
+        const absent = await spec.call(spec.absent);
+        expect(hidden.status).toBe(404);
+        expect(absent.status).toBe(404);
+        expect(await hidden.text()).toBe(await absent.text());
+        continue;
+      }
       await assertHiddenIdEquality({ operation, hiddenId: spec.hidden, absentId: spec.absent,
         call: spec.call, readCounters });
     }

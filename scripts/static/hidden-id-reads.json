@@ -3396,6 +3396,14 @@
     "status": "unregistered"
   },
   {
+    "operation": "POST /v1/recipes/{id}/file-imports",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "POST /v1/recipes/{id}/imports",
     "ids": [
       "path:id"

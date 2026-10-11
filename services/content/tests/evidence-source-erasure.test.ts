@@ -39,13 +39,13 @@ async function cluster() {
 
 function native(id = randomUUID()) { return `https://rezics.com/id/${id}`; }
 
-async function revision(pool: Pool, text: string) {
+async function revision(pool: Pool, text: string, resourceId = `urn:rezics:work:${randomUUID()}`) {
   const id = randomUUID();
   const variant = `urn:rezics:variant:${randomUUID()}`;
   const bytes = Buffer.from(JSON.stringify({ text }));
   const byteDigest = createHash('sha256').update(bytes).digest('hex');
   await pool.query(`INSERT INTO content.variant (id, resource_id, language_kind, direction)
-    VALUES ($1, $2, 'zxx', 'none')`, [variant, `urn:rezics:work:${randomUUID()}`]);
+    VALUES ($1, $2, 'zxx', 'none')`, [variant, resourceId]);
   await pool.query(`INSERT INTO content.revision (id, variant_id, operation_id, format, model, provenance,
     byte_digest, byte_length, serialized_bytes, body)
     VALUES ($1, $2, $3, 'rezics-content-json-v1', 'fixture', '{}', $4, $5, $6, $7::jsonb)`,
@@ -61,6 +61,19 @@ async function observation(pool: Pool, principal: string) {
   await pool.query(`INSERT INTO source.observation (id, record_id, principal_id, media_type, retention,
     coverage, rights_evidence) VALUES ($1, $2, $3, 'application/json', 'not-retained', '{}', '{}')`,
   [id, record, principal]);
+  return id;
+}
+
+async function retainedRecipeFile(pool: Pool, principal: string, work: string, bytes: Buffer) {
+  const record = randomUUID();
+  const id = randomUUID();
+  const byteDigest = createHash('sha256').update(bytes).digest('hex');
+  await pool.query(`INSERT INTO source.record (id, provider, namespace, external_id)
+    VALUES ($1, 'rezics', 'recipe-file', $2)`, [record, work]);
+  await pool.query(`INSERT INTO source.observation (id, record_id, principal_id, source_revision, media_type,
+    retention, raw_bytes, byte_digest, coverage, rights_evidence)
+    VALUES ($1, $2, $3, 'work-head', 'application/ld+json', 'retained', $4, $5, '{}', '{}')`,
+  [id, record, principal, bytes, byteDigest]);
   return id;
 }
 
@@ -752,3 +765,36 @@ test('content-bound source text clears once under the revision journal and canno
     expect(await registry.activePrincipalId({ issuer: 'https://account.example', subject: activeSubject })).toBe(activeId);
   } finally { await source.stop(); }
 }, 180_000);
+
+test('erasing a Work clears its retained Recipe file bytes through the source erasure owner', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  try {
+    await migrateContent(pool);
+    const work = native();
+    const contentRevision = await revision(pool, 'Work content', work);
+    const privateBytes = Buffer.from('{"@type":"Recipe","name":"PRIVATE-RECIPE-FILE-λ"}');
+    const observationId = await retainedRecipeFile(pool, randomUUID(), work, privateBytes);
+    const before = await pool.query<{ retention: string; raw_bytes: Buffer | null }>(
+      `SELECT retention, raw_bytes FROM source.observation WHERE id = $1`, [observationId]);
+    expect(before.rows[0]).toEqual({ retention: 'retained', raw_bytes: privateBytes });
+    expect((await pool.query<{ revision_id: string }>(
+      `SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])`,
+      [[contentRevision]])).rows.map(row => row.revision_id)).toEqual([contentRevision]);
+
+    const erasureId = randomUUID();
+    expect(await erase(pool, contentRevision, erasureId, '11')).toBe(0);
+    const erased = await pool.query<{ retention: string; raw_bytes: Buffer | null; byte_digest: string | null;
+      source_erasure_id: string | null; source_erasure_epoch: string | null }>(
+      `SELECT retention, raw_bytes, byte_digest, source_erasure_id::text, source_erasure_epoch::text
+       FROM source.observation WHERE id = $1`, [observationId]);
+    expect(erased.rows[0]).toEqual({ retention: 'not-retained', raw_bytes: null, byte_digest: null,
+      source_erasure_id: erasureId, source_erasure_epoch: '11' });
+    expect((await pool.query<{ revision_id: string }>(
+      `SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])`,
+      [[contentRevision]])).rows).toEqual([]);
+    await expect(pool.query(`UPDATE source.observation SET coverage = '{"restored":true}'::jsonb WHERE id = $1`,
+      [observationId])).rejects.toMatchObject({ code: '23514' });
+    expect(await erase(pool, contentRevision, erasureId, '11')).toBe(0);
+  } finally { await source.stop(); }
+});
