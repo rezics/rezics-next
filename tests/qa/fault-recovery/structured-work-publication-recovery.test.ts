@@ -12,7 +12,7 @@ import { readWorkStructurePublicationReceipt, workStructurePublicationDigest,
 import { strongRevokeWorkPrincipal } from '../../../services/main/src/modules/work/strong-revoke.ts';
 import { publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
 
-test('WORK10/RECIPE07: publication settlement, withdrawal replay and restore holds keep one terminal public state', async () => {
+test('WORK10: publication settlement, withdrawal replay and restore holds keep one terminal public state', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const fixture = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structured-work-publication-recovery-${randomUUID()}`));

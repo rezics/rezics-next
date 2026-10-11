@@ -76,7 +76,7 @@ function environment(query: (text: string) => Promise<unknown>,
     objectDirectory: '/unused' } as never;
 }
 
-test('RECIPE07: publication intent digest binds the exact source, disclosure, rights and predecessor', () => {
+test('WORK10/COMP08: publication intent digest binds the exact source, disclosure, rights and predecessor', () => {
   const digest = workStructurePublicationDigest(publishInput);
   expect(digest).toMatch(/^[a-f0-9]{64}$/);
   expect(workStructurePublicationDigest({ ...publishInput })).toBe(digest);
@@ -87,7 +87,7 @@ test('RECIPE07: publication intent digest binds the exact source, disclosure, ri
     rightsBasis: 'imported-material' as 'original-contribution' })).toThrow('invalid structured Work publication source');
 });
 
-test('RECIPE07: publication receipt families and typed outbox handlers are owner-discovered', () => {
+test('WORK10: publication receipt families and typed outbox handlers are owner-discovered', () => {
   expect(receiptFamilyFor('work.publish')).toBe('work-structure-publication-v1');
   expect(receiptFamilyFor('work.withdraw-publication')).toBe('work-structure-withdrawal-v1');
   expect(receiptFamilyFor('work.publish')).not.toBe(receiptFamilyFor('work.withdraw-publication'));
@@ -99,7 +99,7 @@ test('RECIPE07: publication receipt families and typed outbox handlers are owner
     .toBe(`urn:rezics:receipt:${hash(`${admissionId}\0work-structure-publication-v1`)}`);
 });
 
-test('RECIPE07: a retained success replays the exact admitted source without claiming or writing again', async () => {
+test('WORK10: a retained success replays the exact admitted source without claiming or writing again', async () => {
   const success = terminalReceipt(publishInput);
   const queries: string[] = [];
   const env = environment(async query => {
@@ -125,7 +125,7 @@ test('RECIPE07: a retained success replays the exact admitted source without cla
   expect(queries).toHaveLength(2);
 });
 
-test('RECIPE07: publication and withdrawal events are reconstructed from their exact terminal receipts', async () => {
+test('WORK10: publication and withdrawal events are reconstructed from their exact terminal receipts', async () => {
   const withdrawalInput: WorkStructurePublicationInput = { profile: 'work-structure-publication-v1',
     operation: 'withdraw', work, actingSubject: actor, expectedPublicationHead: decision };
   const cases: Array<{ action: WorkStructurePublicationReceipt['action']; kind: string; eventType: string;
@@ -164,7 +164,7 @@ test('RECIPE07: publication and withdrawal events are reconstructed from their e
   }
 });
 
-test('RECIPE07: an Access claim denial is terminally recorded and cannot authorize publication', async () => {
+test('WORK10/COMP04: an Access claim denial is terminally recorded and cannot authorize publication', async () => {
   const digest = workStructurePublicationDigest(publishInput);
   const registered = admission(publishInput, { state: 'registered', dispatchEligible: true, replayed: false });
   const cancelled: WorkStructurePublicationReceipt = { action: 'work.publish', outcome: 'cancelled',
@@ -193,7 +193,7 @@ test('RECIPE07: an Access claim denial is terminally recorded and cannot authori
     `register:work.publish:${scope}:${digest}`, 'claim-denied', 'record:cancelled']);
 });
 
-test('RECIPE07: a current publication restriction seals an authority-denied receipt before source dispatch', async () => {
+test('WORK10/COMP04: a current publication restriction seals an authority-denied receipt before source dispatch', async () => {
   const digest = workStructurePublicationDigest(publishInput);
   const registered = admission(publishInput, { state: 'registered', dispatchEligible: true, replayed: false });
   const denied: WorkStructurePublicationReceipt = { action: 'work.publish', outcome: 'cancelled',
@@ -226,7 +226,7 @@ test('RECIPE07: a current publication restriction seals an authority-denied rece
   expect(calls).toEqual(['recorded']);
 });
 
-test('RECIPE07: stale terminal cancellation reports stale while a revocation cancellation does not invent a predecessor', () => {
+test('WORK10/COMP04: stale terminal cancellation reports stale while a revocation cancellation does not invent a predecessor', () => {
   const { publicationDecision: _decision, reason: _reason, mainVersion: _main, structure: _structure,
     structureProfile: _profile, structureRevision: _revision, selectedGeneration: _generation,
     sourceRoot: _root, ...cancelledSuccess } = terminalReceipt(publishInput);
@@ -243,7 +243,7 @@ test('RECIPE07: stale terminal cancellation reports stale while a revocation can
     workStructurePublicationDigest(republish))).toThrow(AdmissionDenied);
 });
 
-test('RECIPE07/WORK10: strong principal revocation settles an in-flight publication without a source', async () => {
+test('WORK10: strong principal revocation settles an in-flight publication without a source', async () => {
   const registered = admission(publishInput, {
     state: 'claimed', dispatchEligible: false, replayed: false,
   });
@@ -295,7 +295,7 @@ test('RECIPE07/WORK10: strong principal revocation settles an in-flight publicat
     `seal:${admissionId}:cancelled`, `fence:${actor}:13`]);
 });
 
-test('RECIPE07: original-contribution proof rejects imports, references, media and another editor', async () => {
+test('WORK10: original-contribution proof rejects imports, references, media and another editor', async () => {
   const source = { structure, revision: structureHead, generation, manifest: sourceRoot,
     placementCount: 2, actingSubject: actor };
   const responses: unknown[] = [

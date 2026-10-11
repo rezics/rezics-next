@@ -223,7 +223,7 @@ test('restoration of the parent restriction restores the candidate (symmetric ca
   } finally { await fixture.close(); }
 }, 180_000);
 
-test('RECIPE07 native admission publishes one exact Work candidate and withdrawal removes its name', async () => {
+test('WORK10/RECIPE03: native admission publishes one exact Work candidate and withdrawal removes its name', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const fixture = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structured-work-publication-native-${randomUUID()}`));

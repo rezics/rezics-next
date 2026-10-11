@@ -31,7 +31,7 @@ function env(query: (text: string, maxBytes?: number) => Promise<unknown>) {
     objectDirectory: '.temp/structured-work-publication-read' } as unknown as WorkActivationEnvironment;
 }
 
-test('public Work reads resolve only the exact admitted Structure root', async () => {
+test('WORK10/COMP08: public Work reads resolve only the exact admitted Structure root', async () => {
   let queryText = '';
   const environment = env(async text => {
     queryText = text;
@@ -43,14 +43,14 @@ test('public Work reads resolve only the exact admitted Structure root', async (
   expect(queryText).not.toContain('rv:selectedGeneration ?currentGeneration');
 });
 
-test('unpublished and withdrawn selections resolve as absent; duplicate roots fail closed', async () => {
+test('WORK10/VIEW03: unpublished and withdrawn selections resolve as absent; duplicate roots fail closed', async () => {
   const unpublished = env(async () => ({ results: { bindings: [] } }));
   expect(await readPublishedStructuredWorkSource(unpublished, work, main)).toBeNull();
   const ambiguous = env(async () => ({ results: { bindings: [sourceRow(), sourceRow()] } }));
   await expect(readPublishedStructuredWorkSource(ambiguous, work, main)).rejects.toThrow('ambiguous');
 });
 
-test('public candidate admission requires the selected Structure disclosure at the same cut', async () => {
+test('WORK10/VIEW03: public candidate admission requires the selected Structure disclosure at the same cut', async () => {
   let hiddenStructure = false;
   let hiddenParent = false;
   const environment = env(async text => {
@@ -78,7 +78,7 @@ test('public candidate admission requires the selected Structure disclosure at t
   expect(await admittedPublicWorks(environment, [work])).toEqual(new Set());
 });
 
-test('parent admission stays bounded to one immediate parent per candidate across DISCLOSURE_COST batches', async () => {
+test('WORK10/VIEW03: parent admission stays bounded to one immediate parent per candidate across DISCLOSURE_COST batches', async () => {
   const candidates = Array.from({ length: DISCLOSURE_COST.batch + 1 }, (_, index) =>
     `https://rezics.com/id/00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`);
   const parentQueries: Array<{ count: number; maxBytes: number | undefined }> = [];
@@ -125,12 +125,12 @@ test.each([
   ['foreign Work key', [{ work: term(main), parent: term(parent) }]],
   ['malformed parent', [{ work: term(work), parent: term('urn:rezics:private-container') }]],
   ['self parent', [{ work: term(work), parent: term(work) }]],
-] as const)('malformed or ambiguous immediate parent batches fail closed: %s', async (_label, bindings) => {
+] as const)('VIEW03: malformed or ambiguous immediate parent batches fail closed: %s', async (_label, bindings) => {
   const environment = env(async () => ({ results: { bindings } }));
   await expect(readWorkPublicationParents(environment, [work])).rejects.toThrow('Publication parent batch');
 });
 
-test('invalid immediate parent requests fail closed before querying the owner', async () => {
+test('VIEW03: invalid immediate parent requests fail closed before querying the owner', async () => {
   let queries = 0;
   const environment = env(async () => { queries++; return { results: { bindings: [] } }; });
   await expect(readWorkPublicationParents(environment, ['urn:rezics:private-container']))
@@ -141,7 +141,7 @@ test('invalid immediate parent requests fail closed before querying the owner', 
   expect(queries).toBe(0);
 });
 
-test('Structure disclosure is fenced on the exact admitted revision and owning Work', async () => {
+test('WORK10/VIEW03: Structure disclosure is fenced on the exact admitted revision and owning Work', async () => {
   let visible = true;
   let seen: unknown;
   const session = { deps: { environment: undefined }, disclosure: async (targets: readonly unknown[]) => {
