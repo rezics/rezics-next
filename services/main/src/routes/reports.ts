@@ -58,11 +58,26 @@ export const reportFields = {
   evidence: t.Array(evidenceTarget, { minItems: 1, maxItems: 16 }),
   idempotencyKey: key,
 };
-const reportResult = t.Object({ profile: t.String(), reportId: t.String(), caseId: t.String(),
+const reportReceiptFields = { profile: t.String(), reportId: t.String(), caseId: t.String(),
   caseGeneration: t.String(), evidenceDigest: t.String(), replayed: t.Boolean(),
   caseState: t.Optional(t.String()), decisionHead: t.Optional(t.Nullable(t.String())),
   evidence: t.Array(t.Object({ ordinal: t.Number(), owner: t.String(), resource: t.String(), component: t.String(),
-    revision: t.Nullable(t.String()), revisionDigest: t.Nullable(t.String()), state: t.String() })) });
+    revision: t.Nullable(t.String()), revisionDigest: t.Nullable(t.String()), state: t.String() })) };
+const reportResult = t.Object(reportReceiptFields);
+const staffRightsComplaint = t.Nullable(t.Object({
+  process: t.Union([t.Literal('dmca_512'), t.Literal('ordinary_dispute')]),
+  claimantKind: t.Union([t.Literal('rights_holder'), t.Literal('authorized_agent'), t.Literal('unknown')]),
+  claimantName: bounded(300), claimantContact: t.Nullable(bounded(500)), claimedWork: bounded(1000),
+  claimedRight: t.Union([t.Literal('copyright'), t.Literal('trademark'), t.Literal('privacy'), t.Literal('other')]),
+  noticeDigest: digest, noticeReceivedAt: t.String({ format: 'date-time' }),
+}, { additionalProperties: false }));
+const staffNotice = t.Object({ statement: t.Nullable(bounded(4000)),
+  contentLanguage: t.Nullable(contentLanguage), process: t.Nullable(bounded(64)),
+  receivedAt: t.String({ format: 'date-time' }), contactEmail: t.Nullable(t.String({ format: 'email', maxLength: 320 })),
+  declarations: t.Nullable(t.Record(t.String(), t.Unknown())), rightsComplaint: staffRightsComplaint,
+}, { additionalProperties: false });
+const reportReadResult = t.Object({ ...reportReceiptFields, caseState: t.Optional(t.String()),
+  decisionHead: t.Optional(t.Nullable(t.String())), staffNotice: t.Optional(staffNotice) });
 export const decisionFields = {
   reasons,
   caseId: uuid,
@@ -164,7 +179,7 @@ export function reportRoutes(work: MainWorkDependencies) {
     .get('/v1/reports/:report', {
       params: t.Object({ report: uuid }),
       query: t.Object({ actingSubject: t.Optional(agent) }, { additionalProperties: false }),
-      response: { 200: reportResult, ...authorizedReadProblems },
+      response: { 200: reportReadResult, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);

@@ -104,6 +104,25 @@ export interface ReportResult {
     revisionDigest: string | null; state: EvidenceState }>;
 }
 
+interface StaffReportNotice {
+  statement: string | null;
+  contentLanguage: string | null;
+  process: string | null;
+  receivedAt: string;
+  contactEmail: string | null;
+  declarations: Record<string, unknown> | null;
+  rightsComplaint: {
+    process: string;
+    claimantKind: string;
+    claimantName: string;
+    claimantContact: string | null;
+    claimedWork: string;
+    claimedRight: string;
+    noticeDigest: string;
+    noticeReceivedAt: string;
+  } | null;
+}
+
 export interface DecisionTargetInput {
   owner: GovernanceOwner; resource: string; component: GovernanceComponent; locator: string | null;
   scopeKind: 'exact_revision' | 'component'; revision: string | null; expectedHead: string | null;
@@ -433,7 +452,7 @@ export class GovernanceStore {
    * exact evidence anchors and the current case state. Anyone else gets 404.
    */
   async readReport(principal: VerifiedPrincipal, reportId: string, actingSubject: string | null):
-    Promise<ReportResult & { caseState: string; decisionHead: string | null }> {
+    Promise<ReportResult & { caseState: string; decisionHead: string | null; staffNotice?: StaffReportNotice }> {
     if (!uuidPattern.test(reportId) || (actingSubject !== null && !agentPattern.test(actingSubject))) {
       throw new GovernanceInvalid('invalid report read');
     }
@@ -449,14 +468,56 @@ export class GovernanceStore {
       if (!row) throw new GovernanceDenied('report is unavailable');
       const own = row.reporter_active && row.reporter_issuer === principal.issuer
         && row.reporter_subject === principal.subject;
-      if (!own || row.urgent) {
+      const staffRead = !own || row.urgent;
+      if (staffRead) {
         if (!actingSubject) throw new GovernanceDenied('report is unavailable');
         await this.decider(client, principal, actingSubject, row.scope,
           row.urgent ? 'governance.safety.evidence' : DECIDE_ACTION[row.kind])
           .catch(() => { throw new GovernanceDenied('report is unavailable'); });
       }
-      return { ...await this.reportResult(client, reportId, false, row.urgent), caseState: row.state,
+      const result = { ...await this.reportResult(client, reportId, false, row.urgent), caseState: row.state,
         decisionHead: row.decision_head };
+      if (!staffRead) return result;
+      const notice = (await client.query<{
+        statement: string | null;
+        content_language: string | null;
+        process: string | null;
+        received_at: Date;
+        contact_email: string | null;
+        declarations: Record<string, unknown> | null;
+        complaint_process: string | null;
+        claimant_kind: string | null;
+        claimant_name: string | null;
+        claimant_contact: string | null;
+        claimed_work: string | null;
+        claimed_right: string | null;
+        notice_digest: string | null;
+        notice_received_at: Date | null;
+      }>(`SELECT r.statement, r.content_language, COALESCE(rc.process, r.process) AS process,
+          r.received_at, r.contact_email, r.declarations, rc.process AS complaint_process,
+          rc.claimant_kind, rc.claimant_name, rc.claimant_contact, rc.claimed_work, rc.claimed_right,
+          rc.notice_digest, rc.notice_received_at
+        FROM access.governance_report r LEFT JOIN access.rights_complaint rc ON rc.report_id = r.id
+        WHERE r.id = $1`, [reportId])).rows[0];
+      if (!notice) throw new GovernanceDenied('report is unavailable');
+      return { ...result, staffNotice: {
+        statement: notice.statement,
+        contentLanguage: notice.content_language,
+        process: notice.process,
+        receivedAt: notice.received_at.toISOString(),
+        contactEmail: notice.contact_email,
+        declarations: notice.declarations,
+        rightsComplaint: notice.complaint_process === null ? null : {
+          process: notice.complaint_process,
+          claimantKind: notice.claimant_kind!,
+          claimantName: notice.claimant_name!,
+          claimantContact: notice.claimant_contact,
+          claimedWork: notice.claimed_work!,
+          claimedRight: notice.claimed_right!,
+          noticeDigest: notice.notice_digest!,
+          noticeReceivedAt: notice.notice_received_at!.toISOString(),
+        },
+      } };
     });
   }
 

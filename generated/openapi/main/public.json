@@ -585939,6 +585939,150 @@
                     },
                     "reportId": {
                       "type": "string"
+                    },
+                    "staffNotice": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contactEmail": {
+                          "~elyTyp": 7,
+                          "format": "email",
+                          "maxLength": 320,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "contentLanguage": {
+                          "~elyTyp": 7,
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "nullable": true,
+                          "pattern": "\\S",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "declarations": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "patternProperties": {
+                            "^.*$": {}
+                          },
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "process": {
+                          "~elyTyp": 7,
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "receivedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "rightsComplaint": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "claimantContact": {
+                              "~elyTyp": 7,
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "claimantKind": {
+                              "enum": [
+                                "rights_holder",
+                                "authorized_agent",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            "claimantName": {
+                              "maxLength": 300,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "claimedRight": {
+                              "enum": [
+                                "copyright",
+                                "trademark",
+                                "privacy",
+                                "other"
+                              ],
+                              "type": "string"
+                            },
+                            "claimedWork": {
+                              "maxLength": 1000,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "noticeDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "noticeReceivedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "process": {
+                              "enum": [
+                                "dmca_512",
+                                "ordinary_dispute"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "process",
+                            "claimantKind",
+                            "claimantName",
+                            "claimantContact",
+                            "claimedWork",
+                            "claimedRight",
+                            "noticeDigest",
+                            "noticeReceivedAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "statement": {
+                          "~elyTyp": 7,
+                          "maxLength": 4000,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "statement",
+                        "contentLanguage",
+                        "process",
+                        "receivedAt",
+                        "contactEmail",
+                        "declarations",
+                        "rightsComplaint"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [

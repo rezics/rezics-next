@@ -13,8 +13,12 @@ export const rightsCases: CaseDeclarations = {
     { tier: 'integration', file: 'tests/qa/integration/export-owner.test.ts',
       name: 'LIVE07/COMP08/FACT05: Content export terminal is exact, concurrent, idempotent and recoverable' },
   ],
-  GOV24: [{ tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',
-    name: 'GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh' }],
+  GOV24: [
+    { tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',
+      name: 'GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh' },
+    { tier: 'integration', file: 'tests/qa/integration/rights-notice-review.test.ts',
+      name: 'GOV01/GOV24: platform reviewers read exact retained rights notices without disclosing the staff projection to reporters' },
+  ],
   GOV25: [
     { tier: 'integration', file: 'tests/qa/integration/rights-complaint.test.ts',
       name: 'GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh' },
