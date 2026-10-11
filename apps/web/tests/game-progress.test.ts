@@ -5,7 +5,7 @@ import { chromium, expect as browserExpect, type Browser, type Page } from 'play
 import type { MainClient } from '../features/discover/types.ts';
 import type { EpisodeProgress } from '../features/tracking/episode-api.ts';
 import { mainTrackingApi } from '../features/tracking/api.ts';
-import type { MediaApi } from '../features/tracking/media-api.ts';
+import { GAME_PART_PAGE_LIMIT, type MediaApi } from '../features/tracking/media-api.ts';
 import type { RouteRef } from '../features/tracking/media.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -15,6 +15,12 @@ const part = (index: number, required = true): RouteRef => ({ structure,
   label: `Part ${index}`, required });
 const parts = (count: number) => Array.from({ length: count }, (_, index) => part(index + 1));
 const completed: EpisodeProgress = { completed: true, position: 'completed', version: 1 };
+const revision = part(9000).occurrence;
+type InventoryItem = { occurrence: string; role: 'part' | 'group'; displayLabel: string; inclusion: 'required' | 'optional' };
+type InventoryLevel = { parent: string | null; items: InventoryItem[] };
+const inventoryPart = (route: RouteRef): InventoryItem => ({ occurrence: route.occurrence,
+  role: 'part', displayLabel: route.label, inclusion: route.required ? 'required' : 'optional' });
+const group = (index: number): InventoryItem => ({ ...inventoryPart(part(index)), role: 'group' });
 
 interface Fixture {
   parts: RouteRef[];
@@ -25,9 +31,12 @@ interface Fixture {
   staleWrite?: string;
   delay?: number;
   emptyFirst?: boolean;
+  levels?: InventoryLevel[];
+  failParent?: string;
 }
 interface TestWindow {
   renderGame(api: MediaApi, key: number): void;
+  inventoryApi(client: MainClient): MediaApi;
   game: {
     api: MediaApi;
     rows: Map<string, EpisodeProgress>;
@@ -51,7 +60,9 @@ describe('game progress component', () => {
     await writeFile(entry, `import { createRoot } from 'react-dom/client';
 import { GameProgress } from ${JSON.stringify(resolve('apps/web/features/tracking/game-progress.tsx'))};
 import { copyOf } from ${JSON.stringify(resolve('apps/web/features/tracking/messages.ts'))};
+import { mainTrackingApi } from ${JSON.stringify(resolve('apps/web/features/tracking/api.ts'))};
 const root = createRoot(document.getElementById('root'));
+window.inventoryApi = client => mainTrackingApi('reader', () => client).media;
 window.renderGame = (api, key) => root.render(<GameProgress key={key} work=${JSON.stringify(work)} api={api} t={copyOf('en')} />);
 `);
     const built = await Bun.build({ entrypoints: [entry], target: 'browser', define: { 'process.env.NODE_ENV': '"development"' } });
@@ -107,6 +118,23 @@ window.renderGame = (api, key) => root.render(<GameProgress key={key} work=${JSO
           return { ok: true, data: saved };
         },
       } as MediaApi;
+      if (fixture.levels) {
+        const client = { v1: { resources: () => ({ parts: {
+          get: async ({ query }: { query: { parent?: string; after?: string; limit: number } }) => {
+            game.pages.push(JSON.stringify(query));
+            if (query.parent === fixture.failParent && fixture.failParent !== undefined) {
+              return { data: null, error: { status: 403, value: {} } };
+            }
+            const items = fixture.levels!.find(level => level.parent === (query.parent ?? null))!.items;
+            const start = Number(query.after ?? 0);
+            return { error: null, data: { structure: fixture.parts[0]!.structure,
+              revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000009010',
+              parts: items.slice(start, start + query.limit),
+              next: start + query.limit < items.length ? String(start + query.limit) : null } };
+          },
+        } }) } } as unknown as MainClient;
+        game.api.routes = target.inventoryApi(client).routes;
+      }
       target.game = game;
       target.renderGame(game.api, game.key);
     }, fixture);
@@ -168,6 +196,89 @@ window.renderGame = (api, key) => root.render(<GameProgress key={key} work=${JSO
     await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
     await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
     expect(await writes()).toHaveLength(45);
+  });
+
+  test('a completed root part cannot hide a required grouped part; the child remains reachable', async () => {
+    const [a, b] = parts(2) as [RouteRef, RouteRef];
+    const branch = group(100);
+    await mount({ parts: [a, b], marks: [[a.occurrence, completed]], levels: [
+      { parent: null, items: [inventoryPart(a), branch] },
+      { parent: branch.occurrence, items: [inventoryPart(b)] },
+    ] });
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'played');
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await browserExpect(row(b.occurrence)).toBeVisible();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'played');
+    await row(b.occurrence).click();
+    await browserExpect(page.locator('[data-selected]')).toContainText('Not played yet');
+    await reload();
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+    expect(await writes()).toEqual([b.occurrence]);
+  });
+
+  test('whole-game completion traverses nested groups before writing required parts', async () => {
+    const [a, b, c] = parts(3) as [RouteRef, RouteRef, RouteRef];
+    const outer = group(100), inner = group(101);
+    await mount({ parts: [a, b, c], levels: [
+      { parent: null, items: [inventoryPart(a), outer] },
+      { parent: outer.occurrence, items: [inventoryPart(b), inner] },
+      { parent: inner.occurrence, items: [inventoryPart(c), inventoryPart(part(4, false))] },
+    ] });
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+    expect(await writes()).toEqual([a, b, c].map(route => route.occurrence));
+    await reload();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'played');
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await browserExpect(row(b.occurrence)).toBeVisible();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'played');
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+  });
+
+  test('whole-game completion exhausts every page within a group', async () => {
+    const all = parts(46), branch = group(100);
+    await mount({ parts: all, levels: [
+      { parent: null, items: [inventoryPart(all[0]!), branch] },
+      { parent: branch.occurrence, items: all.slice(1).map(inventoryPart) },
+    ] });
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+    expect(await writes()).toEqual(all.map(route => route.occurrence));
+    await browserExpect(row(all[45]!.occurrence)).toHaveAttribute('data-route-state', 'completed');
+  });
+
+  test('an unreadable grouped level prevents every whole-game write', async () => {
+    const all = parts(2), branch = group(100);
+    await mount({ parts: all, failParent: branch.occurrence, levels: [
+      { parent: null, items: [inventoryPart(all[0]!), branch] },
+      { parent: branch.occurrence, items: [inventoryPart(all[1]!)] },
+    ] });
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(page.getByRole('status')).toHaveText('Couldn’t save. Try again.');
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'unknown');
+    expect(await writes()).toEqual([]);
+  });
+
+  test('a bounded whole-game walk refuses writes but manual paging can still reach deeper required parts', async () => {
+    const all = parts(2);
+    const branches = Array.from({ length: GAME_PART_PAGE_LIMIT + 1 }, (_, index) => group(index + 100));
+    await mount({ parts: all, levels: [
+      { parent: null, items: [inventoryPart(all[0]!), branches[0]!] },
+      ...branches.map((branch, index) => ({ parent: branch.occurrence,
+        items: index + 1 < branches.length ? [branches[index + 1]!] : [inventoryPart(all[1]!)] })),
+    ] });
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(page.getByRole('status')).toHaveText('Couldn’t save. Try again.');
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'unknown');
+    expect(await writes()).toEqual([]);
+    expect(await page.evaluate(() => (window as unknown as TestWindow).game.pages.length)).toBe(GAME_PART_PAGE_LIMIT + 1);
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await browserExpect(row(all[1]!.occurrence)).toBeVisible();
+    await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+    await browserExpect(state()).toHaveAttribute('data-play-state', 'completed');
+    expect(await writes()).toEqual(all.map(route => route.occurrence));
   });
 
   test('whole-game Played reaches a required part beyond an optional-only page and survives reloading that page', async () => {
@@ -264,6 +375,103 @@ window.renderGame = (api, key) => root.render(<GameProgress key={key} work=${JSO
 });
 
 describe('game progress tracking adapter', () => {
+  function inventory(levels: InventoryLevel[], options: {
+    missing?: string; changedRevision?: string; changedStructure?: string; loop?: string;
+  } = {}) {
+    const asked: { parent?: string; after?: string; limit: number; actingSubject: string }[] = [];
+    const client = { v1: { resources: () => ({ parts: {
+      get: async ({ query }: { query: typeof asked[number] }) => {
+        asked.push(query);
+        if (query.parent === options.missing && options.missing !== undefined) {
+          return { data: null, error: { status: 404, value: {} } };
+        }
+        const items = levels.find(level => level.parent === (query.parent ?? null))!.items;
+        const start = Number(query.after ?? 0);
+        return { error: null, data: { structure: query.parent === options.changedStructure ? part(9002).occurrence : structure,
+          revision: query.parent === options.changedRevision ? part(9001).occurrence : revision,
+          parts: items.slice(start, start + query.limit),
+          next: options.loop ?? (start + query.limit < items.length ? String(start + query.limit) : null) } };
+      },
+    } }) } } as unknown as MainClient;
+    return { api: mainTrackingApi('reader', () => client).media!, asked };
+  }
+
+  test('pending root pages and nested, paged children share one complete inventory continuation', async () => {
+    const all = parts(66), outer = group(100), inner = group(101);
+    const { api, asked } = inventory([
+      { parent: null, items: [outer, ...all.slice(0, 20).map(inventoryPart)] },
+      { parent: outer.occurrence, items: [...all.slice(20, 65).map(inventoryPart), inner] },
+      { parent: inner.occurrence, items: [inventoryPart(all[65]!)] },
+    ]);
+    const found: string[] = [];
+    let after: string | undefined;
+    do {
+      const page = await api.routes(work, after);
+      if (!page.ok) throw new Error(page.failure);
+      found.push(...page.data.items.map(route => route.occurrence));
+      after = page.data.next ?? undefined;
+    } while (after);
+    expect(found).toEqual(all.map(route => route.occurrence));
+    expect(asked.map(({ parent, after }) => [parent ?? null, after ?? null])).toEqual([
+      [null, null], [null, '20'], [outer.occurrence, null], [outer.occurrence, '20'],
+      [outer.occurrence, '40'], [inner.occurrence, null],
+    ]);
+    expect(asked.every(query => query.limit === 20 && query.actingSubject === 'reader')).toBe(true);
+  });
+
+  test('a missing child or changed composition/revision cannot establish inventory exhaustion', async () => {
+    const branch = group(100);
+    const levels = [{ parent: null, items: [inventoryPart(part(1)), branch] },
+      { parent: branch.occurrence, items: [inventoryPart(part(2))] }];
+    for (const [options, failure] of [[{ missing: branch.occurrence }, 'missing'],
+      [{ changedRevision: branch.occurrence }, 'moved'], [{ changedStructure: branch.occurrence }, 'moved']] as const) {
+      const { api } = inventory(levels, options);
+      const first = await api.routes(work);
+      if (!first.ok || !first.data.next) throw new Error('Missing grouped continuation');
+      expect(await api.routes(work, first.data.next)).toEqual({ ok: false, failure });
+    }
+  });
+
+  test('page loops and repeated groups fail instead of falsely exhausting inventory', async () => {
+    const branch = group(100);
+    const cases = [inventory([{ parent: null, items: [inventoryPart(part(1))] }], { loop: '20' }),
+      inventory([{ parent: null, items: [branch] }, { parent: branch.occurrence, items: [branch] }])];
+    for (const { api, asked } of cases) {
+      let after: string | undefined;
+      let failure: string | undefined;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const read = await api.routes(work, after);
+        if (!read.ok) { failure = read.failure; break; }
+        expect(read.data.next).not.toBeNull();
+        after = read.data.next!;
+      }
+      expect(failure).toBe('budget');
+      expect(asked).toHaveLength(2);
+    }
+  });
+
+  test('manual continuation can exhaust an inventory beyond the automatic page budget', async () => {
+    const branches = Array.from({ length: GAME_PART_PAGE_LIMIT }, (_, index) => group(index + 100));
+    const { api, asked } = inventory([
+      { parent: null, items: [branches[0]!] },
+      ...branches.map((branch, index) => ({ parent: branch.occurrence,
+        items: index + 1 < branches.length ? [branches[index + 1]!] : [inventoryPart(part(1))] })),
+    ]);
+    let after: string | undefined;
+    for (let count = 0; count < GAME_PART_PAGE_LIMIT; count++) {
+      const read = await api.routes(work, after);
+      if (!read.ok || !read.data.next) throw new Error('Unvisited levels must remain incomplete');
+      expect(read.data.items).toEqual([]);
+      after = read.data.next;
+    }
+    const last = await api.routes(work, after);
+    expect(last.ok && last.data.items.map(route => route.occurrence)).toEqual([part(1).occurrence]);
+    expect(last.ok && last.data.next).toBeNull();
+    expect(asked).toHaveLength(GAME_PART_PAGE_LIMIT + 1);
+    expect(await api.routes(part(9).occurrence, after)).toEqual({ ok: false, failure: 'invalid' });
+    expect(asked).toHaveLength(GAME_PART_PAGE_LIMIT + 1);
+  });
+
   test('parts keep their cursor and required inclusion; occurrence reads retain unfinished play', async () => {
     const all = parts(25);
     const asked: unknown[] = [];
@@ -273,7 +481,7 @@ describe('game progress tracking adapter', () => {
         return { parts: { get: async ({ query }: { query: { after?: string } }) => {
           asked.push(query);
           const start = query.after ? Number(query.after) : 0;
-          return { error: null, data: { structure, next: start ? null : '20',
+          return { error: null, data: { structure, revision, next: start ? null : '20',
             parts: all.slice(start, start + 20).map((route, index) => ({ ...route, role: 'part',
               displayLabel: route.label, inclusion: start && index === 0 ? 'optional' : start && index === 1 ? 'extra' : 'required' })) } };
         } } };
@@ -288,8 +496,9 @@ describe('game progress tracking adapter', () => {
     const api = mainTrackingApi('reader', () => client).media!;
     const first = await api.routes(work);
     expect(first.ok && first.data.items).toHaveLength(20);
-    expect(first.ok && first.data.next).toBe('20');
-    const last = await api.routes(work, '20');
+    expect(first.ok && first.data.next).toBeString();
+    if (!first.ok || !first.data.next) throw new Error('Missing inventory continuation');
+    const last = await api.routes(work, first.data.next);
     expect(last.ok && last.data.items.map(route => route.required)).toEqual([false, false, true, true, true]);
     expect(last.ok && last.data.next).toBeNull();
     expect(await api.progress(all[1]!)).toEqual({ ok: true, data: { completed: false, position: 'played', version: 7 } });

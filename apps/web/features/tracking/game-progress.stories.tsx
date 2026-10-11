@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from '@rezics/ui/button';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
+import type { MainClient } from '../discover/types.ts';
 import type { EpisodeProgress } from './episode-api.ts';
 import { GameProgress } from './game-progress.tsx';
-import type { MediaApi } from './media-api.ts';
+import { mainMediaApi, type MediaApi } from './media-api.ts';
 import type { RouteRef } from './media.ts';
 import { copyOf } from './messages.ts';
 
@@ -18,17 +19,30 @@ const many = Array.from({ length: 25 }, (_, index): RouteRef => ({ ...story,
   occurrence: `https://example.test/part-${index + 1}`, label: `Part ${index + 1}` }));
 
 function memoryGame(done: string[] = [], options: {
-  parts?: RouteRef[]; played?: string; failOnce?: string;
+  parts?: RouteRef[]; played?: string; failOnce?: string; grouped?: boolean;
 } = {}): MediaApi {
   const parts = options.parts ?? [story, route];
   let fail = options.failOnce;
   const rows = new Map<string, EpisodeProgress>(done.map(id => [id, { completed: true, position: 'completed', version: 1 }]));
   if (options.played) rows.set(options.played, { completed: false, position: 'played', version: 1 });
+  const grouped = options.grouped ? mainMediaApi('reader', () => ({ v1: { resources: () => ({ parts: {
+    get: async ({ query }: { query: { parent?: string; after?: string; limit: number } }) => {
+      const items = query.parent === 'https://example.test/inner' ? many.map(part => ({ ...part,
+        role: 'part', displayLabel: part.label, inclusion: 'required' }))
+        : query.parent ? [{ occurrence: 'https://example.test/inner', role: 'group' }]
+          : [{ ...story, role: 'part', displayLabel: story.label, inclusion: 'required' },
+            { occurrence: 'https://example.test/outer', role: 'group' }];
+      const start = Number(query.after ?? 0);
+      return { error: null, data: { structure: story.structure, revision: 'https://example.test/revision',
+        parts: items.slice(start, start + query.limit), next: start + query.limit < items.length ? String(start + query.limit) : null } };
+    },
+  } }) } }) as unknown as MainClient) : null;
   return {
     types: async () => ({ ok: true, data: ['https://schema.org/VideoGame'] }),
     volumes: async () => ({ ok: true, data: [] }),
     chapters: async () => ({ ok: true, data: null }),
     routes: async (_work, after) => {
+      if (grouped) return grouped.routes(_work, after);
       const start = after ? Number(after) : 0;
       return { ok: true, data: { items: parts.slice(start, start + 20),
         next: start + 20 < parts.length ? String(start + 20) : null } };
@@ -110,6 +124,25 @@ export const PagedRequiredParts: Story = {
     await expect(canvasElement.querySelector('[data-routes]')).toBeNull();
     await userEvent.click(view.getByRole('button', { name: 'Show more' }));
     await view.findByRole('button', { name: 'Part 25' });
+    await userEvent.click(view.getByRole('button', { name: 'Mark completed' }));
+    await view.findByText('Completed', { exact: true });
+  },
+};
+
+/** Completing the root leaves nested required parts pending, including their second page. */
+export const GroupedRequiredParts: Story = {
+  args: { api: memoryGame([story.occurrence], { grouped: true }) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('Played', { exact: true });
+    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(view.getByRole('button', { name: 'Show more' })).toBeEnabled());
+    await expect(canvasElement.querySelector('[data-play-state="completed"]')).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
+    await view.findByRole('button', { name: 'Part 20' });
+    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
+    await view.findByRole('button', { name: 'Part 25' });
+    await expect(canvasElement.querySelector('[data-play-state="completed"]')).toBeNull();
     await userEvent.click(view.getByRole('button', { name: 'Mark completed' }));
     await view.findByText('Completed', { exact: true });
   },

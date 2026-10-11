@@ -6,8 +6,8 @@ import { type EpisodeProgress, type ProgressStale, mainEpisodeApi } from './epis
 import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.ts';
 
 // The same occurrence progress episodes use. A manga is placed by one resume read and one page of
-// the Work's positions; a game by one page of its parts and one page of completed occurrences.
-// Nothing here walks a series, and a read that fails is a failure rather than an empty place.
+// the Work's positions; a game by bounded pages through all levels of its parts.
+// A read that fails is a failure rather than an empty place.
 
 export interface PositionPage { items: Place[]; next: string | null }
 
@@ -21,6 +21,7 @@ export interface ChapterStanding {
   opened: PositionPage | null;
 }
 
+/** `next` covers every pending level, not just the parent of this page. */
 export interface PartPage { items: RouteRef[]; next: string | null }
 
 /** Completed occurrences from one page. `complete` is true when the page is the whole list. */
@@ -38,7 +39,7 @@ export interface MediaApi {
   volumes(work: string): Promise<Loaded<{ number: number; label: string | null; work: string }[]>>;
   /** The first page of the Book's own chapters. Null when the Work is not a Book. */
   chapters(work: string): Promise<Loaded<ChapterRef[] | null>>;
-  /** One page of the Work's parts. Required parts are the game; the others are routes. */
+  /** One page of the Work's parts, including grouped children. Pass the opaque `next` to continue. */
   routes(work: string, after?: string): Promise<Loaded<PartPage>>;
   /** One resume read, plus the neighbour of that chapter when the reader has one. */
   standing(work: string): Promise<Loaded<ChapterStanding>>;
@@ -66,6 +67,8 @@ export function workProgressConflict(status: number, body: unknown): 'parts' | '
 }
 
 const PAGE = 20;
+/** One automatic whole-game action reads at most this many additional pages; manual paging can continue. */
+export const GAME_PART_PAGE_LIMIT = 100;
 const MOVED_RESTARTS = 4;
 const MOVED_DELAY_MS = 250;
 const wait = (ms: number) => new Promise(done => setTimeout(done, ms));
@@ -133,6 +136,28 @@ type Contents = {
   nextCursor: string | null;
 };
 
+type PartVisit = { parent: string | null; after: string | null };
+type GamePartCursor = {
+  work: string; structure: string | null; revision: string | null;
+  pending: PartVisit[]; groups: string[]; visited: string[];
+};
+
+function gamePartCursor(work: string, after?: string): GamePartCursor | null {
+  if (!after) return { work, structure: null, revision: null,
+    pending: [{ parent: null, after: null }], groups: [], visited: [] };
+  try {
+    const cursor = JSON.parse(after) as GamePartCursor;
+    const nullableString = (value: unknown) => value === null || typeof value === 'string';
+    const strings = (value: unknown): value is string[] => Array.isArray(value)
+      && value.every(item => typeof item === 'string');
+    if (cursor.work !== work || !nullableString(cursor.structure) || !nullableString(cursor.revision)
+      || !strings(cursor.groups) || !strings(cursor.visited)
+      || !Array.isArray(cursor.pending) || !cursor.pending.length
+      || !cursor.pending.every(visit => visit && nullableString(visit.parent) && nullableString(visit.after))) return null;
+    return cursor;
+  } catch { return null; }
+}
+
 export function mainMediaApi(actingSubject: string, main: () => MainClient = browserMainApi): MediaApi {
   const episodes = mainEpisodeApi(actingSubject, main);
   const positionsOf = (work: string, query: { position: 'mine' | 'start'; limit?: number; cursor?: string; around?: string }) =>
@@ -163,14 +188,44 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
       return { ok: true, data: chapters };
     },
     async routes(work, after) {
+      const cursor = gamePartCursor(work, after);
+      if (!cursor) return { ok: false, failure: 'invalid' };
+      const visit = cursor.pending[0]!;
+      const key = JSON.stringify(visit);
+      if (cursor.visited.includes(key)) {
+        return { ok: false, failure: 'budget' };
+      }
       const read = await restarted(() => settle(() => main().v1.resources({ resource: uuidOf(work) }).parts.get({
-        query: { actingSubject, limit: PAGE, ...(after ? { after } : {}) } })));
-      if (!read.ok) return read.failure === 'missing' ? { ok: true, data: { items: [], next: null } } : read;
+        query: { actingSubject, limit: PAGE, ...(visit.parent ? { parent: visit.parent } : {}),
+          ...(visit.after ? { after: visit.after } : {}) } })));
+      if (!read.ok) return read.failure === 'missing' && !after ? { ok: true, data: { items: [], next: null } } : read;
+      // Switching composition/revision between parent reads cannot prove one complete inventory.
+      if (cursor.structure && cursor.structure !== read.data.structure
+        || cursor.revision && cursor.revision !== read.data.revision) return { ok: false, failure: 'moved' };
+      const pending = cursor.pending.slice(1);
+      if (read.data.next) {
+        const next = { parent: visit.parent, after: read.data.next };
+        if (JSON.stringify(next) === key || cursor.visited.includes(JSON.stringify(next))) {
+          return { ok: false, failure: 'budget' };
+        }
+        pending.unshift(next);
+      }
+      const groups = new Set(cursor.groups);
+      for (const part of read.data.parts) {
+        if (part.role !== 'group') continue;
+        // Repeated groups would cycle or duplicate a subtree. Refuse rather than silently omit it.
+        if (groups.has(part.occurrence)) return { ok: false, failure: 'budget' };
+        groups.add(part.occurrence);
+        pending.push({ parent: part.occurrence, after: null });
+      }
       const items = read.data.parts.flatMap(part => part.role === 'part' ? [{
         structure: read.data.structure, occurrence: part.occurrence, label: part.displayLabel || '',
         required: part.inclusion !== 'optional' && part.inclusion !== 'extra',
       }] : []);
-      return { ok: true, data: { items, next: read.data.next } };
+      return { ok: true, data: { items, next: pending.length ? JSON.stringify({
+        work, structure: read.data.structure, revision: read.data.revision ?? null,
+        pending, groups: [...groups], visited: [...cursor.visited, key],
+      } satisfies GamePartCursor) : null } };
     },
     async standing(work) {
       const read = await positionsOf(work, { position: 'mine', limit: PAGE });

@@ -6,7 +6,7 @@ import { CheckIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ProgressConflict } from './conflict-panel.tsx';
 import type { EpisodeProgress, ProgressStale } from './episode-api.ts';
-import type { MediaApi } from './media-api.ts';
+import { GAME_PART_PAGE_LIMIT, type MediaApi } from './media-api.ts';
 import { gameStatus, type RouteRef } from './media.ts';
 import type { Copy } from './messages.ts';
 
@@ -126,7 +126,7 @@ export function GameProgress({ work, api, t, className }: { work: string; api: M
       const seen = new Set<string>();
       // No marks are sent until every page is available, including a required part after optional ones.
       while (cursor) {
-        if (seen.has(cursor)) { setFailed(true); return; }
+        if (seen.size >= GAME_PART_PAGE_LIMIT || seen.has(cursor)) { setFailed(true); return; }
         seen.add(cursor);
         const found = await pageOf(api, work, cursor);
         if (!found.ok) { setFailed(true); return; }
