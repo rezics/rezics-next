@@ -629,6 +629,9 @@ export class GovernanceStore {
         `SELECT id, kind, authority_kind, authority_scope_id, context, generation::text, state, urgent
          FROM access.governance_case WHERE id = $1 FOR UPDATE`, [input.caseId])).rows[0];
       if (!caseRow) throw new GovernanceDenied('case is unavailable');
+      const kind = caseRow.kind === 'rights_complaint' ? 'rights_disposition' : 'content_moderation';
+      const authority = await this.decider(client, principal, input.actingSubject, caseRow.authority_scope_id,
+        DECIDE_ACTION[caseRow.kind]);
       if (caseRow.urgent)
         await this.decider(
           client,
@@ -637,6 +640,16 @@ export class GovernanceStore {
           caseRow.authority_scope_id,
           'governance.safety.evidence',
         );
+      // An overlapping request may have missed the preflight replay. Under the
+      // case lock, replay before checking the claim and basis the first decision
+      // already advanced, while retaining the caller's current authority.
+      const prior = (await client.query<{ id: string; request_digest: string }>(`SELECT id, request_digest
+        FROM access.moderation_decision WHERE principal_id = $1 AND kind = $2 AND idempotency_key = $3`,
+      [authority.principalId, kind, input.idempotencyKey])).rows[0];
+      if (prior) {
+        if (prior.request_digest !== request) throw new GovernanceConflict('idempotency key reused');
+        return this.decisionResult(client, prior.id, true);
+      }
       if (caseRow.authority_kind === 'platform') {
         const claim = (
           await client.query<{ principal_id: string; acting_subject: string }>(
@@ -681,7 +694,6 @@ export class GovernanceStore {
         await assertCounterNoticeRestoration(client, caseRow.id, restriction, this.clock());
         for (const target of input.targets) await assertNoParallelRestriction(client, target, restriction);
       }
-      const kind = caseRow.kind === 'rights_complaint' ? 'rights_disposition' : 'content_moderation';
       const allowed: readonly DecisionOutcome[] = kind === 'rights_disposition'
         ? ['interim_restrict', 'final_restrict', 'dismiss', 'restore', 'reverse']
         : ['restrict', 'dismiss', 'restore', 'reverse'];
@@ -694,21 +706,12 @@ export class GovernanceStore {
           throw new GovernanceInvalid('rights restoration must answer a recorded process step');
         }
       }
-      const authority = await this.decider(client, principal, input.actingSubject, caseRow.authority_scope_id,
-        DECIDE_ACTION[caseRow.kind]);
       // The rule publisher locks the same head for update. Hold this share
       // lock through the decision commit so a concurrent revision cannot slip
       // between review and the Access enforcement fence.
       const heldRule = await this.rules.current(input.rule.ref, caseRow.authority_scope_id, client);
       if (!heldRule || heldRule.revision !== input.rule.revision || heldRule.digest !== input.rule.digest) {
         throw new GovernanceStale('rule revision changed since review');
-      }
-      const prior = (await client.query<{ id: string; request_digest: string }>(`SELECT id, request_digest
-        FROM access.moderation_decision WHERE principal_id = $1 AND kind = $2 AND idempotency_key = $3`,
-      [authority.principalId, kind, input.idempotencyKey])).rows[0];
-      if (prior) {
-        if (prior.request_digest !== request) throw new GovernanceConflict('idempotency key reused');
-        return this.decisionResult(client, prior.id, true);
       }
       if (caseRow.state !== 'open' || caseRow.generation !== input.expectedGeneration) {
         throw new GovernanceStale('case changed since review');
