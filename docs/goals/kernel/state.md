@@ -53,6 +53,7 @@ Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recip
 - [Recipe refusal after earlier files](reports/G-1637-specification.md): the missing membership preparation proof, the operator restore gap.
 - [Graph, claim and model cluster](reports/G-1639-specification.md): two product fixes, six fixture corrections, three deferred.
 - [Structure and discovery cluster](reports/G-1640-specification.md): fixture and harness repairs, two evidence investigations.
+- [Closed by default without a default decision: the recommended projection rule](reports/G-1697-specification.md).
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
 
 ## Open
