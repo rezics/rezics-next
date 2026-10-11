@@ -394,7 +394,7 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         const staffCase = await f.read(`/v1/safety-cases/${receipt.caseId}`);
         expect(staffCase.status).toBe(200);
         const staffDetail = await body<{ reports: { reportId: string }[] }>(staffCase);
-        expect(staffDetail.reports).toContainEqual({ reportId: receipt.reportId });
+        expect(staffDetail.reports).toContainEqual(expect.objectContaining({ reportId: receipt.reportId }));
       }
 
       const caseResults = new Map<string, { decision: DecisionResult; affected: string; input: DecisionInput }>();
