@@ -221,7 +221,10 @@ export function accountAuthOptions(config: AccountConfig) {
     baseURL: config.baseURL,
     secret: config.secret,
     database: { db, type: 'postgres' as const, transaction: true },
-    advanced: { ipAddress: { ipAddressHeaders: ['x-rezics-client-ip'] } },
+    // Join the session and identity lookup so the subsequent terminal-stamp
+    // reread keeps its fresh snapshot without a third statement.
+    advanced: { ipAddress: { ipAddressHeaders: ['x-rezics-client-ip'] },
+      database: { joins: true } },
     // The HTTP boundary checks our session-bound reauthentication proof. The
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0, additionalFields: {
