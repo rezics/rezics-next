@@ -20,7 +20,7 @@ Workers are Luna at max for bounded implementation (width 8 live) and Sol (`code
 
 ## Running and queued (2026-10-11 14:00 UTC)
 
-Inside the window (Program's cuts): eligibility chain (one branch, after the classifier and the reply bridge land), the Zone recovery proof, the structure publication chain (steps in order, Access preview last), imported covers slices 1 and 2 (slice 3 is in Trust-ops' area and waits for the answers on scope), rights notice slices 1, 2 and 5, and seven position repairs (Feed, Discover, notifications, Zone browse, serial summary, ranking input, Realm rankings; the load helper is B). Outside: G-1582, G-1615, G-1603 with its image build, unfinished class-table batches. Parked B: Realm boards, public read mode, Claims into Statements, provider identity, history and undelete for replies and Zone pages, the redacted public decision read, the absent-Realm cost equality, the position-domain load helper.
+Inside the window (Program's cuts): eligibility chain (one branch, after the classifier and the reply bridge land), the Zone recovery proof, the structure publication chain (steps in order, Access preview last), imported covers slices 1 and 2 (slice 3 is in Trust-ops' area and waits for the answers on scope), rights notice slices 1, 2 and 5, and seven position repairs (Feed, Discover, notifications, Zone browse, serial summary, ranking input, Realm rankings; the load helper is B). Outside: G-1582, G-1615, G-1603 with its image build, unfinished class-table batches. Parked B: Realm boards, public read mode, Claims into Statements, provider identity, history and undelete for replies and Zone pages, the redacted public decision read, the absent-Realm cost equality, the position-domain load helper, the raw-update migration of roots that are green on the fixture assembler (briefs G-1834 to G-1837 stay unstarted), the 102 model-generation and legacy roots.
 
 ## Specifications (read-only analyses, 2026-10-11)
 
@@ -37,6 +37,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
 - [Content document recovery](reports/G-1801-specification.md): bad-edit restore already proven; slice 1 the Zone proof repair, slices 2 to 7 B.
 - [Publication of a Recipe without notes](reports/G-1802-specification.md): the structure publication chain, eight slices.
+- [Raw-update caller classes](reports/G-1828-specification.md): 149 roots, 47 migration candidates by a supported mechanism, 102 without a supported builder; B except roots still red after the fixture assembler selection (Program, 2026-10-11).
 - [Imported covers: source evidence, rights mark and scoped takedown](reports/G-1800-specification.md): eleven A slices; slices 1 and 2 running, slice 3 in Trust-ops' area, 4 to 11 wait for owner answers now given.
 - [Rights notice path](reports/G-1803-specification.md): two API gaps and eight A slices; slices 6 to 8 wait on Trust-ops' erasure chain; the public decision read is B.
 
