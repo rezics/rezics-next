@@ -223,7 +223,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'game play and completion preserve replay, device conflicts and recovery',
       'Creates identified VideoGames through Main, reads required and extra parts, records played and completed progress, verifies replay and reader isolation, and undoes both part and partless completion.'),
     browser: browser('apps/web/tests/tracking-media.e2e.ts',
-      'a game marked completed on one device is completed on the other',
+      'game progress resumes across required and extra routes and a partless game on another device',
       'Completes the VideoGame Harbour Route on a phone and reads Completed on a separate desktop context before clearing it.'),
   },
   {
@@ -462,7 +462,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'game play and completion preserve replay, device conflicts and recovery',
       'Writes played progress through Main, rejects a later same-reader request with a cached version as stale, rereads the saved state, completes from the current version and undoes completion.'),
     browser: browser('apps/web/tests/tracking-media.e2e.ts',
-      'a game marked completed on one device is completed on the other',
+      'game progress resumes across required and extra routes and a partless game on another device',
       'Completes the VideoGame Harbour Route on a phone and reads Completed on a separate desktop context before clearing it.'),
   },
   {
