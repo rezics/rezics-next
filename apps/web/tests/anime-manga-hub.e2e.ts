@@ -103,11 +103,12 @@ async function openChoice(page: Page, control: Locator, found: Findings, label: 
 }
 
 async function closeChoice(page: Page, control: Locator): Promise<void> {
-  await control.press('Escape');
-  await expect(page.getByRole('listbox')).toBeHidden({ timeout: 3_000 });
+  const list = page.getByRole('listbox');
+  if (await list.isVisible()) await control.press('Escape');
+  await expect(list).toBeHidden({ timeout: 3_000 });
 }
 
-async function chooseOption(page: Page, options: Locator, name: string): Promise<void> {
+async function chooseOption(page: Page, control: Locator, options: Locator, name: string): Promise<void> {
   const names = (await options.allTextContents()).map((text) => text.trim());
   const index = names.indexOf(name);
   expect(index, `a unique option named ${name}`).toBeGreaterThanOrEqual(0);
@@ -115,7 +116,7 @@ async function chooseOption(page: Page, options: Locator, name: string): Promise
   await page.keyboard.press('Home');
   for (let step = 0; step < index; step += 1) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('listbox')).toBeHidden();
+  await closeChoice(page, control);
 }
 
 async function optionNames(page: Page, control: Locator, found: Findings, label: string): Promise<string[]> {
@@ -141,7 +142,7 @@ async function languageWithTwoEditions(
   const current = (await language.textContent())?.trim() ?? '';
   for (const name of languageNames) {
     if (name === current) continue;
-    await chooseOption(page, await openChoice(page, language, found, 'Language'), name);
+    await chooseOption(page, language, await openChoice(page, language, found, 'Language'), name);
     names = await offered();
     if (names.length >= 3) return { edition, names };
   }
@@ -200,7 +201,7 @@ test('anime-manga-hub: a reader chooses anime and manga editions by keyboard and
     expect(choice, `a second release or edition among ${names.join(' | ')}`).toBeTruthy();
     const choiceTitle = choice!.split(' · ')[0]!;
 
-    await chooseOption(page, await openChoice(page, edition, found, 'Edition'), choice!);
+    await chooseOption(page, edition, await openChoice(page, edition, found, 'Edition'), choice!);
     const save = availability.getByRole('button', { name: 'Save choice', exact: true });
     await keyboardReach(page, save, found, 'Save choice');
     await page.keyboard.press('Enter');

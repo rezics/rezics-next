@@ -205,7 +205,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     expect(await json(await call('PUT', preferencePath(anime), chosenAnime, chosenAnimeKey)))
       .toMatchObject({ ...animeSaved, replayed: true });
     const animeEditionPage = await json<{ items: Array<{ id: string; revision: string; language: string }> }>(
-      await mainCall('GET', `/v1/works/${short(anime.work)}/realizations`));
+      await mainCall('GET', `/v1/works/${short(anime.work)}/realizations?actingSubject=${encodeURIComponent(person)}`));
     expect(animeEditionPage.items).toContainEqual(expect.objectContaining({
       id: chosenAnime.edition.resource, revision: chosenAnime.edition.revision, language: 'en',
     }));
@@ -232,7 +232,7 @@ test('anime and manga hubs show recorded publication dates and keep edition choi
     expect(await json(await call('PUT', preferencePath(manga), winnerChoice.body, winnerChoice.key)))
       .toMatchObject({ ...savedManga, replayed: true });
     const mangaRelease = await json<{ id: string; revision: string; title: { value: string } }>(await mainCall('GET',
-      `/v1/works/${short(manga.work)}/releases/${short(winnerChoice.item.release)}`));
+      `/v1/works/${short(manga.work)}/releases/${short(winnerChoice.item.release)}?actingSubject=${encodeURIComponent(person)}`));
     expect(mangaRelease).toMatchObject({ id: winnerChoice.item.release, revision: winnerChoice.item.revision,
       title: { value: winnerChoice.item.title } });
     expect(await json(await readPreference(manga, other, b.token))).toBeNull();
