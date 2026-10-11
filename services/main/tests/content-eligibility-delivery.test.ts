@@ -124,6 +124,22 @@ test('SEARCH19: retained delivery stops at the largest whole-batch prefix within
   expect(proofMock).toHaveBeenCalledTimes(60);
 });
 
+test('SEARCH20/OPS16: rebuild delivery commits only its frozen retained Main prefix', async () => {
+  const f = fixture();
+  configureRange([batch('1', [retainedEvent('1', 0)]), batch('2', [retainedEvent('2', 0)])]);
+  proofMock.mockImplementation(async () => proof);
+  expect((await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '1'))
+    ?.sequence).toBe('1');
+  expect(f.pages).toHaveLength(1);
+  expect(f.pages[0]!.batches).toHaveLength(1);
+  expect(proofMock).toHaveBeenCalledTimes(1);
+  rangeMock.mockClear();
+  expect(await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '1')).toBeNull();
+  expect(rangeMock).not.toHaveBeenCalled();
+  await expect(deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'frozen-test', '0'))
+    .rejects.toThrow('delivery cursor exceeds frozen Main frontier');
+});
+
 test('SEARCH19: Content commit followed by a lost bridge response resumes after its durable cursor', async () => {
   const f = fixture();
   configureRange([batch('1', [retainedEvent('1', 0)])]);

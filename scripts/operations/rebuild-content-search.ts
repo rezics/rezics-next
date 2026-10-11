@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../services/content/src/core.ts';
@@ -15,6 +15,8 @@ import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvir
   parseOptions, projectName,
   readEnv, stackDirectory } from '../dev/config.ts';
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
+import { contentRebuildDelivery, validateContentRebuildFrontier, type ContentRebuildFrontier }
+  from '../../services/main/src/modules/content-publication/rebuild-preflight.ts';
 import { BACKPRESSURE_PROFILE_V1 } from '../../services/main/src/operations/backpressure.ts';
 import { DEFAULT_RESERVE_BYTES, rebuildPublicContentSearch, repositoryPins, SearchStateRefused,
   type FusekiStateRunner } from './search-state.ts';
@@ -75,7 +77,8 @@ const apps = readEnv(join(stack, 'apps.env'));
 const GENERATION = /^urn:rezics:text-index-generation:[0-9a-f-]{36}$/;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
 /** `continues` names the job a fresh id replaced, so a rerun after a refused first command still continues it. */
-interface SavedRebuildJob { id: string; continues?: string; offlinePreSequence?: string; offlineGeneration?: string }
+interface SavedRebuildJob { id: string; continues?: string; offlinePreSequence?: string;
+  offlineGeneration?: string; frontier?: ContentRebuildFrontier }
 const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob : null;
 if (saved && (!UUID.test(saved.id) || (saved.continues !== undefined && !UUID.test(saved.continues))
   || (saved.offlinePreSequence !== undefined && !DECIMAL.test(saved.offlinePreSequence))
@@ -83,6 +86,7 @@ if (saved && (!UUID.test(saved.id) || (saved.continues !== undefined && !UUID.te
   throw new Error('saved Content rebuild job is invalid');
 }
 if (saved && jobArg && saved.id !== jobArg) throw new Error('resume the saved Content rebuild job');
+if (saved?.frontier !== undefined) validateContentRebuildFrontier(saved.frontier);
 const docker = loadDockerEnvironment();
 const runner: FusekiStateRunner = {
   exec: script => compose(['exec', '-T', 'fuseki', 'sh', '-ec', script], docker),
@@ -117,14 +121,29 @@ try {
   if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
   const rememberOffline = (preSequence: string, generation: string) => {
     const current = JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob;
-    writeFileSync(jobFile, JSON.stringify({ id: current.id, continues: current.continues,
+    writeFileSync(jobFile, JSON.stringify({ ...current,
       offlinePreSequence: preSequence, offlineGeneration: generation }) + '\n', { mode: 0o600 });
   };
-  const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
+  let frontier = saved?.frontier;
+  const rememberFrontier = (retained: ContentRebuildFrontier) => {
+    const current = JSON.parse(readFileSync(jobFile, 'utf8')) as SavedRebuildJob;
+    const pendingFile = `${jobFile}.pending`;
+    writeFileSync(pendingFile, JSON.stringify({ ...current, frontier: retained }) + '\n', { mode: 0o600 });
+    renameSync(pendingFile, jobFile);
+    frontier = retained;
+  };
+  if (!apps.MAIN_RELAY_DATABASE_URL || !apps.MAIN_RELAY_CONSUMER) {
+    throw new ContentRebuildUnavailable('preflight: retained Main relay configuration is required');
+  }
+  const relayPool = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL, max: 2,
+    statement_timeout: 8_000, connectionTimeoutMillis: 8_000 });
+  const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4,
+    statement_timeout: 20_000, connectionTimeoutMillis: 8_000 });
   try {
     const content = new ContentCore(pool);
     const cursor = new ContentProjectionCursor(pool, BACKPRESSURE_PROFILE_V1.worker);
     const publicConsumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
+    const delivery = contentRebuildDelivery(env, content, relayPool, apps.MAIN_RELAY_CONSUMER);
     let restartedFrom: string | undefined = saved?.continues;
     let offlinePreSequence = saved?.offlinePreSequence;
     for (;;) {
@@ -138,6 +157,7 @@ try {
       try {
         const result = await rebuildPublicContentSearch({ runner, dockerEnv: docker, env, content, cursor,
           id, publicConsumer, reserveBytes, assertWritersStopped: () => assertWritersStopped(apps.MAIN_ORIGIN!),
+          delivery, frontier, onFrontierRecorded: rememberFrontier,
           expected: repositoryPins(root, docker, `${projectName(options)}_fuseki_data`),
           offlinePreSequence, continuingJob: restartedFrom, onOfflineRecorded: rememberOffline,
           onStep: step => console.log(`content-rebuild step: ${step}`) });
@@ -160,12 +180,13 @@ try {
         restartedFrom = previous;
         id = nextId;
         offlinePreSequence = undefined;
-        writeFileSync(jobFile, JSON.stringify({ id: nextId, continues: previous }) + '\n', { mode: 0o600 });
+        writeFileSync(jobFile, JSON.stringify({ id: nextId, continues: previous, frontier }) + '\n', { mode: 0o600 });
         console.log(freshJobLine(nextId, previous));
       }
     }
   } finally {
     await pool.end();
+    await relayPool.end();
   }
 } catch (error) {
   const line = error instanceof ContentProjectionSaturated ? error.message : contentRebuildFailureLine(error)

@@ -660,6 +660,14 @@ export class ContentCore {
     return sequenceContentEvents(this.pool);
   }
 
+  /** A zero sequencer result can also mean a busy owner lock. Rebuilds must
+   * prove the committed queue is empty before retaining their exact cut. */
+  async hasUnsequencedEvents(): Promise<boolean> {
+    const result = await this.pool.query<{ pending: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM content.outbox WHERE sequence IS NULL) AS pending');
+    return result.rows[0]?.pending !== false;
+  }
+
   /** Await the fence before locks or receipt replays. It must not commit, roll back or release the client. */
   async saveDraft(command: SaveDraftCommand,
     transactionFence?: (client: PoolClient) => Promise<void>): Promise<SaveDraftResult> {

@@ -11,6 +11,11 @@ import { CONTENT_REBUILD_NONEMPTY_REFUSAL, CONTENT_REBUILD_PAGE, SEARCH_REBUILD_
   repeatedFreshJobRefusal, type ContentRebuildProgress }
   from '../src/modules/content-publication/rebuild.ts';
 import { DATASET, hash, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { assertContentRebuildConsumers, prepareContentRebuild, validateContentRebuildFrontier,
+  CONTENT_REBUILD_PREPARATION_BUDGET_MS, type ContentRebuildDelivery, type ContentRebuildFrontier }
+  from '../src/modules/content-publication/rebuild-preflight.ts';
+import { assertFrozenContentRebuildAuthority }
+  from '../src/modules/content-publication/rebuild-authority.ts';
 
 const epoch = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const job = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -261,4 +266,153 @@ test('public projection waits while the search anchor is absent', async () => {
     replaying as unknown as ContentProjectionCursor, 'main-content-public-search-v1', job))
     .rejects.toThrow('replay continued');
   expect(queries).toBe(1);
+});
+
+function preflightScene() {
+  let graph = '7';
+  let main = '5';
+  let relay = '2';
+  let delivered = '2';
+  let owner = '3';
+  let pending = false;
+  let lostAcknowledgement = false;
+  let elapsed = 0;
+  let forbiddenMaintenance = false;
+  let missingMaintenance = false;
+  const calls: string[] = [];
+  const fuseki = { async query(query: string): Promise<SparqlResult> {
+    if (query.includes('SELECT ?epoch ?routing ?sequence ?mainSequence')) {
+      return { results: { bindings: [{ epoch: term(epoch), routing: term(epoch),
+        sequence: term(graph), mainSequence: term(main) }] } };
+    }
+    if (query.includes('SELECT ?sequence ?mainSequence')) {
+      return { results: { bindings: [{ sequence: term(graph), mainSequence: term(main) }] } };
+    }
+    if (query.includes('SELECT ?batch ?sequence ?allowed')) {
+      return { results: { bindings: missingMaintenance ? [] : [{ batch: term('urn:batch:8'),
+        sequence: term('8'), allowed: term(String(!forbiddenMaintenance)) }] } };
+    }
+    throw new Error(`unexpected preflight query: ${query.slice(0, 100)}`);
+  } } as unknown as WorkActivationEnvironment['fuseki'];
+  const env = { fuseki, lineage: { dataEpoch: epoch, routingEpoch: epoch }, objectDirectory: '' };
+  const content = {
+    ownerPosition: async () => ({ owner: 'content' as const, dataEpoch: epoch, sequence: owner }),
+    sequencePending: async () => { calls.push('sequence'); return 0; },
+    hasUnsequencedEvents: async () => pending,
+  } as unknown as ContentCore;
+  const delivery: ContentRebuildDelivery = {
+    relayPosition: async () => relay,
+    relayOnce: async () => { calls.push('relay'); relay = (BigInt(relay) + 1n).toString(); return relay; },
+    deliveryPosition: async () => delivered,
+    deliverOnce: async through => {
+      calls.push(`deliver:${through}`);
+      delivered = (BigInt(delivered) + 1n).toString();
+      owner = (BigInt(owner) + 1n).toString();
+      if (lostAcknowledgement) { lostAcknowledgement = false; throw new Error('lost Content ingestion response'); }
+      return delivered;
+    },
+  };
+  let retained: ContentRebuildFrontier | undefined;
+  const run = () => prepareContentRebuild({ env, content, delivery, frontier: retained,
+    remember: next => { calls.push(next.cut ? 'freeze' : 'frontier'); retained = next; },
+    assertWritersStopped: async () => { calls.push('stopped'); }, now: () => elapsed });
+  return { env, run, calls, retained: () => retained,
+    moveGraph: () => { graph = '8'; main = '6'; },
+    moveContent: () => { owner = '99'; }, pending: () => { pending = true; },
+    lostResponse: () => { lostAcknowledgement = true; },
+    timeout: () => { delivery.relayOnce = async () => {
+      elapsed = CONTENT_REBUILD_PREPARATION_BUDGET_MS; return '3'; }; },
+    missingMaintenance: () => { missingMaintenance = true; },
+    forbiddenMaintenance: () => { forbiddenMaintenance = true; },
+    deliveryAhead: () => { delivered = '6'; },
+  };
+}
+
+test('SEARCH20/OPS16: preflight drains Main approvals before freezing Content and never widens C', async () => {
+  const scene = preflightScene();
+  expect((await scene.run()).cut.sequence).toBe('6');
+  expect(scene.calls).toEqual(['stopped', 'frontier', 'relay', 'relay', 'relay',
+    'deliver:5', 'deliver:5', 'deliver:5', 'sequence', 'stopped', 'freeze']);
+  const before = [...scene.calls];
+  expect(scene.retained()).toEqual(await scene.run());
+  expect(scene.calls.slice(before.length)).toEqual(['stopped']);
+  scene.moveContent();
+  await expect(scene.run()).rejects.toThrow('Content moved beyond frozen cut');
+  expect(scene.calls.filter(call => call.startsWith('deliver:'))).toHaveLength(3);
+});
+
+test('SEARCH20/OPS16: a lost preflight ingestion response resumes the original retained frontier', async () => {
+  const scene = preflightScene();
+  scene.lostResponse();
+  await expect(scene.run()).rejects.toThrow('lost Content ingestion response');
+  expect(scene.retained()).toMatchObject({ graphSequence: '7', mainSequence: '5' });
+  expect(scene.retained()?.cut).toBeUndefined();
+  expect((await scene.run()).cut.sequence).toBe('6');
+  expect(scene.calls.filter(call => call === 'frontier')).toHaveLength(1);
+  expect(scene.calls.filter(call => call.startsWith('deliver:'))).toHaveLength(3);
+});
+
+test('SEARCH20/OPS16: changed graph, advanced delivery, pending sequencing and exhausted preparation refuse', async () => {
+  const changed = preflightScene();
+  changed.lostResponse();
+  await expect(changed.run()).rejects.toThrow('lost Content ingestion response');
+  changed.moveGraph();
+  await expect(changed.run()).rejects.toThrow('graph authority moved during rebuild preflight');
+  expect(changed.calls.filter(call => call === 'freeze')).toHaveLength(0);
+  const ahead = preflightScene();
+  ahead.deliveryAhead();
+  await expect(ahead.run()).rejects.toThrow('delivery exceeds frozen Main frontier');
+  const unsequenced = preflightScene();
+  unsequenced.pending();
+  await expect(unsequenced.run()).rejects.toThrow('committed Content events remain unsequenced');
+  expect(unsequenced.retained()?.cut).toBeUndefined();
+  const exhausted = preflightScene();
+  exhausted.timeout();
+  await expect(exhausted.run()).rejects.toThrow('preparation budget exceeded');
+  expect(exhausted.calls.some(call => call.startsWith('deliver:'))).toBe(false);
+  expect(exhausted.retained()?.cut).toBeUndefined();
+});
+
+test('SEARCH20/OPS16: frozen recovery proves complete maintenance coverage and refuses later approval', async () => {
+  const scene = preflightScene();
+  const frozen = await scene.run();
+  scene.moveGraph();
+  await expect(assertFrozenContentRebuildAuthority(scene.env, frozen, frozen.cut)).resolves.toBeUndefined();
+  scene.missingMaintenance();
+  await expect(scene.run()).rejects.toThrow('maintenance coverage is incomplete');
+  const approval = preflightScene();
+  await approval.run();
+  approval.moveGraph();
+  approval.forbiddenMaintenance();
+  await expect(approval.run()).rejects.toThrow('graph authority moved after frozen rebuild cut');
+  expect(approval.calls.filter(call => call.startsWith('deliver:'))).toHaveLength(3);
+});
+
+test('saved rebuild progress rejects malformed frontier or foreign lineage before ingestion', async () => {
+  expect(() => validateContentRebuildFrontier({ dataEpoch: epoch, routingEpoch: epoch,
+    graphSequence: '7', mainSequence: 'NaN' })).toThrow('saved frontier is invalid');
+  expect(() => validateContentRebuildFrontier({ dataEpoch: epoch, routingEpoch: epoch,
+    graphSequence: '7', mainSequence: '5', cut: { owner: 'content', dataEpoch: epoch, sequence: '-1' } }))
+    .toThrow('saved frontier is invalid');
+});
+
+test('SEARCH20/OPS16: joint consumer preflight preserves parked work and refuses foreign or advanced cursors', async () => {
+  const cut = { owner: 'content' as const, dataEpoch: epoch, sequence: '6' };
+  const seen: string[] = [];
+  let foreign = false;
+  let advanced = false;
+  const cursor = {
+    initialize: async (consumer: string) => { seen.push(consumer); return { ...cut, sequence: '2' }; },
+    readScan: async () => ({ ...cut, dataEpoch: foreign ? prior : epoch, sequence: advanced ? '7' : '5' }),
+    adoptRebuildCheckpoint: () => { throw new Error('preflight must not adopt pending work'); },
+  } as unknown as ContentProjectionCursor;
+  await assertContentRebuildConsumers(cursor, 'live', 'rebuild', cut);
+  expect(seen).toEqual(['live', 'rebuild']);
+  foreign = true;
+  await expect(assertContentRebuildConsumers(cursor, 'live', 'rebuild', cut))
+    .rejects.toThrow('projection consumer differs from frozen Content cut');
+  foreign = false;
+  advanced = true;
+  await expect(assertContentRebuildConsumers(cursor, 'live', 'rebuild', cut))
+    .rejects.toThrow('projection consumer differs from frozen Content cut');
 });

@@ -21,13 +21,12 @@ import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.
 import { saveAdmittedContentDraft } from '../src/modules/content-publication/draft.ts';
 import { publishAdmittedContent } from '../src/modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch } from '../src/modules/content-publication/eligibility-admitted.ts';
-import { contentSearchEligibilityDigest } from '../src/modules/content-publication/eligibility.ts';
-import { readRetainedContentEligibilitySource } from '../src/modules/content-publication/eligibility-state.ts';
-import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
-import type { DeliveredMainEvent } from '../src/modules/outbox/relay.ts';
+import { contentRebuildDelivery, type ContentRebuildFrontier }
+  from '../src/modules/content-publication/rebuild-preflight.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits, quarantinePublicContentSearch,
   replayQuarantinedContentCut, verifyQuarantinedContentIndex } from '../src/modules/content-publication/rebuild.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { migrateTracked } from '../../../scripts/ops/migrate.ts';
 import { qaStack } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
 import { assertPinnedState, inspectFusekiState, offlineTextIndex, rebuildPublicContentSearch,
   repositoryPins, type FusekiStateRunner } from '../../../scripts/operations/search-state.ts';
@@ -114,14 +113,15 @@ test('SEARCH15/WORK10: partial Content outbox checkpoint and fail-closed MatchUn
 }, 30_000);
 
 test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index recovery and fresh rebuild delivery', async () => {
-  const { FUSEKI_URL, ACCESS_DATABASE_URL, CONTENT_DATABASE_URL,
+  const { FUSEKI_URL, ACCESS_DATABASE_URL, CONTENT_DATABASE_URL, MAIN_RELAY_DATABASE_URL, MAIN_RELAY_CONSUMER,
     MAIN_DATA_EPOCH, MAIN_ROUTING_EPOCH, REZICS_QA_RUN_ID } = process.env;
-  if (!FUSEKI_URL || !ACCESS_DATABASE_URL || !CONTENT_DATABASE_URL
+  if (!FUSEKI_URL || !ACCESS_DATABASE_URL || !CONTENT_DATABASE_URL || !MAIN_RELAY_DATABASE_URL || !MAIN_RELAY_CONSUMER
     || !MAIN_DATA_EPOCH || !MAIN_ROUTING_EPOCH || !REZICS_QA_RUN_ID) {
     throw new Error('Run this fixture through isolated Content projection QA');
   }
   const accessPool = new Pool({ connectionString: ACCESS_DATABASE_URL, max: 4 });
   const contentPool = new Pool({ connectionString: CONTENT_DATABASE_URL, max: 4 });
+  const relayPool = new Pool({ connectionString: MAIN_RELAY_DATABASE_URL, max: 2 });
   const state = join(root, '.temp', `content-native-delivery-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   // This fault discards only a response after the real command has committed.
@@ -158,11 +158,6 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
     headers: { authorization: 'Bearer verified-content-fixture' } });
   const frame = (...values: string[]) => values.map(value => `${value.length}:${value}`).join('');
   const sha = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
-  const stable = (value: unknown): string => Array.isArray(value) ? `[${value.map(stable).join(',')}]`
-    : value && typeof value === 'object' ? `{${Object.entries(value).filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`
-      : JSON.stringify(value) ?? 'null';
   const publicGraph = 'urn:rezics:search:public';
   const body = '中文检索投影 café 😀 逐字交付';
   const language = 'zh';
@@ -170,7 +165,9 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
   const consumer = `content-native-${randomUUID()}`;
   try {
     await migrateContent(contentPool);
+    await migrateTracked(MAIN_RELAY_DATABASE_URL, root, 'services/main/migrations/relay');
     const content = new ContentCore(contentPool);
+    const delivery = contentRebuildDelivery(env, content, relayPool, MAIN_RELAY_CONSUMER);
     const cursor = new ContentProjectionCursor(contentPool);
     // This QA fixture owns a clean Content database, so bounded relay work cannot
     // silently omit earlier source events belonging to another fixture.
@@ -214,43 +211,19 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
       expectedPublicationHead: null, actingSubject: actor, idempotencyKey: randomUUID() });
     expect(publication.status).toBe('active');
     if (!publication.decision) throw new Error('terminal graph publication decision absent');
-    const deliverApproval = async (approval: Awaited<ReturnType<typeof selectAdmittedPublicContentSearch>>,
-      expectedEligibilityHead: string | null) => {
+    const deliverApproval = async (approval: Awaited<ReturnType<typeof selectAdmittedPublicContentSearch>>) => {
       if (!approval.decision) throw new Error('Public eligibility decision absent');
-      const input = { resourceId: work.work, variantId: variant.id, publicationDecision: publication.decision!,
-        expectedEligibilityHead, actingSubject: actor, rightsBasis: 'original-contribution' as const,
-        disclosure: 'public' as const };
-      const requestDigest = contentSearchEligibilityDigest(input);
-      const expected = await content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, env.lineage.dataEpoch);
-      const exact = await readRetainedContentEligibilitySource(env, await content.ownerPosition(), {
-        eligibilityDecision: approval.decision, publicationDecision: publication.decision!,
-        variant: variant.id, resource: work.work, receiptId: approval.receipt,
-        requestDigest, graphDataEpoch: approval.graphDataEpoch, graphSequence: approval.graphSequence,
-      });
-      const sequence = (BigInt(expected.sequence) + 1n).toString();
-      const batchId = `urn:rezics:outbox:${sha(`${approval.receipt}\0eligibility`)}`;
-      const envelope = { specversion: '1.0', id: `urn:rezics:event:${sha(`${approval.receipt}\0eligibility`)}`,
-        source: 'https://rezics.com/services/main', type: 'com.rezics.content.search-eligible.v1',
-        datacontenttype: 'application/json', data: { batchId,
-          sourcePosition: { datasetId: 'product', dataEpoch: approval.graphDataEpoch,
-            sequence: approval.graphSequence }, routingEpoch: MAIN_ROUTING_EPOCH, ordinal: 0,
-          relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: approval.graphDataEpoch, sequence },
-          receipt: { id: approval.receipt, action: 'content.search-eligibility', outcome: 'succeeded',
-            requestDigest, resource: work.work, variant: variant.id,
-            publicationDecision: publication.decision!, eligibilityDecision: approval.decision, disclosure: 'public' } } } as const satisfies DeliveredMainEvent;
-      const digest = sha(stable({ streamScope: MAIN_RELAY_STREAM_SCOPE, sequence, batchId,
-        routingEpoch: MAIN_ROUTING_EPOCH, events: [envelope] }));
-      return content.ingestEligibilityDeliveryPage({ expected, batches: [{ sequence, id: batchId, digest,
-        events: [{ id: envelope.id, type: envelope.type, ordinal: 0,
-          sourcePosition: envelope.data.sourcePosition, receipt: envelope.data.receipt,
-          publication: { preparationId: exact.publication.preparationId, revisionId: exact.revisionId } }] }] });
+      await delivery.relayPosition();
+      while (await delivery.relayOnce() !== null) { /* retain every acknowledged Main batch */ }
+      const frontier = await delivery.relayPosition();
+      while (await delivery.deliverOnce(frontier) !== null) { /* commit bounded Content pages */ }
     };
     const eligibility = await selectAdmittedPublicContentSearch(env, content, account, access, request, {
       resourceId: work.work, variantId: variant.id, publicationDecision: publication.decision,
       expectedEligibilityHead: null, actingSubject: actor, rightsBasis: 'original-contribution',
       disclosure: 'public', idempotencyKey: randomUUID() });
     expect(eligibility.outcome).toBe('succeeded');
-    await deliverApproval(eligibility, null);
+    await deliverApproval(eligibility);
     const preparation = await content.readPublicationPreparation(preparationId);
     if (!preparation) throw new Error('Content preparation absent');
     const source = frame(revision, saved.byteDigest, publication.decision,
@@ -273,7 +246,7 @@ test('OPS16/SEARCH19: Content source-admitted native body receipt, stopped-index
       expectedEligibilityHead: eligibility.decision, actingSubject: actor,
       rightsBasis: 'original-contribution', disclosure: 'public', idempotencyKey: randomUUID() });
     expect(nextEligibility.outcome).toBe('succeeded');
-    await deliverApproval(nextEligibility, eligibility.decision);
+    await deliverApproval(nextEligibility);
     // The same relay tick resolves the pending E1 retry as superseded, then
     // projects the retained E2 delivery at the source checkpoint.
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
@@ -494,8 +467,10 @@ test -z "$(ls -A /fuseki/databases/rezics/lucene)"`);
         if (removeProbe) await fuseki.update(`PREFIX rv: <${RV}> DELETE WHERE {
           GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} { ${iri(TEXT_INDEX_PROBE)} rv:searchBody ?body } }`);
       } };
+    const frontiersByJob = new Map<string, ContentRebuildFrontier>();
     const rebuild = (id: string, assertWritersStopped = async () => undefined) =>
       rebuildPublicContentSearch({ runner, dockerEnv: stack.dockerEnv, env, content, cursor,
+        delivery, frontier: frontiersByJob.get(id), onFrontierRecorded: frontier => frontiersByJob.set(id, frontier),
         id, publicConsumer: consumer, expected: expectedPins, reserveBytes: 0, assertWritersStopped });
     const control = async () => (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?generation ?anchor WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:textIndexGeneration ?generation }
@@ -631,7 +606,7 @@ sync`); }
         ${iri(unit)} rv:searchBody ${lit(body)}@${language} } }`);
     }
   } finally {
-    await Promise.all([accessPool.end(), contentPool.end()]);
+    await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(state, { recursive: true, force: true });
   }
 }, 420_000);

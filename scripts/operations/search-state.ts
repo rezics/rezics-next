@@ -15,6 +15,10 @@ import { RV, textIndexProbePattern, type WorkActivationEnvironment }
 import { backfillCatalogueNames } from '../../services/main/src/modules/search/names.ts';
 import type { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
+import { assertContentRebuildConsumers, prepareContentRebuild, type ContentRebuildDelivery, type ContentRebuildFrontier }
+  from '../../services/main/src/modules/content-publication/rebuild-preflight.ts';
+import { assertFrozenContentRebuildAuthority }
+  from '../../services/main/src/modules/content-publication/rebuild-authority.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 
 /**
@@ -242,6 +246,9 @@ export interface RebuildInput {
   cursor: ContentProjectionCursor;
   id: string;
   publicConsumer: string;
+  delivery: ContentRebuildDelivery;
+  frontier?: ContentRebuildFrontier;
+  onFrontierRecorded: (frontier: ContentRebuildFrontier) => void;
   expected: ExpectedPins;
   reserveBytes: number;
   /** Called before the indexer, replay, and activation; it must prove no Main writer remains. */
@@ -284,8 +291,17 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   assertPinnedState(pins, input.expected);
   const storage = storageHeadroom(input.runner, input.reserveBytes);
   assertStorageHeadroom(storage);
+  const retained = await readContentRebuildProgress(input.env, input.id, '0', input.offlinePreSequence);
+  if (retained.quarantine && !input.frontier?.cut) {
+    throw new ContentRebuildUnavailable('preflight: frozen job has no retained Main frontier; start a fresh job');
+  }
+  const frontier = await prepareContentRebuild({ env: input.env, content: input.content,
+    delivery: input.delivery, frontier: input.frontier, remember: input.onFrontierRecorded,
+    assertWritersStopped: input.assertWritersStopped });
+  await assertContentRebuildConsumers(input.cursor, input.publicConsumer,
+    `content-rebuild.${input.id}`, frontier.cut);
   let verify = clock() - started;
-  const job = await quarantinePublicContentSearch(input.env, input.content, input.id, input.continuingJob);
+  const job = await quarantinePublicContentSearch(input.env, input.content, input.id, input.continuingJob, frontier.cut);
   input.onStep?.('quarantined');
   crashSearchRebuild('after-quarantine');
   let removed = 0;
@@ -301,6 +317,13 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
     input.onOfflineRecorded?.(preSequence, generation);
   };
   for (let guard = 0; guard < 8; guard++) {
+    await input.assertWritersStopped();
+    await assertFrozenContentRebuildAuthority(input.env, frontier, job.cut);
+    const owner = await input.content.ownerPosition();
+    if (owner.dataEpoch !== job.cut.dataEpoch || owner.sequence !== job.cut.sequence
+      || await input.content.hasUnsequencedEvents()) {
+      throw new ContentRebuildUnavailable('preflight: Content moved beyond frozen cut');
+    }
     const at = await input.cursor.initialize(job.consumer);
     const progress = await readContentRebuildProgress(input.env, input.id, at.sequence, offlinePreSequence);
     if (offlinePreSequence === null && progress.offlineCovers && progress.sequence
@@ -343,6 +366,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
       if (prepared.malformedContent) throw new SearchStateRefused(CONTENT_REBUILD_NONEMPTY_REFUSAL);
       if (prepared.contentUnits) continue;
       offlineLog = await offlineTextIndex(input.runner);
+      await assertFrozenContentRebuildAuthority(input.env, frontier, job.cut);
       offlineMs += clock() - started;
       started = clock();
       pins = await inspectFusekiState(input.runner, input.dockerEnv, input.env.fuseki);
@@ -385,6 +409,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
     await input.assertWritersStopped();
     const digest = offlineDigest ?? progress.offlineDigest ?? undefined;
     if (!digest) throw new ContentRebuildUnavailable('activate: offline index evidence is absent');
+    await assertFrozenContentRebuildAuthority(input.env, frontier, job.cut);
     started = clock();
     const generation = await activateRebuiltPublicContentSearch(input.env, input.content,
       input.cursor, job, input.publicConsumer, digest);

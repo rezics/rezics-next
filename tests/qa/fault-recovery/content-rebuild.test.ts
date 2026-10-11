@@ -13,6 +13,8 @@ import { contentPublicationDigest, publishPinnedContent, type PublishPinnedConte
 import { clearQuarantinedContentUnits,
   quarantinePublicContentSearch, replayQuarantinedContentCut }
   from '../../../services/main/src/modules/content-publication/rebuild.ts';
+import { contentRebuildDelivery, prepareContentRebuild, type ContentRebuildFrontier }
+  from '../../../services/main/src/modules/content-publication/rebuild-preflight.ts';
 import { activateMetadataWork, metadataWorkRequestDigest,
   DATASET, GRAPHS, RV, hash, initializeFreshGraph, iri, lit }
   from '../../../services/main/src/modules/work/activate.ts';
@@ -20,6 +22,7 @@ import { assertPublicTextReady } from '../../../services/main/src/modules/work/s
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { migrateTracked } from '../../../scripts/ops/migrate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -44,8 +47,10 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
     await initializeFreshGraph(fuseki, lineage);
     const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
+    const relayPool = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL, max: 2 });
     try {
       await migrateContent(pool);
+      await migrateTracked(apps.MAIN_RELAY_DATABASE_URL!, root, 'services/main/migrations/relay');
       const content = new ContentCore(pool);
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
       const id = randomUUID();
@@ -82,12 +87,20 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       const published = await publishPinnedContent(env, content, admission, publicationInput);
       expect(published.status).toBe('active');
       expect(published.graphSequence).toBeTruthy();
-      const job = await quarantinePublicContentSearch(env, content, id);
+      const delivery = contentRebuildDelivery(env, content, relayPool, apps.MAIN_RELAY_CONSUMER!);
+      let frontier: ContentRebuildFrontier | undefined;
+      const prepare = () => prepareContentRebuild({ env, content, delivery, frontier,
+        remember: next => { frontier = next; }, assertWritersStopped: async () => undefined });
+      const frozen = await prepare();
+      expect(frozen.cut).toEqual(await content.ownerPosition());
+      expect(await delivery.deliveryPosition()).toBe(frozen.mainSequence);
+      const job = await quarantinePublicContentSearch(env, content, id, undefined, frozen.cut);
       expect(job.cut.sequence).toBe('3');
       const replayedStart = await quarantinePublicContentSearch(env, content, id);
       expect(replayedStart).toEqual(job);
       expect(await clearQuarantinedContentUnits(env, job)).toBe(0);
       expect(await clearQuarantinedContentUnits(env, job)).toBe(0);
+      expect(await prepare()).toEqual(frozen);
 
       // The native maintenance parser must reject unscoped Main-unit deletion.
       const mainUnit = `urn:rezics:main:match-unit:${randomUUID()}`;
@@ -132,7 +145,7 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       await expect(replayQuarantinedContentCut(env, content, new ContentProjectionCursor(pool), job))
         .rejects.toThrow('terminal publication exact revision unavailable');
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toThrow();
-    } finally { await pool.end(); }
+    } finally { await pool.end(); await relayPool.end(); }
   } finally {
     if (started) await rootCommand(['stack:reset', '--profile', 'qa', '--run-id', runId], 120_000);
   }

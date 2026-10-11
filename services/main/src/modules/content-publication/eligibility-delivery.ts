@@ -109,10 +109,16 @@ function checkedBatch(batch: RetainedRelayBatch, graphDataEpoch: string): { head
 
 /** Copy one verified retained Main page into Content's atomic delivery cursor. */
 export async function deliverRetainedContentEligibilityOnce(env: WorkActivationEnvironment,
-  content: ContentCore, relayPool: Pool, consumer: string): Promise<{
+  content: ContentCore, relayPool: Pool, consumer: string, throughSequence?: string): Promise<{
     graphDataEpoch: string; contentDataEpoch: string; sequence: string; batchCount: number;
   } | null> {
   const progress = await content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, env.lineage.dataEpoch);
+  if (throughSequence !== undefined) {
+    if (!DECIMAL.test(throughSequence) || BigInt(progress.sequence) > BigInt(throughSequence)) {
+      throw new ContentEligibilityStateUnavailable('Content delivery cursor exceeds frozen Main frontier');
+    }
+    if (progress.sequence === throughSequence) return null;
+  }
   const retained = await verifiedRetainedRelayRange(relayPool, consumer, progress.sequence, 100);
   if (retained.coverage.streamScope !== MAIN_RELAY_STREAM_SCOPE
     || retained.coverage.consumer !== consumer || retained.coverage.dataEpoch !== env.lineage.dataEpoch
@@ -128,6 +134,7 @@ export async function deliverRetainedContentEligibilityOnce(env: WorkActivationE
   const batches: EligibilityDeliveryBatch[] = [];
   let selectedEvents = 0;
   for (const batch of retained.batches) {
+    if (throughSequence !== undefined && BigInt(batch.sequence) > BigInt(throughSequence)) break;
     const checked = checkedBatch(batch, env.lineage.dataEpoch);
     if (selectedEvents + checked.eligible.length > 100) break;
     const events: EligibilityDeliverySourceEvent[] = [];

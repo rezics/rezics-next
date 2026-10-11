@@ -359,20 +359,30 @@ async function openQuarantineToContinue(env: WorkActivationEnvironment, id: stri
  * anchor. A live anchor still takes the original deletion. A job that already
  * activated is never used again. */
 export async function quarantinePublicContentSearch(env: WorkActivationEnvironment,
-  content: ContentCore, id: string, continuingJob?: string): Promise<ContentRebuildJob> {
+  content: ContentCore, id: string, continuingJob?: string, frozenCut?: ContentPosition): Promise<ContentRebuildJob> {
   rebuildId(id);
   if (continuingJob !== undefined) rebuildId(continuingJob);
   if (await readActivationGeneration(env, id)) {
     throw new ContentRebuildUnavailable('quarantine: a job with an activation receipt is never adopted');
   }
   const consumer = `content-rebuild.${id}`;
+  const quarantineCommand = (...args: Parameters<typeof command>) => frozenCut
+    ? content.withOwnerPositionLock(frozenCut, () => command(...args)) : command(...args);
   let cut = await readQuarantine(env, id);
+  if (frozenCut) {
+    sourceCut(frozenCut);
+    const owner = await content.ownerPosition();
+    if (owner.dataEpoch !== frozenCut.dataEpoch || owner.sequence !== frozenCut.sequence
+      || (cut && (cut.dataEpoch !== frozenCut.dataEpoch || cut.sequence !== frozenCut.sequence))) {
+      throw new ContentRebuildUnavailable('quarantine: Content differs from frozen cut');
+    }
+  }
   if (!cut) {
     const anchor = await publicSearchAnchorPresent(env);
     if (anchor) {
-      cut = await content.ownerPosition();
+      cut = frozenCut ?? await content.ownerPosition();
       sourceCut(cut);
-      await command(env, 'quarantine', id, { family: 'content-rebuild-quarantine-v1', id, cut }, {
+      await quarantineCommand(env, 'quarantine', id, { family: 'content-rebuild-quarantine-v1', id, cut }, {
         deletion: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }`,
         condition: `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
@@ -381,9 +391,9 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
       });
     } else {
       const prior = await openQuarantineToContinue(env, id, continuingJob);
-      cut = await content.ownerPosition();
+      cut = frozenCut ?? await content.ownerPosition();
       sourceCut(cut);
-      await command(env, 'quarantine', id, {
+      await quarantineCommand(env, 'quarantine', id, {
         family: 'content-rebuild-quarantine-v1', id, cut, continues: prior,
       }, {
         // The prior receipt is named by the hash of its job id. A quarantine
