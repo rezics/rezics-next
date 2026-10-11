@@ -2,12 +2,13 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { NotificationProducer } from '../src/modules/notification-producers/producer.ts';
 import type { NotificationEvent } from '../src/modules/notification/store.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 test('notification producer reads relay checkpoint through a read-only pool and writes cursor through a writable pool', async () => {
   const statements: string[] = [];
   const readOnly = { query: async (sql: string) => {
     statements.push(`read:${sql}`);
-    return { rows: [{ data_epoch: 'epoch', sequence: '0' }] };
+    return { rows: [{ data_epoch: 'epoch', sequence: '0', stream_scope: MAIN_RELAY_STREAM_SCOPE }] };
   }, connect: async () => { throw new Error('read-only pool cannot open a writer'); } } as unknown as Pool;
   const client = { query: async (sql: string) => {
     statements.push(`write:${sql}`);
@@ -24,7 +25,8 @@ test('notification producer reads relay checkpoint through a read-only pool and 
 
 test('notification producer advances numerically from relay batch 9 to 10', async () => {
   let advanced = '';
-  const readOnly = { query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '10' }] }) } as unknown as Pool;
+  const readOnly = { query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '10',
+    stream_scope: MAIN_RELAY_STREAM_SCOPE }] }) } as unknown as Pool;
   const client = { query: async (sql: string, args?: unknown[]) => {
     if (sql.includes('FROM relay.notification_producer_cursor')) return { rows: [{ data_epoch: 'epoch', sequence: '8' }] };
     if (sql.includes('FROM relay.delivered_batch')) return { rows: [{ sequence:
