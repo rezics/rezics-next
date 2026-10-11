@@ -289,6 +289,8 @@ const translations: Record<ZoneLocale, Strings> = {
   },
 };
 
+export const localeStrings = translations;
+
 export function strings(locale: string): Strings {
   return (zoneLocales as readonly string[]).includes(locale) ? translations[locale as ZoneLocale] : en;
 }
