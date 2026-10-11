@@ -6,6 +6,8 @@ export type FusekiReadCallStatus = 'complete' | 'failed' | 'aborted' | 'active';
 
 export interface FusekiReadCallDiagnostic {
   family: FusekiReadCallFamily;
+  /** Native directory entries visited, including rejected entries; never an estimated population. */
+  examined?: number;
   durationMs: number;
   attempt: number;
   phase: FusekiReadPhase;
@@ -251,6 +253,8 @@ export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
   privateSearchWriteEpoch?: string; privateSearchWriteActive?: boolean;
   publicSearchDeltaAvailable?: boolean;
+  /** Absent on older native modules; commandHealth exposes that as false. */
+  prefixWalkAvailable?: boolean;
   profiles: Record<string, string> }
 
 export interface SearchDeltaProof {
@@ -658,10 +662,11 @@ export class FusekiClient {
         || value.publicSearchWriteActive !== (BigInt(value.publicSearchWriteEpoch) % 2n === 1n)
         || (value.publicSearchDeltaAvailable !== undefined
           && typeof value.publicSearchDeltaAvailable !== 'boolean')
+        || (value.prefixWalkAvailable !== undefined && typeof value.prefixWalkAvailable !== 'boolean')
         || !value.profiles
         || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
       status = 'complete';
-      return value;
+      return { ...value, prefixWalkAvailable: value.prefixWalkAvailable ?? false };
     } catch (error) {
       if (signal.aborted) status = 'aborted';
       throw error;

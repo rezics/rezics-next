@@ -75,6 +75,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/protection-content-api.test.ts',
   'tests/qa/integration/protection-work-api.test.ts',
   'tests/qa/integration/public-search-scale.test.ts',
+  // Broad typeahead prefixes characterize exact population growth on a fresh native graph.
+  'tests/qa/integration/typeahead-growth.test.ts',
   'tests/qa/integration/recommendation-context.test.ts',
   'tests/qa/integration/realm-reply-api.test.ts',
   'tests/qa/integration/source-graph-projection.test.ts',

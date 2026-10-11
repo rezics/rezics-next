@@ -27,6 +27,17 @@ test('prefix completion handles literal punctuation, case, word starts and unspa
   expect(matchesSearchText('寻找齐天大圣的故事', '大圣', false)).toBe(true);
 });
 
+test('equal-score typeahead fields order by title before credit, then Main and unit identity', () => {
+  const rows = [
+    { work: 'second', mainVersion: 'main-b', matchUnit: 'unit-b', score: 1, matchedField: 'title' as const },
+    { work: 'first', mainVersion: 'main-a', matchUnit: 'unit-b', score: 1, matchedField: 'title' as const },
+    { work: 'first', mainVersion: 'main-a', matchUnit: 'unit-a', score: 1, matchedField: 'title' as const },
+    { work: 'credit', mainVersion: 'main-0', matchUnit: 'unit-0', score: 1, matchedField: 'credit' as const },
+  ];
+  expect(rankedSearchMatches(rows).map(row => [row.mainVersion, row.matchUnit, row.matchedField]))
+    .toEqual([['main-a', 'unit-a', 'title'], ['main-b', 'unit-b', 'title'], ['main-0', 'unit-0', 'credit']]);
+});
+
 test('an empty credited-name match detects a newly matching source name at the final fence', async () => {
   let generation = '1';
   const owners = { names: { search: async () => ({ names: new Map(), generation }),

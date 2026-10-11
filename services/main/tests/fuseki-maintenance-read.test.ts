@@ -20,7 +20,7 @@ const reads = [
   { name: 'template', call: (fuseki: FusekiClient) => fuseki.templateQuery(template), result: { results: { bindings: [] } } },
   { name: 'index', call: (fuseki: FusekiClient) => fuseki.templateIndex({ operation: 'basis', keys: [] }), result: { bases: [], position: { dataEpoch: 'epoch', sequence: '1' } } },
   { name: 'membership status', call: (fuseki: FusekiClient) => fuseki.membershipPreparationStatus(), result: { needsPreparation: false } },
-  { name: 'health', call: (fuseki: FusekiClient) => fuseki.commandHealth(), result: { moduleVersion: '0.5.37', instanceId: '00000000-0000-4000-8000-000000000001', publicSearchWriteEpoch: '0', publicSearchWriteActive: false, profiles: {} } },
+  { name: 'health', call: (fuseki: FusekiClient) => fuseki.commandHealth(), result: { moduleVersion: '0.5.37', instanceId: '00000000-0000-4000-8000-000000000001', publicSearchWriteEpoch: '0', publicSearchWriteActive: false, prefixWalkAvailable: false, profiles: {} } },
   { name: 'delta', call: (fuseki: FusekiClient) => fuseki.searchDeltaSince('-1'), result: { available: false } },
 ];
 
