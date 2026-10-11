@@ -62,20 +62,29 @@ if (configuredErasureCapture === 5) {
     },
   };
 }
+const fuseki = new FusekiClient(fusekiUrl);
+const relayClient = await relay.connect();
 try {
+  await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+  await relayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
   const coverage = await captureGraphRecoveryCoverage(
-    new FusekiClient(fusekiUrl), account, access, relay, consumer, content,
+    fuseki, account, access, relay, consumer, content,
     { directory: objectDirectory, ...(workObjects ? { workObjects } : {}),
       ...(structureObjects ? { structureObjects,
         structureGroupRoots: new StructureGroupRootStore(content, structureObjects),
         structureQualifierRoots: new StructureQualifierRootStore(content, structureObjects) } : {}) },
-    undefined, nativeAccessCustody);
+    { fuseki, relayClient }, nativeAccessCustody);
   const sealed = JSON.stringify(sealRecoveryPayload(
     coverage, key, 'graph-recovery-coverage'));
-  await retainRecoveryCoverageHead(relay, sealed, key,
+  await retainRecoveryCoverageHead(relayClient, sealed, key,
     nativeAccessCustody ? { attachmentDirectory: Bun.env.ACCESS_ERASURE_ATTACHMENT_DIRECTORY! } : undefined);
+  await relayClient.query('COMMIT');
   console.log(sealed);
+} catch (error) {
+  await relayClient.query('ROLLBACK').catch(() => undefined);
+  throw error;
 } finally {
+  relayClient.release();
   await Promise.all([account.end(), access.end(), relay.end(), content.end(),
     ...(baseAccess ? [baseAccess.end()] : []), ...(baseRelay ? [baseRelay.end()] : [])]);
 }

@@ -210,39 +210,15 @@ async function transactionIdentity(client: PoolClient, isolation: string): Promi
   return first;
 }
 
-/** Native events keep the immutable pin on their receipt; private projection
- * receipts keep it on their revision anchor. Signed reference tuples stay unchanged. */
-async function linkedHistoricalPin(ref: GraphContentReference,
-  proof: ContentRecoveryProofContext | undefined): Promise<GraphContentReference> {
-  if (!proof?.fuseki) throw new ContentRecoveryConflict('erased Content pin requires retained graph digest');
-  const rows = (await proof.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT DISTINCT ?digest ?preparation ?epoch ?sequence WHERE {
-      GRAPH ${iri(ref.graph)} { ${iri(ref.subject)} rv:contentRevision ${iri(ref.object)} .
-        FILTER NOT EXISTS { ${iri(ref.subject)} rv:byteDigest ?directDigest } }
-      { GRAPH ${iri(ref.graph)} { ${iri(ref.subject)} rv:receipt ?anchor }
-        GRAPH ${iri(GRAPHS.receipts)} { ?anchor a rv:OperationReceipt ; rv:contentRevision ${iri(ref.object)} ; rv:byteDigest ?digest .
-          OPTIONAL { ?anchor rv:contentPreparation ?preparation }
-          OPTIONAL { ?anchor rv:ownerDataEpoch ?epoch ; rv:ownerSequence ?sequence } } }
-      UNION
-      { GRAPH ${iri(ref.graph)} { ${iri(ref.subject)} rv:projection ?anchor }
-        GRAPH ${iri(GRAPHS.revisions)} { ?anchor a rv:ContentPrivateProjection ; rv:contentRevision ${iri(ref.object)} ; rv:byteDigest ?digest .
-          OPTIONAL { ?anchor rv:ownerDataEpoch ?epoch ; rv:ownerSequence ?sequence } } }
-    } LIMIT 2`, 16_384)).results?.bindings ?? [];
-  const row = rows[0];
-  const anchor = { preparationId: row?.preparation?.value ?? null,
-    ownerEpoch: row?.epoch?.value ?? null, ownerSequence: row?.sequence?.value ?? null };
-  for (const field of ['preparationId','ownerEpoch','ownerSequence'] as const) {
-    if (ref[field] !== null && ref[field] !== anchor[field]) {
-      throw new ContentRecoveryConflict(`retained graph Content pin ${field} conflicts: ${ref.object}`);
-    }
+/** Erasure clears bytes and graph receipts, but preserves the immutable owner
+ * digest. Signed table coverage binds that digest; assertErasedRevision binds
+ * this revision to the journal. Coverage retains hashes, not recoverable C0
+ * pin tuples. Keep the signed graph tuple unchanged. */
+function linkedHistoricalPin(ref: GraphContentReference, byteDigest: string): GraphContentReference {
+  if (!SHA.test(byteDigest)) {
+    throw new ContentRecoveryConflict(`retained Content digest is unavailable: ${ref.object}`);
   }
-  const pin = { ...ref, byteDigest: row?.digest?.value ?? null,
-    preparationId: ref.preparationId ?? anchor.preparationId,
-    ownerEpoch: ref.ownerEpoch ?? anchor.ownerEpoch, ownerSequence: ref.ownerSequence ?? anchor.ownerSequence };
-  if (rows.length !== 1 || !wellFormed(pin) || !pin.byteDigest) {
-    throw new ContentRecoveryConflict(`retained graph Content digest is unavailable or ambiguous: ${ref.object}`);
-  }
-  return pin;
+  return { ...ref, byteDigest };
 }
 
 async function assertErasedRevision(client: PoolClient, ref: GraphContentReference,
@@ -371,7 +347,7 @@ async function assertRevisionPins(client: PoolClient, references: readonly Graph
       'SELECT byte_digest, availability, serialized_bytes, byte_length, body FROM content.revision WHERE id = $1',
       [revisionId]);
     const row = revision.rows[0];
-    if (row?.availability === 'erased' && ref.byteDigest === null) ref = await linkedHistoricalPin(ref, proof);
+    if (row?.availability === 'erased' && ref.byteDigest === null) ref = linkedHistoricalPin(ref, row.byte_digest);
     if (revision.rowCount !== 1 || !row || !['available','erased'].includes(row.availability)
       || (row.availability === 'available' && (!row.serialized_bytes
         || digestBytes(row.serialized_bytes) !== row.byte_digest || row.serialized_bytes.length !== row.byte_length))
