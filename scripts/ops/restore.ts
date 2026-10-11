@@ -175,7 +175,7 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
         objectDirectory: process.cwd(),
       };
       let complete = false;
-      for (let turn = 0; turn < 256 && Date.now() < deadline; turn++) {
+      while (Date.now() < deadline) {
         context.budget.remaining();
         const progress = await normalizeStoredMembership(environment, 1, deadline);
         if (progress.complete) {
@@ -184,7 +184,7 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
         }
       }
       if (!complete)
-        throw new Error('Native membership preparation exceeded its recovery deadline or turn bound');
+        throw new Error('Native membership preparation exceeded its recovery deadline');
       const confirmedStatus = await context.fuseki.membershipPreparationStatus();
       if (typeof confirmedStatus?.needsPreparation !== 'boolean' || confirmedStatus.needsPreparation)
         throw new Error('Native membership preparation did not confirm completion');

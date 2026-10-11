@@ -212,6 +212,22 @@ test('operator finish resumes native membership progress across bounded turns', 
   expect(fixture.preparationCalls[0]?.deadline).toBe(fixture.preparationCalls[1]?.deadline);
 });
 
+test('operator finish completes membership preparation beyond 256 native turns', async () => {
+  const fixture = restored({
+    membership: {
+      preparations: [
+        ...Array.from({ length: 256 }, () => membershipResult(false)),
+        membershipResult(true),
+      ],
+    },
+  });
+  await fixture.finish();
+  expect(fixture.preparationCalls).toHaveLength(257);
+  expect(new Set(fixture.preparationCalls.map((call) => call.deadline)).size).toBe(1);
+  expect(fixture.events.at(-2)).toBe('advance-owner-epochs');
+  expect(fixture.events.at(-1)).toBe('enable-owner-logins');
+});
+
 test('operator finish refuses release when membership status still needs preparation', async () => {
   const fixture = restored({
     membership: {
@@ -294,20 +310,28 @@ test('partial native membership progress cannot outlive the restore deadline', a
   expect(fixture.events).not.toContain('enable-owner-logins');
 });
 
-test('an unmatched restored membership epoch exhausts bounded preparation without login', async () => {
+test('an unmatched restored membership epoch cannot outlive the shared recovery budget', async () => {
   const fixture = restored({
     membership: {
-      preparations: Array.from({ length: 256 }, () => ({ status: 'guard-unmatched' })),
+      preparations: [{ status: 'guard-unmatched' }],
     },
   });
-  await expect(fixture.finish()).rejects.toThrow('exceeded its recovery deadline or turn bound');
+  let now = 0;
+  fixture.context.budget = new RecoveryBudget(() => now);
+  const prepare = fixture.context.fuseki.membershipPrepare.bind(fixture.context.fuseki);
+  fixture.context.fuseki.membershipPrepare = async (input, signal) => {
+    const result = await prepare(input, signal);
+    now = 600_000;
+    return result;
+  };
+  await expect(fixture.finish()).rejects.toThrow('600-second budget');
   expect(fixture.events.slice(0, 4)).toEqual([
     'independent-frontier-and-source-check',
     'authenticated-reconciliation',
     'graph-release-observation',
     'access-release-observation',
   ]);
-  expect(fixture.preparationCalls).toHaveLength(256);
+  expect(fixture.preparationCalls).toHaveLength(1);
   expect(fixture.events).not.toContain('advance-owner-epochs');
   expect(fixture.events).not.toContain('enable-owner-logins');
 });
