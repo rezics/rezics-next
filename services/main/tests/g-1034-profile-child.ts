@@ -216,8 +216,8 @@ try {
     };
   };
   const opening = corpus.identity.opening;
-  // A Realm with no placed reply is the incomplete-index case. The retained
-  // population is already projected, so it cannot stand in for that 503.
+  // A newly-created Realm with no placed reply is empty under every order,
+  // even when its ranking index has not caught up yet.
   const emptyRealm = (
     await api.command<{ realm: string }>('g1034:empty-realm', {
       method: 'POST',
@@ -230,10 +230,11 @@ try {
       },
     })
   ).realm;
-  const unavailable = await app.handle(
+  const emptyPage = await app.handle(
     new Request(`http://main.local/v1/realms/${emptyRealm.slice(-36)}/threads?sort=top&limit=2`),
   );
-  assert.equal(unavailable.status, 503);
+  assert.equal(emptyPage.status, 200);
+  assert.deepEqual((await emptyPage.json() as { items: unknown[] }).items, []);
   const allRules = Array.from({ length: 12 }, (_, index) => ({
     id: `rule-${index}`,
     title: { original: 'en', labels: { en: `Rule ${index}` } },
