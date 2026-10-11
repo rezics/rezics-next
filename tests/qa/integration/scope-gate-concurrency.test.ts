@@ -225,7 +225,7 @@ test('Realm management reads and idle policy recovery share their Realm gate and
     await held.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR SHARE', [realmScope]);
     await held.query('SELECT 1 FROM access.realm_admin_revision WHERE realm = $1 FOR SHARE', [f.actor]);
     const owner = new AccessRealmManagement(f.pool);
-    expect(await within(owner.roles(f.principal, f.actor, f.actor))).toEqual({ generation: '0', roles: [] });
+    expect(await within(owner.roles(f.principal, f.actor, f.actor))).toEqual({ generation: '0', roles: [], cap: 32 });
     expect((await within(owner.settings(f.principal, f.actor, f.actor))).generation).toBe('0');
   } finally { await held.query('ROLLBACK'); held.release(); await f.close(); }
 }, 30_000);
