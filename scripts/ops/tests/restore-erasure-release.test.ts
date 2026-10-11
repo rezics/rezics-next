@@ -38,14 +38,14 @@ function restored(
     fence?: { open: boolean; generation: string } | null;
     epochFailure?: boolean;
     membership?: { statuses?: unknown[]; preparations?: unknown[] };
+    afterLogin?: () => void;
   } = {},
 ) {
   const events: string[] = [];
   const preparationCalls: MembershipPreparationInput[] = [];
-  const statuses = [...(options.membership?.statuses ?? [
-    { needsPreparation: true },
-    { needsPreparation: false },
-  ])];
+  const statuses = [
+    ...(options.membership?.statuses ?? [{ needsPreparation: true }, { needsPreparation: false }]),
+  ];
   const preparations = [...(options.membership?.preparations ?? [membershipResult(true)])];
   const context: OperatorRestoreReleaseContext = {
     budget: new RecoveryBudget(),
@@ -99,6 +99,7 @@ function restored(
         query: async (query: string) => {
           expect(query).toContain('ALTER ROLE account LOGIN');
           events.push('enable-owner-logins');
+          options.afterLogin?.();
           return { rows: [] };
         },
       } as unknown as Pool,
@@ -141,9 +142,15 @@ function restored(
     budgetMs: 600_000,
   };
   const finishAndVerify = () =>
-    finishAndVerifyRestore(context, checks, 'recovery-cut-successor', () => {
-      events.push('independent-frontier-and-source-check');
-    }, proof);
+    finishAndVerifyRestore(
+      context,
+      checks,
+      'recovery-cut-successor',
+      () => {
+        events.push('independent-frontier-and-source-check');
+      },
+      proof,
+    );
   return { context, checks, events, preparationCalls, finish, finishAndVerify, proof };
 }
 
@@ -187,7 +194,11 @@ test('full restore verifies serving after release on the same budget before mark
     'enable-owner-logins',
     'serving-verification',
   ]);
-  expect(fixture.proof.state).toBe('verified');
+  expect(fixture.proof).toMatchObject({
+    state: 'verified',
+    ownerReleaseObserved: true,
+    ownerLoginsEnabled: true,
+  });
   expect(fixture.proof.phases).toHaveProperty('serving-verification');
   expect(fixture.context.budget).toBe(budget);
   expect(Object.keys(budget.phases)).toEqual([
@@ -216,12 +227,15 @@ test('readiness failure leaves released evidence and records successful stop aft
   }
   expect(failure).toBeInstanceOf(Error);
   expect((failure as Error).message).toBe(
-    'Full restore serving verification failed after release: restored target is not ready',
+    'Full restore serving verification failed after graph and Access release and owner LOGIN were committed: restored target is not ready',
   );
   expect(fixture.proof).toMatchObject({
     state: 'released',
+    ownerReleaseObserved: true,
+    ownerLoginsEnabled: true,
     targetStopped: true,
-    failure: 'Full restore serving verification failed after release: restored target is not ready',
+    failure:
+      'Full restore serving verification failed after graph and Access release and owner LOGIN were committed: restored target is not ready',
   });
   expect(fixture.events.slice(-3)).toEqual([
     'enable-owner-logins',
@@ -229,6 +243,58 @@ test('readiness failure leaves released evidence and records successful stop aft
     'stop-target',
   ]);
 });
+
+test.each([
+  { cleanupFails: false, targetStopped: true },
+  { cleanupFails: true, targetStopped: false },
+])(
+  'records release and LOGIN when the deadline expires immediately after LOGIN (cleanup stopped: $targetStopped)',
+  async ({ cleanupFails, targetStopped }) => {
+    let now = 0;
+    const fixture = restored({
+      afterLogin: () => {
+        now = 600_000;
+      },
+    });
+    fixture.context.budget = new RecoveryBudget(() => now);
+    fixture.proof.phases = fixture.context.budget.phases;
+
+    let failure: unknown;
+    try {
+      await fixture.finishAndVerify();
+    } catch (error) {
+      failure = error;
+      recordRestoreFailure(fixture.proof, error, () => {
+        fixture.events.push('stop-target');
+        if (cleanupFails) throw new Error('docker stop failed');
+      });
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('deadline exceeded');
+    expect((failure as Error).message).toContain(
+      'graph and Access release and owner LOGIN were committed',
+    );
+    expect((failure as Error).message).toContain('600-second budget');
+    expect((failure as Error).message).not.toContain('serving remains held');
+    expect(fixture.proof).toMatchObject({
+      state: 'released',
+      ownerReleaseObserved: true,
+      ownerLoginsEnabled: true,
+      targetStopped,
+      failure: (failure as Error).message,
+    });
+    expect(fixture.proof.state).not.toBe('verified');
+    expect(fixture.events.slice(-2)).toEqual(['enable-owner-logins', 'stop-target']);
+    if (cleanupFails) {
+      expect(fixture.proof.cleanupFailure).toBe('docker stop failed');
+    } else {
+      expect(fixture.proof.cleanupFailure).toBeUndefined();
+    }
+    expect(fixture.proof.phases['epoch-advancement-and-logins']).toBe(600_000);
+    expect(fixture.events).not.toContain('serving-verification');
+  },
+);
 
 test('serving verification shares the recovery deadline and reports failed target cleanup', async () => {
   let now = 0;
@@ -251,7 +317,7 @@ test('serving verification shares the recovery deadline and reports failed targe
   }
   expect(failure).toBeInstanceOf(Error);
   expect((failure as Error).message).toBe(
-    'Full restore serving verification failed after release: Recovery exceeded its 600-second budget',
+    'Full restore serving verification failed after graph and Access release and owner LOGIN were committed: Recovery exceeded its 600-second budget',
   );
   expect(fixture.proof).toMatchObject({
     state: 'released',
@@ -297,7 +363,10 @@ test('operator finish observes both owner releases before enabling logins, using
 
 test('operator finish confirms an already complete native membership proof without preparing again', async () => {
   const fixture = restored({
-    membership: { statuses: [{ needsPreparation: false }, { needsPreparation: false }], preparations: [] },
+    membership: {
+      statuses: [{ needsPreparation: false }, { needsPreparation: false }],
+      preparations: [],
+    },
   });
   await fixture.finish();
   await fixture.finish();
@@ -374,27 +443,29 @@ test('operator finish refuses release when membership status still needs prepara
   expect(fixture.events).not.toContain('enable-owner-logins');
 });
 
-test.each([
-  undefined,
-  { needsPreparation: 'no' },
-] as const)('operator finish refuses an invalid native membership status (%j)', async (status) => {
-  const fixture = restored({ membership: { statuses: [status] } });
-  await expect(fixture.finish()).rejects.toThrow('Native membership preparation status is invalid');
-  expect(fixture.events).toEqual([
-    'independent-frontier-and-source-check',
-    'authenticated-reconciliation',
-    'graph-release-observation',
-    'access-release-observation',
-    'membership-status',
-  ]);
-  expect(fixture.events).not.toContain('enable-owner-logins');
-});
+test.each([undefined, { needsPreparation: 'no' }] as const)(
+  'operator finish refuses an invalid native membership status (%j)',
+  async (status) => {
+    const fixture = restored({ membership: { statuses: [status] } });
+    await expect(fixture.finish()).rejects.toThrow(
+      'Native membership preparation status is invalid',
+    );
+    expect(fixture.events).toEqual([
+      'independent-frontier-and-source-check',
+      'authenticated-reconciliation',
+      'graph-release-observation',
+      'access-release-observation',
+      'membership-status',
+    ]);
+    expect(fixture.events).not.toContain('enable-owner-logins');
+  },
+);
 
 test.each(['conflict', 'invalid', 'unknown-profile', 'deadline'] as const)(
   'operator finish keeps logins held when native membership preparation is refused with %s',
   async (status) => {
     const fixture = restored({
-      membership: { preparations: [{ status }], },
+      membership: { preparations: [{ status }] },
     });
     await expect(fixture.finish()).rejects.toThrow(`Fuseki command ${status}`);
     expect(fixture.events).toEqual([

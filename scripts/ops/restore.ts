@@ -100,6 +100,8 @@ export interface RestoreEvidence {
   id?: string;
   project: string;
   state: 'held' | 'released' | 'verified';
+  ownerReleaseObserved?: boolean;
+  ownerLoginsEnabled?: boolean;
   phases: Record<string, number>;
   elapsedMs: number;
   admissionWaitMs: number;
@@ -129,6 +131,7 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
   checks: Pick<RestoreChecks<Context>, 'reconcile'>,
   idempotencyKey: string,
   beforeReconcile: () => void,
+  onCommittedTransition?: (transition: 'owner-release' | 'owner-logins-enabled') => void,
 ): Promise<void> {
   await context.budget.phase('owner-reconciliation-api', async () => {
     beforeReconcile();
@@ -170,6 +173,8 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       throw new Error(
         'Owner reconciliation did not release the captured Access recovery generation',
       );
+    // Record the observation before the phase's post-work budget check can throw.
+    onCommittedTransition?.('owner-release');
   });
   await context.budget.phase('membership-preparation', async () => {
     const deadline = Date.now() + Math.min(540_000, context.budget.remaining());
@@ -194,7 +199,10 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       if (!complete)
         throw new Error('Native membership preparation exceeded its recovery deadline');
       const confirmedStatus = await context.fuseki.membershipPreparationStatus();
-      if (typeof confirmedStatus?.needsPreparation !== 'boolean' || confirmedStatus.needsPreparation)
+      if (
+        typeof confirmedStatus?.needsPreparation !== 'boolean' ||
+        confirmedStatus.needsPreparation
+      )
         throw new Error('Native membership preparation did not confirm completion');
     }
   });
@@ -205,6 +213,8 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
     await context.pools.account.query(
       'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
     );
+    // LOGIN may commit even when the phase's post-work budget check fails.
+    onCommittedTransition?.('owner-logins-enabled');
   });
 }
 
@@ -217,15 +227,35 @@ export async function finishAndVerifyRestore<Context extends OperatorRestoreRele
   beforeReconcile: () => void,
   evidence: RestoreEvidence,
 ): Promise<void> {
-  await finishOperatorRestore(context, checks, idempotencyKey, beforeReconcile);
-  evidence.state = 'released';
+  try {
+    await finishOperatorRestore(context, checks, idempotencyKey, beforeReconcile, (transition) => {
+      if (transition === 'owner-release') {
+        evidence.ownerReleaseObserved = true;
+        return;
+      }
+      evidence.ownerLoginsEnabled = true;
+      evidence.state = 'released';
+    });
+  } catch (error) {
+    if (!evidence.ownerReleaseObserved) throw error;
+    const phaseCause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+    const detail = phaseCause instanceof Error ? phaseCause.message : String(phaseCause);
+    const deadlineExpired = /600-second budget|deadline/i.test(detail);
+    const committed = evidence.ownerLoginsEnabled
+      ? 'graph and Access release and owner LOGIN were committed'
+      : 'graph and Access release were observed';
+    throw new Error(
+      `Full restore ${deadlineExpired ? 'deadline exceeded' : 'finish failed'} after ${committed}: ${detail.replace(/; serving remains held$/, '')}`,
+      { cause: error },
+    );
+  }
   try {
     await context.budget.phase('serving-verification', () => checks.verifyServing(context));
   } catch (error) {
     const phaseCause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
     const detail = phaseCause instanceof Error ? phaseCause.message : String(phaseCause);
     throw new Error(
-      `Full restore serving verification failed after release: ${detail.replace(/; serving remains held$/, '')}`,
+      `Full restore serving verification failed after graph and Access release and owner LOGIN were committed: ${detail.replace(/; serving remains held$/, '')}`,
       { cause: error },
     );
   }
