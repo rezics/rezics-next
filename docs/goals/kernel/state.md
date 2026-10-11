@@ -54,6 +54,7 @@ Game facts for the Bangumi-like catalogue (S, M if per-platform releases); recip
 - [Graph, claim and model cluster](reports/G-1639-specification.md): two product fixes, six fixture corrections, three deferred.
 - [Structure and discovery cluster](reports/G-1640-specification.md): fixture and harness repairs, two evidence investigations.
 - [Closed by default without a default decision: the recommended projection rule](reports/G-1697-specification.md).
+- [Owner, relay and outbox cluster and the deferred-forever projection class](reports/G-1641-specification.md).
 - [Provider identity in slices](reports/G-1643-specification.md): fifteen A slices and three native builds for the unseen-provider proof.
 
 ## Open
