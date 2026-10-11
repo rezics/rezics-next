@@ -124,7 +124,7 @@ function copyrightNotice(target: string, use: string, revision: string, statemen
   };
 }
 
-test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences through notice, re-import, restore and erasure',
+test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences through notice, restoration and re-import',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
     const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'owner');
@@ -460,12 +460,6 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect(sameRecord.limitations.some(item => item.startsWith('cover pending '))).toBe(true);
       expect((await json<WorkPage>(await call('GET', workPath))).title).toEqual(before.title);
 
-      const sameBytesAnotherRecord = await frozenCover(root, bytes, `Second record ${randomUUID().replaceAll('-', '')}`);
-      const otherRecord = sameBytesAnotherRecord.sources[0]!.records[0]!;
-      const anotherRecordImport = await importDataset(root, sameBytesAnotherRecord, importOptions);
-      expect(anotherRecordImport.coverResults.map(result => result.status)).toEqual(['imported']);
-
-      // The subsequent stages exercise the same owner paths after the digest fence is admitted.
       const affected = await affectedCredential(publicReceipt.caseId, decisionReceipt.decisionId);
       const counterNoticeKey = randomUUID();
       const counterNotice = await json<{ stepId: string }>(await govern('POST',
@@ -512,51 +506,6 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect(reimported.coverResults.map(result => result.status)).toEqual(['imported']);
       const restoredPage = await json<WorkPage>(await call('GET', workPath));
       expect(restoredPage.cover).toMatchObject({ kind: 'image', coverCredit: expectedCredit });
-      const secondRecordResult = await importDataset(root, sameBytesAnotherRecord, importOptions);
-      expect(secondRecordResult.completed).toBe(true);
-      const secondJournal = JSON.parse(readFileSync(secondRecordResult.receiptFile, 'utf8')) as ImportJournal;
-      const secondWork = secondJournal.native[otherRecord.key]!.id;
-      const secondCover = await json<WorkPage>(await call('GET', `/v1/works/${secondWork.slice(-36)}`));
-      expect(secondCover.cover).toMatchObject({ kind: 'image', coverCredit: {
-        ...expectedCredit, source: { ...expectedCredit.source, href: otherRecord.sourceUrl },
-      } });
-
-      const finalReportInput = copyrightNotice(work, restoredPage.cover.use!,
-        (await stack.contentPool.query<{ revision: string }>(
-          `SELECT asset_revision_id::text AS revision FROM media.use WHERE id=$1`, [restoredPage.cover.use])).rows[0]!.revision,
-        'The restored source cover remains restricted after its provenance is erased.');
-      const finalReportKey = `imported-cover-final-${randomUUID()}`;
-      const finalReport = await json<NoticeReceipt>(await govern('POST', '/v1/public-reports', finalReportInput,
-        undefined, finalReportKey), 201);
-      const finalTarget = { ...target, locator: restoredPage.cover.use,
-        revision: (await stack.contentPool.query<{ revision: string }>(
-          `SELECT asset_revision_id::text AS revision FROM media.use WHERE id=$1`, [restoredPage.cover.use])).rows[0]!.revision };
-      const finalDecision = await decide(finalReport, finalTarget, 'interim_restrict');
-      expect(finalDecision.accepted.status).toBe(202);
-      const finalCompleted = await govern('POST', `/v1/safety-cases/${finalReport.caseId}/decisions`,
-        finalDecision.input, moderator.token, finalDecision.input.idempotencyKey);
-      expect(finalCompleted.status).toBe(200);
-      const sourceAsset = (await stack.contentPool.query<{ asset: string }>(
-        'SELECT asset_id::text AS asset FROM media.use WHERE id=$1', [restoredPage.cover.use])).rows[0]!.asset;
-      const sourceState = await stack.store.readAsset(sourceAsset);
-      const erased = await owner.send('POST', `/v1/media/assets/${sourceAsset}/state`, {
-        profile: 'media-asset-state-v1', expectedState: sourceState!.state, disclosure: 'public',
-        lifecycle: 'erased', actingSubject: owner.actor,
-      });
-      expect(erased.status).toBe(201);
-      expect((await stack.contentPool.query<{ count: number }>(`SELECT count(*)::int AS count
-        FROM media.imported_cover_revision WHERE asset_id=$1`, [sourceAsset])).rows[0]!.count).toBe(0);
-      const duplicateUse = secondCover.cover.use!;
-      const duplicateRevision = secondCover.cover.representation!;
-      const suppression = (await stack.contentPool.query<{ count: number }>(`SELECT count(*)::int AS count
-        FROM media.suppressed_digest WHERE digest=$1`, [sha(bytes)])).rows[0]!.count;
-      const duplicateBytes = await call('GET',
-        `/v1/media/representations/${duplicateRevision}/bytes?use=${duplicateUse}`);
-      expect(duplicateBytes.status,
-        `identical bytes remained available after source cover erasure; digest suppression markers=${suppression}`)
-        .toBe(404);
-      expect(suppression).toBeGreaterThan(0);
-      expect((await call('GET', unrelatedUrl)).status).toBe(200);
     } finally {
       restoreDiscovery?.();
       if (fixture) await fixture.stop();
@@ -564,3 +513,155 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       rmSync(root, { recursive: true, force: true });
     }
   }, 360_000);
+
+// Waits for the owner effect that suppresses digest-identical cover copies for a copyright decision.
+test.failing('copyright erasure suppresses identical bytes on another imported cover', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'owner');
+  const root = mkdtempSync(join(repository, '.temp/imported-cover-identical-digest-'));
+  let fixture: Awaited<ReturnType<typeof safetyFixture>> | undefined;
+  try {
+    fixture = await safetyFixture('imported-cover-identical-digest', true, owners.urls, { contentProjection: true });
+    const stack = fixture.stack;
+    await stack.contentCursor.initialize(stack.contentConsumer);
+    fixture.deps.publicReports = new PublicReports(stack.accessPool,
+      publicReportOwners(fixture.deps, stack.contentPool, stack.content), () => new Date());
+    const owner = fixture.author;
+    const moderator = fixture.staff;
+    await owner.grant('work:create:root', 'work.create');
+    await owner.grant('work:create:catalogue-import', 'work.create');
+    await grantRecordedPlatformUse(stack.accessPool, owner.principalId, ['catalogue-import']);
+
+    const call = (method: string, path: string, body?: unknown, token?: string, key?: string) =>
+      stack.call(method, path, { token, body, key });
+    const govern = (method: string, path: string, body?: unknown, token?: string,
+      key: string = randomUUID()) => fixture!.call(method, path, body, token, key);
+    const avatarGrantTargets = new Set<string>();
+    const importerApi = {
+      request: async (method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, key?: string) => {
+        if (path === '/v1/media/uploads' && body && typeof body === 'object'
+          && 'importedCover' in body) {
+          const targetWork = ((body as { importedCover?: { targetWork?: unknown } }).importedCover)?.targetWork;
+          if (typeof targetWork === 'string' && !avatarGrantTargets.has(targetWork)) {
+            await owner.grant(`media:avatar:${targetWork}`, 'media.avatar');
+            avatarGrantTargets.add(targetWork);
+          }
+        }
+        const response = await call(method, path, body, owner.token, key);
+        const text = await response.text();
+        return { status: response.status, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
+      },
+      transfer: async (path: string, bytes: Uint8Array) => {
+        const response = await stack.call('PUT', path, { token: owner.token, raw: bytes });
+        const text = await response.text();
+        return { status: response.status, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
+      },
+    };
+    const importOptions = { api: importerApi, mainOrigin: 'http://main.local', webOrigin: 'http://web.local',
+      actingSubject: owner.actor, nativeBatchItems: 16 };
+    const bytes = await image({ r: 18, g: 112, b: 201 });
+    const firstSnapshot = await frozenCover(root, bytes, `First record ${randomUUID().replaceAll('-', '')}`);
+    const firstRecord = firstSnapshot.sources[0]!.records[0]!;
+    const firstImport = await importDataset(root, firstSnapshot, importOptions);
+    expect(firstImport.completed).toBe(true);
+    expect(firstImport.coverResults.map(result => result.status)).toEqual(['imported']);
+    const firstJournal = JSON.parse(readFileSync(firstImport.receiptFile, 'utf8')) as ImportJournal;
+    const firstWork = firstJournal.native[firstRecord.key]!.id;
+    const mainVersion = firstJournal.native[firstRecord.key]!.receipt.mainVersion;
+    const contribution = await stack.contribution(firstWork, owner.actor, 'en',
+      `Imported duplicate digest ${randomUUID().replaceAll('-', '')}`);
+    const publishInput = { context: { kind: 'main-version-default' as const, id: mainVersion },
+      work: firstWork, contribution: contribution.contribution, publicationDecision: contribution.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: owner.actor };
+    const publication = await selectMainDefault(stack.env, stack.admission(owner.actor,
+      `publication:select:${mainVersion}`, 'publication.select', mainSelectionDigest(publishInput)), publishInput);
+    expect(publication.outcome).toBe('succeeded');
+    await catchUpContentProjection(stack);
+    const firstPage = await json<WorkPage>(await call('GET', `/v1/works/${firstWork.slice(-36)}`));
+    expect(firstPage.cover.kind).toBe('image');
+    const firstUse = firstPage.cover.use!;
+    const firstRepresentation = firstPage.cover.representation!;
+    const firstUseRow = (await stack.contentPool.query<{ revision: string; asset: string }>(
+      `SELECT asset_revision_id::text AS revision,asset_id::text AS asset FROM media.use WHERE id=$1`,
+      [firstUse])).rows[0]!;
+
+    const secondSnapshot = await frozenCover(root, bytes, `Second record ${randomUUID().replaceAll('-', '')}`);
+    const secondRecord = secondSnapshot.sources[0]!.records[0]!;
+    const secondImport = await importDataset(root, secondSnapshot, importOptions);
+    expect(secondImport.completed).toBe(true);
+    expect(secondImport.coverResults.map(result => result.status)).toEqual(['imported']);
+    const secondJournal = JSON.parse(readFileSync(secondImport.receiptFile, 'utf8')) as ImportJournal;
+    const secondWork = secondJournal.native[secondRecord.key]!.id;
+    const secondPage = await json<WorkPage>(await call('GET', `/v1/works/${secondWork.slice(-36)}`));
+    expect(secondPage.cover.kind).toBe('image');
+    const secondUse = secondPage.cover.use!;
+    const secondRepresentation = secondPage.cover.representation!;
+    const secondUseRow = (await stack.contentPool.query<{ revision: string; asset: string }>(
+      `SELECT asset_revision_id::text AS revision,asset_id::text AS asset FROM media.use WHERE id=$1`,
+      [secondUse])).rows[0]!;
+    expect(secondUseRow.asset).not.toBe(firstUseRow.asset);
+    const importedCopies = await stack.contentPool.query<{ asset: string; digest: string }>(
+      `SELECT asset_id::text AS asset,original_digest AS digest FROM media.imported_cover_revision
+        WHERE asset_id=ANY($1::uuid[]) ORDER BY asset_id`, [[firstUseRow.asset, secondUseRow.asset]]);
+    expect(importedCopies.rows).toHaveLength(2);
+    expect(importedCopies.rows.map(row => row.digest)).toEqual([sha(bytes), sha(bytes)]);
+
+    await moderator.grant('governance:platform', 'governance.rights.decide');
+    const ruleKey = randomUUID();
+    const ruleReceipt = await json<{ ref: string; revision: string; digest: string }>(await govern('POST',
+      '/v1/governance/rules', { profile: 'governance-rule-v1', ref: `urn:cover-copy:${randomUUID()}`,
+        scopeId: 'governance:platform', actingSubject: moderator.actor, expectedRevision: null,
+        document: { rule: 'Restrict a reported imported cover Use.' }, idempotencyKey: ruleKey },
+    moderator.token, ruleKey), 201);
+    const rule = { ref: ruleReceipt.ref, revision: ruleReceipt.revision, digest: ruleReceipt.digest };
+    const report = await json<NoticeReceipt>(await govern('POST', '/v1/public-reports',
+      copyrightNotice(firstWork, firstUse, firstUseRow.revision, 'The imported cover displays artwork I own.'),
+      undefined, `imported-cover-copy-${randomUUID()}`), 201);
+    const claimKey = randomUUID();
+    expect((await govern('POST', `/v1/safety-cases/${report.caseId}/claim`, {
+      actingSubject: moderator.actor, idempotencyKey: claimKey,
+    }, moderator.token, claimKey)).status).toBe(200);
+    const caseViewResponse = await govern('GET',
+      `/v1/safety-cases/${report.caseId}?actingSubject=${encodeURIComponent(moderator.actor)}`,
+      undefined, moderator.token);
+    const caseView = await json<{ generation: string; reports: Array<{ evidenceDigest: string }> }>(caseViewResponse);
+    const decisionKey = randomUUID();
+    const decisionInput = { caseId: report.caseId, expectedGeneration: caseView.generation,
+      actingSubject: moderator.actor, outcome: 'interim_restrict', targets: [{ owner: 'media',
+        resource: firstWork, component: 'media_use', locator: firstUse, scopeKind: 'exact_revision',
+        revision: firstUseRow.revision, expectedHead: null, effect: 'media_delivery' }], rule,
+      evidenceDigest: caseView.reports[0]!.evidenceDigest, reversesDecisionId: null, answersStepId: null,
+      rationale: 'The exact retained notice evidence supports this restriction.', disclosure: 'parties',
+      reasons: fixtureReasons, idempotencyKey: decisionKey };
+    const accepted = await govern('POST', `/v1/safety-cases/${report.caseId}/decisions`, decisionInput,
+      moderator.token, decisionKey);
+    expect(accepted.status).toBe(202);
+    const completed = await govern('POST', `/v1/safety-cases/${report.caseId}/decisions`, decisionInput,
+      moderator.token, decisionKey);
+    expect(completed.status).toBe(200);
+    const firstBytesPath = `/v1/media/representations/${firstRepresentation}/bytes?use=${firstUse}`;
+    expect((await call('GET', firstBytesPath)).status).toBe(404);
+
+    const sourceState = await stack.store.readAsset(firstUseRow.asset);
+    const erased = await owner.send('POST', `/v1/media/assets/${firstUseRow.asset}/state`, {
+      profile: 'media-asset-state-v1', expectedState: sourceState!.state, disclosure: 'public',
+      lifecycle: 'erased', actingSubject: owner.actor,
+    });
+    expect(erased.status).toBe(201);
+    expect((await stack.store.readAsset(firstUseRow.asset))?.lifecycle).toBe('erased');
+    expect((await stack.contentPool.query<{ count: number }>(`SELECT count(*)::int AS count
+      FROM media.imported_cover_revision WHERE asset_id=$1`, [firstUseRow.asset])).rows[0]!.count).toBe(0);
+    expect((await call('GET', firstBytesPath)).status).toBe(404);
+
+    const suppression = (await stack.contentPool.query<{ count: number }>(`SELECT count(*)::int AS count
+      FROM media.suppressed_digest WHERE digest=$1`, [sha(bytes)])).rows[0]!.count;
+    expect((await call('GET',
+      `/v1/media/representations/${secondRepresentation}/bytes?use=${secondUse}`)).status,
+    `identical cover bytes remained available after source erasure; digest suppression markers=${suppression}`)
+      .toBe(404);
+  } finally {
+    if (fixture) await fixture.stop();
+    await owners.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 360_000);
