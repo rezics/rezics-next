@@ -68,7 +68,12 @@ async function fixture(run: (f: Awaited<ReturnType<typeof mediaFixture>>) => Pro
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 },
     { ...CONNECTION_BOUNDS, idleInTransactionSessionTimeout: idleTimeout });
   try { await run(await mediaFixture(pool, imported)); }
-  finally { await pool.end(); }
+  finally {
+    await pool.end();
+    // Each scenario restores an isolated copy of the same prepared owner cut.
+    // Dispose it here so earlier scenarios do not retain physical database copies.
+    await admin.query(`DROP DATABASE ${name}`);
+  }
 }
 
 async function mediaFixture(pool: Pool, imported: boolean) {
