@@ -1264,13 +1264,13 @@ export class ContentCore {
     }
     const result = await this.pool.query(`SELECT event.id, event.data_epoch,
       event.sequence::text AS sequence, event.operation_id, event.event_type,
-      event.recipe, event.revision_id, event.payload, source.source_sequence
-      FROM content.eligibility_delivery_source source
-      JOIN content.outbox event ON event.operation_id = source.operation_id
-      WHERE source.content_data_epoch = $1::uuid AND source.stream_scope = $2
-        AND source.graph_data_epoch = $3::uuid AND source.source_sequence <> $4
-        AND source.resource_id = $5 AND source.variant_id = $6
-        AND source.publication_decision = $7 AND source.eligibility_decision = $8
+      event.recipe, event.revision_id, event.payload, delivery.source_sequence
+      FROM content.eligibility_delivery_source delivery
+      JOIN content.outbox event ON event.operation_id = delivery.operation_id
+      WHERE delivery.content_data_epoch = $1::uuid AND delivery.stream_scope = $2
+        AND delivery.graph_data_epoch = $3::uuid AND delivery.source_sequence <> $4
+        AND delivery.resource_id = $5 AND delivery.variant_id = $6
+        AND delivery.publication_decision = $7 AND delivery.eligibility_decision = $8
         AND event.data_epoch = $1::uuid AND event.sequence > $9::bigint
         AND event.event_type = $10 AND event.recipe = $11
       ORDER BY event.sequence LIMIT 2`,
@@ -1303,14 +1303,14 @@ export class ContentCore {
     }
     const result = await this.pool.query(`SELECT event.id, event.data_epoch,
       event.sequence::text AS sequence, event.operation_id, event.event_type,
-      event.recipe, event.revision_id, event.payload, source.source_sequence
-      FROM content.eligibility_delivery_source source
-      JOIN content.outbox event ON event.operation_id = source.operation_id
-      WHERE source.content_data_epoch = $1::uuid AND source.stream_scope = $2
-        AND source.graph_data_epoch = $3::uuid AND source.resource_id = $4
-        AND source.variant_id = $5 AND source.publication_decision = $6
-        AND source.eligibility_decision = $7 AND source.preparation_id = $8
-        AND source.revision_id = $9::uuid
+      event.recipe, event.revision_id, event.payload, delivery.source_sequence
+      FROM content.eligibility_delivery_source delivery
+      JOIN content.outbox event ON event.operation_id = delivery.operation_id
+      WHERE delivery.content_data_epoch = $1::uuid AND delivery.stream_scope = $2
+        AND delivery.graph_data_epoch = $3::uuid AND delivery.resource_id = $4
+        AND delivery.variant_id = $5 AND delivery.publication_decision = $6
+        AND delivery.eligibility_decision = $7 AND delivery.preparation_id = $8
+        AND delivery.revision_id = $9::uuid
         AND event.data_epoch = $1::uuid AND event.sequence > $10::bigint
         AND event.event_type = $11 AND event.recipe = $12
       ORDER BY event.sequence LIMIT 2`,
@@ -1335,20 +1335,20 @@ export class ContentCore {
       const delivery = await this.pool.query(`SELECT event.data_epoch, event.sequence::text AS sequence,
         event.operation_id, event.event_type, event.recipe, event.revision_id, event.payload,
         receipt.action, receipt.request_digest, receipt.outcome, receipt.variant_id, receipt.revision_id AS receipt_revision,
-        source.content_data_epoch, source.stream_scope, source.graph_data_epoch,
-        source.source_event_id, source.source_receipt_id, source.source_sequence,
-        source.source_digest, source.source_batch_sequence::text AS source_batch_sequence,
-        source.source_batch_id, source.source_batch_digest, source.source_ordinal,
-        source.preparation_id, source.resource_id, source.variant_id AS source_variant,
-        source.publication_decision, source.eligibility_decision, source.request_digest AS source_request_digest,
+        delivery.content_data_epoch, delivery.stream_scope, delivery.graph_data_epoch,
+        delivery.source_event_id, delivery.source_receipt_id, delivery.source_sequence,
+        delivery.source_digest, delivery.source_batch_sequence::text AS source_batch_sequence,
+        delivery.source_batch_id, delivery.source_batch_digest, delivery.source_ordinal,
+        delivery.preparation_id, delivery.resource_id, delivery.variant_id AS source_variant,
+        delivery.publication_decision, delivery.eligibility_decision, delivery.request_digest AS source_request_digest,
         batch.batch_id, batch.source_digest AS batch_source_digest
         FROM content.outbox event
         JOIN content.receipt receipt ON receipt.operation_id = event.operation_id
-        JOIN content.eligibility_delivery_source source ON source.operation_id = event.operation_id
-        JOIN content.eligibility_delivery_batch batch ON batch.stream_scope = source.stream_scope
-          AND batch.graph_data_epoch = source.graph_data_epoch
-          AND batch.content_data_epoch = source.content_data_epoch
-          AND batch.sequence = source.source_batch_sequence
+        JOIN content.eligibility_delivery_source delivery ON delivery.operation_id = event.operation_id
+        JOIN content.eligibility_delivery_batch batch ON batch.stream_scope = delivery.stream_scope
+          AND batch.graph_data_epoch = delivery.graph_data_epoch
+          AND batch.content_data_epoch = delivery.content_data_epoch
+          AND batch.sequence = delivery.source_batch_sequence
         WHERE event.id = $1 AND event.data_epoch = $2::uuid AND event.sequence = $3::bigint
           AND event.operation_id = $4`,
       [event.id, event.position.dataEpoch, event.position.sequence, event.operationId]);

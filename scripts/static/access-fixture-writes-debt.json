@@ -146,7 +146,6 @@
   "tests/qa/integration/composition-qualifier-key.test.ts",
   "tests/qa/integration/composition-target-batches.test.ts",
   "tests/qa/integration/content-document-recovery.test.ts",
-  "tests/qa/integration/content-eligibility-order.test.ts",
   "tests/qa/integration/content-public-domain.test.ts",
   "tests/qa/integration/content-publication-native.test.ts",
   "tests/qa/integration/content-search-private-native.test.ts",

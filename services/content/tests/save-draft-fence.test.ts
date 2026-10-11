@@ -1,3 +1,4 @@
+// sql-relations-allow: public.fence_probe -- Scratch table created in this isolated test database to prove transaction commit and rollback.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
