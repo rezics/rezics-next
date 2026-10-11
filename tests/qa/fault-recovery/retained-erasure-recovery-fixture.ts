@@ -302,8 +302,11 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       ownedDirectories.add(candidateDirectory);
       mkdirSync(candidateDirectory, { recursive: true, mode: 0o700 });
       copyRecoveryTree(backupPostgres, postgresDirectory);
+      // Preserve durable recovery without opening every copied relation for fsync.
+      // https://www.postgresql.org/docs/18/runtime-config-error-handling.html#GUC-RECOVERY-INIT-SYNC-METHOD
       appendFileSync(join(postgresDirectory, 'postgresql.auto.conf'),
-        "\narchive_mode = off\nrestore_command = 'false'\n");
+        "\narchive_mode = off\nrestore_command = 'false'\n"
+          + (process.platform === 'linux' ? "recovery_init_sync_method = 'syncfs'\n" : ''));
       writeFileSync(join(postgresDirectory, 'recovery.signal'), '');
       const cluster = await startPreparedPostgresCluster(postgresDirectory, { role: 'postgres' });
       clusters.push(cluster);
@@ -488,7 +491,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
           if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('source PostgreSQL container is unavailable');
           try {
             subprocess('pg_basebackup', 'docker', ['exec', '-u', 'postgres', container, 'sh', '-ec',
-              `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast --verbose --progress`],
+              `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast --sync-method=syncfs --verbose --progress`],
             65_000);
             docker(['cp', `${container}:${remote}`, backupPostgres]);
             subprocess('pg_verifybackup', 'pg_verifybackup', ['--no-parse-wal', backupPostgres], 15_000);

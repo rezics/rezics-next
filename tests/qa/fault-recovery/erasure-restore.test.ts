@@ -814,13 +814,18 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       try {
         const operations = ownerOperationFor(candidate, third);
         const key = `erasure-restore-owner-${randomUUID()}`;
-        const { outerOperationId } = await interruptBeforeOwnerRelease(candidate, third, operations, key);
+        const { outerOperationId, outerId } = await interruptBeforeOwnerRelease(candidate, third, operations, key);
         await mutate(candidate);
         expect(await operations.reconcileRestore(ownerRestoreInput, key))
           .toMatchObject({ state: 'held', disposition: 'conflict' });
         expect((await relay.query<{ state: string; hold_reason: string | null }>(
           'SELECT state, hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1',
           [outerOperationId])).rows[0]).toEqual({ state: 'held', hold_reason: reason });
+        const bindings = (await relay.query<{ item_ref: string }>(`SELECT item_ref
+          FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1
+            AND item_ref LIKE 'restore-%' ORDER BY ordinal`, [outerId])).rows.map(row => row.item_ref);
+        expect(bindings.filter(ref => ref.startsWith('restore-qualification:'))).toHaveLength(1);
+        expect(bindings.filter(ref => ref.startsWith('restore-release:'))).toEqual([]);
         await expectBothHoldsClosed(candidate);
         const graphRelease = await readRestoredGraphReleaseExpectation(
           candidate.candidateGraph.fuseki, candidate.candidateGraph.lineage, third.coverage);
@@ -997,6 +1002,27 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     expect(await credentials(offAccount, operator.id)).toMatchObject({ users: '1' });
     expect(await exact(offContent, payload)).toMatchObject({ status: 'erased' });
     expect(await exact(offContent, later)).toMatchObject({ status: 'erased' });
+    expect(await exact(offContent, staleTarget)).toMatchObject({ status: 'erased' });
+    expect((await offContent.query<{ pin_active: boolean; status: string }>(
+      'SELECT pin_active, status FROM content.publication_preparation WHERE operation_id = $1',
+      [laterPreparation])).rows[0]).toEqual({ pin_active: true, status: 'active' });
+    expect((await offContent.query<{ erasure_id: string; erasure_epoch: string;
+      graph_receipt: string; graph_data_epoch: string; graph_sequence: string }>(`SELECT
+        erasure_id::text AS erasure_id, erasure_epoch::text AS erasure_epoch,
+        graph_receipt, graph_data_epoch, graph_sequence::text AS graph_sequence
+      FROM content.publication_erasure_supersession WHERE operation_id = $1`,
+    [laterPreparation])).rows).toEqual([{ erasure_id: pinnedErasure.erasureId,
+      erasure_epoch: pinnedErasure.erasureEpoch, graph_receipt: pinnedErasure.nativeProof.receipt,
+      graph_data_epoch: pinnedErasure.nativeProof.dataEpoch,
+      graph_sequence: pinnedErasure.nativeProof.sequence }]);
+    expect((await offContent.query<{ revision_id: string; erasure_id: string;
+      erasure_epoch: string }>(`SELECT revision_id::text AS revision_id, erasure_id::text AS erasure_id,
+        erasure_epoch::text AS erasure_epoch FROM content.revision_erasure
+      WHERE revision_id = ANY($1::uuid[]) ORDER BY revision_id`, [[later, staleTarget]])).rows)
+      .toEqual([{ revision_id: later, erasure_id: pinnedErasure.erasureId,
+        erasure_epoch: pinnedErasure.erasureEpoch }, { revision_id: staleTarget,
+        erasure_id: staleErasure.erasureId, erasure_epoch: staleErasure.erasureEpoch }]
+        .sort((left, right) => left.revision_id.localeCompare(right.revision_id)));
     expect(await exact(offContent, unrelated)).toMatchObject({ status: 'available',
       serializedJson: JSON.stringify({ body: 'unrelated public text' }) });
     expect((await offAccess.query<{ open: boolean }>(
@@ -1006,6 +1032,15 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       targets: [expect.objectContaining({ owner: 'content', kind: 'content_revision', ref: payload,
         completionState: 'completed', completionEvidenceRef: expect.stringMatching(/^[a-f0-9]{64}$/) })] });
     expect(await readErasure(offRelay, accountErasureId)).toMatchObject({ suppression: 'suppressed' });
+    for (const [entry, revisionId] of [[pinnedErasure, later], [staleErasure, staleTarget]] as const) {
+      const archivedErasure = await readErasure(offRelay, entry.erasureId);
+      expect(archivedErasure).toMatchObject({ erasureId: entry.erasureId,
+        erasureEpoch: entry.erasureEpoch, stage: 'inventory_complete',
+        suppression: 'suppressed', destruction: 'retained',
+        targets: [expect.objectContaining({ ordinal: 1, owner: 'content',
+          kind: 'content_revision', ref: revisionId })] });
+      expect(archivedErasure).toEqual(await readErasure(relay, entry.erasureId));
+    }
 
     // Retire the three historical physical backup directories only after the
     // sanitized archive has been restored and probed. The evidence digest
