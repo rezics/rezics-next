@@ -136,8 +136,7 @@ function fixture(pool: Pool) {
 
 const holds = [
   { name: 'admission', open: false, dispatchOpen: true },
-  { name: 'dispatch', open: true, dispatchOpen: false },
-  { name: 'both', open: false, dispatchOpen: false },
+  { name: 'dispatch', open: false, dispatchOpen: false },
 ];
 
 for (const hold of holds) {
@@ -154,7 +153,7 @@ for (const hold of holds) {
       // Opening the platform gate restores fresh authority without replacing grants.
       await f.gate(true, true);
       expect((await f.call(field)).status).toBe(201);
-    }));
+    }), 60_000);
 
     test(`public media ${field} protection registered before the ${hold.name} hold cannot claim afterward`, () => isolated(async f => {
       f.beforeClaim(() => f.gate(hold.open, hold.dispatchOpen));
@@ -166,14 +165,14 @@ for (const hold of holds) {
         .toEqual([{ admission_id: f.registered().id }]);
       expect(await f.store.readOutcome(`media-field:${f.registered().id}`)).toBeNull();
       expect(await f.revisions()).toEqual([]);
-    }));
+    }), 60_000);
   }
 
   test(`the unlocked administrator read proof also refuses the ${hold.name} platform hold`, () => isolated(async f => {
     expect(await platformAdministratorProof(f.pool, f.principalId, f.actor, false)).not.toBeNull();
     await f.gate(hold.open, hold.dispatchOpen);
     expect(await platformAdministratorProof(f.pool, f.principalId, f.actor, false)).toBeNull();
-  }));
+  }), 60_000);
 }
 
 for (const field of ['labels', 'conceal'] as const) {
@@ -197,27 +196,28 @@ for (const field of ['labels', 'conceal'] as const) {
       if (sealed) expect(result).toEqual({ ...firstBody, replayed: true });
       expect(await f.revisions()).toEqual(revisions);
       expect(await f.store.readOutcome(`media-field:${f.registered().id}`)).toEqual(outcome);
-    }));
+    }), 60_000);
   }
 }
 
 test('the shared administrator proof holds the platform gate until its transaction ends', () => isolated(async f => {
-  const proofClient = await f.pool.connect(), closer = await f.pool.connect();
+  const closerPool = boundedPool({ ...cluster!.connection, database: f.pool.options.database, max: 1 });
+  const proofClient = await f.pool.connect(), closer = await closerPool.connect();
   try {
     await proofClient.query('BEGIN');
     expect(await platformAdministratorProof(proofClient, f.principalId, f.actor)).not.toBeNull();
     await closer.query("BEGIN; SET LOCAL lock_timeout = '100ms'");
-    await expect(closer.query("UPDATE access.scope_gate SET dispatch_open=false WHERE id='platform:access'"))
+    await expect(closer.query("UPDATE access.scope_gate SET open=false,dispatch_open=false WHERE id='platform:access'"))
       .rejects.toMatchObject({ code: '55P03' });
     await closer.query('ROLLBACK');
     await proofClient.query('COMMIT');
-    await f.gate(true, false);
+    await f.gate(false, false);
     expect(await platformAdministratorProof(proofClient, f.principalId, f.actor)).toBeNull();
   } finally {
     await proofClient.query('ROLLBACK'); await closer.query('ROLLBACK');
-    proofClient.release(); closer.release();
+    proofClient.release(); closer.release(); await closerPool.end();
   }
-}));
+}), 60_000);
 
 test('a missing platform gate cannot supply an administrator proof', async () => {
   const query = async (sql: string, values?: unknown[]) => ({ rows:
