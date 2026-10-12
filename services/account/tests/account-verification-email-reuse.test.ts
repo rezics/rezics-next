@@ -28,7 +28,7 @@ for (const initialOwner of ['original', 'absent'] as const) {
       const resumed = Promise.withResolvers<void>();
       resume = () => resumed.resolve();
       context.options.hooks!.before = createAuthMiddleware(async ctx => {
-        const result = await before(ctx);
+        const result = await before({ ...ctx, returnHeaders: false });
         if (ctx.path === '/verify-email' && ctx.query?.token === new URL(retained).searchParams.get('token')) {
           paused.resolve();
           await resumed.promise;
