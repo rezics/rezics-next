@@ -96,7 +96,12 @@ async function prepare(pool: Pool) {
   const staff = await upload(store, secondOwner, await coverInput(pool, secondOwner));
   await store.moderateOriginal('unrelated-staff-restriction', staff.representation,
     (await store.readAsset(staff.asset))!.state, true);
-  return { firstOwner, secondOwner, cover, a, b, ordinary, different, staff };
+  // Both reservations precede any restriction. Clone them with the baseline;
+  // settlement still runs after the restriction in the late-upload case.
+  const pendingCover = await store.reserveUpload(admission(firstOwner, cover), cover);
+  const userInput = ordinaryInput();
+  const pendingUser = await store.reserveUpload(admission(firstOwner, userInput), userInput);
+  return { firstOwner, secondOwner, cover, a, b, ordinary, different, staff, pendingCover, pendingUser };
 }
 
 beforeAll(async () => {
@@ -118,11 +123,20 @@ afterAll(async () => {
 });
 
 async function isolated(run: (f: Awaited<ReturnType<typeof fixture>>) => Promise<void>) {
+  const started = performance.now();
   const name = `cover_copy_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE DATABASE ${name} TEMPLATE imported_cover_copy_template`);
+  const cloned = performance.now();
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
   try { await run(fixture(pool)); }
-  finally { await pool.end(); await admin.query(`DROP DATABASE ${name}`); }
+  finally {
+    const exercised = performance.now();
+    await pool.end(); await admin.query(`DROP DATABASE ${name}`);
+    console.info('Imported-cover owner fixture timing (ms)', {
+      clone: Math.round(cloned - started), exercise: Math.round(exercised - cloned),
+      cleanup: Math.round(performance.now() - exercised),
+    });
+  }
 }
 
 function fixture(pool: Pool) {
@@ -183,9 +197,8 @@ async function histories(pool: Pool, assets: readonly Asset[]) {
 test('copyright restricts matching imported covers across owners while user bytes and other covers remain deliverable', async () => {
   await isolated(async f => {
     const unchanged = await f.store.readAsset(f.ordinary.asset);
-    const pendingCover = await f.store.reserveUpload(admission(f.firstOwner, f.cover), f.cover);
+    const { pendingCover, pendingUser } = f;
     const ordinary = ordinaryInput();
-    const pendingUser = await f.store.reserveUpload(admission(f.firstOwner, ordinary), ordinary);
     for (const asset of [f.a, f.b, f.ordinary, f.different]) expect((await f.bytes(asset)).status).toBe(200);
     const restriction = await restrict(f);
     expect(restriction.plan.suppression).toMatchObject({ scope: 'imported-cover' });
