@@ -4,6 +4,8 @@ The [Recipe structure profile](../../model/definitions/recipe-structure-v1.ts),
 [exact quantity operations](../../services/main/src/modules/recipe/quantity.ts)
 and [acceptance cases](../../scripts/qa/cases/recipes.ts) own ingredient
 occurrences, ordered steps, measures, source residuals and independent support.
+The [recipe exchange contract](recipe-exchange.md) describes file fields,
+hierarchy, inert units and typed synchronous import capacity outcomes.
 
 Allergen and diet claims still need source or evidence qualified classification;
 a classification statement cannot turn an uncertain claim into a guarantee.

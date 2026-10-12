@@ -1,4 +1,5 @@
-import { importRecipe, MAX_RECIPE_IMPORT_BYTES, type RecipeImport } from './importer.ts';
+import { importRecipe, MAX_RECIPE_IMPORT_BYTES, RecipeNotImportable, type RecipeImport } from './importer.ts';
+import { isRecipeUnitIdentifier } from './export.ts';
 import { MAX_RETAINED_SOURCE_BYTES } from '../source/intake.ts';
 
 export const MAX_RECIPE_FILE_BYTES = MAX_RETAINED_SOURCE_BYTES;
@@ -10,7 +11,11 @@ const GRAPH_KEYWORDS = new Set(['@graph', '@id', '@reverse', '@included', '@list
 const IMPORTABLE_FIELDS = new Set(['inLanguage', 'recipeIngredient', 'recipeInstructions']);
 
 export class RecipeFileInvalid extends Error {}
-export class RecipeFileTooLarge extends Error {}
+export class RecipeFileTooLarge extends RecipeNotImportable {
+  constructor(measured: number, allowed = MAX_RECIPE_FILE_BYTES) {
+    super({ status: 'not-importable', code: 'recipe_not_importable', limit: 'bytes', measured, allowed });
+  }
+}
 
 function invalid(message: string): never {
   throw new RecipeFileInvalid(message);
@@ -28,18 +33,23 @@ function checkMediaType(value: string | null): void {
   }
 }
 
+type InspectionLocation = 'other' | 'ingredients' | 'ingredient' | 'unit-code';
+
 function inspect(value: unknown, root: boolean, context: string | undefined,
-  state: { recipes: number; values: number }, depth = 0): void {
+  state: { recipes: number; values: number }, depth = 0,
+  location: InspectionLocation = 'other'): void {
   if (depth > 32 || ++state.values > 8192) invalid('Recipe file exceeds the supported JSON structure bound');
   if (typeof value === 'string') {
     if (HTML_MARKUP.test(value) || SCRIPT_URL.test(value)) invalid('HTML and scripts are not recipe files');
-    if (REMOTE_URL.test(value) && !(root && value === SCHEMA_CONTEXT && context === value)) {
+    if (REMOTE_URL.test(value) && !(root && value === SCHEMA_CONTEXT && context === value)
+      && !(location === 'unit-code' && isRecipeUnitIdentifier(value))) {
       invalid('Recipe file cannot contain remote URLs');
     }
     return;
   }
   if (Array.isArray(value)) {
-    for (const child of value) inspect(child, false, context, state, depth + 1);
+    for (const child of value) inspect(child, false, context, state, depth + 1,
+      location === 'ingredients' ? 'ingredient' : 'other');
     return;
   }
   if (!value || typeof value !== 'object') return;
@@ -68,7 +78,12 @@ function inspect(value: unknown, root: boolean, context: string | undefined,
         invalid('Recipe file cannot contain a second Recipe');
       }
     }
-    inspect(child, false, context, state, depth + 1);
+    // Only the two ingredient-list forms consumed by the importer admit inert unit identifiers.
+    const childLocation: InspectionLocation = root && key === 'recipeIngredient'
+      || location === 'ingredients' && key === 'itemListElement' && Array.isArray(child)
+      ? 'ingredients' : location === 'ingredient' && key === 'unitCode' && typeof child === 'string'
+        ? 'unit-code' : 'other';
+    inspect(child, false, context, state, depth + 1, childLocation);
   }
 }
 
@@ -79,7 +94,7 @@ export async function readRecipeFileBytes(request: Request): Promise<Uint8Array>
     if (!/^(?:0|[1-9][0-9]*)$/.test(declared) || !Number.isSafeInteger(Number(declared))) {
       invalid('Recipe file content length is invalid');
     }
-    if (Number(declared) > MAX_RECIPE_FILE_BYTES) throw new RecipeFileTooLarge();
+    if (Number(declared) > MAX_RECIPE_FILE_BYTES) throw new RecipeFileTooLarge(Number(declared));
   }
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
@@ -91,7 +106,7 @@ export async function readRecipeFileBytes(request: Request): Promise<Uint8Array>
       if (done) break;
       if (value.byteLength > MAX_RECIPE_FILE_BYTES - length) {
         void reader.cancel().catch(() => undefined);
-        throw new RecipeFileTooLarge();
+        throw new RecipeFileTooLarge(length + value.byteLength);
       }
       chunks.push(value);
       length += value.byteLength;
@@ -110,7 +125,7 @@ export function parseRecipeFile(bytes: Uint8Array, mediaType: string | null): {
   source: Record<string, unknown>; preview: RecipeImport;
 } {
   if (bytes.byteLength > MAX_RECIPE_FILE_BYTES || bytes.byteLength > MAX_RECIPE_IMPORT_BYTES) {
-    throw new RecipeFileTooLarge();
+    throw new RecipeFileTooLarge(bytes.byteLength, Math.min(MAX_RECIPE_FILE_BYTES, MAX_RECIPE_IMPORT_BYTES));
   }
   checkMediaType(mediaType);
   let document: unknown;
@@ -140,6 +155,7 @@ export function parseRecipeFile(bytes: Uint8Array, mediaType: string | null): {
   let preview: RecipeImport;
   try { preview = importRecipe(source, 'recipe-file-preview'); }
   catch (error) {
+    if (error instanceof RecipeNotImportable) throw error;
     invalid(error instanceof Error ? error.message : 'Recipe content is invalid');
   }
   if (!preview.ingredients.length && !preview.steps.length) {

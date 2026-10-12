@@ -1,6 +1,20 @@
 import type { OccurrenceRecord } from '../structure/format.ts';
+import { NATIVE_ID } from '../structure/graph.ts';
+import { recipeImportability } from './importer.ts';
 
 export const RECIPE_EXPORT_OCCURRENCE_LIMIT = 4096;
+/** Exact inert identifiers supported by recipe file exchange; never fetched. */
+export const NATIVE_RECIPE_UNIT_IRIS: ReadonlySet<string> = new Set([
+  'https://qudt.org/vocab/unit/GM',
+  'https://qudt.org/vocab/unit/KiloGM',
+  'https://qudt.org/vocab/unit/MilliL',
+  'https://qudt.org/vocab/unit/L',
+]);
+
+/** Native definition identities and the finite external registry are inert only in unitCode. */
+export function isRecipeUnitIdentifier(value: string): boolean {
+  return NATIVE_ID.test(value) || NATIVE_RECIPE_UNIT_IRIS.has(value);
+}
 
 export class RecipeExportLimit extends Error {}
 
@@ -25,31 +39,43 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     const line = record.qualifier;
     if (line.parseStatus !== 'parsed') residuals.push({ sourceKey: record.sourceKey ?? null,
       text: line.originalText.value, parseStatus: line.parseStatus, residual: line.residual ?? null });
-    ingredients.push(line.amount && line.amountLexical !== line.originalText.value
-      ? { '@type': 'PropertyValue', name: line.originalText.value,
-      value: line.amountLexical ?? `${line.amount.numerator}/${line.amount.denominator}`,
+    if (line.unit && !isRecipeUnitIdentifier(line.unit)) {
+      throw new RecipeExportLimit('Recipe unit is not registered for file exchange');
+    }
+    ingredients.push(line.amount || line.unit || line.unitText || line.optional
+      || line.originalText.language !== 'en' || line.originalText.value !== line.originalText.value.trim()
+      ? { '@type': 'PropertyValue', text: line.originalText.value,
+      ...(line.amount ? { value: line.amount.denominator === 1 ? String(line.amount.numerator)
+        : `${line.amount.numerator}/${line.amount.denominator}` } : {}),
+      ...(line.amountUpper ? { maxValue: `${line.amountUpper.numerator}/${line.amountUpper.denominator}` } : {}),
+      ...(line.amountLexical ? { amountLexical: line.amountLexical } : {}),
       ...(line.unit ? { unitCode: line.unit } : {}), ...(line.unitText ? { unitText: line.unitText } : {}),
+      ...(line.optional ? { optional: true } : {}), parseStatus: line.parseStatus,
       inLanguage: line.originalText.language } : line.originalText.value);
   }
+  let instructionOccurrences = 0;
   const instructions = (parent: string, depth: number): Array<Record<string, unknown>> => {
     if (depth > 16) throw new RecipeExportLimit('Recipe sections exceed depth 16');
     return (children.get(parent) ?? []).flatMap((record): Record<string, unknown>[] => {
       if (record.role === 'step' && record.qualifier?.type === 'recipe-step') {
+        instructionOccurrences++;
         return [{ '@type': 'HowToStep', text: record.qualifier.instructionText.value,
-          inLanguage: record.qualifier.instructionText.language,
-          ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) }];
+          inLanguage: record.qualifier.instructionText.language }];
       }
-      if (record.role === 'group') return [{ '@type': 'HowToSection',
-        name: record.labels[0]?.value ?? 'Untitled section',
-        ...(record.labels[0] ? { inLanguage: record.labels[0].language } : {}),
-        itemListElement: instructions(record.occurrence, depth + 1),
-        ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) }];
+      if (record.role === 'group') {
+        instructionOccurrences++;
+        return [{ '@type': 'HowToSection', name: record.labels[0]?.value ?? 'Untitled section',
+          ...(record.labels[0] ? { inLanguage: record.labels[0].language } : {}),
+          itemListElement: instructions(record.occurrence, depth + 1) }];
+      }
       return [];
     });
   };
   const recipe = { '@context': 'https://schema.org', '@type': 'Recipe',
     recipeIngredient: ingredients, recipeInstructions: instructions(structure, 0) };
-  const result = { recipe, residuals, sourceObservations: [...sourceObservations] };
+  const occurrences = ingredients.length + instructionOccurrences;
+  const importability = recipeImportability(occurrences, Buffer.byteLength(JSON.stringify(recipe), 'utf8'));
+  const result = { recipe, residuals, sourceObservations: [...sourceObservations], importability };
   if (Buffer.byteLength(JSON.stringify(result)) > 1_048_576) {
     throw new RecipeExportLimit('Recipe export exceeds 1 MiB');
   }

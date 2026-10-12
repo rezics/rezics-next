@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { MAX_RECIPE_FILE_BYTES, parseRecipeFile, readRecipeFileBytes,
   RecipeFileInvalid, RecipeFileTooLarge } from '../src/modules/recipe/file-intake.ts';
+import { NATIVE_RECIPE_UNIT_IRIS } from '../src/modules/recipe/export.ts';
+import { MAX_RECIPE_IMPORT_BYTES, RecipeNotImportable } from '../src/modules/recipe/importer.ts';
 
 const asBytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const recipe = { '@type': 'Recipe', recipeIngredient: ['1 1/2 cups cream'],
@@ -51,4 +53,156 @@ test('file intake accepts exactly 256 KiB and rejects the next byte before parsi
   const request = new Request('http://main.local/upload', { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: new Blob([tooLarge]) });
   await expect(readRecipeFileBytes(request)).rejects.toBeInstanceOf(RecipeFileTooLarge);
+});
+
+test('file intake admits each native unit identifier only in consumed ingredient rows', () => {
+  expect(NATIVE_RECIPE_UNIT_IRIS.size).toBeGreaterThan(0);
+  for (const unitCode of NATIVE_RECIPE_UNIT_IRIS) {
+    const ingredient = { '@type': 'PropertyValue', text: '200 g butter', name: 'butter',
+      value: '200', unitText: 'g', unitCode };
+    for (const recipeIngredient of [[ingredient], { itemListElement: [ingredient] }]) {
+      const parsed = parseRecipeFile(asBytes({ ...recipe, '@context': 'https://schema.org',
+        recipeIngredient }), 'application/ld+json');
+      expect(parsed.preview.ingredients[0]?.qualifier.unit).toBe(unitCode);
+      expect(parsed.preview.ingredients[0]?.qualifier.originalText.value).toBe('200 g butter');
+    }
+  }
+});
+
+test('file intake rejects unknown or altered unit identifiers and identifiers outside their field', () => {
+  for (const unitCode of NATIVE_RECIPE_UNIT_IRIS) {
+    const ingredient = { text: '200 g butter', value: '200', unitCode };
+    const documents = [
+      { ...recipe, unitCode },
+      { ...recipe, description: unitCode },
+      { ...recipe, recipeInstructions: [{ text: 'Stir gently.', unitCode }] },
+      { ...recipe, recipeIngredient: [unitCode] },
+      { ...recipe, recipeIngredient: [{ ...ingredient, name: unitCode }] },
+      { ...recipe, recipeIngredient: [{ ...ingredient, text: unitCode }] },
+      { ...recipe, recipeIngredient: [{ ...ingredient, unitText: unitCode }] },
+      { ...recipe, recipeIngredient: [{ text: 'butter', metadata: { unitCode } }] },
+      { ...recipe, recipeIngredient: [{ text: 'butter', unitCode: [unitCode] }] },
+      { ...recipe, recipeIngredient: [{ text: 'butter', unitCode: { value: unitCode } }] },
+      { ...recipe, recipeIngredient: [[ingredient]] },
+      { ...recipe, recipeIngredient: ingredient },
+      { ...recipe, recipeIngredient: { itemListElement: ['butter'], unitCode } },
+      { ...recipe, recipeIngredient: { itemListElement: [[ingredient]] } },
+      { ...recipe, metadata: { recipeIngredient: [ingredient] } },
+    ];
+    for (const document of documents) {
+      expect(() => parseRecipeFile(asBytes(document), 'application/json')).toThrow(RecipeFileInvalid);
+    }
+    for (const altered of [`${unitCode}?download=1`, `${unitCode}#term`, `${unitCode}/`,
+      ` ${unitCode}`, `${unitCode} `, unitCode.replace('https:', 'http:')]) {
+      expect(() => parseRecipeFile(asBytes({ ...recipe,
+        recipeIngredient: [{ ...ingredient, unitCode: altered }] }), 'application/json'))
+        .toThrow(RecipeFileInvalid);
+    }
+  }
+  for (const unitCode of ['https://qudt.org/vocab/unit/UnknownUnit', 'https://schema.org',
+    'https://example.com/unit/GM']) {
+    expect(() => parseRecipeFile(asBytes({ ...recipe,
+      recipeIngredient: [{ text: '200 g butter', unitCode }] }), 'application/json'))
+      .toThrow(RecipeFileInvalid);
+  }
+});
+
+test('hostile strings remain invalid across recipe fields and nested shapes', () => {
+  const hostileStrings = ['<b>butter</b>', '<SCRIPT>alert(1)</SCRIPT>', 'javascript:alert(1)',
+    'vbscript:run()', 'data:text/plain,hello', 'https://example.com/recipe', '//example.com/recipe',
+    'www.example.com/recipe', 'https://schema.org'];
+  for (const hostile of hostileStrings) {
+    const documents = [
+      { ...recipe, name: hostile },
+      { ...recipe, recipeIngredient: [hostile] },
+      { ...recipe, recipeIngredient: [{ text: 'butter', unitCode: hostile }] },
+      { ...recipe, recipeIngredient: { itemListElement: [{ text: hostile }] } },
+      { ...recipe, recipeInstructions: [{ '@type': 'HowToStep', text: hostile }] },
+      { ...recipe, metadata: [{ nested: { description: hostile } }] },
+    ];
+    for (const document of documents) {
+      expect(() => parseRecipeFile(asBytes(document), 'application/json')).toThrow(RecipeFileInvalid);
+    }
+  }
+});
+
+test('hostile graph keywords, scripts and structure bounds remain invalid', () => {
+  const hostileKeys = ['@graph', '@id', '@reverse', '@included', '@list', '@value', '@unknown',
+    '@context', 'script', 'ScRiPtS', 'https://example.com/property', '//example.com/property'];
+  for (const key of hostileKeys) {
+    for (const metadata of [{ [key]: 'blocked' }, [{ nested: { [key]: 'blocked' } }]]) {
+      expect(() => parseRecipeFile(asBytes({ ...recipe, metadata }), 'application/json'))
+        .toThrow(RecipeFileInvalid);
+    }
+  }
+  let nested: unknown = 'safe text';
+  for (let depth = 0; depth < 33; depth++) nested = { nested };
+  for (const metadata of [nested, Array.from({ length: 8193 }, () => 'safe text')]) {
+    expect(() => parseRecipeFile(asBytes({ ...recipe, metadata }), 'application/json'))
+      .toThrow(RecipeFileInvalid);
+  }
+  expect(() => parseRecipeFile(asBytes({ ...recipe, '@context': 'https://schema.org/' }),
+    'application/ld+json')).toThrow(RecipeFileInvalid);
+});
+
+test('file intake retains typed occurrence outcomes from normalization', () => {
+  const document = { '@type': 'Recipe', recipeIngredient: Array.from({ length: 129 }, () => 'salt') };
+  let error: unknown;
+  try { parseRecipeFile(asBytes(document), 'application/json'); }
+  catch (caught) { error = caught; }
+  expect(error).toBeInstanceOf(RecipeNotImportable);
+  expect(error).not.toBeInstanceOf(RecipeFileInvalid);
+  expect(error).toMatchObject({ code: 'recipe_not_importable', limit: 'occurrences',
+    measured: 129, allowed: 128 });
+});
+
+test('byte limit outcomes carry the exact parsed, declared and cumulative stream sizes', async () => {
+  const allowed = Math.min(MAX_RECIPE_FILE_BYTES, MAX_RECIPE_IMPORT_BYTES);
+  const bytes = new Uint8Array(allowed + 1);
+  let parsedError: unknown;
+  try { parseRecipeFile(bytes, 'application/json'); }
+  catch (caught) { parsedError = caught; }
+  expect(parsedError).toBeInstanceOf(RecipeFileTooLarge);
+  expect(parsedError).toBeInstanceOf(RecipeNotImportable);
+  expect(parsedError).toMatchObject({ code: 'recipe_not_importable', limit: 'bytes',
+    measured: bytes.byteLength, allowed });
+
+  const declaredSize = MAX_RECIPE_FILE_BYTES + 27;
+  const declared = new Request('http://main.local/upload', { method: 'POST',
+    headers: { 'content-length': String(declaredSize) }, body: 'salt' });
+  await expect(readRecipeFileBytes(declared)).rejects.toMatchObject({
+    code: 'recipe_not_importable', limit: 'bytes', measured: declaredSize,
+    allowed: MAX_RECIPE_FILE_BYTES });
+
+  let canceled = false;
+  const chunks = [new Uint8Array(MAX_RECIPE_FILE_BYTES - 7), new Uint8Array(19)];
+  const streamed = new Request('http://main.local/upload', { method: 'POST',
+    body: new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk) controller.enqueue(chunk);
+      },
+      cancel() { canceled = true; },
+    }) });
+  await expect(readRecipeFileBytes(streamed)).rejects.toMatchObject({
+    code: 'recipe_not_importable', limit: 'bytes', measured: MAX_RECIPE_FILE_BYTES + 12,
+    allowed: MAX_RECIPE_FILE_BYTES });
+  expect(canceled).toBe(true);
+});
+
+test('native unit definition identities remain confined to ingredient unitCode', () => {
+  const unitCode = 'https://rezics.com/id/00000000-0000-4000-8000-000000000090';
+  const ingredient = { text: '200 g butter', value: '200', unitCode };
+  expect(parseRecipeFile(asBytes({ ...recipe, recipeIngredient: [ingredient] }), 'application/json')
+    .preview.ingredients[0]?.qualifier.unit).toBe(unitCode);
+  for (const altered of [`${unitCode}?a=1`, `${unitCode}#unit`, `${unitCode}/`,
+    unitCode.replace('rezics.com', 'rezics.com.attacker.example')]) {
+    expect(() => parseRecipeFile(asBytes({ ...recipe,
+      recipeIngredient: [{ ...ingredient, unitCode: altered }] }), 'application/json'))
+      .toThrow(RecipeFileInvalid);
+  }
+  for (const document of [{ ...recipe, recipeIngredient: [{ text: unitCode }] },
+    { ...recipe, description: unitCode }, { ...recipe, recipeInstructions: [{ text: 'Stir.', unitCode }] }]) {
+    expect(() => parseRecipeFile(asBytes(document), 'application/json')).toThrow(RecipeFileInvalid);
+  }
 });

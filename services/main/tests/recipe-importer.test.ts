@@ -56,3 +56,18 @@ test('fraction imports retain source support pointers, language, unit references
     sourcePointer: '/recipeIngredient/0', slot: 'structure-occurrence-v1#qualifier.originalText.value',
   }]);
 });
+
+test('complete ingredient names never receive a duplicated quantity or unit', () => {
+  for (const [name, value, unitText] of [
+    ['200 g butter', '200', 'g'], ['200g butter', 200, 'g'],
+    ['1.5 cups cream', 1.5, 'cups'], ['½–¾ cup flour', '½–¾', 'cup'],
+  ] as const) {
+    const imported = importRecipe({ recipeIngredient: [{ name, value, unitText }] }, 'recipe');
+    expect(imported.ingredients[0]?.qualifier.originalText.value).toBe(name);
+  }
+  const foreign = importRecipe({ recipeIngredient: [{ name: 'butter', value: '200', unitText: 'g' }] }, 'recipe');
+  expect(foreign.ingredients[0]?.qualifier.originalText.value).toBe('200 g butter');
+  const explicit = importRecipe({ recipeIngredient: [{ text: '  200 g butter\t',
+    name: 'butter', value: '200', unitText: 'g' }] }, 'recipe');
+  expect(explicit.ingredients[0]?.qualifier.originalText.value).toBe('  200 g butter\t');
+});

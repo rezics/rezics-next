@@ -19,3 +19,16 @@ test('recipe export includes 4,096 occurrences and rejects the next one', () => 
   expect(exportRecipe(records, structure).recipe.recipeIngredient).toHaveLength(RECIPE_EXPORT_OCCURRENCE_LIMIT);
   expect(() => exportRecipe([...records, ingredient(records.length)], structure)).toThrow(RecipeExportLimit);
 });
+
+test('recipe export keeps original text separate from exact quantity and its lexical wording', () => {
+  const record = ingredient(0);
+  record.qualifier = { type: 'ingredient-line', originalText: { value: '200 g butter', language: 'en' },
+    amount: { numerator: 200, denominator: 1 }, amountLexical: '200 g butter',
+    unit: 'https://qudt.org/vocab/unit/GM', unitText: 'g', optional: true,
+    scaling: 'linear', substituteFor: [], parseStatus: 'parsed' };
+  expect(exportRecipe([record], structure).recipe.recipeIngredient).toEqual([{
+    '@type': 'PropertyValue', text: '200 g butter', value: '200', amountLexical: '200 g butter',
+    unitCode: 'https://qudt.org/vocab/unit/GM', unitText: 'g', optional: true,
+    parseStatus: 'parsed', inLanguage: 'en',
+  }]);
+});
