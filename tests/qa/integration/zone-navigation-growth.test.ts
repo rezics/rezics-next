@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
-import { cpSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { trace } from '@opentelemetry/api';
 import { flushTelemetryTraces, shutdownTelemetry, startTelemetry }
   from '../../../packages/observability/src/runtime.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -73,6 +74,48 @@ function measuredCounters(profile: ScaledProfile) {
     serverLatencyMs: profile.serverLatencyMs,
     totalLatencyMs: profile.totalLatencyMs,
   };
+}
+
+function censusStages(profile: WorkProfile) {
+  const stages = ['zone-census.zone-admission', 'zone-census.mounted-target-admission'] as const;
+  const byId = new Map(profile.spans.map(span => [span.spanId, span]));
+  const stageFor = (spanId: string): string => {
+    let span = byId.get(spanId);
+    while (span) {
+      if (stages.some(stage => stage === span!.name)) return span.name;
+      span = byId.get(span.parentSpanId);
+    }
+    return 'zone-census.setup-and-traversal';
+  };
+  const coveredMs = (intervals: Array<[number, number]>) => {
+    let total = 0, end = -Infinity;
+    for (const [start, stop] of intervals.sort((left, right) => left[0] - right[0])) {
+      total += Math.max(0, stop - Math.max(start, end));
+      end = Math.max(end, stop);
+    }
+    return total;
+  };
+  const admissionSpans = profile.spans.filter(span => stages.some(stage => stage === span.name));
+  return [...stages, 'zone-census.setup-and-traversal'].map(stage => {
+    const spans = admissionSpans.filter(span => span.name === stage);
+    const fuseki = profile.fusekiCalls.filter(call => stageFor(call.spanId) === stage);
+    const sql = profile.postgres.filter(call => stageFor(call.spanId) === stage);
+    return {
+      stage,
+      invocations: spans.length,
+      serverMs: stage === 'zone-census.setup-and-traversal'
+        ? Math.max(0, profile.serverLatencyMs - coveredMs(admissionSpans.map(span => [span.startMs, span.endMs])))
+        : coveredMs(spans.map(span => [span.startMs, span.endMs])),
+      postgresStatements: sql.length,
+      postgresMs: sql.reduce((total, call) => total + call.durationMs, 0),
+      fusekiRequests: fuseki.length,
+      fusekiMs: fuseki.reduce((total, call) => total + call.durationMs, 0),
+      fusekiSentBytes: fuseki.some(call => call.sentBytes === null) ? null
+        : fuseki.reduce((total, call) => total + call.sentBytes!, 0),
+      fusekiReceivedBytes: fuseki.some(call => call.receivedBytes === null) ? null
+        : fuseki.reduce((total, call) => total + call.receivedBytes!, 0),
+    };
+  });
 }
 
 async function openRestoredStack(input: CorpusRestoreSmokeInput): Promise<MediaStack> {
@@ -180,7 +223,47 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
       try {
         const member = await stack.member(seedAuthorName, { stable: true, verified: true });
         const api = seedApi(stack, member.token);
-        expect(await seedCensus(api, cut)).toEqual(cut.manifest.dimensions);
+        const censusApi: typeof api = {
+          ...api,
+          async read<T>(path: `/v1/${string}`, signal?: AbortSignal): Promise<T> {
+            if (new URL(path, 'http://main.local').pathname !== '/v1/zones/' + short(cut.population.zone.id))
+              return api.read<T>(path, signal);
+            // Stage spans annotate the existing read and meter, without altering
+            // admission decisions, page limits, deadlines or the seed census.
+            const original = stack.access.canReadSemanticResource;
+            const mountedTargets = new Set<string>();
+            stack.access.canReadSemanticResource = async (...args) => {
+              const stage = args[2] === cut.population.zone.id
+                ? 'zone-census.zone-admission' : 'zone-census.mounted-target-admission';
+              if (stage === 'zone-census.mounted-target-admission') mountedTargets.add(args[2]);
+              return trace.getTracer('zone-census').startActiveSpan(stage, async span => {
+                try { return await original.apply(stack.access, args); }
+                finally { span.end(); }
+              });
+            };
+            try {
+              sink.clear();
+              const { result, profile } = await profileRequest(sink, async headers => {
+                headers.set('authorization', 'Bearer ' + member.token);
+                const response = await stack.main.handle(new Request('http://main.local' + path, { headers, signal }));
+                return { status: response.status, body: await response.text() };
+              }, { service: 'main', peers: { fuseki: input.apps.FUSEKI_URL! }, flush: flushTelemetryTraces });
+              const evidence = { scale: cut.manifest.scale, dimensions: cut.manifest.dimensions,
+                path, distinctMountedTargets: mountedTargets.size, stages: censusStages(profile), profile };
+              const artifact = join(root, '.temp', 'zone-navigation-census-' + qaRunId + '-' + cut.manifest.scale + '.json');
+              writeFileSync(artifact, JSON.stringify(evidence, null, 2) + '\n');
+              console.log('Zone census read counters', JSON.stringify({ scale: evidence.scale, artifact,
+                path, distinctMountedTargets: mountedTargets.size, stages: evidence.stages,
+                counters: measuredCounters({ ...profile, unrelatedWorks: cut.manifest.dimensions.unrelatedWorks }) }));
+              if (result.status !== 200)
+                throw new Error('Corpus verification returned HTTP ' + result.status + ' for ' + path + ': ' + result.body);
+              return JSON.parse(result.body) as T;
+            } finally {
+              stack.access.canReadSemanticResource = original;
+            }
+          },
+        };
+        expect(await seedCensus(censusApi, cut)).toEqual(cut.manifest.dimensions);
         smokeCopies.set(input.target, { stack, fusekiUrl: input.apps.FUSEKI_URL! });
         return async () => {
           smokeCopies.delete(input.target);
