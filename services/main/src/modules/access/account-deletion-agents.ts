@@ -74,7 +74,7 @@ export async function collectAccountDeletionAgents(client: PoolClient, principal
  * ending parent reaches it, with indexed reads of its bounded incoming edges. */
 async function classifyAccountDeletionStep(client: PoolClient, principal: string, progress: DeletionProgress):
   Promise<DeletionProgress> {
-  const result = (await client.query<DeletionProgress & { allowed: boolean; fenced: boolean }>(`
+  const result = (await client.query<DeletionProgress & { fenced: boolean }>(`
     /* account_deletion_classification_step */
     WITH state AS MATERIALIZED (
       SELECT * FROM access.account_deletion_progress WHERE operation_id = $2
@@ -144,17 +144,12 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
       RETURNING p.operation_id, p.classification_done, p.consent, p.orphan_count, p.steps, p.needs_boundary_check
     ) SELECT a.*, (SELECT count(*)::integer FROM effects) AS examined,
       (SELECT coalesce(sum(controller_rows), 0)::integer FROM effects) AS controller_rows,
-      NOT EXISTS (SELECT 1 FROM effects e WHERE e.remaining > 0
-        AND e.remaining < coalesce((SELECT min_controllers FROM access.agent_control
-          WHERE subject_id = e.subject_id), 1)
-        AND NOT EXISTS (SELECT 1 FROM access.account_deletion_orphan_agent WHERE agent_id = e.subject_id)) AS allowed,
       EXISTS (SELECT 1 FROM effects e
         JOIN access.account_deletion_progress_agent a ON a.agent_id = e.subject_id
         JOIN access.account_deletion_progress p ON p.operation_id = a.operation_id
         WHERE e.remaining = 0 AND a.operation_id <> $2 AND NOT p.completed) AS fenced
     FROM advanced a`, [principal, progress.operation_id, ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep])).rows[0]!;
   if (result.fenced) throw new ControlUnavailable('Account deletion control inventory is fenced');
-  if (!result.allowed) throw new ControlConflict('change would break Agent control continuity');
   return result;
 }
 

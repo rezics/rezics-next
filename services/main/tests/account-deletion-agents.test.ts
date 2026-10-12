@@ -653,3 +653,43 @@ test('deletion without owned Agents adds at most one bounded read to the previou
     }
   } finally { await measured.end(); }
 });
+
+async function floorTwo(owner: Principal, subject: string) {
+  const guardian = await principal();
+  const recoverySubject = await provision(guardian, 'person');
+  await control.configure(owner.verified, receipt(), {
+    subjectId: subject, recoverySubject, recoveryApprovals: 1,
+    recoveryDelaySeconds: 0, minControllers: 2, maxControllers: 3,
+  });
+}
+
+test('owned Agent consent refusal takes precedence over a surviving controller floor', async () => {
+  const owner = await principal();
+  const other = await principal();
+  const organization = await provision(owner, 'organization', 'Consent first');
+  const person = await provision(owner, 'person');
+  await addFixtureController(other, person);
+  await floorTwo(owner, person);
+  let refusal: unknown;
+  try { await deletion(owner); } catch (error) { refusal = error; }
+  expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
+  expect(refusal).toMatchObject({ agents: [{ id: organization, kind: 'organization', displayName: 'Consent first' }],
+    hasMore: false, moreCount: 0 });
+  expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+});
+
+test('Persons ending together satisfy closure before floors in the same and later root pages', async () => {
+  for (const count of [2, 18]) {
+    const owner = await principal();
+    const persons: string[] = [];
+    for (let index = 0; index < count; index++) persons.push(await provision(owner, 'person'));
+    const roots = (await pool.query<{ subject_id: string }>(`SELECT subject_id FROM access.representation
+      WHERE principal_id = $1 AND action = 'agent.control' AND active ORDER BY id`, [owner.id])).rows;
+    const child = roots[0]!.subject_id;
+    const parent = roots.at(-1)!.subject_id;
+    await grantFixtureControllerEdge(pool, { principalId: owner.id, representative: parent, represented: child });
+    await floorTwo(owner, child);
+    expect(await deletion(owner)).toMatchObject({ enforcementEpoch: '1' });
+    for (const person of persons) expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  }
+}, 60_000);
