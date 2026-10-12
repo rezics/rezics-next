@@ -57,6 +57,8 @@ export interface Task extends Omit<Brief, 'worktree'> {
   historyGate?: boolean;
   /** Normalized migration paths retain the original claim when a failed unit gate is retried. */
   migrationOrigins?: Record<string, string>;
+  /** Files another open task claims that its Goal's manager (or the program) lent to this task (`loan`). */
+  loans?: string[];
   /** First line of the message that put the task in `conflict`. Absent in every other state. */
   refusal?: string;
 }
@@ -974,7 +976,9 @@ async function landScope(id: string): Promise<LandScope> {
       .filter(other => other.id !== task.id && HOLDING.includes(other.state))
       .map(other => ({ id: other.id, paths: other.paths }));
     const regenerated = regenerationOnlyFiles(task.worktree).map(file => migrationOrigins[file] ?? file);
-    return landClaimScope(committed, sharers.flatMap(sharer => sharer.paths), others, regenerated);
+    const scope = landClaimScope(committed, sharers.flatMap(sharer => sharer.paths), others, regenerated);
+    const lent = new Set(task.loans ?? []);
+    return { ...scope, claimedByOthers: scope.claimedByOthers.filter(file => !lent.has(file)) };
   });
 }
 
@@ -984,7 +988,8 @@ function landScopeRefusal(ledger: Ledger, task: Task, sharers: Task[], committed
   const permitted = new Set(permittedFiles);
   const noLongerUnclaimed = permittedFiles.filter(file => !violations.includes(file));
   const unreviewed = violations.filter(file => !permitted.has(file));
-  const claimed = claimingTasks(ledger, violations, new Set([task.id]));
+  const lent = new Set(task.loans ?? []);
+  const claimed = claimingTasks(ledger, violations, new Set([task.id])).filter(item => !lent.has(item.file));
   if (claimed.length) {
     return `${task.id} out-of-claim files are claimed by another task:\n  `
       + claimed.map(item => `${item.file} (${item.id})`).join('\n  ');
@@ -1595,6 +1600,28 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
     if (outcome.kind === 'ended' && task.land === 'auto' && lastAttempt(task).n === watching.n && !result.error) await landTask(task.id);
     return;
   }
+}
+
+/** Records that the holders of `files` lend them to task `id`, so its landing may carry hunks in files another
+ * open task claims. Only the Goal of every claiming task, or the program, may lend: the claim is theirs. */
+async function lendFiles(id: string, files: string[]): Promise<void> {
+  if (!files.length) throw new Error('loan needs at least one path');
+  await withLedger(ledger => {
+    const task = taskOf(ledger, id);
+    if (!HOLDING.includes(task.state)) throw new Error(`${task.id}: loan needs an open task (${task.state})`);
+    const caller = process.env.GOAL_ID;
+    for (const file of files) {
+      const holders = claimingTasks(ledger, [file], new Set([task.id])).map(item => ledger.tasks[item.id]!);
+      if (!holders.length) throw new Error(`${file} is claimed by no other open task; no loan is needed`);
+      const foreign = holders.filter(holder => caller !== 'program' && holder.goal !== caller);
+      if (foreign.length) {
+        throw new Error(`${file} is claimed by ${foreign.map(holder => `${holder.id} (${holder.goal})`).join(', ')}; `
+          + `its Goal's manager or the program lends it (GOAL_ID is ${caller ?? 'unset'})`);
+      }
+    }
+    task.loans = [...new Set([...task.loans ?? [], ...files])].sort();
+    console.log(`${task.id} may land hunks in: ${task.loans.join(', ')}`);
+  });
 }
 
 /** A task already dispatched takes or drops automatic landing; a brief's `land: auto` sets it at dispatch.
@@ -6149,6 +6176,7 @@ async function main(argv: string[]): Promise<number> {
     case 'gate': await mergeTask(positional[0] ?? '', flags, undefined, undefined, undefined, true); return 0;
     case 'land': await landTask(positional[0] ?? '', flags.has('--step')); return 0;
     case 'auto-land': await setAutoLand(positional[0] ?? '', positional[1] !== 'off'); return 0;
+    case 'loan': await lendFiles(positional[0] ?? '', positional.slice(1)); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
     case 'owner': {

@@ -2775,6 +2775,24 @@ child.on('close', code => process.exit(code ?? 1));
     } finally { r.cleanup(); }
   });
 
+  test('loan records files another task claims, and only the holder Goal or the program may lend', () => {
+    const r = repo();
+    try {
+      expect(r.run(['dispatch', r.brief('G-001')]).status).toBe(0);
+      expect(r.run(['dispatch', r.brief('G-002')]).status).toBe(0);
+      const holder = r.ledger().tasks['G-001']!;
+      const stranger = r.run(['loan', 'G-002', 'worker-001.ts'], { GOAL_ID: 'someone-else' });
+      expect(stranger.status).not.toBe(0);
+      expect(stranger.stderr).toContain(`claimed by G-001 (${holder.goal})`);
+      const unclaimed = r.run(['loan', 'G-002', 'nobody-claims.ts'], { GOAL_ID: 'program' });
+      expect(unclaimed.stderr).toContain('claimed by no other open task');
+      const lent = r.run(['loan', 'G-002', 'worker-001.ts'], { GOAL_ID: 'program' });
+      expect(lent.stderr).toBe('');
+      expect(lent.stdout).toContain('G-002 may land hunks in: worker-001.ts');
+      expect(r.ledger().tasks['G-002']!.loans).toEqual(['worker-001.ts']);
+    } finally { r.cleanup(); }
+  });
+
   test('auto-land switches a dispatched task to land by itself and back', () => {
     const r = repo();
     try {
