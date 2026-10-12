@@ -200,6 +200,7 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
   const works = await fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?work WHERE {
     { GRAPH ${iri(GRAPHS.current)} { ?credit rv:agent ${iri(person.person)} ; rv:work ?work } }
     UNION { GRAPH <urn:rezics:projection:public-name-repair> { ${iri(person.person)} rv:prefixOwnerWork ?work } }
+    UNION { GRAPH ${iri(PUBLIC)} { ?entry rv:prefixAuthor ${iri(person.person)} ; rv:prefixWork ?work } }
   } ORDER BY ?work LIMIT 65`, 65_536);
   consume(budget, 'bytesLeft', Buffer.byteLength(JSON.stringify(works)));
   const workRows = works.results?.bindings;
@@ -208,16 +209,8 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
   }
   const creditedWorks = workRows.map(value => uri(value.work)!);
   const authors = await fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?unit WHERE {
-    VALUES ?work { ${creditedWorks.map(iri).join(' ')} }
-    {
-    {
-      GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?matchUnit ; rv:prefixField "credit" }
-      { BIND(?entry AS ?unit) } UNION { BIND(?matchUnit AS ?unit) }
-    } UNION {
-      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection }
-      GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:matchUnit ?unit }
-    }
-    }
+    { GRAPH ${iri(PUBLIC)} { ?unit rv:prefixAuthor ${iri(person.person)} } }
+    UNION { GRAPH ${iri(PUBLIC)} { ?entry rv:prefixAuthor ${iri(person.person)} ; rv:prefixUnit ?unit } }
   } ORDER BY ?unit LIMIT ${Math.min(64, budget.indexedUnitsLeft) + 1}`, 65_536);
   consume(budget, 'bytesLeft', Buffer.byteLength(JSON.stringify(authors)));
   const authorRows = authors.results?.bindings;
@@ -423,13 +416,7 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
       VALUES ?target { ${[proof.person, ...inventory.revisions.map(value => value.revision)].map(iri).join(' ')} }
       VALUES ?reference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
       GRAPH ?graph { ?unit ?reference ?target } }
-    ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).length ? `FILTER NOT EXISTS {
-      VALUES ?entry { ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).map(predicateIri).join(' ')} }
-      GRAPH ${iri(PUBLIC)} { ?entry ?entryP ?entryO } }` : ''}
-    ${inventory.creditedWorks.length ? `FILTER NOT EXISTS {
-      VALUES ?work { ${inventory.creditedWorks.map(iri).join(' ')} }
-      GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?authorUnit ; rv:prefixField "credit" }
-      }` : ''}
+    FILTER NOT EXISTS { GRAPH ${iri(PUBLIC)} { ?entry rv:prefixAuthor ${iri(proof.person)} } }
   }`, 8192);
   return result.boolean === true;
 }

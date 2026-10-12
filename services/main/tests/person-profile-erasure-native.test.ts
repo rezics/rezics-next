@@ -3,14 +3,14 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
-import { personProfileErasureUpdate, personProfileGraphErased,
+import { inventoryPersonProfileGraph, personProfileErasureUpdate, personProfileGraphErased,
   type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
 import type { PersonProfileErasureProof } from '../src/modules/access/person-profile-erasure.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
 import { outboxEventHandlers } from '../src/modules/erasure/outbox-event.ts';
 import { readMainOutboxEnvelope, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
-import { DATASET, GRAPHS, RV } from '../src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, prepareComponent } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -24,6 +24,16 @@ const credit = resource(9);
 const foreignWork = resource(10);
 const foreignUnit = resource(11);
 const authorUnit = resource(12);
+const coauthor = resource(30);
+const coauthorHead = resource(31);
+const coauthorCredit = resource(32);
+const coauthorRevision = resource(33);
+const main = resource(34);
+const selection = resource(35);
+const contribution = resource(36);
+const decision = resource(37);
+const draft = resource(38);
+const sharedPrefix = `urn:rezics:search:directory:prefix:ZXhhY3Q:*:1${uuid(34).replaceAll('-', '')}${uuid(12).replaceAll('-', '')}`;
 const directUnit = 'urn:rezics:search:name:agent:00000000-0000-4000-8000-000000000001';
 const prefixEntry = 'urn:rezics:search:directory:prefix:RXhhY3Q:*:1fixture';
 const publicGraph = 'urn:rezics:search:public';
@@ -74,10 +84,37 @@ test('Person command and completion query execute against retained TDB2 data', a
   const java = join(build, 'src/test/java/com/rezics/jena');
   mkdirSync(java, { recursive: true });
   mkdirSync(join(build, 'tmp'));
+  const objectDirectory = join(build, 'objects');
+  const model = 'https://rezics.com/definition/agent-provision-v1';
+  const objectManifest = `urn:rezics:sha256:${prepareComponent(objectDirectory, person,
+    { kind: 'person', displayName: 'Exact identifying name', disclosure: 'public' }, model)}`;
+  let authorInventory = '';
+  let workInventory = '';
+  const binding = (value: string) => ({ type: 'uri', value });
+  await inventoryPersonProfileGraph({ query: async query => {
+    if (query.includes('SELECT ?kind')) return { results: { bindings: [{
+      kind: binding(`${RV}PersonAgent`), head: binding(provision) }] } };
+    if (query.includes('SELECT ?p ?o')) return { results: { bindings: [
+      { p: binding(`${RV}head`), o: binding(provision) }] } };
+    if (query.includes('SELECT DISTINCT ?revision')) return { results: { bindings: [{
+      revision: binding(provision), model: binding(model),
+      operation: binding(`urn:rezics:operation:agent-provision:${proof.provisionId}`),
+      manifest: binding(objectManifest), anchor: { type: 'literal', value: 'true' } }] } };
+    if (query.includes('SELECT ?revision ?component')) return { results: { bindings: [{
+      revision: binding(provision), component: binding(person) }] } };
+    if (query.includes('SELECT DISTINCT ?work')) workInventory = query;
+    else if (query.includes('SELECT DISTINCT ?unit')) authorInventory = query;
+    else if (!query.includes('SELECT DISTINCT ?graph')) throw new Error(`Unexpected inventory query: ${query}`);
+    return { results: { bindings: [] } };
+  } }, objectDirectory, { ...proof, requestDigest: 'ab'.repeat(32),
+    graphDataEpoch: lineage.dataEpoch, graphSequence: '1' }, { bytesLeft: 8 * 1024 * 1024,
+    graphRevisionsLeft: 64, indexedUnitsLeft: 64, journalTargetsLeft: 256,
+    signal: new AbortController().signal });
   const cases: [string, PersonProfileGraphInventory][] = [
     ['complete', inventory],
     ['omitted', { ...inventory, revisions: inventory.revisions.filter(value => value.revision !== older) }],
     ['foreign', { ...inventory, units: [{ graph: publicGraph, unit: foreignUnit }] }],
+    ['coauthor', { ...inventory, authorUnits: [sharedPrefix, authorUnit] }],
   ];
   for (const [name, targets] of cases) {
     let completion = '';
@@ -86,7 +123,7 @@ test('Person command and completion query execute against retained TDB2 data', a
       return { boolean: false };
     } }, proof, targets);
     writeFileSync(join(build, `${name}.json`), JSON.stringify({
-      update: personProfileErasureUpdate(lineage, proof, targets), completion,
+      update: personProfileErasureUpdate(lineage, proof, targets), completion, authorInventory, workInventory,
     }));
   }
   const queries = await eventQueryTemplates();
@@ -201,8 +238,8 @@ public class PersonProfileCallerContractTest {
   @Test public void creditedWorkPrefixBlocksCompletionUntilItsProjectionIsCleaned() throws Exception {
     var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
       assertTrue(complete(data,command));
-      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <${prefixEntry}> rv:prefixWork <${work}> ; rv:prefixUnit <${authorUnit}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" } }");
-      assertFalse("a prefix copy linked only through a surviving Work must block completion",complete(data,command));
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <${prefixEntry}> rv:prefixAuthor <${person}> ; rv:prefixWork <${work}> ; rv:prefixUnit <${authorUnit}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" } }");
+      assertFalse("the erased author's prefix copy on a surviving Work must block completion",complete(data,command));
       execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <${prefixEntry}> ?p ?o } }");
       assertTrue(complete(data,command));
     }finally {data.close();}
@@ -210,7 +247,7 @@ public class PersonProfileCallerContractTest {
   @Test public void unexpectedCreditedWorkPrefixOnNewUnitBlocksCompletion() throws Exception {
     var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
       assertTrue(complete(data,command));
-      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> rv:prefixWork <${work}> ; rv:prefixUnit <${resource(16)}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" . <${resource(16)}> a rv:MatchUnit ; rv:resource <${work}> ; rv:publicTitle \\\"Surviving Work\\\" } }");
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> rv:prefixAuthor <${person}> ; rv:prefixWork <${work}> ; rv:prefixUnit <${resource(16)}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" . <${resource(16)}> a rv:MatchUnit ; rv:resource <${work}> ; rv:publicTitle \\\"Surviving Work\\\" } }");
       assertFalse("a new Work unit outside the sealed author-unit list still carries an identifying prefix",complete(data,command));
       execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> ?p ?o } }");
       assertTrue(complete(data,command));
@@ -223,6 +260,85 @@ public class PersonProfileCallerContractTest {
       assertFalse("an unsealed manifest revision may retain identifying object bytes without RDF profile literals",complete(data,command));
       execute(data,"DELETE WHERE { GRAPH <${GRAPHS.revisions}> { <${resource(17)}> ?p ?o } }");
       assertTrue(complete(data,command));
+    }finally{data.close();}
+  }
+  @Test public void detachedAuthorPrefixBlocksCompletionWithoutWorkOrUnitLinks() throws Exception {
+    var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
+      assertTrue(complete(data,command));
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <${prefixEntry}> rv:prefixAuthor <${person}> } }");
+      assertFalse("a detached identifying author edge cannot evade the absence probe",complete(data,command));
+      execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <${prefixEntry}> ?p ?o } }");
+      assertTrue(complete(data,command));
+    }finally{data.close();}
+  }
+  private void coauthorProjection(Dataset data) {
+    data.begin(ReadWrite.WRITE);try {var graph=data.asDatasetGraph();
+      Node current=iri("${GRAPHS.current}"),revisions=iri("${GRAPHS.revisions}"),pub=iri("${publicGraph}"),work=iri("${work}"),
+        main=iri("${main}"),selection=iri("${selection}"),contribution=iri("${contribution}"),decision=iri("${decision}"),draft=iri("${draft}"),unit=iri("${authorUnit}");
+      graph.add(current,work,rv("mainVersion"),main);
+      graph.add(current,main,RDF.type.asNode(),rv("MainVersion"));
+      graph.add(current,main,rv("work"),work);graph.add(current,main,rv("selectionHead"),selection);
+      graph.add(current,contribution,rv("work"),work);graph.add(current,contribution,rv("publicationHead"),decision);
+      graph.add(revisions,selection,RDF.type.asNode(),rv("PublicationSelection"));
+      for(var field:Map.of("work",work,"mainVersion",main,"context",main,"contribution",contribution,
+        "publicationDecision",decision,"selectedDraft",draft,"language",text("en")).entrySet())
+        graph.add(revisions,selection,rv(field.getKey()),field.getValue());
+      graph.add(revisions,selection,rv("matchUnit"),unit);
+      graph.add(revisions,decision,RDF.type.asNode(),rv("PublicationDecision"));
+      for(var field:Map.of("component",contribution,"contribution",contribution,"work",work,"selectedDraft",draft,"disclosure",rv("Public")).entrySet())
+        graph.add(revisions,decision,rv(field.getKey()),field.getValue());
+      graph.add(revisions,draft,RDF.type.asNode(),rv("RevisionAnchor"));graph.add(revisions,draft,rv("component"),contribution);
+      for(var field:Map.of("work",work,"mainVersion",main,"context",main,"selection",selection,"contribution",contribution,
+        "revision",draft,"language",text("en"),"disclosure",rv("Public")).entrySet())graph.add(pub,unit,rv(field.getKey()),field.getValue());
+      for(Node author:List.of(iri("${person}"),iri("${coauthor}"))) {
+        boolean erased=author.equals(iri("${person}"));Node head=iri(erased?"${provision}":"${coauthorHead}"),
+          credit=iri(erased?"${credit}":"${coauthorCredit}"),revision=iri(erased?"${resource(39)}":"${coauthorRevision}");
+        graph.deleteAny(current,author,rv("head"),Node.ANY);graph.add(current,author,rv("head"),head);
+        graph.add(current,author,RDF.type.asNode(),rv("Agent"));graph.add(current,author,rv("agentKind"),rv("PersonAgent"));
+        graph.add(current,author,rv("profileDisclosure"),rv("Public"));
+        if(!erased)graph.add(current,author,iri("http://www.w3.org/2000/01/rdf-schema#label"),text("Exact surviving coauthor"));
+        graph.add(revisions,head,RDF.type.asNode(),rv("RevisionAnchor"));graph.add(revisions,head,rv("component"),author);
+        graph.add(revisions,head,rv("modelRevision"),iri("https://rezics.com/definition/agent-provision-v1"));
+        graph.add(current,credit,RDF.type.asNode(),rv("NativeAgentCredit"));graph.add(current,credit,rv("agent"),author);
+        graph.add(current,credit,rv("work"),work);graph.add(current,credit,rv("creditRevision"),revision);
+        graph.add(current,credit,iri("https://schema.org/roleName"),text("author"));
+        graph.add(revisions,revision,RDF.type.asNode(),rv("NativeAgentCreditRevision"));
+        graph.add(revisions,revision,rv("component"),credit);graph.add(revisions,revision,rv("agent"),author);
+      }
+      PublicNameProjection.refreshPrefixUnit(graph,unit);
+      graph.deleteAny(current,iri("${person}"),rv("head"),Node.ANY);graph.add(current,iri("${person}"),rv("head"),iri("${head}"));
+      data.commit();
+    }finally{data.end();}
+  }
+  @Test public void survivingCoauthorPrefixesAndUnitsPermitCompletionAndReplay() throws Exception {
+    var data=fixture();try {var command=body("coauthor");coauthorProjection(data);
+      Set<Quad> before=snapshot(data);Node pub=iri("${publicGraph}"),shared=iri("${sharedPrefix}"),a=iri("${person}"),b=iri("${coauthor}");
+      assertTrue("the prefix is shared by both authors",before.contains(new Quad(pub,shared,rv("prefixAuthor"),a)));
+      assertTrue(before.contains(new Quad(pub,shared,rv("prefixAuthor"),b)));
+      Set<Node> bEntries=new HashSet<>();for(Quad q:before)if(q.getGraph().equals(pub)&&q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(b))bEntries.add(q.getSubject());
+      assertFalse(bEntries.isEmpty());
+      data.begin(ReadWrite.READ);try {var rows=select(data,command.get("authorInventory").getAsString().value()).get("results").getAsObject().get("bindings").getAsArray();
+        Set<String> selected=new HashSet<>();for(var row:rows)selected.add(row.getAsObject().get("unit").getAsObject().get("value").getAsString().value());
+        assertTrue(selected.contains(shared.getURI()));assertTrue(selected.contains("${authorUnit}"));
+        for(Node entry:bEntries)if(!before.contains(new Quad(pub,entry,rv("prefixAuthor"),a)))assertFalse("inventory must exclude B-only prefixes",selected.contains(entry.getURI()));
+      }finally{data.end();}
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <${prefixEntry}> rv:prefixAuthor <${person}> ; rv:prefixWork <${foreignWork}> . <urn:rezics:search:directory:prefix:Y29hdXRob3I:*:1foreign> rv:prefixAuthor <${coauthor}> ; rv:prefixWork <${resource(40)}> } }");
+      data.begin(ReadWrite.READ);try {var rows=select(data,command.get("workInventory").getAsString().value()).get("results").getAsObject().get("bindings").getAsArray();
+        Set<String> selected=new HashSet<>();for(var row:rows)selected.add(row.getAsObject().get("work").getAsObject().get("value").getAsString().value());
+        assertEquals("prefix-only Work inventory must be keyed to its author",Set.of("${work}","${foreignWork}"),selected);
+      }finally{data.end();}
+      execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <${prefixEntry}> ?p ?o } }");
+      assertFalse(complete(data,command));execute(data,command.get("update").getAsString().value());
+      assertFalse("A's retained prefixes still block completion before native projection refresh",complete(data,command));
+      data.begin(ReadWrite.WRITE);try {PublicNameProjection.refresh(data.asDatasetGraph(),a);data.commit();}finally{data.end();}
+      Set<Quad> after=snapshot(data);
+      for(Node entry:bEntries)assertTrue("B's prefix identity must survive",after.contains(new Quad(pub,entry,rv("prefixAuthor"),b)));
+      assertFalse(after.stream().anyMatch(q->q.getGraph().equals(pub)&&q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(a)));
+      assertTrue(after.contains(new Quad(pub,iri("${authorUnit}"),rv("publicTitle"),text("Surviving Work"))));
+      assertTrue(after.contains(new Quad(iri("${GRAPHS.current}"),iri("${coauthorCredit}"),rv("agent"),b)));
+      assertTrue("a shared sealed prefix retained for B must permit completion",complete(data,command));
+      execute(data,command.get("update").getAsString().value());
+      assertTrue("same-inventory replay completes with B's projection present",complete(data,command));assertEquals(after,snapshot(data));
     }finally{data.close();}
   }
   private void eventContract(int count) throws Exception {
@@ -270,7 +386,7 @@ public class PersonProfileCallerContractTest {
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 10, Failures: 0, Errors: 0');
+    expect(result.stdout).toContain('Tests run: 12, Failures: 0, Errors: 0');
     for (const count of [0, 1, 2]) {
       const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
         batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];
