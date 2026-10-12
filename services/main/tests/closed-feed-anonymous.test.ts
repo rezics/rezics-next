@@ -33,7 +33,8 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
   const state = { closed: false, workHidden: false, contentHidden: false, ancestry: true,
     realmParent: true, preparation: true, approval: true, placement: 'current', parentHead: head,
     generation: '0', enforcementCut: fixtureDisclosureCut.enforcementCut, available: true, hydrate: () => {},
-    privateRealm: false, member: true, proof: 'membership:1' };
+    privateRealm: false, member: true, proof: 'membership:1',
+    reviewGrain: null as null | 'work' | 'realization' | 'release' | 'occurrence' | 'resource' };
   const sources: FeedSource[] = Array.from({ length: 6 }, (_, index) => ({
     id: native(10 + index), sequence: String(index + 1), kind: index % 2 === 0 ? 'discussion' : 'work',
     target: index % 2 === 0 ? native(30 + index) : work, work, actor: native(40 + index),
@@ -67,7 +68,8 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
     const source = direct ? undefined : sources.find(source => source.id === target.occurrence?.resource);
     if (!direct && !source) throw new Error('Unknown selected occurrence');
     const basis: DisclosureRelationshipBasis = {
-      owner: target.occurrence?.owner ?? 'graph', kind: target.occurrence?.kind ?? 'identity',
+      owner: target.occurrence?.owner ?? 'graph',
+      kind: state.reviewGrain && state.reviewGrain !== 'work' ? 'publication' : target.occurrence?.kind ?? 'identity',
       resource: target.occurrence?.resource ?? realm,
       revision: target.occurrence?.revision ?? head,
       targetResource: target.resource, targetRevision: target.revision ?? null,
@@ -78,7 +80,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
     return { resource: target.resource, resourceKind: direct ? 'realm' : 'other', relationshipBasis: basis,
       status: state.ancestry && (!source?.realm || state.approval && state.preparation) ? 'complete' : 'unavailable',
       parents: direct ? [] : source?.realm && state.realmParent
-        ? [{ owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis },
+        ? [...(state.reviewGrain === 'resource' ? [] : [{ owner: 'graph' as const, kind: 'work' as const, resource: work, head, relationshipBasis: basis }]),
           { owner: 'graph', kind: 'realm', resource: realm, head, relationshipBasis: basis }]
         : [{ owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis }],
     };
@@ -250,6 +252,24 @@ export function closedFeedCases(actor: ClosedFeedReader) {
       expect((await captured.fence()).map(row => row.id)).toEqual([owner.sources[1]!.id]);
     }
   });
+  for (const grain of ['work', 'realization', 'release', 'occurrence', 'resource'] as const) {
+    test(`closed-feed-${actor}: ${grain} review keeps the target owner's parent chain`, async () => {
+      const owner = closedFeedOwner(actor);
+      owner.state.reviewGrain = grain;
+      const source = owner.sources[0]!;
+      source.kind = 'review';
+      source.reply = null;
+      source.target = source.work = grain === 'work' ? work : native(200);
+      source.readerReview = { revision: 'review-revision', body: 'Review body', work: source.target,
+        main_version: grain === 'work' ? native(201) : null } as FeedSource['readerReview'];
+      const captured = await captureClosedRealmFeedSources(owner.session, [source]);
+      expect(captured.sources).toEqual([source]);
+      expect(owner.calls[0]?.targets[0]?.ancestry?.parents.map(parent => parent.resource))
+        .toEqual(grain === 'resource' ? [realm] : [work, realm]);
+      owner.state.closed = true;
+      expect(await captured.fence()).toEqual([]);
+    });
+  }
   test(`closed-feed-${actor}: captured identity and review bytes survive caller mutation`, async () => {
     const owner = closedFeedOwner(actor);
     const original = owner.sources[1]!;

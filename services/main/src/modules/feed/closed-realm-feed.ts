@@ -31,14 +31,18 @@ export function closedRealmFeedTargets(source: FeedDisclosureOccurrence): readon
     && !source.contentRevision?.match(/^urn:rezics:content:revision:.+$/)
     || source.kind === 'review' && !source.readerReview?.revision)
     throw new DisclosureUnavailable('Feed publication reference is incomplete');
+  const genericReview = source.kind === 'review' && source.readerReview?.main_version === null;
   const occurrence = {
     owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
-    kind: source.reply ? 'realm-placement' as const : source.kind === 'adoption' ? 'realm-selection' as const
+    kind: genericReview ? 'publication' as const
+      : source.reply ? 'realm-placement' as const : source.kind === 'adoption' ? 'realm-selection' as const
       : source.realm ? 'work-in-realm' as const : 'publication' as const,
     resource: source.id,
     revision: source.readerReview?.revision ?? source.id,
   };
-  const common = { work: source.work, context: source.realm ?? undefined, occurrence };
+  // Generic Review stores its target grain in `work`; only Review/Target can
+  // establish whether that target has a containing Work or just a Realm.
+  const common = { work: genericReview ? undefined : source.work, context: source.realm ?? undefined, occurrence };
   const activity: DisclosureTarget = { ...common, owner: source.kind === 'review' ? 'review' : 'graph',
     resource: source.id, component: 'body', revision: source.readerReview?.revision };
   // A review body belongs to Review; asking Content for it invents a publication.
