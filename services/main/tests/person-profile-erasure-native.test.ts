@@ -2,6 +2,13 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { createAgentGraph } from '../src/modules/agent/graph.ts';
+import { AgentPublicProfiles } from '../src/modules/agent/profile.ts';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { inventoryPersonProfileGraph, personProfileErasureUpdate, personProfileGraphErased,
   type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
@@ -10,7 +17,7 @@ import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts
 import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
 import { outboxEventHandlers } from '../src/modules/erasure/outbox-event.ts';
 import { readMainOutboxEnvelope, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
-import { DATASET, GRAPHS, RV, prepareComponent } from '../src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, PROFILE, prepareComponent } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -69,6 +76,66 @@ async function eventQueryTemplates(): Promise<{ relay: string; facts: string }> 
   return { relay: captured[0]!, facts: captured[1]! };
 }
 
+// Execute captured production graph commands in ARQ below. Access uses its
+// real SQL owner and fixture authority; no profile operation ID is manufactured.
+async function productionProfileCommands(objectDirectory: string) {
+  const cluster = await startPostgresCluster();
+  const pool = new Pool(cluster.connection);
+  try {
+    for (const file of schemaFiles(root, 'access')) {
+      await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
+    const principal = { issuer: 'https://account.rezics.test', subject: uuid(20) };
+    await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+      [uuid(20), principal.issuer, principal.subject]);
+    await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [person]);
+    await grantFixtureAuthority(pool, { scope: 'work:create:root', requireDispatch: true,
+      representations: [{ principalId: uuid(20), actor: person, action: 'agent.control', lifetime: 'infinity' }],
+      grant: { actor: person, action: 'agent.control', lifetime: 'infinity' } });
+    const graph = new FusekiClient('http://unused.invalid');
+    graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture',
+      publicSearchWriteEpoch: '1', publicSearchWriteActive: true,
+      profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256])) });
+    const commands: { receipt: string; digest: string; update: string }[] = [];
+    const uri = (value: string) => ({ type: 'uri', value });
+    const literal = (value: string) => ({ type: 'literal', value });
+    let editedRevision = '';
+    graph.commandWithReceipt = async command => {
+      commands.push({ receipt: command.receipt, digest: command.digest, update: command.update });
+      if (command.receipt.includes(':agent-profile:')) {
+        editedRevision = /rv:publicProfileHead <([^>]+)>/.exec(command.update)![1]!;
+      }
+      return { status: 'committed', receipt: command.receipt };
+    };
+    graph.query = async query => {
+      if (query.includes('ASK')) return { boolean: true };
+      if (query.includes('SELECT ?base ?profile')) return { results: { bindings: [{
+        base: uri(provision), name: literal('Original identifying name') }] } };
+      if (query.includes('SELECT ?base')) return { results: { bindings: [{ base: uri(provision) }] } };
+      const command = commands.find(value => query.includes(`<${value.receipt}>`));
+      if (!command) return { results: { bindings: [] } };
+      return { results: { bindings: [{ digest: literal(command.digest), epoch: literal(lineage.dataEpoch),
+        sequence: literal(String(commands.length)), agent: uri(person), revision: uri(editedRevision) }] } };
+    };
+    const env = { fuseki: graph, lineage, objectDirectory };
+    await createAgentGraph(env, { id: proof.provisionId, agent: person, kind: 'person',
+      displayName: 'Original identifying name', digest: 'a'.repeat(64) });
+    const edited = await new AgentPublicProfiles(pool, env, { avatarSelection: async () => undefined })
+      .change(principal, { agent: person, expectedHead: provision, displayName: 'Edited identifying name',
+        avatarSelection: null, bio: { text: 'Edited identifying biography', language: 'en' }, idempotencyKey: 'erase-edited-profile' });
+    expect(commands).toHaveLength(2);
+    const operation = /rv:operation <(urn:rezics:operation:agent-profile:[^>]+)>/.exec(commands[1]!.update)![1]!;
+    expect(operation).toMatch(/^urn:rezics:operation:agent-profile:[0-9a-f]{64}$/);
+    const closure: PersonProfileGraphInventory = { ...inventory, head: provision, profileHead: edited.revision,
+      revisions: [{ revision: provision, manifest: null }, { revision: edited.revision, manifest: null }],
+      units: [], creditedWorks: [], authorUnits: [], objects: [] };
+    let completion = '';
+    await personProfileGraphErased({ query: async query => { completion = query; return { boolean: false }; } }, proof, closure);
+    return { commands, revision: edited.revision, operation,
+      update: personProfileErasureUpdate(lineage, proof, closure), completion };
+  } finally { await pool.end(); cluster.remove(); }
+}
+
 // ARQ executes the exact TypeScript command and completion query. Native
 // typed-footprint admission is a separate step; this test proves their RDF effect.
 test('Person command and completion query execute against retained TDB2 data', async () => {
@@ -92,6 +159,7 @@ test('Person command and completion query execute against retained TDB2 data', a
   cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
   mkdirSync(join(build, 'tmp'));
   const objectDirectory = join(build, 'objects');
+  writeFileSync(join(build, 'production-profile.json'), JSON.stringify(await productionProfileCommands(objectDirectory)));
   const model = 'https://rezics.com/definition/agent-provision-v1';
   const objectManifest = `urn:rezics:sha256:${prepareComponent(objectDirectory, person,
     { kind: 'person', displayName: 'Exact identifying name', disclosure: 'public' }, model)}`;
@@ -273,6 +341,26 @@ public class PersonProfileCallerContractTest {
       var before=snapshot(data);
       var replay=service.runCommand(data.asDatasetGraph(),"${receiptPlaceholder}",digest,update,validations,System.nanoTime()+30_000_000_000L);
       assertEquals(replay.toString(),"committed",replay.get("status"));assertEquals(before,snapshot(data));
+    }finally{data.close();}
+  }
+  @Test public void productionProvisionAndProfileEditorEraseTheCompleteClosureAndPurgeOffline() throws Exception {
+    var command=body("production-profile");var data=fixture();Path source=Files.createTempDirectory(Path.of("tmp"),"edited-profile-");
+    try {
+      execute(data,"CLEAR ALL");
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch \\\"${lineage.dataEpoch}\\\" ; rv:routingEpoch \\\"1\\\" ; rv:sequence 0 ; rv:textIndexGeneration \\\"${uuid(40)}\\\" ; rv:modelHead <${PROFILE}> ; rv:shapeHead <${PROFILE}> } }");
+      for(var captured:command.get("commands").getAsArray())execute(data,captured.getAsObject().get("update").getAsString().value());
+      Node revision=iri(command.get("revision").getAsString().value());
+      data.begin(ReadWrite.READ);try {
+        assertTrue(data.asDatasetGraph().contains(iri("${GRAPHS.revisions}"),revision,rv("operation"),iri(command.get("operation").getAsString().value())));
+        var plan=CommandPolicy.parse(command.get("update").getAsString().value(),"${receiptPlaceholder}");
+        assertNull(ErasurePolicy.preflight(data.asDatasetGraph(),plan,"${receiptPlaceholder}"));
+      }finally{data.end();}
+      execute(data,command.get("update").getAsString().value());assertTrue(complete(data,command));
+      var retained=TDB2Factory.connectDataset(source.resolve("source").toString());
+      try {retained.begin(ReadWrite.WRITE);snapshot(data).forEach(retained.asDatasetGraph()::add);retained.commit();retained.end();}finally{retained.close();}
+      ErasurePurge.main(new String[]{source.resolve("source").toString(),source.resolve("destination").toString(),"${person}","7"});
+      var output=TDB2Factory.connectDataset(source.resolve("destination").toString());
+      try {output.begin(ReadWrite.READ);assertTrue(output.asDatasetGraph().contains(iri("${GRAPHS.revisions}"),revision,RDF.type.asNode(),rv("ErasedRevision")));output.end();}finally{output.close();}
     }finally{data.close();}
   }
   @Test public void creditedWorkPrefixBlocksCompletionUntilItsProjectionIsCleaned() throws Exception {

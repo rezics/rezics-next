@@ -104,6 +104,20 @@ public class PersonProfileErasurePolicyTest {
         assertNotNull(preflight(data, update())); assertEquals(before, snapshot(data));
     }
 
+    @Test public void profileOperationAcceptsOnlyUuidOrProductionSha256() throws Exception {
+        for (String suffix : List.of(id(6), "a".repeat(64))) {
+            var data = fixture();
+            replace(data, REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + suffix));
+            assertNull(preflight(data, update()));
+        }
+        for (String suffix : List.of("a".repeat(63), "a".repeat(65), "A".repeat(64),
+            "g".repeat(64), id(6) + ":extra", "sha256:" + "a".repeat(64))) {
+            var data = fixture();
+            replace(data, REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + suffix));
+            refused(data);
+        }
+    }
+
     @Test public void typedPersonErasureRetainsIdentityHistoryAttributionAndUnrelatedDocuments() throws Exception {
         var data = fixture(); var plan = CommandPolicy.parse(update(), receipt()); var before = snapshot(data);
         assertNull(ErasurePolicy.admitsMarker(plan, receipt())); assertNull(ErasurePolicy.preflight(data, plan, receipt()));
