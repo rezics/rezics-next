@@ -34,6 +34,15 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
       ref: `urn:rule:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: staff.actor,
       expectedRevision: null, document: { purpose: 'Review graph disclosure' }, idempotencyKey: randomUUID(),
     });
+    const ownerResponses: unknown[] = [];
+    const ownerCommand = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
+    stack.fuseki.commandWithReceipt = async command => {
+      try {
+        const result = await ownerCommand(command);
+        ownerResponses.push({ validations: command.validations, result });
+        return result;
+      } catch (error) { ownerResponses.push({ error: String(error) }); throw error; }
+    };
     for (const [kind, resource] of [
       ['Concept', concept.concept],
       ['Agent', editor.actor],
@@ -69,7 +78,7 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
         },
       };
       const result = await governance.store.decide(staff.principal, input);
-      expect(result.operation.status).toBe('completed');
+      expect(result.operation.status, JSON.stringify({ kind, ownerResponses })).toBe('completed');
       const effects = (await stack.accessPool.query<{ state: string; receipt: string }>(
         'SELECT state,receipt FROM access.safety_decision_effect WHERE decision_id=$1', [result.decisionId])).rows;
       expect(effects).toHaveLength(1);
