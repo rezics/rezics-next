@@ -2,7 +2,19 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
+import { ContentModeration } from '../../../services/content/src/moderation.ts';
+import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
+import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
+import { realmManager, realmTransaction } from '../../../services/main/src/modules/access/realm-management-authority.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { disclosureViewer, namePolicyPrincipal } from '../../../services/main/src/modules/disclosure/viewer.ts';
+import { ownerModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
+import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
+import { GovernanceInvalid, GovernanceStore, type DecisionInput } from '../../../services/main/src/modules/governance/store.ts';
+import { createAdmittedRealmSpace } from '../../../services/main/src/modules/space/create-admitted.ts';
+import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
+import { editAdmittedMetadataWork } from '../../../services/main/src/modules/work/edit-admitted.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import {
   captureDisclosure,
@@ -26,9 +38,8 @@ import {
   ANONYMOUS_VIEWER,
   type Viewer,
 } from '../../../services/main/src/modules/suitability/policy.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId } from '../fixtures/author-credit.ts';
-import { fixtureReasons } from './g-565-decision-support.ts';
+import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 interface PlanNode {
@@ -45,12 +56,12 @@ function planNodes(plan: PlanNode): PlanNode[] {
   return [plan, ...(plan.Plans ?? []).flatMap(planNodes)];
 }
 
-/** Committed owner-policy fixture. Admission/Realm shape validation is owned by
- * governance tests; these rows exercise the real Access read and final cut. */
+type RealmFixture = Awaited<ReturnType<typeof authorCreditFixture>>;
+
+/** Owner evidence is explicit in this policy fixture; acknowledgement and all
+ * mapped fence/epoch work belong to the real GovernanceStore and effect owner. */
 async function restriction(
-  pool: Pool,
-  principalId: string,
-  actor: string,
+  f: RealmFixture,
   resource: string,
   component: 'record' | 'title' | 'name' | 'publication',
   revision: string | null = null,
@@ -60,249 +71,265 @@ async function restriction(
     scope?: string;
     context?: string;
     locator?: string | null;
+    scopeKind?: 'component' | 'exact_revision';
   } = {},
 ) {
-  const caseId = randomUUID(), decisionId = randomUUID();
-  let fenceId = randomUUID();
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO access.governance_case
-      (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
-      VALUES ($1,'content_report',$4,$5,$6,'graph',$2,$3,'private')`,
-      [caseId, resource, component, narrower.authority ?? 'platform', narrower.scope ?? 'governance:platform', narrower.context ?? 'urn:rezics:context:global'],
-    );
-    await client.query(
-      `INSERT INTO access.moderation_decision
-      (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
-      authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
-      evidence_digest,disclosure,statement_of_reasons)
-      VALUES ($1::uuid,'content_moderation','restrict',$9,$2,1,$3,$4,$7,
-      $8,0,$5,$1::text,$5,'urn:rezics:rule:disclosure-parent','1',$5,$5,'private',$6::jsonb)`,
-      [
-        decisionId,
-        caseId,
-        principalId,
-        actor,
-        digest(decisionId),
-        {
-          ...fixtureReasons,
-          rule: {
-            ref: 'urn:rezics:rule:disclosure-parent',
-            revision: '1',
-            digest: digest(decisionId),
-          },
-        },
-        narrower.authority ?? 'platform', narrower.scope ?? 'governance:platform', narrower.context ?? 'urn:rezics:context:global',
-      ],
-    );
-    await client.query(
-      `INSERT INTO access.moderation_decision_target
-      (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect,locator)
-      VALUES ($1,1,'graph',$2,$3,$4,$5,$5,$6,$7)`,
-      [
-        decisionId,
-        resource,
-        component,
-        revision === null ? 'component' : 'exact_revision',
-        revision,
-        effect,
-        narrower.locator ?? null,
-      ],
-    );
-    const recorded = await client.query<{ id: string }>(
-      `INSERT INTO access.governance_enforcement AS current
-      (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
-      VALUES ($1,$7,$8,'graph',$2,$3,$4,$5,$6,1,'restricted',1)
-      ON CONFLICT (owner,resource,component,revision,effect,context,authority_scope_id)
-      DO UPDATE SET state='restricted',decision_id=EXCLUDED.decision_id,
-        decision_ordinal=EXCLUDED.decision_ordinal,fence_epoch=current.fence_epoch+1 RETURNING id`,
-      [fenceId, resource, component, revision, effect, decisionId, narrower.scope ?? 'governance:platform', narrower.context ?? 'urn:rezics:context:global'],
-    );
-    fenceId = recorded.rows[0]!.id;
-    await client.query(
-      `UPDATE access.governance_case SET decision_head=$2,generation=1,
-        state='closed',closed_at=clock_timestamp() WHERE id=$1`,
-      [caseId, decisionId],
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-  return async () => {
-    const restored = randomUUID(), restoreCaseId = randomUUID(),
-      release = await pool.connect();
-    try {
-      await release.query('BEGIN');
-      // Closed cases are immutable. Restoration records a new reviewed case
-      // while releasing the original exact enforcement fence.
-      await release.query(
-        `INSERT INTO access.governance_case
-        (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
-        SELECT $1,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure
-        FROM access.governance_case WHERE id=$2`,
-        [restoreCaseId, caseId],
-      );
-      await release.query(
-        `INSERT INTO access.moderation_decision
-        (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
-        authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
-        evidence_digest,disclosure,statement_of_reasons)
-        SELECT $1::uuid,kind,'restore',context,$3,1,principal_id,acting_subject,authority_kind,
-        authority_scope_id,authority_epoch,authority_proof_digest,$1::text,request_digest,rule_ref,rule_revision,
-        rule_digest,evidence_digest,disclosure,statement_of_reasons FROM access.moderation_decision WHERE id=$2`,
-        [restored, decisionId, restoreCaseId],
-      );
-      await release.query(
-        `INSERT INTO access.moderation_decision_target
-        (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect)
-        SELECT $1,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect
-        FROM access.moderation_decision_target WHERE decision_id=$2`,
-        [restored, decisionId],
-      );
-      await release.query(
-        `UPDATE access.governance_case SET decision_head=$2,generation=1,
-        state='closed',closed_at=clock_timestamp() WHERE id=$1`,
-        [restoreCaseId, restored],
-      );
-      await release.query(
-        `UPDATE access.governance_enforcement SET state='released',decision_id=$2,
-        fence_epoch=fence_epoch+1 WHERE id=$1`,
-        [fenceId, restored],
-      );
-      await release.query('COMMIT');
-    } catch (error) {
-      await release.query('ROLLBACK');
-      throw error;
-    } finally {
-      release.release();
-    }
+  const principal = { issuer: f.account.issuer, subject: f.account.a.id };
+  const scope = narrower.scope ?? 'governance:platform';
+  await grantFixtureAuthority(f.accessPool, { scope, requireDispatch: true,
+    representations: [{ principalId: f.principalId, actor: f.actor, action: 'governance.moderate', lifetime: '8 hours' }],
+    grant: { actor: f.actor, action: 'governance.moderate', lifetime: '8 hours' } });
+  const heads = ownerTargetHeads({ graph: f.env });
+  const store = new GovernanceStore(f.accessPool, {
+    capture: async (_principal, _actor, target) => ({ ...target, state: 'available',
+      representation: 'application/json', revisionDigest: digest(JSON.stringify(target)),
+      provenance: { capturedBy: 'disclosure-policy-fixture' } }),
+  }, heads, { current: async () => ({ revision: '1', digest: digest('disclosure-parent-rule') }) },
+  ownerModerationEffects(new ContentModeration(f.pool), f.env));
+  const target = { owner: 'graph' as const, resource, component, revision, locator: narrower.locator ?? null };
+  const expectedHead = await heads.current(target);
+  const authority = narrower.authority ?? 'platform';
+  const report = await store.submitReport(principal, {
+    kind: 'content_report', actingSubject: f.actor, authority: { kind: authority, scopeId: scope },
+    context: narrower.context ?? 'urn:rezics:context:global',
+    target: { owner: 'graph', resource, component }, disclosure: 'private', reasonCode: 'disclosure',
+    statement: 'Review the exact owner-established disclosure grain', evidence: [target], idempotencyKey: randomUUID(),
+  });
+  const claim = async () => {
+    if (authority !== 'platform') return;
+    if (scope === 'governance:platform') await store.safety.claim(principal, f.actor, report.caseId);
+    else await claimFixture(f.accessPool, report.caseId, f.principalId, f.actor);
   };
+  await claim();
+  const input: DecisionInput = {
+    caseId: report.caseId, expectedGeneration: report.caseGeneration, actingSubject: f.actor, outcome: 'restrict',
+    targets: [{ ...target, scopeKind: narrower.scopeKind ?? (revision === null ? 'component' : 'exact_revision'), expectedHead, effect }],
+    rule: { ref: 'urn:rezics:rule:disclosure-parent', revision: '1', digest: digest('disclosure-parent-rule') },
+    evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
+    rationale: 'Reviewed fixture evidence', disclosure: 'private', reasons: fixtureReasons, idempotencyKey: randomUUID(),
+  };
+  const accepted = await store.decide(principal, input, true);
+  expect(accepted.operation.status).not.toBe('completed');
+  const confirmed = await store.resumeDecision(principal, f.actor, accepted.decisionId);
+  // A missing Realm effect owner must be a visible dependency failure. A fake
+  // receipt would let this fixture claim closure without actual acknowledgement.
+  expect(confirmed.operation.status, JSON.stringify(confirmed.operation)).toBe('completed');
+  return async () => {
+    await claim();
+    const restored = await store.decide(principal, { ...input, outcome: 'restore',
+      expectedGeneration: confirmed.caseGeneration, reversesDecisionId: accepted.decisionId,
+      idempotencyKey: randomUUID() }, true);
+    const released = await store.resumeDecision(principal, f.actor, restored.decisionId);
+    expect(released.operation.status, JSON.stringify(released.operation)).toBe('completed');
+  };
+}
+
+async function realmViewers(f: RealmFixture, realm: string) {
+  const managerPrincipal = await f.account.verifier.verify(new Request('https://main.test',
+    { headers: { authorization: `Bearer ${f.account.tokenA}` } }), []);
+  const memberPrincipal = await f.account.verifier.verify(new Request('https://main.test',
+    { headers: { authorization: `Bearer ${f.account.tokenB}` } }), []);
+  const provisioned = await new AgentProvisioning(f.accessPool, f.env).provision(f.account.verifier,
+    new Request('https://main.test', { headers: { authorization: `Bearer ${f.account.tokenB}` } }),
+    { kind: 'person', displayName: 'Realm disclosure member' }, randomUUID());
+  expect(provisioned.state).toBe('active');
+  const memberActor = provisioned.agent;
+  const policy = (await f.accessPool.query<{ revision: string; terms: string }>(
+    "SELECT revision::text,terms_revision AS terms FROM access.membership_policy WHERE kind = 'realm' AND owner_subject = $1", [realm],
+  )).rows[0]!;
+  const generation = (await f.accessPool.query<{ generation: string }>(
+    'SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1', [realm],
+  )).rows[0]!.generation;
+  await grantFixtureAuthority(f.accessPool, { scope: `governance:realm:${realm}`, requireDispatch: true,
+    representations: [{ principalId: f.principalId, actor: f.actor, action: 'realm.members.manage', lifetime: '8 hours' }],
+    grant: { actor: f.actor, action: 'realm.members.manage', lifetime: '8 hours' } });
+  await grantFixtureAuthority(f.accessPool, { scope: 'work:create:root', requireDispatch: true,
+    representations: [{ principalId: f.otherPrincipal, actor: memberActor, action: 'access.membership.consent', lifetime: '8 hours' }],
+    grant: { actor: memberActor, action: 'access.membership.consent', lifetime: '8 hours' } });
+  const consent = await new AccessMembershipConsents(f.accessPool).issue({ principal: memberPrincipal,
+    kind: 'realm', ownerSubject: realm, memberSubject: memberActor, expectedGeneration: '0',
+    expectedPolicyRevision: policy.revision, termsRevision: policy.terms,
+    idempotencyKey: randomUUID(), requestDigest: digest('realm-disclosure-membership') });
+  const joined = await new AccessRealmManagement(f.accessPool).changeMember(managerPrincipal, realm, {
+    actingSubject: f.actor, member: memberActor, action: 'add', expectedGeneration: generation,
+    expectedMembershipGeneration: '0', reason: 'Join the disclosure policy fixture',
+    consent: consent.consentReference, durationSeconds: null,
+  }, randomUUID(), f.env);
+  expect(joined.membershipGeneration).toBe('1');
+  expect((await f.accessPool.query(`SELECT state FROM access.membership
+    WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`, [realm, memberActor])).rows)
+    .toEqual([{ state: 'joined' }]);
+  const manager = await realmTransaction(f.accessPool, realm, false,
+    client => realmManager(client, managerPrincipal, realm, f.actor));
+  expect(manager.id).toBe(f.principalId);
+  const memberViewer = disclosureViewer(memberPrincipal, memberActor);
+  const managerViewer = disclosureViewer(managerPrincipal, f.actor);
+  expect(namePolicyPrincipal(memberViewer)).toBe(memberPrincipal);
+  expect(namePolicyPrincipal(managerViewer)).toBe(managerPrincipal);
+  return [ANONYMOUS_VIEWER, memberViewer, managerViewer];
+}
+
+/** Large unrelated inventory uses supported Access-local source effects.
+ * It never manufactures graph fences solely to inflate the plan fixture. */
+async function unrelatedFences(f: RealmFixture, count: number) {
+  const principal = { issuer: f.account.issuer, subject: f.account.a.id };
+  const source = new GovernanceStore(f.accessPool, ownerEvidenceCapture({
+    source: async (_principal, record) => ({ record, retention: 'retained', byteDigest: digest(record), mediaType: 'application/json' }),
+  }), ownerTargetHeads({}), { current: async () => ({ revision: '1', digest: digest('unrelated-source-rule') }) });
+  for (let start = 0; start < count; start += 16) {
+    const resources = Array.from({ length: Math.min(16, count - start) }, nativeId);
+    const report = await source.submitReport(principal, {
+      kind: 'content_report', actingSubject: f.actor, authority: { kind: 'platform', scopeId: 'governance:platform' },
+      context: 'urn:rezics:context:global', target: { owner: 'source', resource: resources[0]!, component: 'record' },
+      disclosure: 'private', reasonCode: 'disclosure', statement: 'Review unrelated source records',
+      evidence: resources.map(resource => ({ owner: 'source', resource, component: 'record', revision: nativeId(), locator: null })),
+      idempotencyKey: randomUUID(),
+    });
+    await source.safety.claim(principal, f.actor, report.caseId);
+    const decision = await source.decide(principal, {
+      caseId: report.caseId, expectedGeneration: report.caseGeneration, actingSubject: f.actor, outcome: 'restrict',
+      targets: resources.map(resource => ({ owner: 'source', resource, component: 'record', locator: null,
+        scopeKind: 'component', revision: null, expectedHead: null, effect: 'disclosure' })),
+      rule: { ref: 'urn:rezics:rule:unrelated-source', revision: '1', digest: digest('unrelated-source-rule') },
+      evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
+      rationale: 'Reviewed unrelated records', disclosure: 'private', reasons: fixtureReasons, idempotencyKey: randomUUID(),
+    });
+    expect(decision.operation.status, JSON.stringify(decision.operation)).toBe('completed');
+  }
 }
 
 test('Realm disclosure: real Access preserves Work and Realm fences, independent publication and final-cut races', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
   const directory = resolve('.temp', `disclosure-parents-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
-  const f = await authorCreditFixture(Bun.env as Record<string, string>, directory);
-  const work = nativeId(),
-    realm = nativeId(),
-    space = nativeId(),
-    reply = nativeId();
-  const workHead = nativeId(),
-    realmHead = nativeId(),
-    pinnedWorkHead = nativeId();
-  let currentWorkHead = workHead,
-    token = digest('selected-placement'),
-    sourceAvailable = true;
-  const body: DisclosureTarget = {
-    owner: 'content',
-    resource: reply,
-    component: 'body',
-    revision: randomUUID(),
-  };
-  const media: DisclosureTarget = {
-    owner: 'media',
-    resource: `urn:rezics:media:${randomUUID()}`,
-    component: 'media_use',
-    revision: randomUUID(),
-  };
-  const direct: DisclosureTarget = {
-    owner: 'graph',
-    resource: realm,
-    component: 'record',
-    revision: realmHead,
-  };
-  const independent: DisclosureTarget = {
-    owner: 'content',
-    resource: `urn:rezics:publication:${randomUUID()}`,
-    component: 'body',
-    revision: randomUUID(),
-  };
-  const targets = [body, media, direct, independent];
-  const relationship = (target: DisclosureTarget): DisclosureRelationshipBasis => ({
-    owner: target.owner === 'media' ? 'media' : target.owner === 'graph' ? 'graph' : 'content',
-    kind:
-      target === direct
-        ? 'identity'
-        : target === independent
-          ? 'publication'
-          : target === media
-            ? 'media-use'
-            : 'realm-placement',
-    resource:
-      target === direct ? realm : `urn:rezics:disclosure-occurrence:${target.resource.slice(-36)}`,
-    revision: target === direct ? realmHead : 'urn:rezics:disclosure-occurrence:revision:1',
-    targetResource: target.resource,
-    targetRevision: target.revision ?? null,
-    token,
-    dataEpoch: f.env.lineage.dataEpoch,
-  });
-  const evidence = (input: DisclosureTarget): DisclosureAncestryEvidence => {
-    const selected = targets.find(
-      (target) => target.owner === input.owner && target.resource === input.resource,
-    );
-    if (!selected) throw new Error('Unknown fixture occurrence');
-    const parents: OwnerEstablishedGraphParents =
-      selected === direct || selected === independent
-        ? []
-        : [
-            {
-              owner: 'graph',
-              kind: 'work',
-              resource: work,
-              head: currentWorkHead,
-              protectedRevision: pinnedWorkHead,
-              relationshipBasis: relationship(selected),
-            },
-            {
-              owner: 'graph',
-              kind: 'realm',
-              resource: realm,
-              head: realmHead,
-              relationshipBasis: relationship(selected),
-            },
-          ];
-    return {
-      resource: input.resource,
-      resourceKind: selected === direct ? 'realm' : 'other',
-      relationshipBasis: relationship(selected),
-      parents,
-      status: sourceAvailable ? 'complete' : 'unavailable',
-    };
-  };
-  const source: DisclosureAncestrySource = {
-    read: async (inputs) => inputs.map(evidence),
-    reread: async (bases) =>
-      bases.map((basis) =>
-        evidence(targets.find((target) => target.resource === basis.targetResource)!),
-      ),
-  };
-  const reader = new DisclosureStore(f.accessPool);
-  configureDisclosure(f.env, reader);
-  for (const owner of ['graph', 'content', 'media'] as const)
-    configureDisclosureAncestrySource(f.env, owner, source);
-  const capture = async (
-    inputs = targets,
-    channel: DisclosureChannel = 'read',
-    viewer: Viewer = ANONYMOUS_VIEWER,
-  ) => captureDisclosure(f.env, await resolveDisclosureSelections(f.env, inputs), viewer, channel);
-  const decisions = async (
-    inputs = targets,
-    channel: DisclosureChannel = 'read',
-    viewer: Viewer = ANONYMOUS_VIEWER,
-  ) => (await capture(inputs, channel, viewer)).map((cut) => cut.decision);
-  const restrict = (
-    resource: string,
-    component: 'record' | 'title' | 'name' | 'publication',
-    revision: string | null = null,
-    effect: 'disclosure' | 'search' = 'disclosure',
-  ) => restriction(f.accessPool, f.principalId, f.actor, resource, component, revision, effect);
+  const f = await authorCreditFixture(Bun.env as Record<string, string>, directory,
+    'openid work:create work:edit work:read work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read space:create agent:create');
   try {
+    const request = (token = f.account.tokenA) => new Request('https://main.test', { headers: { authorization: `Bearer ${token}` } });
+    await grantFixtureAuthority(f.accessPool, { scope: 'space:create:root', requireDispatch: true,
+      representations: [{ principalId: f.principalId, actor: f.actor, action: 'space.create', lifetime: '8 hours' }],
+      grant: { actor: f.actor, action: 'space.create', lifetime: '8 hours' } });
+    const createdRealm = await createAdmittedRealmSpace(f.env, f.account.verifier, f.access, request(), {
+      name: 'Realm disclosure fixture', actingSubject: f.actor, idempotencyKey: randomUUID(),
+    }, new AccessRealmManagement(f.accessPool));
+    const createdWork = await createAdmittedMetadataWork(f.env, f.account.verifier, f.access, request(), {
+      title: 'Protected Work original head', language: 'en', actingSubject: f.actor, idempotencyKey: randomUUID(),
+    });
+    await grantFixtureAuthority(f.accessPool, { scope: `work:edit:${createdWork.work}`, requireDispatch: true,
+      representations: [{ principalId: f.principalId, actor: f.actor, action: 'work.edit', lifetime: '8 hours' }],
+      grant: { actor: f.actor, action: 'work.edit', lifetime: '8 hours' } });
+    const editedWork = await editAdmittedMetadataWork(f.env, f.account.verifier, f.access, request(), {
+      work: createdWork.work, expectedHead: createdWork.workRevision, title: 'Protected Work current head',
+      actingSubject: f.actor, idempotencyKey: randomUUID(),
+    });
+    const work = createdWork.work, realm = createdRealm.realm!, reply = nativeId();
+    const workHead = editedWork.revision, realmHead = createdRealm.realmRevision!, pinnedWorkHead = createdWork.workRevision;
+    let currentWorkHead = workHead,
+      token = digest('selected-placement'),
+      sourceAvailable = true;
+    const body: DisclosureTarget = {
+      owner: 'content',
+      resource: reply,
+      component: 'body',
+      revision: randomUUID(),
+    };
+    const media: DisclosureTarget = {
+      owner: 'media',
+      resource: `urn:rezics:media:${randomUUID()}`,
+      component: 'media_use',
+      revision: randomUUID(),
+    };
+    const direct: DisclosureTarget = {
+      owner: 'graph',
+      resource: realm,
+      component: 'record',
+      revision: realmHead,
+    };
+    const independent: DisclosureTarget = {
+      owner: 'content',
+      resource: `urn:rezics:publication:${randomUUID()}`,
+      component: 'body',
+      revision: randomUUID(),
+    };
+    const targets = [body, media, direct, independent];
+    const relationship = (target: DisclosureTarget): DisclosureRelationshipBasis => ({
+      owner: target.owner === 'media' ? 'media' : target.owner === 'graph' ? 'graph' : 'content',
+      kind:
+        target === direct
+          ? 'identity'
+          : target === independent
+            ? 'publication'
+            : target === media
+              ? 'media-use'
+              : 'realm-placement',
+      resource:
+        target === direct ? realm : `urn:rezics:disclosure-occurrence:${target.resource.slice(-36)}`,
+      revision: target === direct ? realmHead : 'urn:rezics:disclosure-occurrence:revision:1',
+      targetResource: target.resource,
+      targetRevision: target.revision ?? null,
+      token,
+      dataEpoch: f.env.lineage.dataEpoch,
+    });
+    const evidence = (input: DisclosureTarget): DisclosureAncestryEvidence => {
+      const selected = targets.find(
+        (target) => target.owner === input.owner && target.resource === input.resource,
+      );
+      if (!selected) throw new Error('Unknown fixture occurrence');
+      const parents: OwnerEstablishedGraphParents =
+        selected === direct || selected === independent
+          ? []
+          : [
+              {
+                owner: 'graph',
+                kind: 'work',
+                resource: work,
+                head: currentWorkHead,
+                protectedRevision: pinnedWorkHead,
+                relationshipBasis: relationship(selected),
+              },
+              {
+                owner: 'graph',
+                kind: 'realm',
+                resource: realm,
+                head: realmHead,
+                relationshipBasis: relationship(selected),
+              },
+            ];
+      return {
+        resource: input.resource,
+        resourceKind: selected === direct ? 'realm' : 'other',
+        relationshipBasis: relationship(selected),
+        parents,
+        status: sourceAvailable ? 'complete' : 'unavailable',
+      };
+    };
+    const source: DisclosureAncestrySource = {
+      read: async (inputs) => inputs.map(evidence),
+      reread: async (bases) =>
+        bases.map((basis) =>
+          evidence(targets.find((target) => target.resource === basis.targetResource)!),
+        ),
+    };
+    const reader = new DisclosureStore(f.accessPool);
+    configureDisclosure(f.env, reader);
+    for (const owner of ['graph', 'content', 'media'] as const)
+      configureDisclosureAncestrySource(f.env, owner, source);
+    const capture = async (
+      inputs = targets,
+      channel: DisclosureChannel = 'read',
+      viewer: Viewer = ANONYMOUS_VIEWER,
+    ) => captureDisclosure(f.env, await resolveDisclosureSelections(f.env, inputs), viewer, channel);
+    const decisions = async (
+      inputs = targets,
+      channel: DisclosureChannel = 'read',
+      viewer: Viewer = ANONYMOUS_VIEWER,
+    ) => (await capture(inputs, channel, viewer)).map((cut) => cut.decision);
+    const restrict = (
+      resource: string,
+      component: 'record' | 'title' | 'name' | 'publication',
+      revision: string | null = null,
+      effect: 'disclosure' | 'search' = 'disclosure',
+    ) => restriction(f, resource, component, revision, effect);
     const client = await f.accessPool.connect();
     try {
       await client.query('BEGIN');
@@ -326,15 +353,16 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     } finally {
       client.release();
     }
-    // Native heads are live graph data. Relationship proof is supplied by an
-    // explicit trusted test source; production adapters have separate acceptance.
-    await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(work)} a <https://schema.org/CreativeWork> ; rv:head ${iri(workHead)} .
-      ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(space)} ; rv:head ${iri(realmHead)} .
-      ${iri(space)} a rv:Space ; rv:realmCapability ${iri(realm)} .
-    } }`);
+    // Admitted heads are live graph data; the explicit trusted ancestry
+    // source isolates disclosure policy from the consuming owner adapters.
     expect(await decisions()).toEqual(['visible', 'visible', 'visible', 'visible']);
 
+    const viewers = await realmViewers(f, realm);
+    await expect(restriction(f, realm, 'record', null, 'disclosure', { scopeKind: 'exact_revision' }))
+      .rejects.toBeInstanceOf(GovernanceInvalid);
+    expect(await decisions([body, media, independent])).toEqual(['visible', 'visible', 'visible']);
+
+    const snapshotObserver = new Pool({ connectionString: f.accessPool.options.connectionString, max: 4 });
     const staleSnapshot = await f.accessPool.connect();
     let releaseSnapshotRestriction: (() => Promise<void>) | undefined;
     try {
@@ -342,7 +370,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       const selection = await resolveDisclosureSelections(f.env, [body]);
       const oldCut = await captureDisclosure(f.env, selection, ANONYMOUS_VIEWER, 'read', staleSnapshot);
       expect(oldCut[0]!.decision).toBe('visible');
-      releaseSnapshotRestriction = await restrict(realm, 'record');
+      releaseSnapshotRestriction = await restriction({ ...f, accessPool: snapshotObserver }, realm, 'record');
       // A final fence on the capture snapshot must refuse: that snapshot cannot
       // observe the independently committed closure.
       await expect(fenceDisclosure(f.env, oldCut, ANONYMOUS_VIEWER, 'read', staleSnapshot))
@@ -350,7 +378,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     } finally {
       await staleSnapshot.query('ROLLBACK');
       staleSnapshot.release();
-      await releaseSnapshotRestriction?.();
+      try { await releaseSnapshotRestriction?.(); } finally { await snapshotObserver.end(); }
     }
 
     const narrowerTuples = [
@@ -366,7 +394,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
           representations: [{ principalId: f.principalId, actor: f.actor, action: 'governance.moderate', lifetime: '8 hours' }],
           grant: { actor: f.actor, action: 'governance.moderate', lifetime: '8 hours' },
         });
-      const release = await restriction(f.accessPool, f.principalId, f.actor, realm, 'record', null, 'disclosure', tuple);
+      const release = await restriction(f, realm, 'record', null, 'disclosure', tuple);
       try {
         expect(await decisions([body, media, independent]), label).toEqual(['visible', 'visible', 'visible']);
       } finally { await release(); }
@@ -398,15 +426,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     expect(constrained[0]!.decision).toBe('tombstone');
     expect(constrained[0]!.parents.map((parent) => parent.kind)).toEqual(['work', 'realm']);
     const releaseRealm = await restrict(realm, 'record');
-    const member: Viewer = {
-      signedIn: true,
-      age: 'adult',
-      country: 'US',
-      optIns: { general: true, r15: true, sexual: true, grotesque: true },
-    };
-    // Platform or manager authority does not enter the ordinary policy read.
-    // The signed-in principal here also holds the fixture platform mandate.
-    for (const viewer of [ANONYMOUS_VIEWER, member]) {
+    for (const viewer of viewers) {
       for (const channel of DISCLOSURE_CHANNELS) {
         expect(await decisions(targets, channel, viewer)).toEqual([
           'hidden',
@@ -437,10 +457,10 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     const pinnedRelease = await restrict(work, 'title', pinnedWorkHead);
     expect(await decisions([body])).toEqual(['tombstone']);
     const oldCut = await capture([body]);
-    currentWorkHead = nativeId();
-    await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(work)} rv:head ${iri(workHead)} } } INSERT { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(work)} rv:head ${iri(currentWorkHead)} } } WHERE {}`);
+    const movedWork = await editAdmittedMetadataWork(f.env, f.account.verifier, f.access, request(), {
+      work, expectedHead: currentWorkHead, title: 'Protected Work moved head', actingSubject: f.actor, idempotencyKey: randomUUID(),
+    });
+    currentWorkHead = movedWork.revision;
     await expect(fenceDisclosure(f.env, oldCut, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(
       DisclosureUnavailable,
     );
@@ -483,7 +503,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
 
     // Unrelated fences must not turn the exact parent lookup into ancestry
     // enumeration. Read the native plan rather than infer cost from call count.
-    for (let index = 0; index < 512; index++) await restrict(nativeId(), 'record');
+    await unrelatedFences(f, 512);
     await f.accessPool.query('ANALYZE access.governance_enforcement');
     const batch = Array.from({ length: 64 }, (): DisclosureTarget => ({
       ...body,
