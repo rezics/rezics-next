@@ -24,7 +24,7 @@ export const governanceGraphKinds = {
   Occurrence: 'https://schema.org/ListItem',
   Concept: 'http://www.w3.org/2004/02/skos/core#Concept',
   ...Object.fromEntries([
-    'Realm', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure', 'Release', 'FixedRelease',
+    'Realm', 'Work', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure', 'Release', 'FixedRelease',
     'TextContribution', 'Realization', 'Collection', 'SemanticContext', 'Character', 'Role',
     'SemanticDefinition', 'Projection', 'Post',
   ].map(kind => [kind, `${RV}${kind}`])),
@@ -345,6 +345,9 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
             ${iri(target.resource)} a ?kind .
             OPTIONAL { FILTER(?kind = rv:Realm) ${iri(target.resource)} rv:head ?head }
           } } LIMIT 2`, 2048)).results?.bindings ?? [];
+        // The successful query also looked for Realm. An unprofiled semantic
+        // resource has no Realm owner basis and retains its Access-only path.
+        if (!rows.length) return null;
         if (rows.length !== 1 || rows[0]?.kind?.type !== 'uri'
           || !governanceGraphTargetKinds.includes(rows[0].kind.value)) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
