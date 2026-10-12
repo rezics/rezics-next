@@ -21,6 +21,7 @@ import { baselineMemberProof } from '../src/modules/access/baseline.ts';
 import { WorkMaintainers } from '../src/modules/work/maintainers.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { principalControllerSubjects } from '../src/modules/access/controller-continuity.ts';
+import { AccountHasOwnedAgents } from '../src/modules/access/account-deletion-agents.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -71,7 +72,7 @@ async function principal() {
   return { id, verified };
 }
 
-async function agent(controllers: Awaited<ReturnType<typeof principal>>[]) {
+async function agent(controllers: Awaited<ReturnType<typeof principal>>[], kind = 'person') {
   const actor = native();
   await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
   const mandates: { id: string; generation: string }[] = [];
@@ -89,8 +90,8 @@ async function agent(controllers: Awaited<ReturnType<typeof principal>>[]) {
   await pool.query(
     `INSERT INTO access.agent_provision (id,principal_id,idempotency_key,request_digest,
     agent_id,agent_kind,display_name,principal_epoch,state,graph_data_epoch,graph_sequence,representation_id)
-    VALUES ($1::uuid,$2,$1::text,$3,$4,'person','Controller fixture',0,'active','fixture',1,$5)`,
-    [provision, controllers[0]!.id, digest(provision), actor, mandates[0]!.id],
+    VALUES ($1::uuid,$2,$1::text,$3,$4,$6,'Controller fixture',0,'active','fixture',1,$5)`,
+    [provision, controllers[0]!.id, digest(provision), actor, mandates[0]!.id, kind],
   );
   return { actor, mandates, provision };
 }
@@ -278,17 +279,17 @@ test('concurrent principal deactivation and revocation of the last two controlle
   ).toBe(1);
 });
 
-test('sole-controller deactivation and Account deletion are refused; handover permits the old principal fence', async () => {
+test('sole-controller deactivation and unconsented owned-Agent deletion are refused; handover permits the old principal fence', async () => {
   const old = await principal(),
     next = await principal();
-  const control = await agent([old]);
+  const control = await agent([old], 'organization');
   const registry = new AccessAdmissionRegistry(pool);
   await expect(registry.strongDeactivatePrincipal(old.id, '0')).rejects.toBeInstanceOf(
     AdmissionControllerContinuity,
   );
   await expect(
     registry.strongDeactivateAccountSubject(old.verified.issuer, old.verified.subject),
-  ).rejects.toBeInstanceOf(AdmissionControllerContinuity);
+  ).rejects.toBeInstanceOf(AccountHasOwnedAgents);
   expect(
     (
       await pool.query('SELECT active,enforcement_epoch FROM access.principal WHERE id = $1', [
