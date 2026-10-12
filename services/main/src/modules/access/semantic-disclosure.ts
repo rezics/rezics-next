@@ -280,11 +280,50 @@ export async function readReferenceDisclosure(
   });
 }
 
-/** Only the reference reader enables independent Work authority. Both readers
- * retain the existing exact semantic gates, policies and live baseline proofs. */
+/** Navigation uses the Structure profile's type-directed policy: Work authority
+ * never substitutes for semantic authority, nor semantic grants for Work reads.
+ * Each immutable range, including lookahead, shares one recovery-fenced Access
+ * transaction. Its semantic sub-batches retain the existing 65-resource bound. */
+export async function readZoneNavigationTargetDisclosure(client: SemanticDisclosureClient,
+  principal: VerifiedPrincipal, workPrincipal: VerifiedPrincipal | null, actor: string,
+  refs: readonly string[]): Promise<ReadonlySet<string>> {
+  const unique = [...new Set(refs.filter(ref => nativeId.test(ref)))];
+  if (unique.length > 101) throw new RangeError('Zone navigation target batch exceeds its immutable range');
+  if (!unique.length) return new Set();
+  const graph = requireDisclosureGraph(client.graph);
+  return inAccessTransaction(client.pool, 'read committed', async access => {
+    await requireRecoveryOpen(access, true);
+    const rows = (await graph.query(`PREFIX schema: <https://schema.org/>
+      SELECT ?resource WHERE { VALUES ?resource { ${unique.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?resource a schema:CreativeWork } }
+      LIMIT ${unique.length + 1}`, 32_768)).results?.bindings ?? [];
+    const works = new Set(rows.map(row => row.resource?.value));
+    if (rows.length !== works.size || rows.length > unique.length
+      || [...works].some(resource => !resource || !unique.includes(resource))) {
+      throw new Error('Zone navigation target types are ambiguous');
+    }
+    const allowed = new Set<string>();
+    for (let at = 0; at < unique.length; at += SEMANTIC_DISCLOSURE_LIMIT) {
+      const batch = unique.slice(at, at + SEMANTIC_DISCLOSURE_LIMIT);
+      const semantics = batch.filter(resource => !works.has(resource));
+      const publicRefs = semantics.length ? await publicInTransaction(access, graph, semantics) : new Set<string>();
+      const semanticRefs = await privateReferenceInTransaction(access, graph, principal, actor,
+        semantics, publicRefs, false);
+      const workRefs = workPrincipal && works.size
+        ? await privateReferenceInTransaction(access, graph, workPrincipal, actor,
+          batch.filter(resource => works.has(resource)), new Set(), 'work') : new Set<string>();
+      for (const resource of [...semanticRefs, ...workRefs]) allowed.add(resource);
+    }
+    return allowed;
+  });
+}
+
+/** Shared live authority proofs. Reference reads permit either scope family;
+ * semantic reads and type-directed Structure reads select their owner family. */
 async function privateReferenceInTransaction(access: PoolClient, graph: Pick<FusekiClient, 'query'>,
   principal: VerifiedPrincipal | null, actor: string | null, unique: readonly string[],
-  publicRefs: ReadonlySet<string>, includeWorks: boolean): Promise<ReadonlySet<string>> {
+  publicRefs: ReadonlySet<string>, includeWorks: boolean | 'work'): Promise<ReadonlySet<string>> {
+  const includeSemantics = includeWorks !== 'work';
   const allowed = new Set(publicRefs);
   if (!principal || !actor || !nativeId.test(actor)) return allowed;
   const remaining = unique.filter((ref) => !allowed.has(ref));
@@ -298,7 +337,7 @@ async function privateReferenceInTransaction(access: PoolClient, graph: Pick<Fus
   ).rows[0];
   if (!identity) return allowed;
   const scopes = includeWorks
-    ? remaining.flatMap(ref => [`semantic:read:${ref}`, `work:read:${ref}`])
+    ? remaining.flatMap(ref => [...(includeSemantics ? [`semantic:read:${ref}`] : []), `work:read:${ref}`])
     : remaining.map(ref => `semantic:read:${ref}`);
   const gates = (
     await access.query<{ id: string; open: boolean }>(
@@ -323,7 +362,7 @@ async function privateReferenceInTransaction(access: PoolClient, graph: Pick<Fus
       `SELECT wanted.resource
     FROM unnest($3::text[]) AS wanted(resource)
     CROSS JOIN (VALUES ${includeWorks
-      ? "('semantic:read:', 'semantic.read'), ('work:read:', 'work.read')"
+      ? `${includeSemantics ? "('semantic:read:', 'semantic.read'), " : ''}('work:read:', 'work.read')`
       : "('semantic:read:', 'semantic.read')"}) AS kind(prefix, action)
     JOIN access.scope_gate gate ON gate.id = kind.prefix || wanted.resource AND gate.open
     JOIN access.authority_subject subject ON subject.id = $2 AND subject.active
@@ -343,7 +382,7 @@ async function privateReferenceInTransaction(access: PoolClient, graph: Pick<Fus
       (ref) =>
         !allowed.has(ref) && !closed.has(`${prefix}${ref}`) && !policies.has(`${prefix}${ref}`),
     );
-  const semantic = eligible('semantic:read:'),
+  const semantic = includeSemantics ? eligible('semantic:read:') : [],
     works = includeWorks ? eligible('work:read:') : [];
   if (!semantic.length && !works.length) return allowed;
   const administrator = semantic.length

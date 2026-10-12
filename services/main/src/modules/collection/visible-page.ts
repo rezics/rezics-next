@@ -9,7 +9,9 @@ type Occurrence = Awaited<ReturnType<typeof readCompositionPage>>['occurrences']
 
 /** Filter within the immutable range scan: neither sparse visible pages nor
  * lookahead has an inventory ceiling. Only a later disclosed occurrence creates
- * a continuation. A trailing private member reveals no cursor or count. */
+ * a continuation. A trailing private member reveals no cursor or count.
+ * The shared scan deduplicates candidate targets, including lookahead, before
+ * calling canReadTargets; callers without a batch retain scalar admission. */
 export async function readVisibleCompositionPage(env: WorkActivationEnvironment,
   input: Request & { limit: number; visible: (item: Occurrence) => boolean; readingBoundary?: ReadingBoundary }) {
   const signal = fusekiReadBudget.getStore()?.signal ?? AbortSignal.timeout(VISIBLE_PAGE_COST.deadlineMs);

@@ -305,6 +305,9 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
     ...(input.revision ? { revision: input.revision } : {}),
     ...(input.after ? { after: input.after } : {}), limit: input.limit ?? 50,
     visible: item => item.role === 'mount' && !!item.target,
+    canReadTargets: work.mediaAccess?.canReadZoneNavigationTargets
+      ? targets => work.mediaAccess!.canReadZoneNavigationTargets!(principal, workPrincipal, input.actingSubject, targets)
+      : undefined,
     canReadTarget: async target => {
       return canReadStructureTarget(structureProfileFor(header.profile), {
         environment: work.environment, access: {

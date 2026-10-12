@@ -254,6 +254,7 @@ export interface MainWorkDependencies {
   verification?: VerificationStore;
   /** Current Access authority for bounded resource-summary batches. */
   mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks' | 'canReadSemantics' | 'canReadPrivateContexts'> & {
+    canReadZoneNavigationTargets?: MediaAccessBatchReader['canReadZoneNavigationTargets'];
     explicitSemanticRead?(principal: import('../modules/access/admission.ts').VerifiedPrincipal,
       actingSubject: string, resource: string): Promise<boolean>;
   };
