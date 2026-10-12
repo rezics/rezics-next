@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { provisionFixtureAuthor } from '../../../tests/qa/fixtures/authored-work.ts';
 import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
 import { releaseFixturePreservationHold } from '../src/modules/access/fixture-preservation.ts';
 import { restrictFixtureDisclosure } from '../src/modules/access/fixture-disclosure.ts';
@@ -435,11 +436,14 @@ test('all snapshot statements cost one indexed read per store, independent of mo
   for (const history of [0, 1000]) {
     if (history) {
       const before = await stack.accessPool.query<{ n: string }>('SELECT count(*)::text AS n FROM access.governance_preservation_hold');
-      // Intake requires actual readable targets. Create through the graph owner,
-      // then hold them after graph movement stops so intake has a stable cut.
+      // Public Agent records give intake real owner-created targets without
+      // building unrelated Works, contributions and Main selections. Create
+      // first, then hold after graph movement stops so intake has a stable cut.
       const unrelated: string[] = [];
       for (let ordinal = 0; ordinal < history; ordinal++) {
-        unrelated.push((await stack.publicWork(f.member.actor, ['en'], `Unrelated preserved Work ${ordinal}`)).work);
+        const resource = `https://rezics.com/id/${randomUUID()}`;
+        await provisionFixtureAuthor(stack.env, resource);
+        unrelated.push(resource);
       }
       for (let batch = 0; batch < 50; batch++) {
         await Promise.all(unrelated.slice(batch * 20, (batch + 1) * 20).map(resource => f.hold(resource)));
