@@ -4,7 +4,8 @@ import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { admittedSemanticChange, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
-import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead } from '../modules/semantic/command.ts';
+import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead,
+  UnavailableSemanticReference } from '../modules/semantic/command.ts';
 import { readSemanticCurrent, readSemanticRevision, type SemanticRead } from '../modules/semantic/read.ts';
 import { InvalidSemanticValue, UnsupportedSemanticValue } from '../modules/semantic/value.ts';
 import { ModelGenerationChanged } from '../modules/semantic/generation-guard.ts';
@@ -37,6 +38,15 @@ const semanticRead = t.Object({ profile: t.Literal('semantic-change-v1'), compon
 const semanticBulkWrite = t.Object({ profile: t.Literal(STAGE_PROFILE), stageId: t.String(),
   modelGeneration: t.String(), receipt: t.String(), sourcePosition: position, itemCount: t.Number(),
   items: t.Array(t.Object({ component: native, revision: native })), replayed: t.Boolean() });
+const unavailableReferenceProblem = t.Object({
+  type: t.Literal('https://rezics.com/problems/unavailable_reference'),
+  title: t.Literal('Semantic change is not admitted'), status: t.Literal(422), code: t.Literal('unavailable_reference'),
+  itemIndex: t.Integer({ minimum: 0, description: 'Zero-based position in items; 0 for a single change state.' }),
+  pointer: t.String({ pattern: '^/', description: 'JSON pointer inside the submitted item, before canonical sorting.' }),
+  reference: { ...native, description: 'Exact reference value supplied by the caller at pointer.' },
+}, { additionalProperties: false,
+  description: 'First unavailable reference in submitted item and field order. Echoes caller input only; hidden and absent targets have identical responses for identical input.' });
+const semanticChangeProblem = t.Union([unavailableReferenceProblem, problemResult(422)]);
 
 export const openApiOperations = {
   '/v1/semantic/changes': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -50,6 +60,10 @@ export function semanticError(error: unknown): Response {
   if (error instanceof ProjectionParticipantRefused) return problem(422, error.problemCode, error.message);
   if (error instanceof WorkReadInvalid || error instanceof WorkReadMissing || error instanceof WorkReadMoved
     || error instanceof WorkReadUnavailable) return workReadError(error);
+  if (error instanceof UnavailableSemanticReference) return Response.json({
+    type: 'https://rezics.com/problems/unavailable_reference', title: 'Semantic change is not admitted',
+    status: 422, code: 'unavailable_reference', itemIndex: error.itemIndex, pointer: error.pointer, reference: error.reference,
+  }, { status: 422, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
   if (error instanceof SemanticChangeRejected) {
     if (error.code === 'invalid' || error.code === 'unsupported') {
       return problem(400, `${error.code}_semantic_change`, 'Semantic change does not match its profile');
@@ -112,7 +126,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         expectedHead: t.Nullable(native), state: t.Record(t.String(), t.Unknown()), actingSubject: native },
       { additionalProperties: false }),
       response: { 200: semanticWrite, 201: semanticWrite, 202: pendingOperation, ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+        404: problemResult(404), 422: semanticChangeProblem },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -132,7 +146,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       body: t.Object({ profile: t.Literal(STAGE_PROFILE), items: t.Array(t.Unknown(),
         { minItems: 1, maxItems: STAGE_LIMITS.items }), actingSubject: native }, { additionalProperties: false }),
       response: { 200: semanticBulkWrite, 201: semanticBulkWrite, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404), 413: problemResult(413), 422: problemResult(422) },
+        ...writeProblems, 404: problemResult(404), 413: problemResult(413), 422: semanticChangeProblem },
     }, async ({ request, body }) => {
       if (!work.semanticStages) return problem(503, 'semantic_stage_unavailable', 'Semantic staging is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');

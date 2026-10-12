@@ -10,6 +10,7 @@ import { readWorkComponentState } from '../work/history.ts';
 import { MODEL_COMPONENT, PROFILES } from './schema.ts';
 import { ModelGenerationChanged, modelGenerationBootstrapGuard } from './generation-guard.ts';
 import { custodyGeneratedModelGeneration } from './model-custody.ts';
+import type { ComponentInput } from './change.ts';
 
 /**
  * Shared graph command path of the semantic families. It reuses the Work family
@@ -27,6 +28,31 @@ export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailab
 export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
     | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large' | 'question-presentation-language-limit', message: string) { super(message); }
+}
+
+export interface SubmittedSemanticReference {
+  itemIndex: number;
+  pointer: string;
+  reference: string;
+}
+
+/** Only caller-supplied coordinates belong in an unavailable-reference diagnostic. */
+export class UnavailableSemanticReference extends SemanticChangeRejected {
+  constructor(readonly itemIndex: number, readonly pointer: string, readonly reference: string) {
+    super('unavailable-reference', 'a referenced resource is unavailable');
+  }
+}
+
+/** Read the validated input before canonical sorting changes its array positions. */
+export function submittedSemanticReferences(state: ComponentInput, itemIndex: number): SubmittedSemanticReference[] {
+  if (state.component === 'resource') return (state.properties ?? []).flatMap((property, index) =>
+    property.value.kind === 'resource'
+      ? [{ itemIndex, pointer: `/properties/${index}/value/ref`, reference: property.value.ref }] : []);
+  return [
+    ...(state.successor ? [{ itemIndex, pointer: '/successor', reference: state.successor }] : []),
+    ...(state.roles ?? []).flatMap((role, roleIndex) => (role.members ?? []).map((reference, memberIndex) =>
+      ({ itemIndex, pointer: `/roles/${roleIndex}/members/${memberIndex}`, reference }))),
+  ];
 }
 export class StaleSemanticHead extends Error {
   constructor(message: string, readonly currentHead?: string) { super(message); }

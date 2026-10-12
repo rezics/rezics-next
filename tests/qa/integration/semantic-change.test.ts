@@ -5,6 +5,10 @@ import { join, resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { ACTIVE_GENERATION } from '../../../services/main/src/modules/semantic/command.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { SemanticStageStore } from '../../../services/main/src/modules/semantic/staging.ts';
 
 const RV = 'https://rezics.com/vocab/';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
@@ -215,11 +219,29 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
     const refused = await Promise.all([hidden.component, missing].map(async ref => {
       const response = await change(edit(moved.revision, privileged, [{ predicate: 'https://schema.org/knows',
         value: { kind: 'resource', ref } }]));
-      return { status: response.status, body: await response.json() };
+      const text = await response.text();
+      return { status: response.status, body: JSON.parse(text), text };
     }));
-    expect(refused[0]).toEqual(refused[1]);
-    expect(refused[0]!.status).toBe(422);
-    expect((refused[0]!.body as { code: string }).code).toBe('unavailable_reference');
+    for (const [index, ref] of [hidden.component, missing].entries()) {
+      expect(refused[index]!.status).toBe(422);
+      expect(refused[index]!.body).toEqual({ type: 'https://rezics.com/problems/unavailable_reference',
+        title: 'Semantic change is not admitted', status: 422, code: 'unavailable_reference',
+        itemIndex: 0, pointer: '/properties/0/value/ref', reference: ref });
+    }
+    // Compare identical submitted input with a hidden target, then with that
+    // target absent. QA raw updates preserve its exact head for the later read proof.
+    await f.nativeFuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden.component)} ?p ?o } }`);
+    try {
+      expect((await f.env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden.component)} ?p ?o } }`)).boolean).toBe(false);
+      const absent = await change(edit(moved.revision, privileged, [{ predicate: 'https://schema.org/knows',
+        value: { kind: 'resource', ref: hidden.component } }]));
+      expect(absent.status).toBe(refused[0]!.status);
+      expect(await absent.text()).toBe(refused[0]!.text);
+    } finally {
+      await f.nativeFuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(hidden.component)} a <http://www.w3.org/2000/01/rdf-schema#Resource>, <https://schema.org/Person> ;
+          rv:semanticHead ${iri(hidden.revision)} . } }`);
+    }
     expect(await admissions()).toBe(before);
     expect((await f.env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${iri(missing)} ?p ?o } }`)).boolean).toBe(false);
     const readGrant = await f.grant(`semantic:read:${hidden.component}`, 'semantic.read');
@@ -258,5 +280,69 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
     finally { writeFileSync(path, saved); }
     expect((await read(created.component, typed.revision)).status).toBe(200);
     expect((await read(created.component, nativeId())).status).toBe(404);
+  } finally { await f.close(); }
+}, 180_000);
+
+test('Bulk semantic reference refusals echo only the first submitted reference and preserve hidden/absent equality', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `semantic-bulk-${randomUUID()}`));
+  const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
+    region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
+    secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/stage/' });
+  try {
+    await objects.initialize();
+    const grant = (scope: string, action: string) => grantFixtureAuthority(f.accessPool, {
+      scope, requireDispatch: true,
+      representations: [{ principalId: f.principalId, actor: f.actor, action, lifetime: '8 hours' }],
+      grant: { actor: f.actor, action, lifetime: '8 hours' },
+    });
+    await grant('semantic:create:root', 'semantic.change');
+    await grant('semantic:create:root', 'semantic.change.bulk');
+    const state = { component: 'resource', types: ['https://schema.org/Person'], properties: [] };
+    const hidden = await f.json<Write>(await f.call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', actingSubject: f.actor, expectedHead: null, state }), 201);
+    const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
+      access: f.access, semanticStages: new SemanticStageStore(f.pool, objects) });
+    const second = nativeId();
+    const body = { profile: 'semantic-change-bulk-v1', actingSubject: f.actor, items: [state, {
+      ...state, properties: [
+        { predicate: 'https://schema.org/knows', value: { kind: 'resource', ref: hidden.component } },
+        { predicate: 'https://schema.org/about', value: { kind: 'resource', ref: second } },
+      ],
+    }] };
+    const key = randomUUID();
+    const bulk = (input: object, idempotencyKey = key) => app.handle(new Request('http://main.local/v1/semantic/changes/bulk', {
+      method: 'POST', headers: { authorization: `Bearer ${f.account.tokenA}`, 'content-type': 'application/json',
+        'idempotency-key': idempotencyKey }, body: JSON.stringify(input),
+    }));
+    const refused = await bulk(body);
+    expect(refused.status).toBe(422);
+    const hiddenText = await refused.text();
+    expect(JSON.parse(hiddenText)).toEqual({ type: 'https://rezics.com/problems/unavailable_reference',
+      title: 'Semantic change is not admitted', status: 422, code: 'unavailable_reference',
+      itemIndex: 1, pointer: '/properties/0/value/ref', reference: hidden.component });
+    await f.nativeFuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden.component)} ?p ?o } }`);
+    try {
+      expect((await f.env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden.component)} ?p ?o } }`)).boolean).toBe(false);
+      const absent = await bulk(body);
+      expect(absent.status).toBe(422);
+      expect(await absent.text()).toBe(hiddenText);
+    } finally {
+      await f.nativeFuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(hidden.component)} a <http://www.w3.org/2000/01/rdf-schema#Resource>, <https://schema.org/Person> ;
+          rv:semanticHead ${iri(hidden.revision)} . } }`);
+    }
+    expect((await f.accessPool.query('SELECT 1 FROM access.admission WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+    expect((await f.pool.query('SELECT 1 FROM semantic.change_stage WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+    await grant(`semantic:read:${hidden.component}`, 'semantic.read');
+    const availableBody = { ...body, items: [state, { ...state, properties: [body.items[1]!.properties[0]!] }] };
+    const availableKey = randomUUID();
+    const accepted = await f.json<{ itemCount: number; items: { component: string; revision: string }[]; receipt: string }>(
+      await bulk(availableBody, availableKey), 201);
+    expect(accepted.itemCount).toBe(2);
+    expect(accepted.items).toHaveLength(2);
+    expect(await (await bulk(availableBody, availableKey)).json()).toMatchObject({
+      itemCount: 2, items: accepted.items, receipt: accepted.receipt, replayed: true,
+    });
   } finally { await f.close(); }
 }, 180_000);

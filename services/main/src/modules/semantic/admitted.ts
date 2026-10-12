@@ -14,7 +14,8 @@ import { ProjectionParticipantRefused, relationReferences, canonicalRelation, ch
 import { changeSemanticComponent, checkedComponentState, type ComponentInput, readSemanticChangeTerminal, referencedResources,
   semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
 import { ACTIVE_GENERATION, cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, sealSemanticRejection, SemanticChangeRejected,
-  SemanticTargetUnavailable, StaleSemanticHead, type SemanticAdmission, type SemanticTerminal } from './command.ts';
+  SemanticTargetUnavailable, StaleSemanticHead, submittedSemanticReferences, UnavailableSemanticReference,
+  type SubmittedSemanticReference, type SemanticAdmission, type SemanticTerminal } from './command.ts';
 
 export type SemanticAccess = Pick<AccessAdmissionRegistry,
   'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>
@@ -61,7 +62,7 @@ interface AdmittedCall<T> {
   platformAccess?: Pick<AccessExposure, 'require'>;
   selectedCapabilities?: () => Promise<Exposure[]>;
   operationId?: string;
-  references: (principal: VerifiedPrincipal) => Promise<string[]>;
+  references: (principal: VerifiedPrincipal) => Promise<(string | SubmittedSemanticReference)[]>;
   dispatch: (admission: SemanticAdmission, canRead: (resource: string) => Promise<boolean>) => Promise<T>;
   readTerminal: (admissionId: string) => Promise<SemanticTerminal | null>;
   result: (terminal: SemanticTerminal, dispatched?: T) => T | Promise<T>;
@@ -79,8 +80,17 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
     await requireSelectedPlatformCapability(call.platformAccess, principal,
       { exposure, operationId: call.operationId ?? 'postV1SemanticChanges' });
   const readable = referenceReader(call.access, principal, call.actingSubject);
-  for (const ref of await call.references(principal)) {
-    if (!await readable(ref)) throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
+  const checkedReferences = new Set<string>();
+  for (const submitted of await call.references(principal)) {
+    const ref = typeof submitted === 'string' ? submitted : submitted.reference;
+    if (checkedReferences.has(ref)) continue;
+    if (!await readable(ref)) {
+      if (typeof submitted !== 'string') {
+        throw new UnavailableSemanticReference(submitted.itemIndex, submitted.pointer, submitted.reference);
+      }
+      throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
+    }
+    checkedReferences.add(ref);
   }
   const registered = await call.access.register({ principal, actingSubject: call.actingSubject, scope: call.scope,
     action: call.action, idempotencyKey: call.idempotencyKey, requestDigest: call.digest });
@@ -166,8 +176,10 @@ export async function admittedSemanticChange(env: WorkActivationEnvironment,
       // discloses them; the rest keep the semantic reader's refusal.
       const members = state.component === 'resource' ? []
         : [...new Set(state.roles.flatMap(role => role.members ?? []))];
-      return semanticWriteReferences(input.target, state,
-        await undisclosedReferences(env, { access, principal, actingSubject: input.actingSubject }, members));
+      const required = new Set(semanticWriteReferences(input.target, state,
+        await undisclosedReferences(env, { access, principal, actingSubject: input.actingSubject }, members)));
+      return [...(input.target ? [input.target] : []),
+        ...submittedSemanticReferences(input.state as ComponentInput, 0).filter(ref => required.has(ref.reference))];
     },
     dispatch: admission => changeSemanticComponent(env, { admission, ...(input.target ? { target: input.target } : {}),
       expectedHead: input.expectedHead, state }),

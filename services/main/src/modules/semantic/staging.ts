@@ -20,7 +20,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { referenceReader, semanticTypeCapabilities, SEMANTIC_WRITE_SCOPE, type SemanticAccess } from './admitted.ts';
 import { requireSelectedPlatformCapability } from '../access/exposure.ts';
 import { cancelSemanticAdmission, ensureModelGeneration, familyReceiptIri, sealSemanticRejection,
-  sealComponentState, SemanticChangeRejected, validationsFor, type SemanticAdmission,
+  sealComponentState, submittedSemanticReferences, UnavailableSemanticReference, validationsFor, type SemanticAdmission,
   type SemanticTerminal } from './command.ts';
 
 export const semanticStageCostContract = {
@@ -580,9 +580,13 @@ export async function admittedSemanticBulkChange(input: {
     expectedHead: null, state })));
   const digest = semanticBulkDigest(states);
   const readable = referenceReader(input.access, principal, input.actingSubject);
-  const refs = [...new Set(states.flatMap(referencedResources))];
-  for (const ref of refs) if (!await readable(ref)) {
-    throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
+  const checkedReferences = new Set<string>();
+  for (const submitted of input.states.flatMap((state, index) => submittedSemanticReferences(state as ComponentInput, index))) {
+    if (checkedReferences.has(submitted.reference)) continue;
+    if (!await readable(submitted.reference)) {
+      throw new UnavailableSemanticReference(submitted.itemIndex, submitted.pointer, submitted.reference);
+    }
+    checkedReferences.add(submitted.reference);
   }
   const registered = await input.access.register({ principal, actingSubject: input.actingSubject,
     scope: 'semantic:create:root', action: 'semantic.change.bulk', idempotencyKey: input.idempotencyKey,

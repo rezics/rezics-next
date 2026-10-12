@@ -30,6 +30,35 @@ record, mandatory Tag/Path/Sense bundle or type-based privilege is unnecessary.
 Resource summaries still need a resolved name and typed avatar or stable
 fallback under the [presentation contract](presentation.md#resource-summaries).
 
+## Semantic change reference refusals
+
+`POST /v1/semantic/changes/bulk` refuses the whole batch when a submitted
+reference cannot be read. Its HTTP 422 problem keeps the `unavailable_reference`
+code and adds `itemIndex`, `pointer` and `reference`. `itemIndex` is the
+zero-based position in `items`; `pointer` is a JSON pointer inside that submitted
+item, such as `/properties/3/value/ref`; `reference` is the exact value supplied
+there. Use these coordinates to locate the input that needs correction.
+
+When several references are unavailable, the response reports the first in
+submitted item order, then field order. Resource properties follow their
+submitted array order. Definition fields check `successor` before `roles`, then
+roles and their `members` in submitted array order. Canonical sorting does not
+change these coordinates. Types, predicates and external identifiers are not
+resource-reference diagnostics.
+
+`POST /v1/semantic/changes` returns the same diagnostic for a refused reference
+inside its submitted `state`: `itemIndex` is 0 and `pointer` is relative to
+`state`. A refusal of its edit `target`, or a server-discovered conflict with no
+caller-supplied field inside the item, retains the generic problem without
+these fields.
+
+A hidden target and an absent target produce byte-identical problem bodies
+for identical submitted input. The three diagnostic fields echo only the
+caller's input; they disclose no label, policy, existence, owner, revision or
+server-discovered conflict reference. Unavailable-reference refusals from
+relation, lexicon, rating and work-authority operations retain their existing
+contracts.
+
 ## Definition responsibilities
 
 The long-term model separates seven decisions: ResourceDefinition fixes referent,
