@@ -104,20 +104,21 @@ async function select(input: DisclosureTarget, parents: readonly { kind: 'work' 
 }
 
 async function restrict(input: DisclosureTarget, options: { component?: EvidenceTarget['component']; revision?: string | null;
-  effect?: 'disclosure' | 'search'; context?: string; pending?: boolean } = {}) {
+  effect?: 'disclosure' | 'search'; context?: string; pending?: boolean; revisions?: readonly string[] } = {}) {
   const reported: EvidenceTarget = { owner: input.owner, resource: input.resource, component: options.component ?? input.component,
     revision: options.revision === undefined ? input.revision ?? null : options.revision, locator: null };
   const report = await governance.submitReport(principal, {
     kind: 'content_report', actingSubject: actor, authority: { kind: 'platform', scopeId: 'governance:platform' },
     context: options.context ?? GLOBAL_CONTEXT, target: reported, disclosure: 'private', reasonCode: 'disclosure',
-    statement: 'Review retained evidence', evidence: [{ ...reported,
-      revision: reported.revision ?? heads.get(input.resource) ?? null }], idempotencyKey: randomUUID(),
+    statement: 'Review retained evidence', evidence: (options.revisions ??
+      [reported.revision ?? heads.get(input.resource) ?? null]).map(revision => ({ ...reported, revision })), idempotencyKey: randomUUID(),
   });
   await governance.safety.claim(principal, actor, report.caseId);
   const decision: DecisionInput = {
     caseId: report.caseId, expectedGeneration: report.caseGeneration, actingSubject: actor, outcome: 'restrict',
-    targets: [{ ...reported, scopeKind: reported.revision === null ? 'component' : 'exact_revision',
-      expectedHead: heads.get(input.resource) ?? null, effect: options.effect ?? 'disclosure' }],
+    targets: (options.revisions ?? [reported.revision]).map(revision => ({ ...reported, revision,
+      scopeKind: revision === null ? 'component' : 'exact_revision',
+      expectedHead: heads.get(input.resource) ?? null, effect: options.effect ?? 'disclosure' })),
     rule, evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
     rationale: null, disclosure: 'private', idempotencyKey: randomUUID(), reasons: {
       facts: 'Reviewed retained evidence.', scope: 'Exact selected target.', duration: 'Until reconsidered.',
@@ -511,3 +512,48 @@ for (const change of ['restoration', 'recovery generation'] as const) {
       .rejects.toThrow('Disclosure enforcement cut moved');
   });
 }
+
+
+type EnforcementPlan = { 'Relation Name'?: string; 'Node Type': string; 'Actual Rows': number;
+  'Actual Loops': number; 'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number;
+  Plans?: EnforcementPlan[] };
+function enforcementRowsExamined(plan: EnforcementPlan): number {
+  const own = plan['Relation Name'] === 'governance_enforcement' && plan['Node Type'] !== 'Bitmap Index Scan'
+    ? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0) + (plan['Rows Removed by Index Recheck'] ?? 0))
+      * plan['Actual Loops'] : 0;
+  return own + (plan.Plans ?? []).reduce((sum, child) => sum + enforcementRowsExamined(child), 0);
+}
+
+test('exact title basis examines constant enforcement rows with 1,000 excluded historical revision/context rows', async () => {
+  const input = target(), selection = await select(input);
+  await restrict(input);
+  const explain = async () => {
+    await pool.query('ANALYZE access.governance_enforcement');
+    const held = await pool.connect();
+    try {
+      await held.query('BEGIN');
+      // Compare the indexed probe at both populations, rather than a small-
+      // table sequential scan chosen only because it happens to be cheaper.
+      await held.query('SET LOCAL enable_seqscan = off');
+      let examined = -1;
+      const explaining = { query: async (sql: string, args?: unknown[]) => {
+        const rows = (await held.query<{ 'QUERY PLAN': { Plan: EnforcementPlan }[] }>(
+          `EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) ${sql}`, args)).rows;
+        examined = enforcementRowsExamined(rows[0]!['QUERY PLAN'][0]!.Plan);
+        return held.query(sql, args);
+      } } as unknown as Pick<PoolClient, 'query'>;
+      const basis = await scopedEnforcementBasis(explaining, [selection]);
+      return { basis: basis.results[0], examined };
+    } finally { await held.query('ROLLBACK'); held.release(); }
+  };
+  const before = await explain();
+  for (const context of [GLOBAL_CONTEXT, native()]) {
+    const revisions = Array.from({ length: 500 }, native);
+    for (let offset = 0; offset < revisions.length; offset += 16)
+      await restrict(input, { revision: revisions[offset], context, revisions: revisions.slice(offset, offset + 16) });
+  }
+  const after = await explain();
+  expect(after.basis).toBe(before.basis);
+  expect(after.examined).toBe(before.examined);
+  expect(after.examined).toBeLessThanOrEqual(2);
+}, 120_000);

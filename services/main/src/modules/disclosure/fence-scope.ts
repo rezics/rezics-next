@@ -21,13 +21,57 @@ export const SCOPED_ENFORCEMENT_BASIS_SQL = `(
         WHEN wanted.component = 'body' AND wanted.owner = 'content' THEN 'graph'
         ELSE wanted.owner END]) owner
     UNION SELECT resource, 'graph' FROM parent_refs
+  ), bounded_refs AS MATERIALIZED (
+    SELECT refs.*,
+      ARRAY(SELECT DISTINCT component FROM unnest(
+        CASE WHEN refs.resource = wanted.resource OR refs.owner IN ('media', 'review')
+          AND refs.resource = right(wanted.resource, 36) THEN
+          ARRAY[wanted.component, 'record', 'publication']
+          || CASE WHEN wanted.component IN ('title', 'name') THEN ARRAY['title', 'name'] ELSE ARRAY[]::text[] END
+          || CASE WHEN wanted.owner = 'media' THEN ARRAY['cover', 'media_use', 'body'] ELSE ARRAY[]::text[] END
+        ELSE ARRAY[]::text[] END
+        || CASE WHEN refs.owner = 'graph' AND EXISTS (
+          SELECT 1 FROM parent_refs parent WHERE parent.resource = refs.resource)
+          THEN ARRAY['title', 'name', 'record', 'publication'] ELSE ARRAY[]::text[] END
+      ) component) AS components,
+      ARRAY(SELECT DISTINCT revision FROM (
+        SELECT wanted.revision AS revision
+          WHERE refs.resource = wanted.resource OR refs.owner IN ('media', 'review')
+            AND refs.resource = right(wanted.resource, 36)
+        UNION ALL SELECT unnest(ARRAY[
+          replace(wanted.revision, 'urn:rezics:content:revision:', ''),
+          'urn:rezics:content:revision:' || replace(wanted.revision, 'urn:rezics:content:revision:', '')])
+          WHERE wanted.component = 'body' AND refs.owner IN ('graph', 'content')
+            AND refs.resource = wanted.resource
+        UNION ALL SELECT unnest(ARRAY[parent.head, parent."protectedRevision"])
+          FROM parent_refs parent WHERE refs.owner = 'graph' AND parent.resource = refs.resource
+      ) revisions WHERE revision IS NOT NULL) AS revisions,
+      (wanted.revision IS NULL AND (refs.resource = wanted.resource OR refs.owner IN ('media', 'review')
+        AND refs.resource = right(wanted.resource, 36)) OR refs.owner = 'graph' AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(wanted.parents) parent
+          WHERE parent->>'resource' = refs.resource AND parent ? 'protectedRevision'
+            AND parent->>'protectedRevision' IS NULL)) AS "anyRevision"
+    FROM refs
   ), matched AS (
     SELECT DISTINCT e.id, e.fence_epoch, e.decision_id, e.decision_ordinal, e.state
-    FROM refs CROSS JOIN LATERAL (
-      SELECT e.* FROM access.governance_enforcement e
-      WHERE e.owner = refs.owner AND e.resource = refs.resource
-      OFFSET 0
-    ) e
+    FROM bounded_refs refs CROSS JOIN LATERAL (
+      SELECT e.* FROM (
+        -- Separate null, exact and unproven revisions so each exact probe can
+        -- use the complete enforcement index. Wildcards run only when the
+        -- selected owner really issued an unproven revision, never for history.
+        SELECT e.* FROM access.governance_enforcement e
+          WHERE e.owner = refs.owner AND e.resource = refs.resource
+            AND e.component = ANY(refs.components) AND e.context = ANY(ARRAY[$3::text, wanted.context])
+            AND e.effect = ANY($2::text[]) AND e.revision IS NULL
+        UNION ALL SELECT e.* FROM access.governance_enforcement e
+          WHERE e.owner = refs.owner AND e.resource = refs.resource
+            AND e.component = ANY(refs.components) AND e.context = ANY(ARRAY[$3::text, wanted.context])
+            AND e.effect = ANY($2::text[]) AND e.revision = ANY(refs.revisions)
+        UNION ALL SELECT e.* FROM access.governance_enforcement e
+          WHERE refs."anyRevision" AND e.owner = refs.owner AND e.resource = refs.resource
+            AND e.component = ANY(refs.components) AND e.context = ANY(ARRAY[$3::text, wanted.context])
+            AND e.effect = ANY($2::text[]) AND e.revision IS NOT NULL
+      ) e
     WHERE (
       e.effect = ANY($2::text[]) AND e.context = ANY(ARRAY[$3::text, wanted.context]) AND (
         (e.resource = wanted.resource OR e.owner IN ('media', 'review')
@@ -64,6 +108,7 @@ export const SCOPED_ENFORCEMENT_BASIS_SQL = `(
           AND t.owner = 'graph' AND t.resource = e.resource AND t.component = 'record'
           AND t.locator IS NULL AND t.scope_kind = 'component' AND t.revision IS NULL AND t.effect = 'disclosure')
     )
+    ) e
   )
   SELECT encode(sha256(convert_to(COALESCE(jsonb_agg(jsonb_build_array(
     id, fence_epoch::text, decision_id, decision_ordinal, state) ORDER BY id)::text, '[]'), 'UTF8')), 'hex')
