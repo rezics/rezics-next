@@ -6,7 +6,7 @@ import { MembersView } from './members-view.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
-import { chooseOption } from '../stories/choose-option.ts';
+import { chooseMenuItem, chooseOption } from '../stories/choose-option.ts';
 import type { Loaded, MemberPage, RoleCommand } from './types.ts';
 
 const record: AdminRecord = { members: [], roles: [], settings: [] };
@@ -60,9 +60,18 @@ async function openDialog(name: string) {
   await settledOverlay(element);
   return within(element);
 }
-async function openMenu(canvas: ReturnType<typeof within>, name: string, item: string) {
-  await userEvent.click(canvas.getByRole('button', { name: `Actions for ${name}` }));
+async function openMenu(canvas: ReturnType<typeof within>, name: string, item: string, input: 'pointer' | 'keyboard' = 'pointer') {
+  const trigger = canvas.getByRole('button', { name: `Actions for ${name}` });
+  if (input === 'pointer') await userEvent.click(trigger);
+  else {
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+  }
   const menu = await body().findByRole('menu', {}, { timeout: 5000 });
+  if (input === 'pointer') {
+    await chooseMenuItem(within(menu), 'menuitem', item);
+    return;
+  }
   await settledOverlay(menu);
   const choice = within(menu).getByRole('menuitem', { name: item });
   const highlighted = () => menu.querySelector('[data-highlighted]');
@@ -96,6 +105,35 @@ export const Roster: Story = {
     await expect(canvas.getByText(/Waiting · Expires Oct 1, 2026/)).toBeVisible();
   },
 };
+
+export const GiveRoleWithPointer: Story = {
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Actions for Sophie Li 李素菲' }));
+    await chooseMenuItem(body(), 'menuitem', 'Give a role…');
+    const dialog = await openDialog('Give Sophie Li 李素菲 a role');
+    await expect(dialog.getByRole('button', { name: 'Give role' })).toBeVisible();
+  },
+};
+
+function menuDialog(input: 'pointer' | 'keyboard', member: string, item: string, title: string): Story {
+  return {
+    async play({ canvasElement }) {
+      await openMenu(within(canvasElement), member, item, input);
+      await openDialog(title);
+      await expect(body().queryByRole('menu')).toBeNull();
+    },
+  };
+}
+
+export const GiveRoleWithKeyboard: Story = menuDialog('keyboard', 'Sophie Li 李素菲', 'Give a role…', 'Give Sophie Li 李素菲 a role');
+export const TakeRoleWithPointer: Story = menuDialog('pointer', 'An Wu 吴安', 'Remove role “Community moderators”…', 'Remove “Community moderators” from An Wu 吴安?');
+export const TakeRoleWithKeyboard: Story = menuDialog('keyboard', 'An Wu 吴安', 'Remove role “Community moderators”…', 'Remove “Community moderators” from An Wu 吴安?');
+export const BanWithPointer: Story = menuDialog('pointer', 'Sophie Li 李素菲', 'Ban…', 'Ban Sophie Li 李素菲');
+export const BanWithKeyboard: Story = menuDialog('keyboard', 'Sophie Li 李素菲', 'Ban…', 'Ban Sophie Li 李素菲');
+export const UnbanWithPointer: Story = menuDialog('pointer', 'Jun Zhang 张俊', 'Unban…', 'Unban Jun Zhang 张俊?');
+export const UnbanWithKeyboard: Story = menuDialog('keyboard', 'Jun Zhang 张俊', 'Unban…', 'Unban Jun Zhang 张俊?');
+export const RemoveMemberWithPointer: Story = menuDialog('pointer', 'An Wu 吴安', 'Remove from Realm…', 'Remove An Wu 吴安 from the Realm?');
+export const RemoveMemberWithKeyboard: Story = menuDialog('keyboard', 'An Wu 吴安', 'Remove from Realm…', 'Remove An Wu 吴安 from the Realm?');
 
 export const CancelOutgoingInvitation: Story = {
   async play({ canvasElement }) {

@@ -53,5 +53,14 @@ export function findMenuItem(scope: Scope, role: MenuRole, name: string | RegExp
 
 /** Clicks a menu item (`menuitem`, `menuitemradio` or `menuitemcheckbox`) once its menu accepts a pointer; see `chooseOption`. */
 export async function chooseMenuItem(scope: Scope, role: MenuRole, name: string | RegExp, { timeout = 4_000 } = {}): Promise<void> {
-  await userEvent.click(await findReady(scope, role, name, timeout));
+  const item = await findReady(scope, role, name, timeout);
+  const rect = item.getBoundingClientRect();
+  const pointer = userEvent.setup();
+  // user-event otherwise moves every click to (0, 0). Ark ignores repeated
+  // coordinates when detecting pointer modality after a keyboard interaction.
+  await pointer.pointer({ target: item, coords: {
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+  } });
+  await pointer.click(item);
 }
