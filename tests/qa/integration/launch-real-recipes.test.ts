@@ -229,16 +229,24 @@ test('recipes / Pinned Schema.org imports retain ordered content, quantities and
   });
   const fractionRows = quantities.filter(row => /[½¼¾⅓⅔⅛⅜⅝⅞]/u.test(row.line));
   const rangeRows = quantities.filter(row => /\b\d+\s+(?:to|or)\s+\d+\b/iu.test(row.line));
+  // A suffix amount is kept as text.
+  const suffixFraction = fractionRows.find(row => row.record.recipeId === 'lemon-pie-iv'
+    && row.line === 'Grated rind ½ lemon');
+  expect(suffixFraction).toBeDefined();
+  const suffixIngredient = suffixFraction!.ingredients[suffixFraction!.index];
+  expect(suffixIngredient?.originalText).toBe('Grated rind ½ lemon');
+  expect(suffixIngredient?.amount).toBeUndefined();
+  expect(suffixIngredient?.amountUpper).toBeUndefined();
   for (const row of quantities) {
     const actual = row.ingredients[row.index];
-    if (/[½¼¾⅓⅔⅛⅜⅝⅞]/u.test(row.line) && !actual?.amount)
+    if (/[½¼¾⅓⅔⅛⅜⅝⅞]/u.test(row.line) && row !== suffixFraction && !actual?.amount)
       failures.push(`${row.record.title}: fraction has no parsed amount (${row.line})`);
     if (/\b\d+\s+(?:to|or)\s+\d+\b/iu.test(row.line)
       && (!actual?.amount || !actual.amountUpper))
       failures.push(`${row.record.title}: range is not retained as lower and upper quantities (${row.line})`);
   }
-  if (fractionRows.filter(row => row.ingredients[row.index]?.amount).length !== 47)
-    failures.push('Recipe corpus: all 47 source fractions must be retained as parsed quantities');
+  if (fractionRows.filter(row => row.ingredients[row.index]?.amount).length !== 46)
+    failures.push('Recipe corpus: all 46 prefix fractions must be retained as parsed quantities');
   if (rangeRows.filter(row => row.ingredients[row.index]?.amount && row.ingredients[row.index]?.amountUpper).length !== 2)
     failures.push('Recipe corpus: both source ranges must be retained as lower and upper quantities');
 
