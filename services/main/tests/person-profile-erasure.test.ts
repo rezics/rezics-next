@@ -469,7 +469,8 @@ async function sealedAliases(proof: PersonProfileErasureProof, limit: number) {
 }
 
 test('unlanded Person migrations keep the retired Agent handle bridge absent', async () => {
-  expect((await access.query("SELECT to_regclass('access.agent_handle') AS bridge")).rows[0]?.bridge).toBeNull();
+  expect((await access.query(`SELECT table_name FROM information_schema.tables
+    WHERE table_schema = $1 AND table_name = $2`, ['access', 'agent_handle'])).rows).toEqual([]);
 });
 
 test('the actual Person sanitation guard lookup uses the principal primary-key index', async () => {
