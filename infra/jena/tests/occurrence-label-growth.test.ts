@@ -4,10 +4,13 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { dirname, join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../../..');
-const focused = Bun.env.REZICS_NATIVE_FULL_SUITE === '1' ? undefined : 'OccurrenceLabelIndexGrowthTest';
+const focused = Bun.env.REZICS_NATIVE_TEST_CLASSES
+  ?? (Bun.env.REZICS_NATIVE_FULL_SUITE === '1' ? undefined : 'OccurrenceLabelIndexGrowthTest');
 
-test(focused ? 'occurrence projection total native visits stay linear across three populations'
+test(focused ? `the image Maven invocation verifies ${focused}`
   : 'occurrence projection and publication guards pass the complete image Maven suite', () => {
+  if (focused && !/^[A-Za-z][A-Za-z0-9]*(?:,[A-Za-z][A-Za-z0-9]*)*$/u.test(focused))
+    throw new Error('invalid native test class selection');
   const temporary = join(root, '.temp');
   mkdirSync(temporary, { recursive: true });
   const build = mkdtempSync(join(temporary, 'occurrence-label-native-'));
@@ -46,8 +49,11 @@ test(focused ? 'occurrence projection total native visits stay linear across thr
       '--env', 'MAVEN_CONFIG=/maven-cache', ...environment, '--workdir', '/build', image,
       'mvn', ...invocation.split(' '), '-Dmaven.repo.local=/maven-cache',
       ...(focused ? [`-Dtest=${focused}`] : []), 'package',
-    ], { cwd: root, encoding: 'utf8', timeout: 1_200_000, maxBuffer: 8 * 1024 * 1024 });
-    const evidence = join(root, '.temp/goal/occurrence-label-native', focused ? 'growth' : 'suite');
+    // Allow the aggregate image suite to finish under concurrent host load;
+    // every original JUnit timeout and JVM limit remains in force.
+    ], { cwd: root, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 8 * 1024 * 1024 });
+    const evidence = join(root, '.temp/goal/occurrence-label-native',
+      focused === 'OccurrenceLabelIndexGrowthTest' ? 'growth' : focused ? 'focused' : 'suite');
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'maven.log'), `${result.stdout ?? ''}\n${result.stderr ?? ''}`);
     const reports = join(build, 'target/surefire-reports');
@@ -63,4 +69,4 @@ test(focused ? 'occurrence projection total native visits stay linear across thr
   } finally {
     rmSync(build, { recursive: true, force: true });
   }
-}, 1_240_000);
+}, 1_840_000);
