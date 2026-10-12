@@ -24,6 +24,7 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/profile-corpus-restore.test.ts',
   // Zone navigation checkpoints retain stopped owner stores for independent restores.
   'tests/qa/integration/zone-navigation-growth.test.ts',
+  'tests/qa/integration/zone-navigation-growth-control.test.ts',
   // Seed checkpoints retain one API-built population and restore independent owner stores.
   'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // Ranked search compares independently restored public-command populations.
@@ -220,6 +221,7 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/profile-corpus-restore.test.ts',
   'tests/qa/integration/recipe-page-growth.test.ts',
   'tests/qa/integration/zone-navigation-growth.test.ts',
+  'tests/qa/integration/zone-navigation-growth-control.test.ts',
   'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // Explicit seed preparation uses the same product assembler as checkpoint restores.
   'tests/qa/fault-recovery/work-profile-seed-build.test.ts',

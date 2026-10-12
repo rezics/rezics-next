@@ -84,6 +84,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'library-growth',
     'recipe-page-growth',
     'zone-navigation-growth',
+    'zone-navigation-growth-control',
   ].map((name) => [`tests/qa/integration/${name}.test.ts`, 'catalogue-disk'] as const),
   ['tests/qa/fault-recovery/work-profile-seed-build.test.ts', 'catalogue-disk'],
   ['tests/qa/integration/work-profile-seed-checkpoints.test.ts', 'seed-cut-restore'],
