@@ -147,11 +147,17 @@ async function graphBindingValidations(env: WorkActivationEnvironment, resource:
       focus: [row![read.variables[role]!]!.value], graphs: commandBindingGraphs(selected.profile, GRAPHS) })), binding);
   // Pin the same structural witness in the writing transaction. BindingPolicy
   // then validates the complete focus/argument bundle against that transaction.
-  const retained = read.keys.filter(key => !read.derived.includes(key));
-  const guard = `VALUES (${retained.map(key => `?${read.variables[key]}`).join(' ')}) {
-    (${retained.map(key => row![read.variables[key]!] ? graphTerm(row![read.variables[key]!]!) : 'UNDEF').join(' ')})
-  } ${read.pattern}
-    ${read.derived.map(key => `FILTER(?${read.variables[key]} = ${graphTerm(row![read.variables[key]!]!)})`).join('\n')}`;
+  const guard = read.facts.flatMap(fact => {
+    const subject = row![read.variables[fact.subject]!]!;
+    const objects = fact.types?.map(value => ({ type: 'uri', value }))
+      ?? (fact.object && row![read.variables[fact.object]!] ? [row![read.variables[fact.object]!]!] : []);
+    if (!objects.length) return [];
+    // Fixed point witnesses avoid graph-variable joins in the command's staged
+    // guard. EXISTS also collapses duplicate facts across retained graphs.
+    return [`FILTER(${objects.flatMap(object => graphs.map(graph => `EXISTS { GRAPH ${iri(graph)} {
+      ${graphTerm(subject)} ${graphIri(fact.predicate)} ${graphTerm(object)} }
+    }`)).join(' || ')})`];
+  }).join('\n');
   return { validations, guard };
 }
 

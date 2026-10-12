@@ -62,6 +62,7 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
       .map(([id, definition]) => [id, definition.sha256])) }),
     commandWithReceipt: async (command: CommandEnvelope) => {
       commands.push(command);
+      expect(command.update).not.toMatch(/GRAPH \?bindingGraph/);
       for (const profile of new Set(command.validations.map(entry => entry.profile))) {
         const entries = command.validations.filter(entry => entry.profile === profile);
         const required = manifest.profiles.find(entry => entry.id === profile)?.binding;

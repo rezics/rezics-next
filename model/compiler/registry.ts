@@ -194,12 +194,14 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
   const role = shapeRole(profile, shape);
   if (!binding.roles.includes(role)) throw new Error(`${profile} has no bound role ${role}`);
   const patterns: string[] = [];
-  const derived: string[] = [];
+  const facts: { subject: string; predicate: string; object?: string; types?: string[] }[] = [];
   let graphIndex = 0;
   const triple = (subject: string, predicate: string, object: string, optional: boolean | string = false) => {
+    const path = predicate.includes('://') ? predicate : `https://rezics.com/vocab/${predicate}`;
+    facts.push({ subject, predicate: path, object });
     const graph = `?bindingGraph${graphIndex++}`;
     const clause = `VALUES ${graph} { ${graphs.map(value => `<${value}>`).join(' ')} }
-      GRAPH ${graph} { ${variable(subject)} <${predicate.includes('://') ? predicate : `https://rezics.com/vocab/${predicate}`}> ${variable(object)} }`;
+      GRAPH ${graph} { ${variable(subject)} <${path}> ${variable(object)} }`;
     patterns.push(optional ? `OPTIONAL { ${typeof optional === 'string' ? `FILTER(${optional})` : ''} ${clause} }` : clause);
   };
   const fields = (subject: string, entries: Record<string, string>) => {
@@ -242,7 +244,6 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
       timeZone: 'ratingTimeZone', displayThreshold: 'displayThreshold' });
     if (keys.includes('language')) {
       patterns.push(`BIND(LANG(${variable('question')}) AS ${variable('language')})`);
-      derived.push('language');
     }
   } else if (/rating.*-observation-/.test(profile)) {
     if (binding.roles.includes('realm')) {
@@ -308,6 +309,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     const types = registry.canonical.filter(entry => entry.routes.some(route => route.shape === focusShape))
       .map(entry => entry.type);
     if (!types.length) continue;
+    facts.push({ subject: focus, predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', types });
     const graph = `?bindingGraph${graphIndex++}`, type = `?bindingType${graphIndex}`;
     patterns.push(`VALUES ${graph} { ${graphs.map(value => `<${value}>`).join(' ')} }
       VALUES ${type} { ${types.map(value => `<${value}>`).join(' ')} }
@@ -318,7 +320,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
   for (const key of [...binding.roles, ...binding.required]) {
     if (!new RegExp(`\\?${variables[key]}\\b`).test(pattern)) throw new Error(`${profile} has no structural read for ${key}`);
   }
-  return { keys, variables, anchor: variable(role), pattern, derived };
+  return { keys, variables, anchor: variable(role), pattern, facts };
 }
 
 /** Native binding arguments use lexical values, with the historical enum names. */
