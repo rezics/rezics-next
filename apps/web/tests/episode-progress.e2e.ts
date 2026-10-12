@@ -87,7 +87,7 @@ const episodes = (page: Page) => page.getByRole('region', { name: 'Episodes' });
 async function loaded(page: Page) {
   await expect(async () => {
     if (await page.getByText('Your place in this series could not be loaded.').count()) await page.reload();
-    await expect(page.locator('[data-episode-progress]')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('[data-episode-progress]:not([data-pending])')).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 60_000 });
 }
 
@@ -109,68 +109,68 @@ async function jumpTo(panel: Locator, number: number) {
   await panel.getByRole('button', { name: 'Go' }).click();
 }
 
+async function honest(panel: Locator) {
+  await expect(panel.getByRole('progressbar')).toHaveCount(0);
+  await expect(panel.locator('[data-through], [data-next], [data-caught-up]')).toHaveCount(0);
+}
+
 test('episodes marked on one device resume on another, with specials kept apart', async ({ browser }, info) => {
   test.setTimeout(300_000);
   const series = seeded;
-  // One after the other: two sign-ins at once sometimes stall on the Account service.
   const a = await device(browser, info, desktop, series);
   const b = await device(browser, info, phone, series);
-
-  // Device A has watched nothing: the first episode is the one to mark.
   const panelA = episodes(a);
   await loaded(a);
-  await expect(panelA.getByText('No episode watched yet')).toBeVisible();
-  await expect(panelA.getByText('Continue from episode 1')).toBeVisible();
+  await expect(panelA.locator('[data-where]')).toHaveText('Unknown');
+  await honest(panelA);
 
-  // Marking the next episode in one tap, seven times over.
+  // Every accepted write is proved by the selected occurrence; Main alone names resume.
   for (let number = 1; number <= 7; number++) {
-    await press(panelA.getByRole('button', { name: `Mark episode ${number} watched` }),
-      panelA.getByText(`Watched through episode ${number} of 12`));
+    await jumpTo(panelA, number);
+    await press(panelA.getByRole('button', { name: 'Mark watched', exact: true }),
+      panelA.locator('[data-selected="main"] [data-state="done"]'));
+    await expect(panelA.locator('[data-where]')).toHaveText(`Last watched: Episode ${number}`);
   }
-  await expect(panelA.getByText('Continue from episode 8')).toBeVisible();
-  await expect(panelA).toHaveAttribute('data-through', '7');
+  await honest(panelA);
   await shot(a, info, 'episodes-desktop', panelA);
 
-  // Device B, a phone, loads the page and stands at the same place.
   await b.reload();
   const panelB = episodes(b);
   await loaded(b);
-  await expect(panelB.getByText('Watched through episode 7 of 12')).toBeVisible();
-  await expect(panelB.getByText('Continue from episode 8')).toBeVisible();
-  await expect(panelB).toHaveAttribute('data-continue', '8');
+  await expect(panelB.locator('[data-where]')).toHaveText('Last watched: Episode 7');
+  await honest(panelB);
+  await jumpTo(panelB, 7);
+  await expect(panelB.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
   await shot(b, info, 'episodes-phone', panelB);
 
-  // A special, marked on the phone, does not move the main count.
   await press(panelB.getByRole('button', { name: 'Special 1' }), panelB.locator('[data-selected="special"]'));
-  await panelB.getByRole('button', { name: 'Mark watched' }).click();
+  await panelB.getByRole('button', { name: 'Mark watched', exact: true }).click();
   await expect(panelB.locator('[data-selected="special"] [data-state="done"]')).toBeVisible();
-  await expect(panelB.getByText('Watched through episode 7 of 12')).toBeVisible();
-  await expect(panelB.getByText('Continue from episode 8')).toBeVisible();
+  await expect(panelB.locator('[data-where]')).toHaveText('Last watched: Episode 7');
+  await honest(panelB);
   await shot(b, info, 'special-phone', panelB);
   await a.reload();
   await loaded(a);
-  await expect(episodes(a).getByText('Watched through episode 7 of 12')).toBeVisible();
-  await expect(episodes(a).getByText('Continue from episode 8')).toBeVisible();
-  await expect(episodes(a).getByRole('button', { name: 'Mark episode 8 watched' })).toBeVisible();
+  await expect(panelA.locator('[data-where]')).toHaveText('Last watched: Episode 7');
+  await press(panelA.getByRole('button', { name: 'Special 1' }), panelA.locator('[data-selected="special"]'));
+  await expect(panelA.locator('[data-selected="special"] [data-state="done"]')).toBeVisible();
 
-  // Jump to an episode by its number: the next one in the run moves the count; one past it only marks itself.
-  await jumpTo(panelB, 8);
-  await panelB.getByRole('button', { name: 'Mark watched' }).click();
-  await expect(panelB.getByText('Watched through episode 8 of 12')).toBeVisible();
-  await jumpTo(panelB, 12);
-  await panelB.getByRole('button', { name: 'Mark watched' }).click();
-  await expect(panelB.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
-  await expect(panelB.getByText('Watched through episode 8 of 12')).toBeVisible();
-  for (const number of [9, 10, 11]) {
-    await panelB.getByRole('button', { name: `Mark episode ${number} watched` }).click();
-    await expect(panelB.getByText(`Watched through episode ${number >= 11 ? 12 : number} of 12`)).toBeVisible();
+  for (const number of [8, 12, 9, 10, 11]) {
+    await jumpTo(panelB, number);
+    await panelB.getByRole('button', { name: 'Mark watched', exact: true }).click();
+    await expect(panelB.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
+    await expect(panelB.locator('[data-where]')).toHaveText(`Last watched: Episode ${number === 8 ? 8 : 12}`);
   }
-  await expect(panelB.getByText('You have watched every episode.')).toBeVisible();
+  await honest(panelB);
   await jumpTo(panelB, 40);
   await expect(panelB.getByText('There is no episode 40 in this series.')).toBeVisible();
+  await expect(panelB.locator('[data-selected]')).toHaveCount(0);
   await a.reload();
   await loaded(a);
-  await expect(episodes(a).getByText('You have watched every episode.')).toBeVisible();
+  await expect(panelA.locator('[data-where]')).toHaveText('Last watched: Episode 12');
+  await honest(panelA);
+  await jumpTo(panelA, 11);
+  await expect(panelA.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
 });
 
 /**
@@ -195,6 +195,15 @@ function fakeSeries(total: number) {
         occurrences: numbers.map(number => ({ occurrence: occurrence(number), role: 'part', parent: structure,
           target: occurrence(number + 100_000), labels: [], qualifier: { type: 'work-part', displayLabel: `Episode ${number}`, inclusion: 'required' } })) }));
     });
+    await context.route('**/api/main/v1/reading-positions/*', route => {
+      const furthest = [...rows].filter(([, row]) => row.completed)
+        .sort(([a], [b]) => Number(a.slice(-12)) - Number(b.slice(-12))).at(-1)?.[0];
+      const number = furthest ? Number(furthest.slice(-12)) : null;
+      return route.fulfill(json({ scope: furthest ? 'resume' : 'positions', complete: true,
+        resolved: furthest ? `https://rezics.com/id/${furthest}` : 'start', nextCursor: null,
+        items: furthest ? [{ structure, occurrence: `https://rezics.com/id/${furthest}`,
+          role: 'part', displayLabel: `Episode ${number}`, labels: [] }] : [] }));
+    });
     await context.route('**/api/main/v1/compositions/*/occurrences/*/progress*', async route => {
       const request = route.request();
       const id = new URL(request.url()).pathname.split('/').at(-2)!;
@@ -215,7 +224,7 @@ test('episode 1000 of a thousand is reached by its number and shows watched on a
   const a = await device(browser, info, desktop, seeded, prepare);
   const panelA = episodes(a);
   await loaded(a);
-  await expect(panelA.getByText('No episode watched yet')).toBeVisible();
+  await expect(panelA.locator('[data-where]').filter({ hasText: 'Unknown' })).toBeVisible();
 
   // Episode 1000 is fifty pages in; its number takes the reader there.
   await expect(async () => {
@@ -226,19 +235,26 @@ test('episode 1000 of a thousand is reached by its number and shows watched on a
   await expect(panelA.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
   await jumpTo(panelA, 1001);
   await expect(panelA.getByText('There is no episode 1001 in this series.')).toBeVisible();
+  await expect(panelA.locator('[data-selected]')).toHaveCount(0);
 
-  // The phone finds episode 1000 watched, and the run from the first still starts at episode 1.
+  // The phone sees the same saved occurrence and resume fact, with coverage still unknown.
   const b = await device(browser, info, phone, seeded, prepare);
   const panelB = episodes(b);
   await loaded(b);
-  await expect(panelB.getByText('No episode watched yet')).toBeVisible();
+  await expect(panelB.getByText('Last watched: Episode 1000', { exact: true })).toBeVisible();
   await expect(async () => {
     await jumpTo(panelB, 1000);
     await expect(panelB.locator('[data-selected="main"] [data-state="done"]')).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 60_000 });
-  await panelB.getByRole('button', { name: 'Mark episode 1 watched' }).click();
-  await expect(panelB.getByText('Watched through episode 1')).toBeVisible();
-  await expect(panelB.getByText('Continue from episode 2')).toBeVisible();
+  await jumpTo(panelB, 1);
+  await panelB.getByRole('button', { name: 'Mark watched', exact: true }).click();
+  await expect(panelB.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
+  await expect(panelB.getByText('Last watched: Episode 1000', { exact: true })).toBeVisible();
+  await honest(panelB);
+  await a.reload();
+  await loaded(a);
+  await jumpTo(panelA, 1);
+  await expect(panelA.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
   await shot(b, info, 'thousand-phone', panelB);
   await shot(a, info, 'thousand-desktop', panelA);
 });

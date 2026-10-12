@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { PageContainer } from '../shell/page.tsx';
-import type { EpisodeApi } from './episode-api.ts';
+import { mainEpisodeApi, type EpisodeApi } from './episode-api.ts';
+import type { MainClient } from '../discover/types.ts';
 import { createMemoryEpisodes, memoryEpisodeApi } from './episode-memory.ts';
 import { EpisodeProgress } from './episode-progress.tsx';
 import { episodeSeries, saoOne } from './fixtures.ts';
@@ -15,7 +16,7 @@ function fixture(count = 12, done: number[] = []) {
   return memoryEpisodeApi(memory);
 }
 
-interface Args { api: EpisodeApi; locale: UiLocale; refresh?: () => void }
+interface Args { api: EpisodeApi; locale: UiLocale; refresh?: () => void; settleRead?: () => Promise<void> }
 function Sheet({ api, locale }: Args) {
   return <PageContainer className="grid max-w-md gap-6"><EpisodeProgress work={saoOne} api={api} t={copyOf(locale)} /></PageContainer>;
 }
@@ -29,6 +30,7 @@ type Story = StoryObj<typeof meta>;
 
 const jump = async (canvasElement: HTMLElement, number: string) => {
   const view = within(canvasElement);
+  await view.findByLabelText('Go to episode number');
   await userEvent.clear(view.getByLabelText('Go to episode number'));
   await userEvent.type(view.getByLabelText('Go to episode number'), number);
   await userEvent.click(view.getByRole('button', { name: 'Go' }));
@@ -44,12 +46,13 @@ const unknownCoverage = async (canvasElement: HTMLElement) => {
 export const MarkEpisodeAndSpecial: Story = {
   async play({ canvasElement }) {
     const view = within(canvasElement);
-    await view.findByText('No episode watched yet');
+    await view.findByText('Unknown');
     await jump(canvasElement, '1');
     await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
     await view.findByText('Last watched: Episode 1');
     await userEvent.click(view.getByRole('button', { name: 'Special 1' }));
     await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
+    await waitFor(() => expect(canvasElement.querySelector('[data-selected="special"] [data-state="done"]')).not.toBeNull());
     await view.findByText('Last watched: Episode 1');
     await unknownCoverage(canvasElement);
   },
@@ -89,7 +92,7 @@ export const ResumeReadFailed: Story = {
   async play({ canvasElement }) {
     const view = within(canvasElement);
     await view.findByRole('alert');
-    await expect(view.queryByText('No episode watched yet')).toBeNull();
+    await expect(view.queryByText('Unknown')).toBeNull();
     await unknownCoverage(canvasElement);
   },
 };
@@ -101,8 +104,8 @@ export const ResumeBeyondInventoryBudget: Story = {
   },
 };
 
-function pendingUnmark(): Args {
-  const api = fixture(12, Array.from({ length: 12 }, (_, index) => index + 1));
+function pendingChange(done: number[]): Args {
+  const api = fixture(12, done);
   let blocked = false;
   let refresh!: () => void;
   const pending = new Promise<void>(resolve => { refresh = resolve; });
@@ -113,7 +116,7 @@ function pendingUnmark(): Args {
   return { api, locale: 'en', refresh };
 }
 export const UnmarkPendingRefresh: Story = {
-  args: pendingUnmark(),
+  args: pendingChange(Array.from({ length: 12 }, (_, index) => index + 1)),
   async play({ canvasElement, args }) {
     const view = within(canvasElement);
     await view.findByText('Last watched: Episode 12');
@@ -133,6 +136,112 @@ export const PendingResume: Story = {
   async play({ canvasElement }) {
     await within(canvasElement).findByText('Unknown');
     await unknownCoverage(canvasElement);
+  },
+};
+
+export const MarkPendingRefresh: Story = {
+  args: pendingChange([1]),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await view.findByText('Last watched: Episode 1');
+    await jump(canvasElement, '2');
+    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
+    await view.findByText('Unknown');
+    await expect(view.queryByText('Last watched: Episode 1')).toBeNull();
+    args.refresh!();
+    await view.findByText('Last watched: Episode 2');
+    await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
+  },
+};
+
+export const OldReadAfterUnmark: Story = {
+  args: (() => {
+    const api = fixture(12, [1]);
+    const progress = api.progress;
+    let calls = 0;
+    let resolve!: (value: { ok: true; data: { completed: boolean; position: string; version: number } }) => void;
+    const held = new Promise<{ ok: true; data: { completed: boolean; position: string; version: number } }>(done => { resolve = done; });
+    api.progress = episode => ++calls === 1 ? held : progress(episode);
+    return { api, locale: 'en', settleRead: async () => {
+      resolve({ ok: true, data: { completed: true, position: 'episode:1', version: 1 } });
+      await new Promise<void>(done => requestAnimationFrame(() => done()));
+    } };
+  })(),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await view.findByText('Last watched: Episode 1');
+    await jump(canvasElement, '1');
+    await jump(canvasElement, '1');
+    await userEvent.click(await view.findByRole('button', { name: 'Mark not watched' }));
+    await view.findByRole('button', { name: 'Mark watched' });
+    await args.settleRead!();
+    await expect(canvasElement.querySelector('[data-selected="main"] [data-state="open"]')).not.toBeNull();
+    await expect(view.queryByRole('button', { name: 'Mark not watched' })).toBeNull();
+  },
+};
+
+export const JumpByNumber: Story = {
+  args: { api: fixture() },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByLabelText('Go to episode number');
+    await jump(canvasElement, '9');
+    await expect(await view.findByText('Episode 9')).toBeVisible();
+    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
+    await view.findByText('Last watched: Episode 9');
+    await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
+    await jump(canvasElement, '40');
+    await expect(await view.findByText('There is no episode 40 in this series.')).toBeVisible();
+    await expect(canvasElement.querySelector('[data-selected]')).toBeNull();
+  },
+};
+
+export const ThousandEpisodes: Story = {
+  args: { api: fixture(1000) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByLabelText('Go to episode number');
+    await jump(canvasElement, '1000');
+    await expect(await view.findByText('Episode 1000')).toBeVisible();
+    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
+    await view.findByText('Last watched: Episode 1000');
+    await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
+    await jump(canvasElement, '1001');
+    await expect(await view.findByText('There is no episode 1001 in this series.')).toBeVisible();
+    await expect(canvasElement.querySelector('[data-selected]')).toBeNull();
+  },
+};
+
+function unreadMain(shape: { scope: string; resolved: string; complete: boolean; items: unknown[] }): EpisodeApi {
+  const structure = 'https://rezics.com/id/00000000-0000-7000-8000-000000000002';
+  const occurrence = 'https://rezics.com/id/00000000-0000-7000-8000-000000000003';
+  const client = { v1: {
+    resources: () => ({ parts: { get: async () => ({ data: { structure, parts: [] }, error: null }) } }),
+    compositions: () => ({ get: async () => ({ data: {
+      occurrences: [{ occurrence, role: 'part', target: saoOne, labels: [{ value: 'Episode 1' }] }], next: null,
+    }, error: null }) }),
+    'reading-positions': () => ({ get: async () => ({ data: shape, error: null }) }),
+  } } as unknown as MainClient;
+  return mainEpisodeApi(saoOne, () => client);
+}
+
+export const UnreadSavedProgress: Story = {
+  args: { api: unreadMain({ scope: 'positions', resolved: 'start', complete: true, items: [] }) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByLabelText('Go to episode number');
+    await expect(view.getByText('Unknown')).toBeVisible();
+    await expect(view.queryByText('No episode watched yet')).toBeNull();
+  },
+};
+export const IncompleteResume: Story = {
+  args: { api: unreadMain({ scope: 'resume', resolved: 'pending', complete: false, items: [] }) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByLabelText('Go to episode number');
+    await expect(view.getByText('Unknown')).toBeVisible();
+    await expect(view.queryByRole('alert')).toBeNull();
+    await expect(view.queryByText('No episode watched yet')).toBeNull();
   },
 };
 export const Desktop: Story = { globals: { viewport: { value: 'desktop' } } };

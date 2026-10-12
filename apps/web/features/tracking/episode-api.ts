@@ -41,7 +41,7 @@ export interface EpisodeApi {
   page(structure: string, query?: { parent?: string; after?: string }): Promise<Loaded<StructurePage>>;
   /**
    * The furthest occurrence this reader has completed, from the progress order index,
-   * and the name that resume item carries. Null when they have not started. A label
+   * and the name that resume item carries. Null when saved progress was not read. A label
    * that is private or missing is null. A read that does not answer is a failure.
    */
   resume(work: string): Promise<Loaded<{ occurrence: string; label: string | null } | null>>;
@@ -107,9 +107,8 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
       if (!read.ok) return read;
       const page = read.data as { scope?: string; resolved?: string; complete?: boolean; items?: {
         occurrence?: string; displayLabel?: string; labels?: { value: string }[] }[] };
-      if (page.scope === 'resume' && page.complete === false) return { ok: false, failure: 'budget' };
-      const named = page.scope === 'resume' || page.resolved?.startsWith('https://') === true;
-      if (!named) return { ok: true, data: null };
+      // A positions window may resolve a place without ever reading private saved progress.
+      if (page.scope !== 'resume' || page.complete !== true) return { ok: true, data: null };
       const item = page.items?.[0];
       const occurrence = item?.occurrence ?? (page.resolved?.startsWith('https://') ? page.resolved : null);
       if (!occurrence) return { ok: true, data: null };

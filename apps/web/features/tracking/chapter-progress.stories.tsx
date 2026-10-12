@@ -3,7 +3,8 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
 import { ChapterProgress } from './chapter-progress.tsx';
 import type { EpisodeProgress } from './episode-api.ts';
-import type { ChapterStanding, MediaApi, PositionPage } from './media-api.ts';
+import { mainMediaApi, type ChapterStanding, type MediaApi, type PositionPage } from './media-api.ts';
+import type { MainClient } from '../discover/types.ts';
 import type { Place } from './media.ts';
 import { copyOf } from './messages.ts';
 
@@ -56,7 +57,8 @@ function memoryChapters(read: string[] = [], stale = false, failRead = false): M
   return api;
 }
 
-function Sheet({ api }: { api: MediaApi }) {
+interface Args { api: MediaApi; refresh?: () => void; settleRead?: () => Promise<void> }
+function Sheet({ api }: Args) {
   return <PageContainer className="grid max-w-md gap-6">
     <ChapterProgress work="https://example.test/series" api={api} t={copyOf('en')} />
   </PageContainer>;
@@ -69,7 +71,7 @@ const meta = {
     'A manga with volumes: the last chapter read, the next one, and the chapters one page at a time. Another device writing the same chapter keeps both versions on screen.' } } },
   args: { api: memoryChapters() },
   globals: { viewport: { value: 'phone' } },
-} satisfies Meta<{ api: MediaApi }>;
+} satisfies Meta<Args>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -78,11 +80,11 @@ export const MarkVolumeChapter: Story = {
   args: { api: memoryChapters() },
   async play({ canvasElement }) {
     const view = within(canvasElement);
-    await view.findByText('No chapter read yet');
+    await view.findByText('Unknown');
     await expect(canvasElement.querySelector('[data-next]')).toBeNull();
     await expect(view.queryByRole('button', { name: 'Volume 2, chapter 3' })).toBeNull();
-    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
-    await userEvent.click(view.getByRole('button', { name: 'Volume 2, chapter 3' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Show more' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 2, chapter 3' }));
     await userEvent.click(await view.findByRole('button', { name: /^Mark read$/ }));
     await view.findByText('Last read: Volume 2, chapter 3');
     await expect(canvasElement.querySelector('[data-next]')).toBeNull();
@@ -106,13 +108,13 @@ export const Conflict: Story = {
   async play({ canvasElement }) {
     const view = within(canvasElement);
     await view.findByText('Last read: Volume 2, chapter 3');
-    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
-    await userEvent.click(view.getByRole('button', { name: 'Volume 2, chapter 3' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Show more' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 2, chapter 3' }));
     await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
     await view.findByText('Changed on another device');
     await expect(view.getByText('Your change')).toBeVisible();
-    await userEvent.click(view.getByRole('button', { name: 'Keep my change' }));
-    await view.findByText('No chapter read yet');
+    await userEvent.click(await view.findByRole('button', { name: 'Keep my change' }));
+    await view.findByText('Unknown');
   },
 };
 
@@ -121,8 +123,8 @@ export const ReadFailed: Story = {
   args: { api: memoryChapters([], false, true) },
   async play({ canvasElement }) {
     const view = within(canvasElement);
-    await view.findByText('No chapter read yet');
-    await userEvent.click(view.getByRole('button', { name: 'Volume 1, chapter 1' }));
+    await view.findByText('Unknown');
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 1' }));
     await view.findByText('Couldn’t save. Try again.');
     await expect(view.queryByText('Not read')).toBeNull();
   },
@@ -155,7 +157,7 @@ export const UnmarkEarlierChapter: Story = {
     const view = within(canvasElement);
     await view.findByText('Last read: Volume 2, chapter 4');
     await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
-    await userEvent.click(view.getByRole('button', { name: 'Volume 1, chapter 2' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 2' }));
     await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
     await view.findByRole('button', { name: /^Mark read$/ });
     await expect(view.getByText('Last read: Volume 2, chapter 4')).toBeVisible();
@@ -185,10 +187,136 @@ export const UnmarkPendingRefresh: Story = {
   async play({ canvasElement }) {
     const view = within(canvasElement);
     await view.findByText('Last read: Volume 2, chapter 4');
-    await userEvent.click(view.getByRole('button', { name: 'Volume 1, chapter 2' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 2' }));
     await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
     await view.findByText('Unknown');
     await expect(view.queryByText('Last read: Volume 2, chapter 4')).toBeNull();
     await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+  },
+};
+
+function pendingChange(read: string[]): Args {
+  const api = memoryChapters(read);
+  let blocked = false;
+  let refresh!: () => void;
+  const pending = new Promise<void>(resolve => { refresh = resolve; });
+  const mark = api.mark;
+  const standing = api.standing;
+  api.mark = async (...input) => { const written = await mark(...input); blocked = written.ok; return written; };
+  api.standing = async work => { if (blocked) await pending; return standing(work); };
+  return { api, refresh };
+}
+
+export const MarkPendingRefresh: Story = {
+  args: pendingChange([occurrence(1, 1)]),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 1, chapter 1');
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 2' }));
+    await userEvent.click(await view.findByRole('button', { name: /^Mark read$/ }));
+    await view.findByText('Unknown');
+    await expect(view.queryByText('Last read: Volume 1, chapter 1')).toBeNull();
+    args.refresh!();
+    await view.findByText('Last read: Volume 1, chapter 2');
+    await waitFor(() => expect(canvasElement.querySelector('[data-selected] [data-state="done"]')).not.toBeNull());
+  },
+};
+
+function delayedRead(): Args {
+  const api = memoryChapters([occurrence(1, 1)]);
+  const progress = api.progress;
+  let calls = 0;
+  let resolve!: (value: { ok: true; data: EpisodeProgress }) => void;
+  const held = new Promise<{ ok: true; data: EpisodeProgress }>(done => { resolve = done; });
+  api.progress = part => ++calls === 1 ? held : progress(part);
+  return { api, settleRead: async () => {
+    resolve({ ok: true, data: { completed: true, position: 'read', version: 1 } });
+    await new Promise<void>(done => requestAnimationFrame(() => done()));
+  } };
+}
+
+export const DelayedSelectionRead: Story = {
+  args: delayedRead(),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 1, chapter 1');
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 1' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 2' }));
+    await view.findByRole('button', { name: /^Mark read$/ });
+    await args.settleRead!();
+    await expect(canvasElement.querySelector('[data-selected]')).toHaveAttribute('data-selected', occurrence(1, 2));
+    await expect(canvasElement.querySelector('[data-selected] [data-state="open"]')).not.toBeNull();
+    await expect(view.queryByRole('button', { name: 'Mark not read' })).toBeNull();
+  },
+};
+
+export const OldReadAfterUnmark: Story = {
+  args: delayedRead(),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 1, chapter 1');
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 1' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 1' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
+    await view.findByRole('button', { name: /^Mark read$/ });
+    await args.settleRead!();
+    await expect(canvasElement.querySelector('[data-selected] [data-state="open"]')).not.toBeNull();
+    await expect(view.queryByRole('button', { name: 'Mark not read' })).toBeNull();
+  },
+};
+
+export const UseOtherUnmark: Story = {
+  args: { api: (() => {
+    const api = memoryChapters([occurrence(1, 1)]);
+    const mark = api.mark;
+    let once = true;
+    api.mark = async (part, change) => {
+      if (!once) return mark(part, change);
+      once = false;
+      const other = await mark(part, { completed: false, position: null });
+      return other.ok ? { ok: false, failure: 'stale', current: other.data,
+        submitted: { completed: change.completed, position: change.position ?? null } } : other;
+    };
+    return api;
+  })() },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 1, chapter 1');
+    await userEvent.click(await view.findByRole('button', { name: 'Volume 1, chapter 1' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
+    await view.findByText('Changed on another device');
+    await userEvent.click(await view.findByRole('button', { name: 'Use the other version' }));
+    await view.findByRole('button', { name: /^Mark read$/ });
+    await expect(canvasElement.querySelector('[data-selected] [data-state="open"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-conflict]')).toBeNull();
+  },
+};
+
+export const UnreadSavedProgress: Story = {
+  args: { api: mainMediaApi('https://example.test/agent', () => ({ v1: {
+    'reading-positions': () => ({ get: async () => ({ data: {
+      scope: 'positions', resolved: 'start', complete: true, items: [], nextCursor: null,
+    }, error: null }) }),
+  } } as unknown as MainClient)) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await waitFor(() => expect(canvasElement.querySelector('[data-pending]')).toBeNull());
+    await expect(await view.findByText('Unknown')).toBeVisible();
+    await expect(view.queryByText('No chapter read yet')).toBeNull();
+  },
+};
+
+export const IncompleteResume: Story = {
+  args: { api: mainMediaApi('https://example.test/agent', () => ({ v1: {
+    'reading-positions': () => ({ get: async () => ({ data: {
+      scope: 'resume', resolved: 'pending', complete: false, items: [], nextCursor: 'resume-more', visibility: 'pending',
+    }, error: null }) }),
+  } } as unknown as MainClient)) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await waitFor(() => expect(canvasElement.querySelector('[data-pending]')).toBeNull());
+    await expect(await view.findByText('Unknown')).toBeVisible();
+    await expect(view.queryByText('No chapter read yet')).toBeNull();
+    await expect(view.queryByRole('alert')).toBeNull();
   },
 };

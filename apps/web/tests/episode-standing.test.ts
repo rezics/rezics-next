@@ -3,6 +3,8 @@ import type { MainClient } from '../features/discover/types.ts';
 import { mainEpisodeApi } from '../features/tracking/episode-api.ts';
 import { createMemoryEpisodes, memoryEpisodeApi, type MemoryEpisodes } from '../features/tracking/episode-memory.ts';
 import { MAX_PAGES, markPosition, reach, standingOf } from '../features/tracking/episodes.ts';
+import { episodeProgressWhere } from '../features/tracking/episode-progress.tsx';
+import { copyOf } from '../features/tracking/messages.ts';
 import { episodeSeries, saoOne } from '../features/tracking/fixtures.ts';
 
 const store = (mains: number, specials = 0, page?: number) => createMemoryEpisodes({ ...episodeSeries({ mains, specials }), ...(page ? { page } : {}) });
@@ -99,8 +101,10 @@ describe('where the reader stands in a series', () => {
     expect(memory.calls.filter(call => call.startsWith('page:root')).length).toBeLessThanOrEqual(MAX_PAGES);
   });
 
-  test('a series with no episodes has no standing', async () => {
-    expect(await standingOf(memoryEpisodeApi(store(0)), saoOne)).toEqual({ ok: true, data: null });
+  test('an empty inventory cannot establish saved progress', async () => {
+    const read = await standingOf(memoryEpisodeApi(store(0)), saoOne);
+    if (!read.ok || !read.data) throw new Error('unknown standing must remain visible');
+    expect(episodeProgressWhere(read.data, copyOf('en'))).toBe('Unknown');
   });
 
   test('a mark leaves the number a later device reads back', async () => {
@@ -159,12 +163,44 @@ describe('Main behind the episode api', () => {
     expect(await main({ parts: () => ({ data: null, error: { status: 503, value: {} } }) }).api.structure(saoOne)).toMatchObject({ ok: false });
   });
 
-  test('Mine names the furthest completed occurrence, and a start has none', async () => {
+  test('Mine names a fenced completed occurrence, while a positions window is unknown', async () => {
     const resumed = main({ resume: () => ({ data: { scope: 'resume', resolved: at('e1001'),
-      items: [{ occurrence: at('e1001'), displayLabel: 'Episode 1001' }] }, error: null }) });
+      complete: true, items: [{ occurrence: at('e1001'), displayLabel: 'Episode 1001' }] }, error: null }) });
     expect(await resumed.api.resume(saoOne)).toEqual({ ok: true, data: { occurrence: at('e1001'), label: 'Episode 1001' } });
     expect(resumed.asked.resumes).toEqual([{ actingSubject: 'https://rezics.com/id/agent', position: 'mine', limit: 1 }]);
     expect(await main({}).api.resume(saoOne)).toEqual({ ok: true, data: null });
+    expect(await main({ resume: () => ({ data: { scope: 'positions', resolved: at('e1001'), complete: true,
+      items: [{ occurrence: at('e1001'), displayLabel: 'Episode 1001' }] }, error: null }) }).api.resume(saoOne))
+      .toEqual({ ok: true, data: null });
+  });
+
+  test('revoked eligibility after a mark leaves progress unknown, not empty', async () => {
+    let eligible = true;
+    const episode = { occurrence: at('e1'), label: 'Episode 1' };
+    const { api } = main({
+      page: () => ({ data: { occurrences: [{ ...episode, role: 'part', target: at('1'), labels: [{ value: episode.label }] }], next: null }, error: null }),
+      resume: () => ({ data: eligible
+        ? { scope: 'resume', resolved: episode.occurrence, complete: true, items: [{ ...episode, displayLabel: episode.label }] }
+        : { scope: 'positions', resolved: 'start', complete: true, items: [] }, error: null }),
+      put: () => { eligible = false; return { data: { completed: true, position: 'episode:1', version: 1 }, error: null }; },
+    });
+    const before = await standingOf(api, saoOne);
+    if (!before.ok || !before.data) throw new Error('no standing');
+    expect(episodeProgressWhere(before.data, copyOf('en'))).toBe('Last watched: Episode 1');
+    expect(await api.mark({ structure, occurrence: episode.occurrence }, { completed: true })).toMatchObject({ ok: true });
+    const after = await standingOf(api, saoOne);
+    if (!after.ok || !after.data) throw new Error('unknown standing must remain visible');
+    expect(episodeProgressWhere(after.data, copyOf('en'))).toBe('Unknown');
+  });
+
+  test('an incomplete Main resume is unknown, not unavailable or no episode watched', async () => {
+    const { api } = main({ resume: () => ({ data: {
+      scope: 'resume', resolved: 'pending', complete: false, items: [], nextCursor: 'resume-more', visibility: 'pending',
+    }, error: null }) });
+    expect(await api.resume(saoOne)).toEqual({ ok: true, data: null });
+    const read = await standingOf(api, saoOne);
+    if (!read.ok || !read.data) throw new Error('unknown standing must remain visible');
+    expect(episodeProgressWhere(read.data, copyOf('en'))).toBe('Unknown');
   });
 
   test('a page tells episodes from groups, names them, and continues from Main\'s cursor', async () => {

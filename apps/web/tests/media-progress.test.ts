@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { progressControl } from '../features/tracking/medium-progress.tsx';
 import type { MainClient } from '../features/discover/types.ts';
 import { mainMediaApi, workProgressConflict } from '../features/tracking/media-api.ts';
+import { chapterProgressWhere } from '../features/tracking/chapter-progress.tsx';
+import { copyOf } from '../features/tracking/messages.ts';
 import { chapterPosition, flattenChapters, gameStatus, mediumOf, resumeAt, resumeName, type ChapterRef } from '../features/tracking/media.ts';
 
 const chapter = (volume: number, number: number, id = `${volume}-${number}`): ChapterRef => ({
@@ -94,6 +96,33 @@ describe('chapter completion coverage', () => {
     if (read.ok) expect(read.data).not.toHaveProperty('caughtUp');
     expect(calls).toEqual(['mine']);
   });
+
+  for (const response of [
+    { scope: 'positions', resolved: 'start', complete: true, items: [], nextCursor: null },
+    { scope: 'positions', resolved: occurrence(1), complete: true,
+      items: [{ occurrence: occurrence(1), structure, role: 'chapter', displayLabel: 'Chapter 1' }], nextCursor: null },
+    { scope: 'resume', resolved: 'pending', complete: false, items: [], nextCursor: 'resume-more', visibility: 'pending' },
+  ]) {
+    test(`${response.scope}/${response.resolved} does not invent an empty saved chapter state`, async () => {
+      let afterMark = false;
+      const saved = { structure, occurrence: occurrence(1), role: 'chapter', displayLabel: 'Chapter 1' };
+      const client = { v1: {
+        'reading-positions': () => ({ get: async () => ({ data: afterMark ? response
+          : { scope: 'resume', resolved: saved.occurrence, complete: true, items: [saved] }, error: null }) }),
+        compositions: () => ({ occurrences: () => ({ progress: {
+          get: async () => ({ data: { completed: false, position: null, version: 0 }, error: null }),
+          put: async () => { afterMark = true; return { data: { completed: true, position: 'read', version: 1 }, error: null }; },
+        } }) }),
+      } } as unknown as MainClient;
+      const api = mainMediaApi(work, () => client);
+      expect(await api.standing(work)).toMatchObject({ ok: true, data: { last: { occurrence: saved.occurrence } } });
+      expect(await api.mark(saved, { completed: true })).toMatchObject({ ok: true });
+      const read = await api.standing(work);
+      expect(read).toMatchObject({ ok: true, data: { last: null, next: null } });
+      if (!read.ok) throw new Error('unknown standing must remain visible');
+      expect(chapterProgressWhere(read.data, copyOf('en'))).toBe('Unknown');
+    });
+  }
 
 });
 

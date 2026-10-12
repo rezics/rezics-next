@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { EpisodeApi, EpisodeProgress as Mark } from './episode-api.ts';
 import { type Episode, type Standing, markPosition, reach, standingOf } from './episodes.ts';
 import type { Copy } from './messages.ts';
@@ -13,10 +13,11 @@ const nameOf = (episode: Episode, t: Copy) =>
   episode.label ?? (episode.special ? t.specialLabel : t.episodeLabel)({ number: String(episode.number) });
 
 type Selected = { episode: Episode; mark: Mark | 'loading' | 'failed' };
+type Scope = { api: EpisodeApi; work: string; read: number; write: number; busy: boolean };
 
 /** Without an occurrence-count summary, only the name in Main's resume response is known. */
 export function episodeProgressWhere(read: Standing, t: Copy): string {
-  if (!read.furthest) return t.noneWatched;
+  if (!read.furthest) return t.unknown;
   return read.furthest.label ? t.lastWatched({ place: read.furthest.label }) : t.someWatched;
 }
 
@@ -37,10 +38,29 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   const [typed, setTyped] = useState('');
   const [missing, setMissing] = useState<number | null>(null);
   const [finding, setFinding] = useState<number | null>(null);
+  const active = useRef<Scope | null>(null);
+
+  useLayoutEffect(() => {
+    const scope: Scope = { api, work, read: 0, write: 0, busy: false };
+    active.current = scope;
+    setStanding(null);
+    setSelected(null);
+    setSaving(false);
+    setFailed(false);
+    setTyped('');
+    setMissing(null);
+    setFinding(null);
+    return () => { if (active.current === scope) active.current = null; };
+  }, [api, work]);
 
   useEffect(() => {
     let current = true;
-    void standingOf(api, work).then(read => { if (current) setStanding(read); });
+    const scope = active.current;
+    if (!scope || scope.api !== api || scope.work !== work) return;
+    const write = scope.write;
+    void standingOf(api, work).then(read => {
+      if (current && active.current === scope && write === scope.write) setStanding(read);
+    });
     return () => { current = false; };
   }, [api, work, reload]);
 
@@ -60,16 +80,33 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   const typedNumber = /^[1-9]\d*$/.test(typed.trim()) ? Number(typed.trim()) : null;
 
   async function select(episode: Episode) {
+    const scope = active.current;
+    if (!scope || scope.api !== api || scope.work !== work || scope.busy) return;
+    const request = ++scope.read;
+    const write = scope.write;
     setSelected({ episode, mark: 'loading' });
+    setFinding(null);
+    setMissing(null);
     setFailed(false);
     const state = await api.progress(episode);
+    // Occurrence identity alone cannot reject an older read of the same selected episode.
+    if (active.current !== scope || request !== scope.read || write !== scope.write) return;
     setSelected(now => (now?.episode.occurrence === episode.occurrence ? { episode, mark: state.ok ? state.data : 'failed' } : now));
   }
 
   async function write(episode: Episode, completed: boolean) {
+    const scope = active.current;
+    if (!scope || scope.api !== api || scope.work !== work || scope.busy) return;
+    scope.busy = true;
+    ++scope.read;
+    setFinding(null);
+    const request = ++scope.write;
     setSaving(true);
     setFailed(false);
     const written = await api.mark(episode, { completed, ...(completed ? { position: markPosition(episode) } : {}) });
+    if (active.current !== scope || request !== scope.write) return;
+    ++scope.read;
+    scope.busy = false;
     setSaving(false);
     if (!written.ok) { setFailed(true); return; }
     setSelected(now => (now?.episode.occurrence === episode.occurrence ? { episode, mark: written.data } : now));
@@ -80,11 +117,18 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
 
   async function jump() {
     if (typedNumber === null) return;
+    const scope = active.current;
+    if (!scope || scope.api !== api || scope.work !== work || scope.busy) return;
+    const request = ++scope.read;
     setMissing(null);
     setFailed(false);
     setFinding(typedNumber);
     let found: Episode | null = null;
-    try { found = await reach(api, read!.mains, typedNumber); } catch { setFinding(null); setFailed(true); return; }
+    try { found = await reach(api, read!.mains, typedNumber); } catch {
+      if (active.current === scope && request === scope.read) { setFinding(null); setFailed(true); }
+      return;
+    }
+    if (active.current !== scope || request !== scope.read) return;
     setFinding(null);
     if (!found) { setMissing(typedNumber); setSelected(null); return; }
     await select(found);
@@ -116,6 +160,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
       <ul className="flex flex-wrap gap-2">
         {read.specials.flatMap(group => group.walk.items).map(episode => <li key={episode.occurrence}>
           <Button type="button" size="sm" className="min-h-11 sm:min-h-8"
+            disabled={saving}
             variant={selected?.episode.occurrence === episode.occurrence ? 'default' : 'outline'}
             aria-pressed={selected?.episode.occurrence === episode.occurrence}
             data-special={episode.occurrence} onClick={() => void select(episode)}>{nameOf(episode, t)}</Button>

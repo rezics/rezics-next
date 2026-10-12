@@ -107,8 +107,8 @@ describe('episode progress summary', () => {
     expect(await where(memory)).toBe('Last watched: Episode 12');
   });
 
-  test('none watched', async () => {
-    expect(await where(store(12))).toBe('No episode watched yet');
+  test('no saved progress fact is unknown', async () => {
+    expect(await where(store(12))).toBe('Unknown');
   });
 
   test('an unbroken run', async () => {

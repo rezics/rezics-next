@@ -35,7 +35,7 @@ export interface Standing {
   next: null;
   /**
    * The furthest main occurrence completed, named by one authoritative resume response.
-   * Null when the reader has not completed any main episode.
+   * Null means Main did not supply a saved progress fact.
    */
   furthest: EpisodePart | null;
 }
@@ -89,7 +89,6 @@ export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<
     const present = specials.filter(entry => entry.walk.items.length);
     const resumed = await api.resume(work);
     if (!resumed.ok) return resumed;
-    if (!mains.items.length && !present.length && !resumed.data) return { ok: true, data: null };
     return { ok: true, data: { structure, mains, specials: present, next: null, furthest: resumed.data } };
   } catch {
     return { ok: false, failure: 'unavailable' };

@@ -230,8 +230,8 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
     async standing(work) {
       const read = await positionsOf(work, { position: 'mine', limit: PAGE });
       if (!read.ok) return read;
-      if (read.data.scope === 'resume' && !read.data.complete) return { ok: false, failure: 'budget' };
-      const resumed = read.data.scope === 'resume' || read.data.resolved.startsWith('https://');
+      if (read.data.scope === 'resume' && !read.data.complete) return { ok: true, data: { last: null, next: null, opened: null } };
+      const resumed = read.data.scope === 'resume';
       if (!resumed) {
         const items = chaptersOf(read.data.items);
         return { ok: true, data: { last: null, next: null,

@@ -75,7 +75,7 @@ async function loaded(page: Page, marker: string, timeout = 90_000) {
   try {
     await expect(async () => {
       if (await page.getByText('Your place in this series could not be loaded.').count()) await page.reload();
-      await expect(page.locator(marker)).toBeVisible({ timeout: 8_000 });
+      await expect(page.locator(`${marker}:not([data-pending])`)).toBeVisible({ timeout: 8_000 });
     }).toPass({ timeout });
   } catch (error) {
     const main = await page.locator('main').innerText().catch(() => '');
@@ -100,29 +100,29 @@ test('identified manga chapter progress resumes across volumes and devices', asy
   await handset.goto(at(seeded.manga.work));
   const phoneChapters = chapters(handset);
   await loaded(handset, '[data-chapter-progress]');
-  await expect(phoneChapters.getByText('No chapter read yet')).toBeVisible();
-  await expect(phoneChapters.getByText('Continue from Volume 1, chapter 1')).toBeVisible();
+  await expect(phoneChapters.getByText('Unknown', { exact: true })).toBeVisible();
+  await expect(phoneChapters.locator('[data-next], [data-caught-up]')).toHaveCount(0);
 
   await phoneChapters.getByRole('button', { name: 'Volume 1, chapter 4', exact: true }).click();
   await expect(phoneChapters.locator('[data-selected]')).toContainText('Volume 1, chapter 4');
   await phoneChapters.getByRole('button', { name: 'Mark read', exact: true }).click();
   await expect(phoneChapters.getByText('Last read: Volume 1, chapter 4')).toBeVisible();
-  await expect(phoneChapters.getByText('Continue from Volume 2, chapter 1')).toBeVisible();
+  await expect(phoneChapters.locator('[data-next], [data-caught-up]')).toHaveCount(0);
 
   await phoneChapters.getByRole('button', { name: 'Volume 2, chapter 3', exact: true }).click();
   await expect(phoneChapters.locator('[data-selected]')).toContainText('Volume 2, chapter 3');
   await phoneChapters.getByRole('button', { name: 'Mark read', exact: true }).click();
   await expect(phoneChapters.getByText('Last read: Volume 2, chapter 3')).toBeVisible();
-  await expect(phoneChapters.getByText('Continue from Volume 2, chapter 4')).toBeVisible();
+  await expect(phoneChapters.locator('[data-next], [data-caught-up]')).toHaveCount(0);
   await shot(handset, info, 'manga-phone', phoneChapters);
 
   const wide = await device(browser, info, desktop, seeded.manga.work);
   const desktopChapters = chapters(wide);
   await loaded(wide, '[data-chapter-progress]');
   await expect(desktopChapters.getByText('Last read: Volume 2, chapter 3')).toBeVisible();
-  await expect(desktopChapters.getByText('Continue from Volume 2, chapter 4')).toBeVisible();
+  await expect(desktopChapters.locator('[data-next], [data-caught-up]')).toHaveCount(0);
   const last = await desktopChapters.getAttribute('data-last');
-  const next = await desktopChapters.getAttribute('data-continue');
+  await expect(desktopChapters.locator('[data-caught-up]')).toHaveCount(0);
   expect(last).toBeTruthy();
   await shot(wide, info, 'manga-desktop', desktopChapters);
 
@@ -131,7 +131,7 @@ test('identified manga chapter progress resumes across volumes and devices', asy
   await loaded(wide, '[data-chapter-progress]');
   const omnibusChapters = chapters(wide);
   await expect(omnibusChapters).toHaveAttribute('data-last', last!);
-  await expect(omnibusChapters).toHaveAttribute('data-continue', next!);
+  await expect(omnibusChapters.locator('[data-next], [data-caught-up]')).toHaveCount(0);
   await wide.goto(at(seeded.manga.work));
   await loaded(wide, '[data-chapter-progress]');
 
@@ -162,6 +162,36 @@ test('identified manga chapter progress resumes across volumes and devices', asy
   await phoneChapters.getByRole('button', { name: 'Keep my change' }).click();
   await expect(phoneChapters.getByText('Changed on another device')).toHaveCount(0);
   await expect(phoneChapters.locator('[data-selected] [data-state="done"]')).toBeVisible();
+
+  // A later conflict carries the other device's unmark. Adopting it changes the selected state too.
+  let releaseUnmark!: () => void;
+  const unmarkGate = new Promise<void>(resolve => { releaseUnmark = resolve; });
+  let unmarkStarted!: () => void;
+  const unmarkSent = new Promise<void>(resolve => { unmarkStarted = resolve; });
+  await handset.route('**/api/main/v1/compositions/*/occurrences/*/progress*', async route => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    unmarkStarted();
+    await unmarkGate;
+    await route.fallback();
+  });
+  await phoneChapters.getByRole('button', { name: 'Volume 2, chapter 4', exact: true }).click();
+  await desktopChapters.getByRole('button', { name: 'Volume 2, chapter 4', exact: true }).click();
+  const unmarking = phoneChapters.getByRole('button', { name: 'Mark not read', exact: true }).click();
+  await unmarkSent;
+  await desktopChapters.getByRole('button', { name: 'Mark not read', exact: true }).click();
+  await expect(desktopChapters.locator('[data-selected] [data-state="open"]')).toBeVisible();
+  releaseUnmark();
+  await unmarking;
+  await expect(phoneChapters.getByText('Changed on another device')).toBeVisible();
+  await phoneChapters.getByRole('button', { name: 'Use the other version', exact: true }).click();
+  await expect(phoneChapters.locator('[data-selected] [data-state="open"]')).toBeVisible();
+  await expect(phoneChapters.getByRole('button', { name: 'Mark read', exact: true })).toBeVisible();
+  await expect(phoneChapters.locator('[data-conflict]')).toHaveCount(0);
+  await handset.reload();
+  await loaded(handset, '[data-chapter-progress]');
+  await phoneChapters.getByRole('button', { name: 'Volume 2, chapter 4', exact: true }).click();
+  await expect(phoneChapters.locator('[data-selected] [data-state="open"]')).toBeVisible();
+  await shot(handset, info, 'manga-other-unmark', phoneChapters);
 });
 
 test('game progress resumes across required and extra routes and a partless game on another device', async ({ browser }, info) => {
@@ -260,8 +290,8 @@ test('identified anime watched progress resumes across devices and rejects stale
   await handset.goto(at(seeded.episodes.work));
   await loaded(handset, '[data-episode-progress]', 180_000);
   // An accepted Anime classification identifies this series before its progress is changed.
-  await expect(phoneEpisodes.getByText('Continue from episode 1')).toBeVisible();
-  await expect(phoneEpisodes.getByText('No episode watched yet')).toBeVisible();
+  await expect(phoneEpisodes.locator('[data-next], [data-caught-up]')).toHaveCount(0);
+  await expect(phoneEpisodes.getByText('Unknown', { exact: true })).toBeVisible();
   await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
   await phoneEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(phoneEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1001', { timeout: 180_000 });
@@ -279,7 +309,8 @@ test('identified anime watched progress resumes across devices and rejects stale
   const wide = await device(browser, info, desktop, seeded.episodes.work);
   const desktopEpisodes = wide.locator('[data-episode-progress]');
   await loaded(wide, '[data-episode-progress]', 180_000);
-  await expect(desktopEpisodes.getByText('Continue from episode 1002')).toBeVisible();
+  await expect(desktopEpisodes.locator('[data-where]')).toHaveText('Last watched: Episode 1001');
+  await expect(desktopEpisodes.locator('[data-next], [data-caught-up]')).toHaveCount(0);
   await desktopEpisodes.getByLabel('Go to episode number').fill('1001');
   await desktopEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1001', { timeout: 180_000 });
@@ -302,8 +333,8 @@ test('identified anime watched progress resumes across devices and rejects stale
   expect(await refused.json()).toMatchObject({ code: 'stale_progress' });
   await handset.reload();
   await loaded(handset, '[data-episode-progress]', 180_000);
-  await expect(phoneEpisodes.getByText('No episode watched yet')).toBeVisible();
-  await expect(phoneEpisodes.getByText('Continue from episode 1', { exact: true })).toBeVisible();
+  await expect(phoneEpisodes.getByText('Unknown', { exact: true })).toBeVisible();
+  await expect(phoneEpisodes.locator('[data-next], [data-caught-up]')).toHaveCount(0);
   await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
   await phoneEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(phoneEpisodes.locator('[data-selected="main"]')).toContainText('Not watched', { timeout: 180_000 });
