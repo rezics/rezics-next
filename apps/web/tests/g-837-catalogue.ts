@@ -40,6 +40,7 @@ export interface Catalogue {
   sao: { web: Work; bunko: Work; progressive: Work; aggo: Work; volumes: Work[]; collection: string };
   index: { overall: Work; newTestament: Work; genesisTestament: Work };
   railgun: { manga: Work; anime: Work };
+  vn: { work: Work; anime: Work };
   volumeOne: { work: Work; release: string; omnibus: string; isbn: string };
 }
 
@@ -156,9 +157,9 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   };
 
   /** A public Work: a selected native text makes it readable to the signed-in member. */
-  const work = async (title: string): Promise<Work> => {
-    const created = await activateMetadataWork(stack.env, { title, semanticTypes: types, admission: stack.admission(
-      editor.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types)) });
+  const work = async (title: string, semanticTypes = types): Promise<Work> => {
+    const created = await activateMetadataWork(stack.env, { title, semanticTypes, admission: stack.admission(
+      editor.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes)) });
     const text = await stack.contribution(created.work, editor.actor, 'ja', `${title}（本文）`);
     const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion }, work: created.work,
       contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
@@ -242,6 +243,10 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   await derive(anime, manga, 'adaptation', true);
   await relate('spin-off', { source: await work('A Certain Magical Index (novel)'), 'spin-off': manga });
 
+  const visualNovel = await work('Steins;Gate (visual novel)', ['https://schema.org/VideoGame']);
+  const vnAnime = await work('Steins;Gate (anime)');
+  await derive(vnAnime, visualNovel, 'adaptation');
+
   // Sword Art Online: the web serial, the bunko Rewrite of it, a Reboot and a SpinOff of the bunko.
   const web = await work('Sword Art Online (web)');
   const bunko = await work('Sword Art Online');
@@ -300,5 +305,6 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
     [english, ...others].map(entry => ({ realization: entry.id, revision: entry.revision })), { platform: 'ebook' });
 
   return { sao: { web, bunko, progressive, aggo, volumes, collection }, index: { overall, newTestament, genesisTestament },
-    railgun: { manga, anime }, volumeOne: { work: volumeOne, release: paperback, omnibus, isbn } };
+    railgun: { manga, anime }, vn: { work: visualNovel, anime: vnAnime },
+    volumeOne: { work: volumeOne, release: paperback, omnibus, isbn } };
 }

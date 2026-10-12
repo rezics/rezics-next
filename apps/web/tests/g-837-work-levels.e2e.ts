@@ -1,3 +1,4 @@
+import { uuidToSid } from '@rezics/model/address';
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { spawnSync } from 'node:child_process';
@@ -43,6 +44,15 @@ test.beforeAll(async () => {
 });
 
 const uuid = (iri: string) => iri.slice(-36);
+const canonicalWorkPath = (work: { work: string; title: string }) =>
+  localizedPath(
+    resourceHref('/w/', {
+      prefix: '/w/',
+      key: uuidToSid(uuid(work.work)),
+      suffixSource: work.title,
+    }),
+    'en',
+  );
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
 const overflows = (page: Page) =>
@@ -107,7 +117,7 @@ test('parts, connections and editions read from Main for the franchise records',
   await expect(partOf).toContainText('Part of');
   await expect(partOf.getByRole('link', { name: 'A Certain Magical Index' })).toHaveAttribute(
     'href',
-    localizedPath(resourceHref('/w/', uuid(index.overall.work)), 'en'),
+    canonicalWorkPath(index.overall),
   );
   // The seed reviews its presentations through Main, so every visitor gets the typed label.
   await expect(
@@ -115,10 +125,7 @@ test('parts, connections and editions read from Main for the franchise records',
       name: 'A Certain Magical Index: Genesis Testament',
       exact: true,
     }),
-  ).toHaveAttribute(
-    'href',
-    localizedPath(resourceHref('/w/', uuid(index.genesisTestament.work)), 'en'),
-  );
+  ).toHaveAttribute('href', canonicalWorkPath(index.genesisTestament));
   await expect(page.locator('[data-relation-row]').filter({ hasText: 'Sequel' })).toContainText(
     'Genesis Testament',
   );
@@ -153,7 +160,7 @@ test('parts, connections and editions read from Main for the franchise records',
   const rows = page.locator('[data-relation-row]');
   await expect(
     rows.filter({ hasText: 'Rewrite of' }).getByRole('link', { name: 'Sword Art Online (web)' }),
-  ).toHaveAttribute('href', localizedPath(resourceHref('/w/', uuid(sao.web.work)), 'en'));
+  ).toHaveAttribute('href', canonicalWorkPath(sao.web));
   await expect(rows.filter({ hasText: 'Reboot' })).toContainText('Sword Art Online Progressive');
   await expect(rows.filter({ hasText: 'Spin-off' })).toContainText('Alternative Gun Gale Online');
 
@@ -341,3 +348,38 @@ test.fixme(
     await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
   },
 );
+
+// Locator.click uses Chromium's pointer input and hit testing, after hydration.
+for (const kind of ['anime', 'manga', 'vn'] as const) {
+  test(`${kind} hub: a pointer follows a relation to the related Work`, async ({ page }) => {
+    const source =
+      kind === 'anime'
+        ? catalogue.railgun.anime
+        : kind === 'manga'
+          ? catalogue.railgun.manga
+          : catalogue.vn.work;
+    const target =
+      kind === 'anime'
+        ? catalogue.railgun.manga
+        : kind === 'manga'
+          ? { title: 'A Certain Magical Index (novel)' }
+          : catalogue.vn.anime;
+    await page.goto(`${canonicalWorkPath(source)}/connections`);
+    await expect(
+      page.getByRole('heading', { level: 1, name: source.title, exact: true }),
+    ).toBeVisible();
+    const link = page
+      .locator('[data-relation-row]')
+      .getByRole('link', { name: target.title, exact: true });
+    const href = await link.getAttribute('href');
+    expect(href).not.toBeNull();
+    if ('work' in target) await expect(link).toHaveAttribute('href', canonicalWorkPath(target));
+    // Wait for React effects so this covers the enhanced router, rather than the hydration fallback.
+    await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+    await link.click();
+    await expect(page).toHaveURL(new URL(href!, page.url()).href);
+    await expect(
+      page.getByRole('heading', { level: 1, name: target.title, exact: true }),
+    ).toBeVisible();
+  });
+}

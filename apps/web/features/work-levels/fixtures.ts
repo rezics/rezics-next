@@ -1,4 +1,5 @@
 import { direction } from '@rezics/main/language';
+import { uuidToSid } from '@rezics/model/address';
 import type { Loaded, Part, PartsPage, RealizationPage, Realization, RelationEntry, RelationsPage, Release, ReleasePage,
   Summary, WholesPage } from './types.ts';
 
@@ -12,6 +13,8 @@ const position = { datasetId: 'product' as const, dataEpoch: 'epoch', sequence: 
 
 export function summary(reference: string, name: string, language = 'en', type: 'work' | 'collection' | 'main-version' | 'resource' = 'work'): Summary {
   return { reference, status: 'available', type, base: type === 'work' ? 'work' : 'resource', work: null, disclosure: 'public',
+    // ast-grep-ignore: web-links-use-address -- CanonicalAddress prefixes are protocol fixture inputs; consumers construct destinations through resourceHref.
+    address: { prefix: type === 'work' ? '/w/' : '/e/', key: uuidToSid(reference.slice(-36)), suffixSource: name },
     name: { value: name, language, direction: direction(language, name), basis: 'requested' },
     avatar: { kind: 'fallback', policy: 'fallback-avatar-v1', key: reference, resourceType: type } } as unknown as Summary;
 }

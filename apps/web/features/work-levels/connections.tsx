@@ -12,9 +12,9 @@ import { languageName } from '../work-page/format.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
-import { NameLink, SummaryLink, type SummaryHref } from './names.tsx';
+import { namedWorkHref, NameLink, SummaryLink, type SummaryHref, summaryWorkHref } from './names.tsx';
 import { type Appearance, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
-import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains, workLinkHref } from './route.ts';
+import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
@@ -52,7 +52,7 @@ function creditPage(reference: string, item: RelationItem, hrefFor?: SummaryHref
     if (target.kind !== 'resource' || target.reference !== reference || target.summary?.status !== 'available') continue;
     const summary = target.summary;
     if (summary.type === 'agent') return authorHref({ kind: 'agent', handle: null, agent: reference });
-    const href = hrefFor?.(summary) ?? (summary.type === 'work' ? workLinkHref(summary.reference) : null);
+    const href = hrefFor?.(summary) ?? summaryWorkHref(summary);
     if (href) return href;
   }
   return resourceHref('/e/', reference);
@@ -187,6 +187,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
       {members.data.members.map(member => {
         const work = member.target!;
         const parts = franchise.parts.get(work);
+        const workPage = namedWorkHref(work, names);
         return <li key={member.occurrence} className="grid min-w-0 gap-1"
           aria-current={work.endsWith(current) ? 'true' : undefined}>
           <span className="flex flex-wrap items-center gap-2">
@@ -200,7 +201,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
                   <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
                   {part.displayLabel ? <> <bdi className="tabular-nums">({part.displayLabel})</bdi></> : null}
                 </li>)}
-                {parts.data.next && workLinkHref(work) ? <li><Link href={`${workLinkHref(work)}/connections#parts`}
+                {parts.data.next && workPage ? <li><Link href={`${workPage}/connections#parts`}
                   className="text-primary underline-offset-4 hover:underline">{t.morePartsExist}</Link></li> : null}
               </ol>
               : parts.failure === 'missing' ? null

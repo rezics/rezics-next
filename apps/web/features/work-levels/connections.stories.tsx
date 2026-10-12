@@ -1,3 +1,4 @@
+import type { CanonicalAddress } from '@rezics/model/address';
 import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -7,6 +8,7 @@ import { messages as pageMessages } from '../work-page/messages.ts';
 import { ConnectionsSection, type Franchise } from './connections.tsx';
 import * as fixture from './fixtures.ts';
 import { copyOf } from './messages.ts';
+import { namedWorkHref } from './names.tsx';
 import { ConnectionsPreviewView } from './previews.tsx';
 import type { ConnectionsQuery } from './route.ts';
 import type { Loaded, RelationsPage } from './types.ts';
@@ -102,6 +104,17 @@ export const TypedRelations: Story = {
     // The derivation whose source version is not pinned is visibly unresolved, not hidden.
     await expect(canvas.getByText('Source version unresolved')).toBeVisible();
     await expect(canvasElement.querySelectorAll('[data-role-chip]')).toHaveLength(0);
+    for (const entry of fixture.relationEntries) {
+      for (const target of entry.counterparts) {
+        if (target.status !== 'available' || target.type !== 'work') continue;
+        for (const link of canvas.getAllByRole('link', { name: target.name.value })) {
+          await expect(link).toHaveAttribute(
+            'href',
+            localizedPath(resourceHref('/w/', target.address as CanonicalAddress), 'en'),
+          );
+        }
+      }
+    }
   },
 };
 
@@ -158,10 +171,7 @@ export const MemberWithMoreParts: Story = {
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'More parts…' })).toHaveAttribute(
       'href',
-      localizedPath(
-        `${resourceHref('/w/', fixture.iri('100').slice(-36))}/connections#parts`,
-        'en',
-      ),
+      localizedPath(`${namedWorkHref(fixture.iri('100'), fixture.names)}/connections#parts`, 'en'),
     );
   },
 };

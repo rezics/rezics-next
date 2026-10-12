@@ -1,3 +1,4 @@
+import type { CanonicalAddress } from '@rezics/model/address';
 import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -70,6 +71,14 @@ export const PublicationOrder: Story = {
     await expect(within(list).getByText('Extra')).toBeVisible();
     await expect(canvas.getByText('Part of')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'A Certain Magical Index' })).toBeVisible();
+    for (const reference of [fixture.iri('101'), fixture.iri('200')]) {
+      const target = fixture.names.get(reference);
+      if (target?.status !== 'available') throw new Error('Expected a disclosed part or whole');
+      await expect(canvas.getByRole('link', { name: target.name.value })).toHaveAttribute(
+        'href',
+        localizedPath(resourceHref('/w/', target.address as CanonicalAddress), 'en'),
+      );
+    }
     await expect(canvas.getByText(/Concluded/)).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
