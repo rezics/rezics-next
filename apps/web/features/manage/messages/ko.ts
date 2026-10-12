@@ -531,6 +531,7 @@ export default {
   previewEmpty: '아직 없음.',
   decisionFieldRequired: '내용을 입력하세요.',
   decisionSend: '결정 기록', decisionSending: '기록 중…',
+  decisionCancelled: '결정이 취소되었습니다. 이미 확인된 효과는 계속 적용됩니다.',
   decisionResume: '이어서 진행',
   decisionAccepted: '결정은 기록되었지만 일부 조치는 아직 확인되지 않았어요. 이어서 진행하면 같은 요청을 다시 보냅니다.',
   decisionStale: '읽은 뒤에 사안, 규칙 또는 콘텐츠가 바뀌었어요. 사안을 새로고침한 뒤 다시 결정하세요.',

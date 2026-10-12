@@ -519,6 +519,7 @@ export default {
   previewEmpty: 'まだありません。',
   decisionFieldRequired: '入力してください。',
   decisionSend: '判断を記録', decisionSending: '記録しています…',
+  decisionCancelled: '決定はキャンセルされました。確認済みの効果は引き続き適用されます。',
   decisionResume: '再開',
   decisionAccepted: '判断は記録されましたが、すべての措置が確認されたわけではありません。再開すると同じリクエストを再送します。',
   decisionStale: '読み込んだ後に、案件、ルール、またはコンテンツが変わりました。案件を更新して、もう一度判断してください。',

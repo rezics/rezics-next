@@ -351,7 +351,7 @@ export function adminApi(options: { record?: AdminRecord; settingsFailure?: 'sta
   memberFailure?: 'stale' | 'denied' } = {}): AdminApi {
   const record = options.record ?? { members: [], roles: [], settings: [] };
   const ok = <T>(data: T): Loaded<T> => ({ ok: true, data });
-  return {
+  return { principal: 'storybook:account-one',
     members: async (search, _after, role) => ok({ generation: '12', nextCursor: null, items: members.filter(member => {
       if (role && !member.roles.some(item => item.id === role)) return false;
       if (!search) return true;

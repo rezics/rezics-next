@@ -21,7 +21,7 @@ export default async function RealmMembersRoute({ params, searchParams }: { para
   const role = parseMemberRole(await searchParams);
   const locale = await requestLocale();
   const back = membersHref(address, role);
-  const { actingSubject, main, anonymous, signInHref } = await manager(locale, back);
+  const { principal, actingSubject, main, anonymous, signInHref } = await manager(locale, back);
   const [messages, page, roles, invitations] = await Promise.all([getMessages('manage', locale),
     readMembers(main, realm, { actingSubject, role }), readRoles(main, realm, actingSubject),
     readOutgoingInvitations(main, realm, actingSubject)]);
@@ -30,7 +30,7 @@ export default async function RealmMembersRoute({ params, searchParams }: { para
   const agents = await readAgents(anonymous, [...page.data.items.map(item => item.member),
     ...(invitations.ok ? invitations.data.items.map(item => item.member) : [])]);
   const named = role && roles.ok ? roles.data.roles.find(item => item.id === role)?.name ?? null : null;
-  return <MembersView realm={realm} address={address} actingSubject={actingSubject} first={page.data} agents={agents}
+  return <MembersView key={`${principal}:${realm}:${actingSubject}`} principal={principal} realm={realm} address={address} actingSubject={actingSubject} first={page.data} agents={agents}
     invitations={invitations} roles={roles.ok ? roles.data.roles : null}
     roleFilter={role ? { id: role, name: named } : null}
     now={Date.now()} locale={locale} messages={messages} />;

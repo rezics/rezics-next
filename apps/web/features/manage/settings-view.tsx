@@ -8,13 +8,13 @@ import { Textarea } from '@rezics/ui/textarea';
 import { GitCompareArrowsIcon, PencilIcon, ScaleIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { type AdminApi, bffAdminApi } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import { newKey } from './commands.ts';
-import { performCommand, readCommand } from './safety-pending.ts';
+import { attemptStorage, performCommand, readCommand } from './safety-pending.ts';
 import type { ManageMessages } from './messages.ts';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
@@ -26,8 +26,9 @@ import type { RealmRule, SettingsView as Settings, WhoMaySubmit } from './types.
 const submitChoices = [['granted', 'submitGranted', 'submitGrantedHelp'], ['members', 'submitMembers', 'submitMembersHelp'],
   ['closed', 'submitClosed', 'submitClosedHelp']] as const satisfies ReadonlyArray<readonly [WhoMaySubmit, string, string]>;
 
-const storageKey = (realm: string) => `rezics:manage:rules-draft:${realm}`;
+export const rulesDraftKey = (principal: string, realm: string, actor: string) => `rezics:manage:rules-draft:${encodeURIComponent(principal)}:${realm}:${encodeURIComponent(actor)}`;
 interface StoredDraft { base: string | null; drafts: RuleDraft[]; whoMaySubmit: WhoMaySubmit }
+export const newestSettings = (a: Settings, b: Settings): Settings => BigInt(a.generation) >= BigInt(b.generation) ? a : b;
 type SettingsCommand = Parameters<AdminApi['saveSettings']>[0];
 
 /**
@@ -35,14 +36,17 @@ type SettingsCommand = Parameters<AdminApi['saveSettings']>[0];
  * with the published revision, then published as the next revision; a
  * publication by someone else in the meantime keeps this draft for review.
  */
-export function SettingsView({ realm, actingSubject, initial, locale, messages, api: givenApi }: {
-  realm: string; actingSubject: string; initial: Settings; locale: UiLocale; messages: ManageMessages; api?: AdminApi;
+export function SettingsView({ principal, realm, actingSubject, initial, locale, messages, api: givenApi }: {
+  principal: string; realm: string; actingSubject: string; initial: Settings; locale: UiLocale; messages: ManageMessages; api?: AdminApi;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
   const router = useRouter();
+  const store = useMemo(() => attemptStorage(principal), [principal]);
   const reading = useReadingLanguages(actingSubject);
   const [current, setCurrent] = useState(initial);
+  const latestSettings = useRef(current);
+  latestSettings.current = newestSettings(current, initial);
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<RuleDraft[]>(() => draftsOf(initial.settings.rules));
   const [who, setWho] = useState<WhoMaySubmit>(initial.settings.whoMaySubmit);
@@ -55,7 +59,7 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
   // A draft survives a reload until it is published or discarded.
   useEffect(() => {
     try {
-      const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings');
+      const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings', store);
       if (attempt) {
         setRecovering(true);
         setDrafts(draftsOf(attempt.input.settings.rules));
@@ -64,7 +68,7 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
         setReviewing(true);
         return;
       }
-      const stored = JSON.parse(localStorage.getItem(storageKey(realm)) ?? 'null') as StoredDraft | null;
+      const stored = JSON.parse(localStorage.getItem(rulesDraftKey(principal, realm, actingSubject)) ?? 'null') as StoredDraft | null;
       if (!stored) return;
       const restored = stored.drafts.map(draft => ({ ...draft, rule: restoredRule(draft.rule) }));
       setDrafts(restored);
@@ -72,19 +76,27 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
       setEditing(true);
       if (stored.base !== initial.ruleBasis.revision) setConflict(initial);
     } catch { /* an unreadable draft is ignored */ }
-  }, [realm, actingSubject, initial]);
+  }, [realm, actingSubject, initial, store]);
   useEffect(() => {
     if (!editing) return;
     const stored: StoredDraft = { base: current.ruleBasis.revision, drafts, whoMaySubmit: who };
-    try { localStorage.setItem(storageKey(realm), JSON.stringify(stored)); } catch { /* storage may be full or off */ }
+    try { localStorage.setItem(rulesDraftKey(principal, realm, actingSubject), JSON.stringify(stored)); } catch { /* storage may be full or off */ }
   }, [editing, drafts, who, current.ruleBasis.revision, realm]);
+
+  useEffect(() => {
+    if (!editing && !recovering && BigInt(initial.generation) > BigInt(current.generation)) {
+      setCurrent(initial);
+      setDrafts(draftsOf(initial.settings.rules));
+      setWho(initial.settings.whoMaySubmit);
+    }
+  }, [initial, editing, recovering, current.generation]);
 
   const rules = drafts.map(draft => draft.rule);
   const changes = compareRules(current.settings.rules, rules);
   const whoChanged = who !== current.settings.whoMaySubmit;
 
   function discard(to: Settings = current) {
-    try { localStorage.removeItem(storageKey(realm)); } catch { /* nothing to remove */ }
+    try { localStorage.removeItem(rulesDraftKey(principal, realm, actingSubject)); } catch { /* nothing to remove */ }
     setCurrent(to);
     setDrafts(draftsOf(to.settings.rules));
     setWho(to.settings.whoMaySubmit);
@@ -101,9 +113,11 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
 
   async function published(result: Settings, revision: string | null) {
     setRecovering(false);
-    discard(result);
+    const fresh = await api.settings();
+    const latest = newestSettings(latestSettings.current, fresh.ok ? fresh.data : result);
+    discard(newestSettings(latest, result));
     setReviewing(false);
-    setStatus(revision ? t.rulesPublished({ revision }) : t.settingsSaved);
+    setStatus(revision && BigInt(result.generation) >= BigInt(latest.generation) ? t.rulesPublished({ revision }) : t.settingsSaved);
     router.refresh();
   }
 
@@ -153,7 +167,7 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
       <Button variant="ghost" disabled={recovering} onClick={() => discard()}>{t.discardChanges}</Button>
       {problems?.length ? <p role="alert" className="text-destructive-foreground text-sm">{t.fixProblems}</p> : null}
     </div> : null}
-    <PublishDialog realm={realm} open={reviewing} current={current} changes={changes} whoMaySubmit={who} whoChanged={whoChanged}
+    <PublishDialog principal={principal} realm={realm} open={reviewing} current={current} changes={changes} whoMaySubmit={who} whoChanged={whoChanged}
       rules={rules} api={api} actingSubject={actingSubject} locale={locale} messages={messages}
       onRecovery={setRecovering}
       onClose={() => setReviewing(false)} onPublished={(result, revision) => void published(result, revision)}
@@ -172,26 +186,27 @@ function changeText(change: RuleChange, t: ReturnType<typeof materializeData<Man
   }
 }
 
-function PublishDialog({ realm, open, current, changes, whoMaySubmit, whoChanged, rules, api, actingSubject, locale, messages, onRecovery,
+function PublishDialog({ principal, realm, open, current, changes, whoMaySubmit, whoChanged, rules, api, actingSubject, locale, messages, onRecovery,
   onClose, onPublished, onConflict }: {
-  realm: string; open: boolean; current: Settings; changes: RuleChange[]; whoMaySubmit: WhoMaySubmit; whoChanged: boolean;
+  principal: string; realm: string; open: boolean; current: Settings; changes: RuleChange[]; whoMaySubmit: WhoMaySubmit; whoChanged: boolean;
   rules: RealmRule[]; api: AdminApi; actingSubject: string; locale: UiLocale; messages: ManageMessages;
   onClose: () => void; onPublished: (result: Settings, revision: string | null) => void;
   onConflict: (theirs: Settings) => void;
   onRecovery: (recovering: boolean) => void;
 }) {
   const t = materializeData(messages, { locale });
+  const store = useMemo(() => attemptStorage(principal), [principal]);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [recovering, setRecovering] = useState(() => readCommand<SettingsCommand>(realm, actingSubject, 'settings') !== null);
+  const [recovering, setRecovering] = useState(() => readCommand<SettingsCommand>(realm, actingSubject, 'settings', store) !== null);
   useEffect(() => {
     if (!open) return;
     setError(null);
-    const stored = readCommand<SettingsCommand>(realm, actingSubject, 'settings');
+    const stored = readCommand<SettingsCommand>(realm, actingSubject, 'settings', store);
     if (stored) setReason(stored.input.reason);
     setRecovering(stored !== null);
-  }, [open, realm, actingSubject]);
+  }, [open, realm, actingSubject, store]);
   const choice = submitChoices.find(([value]) => value === whoMaySubmit)!;
 
   async function publish() {
@@ -199,12 +214,12 @@ function PublishDialog({ realm, open, current, changes, whoMaySubmit, whoChanged
     setPending(true); setError(null);
     let basis = current;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings') ?? { realm, actingSubject, key: newKey(), status: 'recorded' as const,
+      const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings', store) ?? { realm, actingSubject, key: newKey(), status: 'recorded' as const,
         input: { actingSubject, expectedGeneration: basis.generation, reason: reason.trim(),
           settings: { ...basis.settings, whoMaySubmit, rules }, expectedRulesRevision: basis.ruleBasis.revision } };
       const result = await performCommand('settings', attempt,
-        attempt => api.saveSettings(attempt.input, attempt.key));
-      const retained = !result.ok && readCommand(realm, actingSubject, 'settings') !== null;
+        attempt => api.saveSettings(attempt.input, attempt.key), store);
+      const retained = !result.ok && readCommand(realm, actingSubject, 'settings', store) !== null;
       setRecovering(retained); onRecovery(retained);
       if (result.ok) {
         setPending(false); setReason('');
@@ -212,7 +227,7 @@ function PublishDialog({ realm, open, current, changes, whoMaySubmit, whoChanged
           result.data.ruleBasis.revision);
         return;
       }
-      if (result.failure !== 'stale') {
+      if (retained || result.failure !== 'stale') {
         setPending(false);
         setError(retained ? t.decisionStillPending : result.failure === 'denied' ? t.settingsDenied : result.failure === 'invalid' ? t.settingsInvalid
           : t.failedNotice);
@@ -243,8 +258,8 @@ function PublishDialog({ realm, open, current, changes, whoMaySubmit, whoChanged
           {t.checkHelp({ changed: change.languages.map(language => ruleLanguageName(language, t, locale)).join(', '),
             other: change.check.map(language => ruleLanguageName(language, t, locale)).join(', ') })}</span> : null}</li>)}
     </ul> : <p className="text-sm">{t.noChanges}</p>}
-    <p className="rounded-xl bg-muted/40 p-3 text-muted-foreground text-sm">
-      {t.publishNote({ revision: nextRevision(current.ruleBasis) })}</p>
+    {!recovering ? <p className="rounded-xl bg-muted/40 p-3 text-muted-foreground text-sm">
+      {t.publishNote({ revision: nextRevision(current.ruleBasis) })}</p> : null}
     <Field invalid={error === t.reasonRequired}>
       <FieldLabel>{t.publishReasonLabel}</FieldLabel>
       <Textarea disabled={recovering || pending} value={reason} rows={2} maxLength={REASON_LIMIT} onChange={event => setReason(event.currentTarget.value)} />

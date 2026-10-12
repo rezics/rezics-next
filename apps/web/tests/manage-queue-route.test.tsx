@@ -10,7 +10,7 @@ const queueApi = { ...await import('../features/manage/queue-api.ts') };
 const i18n = { ...await import('../i18n/server.ts') };
 const signInHref = '/auth/sign-in?next=queue';
 let result: Loaded<RealmHeader>;
-let permissions: string[];
+let permissions: string[] | null;
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
 const headerRead = mock(async ({ query }: { query: { language: string; actingSubject?: string } }) => {
   if (query.actingSubject !== actingSubject) return { data: null, error: { status: 403, value: {} } };
@@ -21,29 +21,29 @@ const headerRead = mock(async ({ query }: { query: { language: string; actingSub
 const main = { v1: { realms: () => ({ get: headerRead }) } } as unknown as MainClient;
 const names = mock(async () => queueApi.noNames);
 
-beforeEach(() => {
+beforeEach(async () => {
   names.mockClear();
   headerRead.mockClear();
   permissions = [];
-  mock.module('../features/manage/server.ts', () => ({ ...server,
+  await mock.module('../features/manage/server.ts', () => ({ ...server,
     managedAddress: async () => ({ id: realm, address: 'books' }),
-    manager: async () => ({ actingSubject, main, anonymous: {}, signInHref }),
+    manager: async () => ({ principal: 'account-A', actingSubject, main, anonymous: {}, signInHref }),
     permissionsIn: async () => permissions,
   }));
-  mock.module('../features/manage/read.ts', () => ({ ...reads,
+  await mock.module('../features/manage/read.ts', () => ({ ...reads,
     readQueue: async () => ({ ok: true, data: queuePage }),
   }));
-  mock.module('../features/manage/queue-api.ts', () => ({ ...queueApi, readQueueNames: names }));
-  mock.module('../i18n/server.ts', () => ({ ...i18n,
+  await mock.module('../features/manage/queue-api.ts', () => ({ ...queueApi, readQueueNames: names }));
+  await mock.module('../i18n/server.ts', () => ({ ...i18n,
     requestLocale: async () => 'en', getMessages: async () => messages,
   }));
 });
 
-afterEach(() => {
-  mock.module('../features/manage/server.ts', () => server);
-  mock.module('../features/manage/read.ts', () => reads);
-  mock.module('../features/manage/queue-api.ts', () => queueApi);
-  mock.module('../i18n/server.ts', () => i18n);
+afterEach(async () => {
+  await mock.module('../features/manage/server.ts', () => server);
+  await mock.module('../features/manage/read.ts', () => reads);
+  await mock.module('../features/manage/queue-api.ts', () => queueApi);
+  await mock.module('../i18n/server.ts', () => i18n);
 });
 
 async function route() {
@@ -57,7 +57,8 @@ for (const failure of ['unavailable', 'denied', 'sign-in'] as const) {
     result = { ok: false, failure };
     const view = await route();
     expect(view.type).toBe(QueueView);
-    expect(view.props).toMatchObject({ initial: queuePage, realmRules: undefined });
+    expect(view.props).toMatchObject({ principal: 'account-A', recoverReports: false, initial: queuePage, realmRules: undefined });
+    expect(view.key).toContain(`account-A:${realm}:${actingSubject}:`);
     expect(names).toHaveBeenCalledTimes(1);
   });
 }
@@ -85,6 +86,13 @@ test('a role-only private Realm moderator sees the authorized queue when its hea
   expect(headerRead).toHaveBeenCalledWith({ query: { language: 'en', actingSubject } });
   expect(view.type).toBe(QueueView);
   expect(view.props).toMatchObject({ actingSubject, initial: queuePage, realmRules: undefined,
-    authority: { decideReports: true, escalate: true }, rulesHref: null });
+    recoverReports: true, authority: { decideReports: true, escalate: true }, rulesHref: null });
   expect(names).toHaveBeenCalledTimes(1);
+});
+
+test('an authorized report read remains visible when optional permission discovery is unavailable', async () => {
+  permissions = null;
+  result = { ok: false, failure: 'unavailable' };
+  const view = await route();
+  expect(view.props).toMatchObject({ recoverReports: true, initial: queuePage });
 });

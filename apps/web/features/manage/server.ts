@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { serviceOrigin } from '../api/origins.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -24,7 +25,7 @@ export async function manager(locale: UiLocale, path: string) {
   if (!session) redirect(signInPath(next));
   if (session.agent.status !== 'selected') redirect(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(next)}`);
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-  return { agent: session.agent.agent, actingSubject: session.agent.agent.iri, main: managementMain(token),
+  return { principal: JSON.stringify([serviceOrigin('ACCOUNT_ORIGIN'), session.user.id]), agent: session.agent.agent, actingSubject: session.agent.agent.iri, main: managementMain(token),
     anonymous: mainApiWithToken(undefined), signInHref: signInPath(next) };
 }
 

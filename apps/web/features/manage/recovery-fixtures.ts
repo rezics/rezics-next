@@ -2,11 +2,20 @@ import type { DecisionReceipt } from './commands.ts';
 import type { AttemptStorage } from './safety-pending.ts';
 import type { ModerationDecisionCommand, ModerationItem } from './types.ts';
 
-export function isolatedAttemptStorage(): AttemptStorage {
+export const recoveryPrincipal = 'storybook:account-one';
+export function isolatedAttemptStorage(principal = recoveryPrincipal): AttemptStorage {
   const values = new Map<string, string>();
-  return { get length() { return values.size; }, key: index => [...values.keys()][index] ?? null,
-    getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); },
-    removeItem: key => { values.delete(key); } };
+  const locks = new Map<string, Promise<void>>();
+  return { principal, getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => { values.set(key, value); }, removeItem: key => { values.delete(key); },
+    async lock<T>(name: string, action: () => T): Promise<T> {
+      const before = locks.get(name) ?? Promise.resolve();
+      let release!: () => void;
+      const next = new Promise<void>(resolve => { release = resolve; });
+      locks.set(name, before.then(() => next));
+      await before;
+      try { return action(); } finally { release(); }
+    } };
 }
 
 export const recoveryReasons: ModerationDecisionCommand['reasons'] = {

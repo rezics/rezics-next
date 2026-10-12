@@ -33,7 +33,7 @@ const meta = {
   title: 'Manage/Queue',
   component: QueueView,
   parameters: { route: { pathname: `/en/manage/r/${realm}` } },
-  args: { realm, actingSubject: acting.iri, view: { state: 'open', type: null }, initial: queuePage, names, now,
+  args: { principal: 'storybook:account-one', realm, actingSubject: acting.iri, view: { state: 'open', type: null }, initial: queuePage, names, now,
     realmRules: publishedRules(), locale: 'en', messages, api: queueApi({ recorded }), undoWindowMs: 400 },
   render: (args: ComponentProps<typeof QueueView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><QueueView {...args} /></RealmFrame>,
@@ -196,6 +196,7 @@ export const KeepOrRemoveReport: Story = {
     await userEvent.keyboard('a');
     const keepDialog = within(await within(document.body).findByRole('dialog', { name: 'Keep reported content' }, { timeout: 5000 }));
     await expect(keepDialog.getByRole('radio', { name: /It follows the rules/ })).toBeChecked();
+    await waitFor(() => expect(keepDialog.getByRole('radiogroup').contains(document.activeElement)).toBe(true));
     await userEvent.keyboard('{Enter}');
     await expect(canvas.getByRole('status', { name: 'Decisions you can still undo' })).toHaveTextContent('Kept “Pride and Prejudice”');
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'keep',

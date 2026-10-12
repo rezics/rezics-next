@@ -510,6 +510,7 @@ export default {
   previewEmpty: '暂无内容。',
   decisionFieldRequired: '请填写此项。',
   decisionSend: '记录裁决', decisionSending: '正在记录…',
+  decisionCancelled: '决定已取消。已确认的效果仍然有效。',
   decisionResume: '继续',
   decisionAccepted: '裁决已记录，但并非所有措施都已确认。点击“继续”会重新发送同一请求。',
   decisionStale: '你阅读之后，案件、规则或内容发生了变化。请刷新案件后重新裁决。',

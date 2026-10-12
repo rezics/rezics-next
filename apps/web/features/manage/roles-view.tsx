@@ -10,7 +10,7 @@ import { Textarea } from '@rezics/ui/textarea';
 import { CheckIcon, PencilIcon, PlusIcon, ShieldIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -24,21 +24,21 @@ import { permissionOrder, permissionText, sortPermissions } from './permissions.
 import { mergeAgents, newestRoleList } from './read.ts';
 import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
-import type { AgentSummary, RealmPermission, Role, RoleChange, RoleList } from './types.ts';
+import type { AgentSummary, RealmPermission, Role, RoleChange, RoleCommand, RoleList } from './types.ts';
 
 /**
  * The Realm's roles as bundles of permissions in plain words. Every edit shows
  * who gains or loses what before it can be saved.
  */
-export function RolesView({ realm, address = realm, actingSubject, list: serverList, agents, locale, messages, api: givenApi }: {
-  realm: string; address?: string; actingSubject: string; list: RoleList; agents: Record<string, AgentSummary>;
+export function RolesView({ principal, realm, address = realm, actingSubject, list: serverList, agents, locale, messages, api: givenApi }: {
+  principal: string; realm: string; address?: string; actingSubject: string; list: RoleList; agents: Record<string, AgentSummary>;
   locale: UiLocale; messages: ManageMessages; api?: AdminApi;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
   const router = useRouter();
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
-  const recovery = useRoleRecovery(api, realm, actingSubject, editing !== null);
+  const recovery = useRoleRecovery(api, realm, actingSubject, editing !== null, principal);
   const [status, setStatus] = useState<string | null>(null);
   const [savedList, setSavedList] = useState<{ realm: string; actingSubject: string; list: RoleList } | null>(null);
   const list = newestRoleList(serverList,
@@ -105,14 +105,14 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
           </div>
         </li>)}
       </ul>}
-    {editing ? <RoleEditor realm={realm} role={editing === 'new' ? null : editing} generation={list.generation} api={api}
+    {editing ? <RoleEditor principal={principal} realm={realm} role={editing === 'new' ? null : editing} generation={list.generation} api={api}
       actingSubject={actingSubject} agents={agents} locale={locale} messages={messages} onClose={() => setEditing(null)}
       onSaved={saved} /> : null}
   </div>;
 }
 
-function RoleEditor({ realm, role, generation, api, actingSubject, agents, locale, messages, onClose, onSaved }: {
-  realm: string;
+function RoleEditor({ principal, realm, role, generation, api, actingSubject, agents, locale, messages, onClose, onSaved }: {
+  principal: string; realm: string;
   role: Role | null; generation: string; api: AdminApi; actingSubject: string; agents: Record<string, AgentSummary>;
   locale: UiLocale; messages: ManageMessages; onClose: () => void; onSaved: () => Promise<void>;
 }) {
@@ -128,7 +128,15 @@ function RoleEditor({ realm, role, generation, api, actingSubject, agents, local
   [roleId, name, permissions]);
   const unchanged = role !== null && role.name === name.trim()
     && sortPermissions(role.permissions).join() === sortPermissions(permissions).join();
-  const { state, save, names, recovering } = useRoleChange(api, { realm, actingSubject, generation, change });
+  const { state, save, names, recovering, recoveredCommand } = useRoleChange(api, { principal, realm, actingSubject, generation, change });
+
+  const recoveryInput = JSON.stringify(recoveredCommand);
+  useEffect(() => {
+    const command = JSON.parse(recoveryInput) as RoleCommand | null;
+    if (command?.change.kind === 'role') {
+      setName(command.change.name); setPermissions(command.change.permissions); setReason(command.reason);
+    }
+  }, [recoveryInput]);
 
   async function submit() {
     if (!recovering && !name.trim()) { setError(t.roleNameRequired); return; }

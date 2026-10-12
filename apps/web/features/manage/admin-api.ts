@@ -1,16 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { browserMainApi } from '../api/browser.ts';
 import { changeMember, changeRole, invite, newKey, type Outcome, previewRole, saveSettings, send } from './commands.ts';
 import type { ImpactState } from './impact-preview.tsx';
-import { performCommand, readCommand, retainedCommands } from './safety-pending.ts';
+import { attemptStorage, performCommand, readCommand, retainedCommands } from './safety-pending.ts';
 import { mergeAgents, readAgents, readHandle, readMembers, readOutgoingInvitations, readRoles, readSettings } from './read.ts';
 import type { AgentSummary, InvitationCommand, InvitationPage, InvitationResult, Loaded, MemberCommand, MemberPage, MemberReceipt,
   RoleChange, RoleCommand, RoleImpact, RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
 
 /** Members, roles and settings from the browser. Stories pass a stand-in. */
 export interface AdminApi {
+  /** Principal supplied by an injected adapter; normal pages pass the authenticated server value. */
+  principal?: string;
   members(search: string, after: string | null, role?: string | null): Promise<Loaded<MemberPage>>;
   names(iris: readonly string[]): Promise<Record<string, AgentSummary>>;
   lookup(handle: string): Promise<Loaded<AgentSummary>>;
@@ -51,26 +53,28 @@ export function bffAdminApi(realm: string, actingSubject: string): AdminApi {
 const PREVIEW_REASON = 'Preview';
 const sameImpact = (a: RoleImpact, b: RoleImpact) => JSON.stringify(a.changes) === JSON.stringify(b.changes);
 
-export type RoleSave = Outcome<RoleReceipt> & { unconfirmed?: boolean }
+export type RoleSave = Outcome<RoleReceipt> & { unconfirmed?: boolean; command?: RoleCommand }
   | { ok: false; failure: 'changed'; impact: RoleImpact };
 type RoleRequest = { command: RoleCommand; digest: string; impact?: RoleImpact };
 
 /** Role writes remain reachable after their dialog closes, including a newly created role. */
-export function useRoleRecovery(api: AdminApi, realm: string, actor: string, editing: boolean) {
+export function useRoleRecovery(api: AdminApi, realm: string, actor: string, editing: boolean, principal: string) {
+  const store = useMemo(() => attemptStorage(principal), [principal]);
   const [attempts, setAttempts] = useState<ReturnType<typeof retainedCommands<RoleRequest>>>([]);
   const [pending, setPending] = useState(false);
-  useEffect(() => { if (!editing) setAttempts(retainedCommands<RoleRequest>(realm, actor, 'role')); }, [realm, actor, editing]);
+  useEffect(() => { if (!editing) setAttempts(retainedCommands<RoleRequest>(realm, actor, 'role', store)); }, [realm, actor, editing, store]);
   const resume = async (operation: string): Promise<RoleSave> => {
-    const attempt = readCommand<RoleRequest>(realm, actor, operation);
+    const attempt = readCommand<RoleRequest>(realm, actor, operation, store);
     if (!attempt || pending) return { ok: false, failure: 'unavailable' };
     setPending(true);
     const result = await performCommand(operation, attempt,
-      stored => api.changeRole(stored.input.command, stored.input.digest, stored.key));
-    setAttempts(retainedCommands<RoleRequest>(realm, actor, 'role'));
+      stored => api.changeRole(stored.input.command, stored.input.digest, stored.key), store);
+    setAttempts(retainedCommands<RoleRequest>(realm, actor, 'role', store));
     setPending(false);
-    return result.ok ? result : { ...result, unconfirmed: readCommand(realm, actor, operation) !== null };
+    return result.ok ? result : { ...result, unconfirmed: readCommand(realm, actor, operation, store) !== null };
   };
-  return { attempts: editing ? [] : attempts, pending, resume };
+  return { attempts: editing ? [] : attempts.filter(entry => entry.attempt.principal === principal
+    && entry.attempt.realm === realm && entry.attempt.actingSubject === actor), pending, resume };
 }
 
 /**
@@ -78,8 +82,10 @@ export function useRoleRecovery(api: AdminApi, realm: string, actor: string, edi
  * change (debounced); a Realm generation that moved under it is read again
  * once and the refreshed preview says so.
  */
-export function useRoleChange(api: AdminApi, input: { realm: string; actingSubject: string; generation: string;
+export function useRoleChange(api: AdminApi, input: { principal: string; realm: string; actingSubject: string; generation: string;
   change: RoleChange | null }) {
+  const store = useMemo(() => attemptStorage(input.principal), [input.principal]);
+  const [preparation, restartPreparation] = useState(0);
   const [state, setState] = useState<ImpactState>({ kind: 'idle' });
   // People a change affects need not be on the roster the page already named.
   const [names, setNames] = useState<Record<string, AgentSummary>>({});
@@ -87,7 +93,7 @@ export function useRoleChange(api: AdminApi, input: { realm: string; actingSubje
   const request = JSON.stringify(input.change);
   const operation = input.change ? `role:${input.change.kind}:${input.change.roleId}${input.change.kind === 'assignment'
     ? `:${input.change.member}` : ''}` : 'role';
-  const [recovering, setRecovering] = useState(() => readCommand<RoleRequest>(input.realm, input.actingSubject, operation) !== null);
+  const [recovering, setRecovering] = useState(() => readCommand<RoleRequest>(input.realm, input.actingSubject, operation, store) !== null);
   const shown = useRef<RoleImpact | null>(null);
   useEffect(() => { generation.current = input.generation; }, [input.generation]);
 
@@ -103,7 +109,7 @@ export function useRoleChange(api: AdminApi, input: { realm: string; actingSubje
   }, [api, input.actingSubject]);
 
   useEffect(() => {
-    const retained = readCommand<RoleRequest>(input.realm, input.actingSubject, operation);
+    const retained = readCommand<RoleRequest>(input.realm, input.actingSubject, operation, store);
     if (retained) {
       setRecovering(true);
       setState(retained.input.impact ? { kind: 'ready', impact: retained.input.impact, refreshed: false } : { kind: 'failed' });
@@ -128,16 +134,24 @@ export function useRoleChange(api: AdminApi, input: { realm: string; actingSubje
       });
     }, 350);
     return () => { current = false; clearTimeout(timer); };
-  }, [request, preview, api, input.realm, input.actingSubject, operation]);
+  }, [request, preview, api, input.realm, input.actingSubject, operation, store, preparation]);
 
   const save = useCallback(async (reason: string): Promise<RoleSave> => {
-    const retained = readCommand<RoleRequest>(input.realm, input.actingSubject, operation);
+    const retained = readCommand<RoleRequest>(input.realm, input.actingSubject, operation, store);
     if (retained) {
-      const result = await performCommand(operation, retained, attempt => api.changeRole(attempt.input.command,
-        attempt.input.digest, attempt.key));
-      const unconfirmed = !result.ok && readCommand(input.realm, input.actingSubject, operation) !== null;
+      let committed = retained.input.command;
+      const result = await performCommand(operation, retained, attempt => {
+        committed = attempt.input.command;
+        return api.changeRole(attempt.input.command, attempt.input.digest, attempt.key);
+      }, store);
+      const unconfirmed = !result.ok && readCommand(input.realm, input.actingSubject, operation, store) !== null;
       setRecovering(unconfirmed);
-      return result.ok ? result : { ...result, unconfirmed };
+      if (!result.ok && !unconfirmed) {
+        shown.current = null;
+        setState({ kind: 'checking' });
+        restartPreparation(value => value + 1);
+      }
+      return result.ok ? { ...result, command: committed } : { ...result, unconfirmed };
     }
     const change = request === 'null' ? null : JSON.parse(request) as RoleChange;
     if (!change || !shown.current) return { ok: false, failure: 'invalid' };
@@ -150,13 +164,20 @@ export function useRoleChange(api: AdminApi, input: { realm: string; actingSubje
     }
     const command: RoleCommand = { actingSubject: input.actingSubject, expectedGeneration: generation.current,
       reason: reason.trim(), change };
+    let committed = command;
     const result = await performCommand(operation, { realm: input.realm, actingSubject: input.actingSubject,
       input: { command, digest: bound.data.digest, impact: bound.data }, key: newKey(), status: 'recorded' },
-      attempt => api.changeRole(attempt.input.command, attempt.input.digest, attempt.key));
-    const unconfirmed = !result.ok && readCommand(input.realm, input.actingSubject, operation) !== null;
+      attempt => { committed = attempt.input.command; return api.changeRole(attempt.input.command, attempt.input.digest, attempt.key); }, store);
+    const unconfirmed = !result.ok && readCommand(input.realm, input.actingSubject, operation, store) !== null;
     setRecovering(unconfirmed);
-    return result.ok ? result : { ...result, unconfirmed };
-  }, [api, preview, request, input.actingSubject, input.realm, operation]);
+    if (!result.ok && !unconfirmed) {
+      shown.current = null;
+      setState({ kind: 'checking' });
+      restartPreparation(value => value + 1);
+    }
+    return result.ok ? { ...result, command: committed } : { ...result, unconfirmed };
+  }, [api, preview, request, input.actingSubject, input.realm, operation, store]);
 
-  return { state, save, names, recovering };
+  const retained = readCommand<RoleRequest>(input.realm, input.actingSubject, operation, store);
+  return { state, save, names, recovering, recoveredCommand: retained?.input.command ?? null };
 }

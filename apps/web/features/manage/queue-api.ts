@@ -1,4 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
+import { attemptStorage } from './safety-pending.ts';
 import { commitDecision, type Outcome } from './commands.ts';
 import type { Decision } from './queue-state.ts';
 import { targetWork } from './queue-subject.ts';
@@ -71,7 +72,7 @@ export async function readQueueNames(main: MainClient, realm: string, items: rea
 }
 
 /** The queue through the BFF, acting as `actingSubject`. */
-export function bffQueueApi(realm: string, actingSubject: string, language: string): QueueApi {
+export function bffQueueApi(realm: string, actingSubject: string, language: string, principal: string): QueueApi {
   return {
     page: (view, cursor) => readQueue(browserMainApi(), realm, { actingSubject, ...view, cursor }),
     names: (items, known) => readQueueNames(browserMainApi(), realm, items, { language, actingSubject }, known),
@@ -81,6 +82,6 @@ export function bffQueueApi(realm: string, actingSubject: string, language: stri
       : Promise.resolve({ ok: false, failure: 'missing' }),
     basis: item => readDecisionBasis(browserMainApi(), realm, item.id, actingSubject),
     people: iris => readAgents(browserMainApi(), iris, actingSubject),
-    commit: (item, decision, key) => commitDecision(browserMainApi(), realm, item, decision, actingSubject, key),
+    commit: (item, decision, key) => commitDecision(browserMainApi(), realm, item, decision, actingSubject, key, attemptStorage(principal)),
   };
 }

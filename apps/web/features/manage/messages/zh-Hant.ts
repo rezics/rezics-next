@@ -518,6 +518,7 @@ export default {
   previewEmpty: '尚無內容。',
   decisionFieldRequired: '請填寫此項。',
   decisionSend: '記錄裁決', decisionSending: '正在記錄…',
+  decisionCancelled: '決定已取消。已確認的效果仍然有效。',
   decisionResume: '繼續',
   decisionAccepted: '裁決已記錄，但並非所有措施都已確認。按「繼續」會重新送出同一請求。',
   decisionStale: '你閱讀之後，案件、規則或內容發生了變化。請重新整理案件後再裁決。',

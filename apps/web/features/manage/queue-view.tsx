@@ -14,7 +14,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { decisionStatus, type Outcome } from './commands.ts';
-import { forgetCommand, readReportAttempt, reportAttempts, retainCommand, type ReportAttempt } from './safety-pending.ts';
+import { attemptStorage, readQueueAttempt, queueAttempts } from './safety-pending.ts';
 import { agentLabel, isoTime, relativeTime } from './format.ts';
 import { actionLabel, componentLabel, decidedText, kindLabel, reasonLabel, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
@@ -33,6 +33,8 @@ import { subjectOf } from './queue-subject.ts';
 import type { DecisionBasis, Loaded, ModerationItem, ModerationKind, ModerationPage, PublishedRule } from './types.ts';
 
 export interface QueueViewProps {
+  principal: string;
+  recoverReports?: boolean;
   realm: string;
   /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
   address?: string;
@@ -64,12 +66,15 @@ const filters: ReadonlyArray<[ModerationKind | null, 'filterAll' | 'filterReport
   ['correction_submission', 'filterCorrections'], ['rights_complaint', 'filterRights']];
 
 /** The report reasons a view offers to narrow by: those its items give, and the one in use. */
+const isReportItem = (item: ModerationItem) => item.kind === 'content_report' || item.kind === 'rights_complaint';
+
 export function reasonsOf(items: readonly ModerationItem[], current: string | null | undefined): string[] {
   const codes = items.filter(item => !item.kind.endsWith('_submission')).flatMap(item => item.reasonCode ? [item.reasonCode] : []);
   return [...new Set([...current ? [current] : [], ...codes])].sort();
 }
 
 export function outcomeOf(result: Outcome<unknown>, report = false): Settled {
+  if (result.ok && report && decisionStatus(result.data) === 'cancelled') return { kind: 'cancelled' };
   if (result.ok) return !report || decisionStatus(result.data) === 'completed' ? { kind: 'done' }
     : { kind: 'pending' };
   if (result.failure === 'pending') return { kind: 'pending' };
@@ -98,12 +103,16 @@ function rulesOf(bases: Record<string, Loaded<DecisionBasis> | 'loading'>): Rule
  * submissions, the current item in context beside it, keyboard triage, bulk
  * decisions and an undo window before anything reaches Main.
  */
-export function QueueView({ realm, address = realm, actingSubject, authority = fullAuthority, rulesHref = null, view,
+export function QueueView({ principal, recoverReports, realm, address = realm, actingSubject, authority = fullAuthority, rulesHref = null, view,
   initial, names: initialNames, realmRules = [], now, locale, messages, api: givenApi,
   undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
-  const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale),
-    [givenApi, realm, actingSubject, locale]);
+  const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale, principal),
+    [givenApi, realm, actingSubject, locale, principal]);
+  const store = useMemo(() => attemptStorage(principal), [principal]);
+  const allowedHere = useCallback((item: ModerationItem) => (!isReportItem(item) || (recoverReports ?? authority.decideReports))
+    && (!view.type || item.kind === view.type) && (!view.reason || item.reasonCode === view.reason),
+  [recoverReports, authority.decideReports, view.type, view.reason]);
   const [state, dispatch] = useReducer(triage, itemsFor(initial.items, view.state), initialTriage);
   const [names, setNames] = useState(initialNames);
   const namesRef = useRef(names);
@@ -129,8 +138,8 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const latest = useRef(state);
   latest.current = state;
 
-  const visible = visibleIds(state);
-  const current = state.current ? state.items[state.current] ?? null : null;
+  const visible = visibleIds(state).filter(id => state.items[id] && allowedHere(state.items[id]!));
+  const current = state.current && visible.includes(state.current) ? state.items[state.current] ?? null : null;
   const titleOf = useCallback((id: string) => {
     const item = latest.current.items[id];
     return item ? subjectOf(item.target.resource, names, t).text : t.workFallback;
@@ -141,10 +150,10 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     setNames(known => mergeNames(known, found));
   }, [api]);
   useEffect(() => {
-    const attempts = reportAttempts(realm, actingSubject);
+    const attempts = view.state === 'open' ? queueAttempts(realm, actingSubject, store).filter(attempt => allowedHere(attempt.item)) : [];
     dispatch({ type: 'recover', items: attempts });
     if (attempts.length) void learn(attempts.map(attempt => attempt.item));
-  }, [realm, actingSubject, learn]);
+  }, [realm, actingSubject, learn, store, allowedHere, view.state]);
 
   const reload = useCallback(async () => {
     const read = await api.page(view, null);
@@ -157,27 +166,19 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
 
   const sendItem = useCallback(async (item: ModerationItem, decision: Decision, key: string) => {
     const report = isReportAction(decision.action);
-    const saved = report ? readReportAttempt(realm, actingSubject, item.id) : null;
-    const attempt: ReportAttempt = saved ?? { realm, actingSubject, key, item, decision, input: null, status: 'recorded' };
-    if (report && !retainCommand(`report:${item.id}`, attempt)) {
-      const outcome: Settled = { kind: 'failed', failure: 'unavailable' };
-      dispatch({ type: 'settle', id: item.id, outcome });
-      return outcome;
+    const saved = readQueueAttempt(realm, actingSubject, item.id, store);
+    const intended = saved ?? { item, decision, key };
+    const result = await api.commit(intended.item, intended.decision, intended.key);
+    const retained = readQueueAttempt(realm, actingSubject, item.id, store);
+    if (retained && retained.key !== intended.key) {
+      dispatch({ type: 'recover', items: allowedHere(retained.item) ? [retained] : [] });
+      return { kind: retained.status } as Settled;
     }
-    const result = await api.commit(attempt.item, attempt.decision, attempt.key);
-    const retained = report ? readReportAttempt(realm, actingSubject, item.id) : null;
-    const outcome: Settled = report && !result.ok && retained?.status === 'pending' ? { kind: 'pending' }
-      : report && !result.ok && retained?.uncertain ? { kind: 'recorded' } : outcomeOf(result, report);
-    if (report) {
-      if (outcome.kind === 'recorded' || outcome.kind === 'pending') {
-        // The command adapter has retained the prepared body; preserve it with the UI status.
-        retainCommand(`report:${item.id}`, { ...readReportAttempt(realm, actingSubject, item.id) ?? attempt,
-          status: outcome.kind });
-      } else forgetCommand(realm, actingSubject, `report:${item.id}`);
-    }
+    const outcome: Settled = !result.ok && retained?.status === 'pending' ? { kind: 'pending' }
+      : !result.ok && retained?.uncertain ? { kind: 'recorded' } : outcomeOf(result, report);
     dispatch({ type: 'settle', id: item.id, outcome });
     return outcome;
-  }, [api, realm, actingSubject]);
+  }, [api, realm, actingSubject, store, allowedHere]);
 
   const commit = useCallback(async (entry: PendingDecision) => {
     if (committed.current.has(entry.key)) return;
@@ -192,8 +193,8 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   }, [sendItem, reload]);
 
   async function resume(id: string) {
-    const attempt = readReportAttempt(realm, actingSubject, id);
-    if (!attempt || latest.current.committing.includes(id)) return;
+    const attempt = readQueueAttempt(realm, actingSubject, id, store);
+    if (!attempt || !allowedHere(attempt.item) || latest.current.committing.includes(id)) return;
     dispatch({ type: 'decide', key: attempt.key, ids: [id], decision: attempt.decision, now: 0, window: 0 });
     dispatch({ type: 'commit', key: attempt.key });
     await sendItem(attempt.item, attempt.decision, attempt.key);
@@ -263,7 +264,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   /** Decides the targets with the first of `wanted` they all allow, as a shortcut key stands for several actions. */
   const act = useCallback((wanted: QueueAction | readonly QueueAction[]) => {
     const snapshot = latest.current;
-    const ids = targetIds(snapshot);
+    const ids = targetIds(snapshot).filter(id => snapshot.items[id] && allowedHere(snapshot.items[id]!));
     if (!ids.length) { setFlash(t.noneSelected); return; }
     const choices = typeof wanted === 'string' ? [wanted] : wanted;
     const allowed = commonActions(snapshot, ids, authorityRef.current);
@@ -276,7 +277,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     }
     if (needsReason(action)) setDialog({ action, ids });
     else decide(ids, { action, reason: null, note: null });
-  }, [decide, t]);
+  }, [decide, t, allowedHere]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -303,10 +304,10 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   }, [act, dialog, help]);
 
   const focusAfterDialog = () => (latest.current.current ? rows.current.get(latest.current.current) : null) ?? null;
-  const dialogItems = (dialog?.ids ?? []).flatMap(id => state.items[id] ?? []);
+  const dialogItems = (dialog?.ids ?? []).flatMap(id => state.items[id] && allowedHere(state.items[id]!) ? [state.items[id]!] : []);
   const dialogBases = dialogItems.map(item => bases[item.id]).map(basis => basis === 'loading' ? undefined : basis);
   const decideFromDialog = (decision: Decision) => {
-    const ids = dialog?.ids ?? [];
+    const ids = dialogItems.map(item => item.id);
     setDialog(null);
     decide(ids, decision);
   };
@@ -325,8 +326,10 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const selected = new Set(state.selected);
   const bulk = state.selected.filter(id => visible.includes(id));
   const bulkActions = commonActions(state, bulk, effective);
-  const notices = Object.entries(state.settled).filter(([, outcome]) => outcome.kind !== 'done');
-  const last = state.pending.at(-1);
+  const notices = Object.entries(state.settled).filter(([id, outcome]) => outcome.kind !== 'done' && state.items[id] && allowedHere(state.items[id]!));
+  const pendingHere = state.pending.map(entry => ({ ...entry, ids: entry.ids.filter(id => state.items[id] && allowedHere(state.items[id]!)) }))
+    .filter(entry => entry.ids.length);
+  const last = pendingHere.at(-1);
   const waiting = view.state === 'open';
   const summary = !waiting ? null : cursor ? t.waitingAtLeast({ count: String(visible.length) })
     : visible.length ? t.waiting(visible.length) : t.nothingWaiting;
@@ -381,7 +384,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
       && state.settled[current.id]?.kind !== 'pending' ? actionsFor(current, effective) : new Set()}
     authority={authority} rules={rules} realmRules={realmRules} rulesHref={rulesHref} onAct={act} now={now}
     locale={locale} messages={messages} className={className} />;
-  const reasons = view.type?.endsWith('_submission') ? [] : reasonsOf(Object.values(state.items), view.reason);
+  const reasons = view.type?.endsWith('_submission') ? [] : reasonsOf(Object.values(state.items).filter(allowedHere), view.reason);
 
   return <div className="grid gap-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -414,7 +417,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
         <AlertDescription className="flex items-start justify-between gap-3">
           <span>{outcome.kind === 'pending' ? `${titleOf(id)}: ${t.decisionPendingHelp}`
             : outcome.kind === 'recorded' ? `${titleOf(id)}: ${t.decisionStillPending}`
-            : outcome.kind === 'gone' ? t.goneNotice({ title: titleOf(id) })
+            : outcome.kind === 'cancelled' ? t.decisionCancelled : outcome.kind === 'gone' ? t.goneNotice({ title: titleOf(id) })
             : outcome.kind === 'stale' ? `${titleOf(id)}: ${t.staleNotice}`
               : `${titleOf(id)}: ${outcome.kind === 'failed' && outcome.failure === 'denied' ? t.deniedNotice
                 : outcome.kind === 'failed' && outcome.failure === 'no-rules' ? t.noRulesNotice : t.failedNotice}`}</span>

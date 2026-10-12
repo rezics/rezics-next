@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { decideReport, decideSubmission, decisionStatus } from '../features/manage/commands.ts';
-import { basisFor, queue, realm, acting } from '../features/manage/fixtures.ts';
+import { basisFor, queue, realm, acting, settings, roles } from '../features/manage/fixtures.ts';
 import { commonActions, initialTriage, targetIds, triage, visibleIds, type Decision } from '../features/manage/queue-state.ts';
 import { decisionReceipt, isolatedAttemptStorage as isolatedStorage, recoveryReasons } from '../features/manage/recovery-fixtures.ts';
-import { performCommand, readCommand, readReportAttempt, reportAttempts, type CommandAttempt } from '../features/manage/safety-pending.ts';
+import { performCommand, readCommand, readReportAttempt, reportAttempts, queueAttempts, retainCommand, forgetCommand, recoveryIndexKey, retainedCommands, type CommandAttempt } from '../features/manage/safety-pending.ts';
 import type { MainClient } from '../features/manage/types.ts';
 
 const reasons = recoveryReasons;
@@ -96,21 +96,29 @@ describe('one recoverable Realm decision', () => {
   });
 });
 
-for (const operation of ['role:assignment', 'role:definition', 'settings']) {
+const recoveryCommands = [
+  { operation: 'role:assignment', input: { command: { actingSubject: acting.iri, expectedGeneration: '12', reason: 'Original intent',
+    change: { kind: 'assignment', roleId: roles[0]!.id, member: acting.iri, assigned: true, validUntil: '2027-01-01T00:00:00Z' } }, digest: 'b'.repeat(64) } },
+  { operation: 'role:definition', input: { command: { actingSubject: acting.iri, expectedGeneration: '12', reason: 'Original intent',
+    change: { kind: 'role', roleId: roles[0]!.id, name: 'Original role', permissions: ['governance.moderate'] } }, digest: 'b'.repeat(64) } },
+  { operation: 'settings', input: { actingSubject: acting.iri, expectedGeneration: '12', reason: 'Original intent',
+    expectedRulesRevision: '3', settings: settings.settings } },
+];
+for (const { operation, input } of recoveryCommands) {
   test(`${operation}: retry retains body, key, actor and Realm until its receipt is recovered`, async () => {
     const store = isolatedStorage();
-    const original = { realm, actingSubject: acting.iri, key: 'first-key', status: 'recorded' as const,
-      input: { expectedGeneration: '12', reason: 'Original intent', payload: ['original'] } };
-    const calls: CommandAttempt<typeof original.input>[] = [];
-    const dispatch = async (attempt: CommandAttempt<typeof original.input>) => {
+    const original = { realm, actingSubject: acting.iri, key: 'first-key', status: 'recorded' as const, input };
+    const calls: { input: unknown; key: string }[] = [];
+    const dispatch = async (attempt: CommandAttempt<unknown>) => {
       expect(readCommand(realm, acting.iri, operation, store)?.key).toBe('first-key');
-      calls.push({ ...attempt, uncertain: undefined });
+      calls.push({ input: attempt.input, key: attempt.key });
       return calls.length === 1 ? { ok: false as const, failure: 'unavailable' as const }
         : { ok: true as const, data: { receiptId: 'original-receipt', replayed: true } };
     };
     await performCommand(operation, original, dispatch, store);
-    expect(await performCommand(operation, { ...original, key: 'different-key', input: {
-      expectedGeneration: '99', reason: 'Changed reason', payload: ['different'] } }, dispatch, store))
+    const changed = input.command ? { ...input, command: { ...input.command, expectedGeneration: '99', reason: 'Changed reason' } }
+      : { ...input, expectedGeneration: '99', reason: 'Changed reason' };
+    expect(await performCommand(operation, { ...original, key: 'different-key', input: changed }, dispatch, store))
       .toEqual({ ok: true, data: { receiptId: 'original-receipt', replayed: true } });
     expect(calls[1]).toEqual(calls[0]);
     expect(readCommand(realm, acting.iri, operation, store)).toBeNull();
@@ -178,4 +186,125 @@ test('reload during an in-flight dispatch retains uncertainty before any respons
   finish();
   await first;
   expect(readReportAttempt(realm, acting.iri, report.id, store)).toBeNull();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+const proposedSettings = (key: string) => ({ realm, actingSubject: acting.iri, key, status: 'recorded' as const,
+  input: { actingSubject: acting.iri, expectedGeneration: '12', reason: `Intent ${key}`, expectedRulesRevision: '3', settings: settings.settings } });
+
+test('overlapping report preparations preserve the first payload and generation under a shared key', async () => {
+  const store = isolatedStorage();
+  const basis = deferred<ReturnType<typeof basisFor>>();
+  const calls: { body: unknown; options: unknown }[] = [];
+  const mainFor = (second: boolean) => ({ v1: { realms: () => ({ moderation: () => ({ get: async () =>
+    ({ data: second ? await basis.promise : basisFor(report), error: null }) }) }), moderation: { decisions: { post: async (body: unknown, options: unknown) => {
+      calls.push({ body, options });
+      return { data: receipt(report, second ? 'completed' : 'accepted'), error: null };
+    } } } } }) as unknown as MainClient;
+  const decision: Decision = { action: 'remove', reason: null, note: null, reasons };
+  const first = decideReport(mainFor(false), realm, report, decision, acting.iri, 'shared-key', store);
+  const second = decideReport(mainFor(true), realm, report, { ...decision, details: 'A different basis' }, acting.iri, 'shared-key', store);
+  await first;
+  const committed = readReportAttempt(realm, acting.iri, report.id, store)!.input;
+  basis.resolve({ ...basisFor(report), generation: '99' });
+  await second;
+  expect(calls[1]).toEqual(calls[0]);
+  expect((calls[1]!.body as { expectedGeneration: string }).expectedGeneration).toBe(committed.expectedGeneration);
+});
+
+for (const response of ['completed', 'pending', 'unavailable', 'stale'] as const) {
+  test(`a late ${response} response for K cannot change a newer settings intent L`, async () => {
+    const store = isolatedStorage();
+    const started = deferred<void>();
+    const late = deferred<import('../features/manage/commands.ts').Outcome<string>>();
+    const first = performCommand('settings', proposedSettings('K'), async () => { started.resolve(); return late.promise; }, store);
+    await started.promise;
+    const old = readCommand(realm, acting.iri, 'settings', store)!;
+    await performCommand('settings', old, async () => ({ ok: true, data: 'K receipt' }), store);
+    const newer = await retainCommand('settings', proposedSettings('L'), store);
+    late.resolve(response === 'completed' ? { ok: true, data: 'K receipt' }
+      : { ok: false, failure: response === 'unavailable' ? 'unavailable' : response });
+    await first;
+    expect(readCommand(realm, acting.iri, 'settings', store)).toEqual(newer);
+  });
+}
+
+test('a late report receipt cannot overwrite a newer report payload', async () => {
+  const store = isolatedStorage();
+  const started = deferred<void>();
+  const late = deferred<{ data: ReturnType<typeof receipt>; error: null }>();
+  const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: basisFor(report), error: null }) }) }),
+    moderation: { decisions: { post: () => { started.resolve(); return late.promise; } } } } } as unknown as MainClient;
+  const first = decideReport(main, realm, report, { action: 'remove', reason: null, note: null, reasons }, acting.iri, 'K', store);
+  await started.promise;
+  const old = readReportAttempt(realm, acting.iri, report.id, store)!;
+  await forgetCommand(`report:${report.id}`, old, store);
+  const newer = await retainCommand(`report:${report.id}`, { ...old, key: 'L',
+    input: { ...old.input, idempotencyKey: 'L', expectedGeneration: '99' } }, store);
+  late.resolve({ data: receipt(report, 'accepted'), error: null });
+  await first;
+  expect(JSON.stringify(readReportAttempt(realm, acting.iri, report.id, store))).toBe(JSON.stringify(newer));
+});
+
+test('another authenticated principal cannot discover or clear the same organization intent', async () => {
+  const accountA = isolatedStorage('account-A');
+  const accountB = { ...accountA, principal: 'account-B' };
+  const original = await retainCommand('settings', proposedSettings('A'), accountA);
+  expect(original).not.toBeNull();
+  expect(readCommand(realm, acting.iri, 'settings', accountB)).toBeNull();
+  expect(await forgetCommand('settings', original!, accountB)).toBe(false);
+  expect(await retainCommand('settings', original!, accountB)).toBeNull();
+  expect(readCommand(realm, acting.iri, 'settings', accountA)).toEqual(original);
+});
+
+test('discovery reads one bounded index regardless of unrelated storage keys', async () => {
+  const store = isolatedStorage();
+  for (let index = 0; index < 1000; index++) store.setItem(`unrelated:${index}`, 'draft');
+  const role = recoveryCommands[1]!;
+  await retainCommand(role.operation, { ...proposedSettings('role-key'), input: role.input }, store);
+  let reads = 0;
+  const counted = { ...store, getItem: (key: string) => { reads++; return store.getItem(key); } };
+  expect(retainedCommands(realm, acting.iri, 'role', counted)).toHaveLength(1);
+  expect(reads).toBe(1);
+});
+
+test('malformed or incomplete inputs are discarded before reaching any recovery view', () => {
+  const store = isolatedStorage();
+  const slot = JSON.stringify([acting.iri, 'role:definition']);
+  store.setItem(recoveryIndexKey(store.principal, realm), JSON.stringify({ version: 1, entries: {
+    [slot]: { operation: 'role:definition', attempt: { principal: store.principal, realm,
+      actingSubject: acting.iri, key: 'broken', status: 'recorded' } },
+  } }));
+  expect(readCommand(realm, acting.iri, 'role:definition', store)).toBeNull();
+  expect(retainedCommands(realm, acting.iri, 'role', store)).toEqual([]);
+  expect(queueAttempts(realm, acting.iri, store)).toEqual([]);
+});
+
+test('cancelled decision receipts end retention instead of offering another Resume', async () => {
+  const store = isolatedStorage();
+  const cancelled = receipt(report, 'cancelled');
+  cancelled.operation.continuation = null;
+  const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: basisFor(report), error: null }) }) }),
+    moderation: { decisions: { post: async () => ({ data: cancelled, error: null }) } } } } as unknown as MainClient;
+  await decideReport(main, realm, report, { action: 'remove', reason: null, note: null, reasons }, acting.iri, 'cancelled', store);
+  expect(readReportAttempt(realm, acting.iri, report.id, store)).toBeNull();
+});
+
+test('the scoped recovery index refuses a new dispatch at capacity without evicting existing intents', async () => {
+  const store = isolatedStorage();
+  for (let index = 0; index < 64; index++) {
+    const actor = `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+    const original = proposedSettings(`key-${index}`);
+    expect(await retainCommand('settings', { ...original, actingSubject: actor,
+      input: { ...original.input, actingSubject: actor } }, store)).not.toBeNull();
+  }
+  const overflow = proposedSettings('overflow');
+  const extraActor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000999';
+  expect(await retainCommand('settings', { ...overflow, actingSubject: extraActor,
+    input: { ...overflow.input, actingSubject: extraActor } }, store)).toBeNull();
+  expect(readCommand(realm, 'https://rezics.com/id/00000000-0000-4000-8000-000000000000', 'settings', store)?.key).toBe('key-0');
 });

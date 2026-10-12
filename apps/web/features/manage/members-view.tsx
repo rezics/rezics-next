@@ -59,9 +59,9 @@ export function failureText(failure: CommandFailure | 'changed', t: ReturnType<t
  * Members of the Realm: search by name or handle, invite people, remove, ban
  * and unban them, and give or take roles with the impact shown first.
  */
-export function MembersView({ realm, address = realm, actingSubject, first, agents: initialAgents, roles, now, locale,
+export function MembersView({ principal: givenPrincipal, realm, address = realm, actingSubject, first, agents: initialAgents, roles, now, locale,
   messages, invitations: firstInvitations, roleFilter = null, api: givenApi }: {
-  realm: string; address?: string; actingSubject: string; first: MemberPage; agents: Record<string, AgentSummary>;
+  principal?: string; realm: string; address?: string; actingSubject: string; first: MemberPage; agents: Record<string, AgentSummary>;
   invitations: Loaded<InvitationPage>;
   /** Roles the person may give, or null without the Manage roles permission. */
   roles: readonly Role[] | null;
@@ -71,6 +71,7 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
+  const principal = givenPrincipal ?? givenApi?.principal ?? '';
   const router = useRouter();
   const [page, setPage] = useState(first);
   const [invitations, setInvitations] = useState(firstInvitations);
@@ -81,7 +82,7 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
   const [searching, setSearching] = useState(false);
   const memberReads = useRef(new MemberReads());
   const [open, setOpen] = useState<Open | null>(null);
-  const recovery = useRoleRecovery(api, realm, actingSubject, open !== null);
+  const recovery = useRoleRecovery(api, realm, actingSubject, open !== null || roles === null, principal);
   const [status, setStatus] = useState<string | null>(null);
 
   const nameOf = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
@@ -255,11 +256,11 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
         className="justify-self-start" isLoading={invitationBusy === invitations.data.nextCursor}
         onClick={() => void loadInvitations(invitations.data.nextCursor!)}>{t.loadMore}</Button> : null}
     </section>
-    {open?.kind === 'give' || open?.kind === 'take'
-      ? <RoleDialog realm={realm} open={open} generation={page.generation} roles={roles ?? []} api={api} actingSubject={actingSubject}
+    {(open?.kind === 'give' || open?.kind === 'take') && roles !== null
+      ? <RoleDialog principal={principal} realm={realm} open={open} generation={page.generation} roles={roles ?? []} api={api} actingSubject={actingSubject}
         agents={agents} name={nameOf(open.target.iri)} now={now} locale={locale} messages={messages}
         onClose={() => setOpen(null)} onDone={message => void done(message)} />
-      : <MemberDialog open={open} generation={page.generation} api={api} actingSubject={actingSubject} nameOf={nameOf}
+      : <MemberDialog open={open?.kind === 'give' || open?.kind === 'take' ? null : open} generation={page.generation} api={api} actingSubject={actingSubject} nameOf={nameOf}
         locale={locale} messages={messages} onClose={() => setOpen(null)} onDone={message => void done(message)}
         onLearn={agent => setAgents(known => ({ ...known, [agent.iri]: agent }))} />}
   </div>;
@@ -378,8 +379,8 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
   </CommandDialog>;
 }
 
-function RoleDialog({ realm, open, generation, roles, api, actingSubject, agents, name, now, locale, messages, onClose, onDone }: {
-  realm: string;
+function RoleDialog({ principal, realm, open, generation, roles, api, actingSubject, agents, name, now, locale, messages, onClose, onDone }: {
+  principal: string; realm: string;
   open: Extract<Open, { kind: 'give' | 'take' }>; generation: string; roles: readonly Role[]; api: AdminApi;
   actingSubject: string; agents: Record<string, AgentSummary>; name: string; now: number; locale: UiLocale;
   messages: ManageMessages; onClose: () => void; onDone: (message: string) => void;
@@ -397,8 +398,12 @@ function RoleDialog({ realm, open, generation, roles, api, actingSubject, agents
     assigned: open.kind === 'give',
     validUntil: new Date(openedAt + (open.kind === 'give' ? days * 86_400_000 : 0)).toISOString() } : null,
   [roleId, open, days, openedAt]);
-  const { state, save, names, recovering } = useRoleChange(api, { realm, actingSubject, generation, change });
-  const roleName = open.kind === 'take' ? open.role.name : roles.find(role => role.id === roleId)?.name ?? '';
+  const { state, save, names, recovering, recoveredCommand } = useRoleChange(api, { principal, realm, actingSubject, generation, change });
+  useEffect(() => { if (recoveredCommand) setReason(recoveredCommand.reason); }, [recoveredCommand?.reason]);
+  const actualChange = recoveredCommand?.change.kind === 'assignment' ? recoveredCommand.change : change;
+  const giving = actualChange?.kind === 'assignment' ? actualChange.assigned : open.kind === 'give';
+  const recoveredRole = actualChange ? roles.find(role => role.id === actualChange.roleId)?.name : null;
+  const roleName = recoveredRole ?? (open.kind === 'take' ? open.role.name : roles.find(role => role.id === roleId)?.name ?? '');
 
   async function submit() {
     if (!recovering && !reason.trim()) { setError(t.reasonRequired); return; }
@@ -409,13 +414,17 @@ function RoleDialog({ realm, open, generation, roles, api, actingSubject, agents
       setError('unconfirmed' in result && result.unconfirmed ? t.decisionStillPending : failureText(result.failure, t, 'role'));
       return;
     }
-    onDone(open.kind === 'give' ? t.roleGiven({ name, role: roleName }) : t.roleTaken({ name, role: roleName }));
+    const committed = result.command?.change;
+    const assigned = committed?.kind === 'assignment' ? committed.assigned : giving;
+    const committedRole = committed ? roles.find(role => role.id === committed.roleId)?.name ?? roleName : roleName;
+    onDone(assigned ? t.roleGiven({ name, role: committedRole }) : t.roleTaken({ name, role: committedRole }));
   }
 
-  return <CommandDialog open title={open.kind === 'give' ? t.giveRoleTitle({ name }) : t.takeRoleTitle({ role: roleName, name })}
-    confirm={recovering ? t.decisionResume : open.kind === 'give' ? t.giveRole : t.takeRole} destructive={open.kind === 'take'} pending={pending}
+  return <CommandDialog open title={giving ? t.giveRoleTitle({ name }) : t.takeRoleTitle({ role: roleName, name })}
+    confirm={recovering ? t.decisionResume : giving ? t.giveRole : t.takeRole} destructive={!giving} pending={pending}
     error={error} cancel={t.cancel} onClose={onClose} onConfirm={() => void submit()}
     disabled={!recovering && (state.kind !== 'ready' || !roleId)}>
+    {recoveredCommand ? <p className="text-sm">{giving ? t.giveRole : t.takeRole} · {roleName} · {name}</p> : null}
     <fieldset disabled={recovering || pending} className="contents">
     {open.kind === 'give' ? <div className="grid gap-4 sm:grid-cols-2">
       <Field>

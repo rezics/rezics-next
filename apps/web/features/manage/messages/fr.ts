@@ -549,6 +549,7 @@ export default {
   previewEmpty: 'Rien pour l’instant.',
   decisionFieldRequired: 'Renseignez ce champ.',
   decisionSend: 'Enregistrer la décision', decisionSending: 'Enregistrement…',
+  decisionCancelled: 'Décision annulée. Les effets déjà confirmés restent appliqués.',
   decisionResume: 'Reprendre',
   decisionAccepted: 'La décision est enregistrée, mais tous les effets ne sont pas confirmés. Reprendre renvoie la même requête.',
   decisionStale: 'Le cas, la règle ou le contenu ont changé depuis votre lecture. Actualisez le cas et décidez de nouveau.',

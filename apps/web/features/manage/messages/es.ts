@@ -546,6 +546,7 @@ export default {
   previewEmpty: 'Nada todavía.',
   decisionFieldRequired: 'Rellena este campo.',
   decisionSend: 'Registrar decisión', decisionSending: 'Registrando…',
+  decisionCancelled: 'Decisión cancelada. Los efectos ya confirmados siguen aplicados.',
   decisionResume: 'Reanudar',
   decisionAccepted: 'La decisión está registrada, pero no todos los efectos están confirmados. Reanudar reenvía la misma solicitud.',
   decisionStale: 'El caso, la regla o el contenido cambiaron desde que los leíste. Actualiza el caso y decide de nuevo.',

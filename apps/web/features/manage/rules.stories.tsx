@@ -7,7 +7,7 @@ import { messages } from './messages.ts';
 import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
-import { SettingsView } from './settings-view.tsx';
+import { rulesDraftKey, SettingsView } from './settings-view.tsx';
 
 // Realm rules have one approved meaning, the published revision moderators
 // cite, and localized forms readers see. These stories hold that behavior:
@@ -23,11 +23,11 @@ const meta = {
   title: 'Manage/Settings and rules',
   component: SettingsView,
   parameters: { route: { pathname: `/en/manage/r/${realm}/settings` } },
-  args: { realm, actingSubject: acting.iri, initial: settings, locale: 'en', messages, api: adminApi({ record }) },
+  args: { principal: 'storybook:account-one', realm, actingSubject: acting.iri, initial: settings, locale: 'en', messages, api: adminApi({ record }) },
   beforeEach: () => {
     record.settings.length = 0;
-    localStorage.removeItem(`rezics:manage:rules-draft:${realm}`);
-    return () => localStorage.removeItem(`rezics:manage:rules-draft:${realm}`);
+    localStorage.removeItem(rulesDraftKey('storybook:account-one', realm, acting.iri));
+    return () => localStorage.removeItem(rulesDraftKey('storybook:account-one', realm, acting.iri));
   },
   render: (args: ComponentProps<typeof SettingsView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><SettingsView {...args} /></RealmFrame>,
@@ -189,7 +189,7 @@ export const ConcurrentPublicationKeepsDraft: Story = {
 /** A draft survives a reload until it is published or discarded. */
 export const DraftSurvivesReload: Story = {
   beforeEach: () => {
-    localStorage.setItem(`rezics:manage:rules-draft:${realm}`, JSON.stringify({ base: '3', whoMaySubmit: 'closed',
+    localStorage.setItem(rulesDraftKey('storybook:account-one', realm, acting.iri), JSON.stringify({ base: '3', whoMaySubmit: 'closed',
       drafts: rules.slice(0, 1).map(rule => ({ key: rule.id, rule, published: true })) }));
   },
   async play({ canvasElement }) {
@@ -198,7 +198,7 @@ export const DraftSurvivesReload: Story = {
     await expect(canvas.getAllByRole('heading', { name: /^Rule \d$/ })).toHaveLength(1);
     await userEvent.click(canvas.getByRole('button', { name: 'Discard changes' }));
     await expect(canvas.getByRole('radio', { name: /Realm members/ })).toBeChecked();
-    await expect(localStorage.getItem(`rezics:manage:rules-draft:${realm}`)).toBeNull();
+    await expect(localStorage.getItem(rulesDraftKey('storybook:account-one', realm, acting.iri))).toBeNull();
   },
 };
 

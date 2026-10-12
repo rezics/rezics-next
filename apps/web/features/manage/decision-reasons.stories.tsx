@@ -24,7 +24,7 @@ const meta = {
   title: 'Manage/Decision reasons',
   component: QueueView,
   parameters: { route: { pathname: `/en/manage/r/${realm}` } },
-  args: { realm, actingSubject: acting.iri, view: { state: 'open', type: null }, initial: queuePage, names, now,
+  args: { principal: 'storybook:account-one', realm, actingSubject: acting.iri, view: { state: 'open', type: null }, initial: queuePage, names, now,
     realmRules: publishedRules(), locale: 'en', messages, api: queueApi({ recorded }), undoWindowMs: 400 },
   render: (args: ComponentProps<typeof QueueView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><QueueView {...args} /></RealmFrame>,

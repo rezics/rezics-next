@@ -549,6 +549,7 @@ export default {
   previewEmpty: 'Noch nichts.',
   decisionFieldRequired: 'Bitte ausfüllen.',
   decisionSend: 'Entscheidung festhalten', decisionSending: 'Wird festgehalten…',
+  decisionCancelled: 'Entscheidung abgebrochen. Bereits bestätigte Auswirkungen bleiben bestehen.',
   decisionResume: 'Fortsetzen',
   decisionAccepted: 'Die Entscheidung ist festgehalten, aber nicht jede Wirkung ist bestätigt. Fortsetzen sendet dieselbe Anfrage erneut.',
   decisionStale: 'Fall, Regel oder Inhalt haben sich seit dem Lesen geändert. Aktualisiere den Fall und entscheide erneut.',

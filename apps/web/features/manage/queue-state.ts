@@ -98,6 +98,7 @@ export interface PendingDecision {
 
 export type Settled =
   | { kind: 'done' }
+  | { kind: 'cancelled' }
   /** A retained request with an unknown response, or with effects still outstanding. */
   | { kind: 'recorded' | 'pending' }
   /** Main refused because the item changed: another moderator got there first, or it moved on. */
@@ -201,7 +202,7 @@ export function triage(state: TriageState, event: TriageEvent): TriageState {
         const present = incoming.has(id) || event.append && state.items[id] !== undefined;
         if (outcome.kind === 'stale') settled[id] = present ? outcome : { kind: 'gone' };
         else if (outcome.kind === 'recorded' || outcome.kind === 'pending' || outcome.kind === 'failed' && present) settled[id] = outcome;
-        else if (outcome.kind === 'gone') settled[id] = outcome;
+        else if (outcome.kind === 'gone' || outcome.kind === 'cancelled') settled[id] = outcome;
       }
       const keep = [...order];
       for (const id of Object.keys(settled)) if (!keep.includes(id) && state.items[id]) {

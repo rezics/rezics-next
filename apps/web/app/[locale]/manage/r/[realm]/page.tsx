@@ -24,7 +24,7 @@ export default async function RealmQueueRoute({ params, searchParams }: {
   const { id: realm, address } = target;
   const locale = await requestLocale();
   const view = parseQueueView(query);
-  const { actingSubject, main, anonymous, signInHref } = await manager(locale, queueHref(address, view));
+  const { principal, actingSubject, main, anonymous, signInHref } = await manager(locale, queueHref(address, view));
   const [messages, page, permissions, header] = await Promise.all([getMessages('manage', locale),
     readQueue(main, realm, { actingSubject, ...view }), permissionsIn(main, actingSubject, realm),
     realmHeader(main, realm, locale, actingSubject)]);
@@ -38,7 +38,10 @@ export default async function RealmQueueRoute({ params, searchParams }: {
   // Rules are published from Settings, which needs both permissions Main checks there.
   const publishesRules = permissions === null || permissions.includes('governance.rule.publish')
     && permissions.includes('realm.settings.manage');
-  return <QueueView key={`${view.state}:${view.type ?? ''}:${view.reason ?? ''}`} realm={realm} address={address}
+  // An authorized report read also proves report access when the optional permission read is unavailable.
+  const readsReports = permissions === null ? page.data.items.some(item => item.kind === 'content_report' || item.kind === 'rights_complaint')
+    : permissions.includes('governance.moderate');
+  return <QueueView principal={principal} recoverReports={readsReports} key={`${principal}:${realm}:${actingSubject}:${readsReports}:${view.state}:${view.type ?? ''}:${view.reason ?? ''}`} realm={realm} address={address}
     actingSubject={actingSubject} view={view} initial={page.data} names={names}
     realmRules={header.ok ? header.data.rules ?? undefined : undefined} authority={authorityFrom(permissions)}
     rulesHref={publishesRules ? realmHref(address, 'settings') : null} now={Date.now()} locale={locale}

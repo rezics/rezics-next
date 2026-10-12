@@ -1,6 +1,6 @@
 import type { Decision } from './queue-state.ts';
 import { automationOf } from './reason-presets.ts';
-import { type AttemptStorage, forgetCommand, performCommand, readCommand, readReportAttempt, refusalProvesNoCommit, retainCommand, type ReportAttempt } from './safety-pending.ts';
+import { type AttemptStorage, forgetCommand, performCommand, readCommand, readReportAttempt, refusalProvesNoCommit, retainCommand, updateCommand, type ReportAttempt } from './safety-pending.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
 import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
   type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, type SubmissionDecision, uuidOf } from './types.ts';
@@ -91,7 +91,7 @@ async function acceptBasis(main: MainClient, realm: string, item: ModerationItem
 
 /** One submission decision. `key` stays the same for every retry of this decision. */
 export async function decideSubmission(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
-  actingSubject: string, key: string, store?: AttemptStorage): Promise<Outcome<unknown>> {
+  actingSubject: string, key: string, store?: AttemptStorage | null): Promise<Outcome<unknown>> {
   const operation = `submission:${item.id}`;
   const retained = readCommand<SubmissionDecision>(realm, actingSubject, operation, store);
   const dispatch = (attempt: { input: SubmissionDecision; key: string }) => send(() =>
@@ -106,7 +106,7 @@ export async function decideSubmission(main: MainClient, realm: string, item: Mo
     if (!basis.ok) return basis;
     expectedSelectionHead = basis.data;
   }
-  return performCommand(operation, { realm, actingSubject, key, status: 'recorded', input: {
+  return performCommand(operation, { realm, actingSubject, key, status: 'recorded', item, decision, input: {
     actingSubject, expectedRevision: item.submission.revision, outcome, expectedSelectionHead,
     publicReason: decision.reason?.trim() || null, internalNote: decision.note?.trim() || null } }, dispatch, store);
 }
@@ -190,7 +190,7 @@ async function caseAutomation(main: MainClient, realm: string, caseId: string, a
  * even if its targets, rules or case generation have since changed.
  */
 export async function decideReport(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
-  actingSubject: string, key: string, store?: AttemptStorage): Promise<Outcome<DecisionReceipt>> {
+  actingSubject: string, key: string, store?: AttemptStorage | null): Promise<Outcome<DecisionReceipt>> {
   const retained = readReportAttempt(realm, actingSubject, item.id, store);
   if (retained?.input) return sendReport(main, retained, store);
   if (!['keep', 'remove', 'interim-restrict', 'final-restrict'].includes(decision.action))
@@ -216,28 +216,28 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   const attempt: ReportAttempt = { realm, actingSubject, item, decision, key: retained?.key ?? key,
     input: { ...command, reasons, idempotencyKey: retained?.key ?? key,
       profile: item.kind === 'rights_complaint' ? 'rights-restriction-v1' : 'moderation-decision-v1' }, status: 'recorded' };
-  if (!retainCommand(`report:${item.id}`, attempt, store)) return { ok: false, failure: 'unavailable' };
   return sendReport(main, attempt, store);
 }
 
 async function sendReport(main: MainClient, attempt: NonNullable<ReturnType<typeof readReportAttempt>>,
-  store?: AttemptStorage): Promise<Outcome<DecisionReceipt>> {
-  const command = attempt.input!;
-  if (!retainCommand(`report:${attempt.item.id}`, { ...attempt, uncertain: true }, store))
-    return { ok: false, failure: 'unavailable' };
+  store?: AttemptStorage | null): Promise<Outcome<DecisionReceipt>> {
+  const kept = await retainCommand(`report:${attempt.item.id}`, attempt, store, true) as ReportAttempt | null;
+  if (!kept) return { ok: false, failure: 'unavailable' };
+  attempt = kept;
+  const command = attempt.input;
   const result = command.profile === 'rights-restriction-v1'
     ? await send(() => main.v1.rights.restrictions.post({ ...command, profile: command.profile as 'rights-restriction-v1',
       // Main's `literals()` helper currently reads as `never` through Eden.
       outcome: command.outcome as never }, keyed(attempt.key)))
     : await send(() => main.v1.moderation.decisions.post({ ...command, profile: command.profile as 'moderation-decision-v1' }, keyed(attempt.key)));
-  if (result.ok && decisionStatus(result.data) === 'completed') {
-    forgetCommand(attempt.realm, attempt.actingSubject, `report:${attempt.item.id}`, store);
+  if (result.ok && (decisionStatus(result.data) === 'completed' || decisionStatus(result.data) === 'cancelled')) {
+    await forgetCommand(`report:${attempt.item.id}`, attempt, store);
   } else if (result.ok) {
-    retainCommand(`report:${attempt.item.id}`, { ...attempt, status: 'pending' }, store);
+    await updateCommand(`report:${attempt.item.id}`, attempt, { status: 'pending' }, store);
   } else if (refusalProvesNoCommit(attempt, result.failure)) {
     // These are authoritative refusals. A key conflict does not establish that nothing committed.
-    forgetCommand(attempt.realm, attempt.actingSubject, `report:${attempt.item.id}`, store);
-  } else retainCommand(`report:${attempt.item.id}`, { ...attempt, uncertain: true }, store);
+    await forgetCommand(`report:${attempt.item.id}`, attempt, store);
+  } else await updateCommand(`report:${attempt.item.id}`, attempt, { status: attempt.status, uncertain: true }, store);
   return result;
 }
 
@@ -280,13 +280,13 @@ export async function escalate(main: MainClient, realm: string, item: Moderation
 }
 
 export function commitDecision(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
-  actingSubject: string, key: string) {
+  actingSubject: string, key: string, store?: AttemptStorage | null) {
   if (decision.action === 'escalate') return escalate(main, realm, item, decision.reason ?? '', actingSubject, key);
   if (decision.action === 'keep' || decision.action === 'remove'
     || decision.action === 'interim-restrict' || decision.action === 'final-restrict') {
-    return decideReport(main, realm, item, decision, actingSubject, key);
+    return decideReport(main, realm, item, decision, actingSubject, key, store);
   }
-  return decideSubmission(main, realm, item, decision, actingSubject, key);
+  return decideSubmission(main, realm, item, decision, actingSubject, key, store);
 }
 
 /** Invites someone to join; they join when they accept it from their notifications (G-314). */

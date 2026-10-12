@@ -14,7 +14,7 @@ const meta = {
   title: 'Manage/Roles',
   component: RolesView,
   parameters: { route: { pathname: `/en/manage/r/${realm}/roles` } },
-  args: { realm, actingSubject: acting.iri, list: { generation: '12', cap: 32, roles },
+  args: { principal: 'storybook:account-one', realm, actingSubject: acting.iri, list: { generation: '12', cap: 32, roles },
     agents, locale: 'en', messages, api: adminApi({ record }) },
   render: (args: ComponentProps<typeof RolesView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><RolesView {...args} /></RealmFrame>,

@@ -546,6 +546,7 @@ export const messages = {
   previewEmpty: 'Nothing yet.',
   decisionFieldRequired: 'Fill this in.',
   decisionSend: 'Record decision', decisionSending: 'Recording…',
+  decisionCancelled: 'Decision cancelled. Effects already confirmed remain applied.',
   decisionResume: 'Resume',
   decisionAccepted: 'The decision is recorded, but not every effect is confirmed yet. Resume replays the same request.',
   decisionStale: 'The case, the rule or the content changed since you read it. Refresh the case and decide again.',
