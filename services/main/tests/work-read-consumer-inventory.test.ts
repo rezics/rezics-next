@@ -35,6 +35,7 @@ const ownerReads: Record<string, OwnerRead> = {
   "modules/notification-producers/feed-subjects.ts::feedNotificationSubjectReader.source.query::env.fuseki": {"count": 1, "fingerprint": "ac911aea40bf79a69efff8136ac0a8ed9c06bd7398275f63eeb3b29280650202", "reason": "Independent notification adapter bounds one subject and checks restore admission; resolve owns its selected two-read source token plus closing recipient relationship."},
   "modules/notification-producers/saved-views.ts::SavedViewNotifications.run::client": {"count": 12, "fingerprint": "0d6477ba11637a3e75b2349a0add19035e491aa13b606896650e767daf5b9ba4", "reason": "Worker recipient seek/progress transaction creates notification work, not delivered payload; dispatcher resolution rechecks saved-view and subject owners separately."},
   "modules/public-report/owners.ts::authorAndRealm::content": {"count": 2, "fingerprint": "6285bfdf782044a5dbcd805853ff20d89fd4e45f6c7d480b4a2be5545cb76ee8", "reason": "media.asset.owner and content.reply_author author/origin are immutable custody tuples; Content core rejects changed reply authorship/origin, while graph attribution uses session.query."},
+  "modules/public-report/owners.ts::reportOwnerTargets.readMedia::content": {"count": 1, "fingerprint": "408131b52322214d9e46df4c70f7b6369a401ca3e0866c5b19b9287ad0807bd4", "reason": "Bounded selected media IDs and exact draft heads are registered as report-media-targets; closing owner reread repeats live lifecycle, disclosure and revision availability predicates before report delivery."},
   "modules/query/template-read.ts::executeTemplate.operation::index.pool": {"count": 1, "fingerprint": "951bc44ae44efa43b123bc7d11b0de962444838ed481f45daf40ba62ae6a25aa", "reason": "Exact accepted term revisions plus active discovery generation are registered as template-membership and reread before the selected template page returns."},
   "modules/rankings/realm-threads.ts::contentPosition::session.deps.realmReplyThreads!.rankingContent": {"count": 1, "fingerprint": "51e4183bf346e72e5da0b8064edbbb20a9a8e22156297711df740d126cb70ccf", "reason": "Content owner position supplies ranking projection readiness; realmRankPage uses coherent population cut, and thread-read closes selected ranking revision before delivery."},
   "modules/rankings/realm-threads.ts::realmRankPage::access": {"count": 1, "fingerprint": "c1b11ccd3fde1f466ecf1559b3320e382ab049736e7b19092c0ab1fd906d261f", "reason": "One MVCC statement reads exact Realm population revision, source readiness and bounded rows; thread-read closes that ranking revision and live disclosure for selected replies."},
@@ -70,11 +71,6 @@ const ownerReads: Record<string, OwnerRead> = {
 const receiverOf = (query: AstMatch) => query.metaVariables?.single?.RECEIVER?.text
   ?? query.text.match(/^(?:await\s+)?([\w$.!]+(?:\s*\.\s*[\w$!]+)*)\s*\.query\s*(?:<|\()/)?.[1]?.replace(/\s+/g, '') ?? '';
 const sessionReceiver = (receiver: string) => /(?:^|\.)(?:session|[\w$]*Session|probe)!?$/.test(receiver);
-
-const blockedReadOwners: Record<string, string> = {
-  'modules/public-report/owners.ts::reportOwnerTargets::content':
-    'Claimed by G-1923: selected media disclosure/lifecycle and draft revision need a bounded SQL owner reread before reporting delivery.',
-};
 
 function symbol(node: AstMatch, source: Buffer): string | undefined {
   const named = node.text.match(/^\s*(?:(?:async|private|public|protected|static|override|get|set|export)\s+)*(?:function\s*\*?\s*)?([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\(/)?.[1];
@@ -146,7 +142,7 @@ if (process.argv.includes('--inventory')) {
     const uncovered = actual.filter(read => ownerReads[read.site]?.count !== read.count
       || ownerReads[read.site]?.fingerprint !== read.fingerprint);
     expect(uncovered, JSON.stringify(uncovered.map(read => ({ ...read,
-      blocker: blockedReadOwners[read.site] ?? 'New direct read needs a selected owner witness or an exact immutable/independent-owner reason',
+      blocker: 'New direct read needs a selected owner witness or an exact immutable/independent-owner reason',
     })), null, 2)).toEqual([]);
     expect(Object.keys(ownerReads).filter(site => !actual.some(read => read.site === site))).toEqual([]);
     for (const owner of Object.values(ownerReads)) expect(owner.reason.length).toBeGreaterThan(30);

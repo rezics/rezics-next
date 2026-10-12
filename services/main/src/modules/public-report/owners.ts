@@ -56,12 +56,14 @@ export async function reportAddress(deps: MainWorkDependencies, value: string): 
 function reportOwnerTargets(content: Pool): ReportTargets {
   return async (session, resources) => {
     const targets = new Map<string, ResolvedTarget>();
-    const media = (await content.query<{ id: string; draft_head: string }>(`SELECT a.id::text, v.draft_head::text
+    const readMedia = async () => (await content.query<{ id: string; draft_head: string }>(`SELECT a.id::text, v.draft_head::text
       FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
       JOIN content.variant v ON v.id = a.variant_id
       JOIN content.revision r ON r.id = v.draft_head WHERE a.id = ANY($1::uuid[])
-      AND s.disclosure = 'public' AND s.lifecycle = 'active' AND r.availability = 'available'`,
+      AND s.disclosure = 'public' AND s.lifecycle = 'active' AND r.availability = 'available' ORDER BY a.id`,
     [resources.map(resource => resource.slice(-36))])).rows;
+    const media = await readMedia();
+    session.observeDependency(`report-media-targets:${JSON.stringify(resources)}`, media, readMedia);
     for (const row of media) targets.set(ID + row.id, { resource: ID + row.id, revision: ID + row.draft_head,
       base: 'resource', types: ['https://rezics.com/vocab/MediaAsset'], work: null, disclosure: 'public' });
     const rows = await session.query(`SELECT ?r ?revision ?type WHERE {
