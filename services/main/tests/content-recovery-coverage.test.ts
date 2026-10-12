@@ -43,7 +43,8 @@ function retainedCut() {
     else if (sql.includes('FROM content.revision_erasure WHERE revision_id')) rows = state.tombstone
       ? [{ erasure_id: erasureId, erasure_epoch: '1' }] : [];
     else if (sql.includes('AS wanted(id)') && sql.includes('r.availability,')) rows = [{ id: revisionId,
-      availability: state.erased ? 'erased' : 'available', erasure_id: erasureId, erasure_epoch: '1' }];
+      availability: state.erased ? 'erased' : 'available', payload_absent: state.erased,
+      erasure_id: erasureId, erasure_epoch: '1' }];
     else if (sql.includes('AS mismatch')) rows = [{ mismatch: !state.erased }];
     else if (sql.includes('SELECT s.operation_id')) rows = state.supersession
       && (params[3] === null || params[3] === 'publication-retained') ? [{ operation_id: 'publication-retained' }] : [];
