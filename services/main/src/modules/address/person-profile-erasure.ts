@@ -84,6 +84,13 @@ export async function erasePersonProfileAliasesInTransaction(client: PoolClient,
   if (sealed.entries.length > 256 || sealed.digest !== digest(sealed.entries)) {
     throw new PersonProfileErasureDenied('invalid sealed Person alias inventory');
   }
+  // Access installs this value from the immutable child-journal target, never
+  // from the caller's freshly recollected inventory. Check it even on replay.
+  const authority = (await client.query<{ seal: string | null }>(`SELECT
+    current_setting('rezics.person_profile_erasure', true)::jsonb->>'aliasInventorySeal' AS seal`)).rows[0];
+  if (authority?.seal !== `${proof.person}|${sealed.digest}`) {
+    throw new PersonProfileErasureStale('Person aliases differ from the original journal seal');
+  }
   const current = await inventory(client, proof.person, sealed.entries.length);
   const refsEqual = current.entries.length === sealed.entries.length
     && current.entries.every((entry, index) => entry.owner === sealed.entries[index]?.owner

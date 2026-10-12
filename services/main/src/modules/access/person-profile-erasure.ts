@@ -142,7 +142,12 @@ export async function assertPersonProfileErasureAuthority(client: PoolClient, re
     AND (target_resource = $1 OR author_subject = $1 OR (account_issuer = $2 AND account_subject = $3)) LIMIT 1`,
   [proof.person, principal.account_issuer, principal.account_subject]);
   if (holds.rowCount) throw new PersonProfileErasureDenied('Person profile is retained under a preservation hold');
-  await client.query("SELECT set_config('rezics.person_profile_erasure', $1, true)", [JSON.stringify(proof)]);
+  const aliasSeals = (await relay.query<{ seal: string }>(`SELECT target_ref AS seal FROM relay.erasure_target
+    WHERE erasure_id = $1 AND owner = 'access' AND target_kind = 'person_alias_inventory'
+      AND target_ref LIKE $2 ORDER BY target_ref LIMIT 2`, [proof.erasureId, `${proof.person}|%`])).rows;
+  if (aliasSeals.length > 1) throw new PersonProfileErasureStale('Person alias inventory has conflicting journal seals');
+  await client.query("SELECT set_config('rezics.person_profile_erasure', $1, true)",
+    [JSON.stringify({ ...proof, aliasInventorySeal: aliasSeals[0]?.seal ?? null })]);
 }
 
 /** All owner callbacks run under the same rechecked Access neighborhood locks. */
