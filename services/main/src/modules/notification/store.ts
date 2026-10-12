@@ -659,6 +659,10 @@ export class NotificationStore {
       const reset = cursor !== null && cursor.generation !== stream.generation;
       const from = cursor && !reset ? cursor.sequence : descending ? null : '0';
       if (from !== null && BigInt(from) > BigInt(stream.head_sequence)) throw new NotificationStale('stream cursor is ahead of head');
+      const viewPredicate = selection.view === 'saved' ? 'f.saved' : selection.view === 'done' ? 'f.done' : 'NOT f.done';
+      const parameters: unknown[] = [principalId, stream.generation, from, limit + 1];
+      const reasonPredicate = selection.reason ? `AND f.reason = $${parameters.push(selection.reason)}::text` : '';
+      const headPredicate = descending ? `AND f.sequence <= $${parameters.push(stream.head_sequence)}::bigint` : '';
       const rows = (await client.query<{ id: string; sequence: string; purpose: string; topic: string;
         state: StreamItem['state']; subject_owner: string; subject_ref: string; subject_revision: string | null;
         disclosure_basis: string; kind: NotificationKind | null; actor_agent: string | null;
@@ -676,21 +680,15 @@ export class NotificationStore {
           coalesce(t.saved,false) AS saved, coalesce(t.done,false) AS done, t.revision::text AS triage_revision,
           pc.reason, pc.proposal, pc.revision AS proposal_revision,
           (r.item_id IS NOT NULL) AS individually_read FROM access.notification_item i
+        JOIN access.notification_filter_seek f ON f.item_id = i.id
         LEFT JOIN access.notification_item_triage t ON t.principal_id = i.principal_id AND t.item_id = i.id
         LEFT JOIN access.notification_proposal_context pc ON pc.item_id = i.id
         LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
         LEFT JOIN access.notification_display_context c ON c.item_id = i.id
-        WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.generation = $2
-          AND ${descending ? '($3::bigint IS NULL OR i.sequence < $3)' : 'i.sequence > $3'}
-          ${descending ? 'AND i.sequence <= $7::bigint' : ''}
-          AND ($5::text IS NULL OR $5 = 'inbox' AND NOT coalesce(t.done,false)
-            OR $5 = 'saved' AND t.saved OR $5 = 'done' AND t.done)
-          AND ($6::text IS NULL OR pc.reason = $6)
-        ORDER BY i.sequence ${descending ? 'DESC' : 'ASC'} LIMIT $4`, [principalId, stream.generation, from, limit + 1,
-            selection.view ?? 'inbox',
-            selection.reason ?? null,
-            ...(descending ? [stream.head_sequence] : []),
-          ])).rows;
+        WHERE f.principal_id = $1 AND i.stream = 'inbox' AND f.generation = $2
+          AND ${descending ? '($3::bigint IS NULL OR f.sequence < $3)' : 'f.sequence > $3'}
+          ${headPredicate} AND ${viewPredicate} ${reasonPredicate}
+        ORDER BY f.sequence ${descending ? 'DESC' : 'ASC'} LIMIT $4`, parameters)).rows;
       const watermark = (await client.query<{ read_through: string }>(`SELECT read_through::text
         FROM access.notification_read_watermark WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2`,
       [principalId, stream.generation])).rows[0];
@@ -804,10 +802,13 @@ export class NotificationStore {
   }
 
   /** Exact visible count through 99; an unusually hidden-heavy inbox fails closed after 256 reads. */
-  async unreadCount(principal: VerifiedPrincipal): Promise<{ count: number; overflow: boolean }> {
-    const { principalId, rows } = await this.transaction(async client => {
+  async unreadCount(principal: VerifiedPrincipal): Promise<{ generation: string; count: number; overflow: boolean }> {
+    const { principalId, rows, generation } = await this.transaction(async client => {
       const principalId = await this.reader(client, principal);
-      if (!principalId) return { principalId, rows: [] };
+      if (!principalId) return { principalId, rows: [], generation: '1' };
+      const stream = (await client.query<{ generation: string }>(`SELECT generation::text
+        FROM access.notification_stream WHERE principal_id = $1 AND stream = 'inbox'`, [principalId])).rows[0];
+      const generation = stream?.generation ?? '1';
       const rows = (await client.query<{ subject_owner: string; subject_ref: string;
         subject_revision: string | null; disclosure_basis: string; realm: string | null; actor_agent: string | null; group_key: string | null;
         reason: ProposalSubscriptionReason | null; topic: string }>(`SELECT i.subject_owner, i.subject_ref,
@@ -820,9 +821,10 @@ export class NotificationStore {
         LEFT JOIN access.notification_display_context c ON c.item_id = i.id
         LEFT JOIN access.notification_proposal_context pc ON pc.item_id = i.id
         WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.state = 'active'
+          AND i.generation = $3
           AND i.sequence > coalesce(w.read_through, 0) AND r.item_id IS NULL
-        ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1])).rows;
-      return { principalId, rows };
+        ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1, generation])).rows;
+      return { principalId, rows, generation };
     });
     const subjects = [];
     for (const row of rows.slice(0, NOTIFICATION_LIMITS.unreadScan)) {
@@ -837,11 +839,11 @@ export class NotificationStore {
     }
     const visible = await discloseNotifications(this.pool, subjects, 'inbox', disclosureViewer(principal));
     const count = visible.filter(subject => subject.status === 'available').length;
-    if (count >= NOTIFICATION_LIMITS.unreadCap) return { count: 99, overflow: true };
+    if (count >= NOTIFICATION_LIMITS.unreadCap) return { generation, count: 99, overflow: true };
     if (rows.length > NOTIFICATION_LIMITS.unreadScan) {
       throw new NotificationUnavailable('unread count exceeds the disclosure scan bound');
     }
-    return { count, overflow: false };
+    return { generation, count, overflow: false };
   }
 
   /** CAS one recipient item's independent triage, preserving omitted flags. */

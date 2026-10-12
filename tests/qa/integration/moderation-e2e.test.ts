@@ -145,7 +145,7 @@ test('G314 joining: provisioned person consents, accepts only own invitation, re
     const producer = new NotificationProducer(s.stack.accessPool, null, s.stack.contentPool,
       s.stack.fuseki, notices, null);
     expect(await producer.runAccessOnce()).toBeGreaterThan(0);
-    expect(await notices.unreadCount(member.principal)).toEqual({ count: 1, overflow: false });
+    expect(await notices.unreadCount(member.principal)).toEqual({ generation: '1', count: 1, overflow: false });
     expect((await s.read(member,'/v1/me/realm-invitations')).headers.get('cache-control')).toBe('private, no-store');
     expect((await s.respond(s.outsider,invited.invitation.id)).status).toBe(403);
     expect((await s.call(s.outsider,'POST',`${s.root}/invitations`,{
@@ -155,7 +155,7 @@ test('G314 joining: provisioned person consents, accepts only own invitation, re
     const accepted = await Promise.all(results.map(r => json<InvitationResult>(r)));
     expect(accepted.map(r => r.replayed).sort()).toEqual([false,true]);
     expect(accepted[0]!.invitation.state).toBe('accepted');
-    expect(await notices.unreadCount(member.principal)).toEqual({ count: 0, overflow: false });
+    expect(await notices.unreadCount(member.principal)).toEqual({ generation: '1', count: 0, overflow: false });
     expect((await s.respond(member,invited.invitation.id,'decline',false,key)).status).toBe(409);
     expect((await s.respond(member,invited.invitation.id)).status).toBe(409);
     expect(await json(await s.call(null,'GET',`${s.root}/roster`))).toEqual({ items: [],nextCursor: null });

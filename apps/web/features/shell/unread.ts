@@ -8,12 +8,14 @@ import { BFF_PREFIX } from '../api/browser.ts';
 // and says `overflow` beyond; it answers 503 when it cannot prove either, and
 // the badge then stays as it was.
 
-export interface Unread { count: number; overflow: boolean }
+export interface Unread { count: number; overflow: boolean; generation?: string }
 
 /** How often an open page asks again; focus and visibility also ask. */
 const UNREAD_INTERVAL_MS = 60_000;
 
 let current: Unread | null = null;
+let displayedGeneration: string | null = null;
+let revision = 0;
 const listeners = new Set<() => void>();
 let users = 0;
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -25,13 +27,18 @@ function publish(next: Unread | null) {
 
 async function refresh() {
   if (document.visibilityState !== 'visible') return;
+  const requestRevision = revision;
   try {
     const response = await fetch(`${BFF_PREFIX}/v1/me/notifications/unread-count`,
       { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (!response.ok) { await response.body?.cancel(); return; }
-    const body = await response.json() as { profile?: string; count?: unknown; overflow?: unknown };
+    const body = await response.json() as { profile?: string; generation?: unknown; count?: unknown; overflow?: unknown };
+    if (requestRevision !== revision) return;
     if (body.profile === 'notification-unread-count-v1' && typeof body.count === 'number'
-      && typeof body.overflow === 'boolean') publish({ count: body.count, overflow: body.overflow });
+      && typeof body.overflow === 'boolean' && typeof body.generation === 'string'
+      && /^[1-9][0-9]{0,18}$/.test(body.generation)) {
+      setUnread({ generation: body.generation, count: body.count, overflow: body.overflow });
+    }
   } catch { /* Offline: the badge keeps its last value. */ }
 }
 
@@ -52,11 +59,28 @@ function stop() {
   clearInterval(timer);
   window.removeEventListener('focus', onVisible);
   document.removeEventListener('visibilitychange', onVisible);
+  // A response started by an unmounted or signed-out badge cannot outlive it.
+  revision += 1;
+  publish(null);
 }
 
 /** The notifications page sets what it just marked read, so badges agree at once; null forgets the count. */
 export function setUnread(next: Unread | null) {
+  if (next === null) displayedGeneration = null;
+  else {
+    if (displayedGeneration !== null && next.generation !== displayedGeneration) return;
+    if (next.generation && current?.generation && BigInt(next.generation) < BigInt(current.generation)) return;
+  }
+  revision += 1;
   publish(next);
+}
+
+/** The currently displayed notification traversal; null releases its generation fence. */
+export function setUnreadGeneration(generation: string | null) {
+  if (displayedGeneration === generation) return;
+  displayedGeneration = generation;
+  revision += 1;
+  if (generation !== null && current?.generation !== generation) publish(null);
 }
 
 const subscribe = (listener: () => void) => {

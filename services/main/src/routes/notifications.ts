@@ -92,7 +92,7 @@ const streamPage = t.Object({ profile: t.Literal('notification-stream-page-v1'),
   head: t.String(), reset: t.Boolean(), readThrough: t.String(), items: t.Array(streamItem),
   groups: t.Array(t.Object({ kind: t.String(), key: t.String(), itemIds: t.Array(t.String()) })),
   next: t.Nullable(t.String()) });
-const unreadCount = t.Object({ profile: t.Literal('notification-unread-count-v1'), count: t.Number(),
+const unreadCount = t.Object({ profile: t.Literal('notification-unread-count-v1'), generation, count: t.Number(),
   overflow: t.Boolean() });
 const itemRead = t.Object({ profile: t.Literal('notification-item-read-v1'), id: t.String(), readAt: t.String() });
 const hint = t.Object({ profile: t.Literal('notification-stream-hint-v1'), generation: t.String(), head: t.String() });
