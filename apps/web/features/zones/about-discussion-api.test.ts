@@ -181,7 +181,7 @@ test('a missing, mismatched or failed shared projection keeps the discussion una
   }
 });
 
-test('mounted documents and detail resources retain their command basis, while hidden and absent threads stay empty', async () => {
+test('document and detail lookup responses with no visible thread keep their target basis without reading bodies', async () => {
   for (const routeKind of ['document', 'detail'] as const) {
     const hidden = reader({ routeKind, thread: null }), absent = reader({ routeKind, thread: null });
     const hiddenRead = await readAboutDiscussion(hidden.main, readInput);
