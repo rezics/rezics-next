@@ -193,6 +193,12 @@ export class DisclosureStore implements DisclosureReader {
     else poolEnvironments.delete(this.pool);
   }
 
+  /** Read committed takes a new statement snapshot, including when the caller
+   * lends an existing checkout. Snapshot isolation cannot fence newer policy. */
+  async assertFinalSnapshot(client?: PoolClient): Promise<void> {
+    await requireFreshSnapshot(client ?? accessClient(this.pool));
+  }
+
   async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient) {
     if (!targets.length) return [];
@@ -658,7 +664,12 @@ export async function captureDisclosure(env: WorkActivationEnvironment, selectio
   return Object.freeze(selections.map((selection, index) => {
     const cut = Object.freeze({ selection, parents: Object.freeze(selection.ancestry.parents.map(parent =>
       Object.freeze({ ...parent, fenceBasis }))), fenceBasis, decision: evaluated.decisions[index]! });
-    state.cuts.set(cut, { heads, viewer, audience: JSON.stringify(viewer), channel,
+    const dependencies = new Set([
+      ...selection.ancestry.parents.map(parent => parent.resource),
+      ...(selection.ancestry.resourceKind !== 'other' ? [selection.target.resource] : []),
+    ]);
+    state.cuts.set(cut, { heads: new Map([...heads].filter(([resource]) => dependencies.has(resource))),
+      viewer, audience: JSON.stringify(viewer), channel,
       source: state.sources.get(selection.target.owner)!, reader: requireReader(env) });
     return cut;
   }));
@@ -702,12 +713,13 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
   if (!cuts.length) return [];
   const selections = cuts.map(cut => cut.selection);
   try {
+    if (reader instanceof DisclosureStore) await reader.assertFinalSnapshot(client);
+    else await requireFreshSnapshot(client);
     await rereadRelationships(env, selections);
     const heads = await currentHeads(env, selections);
-    if (saved.some((basis, index) => [...basis.heads].some(([resource, head]) =>
-      // Each capture's map may include other targets. Compare only this selection.
-      (selections[index]!.target.resource === resource || selections[index]!.ancestry.parents.some(parent => parent.resource === resource))
-      && heads.get(resource) !== head))) throw new DisclosureUnavailable('Disclosure parent head moved');
+    if (saved.some(basis => [...basis.heads].some(([resource, head]) => heads.get(resource) !== head))) {
+      throw new DisclosureUnavailable('Disclosure parent head moved');
+    }
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
     return evaluated.decisions.map((decision, index) => {
       if (cuts[index]!.decision === 'hidden' || decision === 'hidden') return 'hidden';
@@ -719,6 +731,13 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
   } catch (cause) {
     if (cause instanceof DisclosureUnavailable) throw cause;
     throw new DisclosureUnavailable('Disclosure final ancestry is unavailable', { cause });
+  }
+}
+async function requireFreshSnapshot(client?: PoolClient): Promise<void> {
+  if (!client) return;
+  const rows = (await client.query<{ transaction_isolation: string }>('SHOW transaction_isolation')).rows;
+  if (rows.length !== 1 || rows[0]?.transaction_isolation !== 'read committed') {
+    throw new DisclosureUnavailable('Disclosure final fence requires a fresh Access snapshot');
   }
 }
 async function readInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
