@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   startTelemetry,
   flushTelemetryTraces,
@@ -111,6 +112,68 @@ const profileForegroundRequest = async <T>(request: (headers: Headers) => Promis
   };
 };
 const evidence: Record<string, unknown>[] = [];
+const agentCommand = new AsyncLocalStorage<string>();
+const diagnosedOwners = new WeakSet<object>();
+const restoreOwnerDiagnostics: (() => void)[] = [];
+const causeChain = (error: unknown) => {
+  const causes: { name: string; message?: string; code?: string }[] = [];
+  const seen = new Set<unknown>();
+  for (let cause = error; cause && typeof cause === 'object' && !seen.has(cause);) {
+    seen.add(cause);
+    const value = cause as { name?: unknown; message?: unknown; code?: unknown; cause?: unknown };
+    causes.push({
+      name: typeof value.name === 'string' ? value.name : (cause.constructor?.name ?? 'Unknown'),
+      ...(typeof value.message === 'string' ? { message: value.message.slice(0, 512) } : {}),
+      ...(['string', 'number'].includes(typeof value.code) ? { code: String(value.code) } : {}),
+    });
+    if (causes.length === 8) break;
+    cause = value.cause;
+  }
+  return causes;
+};
+// A refused provision can fail before measured profiles exist. Retain the exact
+// restored owner call, without query text, request payloads or bearer headers.
+const diagnoseAgentOwner = (fuseki: typeof home.stack.env.fuseki) => {
+  if (diagnosedOwners.has(fuseki)) return;
+  diagnosedOwners.add(fuseki);
+  const diagnose = <K extends 'query' | 'commandHealth' | 'commandWithReceipt'>(operation: K) => {
+    const original = fuseki[operation];
+    const invoke = original.bind(fuseki) as (...args: unknown[]) => Promise<unknown>;
+    const diagnosed = async (...args: unknown[]) => {
+      const command = agentCommand.getStore();
+      if (!command) return invoke(...args);
+      const began = performance.now();
+      const caller = new Error().stack
+        ?.split('\n')
+        .filter((line) => line.includes(process.cwd()))
+        .map((line) => line.replaceAll(`${process.cwd()}/`, '').trim())
+        .slice(0, 12);
+      try {
+        return await invoke(...args);
+      } catch (error) {
+        const endpoint = new URL(restored.fusekiUrl);
+        const failure = {
+          command,
+          owner: 'fuseki',
+          operation,
+          endpoint: { host: endpoint.hostname, port: endpoint.port, path: endpoint.pathname },
+          elapsedMs: Math.round(performance.now() - began),
+          caller,
+          causes: causeChain(error),
+        };
+        evidence.push({ agentProvisioningDependencyFailure: failure });
+        console.error(JSON.stringify({ agentProvisioningDependencyFailure: failure }));
+        throw error;
+      }
+    };
+    fuseki[operation] = diagnosed as typeof original;
+    restoreOwnerDiagnostics.push(() => {
+      fuseki[operation] = original;
+    });
+  };
+  for (const operation of ['query', 'commandHealth', 'commandWithReceipt'] as const)
+    diagnose(operation);
+};
 const ownerDatabases: Record<string, string> = {};
 const ownerDatabaseEndpoints: Record<string, ReturnType<typeof realmRankingOwnerEndpoint>> = {};
 const profiles: {
@@ -163,8 +226,32 @@ try {
       ),
     },
   });
+  const diagnosticApiFetch = (async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method !== 'POST' || new URL(request.url).pathname !== '/v1/agents')
+      return app.handle(request);
+    diagnoseAgentOwner(home.stack.env.fuseki);
+    return agentCommand.run(
+      request.headers.get('idempotency-key') ?? 'agent provision',
+      async () => {
+        const response = await app.handle(request);
+        if (response.status >= 500) {
+          const refusal = {
+            command: agentCommand.getStore(),
+            method: request.method,
+            path: '/v1/agents',
+            status: response.status,
+            problem: (await response.clone().text()).slice(0, 4096),
+          };
+          evidence.push({ agentProvisioningRefusal: refusal });
+          console.error(JSON.stringify({ agentProvisioningRefusal: refusal }));
+        }
+        return response;
+      },
+    );
+  }) as typeof fetch;
   let api = workProfileCorpusApi('http://main.local', home.author.token, {
-    fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+    fetch: diagnosticApiFetch,
   });
   const project = async () =>
     timeRealmRankingStage(
@@ -637,7 +724,7 @@ try {
         },
       });
       api = workProfileCorpusApi('http://main.local', home.author.token, {
-        fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+        fetch: diagnosticApiFetch,
       });
       await grantRankingAuthority();
     }
@@ -950,7 +1037,7 @@ try {
   const voterMember = await home.member('g1034-voter');
   const voterSubject = await home.provision('ranking voter', voterMember.token);
   const voter = workProfileCorpusApi('http://main.local', voterMember.token, {
-    fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+    fetch: diagnosticApiFetch,
   });
   // Capture the committed score before the transactional vote changes it.
   const baseline = (
@@ -1153,7 +1240,31 @@ try {
     ],
     child: child.reply,
   });
+} catch (error) {
+  try {
+    await flushTelemetryTraces();
+    const spans = sink.snapshot();
+    const refusedTraces = new Set(
+      spans
+        .filter((span) => Number(span.attributes['http.response.status_code']) >= 500)
+        .map((span) => span.traceId),
+    );
+    evidence.push({
+      failure: causeChain(error),
+      setupSpans: (refusedTraces.size
+        ? spans.filter((span) => refusedTraces.has(span.traceId))
+        : spans
+      ).slice(-1024),
+    });
+  } catch (diagnosticError) {
+    evidence.push({
+      failure: causeChain(error),
+      telemetryCaptureFailure: causeChain(diagnosticError),
+    });
+  }
+  throw error;
 } finally {
+  for (const restore of restoreOwnerDiagnostics) restore();
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
     process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1034.json',
