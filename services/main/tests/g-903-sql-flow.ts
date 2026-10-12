@@ -17,6 +17,7 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
   const sourceCalls = new Map<ts.Node, string>();
   const requests: (ts.CallExpression | ts.NewExpression)[] = [];
   const nodes: ts.Node[] = [];
+  const returnExpressions = new Map<ts.FunctionLikeDeclaration, ts.Expression[]>();
   const location = (node: ts.Node) => {
     const file = node.getSourceFile();
     return `${file.fileName}:${file.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
@@ -74,7 +75,24 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
 
   for (const file of files) {
     const visit = (node: ts.Node) => {
-      nodes.push(node);
+      if (ts.isVariableDeclaration(node) || ts.isPropertyAssignment(node)
+        || ts.isBindingElement(node) || ts.isBinaryExpression(node) || isFunction(node)
+        || ts.isCallExpression(node)) nodes.push(node);
+      if (isFunction(node)) {
+        const expressions: ts.Expression[] = [];
+        const returns = (child: ts.Node) => {
+          if (child !== node && isFunction(child)) return;
+          if (ts.isReturnStatement(child) && child.expression && !ts.isObjectLiteralExpression(child.expression))
+            expressions.push(child.expression);
+          child.forEachChild(returns);
+        };
+        if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) {
+          if (!ts.isObjectLiteralExpression(node.body)) expressions.push(node.body);
+        } else returns(node);
+        // The return sites cannot change while origins converge. Walk function
+        // bodies once, rather than once for every propagation round.
+        returnExpressions.set(node, expressions);
+      }
       if (ts.isVariableDeclaration(node) && node.initializer && ts.isIdentifier(node.name)) {
         const target = symbol(node.name);
         if (target) initializers.set(target, node.initializer);
@@ -121,6 +139,7 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
     return union(...children);
   };
   let changed = true;
+  let rounds = 0;
   const add = (target: TypeSymbol | undefined, sources: Set<string>) => {
     if (!target || !sources.size) return;
     const prior = origins.get(target) ?? new Set();
@@ -130,6 +149,7 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
   // Each iteration can only add one of the finite SELECT origins to a finite
   // symbol set; convergence is independent of fixture runtime data size.
   while (changed) {
+    rounds++;
     changed = false;
     for (const node of nodes) {
       if (ts.isVariableDeclaration(node) && node.initializer && ts.isIdentifier(node.name)) {
@@ -153,16 +173,8 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
       }
       if (isFunction(node)) {
         const sources = new Set<string>();
-        const returns = (child: ts.Node) => {
-          if (child !== node && isFunction(child)) return;
-          if (ts.isReturnStatement(child) && child.expression && !ts.isObjectLiteralExpression(child.expression)) {
-            for (const source of value(child.expression)) sources.add(source);
-          }
-          child.forEachChild(returns);
-        };
-        if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) {
-          if (!ts.isObjectLiteralExpression(node.body)) for (const source of value(node.body)) sources.add(source);
-        } else returns(node);
+        for (const expression of returnExpressions.get(node) ?? [])
+          for (const source of value(expression)) sources.add(source);
         const prior = functions.get(node) ?? new Set();
         for (const source of sources) if (!prior.has(source)) { prior.add(source); changed = true; }
         functions.set(node, prior);
@@ -199,6 +211,8 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
   };
   const flows = requests.flatMap(request => [...union(...request.arguments?.map(argumentValue) ?? [])]
     .map(source => ({ source, request: location(request) })));
+  if (process.env.G903_SQL_FLOW_PROFILE === '1')
+    process.stderr.write(`SQL flow propagation: ${files.length} files, ${nodes.length} nodes, ${rounds} rounds\n`);
   return [...new Map(flows.map(flow => [`${flow.source}\0${flow.request}`, flow])).values()];
 }
 
@@ -218,8 +232,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     directoryExists: path => virtual.directoryExists?.(path) ? true : undefined,
   } });
   try {
+    const started = performance.now();
     const project = api.updateSnapshot({ openProjects: [config] }).getProject(config)!;
     const files = input.paths.map(path => project.program.getSourceFile(path)!);
-    process.stdout.write(JSON.stringify(sqlRequestFlows(project, files)));
+    const compiled = performance.now();
+    const result = sqlRequestFlows(project, files);
+    if (process.env.G903_SQL_FLOW_PROFILE === '1') process.stderr.write(`SQL flow timing (ms): compile=${Math.round(compiled - started)}, scan=${Math.round(performance.now() - compiled)}\n`);
+    process.stdout.write(JSON.stringify(result));
   } finally { api.close(); }
 }
