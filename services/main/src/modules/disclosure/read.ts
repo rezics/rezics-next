@@ -542,10 +542,20 @@ function validFenceBasis(basis: DisclosureFenceBasis): boolean {
 }
 function currentNameHead(target: DisclosureTarget): string | null {
   const ancestry = target.ancestry!;
-  return ancestry.resourceKind !== 'other' && ancestry.relationshipBasis.kind === 'identity'
-    && ancestry.relationshipBasis.resource === target.resource
+  return isGraphIdentity(target, ancestry)
     ? ancestry.relationshipBasis.revision
     : ancestry.parents.find(parent => parent.kind === 'work' && parent.resource === target.resource)?.head ?? null;
+}
+function isGraphIdentity(target: DisclosureTarget, ancestry: OwnerEstablishedDisclosureAncestry): boolean {
+  return target.owner === 'graph' && ancestry.relationshipBasis.owner === 'graph'
+    && ancestry.relationshipBasis.kind === 'identity' && ancestry.relationshipBasis.resource === target.resource;
+}
+function headDependencies(selection: DisclosureSelection): string[] {
+  return [
+    ...selection.ancestry.parents.map(parent => parent.resource),
+    ...(selection.ancestry.resourceKind !== 'other' || isGraphIdentity(selection.target, selection.ancestry)
+      ? [selection.target.resource] : []),
+  ];
 }
 function requireReader(env: WorkActivationEnvironment): DisclosureReader & Required<Pick<DisclosureReader, 'readAtCut'>> {
   const reader = (env as ComposedEnvironment)[owner];
@@ -598,10 +608,7 @@ function requireSelections(env: WorkActivationEnvironment, selections: readonly 
   }
 }
 async function currentHeads(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]) {
-  const resources = [...new Set(selections.flatMap(selection => [
-    ...selection.ancestry.parents.map(parent => parent.resource),
-    ...(selection.ancestry.resourceKind !== 'other' ? [selection.target.resource] : []),
-  ]))];
+  const resources = [...new Set(selections.flatMap(headDependencies))];
   const heads = new Map<string, string>();
   try {
     for (let offset = 0; offset < resources.length; offset += DISCLOSURE_COST.parentHeadBatch) {
@@ -623,8 +630,7 @@ async function currentHeads(env: WorkActivationEnvironment, selections: readonly
       for (const row of rows) heads.set(row.resource!.value, row.head!.value);
     }
     if (selections.some(selection => selection.ancestry.parents.some(parent => heads.get(parent.resource) !== parent.head)
-      || selection.ancestry.resourceKind !== 'other' && selection.ancestry.relationshipBasis.kind === 'identity'
-        && selection.ancestry.relationshipBasis.resource === selection.target.resource
+      || isGraphIdentity(selection.target, selection.ancestry)
         && heads.get(selection.target.resource) !== selection.ancestry.relationshipBasis.revision)) {
       throw new DisclosureUnavailable('Disclosure parent head moved');
     }
@@ -669,10 +675,7 @@ export async function captureDisclosure(env: WorkActivationEnvironment, selectio
   return Object.freeze(selections.map((selection, index) => {
     const cut = Object.freeze({ selection, parents: Object.freeze(selection.ancestry.parents.map(parent =>
       Object.freeze({ ...parent, fenceBasis }))), fenceBasis, decision: evaluated.decisions[index]! });
-    const dependencies = new Set([
-      ...selection.ancestry.parents.map(parent => parent.resource),
-      ...(selection.ancestry.resourceKind !== 'other' ? [selection.target.resource] : []),
-    ]);
+    const dependencies = new Set(headDependencies(selection));
     state.cuts.set(cut, { heads: new Map([...heads].filter(([resource]) => dependencies.has(resource))),
       viewer, audience: JSON.stringify(viewer), channel,
       source: state.sources.get(selection.target.owner)!, reader: requireReader(env) });
