@@ -47,8 +47,17 @@ function representedMandateAction(actionParameter: string): string {
 
 export interface RepresentedGrantProof {
   principalId: string;
+  principalEpoch: string;
+  representationId: string;
+  representationGeneration: string;
+  mandateAction: string;
+  subjectGeneration: string;
   grantId: string;
   grantGeneration: string;
+  membershipId: string | null;
+  membershipGeneration: string | null;
+  authorityEpoch: string;
+  recoveryGeneration: string;
   validUntil: Date;
 }
 
@@ -60,7 +69,12 @@ export async function representedGrantProof(client: Pick<Pool | PoolClient, 'que
   principal: VerifiedPrincipal | string, actor: string, scope: string, action: string,
   options: { lock?: boolean; directOnly?: boolean } = {}): Promise<RepresentedGrantProof | null> {
   const row = (await client.query<RepresentedGrantProof>(`SELECT p.id AS "principalId",
+    p.enforcement_epoch::text AS "principalEpoch",r.id AS "representationId",
+    r.generation::text AS "representationGeneration",r.action AS "mandateAction",
+    a.generation::text AS "subjectGeneration",
     g.id AS "grantId",g.generation::text AS "grantGeneration",
+    g.membership_id AS "membershipId",g.membership_generation::text AS "membershipGeneration",
+    gate.authority_epoch::text AS "authorityEpoch",recovery.generation::text AS "recoveryGeneration",
     LEAST(r.valid_until,g.valid_until) AS "validUntil"
     FROM access.principal p
     JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
@@ -72,10 +86,10 @@ export async function representedGrantProof(client: Pick<Pool | PoolClient, 'que
         SELECT 1 FROM access.membership m WHERE m.id = g.membership_id
           AND m.state = 'joined' AND m.generation = g.membership_generation))
     JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
+    JOIN access.recovery_fence recovery ON recovery.id AND recovery.open
     WHERE ${typeof principal === 'string' ? 'p.id = $1::uuid AND $2::text IS NULL'
       : 'p.account_issuer = $1 AND p.account_subject = $2'} AND p.active
-      AND (SELECT open FROM access.recovery_fence WHERE id)
-    ORDER BY LEAST(r.valid_until,g.valid_until) DESC,g.id,r.id LIMIT 1${options.lock ? ' FOR SHARE OF p,r,a,g,gate' : ''}`,
+    ORDER BY LEAST(r.valid_until,g.valid_until) DESC,g.id,r.id LIMIT 1${options.lock ? ' FOR SHARE OF p,r,a,g,gate,recovery' : ''}`,
   [typeof principal === 'string' ? principal : principal.issuer,
     typeof principal === 'string' ? null : principal.subject,actor,scope,action,options.directOnly ?? false])).rows[0];
   return row ?? null;

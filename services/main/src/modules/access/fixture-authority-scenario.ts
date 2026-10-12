@@ -13,6 +13,21 @@ export async function setFixtureMandateState(pool: Pool, representationId: strin
   }
 }
 
+/** Give a live fixture grant a bounded deadline for a paused owner read. */
+export async function setFixtureGrantDeadline(pool: Pool, grantId: string, milliseconds: number): Promise<Date> {
+  const row = (await pool.query<{ valid_until: Date }>(`UPDATE access.permission_grant
+    SET valid_until = clock_timestamp() + ($2 * interval '1 millisecond')
+    WHERE id = $1 RETURNING valid_until`, [grantId, milliseconds])).rows[0]!;
+  return row.valid_until;
+}
+
+/** Advance a fixture authority episode while preserving its live deadline. */
+export async function advanceFixtureAuthorityGeneration(pool: Pool,
+  table: 'principal' | 'representation' | 'authority_subject' | 'permission_grant' | 'scope_gate', id: string): Promise<void> {
+  const generation = table === 'principal' ? 'enforcement_epoch' : table === 'scope_gate' ? 'authority_epoch' : 'generation';
+  await pool.query(`UPDATE access.${table} SET ${generation} = ${generation} + 1 WHERE id = $1`, [id]);
+}
+
 /** Isolated owner-test authority, including states a live grant may outlast. */
 export async function fixtureAuthorityScenario(pool: Pool, input: {
   scope: string; action: string; mandate: string;

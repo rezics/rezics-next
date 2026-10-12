@@ -6,13 +6,17 @@ import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
-import { fixtureAuthorityScenario, setFixtureMandateState } from '../src/modules/access/fixture-authority-scenario.ts';
+import { advanceFixtureAuthorityGeneration, fixtureAuthorityScenario, setFixtureGrantDeadline,
+  setFixtureMandateState } from '../src/modules/access/fixture-authority-scenario.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { AccessRealmManagement } from '../src/modules/access/realm-management.ts';
 import { requireRealmSubmissionPolicy } from '../src/modules/access/realm-management-settings.ts';
 import { realmManager } from '../src/modules/access/realm-management-authority.ts';
 import { RealmAdminDenied } from '../src/modules/realm-admin/contract.ts';
 import { realmApprovedProof } from '../src/modules/realm-reply/member-policy.ts';
+import { representedGrantProof } from '../src/modules/access/composition.ts';
+import { visibleRealmReply } from '../src/modules/realm-reply/store.ts';
+import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 let cluster: PostgresCluster, pool: Pool;
 beforeAll(async () => {
@@ -86,4 +90,70 @@ test('Realm ownership mandate cannot consume another management grant; an exact 
     representations: [{ principalId: h.principalId, actor: h.actor, action: 'realm.settings.manage', lifetime: '8 hours' }],
     grant: { actor: h.actor, action: 'realm.settings.manage', lifetime: '8 hours' } });
   expect(await h.management.settings(h.principal, h.realm, h.actor)).toMatchObject({ generation: '0' });
+});
+
+test('a member cannot read pre-admission history after the owner grant expires during Content review', async () => {
+  const h = await fixture('agent.control');
+  const membershipId = randomUUID();
+  await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution')", [h.realm]);
+  await pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
+    VALUES ('realm',$1,1,'terms:1')`, [h.realm]);
+  await pool.query(`INSERT INTO access.membership (id,kind,owner_subject,member_subject,state,generation,
+    policy_revision,terms_revision,consent_reference) VALUES ($1,'realm',$2,$3,'joined',1,1,'terms:1','fixture-consent')`,
+  [membershipId,h.realm,h.actor]);
+  await pool.query(`INSERT INTO access.realm_history_admission (kind,membership_id,generation,data_epoch,sequence)
+    VALUES ('agent',$1,1,'epoch',10)`, [membershipId]);
+  const reply = `https://rezics.com/id/${randomUUID()}`;
+  const uri = (value: string) => ({ type: 'uri', value });
+  const env = { lineage: { dataEpoch: 'epoch', routingEpoch: '0' }, fuseki: { query: async (sql: string) => {
+    if (sql.includes('SELECT ?space ?realmRevision')) return { results: { bindings: [{
+      space: uri(`https://rezics.com/id/${membershipId}`), disclosure: uri(`${RV}Private`),
+      history: { type: 'literal', value: 'from-admission' } }] } };
+    // The reply predates sequence 10, so a history-cut ASK must refuse it.
+    if (sql.includes('ASK')) return { boolean: false };
+    return { results: { bindings: [{ reply: uri(reply), placement: uri(`https://rezics.com/id/${randomUUID()}`),
+      revision: uri(`urn:rezics:content:revision:${randomUUID()}`), review: uri(`urn:rezics:realm-review:${randomUUID()}`),
+      root: uri(reply), rootRevision: uri(reply), author: uri(h.actor), preparation: uri('fixture-reply') }] } };
+  } } } as unknown as WorkActivationEnvironment;
+  const before = await h.access.realmReadProof(h.principal,h.actor,h.realm);
+  expect(before).toBeString();
+  expect(await h.access.realmHistoryFloor(h.principal,h.actor,h.realm)).toBeNull();
+  const deadline = await setFixtureGrantDeadline(pool,h.grantId,1000);
+  let reviews = 0;
+  const content = { currentReview: async () => {
+    reviews++;
+    await pool.query('SELECT pg_sleep(GREATEST(0,EXTRACT(epoch FROM $1::timestamptz - clock_timestamp())) + 0.02)', [deadline]);
+    return true;
+  } };
+  expect(await visibleRealmReply(content,h.access,env,h.realm,reply,h.principal,h.actor)).toBeNull();
+  expect(reviews).toBe(1);
+  expect(await h.access.realmHistoryFloor(h.principal,h.actor,h.realm)).toEqual({ dataEpoch: 'epoch', sequence: '10' });
+  expect(await h.access.realmReadProof(h.principal,h.actor,h.realm)).not.toBe(before);
+  expect(await visibleRealmReply(content,h.access,env,h.realm,reply,h.principal,h.actor)).toBeNull();
+  expect(reviews).toBe(1);
+});
+
+for (const table of ['principal','representation','authority_subject','permission_grant','scope_gate'] as const) {
+  test(`represented grant proofs retain the selected ${table} generation`, async () => {
+    const h = await fixture('realm.owner');
+    const before = await representedGrantProof(pool,h.principal,h.actor,h.scope,'realm.owner');
+    expect(before).not.toBeNull();
+    const id = table === 'principal' ? h.principalId : table === 'representation' ? h.representationIds[0]!
+      : table === 'authority_subject' ? h.actor : table === 'permission_grant' ? h.grantId : h.scope;
+    await advanceFixtureAuthorityGeneration(pool,table,id);
+    const after = await representedGrantProof(pool,h.principal,h.actor,h.scope,'realm.owner');
+    expect(after).not.toBeNull();
+    expect(JSON.stringify(after)).not.toBe(JSON.stringify(before));
+  });
+}
+
+test('baseline Realm owner participation retains the selected owner mandate generation', async () => {
+  const h = await fixture('realm.owner');
+  const client = await pool.connect();
+  try {
+    const before = await realmApprovedProof(client,h.realm,h.principalId,h.actor);
+    expect(before).toStartWith('owner:');
+    await advanceFixtureAuthorityGeneration(pool,'representation',h.representationIds[0]!);
+    expect(await realmApprovedProof(client,h.realm,h.principalId,h.actor)).not.toBe(before);
+  } finally { client.release(); }
 });
