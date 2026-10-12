@@ -1,7 +1,10 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { AdaptContext } from '../realm/adapt.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
+import { resourceHref, siteMemberTarget } from '../address/path.ts';
+import { realmWorkHref } from '../realm/route.ts';
 import { loadPreviewHomeModules, localizedHomePresentation } from './home-modules.ts';
-import { collectionPreview, previewCollection, previewReaders, previewWork } from './home-modules.fixtures.ts';
+import { collectionPreview, previewCollection, previewReaders, previewSummary, previewWork } from './home-modules.fixtures.ts';
 
 const context: AdaptContext = { locale: 'en', ref: 'harbor', realm: previewCollection,
   mounts: new Map([[previewCollection, 'saved-reading']]) };
@@ -32,6 +35,45 @@ describe('authorized saved home modules', () => {
       expect(modules[0]?.state.state, type).toBe('ready');
       expect(JSON.stringify(modules[0]?.state)).toContain(previewWork);
     }
+  });
+
+  test.each([
+    { name: 'a Realm-less Zone', context: { ...context, realm: '', mounts: new Map<string, string>() } },
+    { name: 'a foreign public Work in a Realm Zone', context },
+  ])('$name uses canonical links for explicit Work slides and complete query members', async ({ context: selectedContext }) => {
+    const href = resourceHref('/w/', previewSummary.address as CanonicalAddress);
+    const preview = collectionPreview();
+    const source = { kind: 'query-block' as const, block: 'saved-reading' };
+    preview.moduleData[0].sources[0].source = source;
+    preview.presentation.modules[0]!.source = source;
+    const query = await loadPreviewHomeModules(preview, localizedHomePresentation(preview.presentation, 'en'),
+      selectedContext, previewReaders());
+    expect(query.modules[0]?.state).toMatchObject({ state: 'ready', data: { tabs: [{
+      items: [{ id: previewWork, href }],
+    }] } });
+
+    preview.presentation.modules[0]!.type = 'hero-carousel';
+    preview.presentation.slides = [{ id: 'explicit-work', work: previewWork }];
+    const explicit = await loadPreviewHomeModules(preview, localizedHomePresentation(preview.presentation, 'en'),
+      selectedContext, previewReaders());
+    expect(explicit.modules[0]?.state).toMatchObject({ state: 'ready', data: { slides: [{
+      id: 'explicit-work', href, work: { id: previewWork, href },
+    }] } });
+  });
+
+  test('only a witnessed Collection member retains its mounted Work link', async () => {
+    const preview = collectionPreview();
+    const mounted = await load(preview);
+    expect(mounted.modules[0]?.state).toMatchObject({ state: 'ready', data: { tabs: [{
+      items: [{ href: realmWorkHref(context.ref, siteMemberTarget(previewWork,
+        previewSummary.address as CanonicalAddress), 'saved-reading') }],
+    }] } });
+
+    const unwitnessed = await loadPreviewHomeModules(preview, localizedHomePresentation(preview.presentation, 'en'),
+      { ...context, mounts: new Map() }, previewReaders());
+    expect(unwitnessed.modules[0]?.state).toMatchObject({ state: 'ready', data: { tabs: [{
+      items: [{ href: resourceHref('/w/', previewSummary.address as CanonicalAddress) }],
+    }] } });
   });
 
   test('partial, skipped, unavailable, missing and malformed saved sources remain visibly failed', async () => {

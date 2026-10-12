@@ -1,6 +1,7 @@
 import type { ZoneShelfTab, ZoneWork } from '@rezics/zone-sdk';
 import type { CanonicalAddress } from '@rezics/model/address';
-import type { readShowcaseWorks } from '../api/showcase.ts';
+import type { readShowcaseWorks, WorkSummary } from '../api/showcase.ts';
+import { resourceHref } from '../address/path.ts';
 import { liveSlides, presentationSlide, type AdaptContext } from '../realm/adapt.ts';
 import type { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext, summaryWork } from '../realm/modules.ts';
 import { siteHref } from '../realm/route.ts';
@@ -45,6 +46,13 @@ export async function loadPreviewHomeModules(preview: ZoneAuthoringPreview, pres
     data.find(item => item.id === module.id)?.sources.find(item => sameSource(item.source, source));
   const publicModule = async (module: PresentationModule): Promise<ModuleState> =>
     (await read.publicModules({ ...presentation, modules: [module] }, context, preview.slideMedia))[0]?.state ?? failed;
+  const summaryCard = (item: WorkSummary, mount: string | null = null): ZoneWork => {
+    const address = item.address as CanonicalAddress;
+    const work = read.work({ id: item.reference, title: item.name, cover: item.avatar, address }, context, mount);
+    // A public summary supplies no site membership; a selected Collection
+    // and its mount are the only route witness in this saved source contract.
+    return mount ? work : { ...work, href: resourceHref('/w/', address) };
+  };
 
   const cache = new Map<SavedSource, Promise<WorkRead>>();
   const worksOf = (module: PresentationModule, source: ModuleSource): Promise<WorkRead> => {
@@ -66,11 +74,7 @@ export async function loadPreviewHomeModules(preview: ZoneAuthoringPreview, pres
       const cards = await summaries(targets);
       if (targets.some(target => !cards.has(target))) return { ok: false };
       const mount = source.kind === 'collection' ? context.mounts?.get(source.collection) ?? null : null;
-      return { ok: true, works: targets.map(target => {
-        const item = cards.get(target)!;
-        return read.work({ id: item.reference, title: item.name, cover: item.avatar,
-          address: item.address as CanonicalAddress }, context, mount);
-      }) };
+      return { ok: true, works: targets.map(target => summaryCard(cards.get(target)!, mount)) };
     })();
     cache.set(saved, pending);
     return pending;
@@ -88,8 +92,7 @@ export async function loadPreviewHomeModules(preview: ZoneAuthoringPreview, pres
         if (targets.some(target => !cards.has(target))) return failed;
         const slides = scheduled.flatMap(slide => {
           const item = 'work' in slide ? cards.get(slide.work) : null;
-          const work = item ? read.work({ id: item.reference, title: item.name, cover: item.avatar,
-            address: item.address as CanonicalAddress }, context) : null;
+          const work = item ? summaryCard(item) : null;
           const adapted = presentationSlide(slide, work, context, preview.slideMedia);
           return adapted ? [adapted] : [];
         });
