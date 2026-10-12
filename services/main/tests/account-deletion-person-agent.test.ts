@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { AccountHasOwnedAgents } from '../src/modules/access/account-deletion-agents.ts';
+import { commandError } from '../src/routes/problems.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 
 type Member = Awaited<ReturnType<MediaStack['member']>>;
@@ -54,13 +56,13 @@ async function observeDeactivation(member: Member): Promise<DeactivationOutcome>
   }
 }
 
-async function logPrincipalFence(member: Member, outcome: DeactivationOutcome, label: string): Promise<void> {
+async function assertPrincipalFence(member: Member): Promise<void> {
   const principal = await mainStack().accessPool.query<{ active: boolean; enforcement_epoch: string }>(`
     SELECT active, enforcement_epoch::text FROM access.principal WHERE id = $1`, [member.principalId]);
   const markers = await mainStack().accessPool.query<{ count: string }>(`SELECT count(*)::text AS count
     FROM access.outbox WHERE principal_id = $1 AND kind = 'account.deletion_fenced'`, [member.principalId]);
-  console.info(`[OBSERVED ${label}]`, JSON.stringify({ outcome, principal: principal.rows[0],
-    deletionFenceRows: markers.rows[0]?.count }));
+  expect(principal.rows[0]).toEqual({ active: false, enforcement_epoch: '1' });
+  expect(markers.rows[0]?.count).toBe('1');
 }
 
 beforeAll(async () => {
@@ -129,25 +131,60 @@ beforeAll(async () => {
 
 afterAll(async () => { await stack?.stop(); });
 
-test.failing('known gap: deleting an account with only its Person Agent succeeds', async () => {
+test('deleting an account ends its solely controlled provisioned Person Agent atomically', async () => {
   const observed = await observeDeactivation(personOnly.member);
-  await logPrincipalFence(personOnly.member, observed, 'Person Agent only');
   expect(observed, JSON.stringify(observed)).toMatchObject({ status: 'succeeded' });
+  await assertPrincipalFence(personOnly.member);
+  const authority = await mainStack().accessPool.query<{ active: boolean; controllers: number }>(`
+    SELECT active, access.agent_controller_count(id) AS controllers
+    FROM access.authority_subject WHERE id = $1`, [personOnly.personAgent]);
+  expect(authority.rows[0]).toEqual({ active: false, controllers: 0 });
+  expect((await mainStack().accessPool.query(`SELECT 1 FROM access.account_deletion_orphan_agent
+    WHERE agent_id = $1`, [personOnly.personAgent])).rowCount).toBe(0);
+  // A lost response cannot duplicate the account fence or reactivate authority.
+  expect(await observeDeactivation(personOnly.member)).toEqual(observed);
+  await assertPrincipalFence(personOnly.member);
 });
 
-test.failing('known gap: an owned Agent with a Realm requires an explicit transfer or retirement reason', async () => {
-  const observed = await observeDeactivation(realmOwner.member);
-  await logPrincipalFence(realmOwner.member, observed, 'second Agent owns Realm');
-  expect(observed, JSON.stringify(observed)).toMatchObject({
-    status: 'rejected',
-    errorClass: 'AdmissionControllerContinuity',
-    message: expect.stringMatching(/(?=.*owned Agent)(?=.*transfer)(?=.*retir(e|ement))/i),
-  });
+test('a Realm owner gets a typed refusal and explicit consent leaves the Realm steward standing', async () => {
+  let refusal: AccountHasOwnedAgents | undefined;
+  try {
+    await mainStack().access.strongDeactivateAccountSubject(
+      realmOwner.member.principal.issuer, realmOwner.member.principal.subject);
+    expect.unreachable();
+  } catch (error) {
+    expect(error).toBeInstanceOf(AccountHasOwnedAgents);
+    refusal = error as AccountHasOwnedAgents;
+  }
+  expect(refusal?.agents).toEqual([{ id: realmOwner.ownedAgent, kind: 'organization', displayName: 'Realm Steward' }]);
+  const response = commandError(refusal);
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: 'account_has_owned_agents',
+    agents: refusal!.agents, hasMore: false, moreCount: 0 });
+  const before = await mainStack().accessPool.query<{ active: boolean }>(`
+    SELECT active FROM access.authority_subject WHERE id = $1`, [realmOwner.personAgent]);
+  expect(before.rows[0]?.active).toBe(true);
+  expect((await mainStack().accessPool.query(`SELECT 1 FROM access.outbox
+    WHERE principal_id = $1 AND kind = 'account.deletion_fenced'`, [realmOwner.member.principalId])).rowCount).toBe(0);
+  await mainStack().access.strongDeactivateAccountSubject(
+    realmOwner.member.principal.issuer, realmOwner.member.principal.subject, { leaveOwnedAgentsStanding: true });
+  await assertPrincipalFence(realmOwner.member);
+  const authority = await mainStack().accessPool.query<{ active: boolean; controllers: number }>(`
+    SELECT active, access.agent_controller_count(id) AS controllers
+    FROM access.authority_subject WHERE id = $1`, [realmOwner.ownedAgent]);
+  expect(authority.rows[0]).toEqual({ active: true, controllers: 0 });
+  const orphan = await mainStack().accessPool.query<{ deleted_principal_id: string; operation_id: string }>(`
+    SELECT deleted_principal_id, operation_id FROM access.account_deletion_orphan_agent WHERE agent_id = $1`,
+    [realmOwner.ownedAgent]);
+  const fence = await mainStack().accessPool.query<{ id: string }>(`SELECT id FROM access.outbox
+    WHERE principal_id = $1 AND kind = 'account.deletion_fenced'`, [realmOwner.member.principalId]);
+  expect(orphan.rows).toEqual([{ deleted_principal_id: realmOwner.member.principalId, operation_id: fence.rows[0]!.id }]);
+  expect((await mainStack().accessPool.query(`SELECT 1 FROM access.realm_admin_owner_bootstrap
+    WHERE realm = $1 AND owner_subject = $2`, [realmOwner.realm, realmOwner.ownedAgent])).rowCount).toBe(1);
 });
 
 test('an accepted control invitation lets the former sole controller delete their account', async () => {
   const observed = await observeDeactivation(sharedController.member);
-  console.info('[OBSERVED control invitation accepted]', JSON.stringify(observed));
   expect(observed, JSON.stringify(observed)).toMatchObject({
     status: 'succeeded',
     fence: { principalId: sharedController.member.principalId, enforcementEpoch: '1' },
@@ -157,4 +194,49 @@ test('an accepted control invitation lets the former sole controller delete thei
     WHERE r.subject_id = $1 AND r.action = 'agent.control'
       AND r.active AND r.valid_until > clock_timestamp() ORDER BY r.principal_id`, [sharedController.personAgent]);
   expect(controls.rows.map(row => row.principal_id)).toEqual([sharedController.invitedMember.principalId]);
+  expect((await mainStack().accessPool.query(`SELECT active FROM access.authority_subject
+    WHERE id = $1`, [sharedController.personAgent])).rows[0]?.active).toBe(true);
+  expect((await mainStack().accessPool.query(`SELECT 1 FROM access.account_deletion_orphan_agent
+    WHERE agent_id = $1`, [sharedController.personAgent])).rowCount).toBe(0);
+});
+
+test('forty owned Agents have an honest bounded refusal and consent orphans every Agent', async () => {
+  const member = await mainStack().member(`many-owner-${randomUUID()}`, { verified: true });
+  const person = await provisionAgent(member, 'person', 'Forty Agent Owner');
+  const agents: string[] = [];
+  for (let i = 0; i < 40; i++) agents.push(await provisionAgent(member, 'organization', `Owned Agent ${i}`));
+  let refusal: AccountHasOwnedAgents | undefined;
+  try {
+    await mainStack().access.strongDeactivateAccountSubject(member.principal.issuer, member.principal.subject);
+    expect.unreachable();
+  } catch (error) {
+    expect(error).toBeInstanceOf(AccountHasOwnedAgents);
+    refusal = error as AccountHasOwnedAgents;
+  }
+  expect(refusal?.agents.map(agent => agent.id)).toEqual([...agents].sort().slice(0, 16));
+  expect(refusal).toMatchObject({ hasMore: true, moreCount: 24 });
+  // A request cannot claim the provisioned Organization is a Person.
+  const options = { leaveOwnedAgentsStanding: true, kind: 'person' };
+  await mainStack().access.strongDeactivateAccountSubject(member.principal.issuer, member.principal.subject, options);
+  const standing = await mainStack().accessPool.query<{ agent_id: string; active: boolean; controllers: number }>(`
+    SELECT o.agent_id, s.active, access.agent_controller_count(o.agent_id) AS controllers
+    FROM access.account_deletion_orphan_agent o JOIN access.authority_subject s ON s.id = o.agent_id
+    WHERE o.deleted_principal_id = $1 ORDER BY o.agent_id`, [member.principalId]);
+  expect(standing.rows).toEqual([...agents].sort().map(agent_id => ({ agent_id, active: true, controllers: 0 })));
+  expect((await mainStack().accessPool.query(`SELECT active FROM access.authority_subject WHERE id = $1`, [person]))
+    .rows[0]?.active).toBe(false);
+}, 180_000);
+
+test('a non-Person Agent with another live controller is neither listed nor orphaned', async () => {
+  const owner = await mainStack().member(`shared-org-owner-${randomUUID()}`, { verified: true });
+  const other = await mainStack().member(`shared-org-controller-${randomUUID()}`, { verified: true });
+  const agent = await provisionAgent(owner, 'organization', 'Shared organization');
+  await grantFixtureAuthority(mainStack().accessPool, { scope: 'work:create:root', requireDispatch: true, representations: [
+    { principalId: other.principalId, actor: agent, action: 'agent.control', lifetime: 'infinity' },
+  ], grant: { actor: agent, action: 'agent.control', lifetime: 'infinity' } });
+  await mainStack().access.strongDeactivateAccountSubject(owner.principal.issuer, owner.principal.subject);
+  expect((await mainStack().accessPool.query(`SELECT active, access.agent_controller_count(id) AS controllers
+    FROM access.authority_subject WHERE id = $1`, [agent])).rows[0]).toEqual({ active: true, controllers: 1 });
+  expect((await mainStack().accessPool.query(`SELECT 1 FROM access.account_deletion_orphan_agent
+    WHERE agent_id = $1`, [agent])).rowCount).toBe(0);
 });

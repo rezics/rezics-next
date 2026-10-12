@@ -41,14 +41,7 @@ export async function assertControllerContinuity(
   for (const subject of [...new Set(subjects)].sort()) {
     const row = (
       await client.query<{ allowed: boolean }>(
-        `WITH controllers AS MATERIALIZED (
-      SELECT access.agent_controller_count($1) AS live) SELECT
-      live >= COALESCE(
-        (SELECT min_controllers FROM access.agent_control WHERE subject_id = $1), 1)
-      OR (live >= 1 AND EXISTS (
-        SELECT 1 FROM access.protected_change_activation WHERE target_subject = $1
-          AND kind = 'agent-recovery' AND activation_txid = txid_current())) AS allowed
-      FROM controllers`,
+        'SELECT access.agent_control_continuity_allowed($1) AS allowed',
         [subject],
       )
     ).rows[0];

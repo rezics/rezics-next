@@ -33,7 +33,7 @@ function deactivationPool(options: { allowed: boolean; epoch?: string }) {
     if (sql.includes('FROM access.representation')) return rows([{ subject_id: actor }]);
     if (sql.includes('pg_advisory_xact_lock')) return rows([]);
     if (sql.startsWith('UPDATE')) return rows([{ enforcement_epoch: '1' }]);
-    if (sql.includes('agent_controller_count')) return rows([{ allowed: options.allowed }]);
+    if (sql.includes('agent_control_continuity_allowed')) return rows([{ allowed: options.allowed }]);
     throw new Error(`Unexpected deactivation query: ${sql}`);
   };
   return { connect: async () => ({ query, release() {} }) } as unknown as Pool;
@@ -52,7 +52,7 @@ function maintainerPool(options: { clash?: boolean }) {
       return options.clash ? rows([{ id: 'prior', request_digest: 'other', generation: '0', maintainers: [] }]) : rows([]);
     }
     if (sql.includes('pg_advisory_xact_lock')) return rows([]);
-    if (sql.includes('agent_controller_count')) return rows([{ allowed: false }]);
+    if (sql.includes('agent_control_continuity_allowed')) return rows([{ allowed: false }]);
     throw new Error(`Unexpected maintainer query: ${sql}`);
   };
   return { connect: async () => ({ query, release() {} }) } as unknown as Pool;

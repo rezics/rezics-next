@@ -1,4 +1,6 @@
 import { assertControllerContinuity, lockControllerContinuity, principalControllerSubjects } from './controller-continuity.ts';
+import { applyAccountDeletionAgents, lockAccountDeletionAgents,
+  type AccountDeletionOptions } from './account-deletion-agents.ts';
 import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
   type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
 import { admissionAuthorityAction, admissionPolicyAllowed } from './policy-decisions.ts';
@@ -1905,6 +1907,7 @@ export class AccessAdmissionRegistry {
 
   private async deactivatePrincipal(
     principalId: string, expectedEpoch: string, accountDeletion: boolean,
+    options: AccountDeletionOptions = {},
   ): Promise<StrongPrincipalDeactivation> {
     if (!/^[0-9a-f-]{36}$/.test(principalId) || !/^[0-9]+$/.test(expectedEpoch)) {
       throw new AdmissionDenied('invalid principal fence request');
@@ -1921,15 +1924,18 @@ export class AccessAdmissionRegistry {
       const principal = result.rows[0];
       if (!principal) throw new AdmissionUnavailable('principal is unavailable');
       let enforcementEpoch = principal.enforcement_epoch;
+      const deletionOperationId = Bun.randomUUIDv7();
       if (principal.active) {
-        const controlled = await principalControllerSubjects(client, principalId);
-        await lockControllerContinuity(client, controlled);
+        const controlled = accountDeletion ? [] : await principalControllerSubjects(client, principalId);
+        const hasDeletionAgents = accountDeletion && await lockAccountDeletionAgents(client, principalId);
+        if (!accountDeletion) await lockControllerContinuity(client, controlled);
         if (enforcementEpoch !== expectedEpoch) throw new AdmissionConflict('principal epoch changed');
         const changed = await client.query<{ enforcement_epoch: string }>(
           `UPDATE access.principal SET active = false,
              enforcement_epoch = enforcement_epoch + 1 WHERE id = $1
            RETURNING enforcement_epoch`, [principalId]);
-        await assertControllerContinuity(client, controlled);
+        if (hasDeletionAgents) await applyAccountDeletionAgents(client, principalId, deletionOperationId, options);
+        if (!accountDeletion) await assertControllerContinuity(client, controlled);
         enforcementEpoch = changed.rows[0]!.enforcement_epoch;
         await client.query(
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
@@ -1941,7 +1947,7 @@ export class AccessAdmissionRegistry {
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
            VALUES ($1, 'account.deletion_fenced', $2, $3)
            ON CONFLICT (principal_id) WHERE kind = 'account.deletion_fenced' DO NOTHING`,
-          [Bun.randomUUIDv7(), principalId, enforcementEpoch]);
+          [deletionOperationId, principalId, enforcementEpoch]);
         const marker = await client.query<{ authority_epoch: string }>(
           `SELECT authority_epoch FROM access.outbox
            WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]);
@@ -1970,9 +1976,12 @@ export class AccessAdmissionRegistry {
 
   /** Account deletion hook: fence an existing private binding before deleting credentials. */
   async strongDeactivateAccountSubject(
-    issuer: string, subject: string,
+    issuer: string, subject: string, options: AccountDeletionOptions = {},
   ): Promise<StrongPrincipalDeactivation | null> {
     if (!issuer || !subject) throw new AdmissionDenied('invalid Account binding');
+    if (options.leaveOwnedAgentsStanding !== undefined && typeof options.leaveOwnedAgentsStanding !== 'boolean') {
+      throw new AdmissionDenied('invalid Account deletion consent');
+    }
     const client = await this.pool.connect();
     let principal: { id: string; enforcement_epoch: string } | undefined;
     try {
@@ -1992,7 +2001,7 @@ export class AccessAdmissionRegistry {
       client.release();
     }
     if (!principal) return null;
-    return this.deactivatePrincipal(principal.id, principal.enforcement_epoch, true);
+    return this.deactivatePrincipal(principal.id, principal.enforcement_epoch, true, options);
   }
 
   /** One bounded row. The caller proves an edit digest with this actor and no other. */

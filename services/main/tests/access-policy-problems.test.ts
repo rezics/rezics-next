@@ -25,7 +25,7 @@ function pool(options: { allowed: boolean; earlier?: boolean }) {
       active: true, generation: '1', action: 'agent.control', issuer: agent, scope: null }]);
     if (sql.includes('FROM access.revocation WHERE')) return rows(options.earlier ? [{ present: 1 }] : []);
     if (sql.startsWith('UPDATE')) return rows([{ generation: '1' }]);
-    if (sql.includes('agent_controller_count')) return rows([{ allowed: options.allowed }]);
+    if (sql.includes('agent_control_continuity_allowed')) return rows([{ allowed: options.allowed }]);
     throw new Error(`Unexpected revocation query: ${sql}`);
   };
   return { connect: async () => ({ query, release() {} }) } as unknown as Pool;

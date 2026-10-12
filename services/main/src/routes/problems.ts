@@ -1,4 +1,5 @@
 import { logWorkerFault } from '@rezics/observability/log';
+import { AccountHasOwnedAgents, type AccountOwnedAgent } from '../modules/access/account-deletion-agents.ts';
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
 import { PlatformClosed } from '../modules/access/exposure.ts';
 import { platformExposureProblem } from '../modules/access/exposure-routes.ts';
@@ -134,6 +135,9 @@ export class LibraryImportTooLarge extends Error {}
 export class LibraryImportTimedOut extends Error {}
 
 interface ProblemDetails {
+  agents?: AccountOwnedAgent[];
+  hasMore?: boolean;
+  moreCount?: number;
   detail?: string;
   validation?: { path: string | null; constraint: string | null };
 }
@@ -146,6 +150,10 @@ export function problem(status: number, code: string, title: string, headers?: H
 }
 
 export function commandError(error: unknown): Response {
+  if (error instanceof AccountHasOwnedAgents) {
+    return problem(409, error.code, error.message, undefined,
+      { agents: error.agents, hasMore: error.hasMore, moreCount: error.moreCount });
+  }
   const typed = typedRefusal(error);
   if (typed) return typed;
   // An unrecognized error is answered as unavailable; the log carries its class
