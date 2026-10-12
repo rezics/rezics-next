@@ -12,6 +12,8 @@ ALTER TABLE access.account_deletion_progress_agent
     ADD COLUMN expanded boolean NOT NULL DEFAULT false;
 CREATE INDEX account_deletion_root_frontier ON access.representation (principal_id, id)
     INCLUDE (subject_id) WHERE active AND action = 'agent.control';
+CREATE INDEX account_deletion_foreign_controllers ON access.representation (subject_id, principal_id, id)
+    WHERE active AND action = 'agent.control';
 CREATE INDEX account_deletion_person_frontier
     ON access.account_deletion_progress_agent (operation_id, agent_id)
     WHERE effect = 'end' AND NOT expanded;
@@ -27,25 +29,35 @@ CREATE TABLE access.account_deletion_classification_frontier (
 CREATE INDEX account_deletion_classification_frontier_subject
     ON access.account_deletion_classification_frontier (agent_id);
 
--- The same bounded controller inventory as ordinary continuity. A surviving
--- Agent edge cuts traversal even when that Agent is a Person. Keep accounting
+-- Exclude the deleting principal before either indexed controller range. Its
+-- repeated mandates must never hide a foreign controller behind a row budget.
+-- A surviving Agent edge cuts traversal even when that Agent is a Person. Keep accounting
 -- in the owner so tests can measure actual inventory rows, independent of time.
 CREATE FUNCTION access.account_deletion_remaining_controllers(
     controlled text, deleting uuid, operation text)
 RETURNS TABLE (remaining integer, controller_rows integer)
 LANGUAGE sql STABLE AS $$
-    WITH principals AS MATERIALIZED (
+    WITH below AS MATERIALIZED (
         SELECT r.principal_id FROM access.representation r
         JOIN access.principal p ON p.id = r.principal_id AND p.active
         WHERE r.subject_id = controlled AND r.action = 'agent.control' AND r.active
-        ORDER BY r.id LIMIT 17
+            AND r.principal_id < deleting
+        ORDER BY r.principal_id, r.id LIMIT 17
+    ), above AS MATERIALIZED (
+        SELECT r.principal_id FROM access.representation r
+        JOIN access.principal p ON p.id = r.principal_id AND p.active
+        WHERE r.subject_id = controlled AND r.action = 'agent.control' AND r.active
+            AND r.principal_id > deleting
+        ORDER BY r.principal_id, r.id LIMIT 17
+    ), principals AS MATERIALIZED (
+        SELECT principal_id FROM below UNION ALL SELECT principal_id FROM above
     ), agents AS MATERIALIZED (
         SELECT e.representative_subject FROM access.representation_edge e
         JOIN access.authority_subject s ON s.id = e.representative_subject AND s.active
         WHERE e.represented_subject = controlled AND e.action = 'agent.control'
             AND e.active AND e.valid_until > clock_timestamp()
         ORDER BY e.id LIMIT 17
-    ) SELECT ((SELECT count(*) FROM principals WHERE principal_id <> deleting)
+    ) SELECT ((SELECT count(*) FROM principals)
         + (SELECT count(*) FROM agents e WHERE NOT EXISTS (
             SELECT 1 FROM access.account_deletion_progress_agent a
             WHERE a.operation_id = operation AND a.agent_id = e.representative_subject

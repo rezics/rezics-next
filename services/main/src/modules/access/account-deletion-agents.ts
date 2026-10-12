@@ -38,10 +38,11 @@ export async function lockAccountDeletionTopology(client: PoolClient): Promise<v
 }
 
 // One root page or one Person's outgoing edges per classification statement.
-// Each candidate reads at most 17 controllers per side; no prior level is scanned.
+// Each candidate reads two foreign-principal ranges and one edge range, each
+// bounded to 17 controllers; no prior level is scanned.
 export const ACCOUNT_DELETION_CLASSIFICATION_COST = {
   subjectsPerStep: MAX_EDGE_DEGREE,
-  controllerRowsPerStep: MAX_EDGE_DEGREE * CONTROLLER_CONTINUITY_COST.controllerRowsPerSide * 2,
+  controllerRowsPerStep: MAX_EDGE_DEGREE * CONTROLLER_CONTINUITY_COST.controllerRowsPerSide * 3,
 } as const;
 
 interface DeletionProgress {
@@ -163,6 +164,8 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
   const progress = initial.classification_done ? initial : await classifyAccountDeletionStep(client, principal, initial);
   if (!progress.classification_done) return { pending: true, checkBoundary: true };
   const operationId = progress.operation_id;
+  // A fresh one-step closure stays under the topology lock from its first
+  // controller read through deactivation. Only cuts or prior commits need a recheck.
   const checkBoundary = progress.needs_boundary_check || initial.classification_done || initial.steps > 0;
   if (progress.orphan_count > 0 && !progress.consent) {
     const agents = (await client.query<AccountOwnedAgent>(`SELECT a.agent_id AS id,
