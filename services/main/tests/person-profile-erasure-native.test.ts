@@ -105,7 +105,8 @@ async function productionProfileCommands(objectDirectory: string) {
       if (command.receipt.includes(':agent-profile:')) {
         editedRevision = /rv:publicProfileHead <([^>]+)>/.exec(command.update)![1]!;
       }
-      return { status: 'committed', receipt: command.receipt };
+      return { status: 'committed', position: { datasetId: DATASET,
+        dataEpoch: lineage.dataEpoch, sequence: String(commands.length) } };
     };
     graph.query = async query => {
       if (query.includes('ASK')) return { boolean: true };
@@ -157,6 +158,7 @@ test('Person command and completion query execute against retained TDB2 data', a
     join(java, `${name}.java`));
   cpSync(join(module, 'src/test/resources'), join(build, 'src/test/resources'), { recursive: true });
   cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
+  cpSync(join(root, 'infra/jena/fuseki-text.ttl'), join(build, 'text-assembler.ttl'));
   mkdirSync(join(build, 'tmp'));
   const objectDirectory = join(build, 'objects');
   writeFileSync(join(build, 'production-profile.json'), JSON.stringify(await productionProfileCommands(objectDirectory)));
@@ -244,6 +246,8 @@ import java.util.*;
 import org.apache.jena.atlas.json.*;
 import org.apache.jena.graph.*;
 import org.apache.jena.query.*;
+import org.apache.jena.query.text.*;
+import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.sparql.core.*;
 import org.apache.jena.tdb2.TDB2Factory;
@@ -449,6 +453,55 @@ public class PersonProfileCallerContractTest {
       graph.deleteAny(current,iri("${person}"),rv("head"),Node.ANY);graph.add(current,iri("${person}"),rv("head"),iri("${head}"));
       data.commit();
     }finally{data.end();}
+  }
+  private static void textAbsentAfterPurge(Set<Quad> quads) throws Exception {
+    var definition=new EntityDefinition("uri","label","graph");definition.set("publicTitle",rv("publicTitle"));
+    definition.setUidField("uid");definition.setLangField("lang");var config=new TextIndexConfig(definition);config.setValueStored(true);
+    var index=new TextIndexLucene(new ByteBuffersDirectory(),config);var filtered=new FilteredGraphTextIndex(index);
+    var indexed=new DatasetGraphText(DatasetGraphFactory.createTxnMem(),filtered,new TextDocProducerTriples(filtered));
+    try {indexed.begin(ReadWrite.WRITE);quads.forEach(indexed::add);indexed.commit();indexed.end();
+      assertTrue("purged native text index still matches the Person's name",filtered.query(rv("publicTitle"),"ExactIdentifying","${publicGraph}",null,100).isEmpty());
+      assertFalse("the surviving Work and coauthor prefix documents remain searchable",filtered.query(rv("publicTitle"),"rezicsprefixdirectory","${publicGraph}",null,100).isEmpty());
+    }finally{indexed.close();index.close();}
+  }
+  @Test public void offlinePersonPurgeRefreshesAuthorPrefixesAndRebuildCannotRestoreTheName() throws Exception {
+    var data=fixture();Path base=Files.createTempDirectory(Path.of("tmp"),"author-prefix-purge-");
+    try {coauthorProjection(data);Set<Quad> original=snapshot(data);Node pub=iri("${publicGraph}"),a=iri("${person}"),b=iri("${coauthor}");
+      Set<Quad> coauthorEntries=new HashSet<>();Set<Node> entries=new HashSet<>();
+      for(Quad q:original)if(q.getGraph().equals(pub)&&q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(b))entries.add(q.getSubject());
+      for(Quad q:original)if(q.getGraph().equals(pub)&&entries.contains(q.getSubject())&&!(q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(a)))coauthorEntries.add(q);
+      assertFalse(coauthorEntries.isEmpty());
+      data.begin(ReadWrite.WRITE);try {var graph=data.asDatasetGraph();Node current=iri("${GRAPHS.current}");
+        graph.deleteAny(current,a,Node.ANY,Node.ANY);graph.add(current,a,RDF.type.asNode(),rv("AgentTombstone"));
+        graph.add(current,a,rv("agentKind"),rv("PersonAgent"));graph.add(current,a,rv("erasureId"),text("${proof.erasureId}"));
+        graph.add(current,a,rv("erasureEpoch"),NodeFactory.createLiteralDT("7",org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+        graph.add(pub,iri("${prefixEntry}"),rv("prefixAuthor"),a);graph.add(pub,iri("${prefixEntry}"),rv("prefixUnit"),iri("${authorUnit}"));
+        graph.add(pub,iri("${prefixEntry}"),rv("publicTitle"),text("ExactIdentifying"));
+        graph.add(pub,iri("urn:rezics:search:directory:prefix:detached"),rv("prefixAuthor"),a);
+        graph.add(pub,iri("urn:rezics:search:directory:prefix:detached"),rv("publicTitle"),text("ExactIdentifying"));data.commit();
+      }finally{data.end();}
+      var source=TDB2Factory.connectDataset(base.resolve("source").toString());
+      try {source.begin(ReadWrite.WRITE);snapshot(data).forEach(source.asDatasetGraph()::add);source.commit();source.end();}finally{source.close();}
+      ErasurePurge.main(new String[]{base.resolve("source").toString(),base.resolve("destination").toString(),"${person}","7"});
+      var output=TDB2Factory.connectDataset(base.resolve("destination").toString());Set<Quad> copied;
+      try {copied=snapshot(output);assertTrue("all coauthor entry facts survive the Person purge",copied.containsAll(coauthorEntries));
+        assertFalse(copied.stream().anyMatch(q->q.getGraph().equals(pub)&&q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(a)));
+        assertTrue(copied.contains(new Quad(iri("${GRAPHS.current}"),iri("${credit}"),rv("agent"),a)));
+      }finally{output.close();}
+      textAbsentAfterPurge(copied);
+      Path assembler=base.resolve("text.ttl");String description=Files.readString(Path.of("text-assembler.ttl"))
+        .replace("databases/rezics/tdb2",base.resolve("destination").toAbsolutePath().toString())
+        .replace("databases/rezics/lucene",base.resolve("lucene").toAbsolutePath().toString());Files.writeString(assembler,description);
+      ErasureTextIndexer.main(new String[]{"--desc="+assembler.toAbsolutePath()});
+      var rebuilt=DatasetFactory.assemble(assembler.toString());
+      try {rebuilt.begin(ReadWrite.READ);
+        try(var query=QueryExecutionFactory.create("PREFIX text: <http://jena.apache.org/text#> PREFIX rv: <${RV}> SELECT ?s WHERE { (?s ?score ?literal ?g) text:query (rv:publicTitle \\\"ExactIdentifying\\\" 100) FILTER(?g = <${publicGraph}>) }",rebuilt)){
+          assertFalse("offline native index rebuild restored the Person name",query.execSelect().hasNext());}
+        try(var query=QueryExecutionFactory.create("PREFIX text: <http://jena.apache.org/text#> PREFIX rv: <${RV}> SELECT ?s WHERE { (?s ?score ?literal ?g) text:query (rv:publicTitle \\\"rezicsprefixdirectory\\\" 100) FILTER(?g = <${publicGraph}>) }",rebuilt)){
+          assertTrue("offline index rebuild lost surviving prefix entries",query.execSelect().hasNext());}
+        rebuilt.end();
+      }finally{rebuilt.close();}
+    }finally{data.close();}
   }
   @Test public void survivingCoauthorPrefixesAndUnitsPermitCompletionAndReplay() throws Exception {
     var data=fixture();try {var command=body("coauthor");coauthorProjection(data);

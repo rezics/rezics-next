@@ -179,6 +179,46 @@ public final class ErasurePurge {
         return documents;
     }
 
+    private record PersonAuthorFootprint(Set<IndexUnit> entries, Set<Node> units, Set<Node> works) {}
+
+    /** Attribution is retained. Discover identifying copies from the Person's
+     * author edges, never by deleting every document on a credited Work. */
+    private static PersonAuthorFootprint personAuthorFootprint(DatasetGraph input, Set<Node> persons) {
+        Set<IndexUnit> entries = new HashSet<>();
+        Set<Node> units = new HashSet<>(), works = new HashSet<>();
+        for (Node person : persons) {
+            for (Node graph : new Node[]{PUBLIC_SEARCH, PRIVATE_SEARCH}) {
+                var prefixes = input.find(graph, Node.ANY, rv("prefixAuthor"), person);
+                try { while (prefixes.hasNext()) {
+                    Node entry = prefixes.next().getSubject();
+                    entries.add(new IndexUnit(graph, entry));
+                    for (Node predicate : new Node[]{rv("prefixUnit"), rv("prefixWork")}) {
+                        var references = input.find(graph, entry, predicate, Node.ANY);
+                        try { while (references.hasNext()) {
+                            Node value = references.next().getObject();
+                            if (predicate.equals(rv("prefixUnit"))) units.add(value); else works.add(value);
+                        } } finally { org.apache.jena.atlas.iterator.Iter.close(references); }
+                    }
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(prefixes); }
+            }
+            var credits = input.find(CURRENT, Node.ANY, rv("agent"), person);
+            try { while (credits.hasNext()) {
+                Node credit = credits.next().getSubject();
+                var references = input.find(CURRENT, credit, rv("work"), Node.ANY);
+                try { while (references.hasNext()) works.add(references.next().getObject()); }
+                finally { org.apache.jena.atlas.iterator.Iter.close(references); }
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(credits); }
+        }
+        return new PersonAuthorFootprint(entries, units, works);
+    }
+
+    private static boolean retainedPrefixAuthor(DatasetGraph input, IndexUnit entry, Set<Node> persons) {
+        var authors = input.find(entry.graph(), entry.subject(), rv("prefixAuthor"), Node.ANY);
+        try { while (authors.hasNext()) if (!persons.contains(authors.next().getObject())) return true; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(authors); }
+        return false;
+    }
+
     private static byte[] readCampaign(Path path) throws Exception {
         try (var input = Files.newInputStream(path)) { return input.readNBytes(8193); }
     }
@@ -285,6 +325,10 @@ public final class ErasurePurge {
                         genericRevisions.removeAll(personTargets);
                         Set<IndexUnit> textDocuments = textIndexDocuments(input, genericRevisions);
                         Set<IndexUnit> personDocuments = personIndexDocuments(input, personTargets);
+                        PersonAuthorFootprint authors = personAuthorFootprint(input, personHeads);
+                        Set<IndexUnit> exclusivePrefixes = new HashSet<>();
+                        for (IndexUnit entry : authors.entries())
+                            if (!retainedPrefixAuthor(input, entry, personHeads)) exclusivePrefixes.add(entry);
                         long retained = 0;
                         long excluded = 0;
                         var quads = input.find();
@@ -299,7 +343,10 @@ public final class ErasurePurge {
                                 && ErasurePolicy.PROFILE_PREDICATES.contains(quad.getPredicate());
                             boolean dropText = textDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
                                 || personDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()));
-                            if (dropContent || dropRevision || dropPerson || dropText) excluded++;
+                            boolean dropPrefix = exclusivePrefixes.contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
+                                || authors.entries().contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
+                                    && quad.getPredicate().equals(rv("prefixAuthor")) && personHeads.contains(quad.getObject());
+                            if (dropContent || dropRevision || dropPerson || dropText || dropPrefix) excluded++;
                             else { output.add(quad); retained++; }
                         }
                         org.apache.jena.tdb2.sys.CopyDSG.copyPrefixes(input, output);
@@ -310,6 +357,11 @@ public final class ErasurePurge {
                             output.add(REVISIONS, target, RDF.type.asNode(), ERASED_REVISION);
                             output.add(REVISIONS, target, ERASURE_EPOCH, epoch);
                         });
+                        // Recompute surviving shared units from sanitized current
+                        // state, so a later Lucene rebuild cannot recover old names.
+                        for (Node person : personHeads) PublicNameProjection.refresh(output, person);
+                        for (Node work : authors.works()) PublicNameProjection.refreshPrefixSource(output, work, Long.MAX_VALUE);
+                        for (Node unit : authors.units()) PublicNameProjection.refreshPrefixUnit(output, unit);
                         CommitHalt.commit(destination);
                         System.out.println("campaignSha256=" + campaign.sha256() + " campaignTargets=" + campaign.targets().size()
                             + " retainedQuads=" + retained + " excludedQuads=" + excluded
