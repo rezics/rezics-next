@@ -344,6 +344,7 @@ async function createReplyReportFixture(
       env,
     );
     configureDisclosure(env, new DisclosureStore(accessPool));
+    access.configureBaseline(fuseki);
     const deps: MainWorkDependencies = {
       environment: env,
       access,
