@@ -121,8 +121,9 @@ async function privateName(person: PersonAvatar): Promise<void> {
   // Keep the public graph profile to exercise the independent name owner,
   // including the interval before its derived-name projection catches up.
   const preferences = new PersonPreferencesStore(mediaStack().accessPool, async () => {});
-  const current = await preferences.read(person.member.principal, person.agent);
-  await preferences.write(person.member.principal, person.agent,
+  const principal = { ...person.member.principal, emailVerified: true };
+  const current = await preferences.read(principal, person.agent);
+  await preferences.write(principal, person.agent,
     { ...DEFAULT_PERSON_CHOICES, profileVisibility: 'private' }, current.version, randomUUID());
 }
 
