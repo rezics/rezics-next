@@ -19,7 +19,6 @@ import {
   type DisclosureFenceBasis,
   type DisclosureReader,
   type DisclosureRelationshipBasis,
-  type DisclosureSelection,
   type DisclosureTarget,
   type OwnerEstablishedGraphParent,
   type OwnerEstablishedGraphParents,
@@ -538,6 +537,19 @@ test('resolve, capture, fence and direct owner entries refuse overflow before al
   expect(sourceWork).toBe(0);
   expect(f.headQueries).toHaveLength(0);
   expect(f.ownerReads).toHaveLength(0);
+});
+
+test('strict cut readers refuse missing, incomplete and invalid per-selection bases without a global fallback', async () => {
+  for (const fenceBases of [undefined, [], [{ recoveryGeneration: '1', enforcementCut: 'bad' }],
+    Array(2).fill({ recoveryGeneration: '1', enforcementCut: hash('cut') })]) {
+    const f = fixture();
+    configureDisclosure(f.env, { read: f.reader.read, readAtCut: async inputs => ({
+      decisions: inputs.map(() => 'visible'), anonymousNames: [], fenceBases,
+    }) });
+    const selections = await resolveDisclosureSelections(f.env, [target]);
+    await expect(captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(disclose(f.env, [target], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  }
 });
 
 test('disclosure ancestry: final fence refuses moved heads, changed placement/review/attachment and owner outage', async () => {

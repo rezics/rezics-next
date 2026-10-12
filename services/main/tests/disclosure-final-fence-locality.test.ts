@@ -319,6 +319,21 @@ test('over-cap and empty scoped submissions perform no owner statements', async 
   expect(statements).toHaveLength(0);
 });
 
+test('direct owner costs count optional name probes and every actual SQL statement across chunks', async () => {
+  const { nameOwnerResolved: _resolved, ...input } = target();
+  const selection = await select(input);
+  const { client, statements } = measured(pool);
+  // A pool-only owner resolves names in Access; its checkout is still lent.
+  const poolOnlyReader = new DisclosureStore(client as unknown as Pool);
+  const issued = { ...selection.target, ancestry: selection.ancestry };
+  const result = await poolOnlyReader.readAtCut(Array(65).fill(issued), ANONYMOUS_VIEWER, 'read');
+  expect(result.decisions).toEqual(Array(65).fill('visible'));
+  expect(result.cost).toEqual({ ownerStatements: 2, recoveryStatements: 2, statements: 4,
+    nameOwnerQueries: 0, nameOwnerStatements: 2 });
+  expect(result.cost.statements).toBe(statements.length);
+  expect(statements).toHaveLength(4);
+});
+
 test('the embeddable expression shares the policy statement snapshot and recovery remains a separate global fence', async () => {
   const input = target(), selection = await select(input);
   const basis = await scopedEnforcementBasis(pool, [selection]);
