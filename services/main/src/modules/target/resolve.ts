@@ -284,34 +284,45 @@ export async function resolveTargets<Session extends TargetReadSession>(session:
     throw new WorkReadInvalid('Target batch is invalid');
   }
   if (redirectOf) return resolveTargetHeads(session, iris, capability, redirectOf, reportOwners);
+  const resolved = await resolveTargetChains(session, iris, capability, false, reportOwners);
+  return iris.map(resource => resolved.get(resource)!);
+}
+
+/** Strict and inventory reads follow the same admitted merge edges. An
+ * inventory may omit an unavailable path; it cannot stop before its survivor. */
+async function resolveTargetChains<Session extends TargetReadSession>(session: Session, iris: readonly string[],
+  capability: Capability, inventory: boolean, reportOwners?: ReportTargets<Session>) {
   const current = new Map(iris.map(resource => [resource, resource]));
   const seen = new Map(iris.map(resource => [resource, new Set<string>()]));
   const resolved = new Map<string, ResolvedTarget>();
+  const unavailable = new Set<string>();
   for (let hop = 0; hop <= TARGET_RESOLVE_COST.redirectHops; hop++) {
-    const active = [...current].filter(([source]) => !resolved.has(source));
+    const active = [...current].filter(([source]) => !resolved.has(source) && !unavailable.has(source));
     const resources = [...new Set(active.map(([, resource]) => resource))];
     const redirects = new Map<string, string>();
-    const targets = await resolveTargetHeads(session, resources, capability, () => null, reportOwners, redirects);
+    const targets = await resolveTargetHeads(session, resources, capability, () => null, reportOwners, redirects, inventory);
     const byResource = new Map(targets.map(target => [target.resource, target]));
     for (const [source, resource] of active) {
+      const target = byResource.get(resource);
+      if (!target) { unavailable.add(source); continue; }
       const path = seen.get(source)!;
       if (path.has(resource)) throw new WorkReadUnavailable('Target redirect is cyclic');
       path.add(resource);
       const next = redirects.get(resource);
-      if (!next) resolved.set(source, byResource.get(resource)!);
+      if (!next) resolved.set(source, target);
       else {
         if (!Value.Check(targetRef, next) || path.has(next)) throw new WorkReadUnavailable('Target redirect is cyclic or invalid');
         current.set(source, next);
       }
     }
-    if (resolved.size === current.size) return iris.map(resource => resolved.get(resource)!);
+    if (resolved.size + unavailable.size === current.size) return resolved;
   }
   throw new WorkReadUnavailable('Target redirect exceeds its bound');
 }
 
 async function resolveTargetHeads<Session extends TargetReadSession>(session: Session, iris: readonly string[],
   capability: Capability, redirectOf: RedirectOf, reportOwners?: ReportTargets<Session>,
-  redirects?: Map<string, string>): Promise<ResolvedTarget[]> {
+  redirects?: Map<string, string>, inventory = false): Promise<ResolvedTarget[]> {
   session.checkDeadline();
   if (!iris.length || iris.length > TARGET_RESOLVE_COST.batch
     || iris.some(resource => !Value.Check(targetRef, resource))) {
@@ -336,14 +347,17 @@ async function resolveTargetHeads<Session extends TargetReadSession>(session: Se
         } LIMIT ${owned.size + 1}`, owned.size + 1);
         collectRedirects(rows, redirects);
       }
-      const resolved = remaining.length ? await resolveTargetHeads(session, remaining, capability, () => null, undefined, redirects) : [];
+      const resolved = remaining.length ? await resolveTargetHeads(session, remaining, capability, () => null, undefined, redirects, inventory) : [];
       const all = new Map([...owned, ...resolved.map(target => [target.resource, target] as const)]);
       return iris.map(resource => all.get(canonical.get(resource)!)!);
     }
   }
   const summaries = await targetSummaries(session, resources);
-  const targets = await resolveSummarizedTargets(session, summaries, capability, false, redirects);
-  return iris.map(resource => targets.get(canonical.get(resource)!)!);
+  const targets = await resolveSummarizedTargets(session, summaries, capability, inventory, redirects);
+  return iris.flatMap(resource => {
+    const target = targets.get(canonical.get(resource)!);
+    return target ? [target] : [];
+  });
 }
 
 /** Inventory disclosure shares the exact resolver with command/capability reads.
@@ -351,17 +365,23 @@ async function resolveTargetHeads<Session extends TargetReadSession>(session: Se
  * ambiguous heads or graph movement. This does not grant partial command success. */
 export async function resolveVisibleTargets(session: TargetReadSession, resources: readonly string[],
   capability: Capability): Promise<ResolvedTarget[]> {
+  const targets = await resolveVisibleTargetSources(session, resources, capability);
+  return resources.flatMap(resource => {
+    const target = targets.get(resource);
+    return target ? [target] : [];
+  });
+}
+
+/** Preserve the requested identity alongside its admitted survivor. Page
+ * filtering grants visibility to the source only after its whole chain passes. */
+export async function resolveVisibleTargetSources(session: TargetReadSession, resources: readonly string[],
+  capability: Capability): Promise<ReadonlyMap<string, ResolvedTarget>> {
   session.checkDeadline();
   if (!resources.length || resources.length > TARGET_RESOLVE_COST.batch
     || resources.some(resource => !Value.Check(targetRef, resource))) {
     throw new WorkReadInvalid('Target batch is invalid');
   }
-  const summaries = await targetSummaries(session, [...new Set(resources)]);
-  const targets = await resolveSummarizedTargets(session, summaries, capability, true);
-  return resources.flatMap(resource => {
-    const target = targets.get(resource);
-    return target ? [target] : [];
-  });
+  return resolveTargetChains(session, resources, capability, true);
 }
 
 async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,

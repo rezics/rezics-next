@@ -1,4 +1,4 @@
-import { resolveVisibleTargets, TARGET_RESOLVE_COST } from '../target/resolve.ts';
+import { resolveVisibleTargetSources, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 
 /** A range has at most 101 candidates. Distinct targets are hydrated once in
@@ -19,9 +19,9 @@ function visibleTargetBatchReader(session: WorkReadSession, worksOnly: boolean) 
     const visible = new Set<string>();
     for (let at = 0; at < resources.length; at += TARGET_RESOLVE_COST.batch) {
       session.checkDeadline();
-      for (const target of await resolveVisibleTargets(session,
+      for (const [source, target] of await resolveVisibleTargetSources(session,
         resources.slice(at, at + TARGET_RESOLVE_COST.batch), 'collection-member')) {
-        if (!worksOnly || target.base === 'work') visible.add(target.resource);
+        if (!worksOnly || target.base === 'work') visible.add(source);
       }
     }
     return visible;

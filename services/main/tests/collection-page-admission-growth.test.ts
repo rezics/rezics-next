@@ -9,12 +9,16 @@ import { canReadStructureTarget, canReadStructureTargets, structureProfileFor } 
 import { collectionRoutes } from '../src/routes/collections.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import type { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
-import { orderTree, recordTree } from '../src/modules/structure/change.ts';
+import { orderTree, recordTree, pinTree } from '../src/modules/structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
 import { derivedId, orderTreeKey, type CompositionHeader } from '../src/modules/structure/graph.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
-import { WorkReadSession, WorkReadMissing } from '../src/modules/work/read-session.ts';
+import { WorkReadSession, WorkReadMissing, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { resolveTargets, TargetUnavailable } from '../src/modules/target/resolve.ts';
+import { compositionRoutes } from '../src/routes/compositions.ts';
+import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
+import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
 
 const term = (value: string) => ({ type: 'literal' as const, value });
 const uri = (value: string) => ({ type: 'uri' as const, value });
@@ -24,7 +28,7 @@ const uri = (value: string) => ({ type: 'uri' as const, value });
 async function fixture(count: number, options: { duplicate?: boolean; hidden?: (index: number) => boolean;
   gated?: (index: number) => boolean; missingRevision?: (index: number) => boolean; corrupt?: boolean;
   post?: boolean; private?: (index: number) => boolean; granted?: (index: number) => boolean;
-  erased?: (index: number) => boolean } = {}) {
+  erased?: (index: number) => boolean; merge?: 'survivor' | 'cycle' } = {}) {
   const stored = new Map<string, Uint8Array>();
   const objects: ImmutableObjects = {
     async put(bytes) {
@@ -56,6 +60,17 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
     order: await orderIndex.apply(await orderIndex.empty(cost), new Map(entries.map(row => [orderTreeKey(row), row])), cost),
     placementCount: count, measures: [], model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE };
   const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
+  const seal = derivedId('collection-admission-seal'), pins = records.map(record => ({
+    occurrence: record.occurrence, target: record.target!, revision,
+  }));
+  const pinIndex = pinTree(objects);
+  const pinRoot = await pinIndex.apply(await pinIndex.empty(cost), new Map(pins.map(pin =>
+    [`${pin.occurrence}\u0001`, pin])), cost);
+  const sealDigest = await objects.put(new TextEncoder().encode(JSON.stringify({
+    format: 'rezics-structure-seal-v1', structure, structureRevision: revision,
+    structureManifest: `sha256:${digest}`, pins: pinRoot, coverage: 'complete', unavailableCount: 0,
+    model: STRUCTURE_PROFILE,
+  })));
   const header: CompositionHeader = { structure, head: revision, generation, manifest: `urn:rezics:sha256:${digest}`,
     placementCount: count, profile: 'collection-membership', owner, component: owner, work: owner, mainVersion: owner };
   const queries: string[] = [], hydrated: string[][] = [], positionBatches: string[][] = [];
@@ -65,6 +80,10 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
     queries.push(query);
     const bindings: NonNullable<SparqlResult['results']>['bindings'] = [];
     if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?revision ?manifest ?coverage')) return { results: { bindings: [{
+      revision: uri(revision), manifest: term(`urn:rezics:sha256:${sealDigest}`),
+      coverage: uri('https://rezics.com/vocab/Complete'), unavailable: term('0'), epoch: term('epoch'), sequence: term('1'),
+    }] } };
     if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
       const resources = [...new Set([...query.matchAll(/VALUES \?work \{([^}]+)\}/g)].flatMap(match =>
         [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!)))];
@@ -97,7 +116,9 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
         } else if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
           if (options.missingRevision?.(index)) continue;
           bindings.push({ epoch: term('epoch'), sequence: term(graphSequence), r: uri(resource),
-            revision: uri(revision), type: uri('https://schema.org/CreativeWork') });
+            revision: uri(revision), type: uri('https://schema.org/CreativeWork'),
+            ...(options.merge && (index === 0 || options.merge === 'cycle' && index === 1)
+              ? { mergedInto: uri(records[index === 0 ? 1 : 0]!.target!) } : {}) });
           if (ambiguous) bindings.push({ ...bindings.at(-1)!, revision: uri(derivedId('other-revision')) });
         } else throw new Error(`Unexpected graph query: ${query}`);
       }
@@ -126,6 +147,12 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
   const session = () => new WorkReadSession(deps, new Request('http://main.test/v1/collections?position=start'),
     {}, { dataEpoch: 'epoch', sequence: '1' });
   const app = collectionRoutes(graph, deps);
+  const sealApp = compositionRoutes(graph, deps);
+  const readSeal = async () => {
+    const response = await sealApp.handle(new Request(
+      `http://main.test/v1/compositions/${structure.slice(-36)}/seals/${seal.slice(-36)}`));
+    return { status: response.status, body: await response.json() as { pins?: typeof pins; next?: string | null } };
+  };
   const read = async (limit = 100, after?: string) => {
     queries.length = hydrated.length = positionBatches.length = 0;
     const query = new URLSearchParams({ limit: String(limit), ...(after ? { after } : {}) });
@@ -138,7 +165,7 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
     return { scalar: compositionTargetReader(current, structureProfileFor(profile)),
       batch: compositionTargetBatchReader(current, structureProfileFor(profile)) };
   };
-  return { records, read, direct, environment, header, session, deps, queries, hydrated, positionBatches,
+  return { records, read, readSeal, pins, direct, environment, header, session, deps, queries, hydrated, positionBatches,
     moveGraph: () => { graphSequence = '2'; }, movePosition: () => { positionGeneration = '2'; },
     ambiguous: () => { ambiguous = true; } };
 }
@@ -159,6 +186,73 @@ test('public Collection pages batch duplicate and distinct 4/16/64 members in co
     expect(counts).toEqual([counts[0]!, counts[0]!, counts[0]!]);
     expect(counts[0]!).toBeLessThanOrEqual(12);
     console.info(`Collection ${duplicate ? 'duplicate' : 'distinct'}-target admission counts: ${JSON.stringify(counts)}`);
+  }
+});
+
+test('Work batches share strict resolver merge admission on Collection pages and composition seals', async () => {
+  for (const privateSurvivor of [true, false]) {
+    const f = await fixture(3, { merge: 'survivor', private: index => privateSurvivor && index === 1 });
+    const source = f.records[0]!.target!, survivor = f.records[1]!.target!;
+    const targets = f.records.map(record => record.target!), expected = privateSurvivor ? f.records.slice(2) : f.records;
+    if (privateSurvivor) await expect(resolveTargets(f.session(), [source], 'collection-member'))
+      .rejects.toBeInstanceOf(TargetUnavailable);
+    else expect((await resolveTargets(f.session(), [source], 'collection-member'))[0]!.resource).toBe(survivor);
+    const read = f.direct('collection-membership');
+    const scalar = new Set<string>();
+    for (const target of targets) if (await read.scalar(target)) scalar.add(target);
+    expect(await read.batch([...targets, source])).toEqual(scalar);
+    expect(scalar).toEqual(new Set(expected.map(record => record.target!)));
+    const page = await f.read();
+    expect(page.status, JSON.stringify(page.body)).toBe(200);
+    expect(page.body.occurrences).toEqual(expected);
+    expect(page.body.next).toBeNull();
+    const seal = await f.readSeal();
+    expect(seal.status, JSON.stringify(seal.body)).toBe(200);
+    expect(seal.body.pins).toEqual((privateSurvivor ? f.pins.slice(2) : [...f.pins]).sort((left, right) =>
+      left.occurrence.localeCompare(right.occurrence)));
+    expect(seal.body.next).toBeNull();
+  }
+});
+
+test('Work scalar, batch, Collection page and seal reads all refuse a merge cycle', async () => {
+  const f = await fixture(2, { merge: 'cycle' }), targets = f.records.map(record => record.target!);
+  await expect(resolveTargets(f.session(), [targets[0]!], 'collection-member')).rejects.toBeInstanceOf(WorkReadUnavailable);
+  const read = f.direct('collection-membership');
+  for (const target of targets) await expect(read.scalar(target)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  await expect(read.batch(targets)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  expect((await f.read()).status).toBe(503);
+  expect((await f.readSeal()).status).toBe(503);
+});
+
+test('scalar compatibility establishes limit-50 lookahead before a later failing target, with and without a reading boundary', async () => {
+  for (const boundary of [false, true]) {
+    const f = await fixture(64);
+    const checked: string[] = [], later = f.records[51]!.target!;
+    const page = await readVisibleCompositionPage(f.environment, { structure: f.header.structure, header: f.header,
+      limit: 50, visible: record => !!record.target,
+      ...(boundary ? { readingBoundary: new ReadingBoundary(f.session()) } : {}),
+      canReadTarget: async target => {
+        checked.push(target);
+        if (target === later) throw new Error('Later target owner unavailable');
+        return true;
+      } });
+    expect(page.occurrences).toEqual(f.records.slice(0, 50));
+    expect(page.next).not.toBeNull();
+    expect(checked).toEqual(f.records.slice(0, 51).map(record => record.target!));
+  }
+});
+
+test('scalar compatibility stops at cancellation between target callbacks with and without a reading boundary', async () => {
+  for (const boundary of [false, true]) {
+    const f = await fixture(64), controller = new AbortController();
+    let checks = 0;
+    await expect(fusekiReadBudget.run({ signal: controller.signal, callsLeft: 10, bytesLeft: 100_000 },
+      () => readVisibleCompositionPage(f.environment, { structure: f.header.structure, header: f.header,
+        limit: 50, visible: record => !!record.target,
+        ...(boundary ? { readingBoundary: new ReadingBoundary(f.session()) } : {}),
+        canReadTarget: async () => { checks++; controller.abort(new Error('Read cancelled')); return false; },
+      }))).rejects.toThrow('Read cancelled');
+    expect(checks).toBe(1);
   }
 });
 
