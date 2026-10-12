@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
 import { unlink } from 'node:fs/promises';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { SuitabilityStore } from '../../../services/main/src/modules/suitability/store.ts';
@@ -9,7 +8,6 @@ import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalog
 import { SerialStatisticsProjection } from '../../../services/main/src/modules/work/serial-projection.ts';
 import { ReadRankingProjection, rankingBuckets } from '../../../services/main/src/modules/rankings/projection.ts';
 import { refreshReadRankingAdmissions } from '../../../services/main/src/modules/feed/ranking-admission.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import {
   realmSelectionDigest,
   selectRealmLocal,
@@ -89,10 +87,9 @@ test('G-904: interactive derived inventories retain rated targets and enforce cu
         { value: last[order], work: last.work }, 2);
       expect([...first, ...second].map(row => row.work)).toEqual(works.map(work => work.work));
     }
-    let graphSequence = '0';
     const serial = new SerialStatisticsProjection(
       home.stack.accessPool,
-      { query: async () => ({ rows: [{ sequence: graphSequence }] }) } as unknown as Pool,
+      home.relay,
       home.stack.contentPool,
       home.stack.env,
     );
@@ -420,17 +417,16 @@ test('G-904: interactive derived inventories retain rated targets and enforce cu
     expect(candidates.candidates.map((item) => item.work)).toContain(publicWork.work);
     // Ratings leave an interactive container's cached totals intact. An actual
     // Work read fence on a child must still suppress those totals at the same cut.
-    graphSequence = (
-      await home.stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
-      GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:sequence ?sequence } }`)
-    ).results!.bindings[0]!.sequence!.value;
+    await home.projectRelay();
+    const position = await home.deps.relayPosition.read();
+    if (!position) throw new Error('Serial fixture has no acknowledged Main position');
     const generation = randomUUID(),
       child = other.work,
       occurrence = native();
     await home.stack.accessPool.query(
       `INSERT INTO access.serial_stats_checkpoint(singleton,generation,graph_epoch,sequence)
       VALUES(true,$1,$2,$3) ON CONFLICT(singleton) DO UPDATE SET generation=$1,graph_epoch=$2,sequence=$3`,
-      [generation, home.stack.env.lineage.dataEpoch, graphSequence],
+      [generation, position.dataEpoch, position.sequence],
     );
     await home.stack.accessPool.query(
       `INSERT INTO access.serial_summary(generation,work,chapter_count,word_count,last_updated_at)
