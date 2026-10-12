@@ -34,7 +34,7 @@ type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bod
 type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?: string[];
   concept?: string[]; excludeConcept?: string[];
   status?: SerialStatus[]; excludeStatus?: SerialStatus[];
-  length?: string; language?: string; limit: number; cursor?: string };
+  length?: string; publicationYear?: string; language?: string; limit: number; cursor?: string };
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
 export type CompiledQuery =
@@ -254,7 +254,7 @@ function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQue
     }
     for (const condition of conditions) {
       const facet = resolveFacet(condition.facet)!;
-      if (!['type', 'concept', 'status', 'length'].includes(facet.name)) {
+      if (!['type', 'concept', 'status', 'length', 'publicationYear'].includes(facet.name)) {
         fail(`${facet.name} has no Zone browse template`);
       }
       if (condition.interpretation || condition.applicability || condition.bind) {
@@ -263,6 +263,12 @@ function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQue
       if (facet.name === 'length') {
         if (!condition.range || request.length !== undefined) fail('Length needs one range');
         request.length = `${condition.range!.min ?? ''}-${condition.range!.max ?? ''}`;
+        continue;
+      }
+      if (facet.name === 'publicationYear') {
+        if (!condition.range || request.publicationYear !== undefined) fail('Publication year needs one range');
+        const min = String(Number(condition.range!.min ?? '1')), max = String(Number(condition.range!.max ?? '9999'));
+        request.publicationYear = min === max ? min : `${min}-${max}`;
         continue;
       }
       const operator = condition.any ? 'any' : condition.none ? 'none' : fail(`${facet.name} all has no Zone browse template`);

@@ -40,6 +40,9 @@ type FacetStep =
   | { kind: 'selection' }
   /** Count of this unit over the Work's published composition. */
   | { kind: 'units'; unit: Term }
+  /** Calendar years of active date-published Statements accepted globally; typed
+   * gYear/date/dateTime literals within 1..9999, as work-publication-years reads. */
+  | { kind: 'publication-year' }
   /** The Work's current, unerased primary credits in `role`: a native Agent, or a human-confirmed source author. */
   | { kind: 'credit'; role: string }
   /** Objects of Statements about the node reached, accepted in the Query's Context. A term left out
@@ -171,6 +174,7 @@ function step(value: FacetStep, location: string): Record<string, unknown> {
         ...(value.types ? { types: value.types.map(type => iri(type, location)) } : {}) };
     case 'selection':
     case 'occurrence':
+    case 'publication-year':
       knownFields(value, ['kind'], location);
       return { kind: value.kind };
     case 'related':
@@ -274,6 +278,13 @@ export function compileFacet(facet: FacetDefinition): Record<string, unknown> {
     throw new Error(`${id} units must count nonnegative integers over a Work's composition`);
   }
   const groups = (item: FacetStep) => item.kind === 'occurrence' || item.kind === 'related';
+  if (facet.path.some(item => item.kind === 'publication-year')
+    && (facet.path.length !== 1 || facet.appliesTo !== 'resource' || facet.subject !== 'schema:CreativeWork'
+      || facet.source !== 'global' || facet.operators.join() !== 'range' || facet.values.length !== 1
+      || facet.values[0]?.kind !== 'datatype' || facet.values[0].datatype !== 'xsd:integer'
+      || facet.values[0].min !== '1' || facet.values[0].max !== '9999')) {
+    throw new Error(`${id} publication-year must bound global accepted calendar years within 1..9999`);
+  }
   const occurrence = groups(facet.path.at(-1)!);
   if (!!facet.occurrence !== occurrence || facet.path.slice(0, -1).some(groups)
     || (occurrence && facet.appliesTo !== 'resource')) {

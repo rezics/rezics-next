@@ -5,6 +5,7 @@ import { primaryDiscoveryCredits } from '../discovery/credits.ts';
 import type { BrowseAfter, BrowseEntry } from '../zone-browse/store.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
 import { compileQuery, QueryRejected } from '../query/compile.ts';
+import { publicationYearBoundsError } from '../query/year-fact.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
@@ -63,19 +64,22 @@ const facets: Record<BrowseFacet, { test: (item: BrowseCandidate, value: string)
 export interface BrowseFilter {
   type?: readonly string[]; concept?: readonly string[]; status?: readonly string[];
   length?: { min?: string; max?: string };
+  publicationYear?: { min: string; max: string };
   conceptExclude?: readonly string[]; statusExclude?: readonly string[];
 }
 
 export function browseFilter(query: Query): BrowseFilter {
   const [min, max] = query.length?.split('-') ?? [];
+  const [from, to = from] = query.publicationYear?.split('-') ?? [];
   return { type: query.type, concept: query.concept, conceptExclude: query.excludeConcept,
+    publicationYear: from === undefined ? undefined : { min: from, max: to! },
     status: query.status, statusExclude: query.excludeStatus,
     length: query.length === undefined ? undefined : { ...(min ? { min } : {}), ...(max ? { max } : {}) } };
 }
 
 type Condition = { facet: 'type' | 'concept' | 'status'; any: string[] }
   | { facet: 'concept' | 'status'; none: string[] }
-  | { facet: 'length'; range: { min?: string; max?: string } };
+  | { facet: 'length' | 'publicationYear'; range: { min?: string; max?: string } };
 
 /** The applied Conditions, including exclusions, never depend on count buckets. */
 export function filterDocument(filter: BrowseFilter): { all: Condition[] } {
@@ -84,23 +88,52 @@ export function filterDocument(filter: BrowseFilter): { all: Condition[] } {
     if (filter[facet]?.length) all.push({ facet, any: [...filter[facet]!] });
   }
   if (filter.length) all.push({ facet: 'length', range: { ...filter.length } });
+  if (filter.publicationYear) all.push({ facet: 'publicationYear', range: { ...filter.publicationYear } });
   if (filter.conceptExclude?.length) all.push({ facet: 'concept', none: [...filter.conceptExclude] });
   if (filter.statusExclude?.length) all.push({ facet: 'status', none: [...filter.statusExclude] });
   return { all };
 }
 
 /** GET is an adapter to the same admission as POST /v1/query, before any read session exists. */
-export function compileZoneBrowse(realm: string, query: Query) {
+export function compileZoneBrowse(realm: string, query: Query): ReturnType<typeof compileQuery> {
   const controls = ['language', 'limit', 'cursor', 'q', 'sort', 'type', 'concept', 'excludeConcept',
-    'status', 'excludeStatus', 'length'];
+    'status', 'excludeStatus', 'length', 'publicationYear'];
   if (Object.keys(query).some(key => !controls.includes(key))) {
     throw new QueryRejected('unsupported_query_shape', 'Zone browse parameter has no admitted Facet');
+  }
+  if (query.publicationYear !== undefined) {
+    const [from, to = from] = query.publicationYear.split('-').map(Number);
+    const error = publicationYearBoundsError(from, to);
+    if (!/^[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?$/.test(query.publicationYear) || error) {
+      throw new QueryRejected('invalid_query', error ?? 'Publication year range is invalid');
+    }
   }
   const text = query.q?.trim();
   return compileQuery({ profile: 'filter-document-v2', context: { realm }, scope: { kind: 'realm', realm },
     filter: filterDocument(browseFilter(query)), ...(text ? { text: { phrase: text } } : {}),
     sort: query.sort ?? (text ? 'relevance' : 'newest'),
     page: { size: query.limit ?? ZONE_BROWSE_COST.pageSize, continuation: query.cursor } });
+}
+
+/** Same active, globally accepted date-published facts as work-publication-years.
+ * EXISTS keeps multiple Statements for a Work from duplicating its browse row. */
+function publicationYearFilter(value: string | undefined): string {
+  if (value === undefined) return '';
+  const [from, to = from] = value.split('-').map(Number);
+  return `FILTER EXISTS {
+    GRAPH ${iri(GRAPHS.current)} {
+      ?yearStatement a rdf:Statement ; rdf:subject ?work ; rdf:predicate schema:datePublished ;
+        rdf:object ?published ; rv:statementState rv:Active ; rv:head ?yearHead .
+      ?yearSlot a rv:DecisionSlot ; rv:decisionTarget ?yearStatement ; rv:targetKind rv:StatementTarget ;
+        rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ?yearDecision .
+    }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?yearDecision a rv:StatementDecision ; rv:component ?yearSlot ; rv:outcome rv:Accepted .
+    }
+    FILTER(DATATYPE(?published) IN (<http://www.w3.org/2001/XMLSchema#gYear>,
+      <http://www.w3.org/2001/XMLSchema#date>, <http://www.w3.org/2001/XMLSchema#dateTime>))
+    FILTER(YEAR(?published) >= ${from} && YEAR(?published) <= ${to})
+  }`;
 }
 
 const holds = (item: BrowseCandidate, filter: BrowseFilter, except?: BrowseFacet) => {
@@ -175,7 +208,7 @@ async function readTags(session: WorkReadSession, realm: string, works: readonly
 }
 
 async function readBrowseBatch(session: WorkReadSession, realm: string, ids: string[],
-  filter: BrowseFilter, entries?: Map<string, BrowseEntry>) {
+  filter: BrowseFilter, entries?: Map<string, BrowseEntry>, publicationYear?: string) {
   if (!ids.length) return { candidates: [] as BrowseCandidate[], tags: 'unavailable' as const,
     rows: new Map<string, ReadRow>(), summaries: new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>() };
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
@@ -186,8 +219,7 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
     GRAPH ${iri(GRAPHS.revisions)} { ?evidence rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
     GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head . OPTIONAL { ?work rv:completionStatus ?status } }
     ${publicWork('?work', '?main')}
-
-
+    ${publicationYearFilter(publicationYear)}
   } LIMIT ${ids.length + 1}`, ids.length);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence || !row.revisionEpoch
     || !/^\d+$/.test(row.sequence?.value ?? '')
@@ -234,7 +266,8 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
  * Works. Filters may yield an empty page with a continuation: a request budget
  * never becomes a Realm population limit. Cursor keys address examined rows. */
 export async function readZoneBrowse(session: WorkReadSession, realm: string, query: Query) {
-  compileZoneBrowse(realm, query);
+  const plan = compileZoneBrowse(realm, query);
+  if (plan.template !== 'zone-browse') throw new QueryRejected('unsupported_query_shape', 'Zone browse needs a Realm plan');
   await readRealmBasis(session, realm);
   const text = query.q?.trim() || null;
   const sort: ZoneBrowseSort = query.sort ?? (text ? 'relevance' : 'newest');
@@ -261,7 +294,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   let tags: 'current' | 'stale' | 'unavailable' = 'unavailable';
   let after = prior.after, more = false;
   const evaluate = async (ids: string[], entries?: Map<string, BrowseEntry>) => {
-    const batch = await readBrowseBatch(session, realm, ids, filter, entries);
+    const batch = await readBrowseBatch(session, realm, ids, filter, entries, plan.request.publicationYear);
     tags = batch.tags;
     for (const [work, row] of batch.rows) rows.set(work, row);
     for (const [work, summary] of batch.summaries) summaries.set(work, summary);
@@ -330,7 +363,9 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const next = more ? encodeReadCursor(binding, session.position,
     JSON.stringify({ after, current, visible }), '', cursor?.expiresAt ?? Date.now() + 300_000) : null;
   return { profile: 'zone-browse-v1' as const, realm,
-    query: { text, sort, appliedSort, textMatch: text ? 'title' as const : 'none' as const, filter: filterDocument(filter) }, facets: { ...counts, concept }, tags,
+    query: { text, sort, appliedSort, textMatch: text ? 'title' as const : 'none' as const,
+      ...plan.request.publicationYear !== undefined ? { publicationYear: plan.request.publicationYear } : {},
+      filter: filterDocument(filter) }, facets: { ...counts, concept }, tags,
     matches: { value: visible, kind: complete ? 'exact' as const : 'lower-bound' as const },
     window: { scanned: examined.length, complete }, ...pageResult(session, items, next) };
 }

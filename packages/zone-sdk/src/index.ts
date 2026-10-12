@@ -415,9 +415,9 @@ export interface BrowseHeaderSlotProps extends ZoneSlotProps {
     kept: readonly { name: string; value: string }[];
     /** The same filters with no year and no year directory. Null when neither is open. */
     clearHref: string | null;
-    /** Newest-first publication years, with the same filters and no chosen year. */
+    /** Works with any recorded publication year, keeping the same filters and selected sort. */
     directoryHref: string;
-    /** The page is that newest-first list, not one chosen year. */
+    /** The page includes all recorded publication years rather than one chosen year. */
     directory: boolean;
     /** How many of this Zone's Works, in the current order, this year view read. */
     window: number;

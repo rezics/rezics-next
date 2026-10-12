@@ -70,6 +70,8 @@ const sortValue = t.Union([t.Literal('relevance'), t.Literal('newest'), t.Litera
 export const zoneBrowseQuery = t.Object({ language: pageQuery.language, limit: pageQuery.limit,
   cursor: pageQuery.cursor, q: t.Optional(t.String({ minLength: 1, maxLength: ZONE_BROWSE_COST.textCharacters })),
   sort: t.Optional(sortValue),
+  /** An accepted first-publication calendar year, or an inclusive bounded range. */
+  publicationYear: t.Optional(t.String({ pattern: '^[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?$' })),
   type: t.Optional(t.Array(workType, many)), concept: t.Optional(t.Array(readId, many)),
   excludeConcept: t.Optional(t.Array(readId, many)),
   status: t.Optional(t.Array(status, many)),
@@ -79,7 +81,7 @@ const included = t.Object({ facet: t.Union([t.Literal('type'), t.Literal('concep
   any: t.Array(t.String(), many) });
 const excluded = t.Object({ facet: t.Union([t.Literal('concept'), t.Literal('status')]),
   none: t.Array(t.String(), many) });
-const condition = t.Union([included, excluded, t.Object({ facet: t.Literal('length'),
+const condition = t.Union([included, excluded, t.Object({ facet: t.Union([t.Literal('length'), t.Literal('publicationYear')]),
   range: t.Object({ min: t.Optional(t.String()), max: t.Optional(t.String()) }) })]);
 const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }),
   /** A Concept's name in the requested language; other values are labelled by the client's Facet vocabulary. */
@@ -87,10 +89,11 @@ const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ min
 export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), realm: readId,
   /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
   query: t.Object({ text: t.Nullable(t.String()), sort: sortValue,
+    publicationYear: t.Optional(t.String()),
     /** Title matching falls back to adoption order for requested relevance. */
     appliedSort: t.Union([t.Literal('newest'), t.Literal('updated')]),
     textMatch: t.Union([t.Literal('title'), t.Literal('none')]),
-    filter: t.Object({ all: t.Array(condition, { maxItems: 6 }) }) }),
+    filter: t.Object({ all: t.Array(condition, { maxItems: 7 }) }) }),
   /** How many of the examined public Works each value would match, with the other Facets' Conditions applied. */
   facets: t.Object({ type: facetValues, concept: facetValues, status: facetValues, length: facetValues }),
   /**

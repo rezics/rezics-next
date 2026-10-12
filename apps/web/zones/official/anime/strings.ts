@@ -5,7 +5,7 @@ const en = {
   yearLabel: 'Publication year',
   yearSubmit: 'Show this year',
   yearClear: 'Clear year',
-  yearDirectory: 'Newest years',
+  yearDirectory: 'All years',
   yearBounded: (count: string) =>
     `This year view covers this Zone's first ${count} Works in the current order, and may miss others.`,
   panelLabel: 'Catalogue facts',
@@ -47,7 +47,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: '首发年份',
     yearSubmit: '显示这一年',
     yearClear: '清除年份',
-    yearDirectory: '最新年份',
+    yearDirectory: '所有年份',
     yearBounded: (count: string) =>
       `此年份视图只涵盖本专区当前顺序中的前 ${count} 部作品，其余作品可能未列出。`,
     panelLabel: '目录事实',
@@ -82,7 +82,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: '首發年份',
     yearSubmit: '顯示這一年',
     yearClear: '清除年份',
-    yearDirectory: '最新年份',
+    yearDirectory: '所有年份',
     yearBounded: (count: string) =>
       `此年份檢視只涵蓋本專區目前順序中的前 ${count} 部作品，其餘作品可能未列出。`,
     panelLabel: '目錄事實',
@@ -117,7 +117,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: '公開年',
     yearSubmit: 'この年を表示',
     yearClear: '年をクリア',
-    yearDirectory: '新しい年から',
+    yearDirectory: 'すべての年',
     yearBounded: (count: string) =>
       `この年の表示は、このゾーンの現在の順で先頭から ${count} 作品までです。それ以外は含まれないことがあります。`,
     panelLabel: 'カタログの事実',
@@ -152,7 +152,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: '첫 공개 연도',
     yearSubmit: '이 연도 보기',
     yearClear: '연도 지우기',
-    yearDirectory: '최근 연도',
+    yearDirectory: '모든 연도',
     yearBounded: (count: string) =>
       `이 연도 보기는 이 존의 현재 순서에서 앞쪽 ${count}개 작품까지를 다루며, 그 밖의 작품은 빠질 수 있습니다.`,
     panelLabel: '카탈로그 사실',
@@ -187,7 +187,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: 'Erscheinungsjahr',
     yearSubmit: 'Dieses Jahr zeigen',
     yearClear: 'Jahr entfernen',
-    yearDirectory: 'Neueste Jahre',
+    yearDirectory: 'Alle Jahre',
     yearBounded: (count: string) =>
       `Diese Jahresansicht umfasst die ersten ${count} Werke dieser Zone in der aktuellen Reihenfolge und kann andere auslassen.`,
     panelLabel: 'Katalogfakten',
@@ -222,7 +222,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: 'Année de publication',
     yearSubmit: 'Afficher cette année',
     yearClear: 'Retirer l’année',
-    yearDirectory: 'Années les plus récentes',
+    yearDirectory: 'Toutes les années',
     yearBounded: (count: string) =>
       `Cette vue par année couvre les ${count} premières œuvres de cette zone dans l’ordre actuel, et peut en omettre d’autres.`,
     panelLabel: 'Faits du catalogue',
@@ -257,7 +257,7 @@ const translations: Record<ZoneLocale, Strings> = {
     yearLabel: 'Año de publicación',
     yearSubmit: 'Mostrar este año',
     yearClear: 'Quitar el año',
-    yearDirectory: 'Años más recientes',
+    yearDirectory: 'Todos los años',
     yearBounded: (count: string) =>
       `Esta vista por año abarca las primeras ${count} obras de esta zona en el orden actual, y puede omitir otras.`,
     panelLabel: 'Datos del catálogo',

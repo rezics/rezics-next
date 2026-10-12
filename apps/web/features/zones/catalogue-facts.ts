@@ -8,6 +8,7 @@ import { reader, readClassifications, settle } from '../work-page/read.ts';
 import { idOf } from '../work-page/route.ts';
 import type { Loaded } from '../work-page/types.ts';
 import { catalogueCountProperty, type CatalogueCountProperty } from './catalogue-count.ts';
+export { catalogueYearParam } from './catalogue-year.ts';
 
 // Facts a catalogue card and the leading panel state. Every value is a Statement or a classification
 // the Work page already reads, or a year the publication-year template returned. A count's predicate
@@ -223,14 +224,6 @@ export function catalogueYears(stated: readonly number[], listed?: readonly numb
   if (stated.length || !listed?.length) return [...stated];
   return [...new Set(listed.filter(year => Number.isInteger(year) && year >= 1 && year <= 9999))]
     .sort((left, right) => right - left);
-}
-
-/** A year the address names, or null when it names none. A value outside 1..9999 is dropped, not guessed. */
-export function catalogueYearParam(value: string | string[] | undefined): number | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw || !/^[1-9][0-9]{0,3}$/.test(raw)) return null;
-  const year = Number(raw);
-  return year >= 1 && year <= 9999 ? year : null;
 }
 
 export function catalogueText(value: string, locale: string): ZoneText {

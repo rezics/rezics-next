@@ -28,7 +28,7 @@ import {
   releaseFilterActive,
 } from '../release-filter/state.ts';
 import { zoneContentText } from '../language/untagged.ts';
-import { applyCatalogueYear } from '../zones/catalogue-browse.tsx';
+import { applyCatalogueYear, catalogueBrowseQuery } from '../zones/catalogue-browse.tsx';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadHomeModules } from './modules.ts';
 import {
@@ -332,7 +332,8 @@ export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadR
       }
       const state = parseBrowseState(search);
       const [page, facets] = await Promise.all([
-        readZoneBrowse(view.context.realm, locale, mainBrowseQuery(state)),
+        readZoneBrowse(view.context.realm, locale,
+          view.pkg?.catalogue ? catalogueBrowseQuery(search) : mainBrowseQuery(state)),
         readFacets(),
       ]);
       if (!page.ok) return failure(view, 'browse', page.failure, page.reference);
