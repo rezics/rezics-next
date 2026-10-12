@@ -680,6 +680,7 @@ export class GovernanceStore {
       ) {
         throw new GovernanceStale('resume or cancel the pending decision before reconsidering');
       }
+      let restorationRestrictionId: string | null = null;
       if (releasing.has(input.outcome)) {
         // A cancelled restoration may be the head. Eligibility still belongs
         // to the original restriction, as it does during owner confirmation.
@@ -691,6 +692,7 @@ export class GovernanceStore {
             AND outcome IN ('reject','restrict','interim_restrict','final_restrict')
           ORDER BY case_sequence DESC LIMIT 1`, [caseRow.id])).rows[0]?.id;
         if (!restriction) throw new GovernanceStale('Restoration has no original restriction');
+        restorationRestrictionId = restriction;
         await assertCounterNoticeRestoration(client, caseRow.id, restriction, this.clock());
         for (const target of input.targets) await assertNoParallelRestriction(client, target, restriction);
       }
@@ -780,6 +782,8 @@ export class GovernanceStore {
           [caseRow.id],
         )
       ).rowCount;
+      const copyright = !!(await client.query(`SELECT 1 FROM access.rights_complaint
+        WHERE report_id = $1 AND claimed_right = 'copyright'`, [basisReportId])).rowCount;
       let appealUpheld = false;
       if (ncii && releasing.has(input.outcome)) {
         appealUpheld = input.outcome === 'reverse' && input.reversesDecisionId !== null
@@ -800,8 +804,10 @@ export class GovernanceStore {
           throw new GovernanceInvalid('participation restrictions require a future expiry');
         }
         const plan = (await this.effects?.plan?.(target, input.outcome, {
-          caseId: caseRow.id, decisionId, reversesDecisionId: input.reversesDecisionId,
-          ncii, appealUpheld,
+          caseId: caseRow.id, decisionId,
+          reversesDecisionId: restorationRestrictionId ?? input.reversesDecisionId,
+          ncii, appealUpheld, copyright,
+          restorationAuthorized: releasing.has(input.outcome),
         })) ?? {};
         if (ncii && plan.media) plan.ncii = true;
         if (['participation', 'capability'].includes(target.effect) && !plan.participant) {

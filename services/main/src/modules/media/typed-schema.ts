@@ -214,11 +214,13 @@ const clearanceDecision = media.table('clearance_decision', {
 const suppressedDigest = media.table('suppressed_digest', {
   digest: text('digest').notNull(), createdAt: createdAt(), id: uuid('id').primaryKey().defaultRandom(),
   caseId: uuid('case_id'), decisionId: uuid('decision_id'),
+  scope: text('scope', { enum: ['all', 'imported-cover'] }).notNull().default('all'),
 });
 const suppressionLift = media.table('suppression_lift', {
   suppressionId: uuid('suppression_id').primaryKey(), caseId: uuid('case_id').notNull(),
   decisionId: uuid('decision_id').notNull(), operationId: text('operation_id').notNull(),
   liftedAt: timestamp('lifted_at', { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+  scope: text('scope', { enum: ['all', 'imported-cover'] }).notNull().default('all'),
 });
 
 const importedCoverRevision = media.table('imported_cover_revision', {

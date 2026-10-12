@@ -44,10 +44,13 @@ export interface MediaAdmission {
 }
 
 /** Saved governance basis. Only an upheld appeal supplies a lift to the owner. */
+export type CopySuppressionScope = 'all' | 'imported-cover';
 export interface CopySuppression {
   id: string;
   caseId: string;
   decisionId: string;
+  /** Omitted on retained NCII plans, which continue to cover all assets. */
+  scope?: CopySuppressionScope;
 }
 export interface CopySuppressionLift extends CopySuppression {
   reversesDecisionId: string;
@@ -316,24 +319,25 @@ async function receipt(client: PoolClient, args: { operationId: string; digest: 
 async function registerCopySuppression(client: PoolClient, digest: string, basis?: CopySuppression): Promise<string> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${digest}`]);
   const existing = (await client.query<{ id: string; digest: string; case_id: string | null;
-    decision_id: string | null; lifted: boolean }>(`SELECT d.*,
+    decision_id: string | null; scope: CopySuppressionScope; lifted: boolean }>(`SELECT d.*,
     EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id) AS lifted
     FROM media.suppressed_digest d WHERE ($2::uuid IS NOT NULL AND d.id = $2)
-      OR ($2::uuid IS NULL AND d.digest = $1 AND NOT EXISTS (
+      OR ($2::uuid IS NULL AND d.digest = $1 AND d.scope = $3 AND NOT EXISTS (
         SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id))
-    ORDER BY d.created_at DESC,d.id DESC LIMIT 1`, [digest, basis?.id ?? null])).rows[0];
+    ORDER BY d.created_at DESC,d.id DESC LIMIT 1`, [digest, basis?.id ?? null, basis?.scope ?? 'all'])).rows[0];
   if (existing && (existing.digest !== digest || existing.lifted
+    || existing.scope !== (basis?.scope ?? 'all')
     || (basis && (existing.case_id !== basis.caseId || existing.decision_id !== basis.decisionId))))
     throw new MediaStale('copy suppression basis changed');
   if (existing) return existing.id;
   const id = basis?.id ?? randomUUID();
-  await client.query(`INSERT INTO media.suppressed_digest (id,digest,case_id,decision_id)
-    VALUES ($1,$2,$3,$4)`, [id, digest, basis?.caseId ?? null, basis?.decisionId ?? null]);
+  await client.query(`INSERT INTO media.suppressed_digest (id,digest,case_id,decision_id,scope)
+    VALUES ($1,$2,$3,$4,$5)`, [id, digest, basis?.caseId ?? null, basis?.decisionId ?? null, basis?.scope ?? 'all']);
   const operationId = `media-copy-digest:${id}`;
   await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
     outcome: 'succeeded', eventType: 'media.copy.suppression.started',
     payload: { digest, suppression: id, caseId: basis?.caseId ?? null,
-      decisionId: basis?.decisionId ?? null } });
+      decisionId: basis?.decisionId ?? null, scope: basis?.scope ?? 'all' } });
   return id;
 }
 
@@ -654,7 +658,7 @@ export class MediaStore {
         ELSE NULL END AS clearance_reason
       FROM media.upload u JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.representation r ON r.upload_id = u.id
-      LEFT JOIN LATERAL (SELECT media.digest_suppressed(r.byte_digest)
+      LEFT JOIN LATERAL (SELECT media.digest_suppressed(r.byte_digest,a.cover_only)
         OR (r.clearance = 'rejected' AND r.clearance_reason = 'staff-rejected')
         OR EXISTS (SELECT 1 FROM media.transform_job j WHERE j.source_id=r.id
           AND j.profile='required-image-match-v1' AND j.status='failed') AS rejected)
@@ -803,7 +807,7 @@ export class MediaStore {
           s.actor, s.authority_epoch, $2 FROM media.asset a
         JOIN media.asset_state s ON s.id = a.state_head
         WHERE a.id = $3 AND s.moderation <> 'suppressed'
-          AND media.digest_suppressed($4)`,
+          AND media.digest_suppressed($4,a.cover_only)`,
       [randomUUID(), operationId, current.asset, verdict.sha256]);
       return { asset: current.asset, upload, representation, sha256: verdict.sha256, status: 'activated',
         reason: null, replayed: false };
@@ -1066,7 +1070,7 @@ export class MediaStore {
       WHERE m.original_digest = $1 AND (
         (m.source_record_id = $2 AND m.provider = $3 AND m.namespace = $4 AND m.external_id = $5
           AND s.moderation = 'suppressed')
-        OR (media.delivery_clearance(p) = 'rejected' AND media.digest_suppressed(p.byte_digest))
+        OR (media.delivery_clearance(p) = 'rejected' AND media.digest_suppressed(p.byte_digest,a.cover_only))
       ) LIMIT 1`, [provenance.originalDigest, sourceRecord, provenance.source.provider,
       provenance.source.namespace, provenance.source.externalId]);
     return result.rows.length > 0;
@@ -1329,7 +1333,7 @@ export class MediaStore {
       lifecycle: row.lifecycle as string, objectNamespace: row.object_namespace as string } : null;
   }
 
-  /** Internal governance capability. Each call denies all exact-byte copies immediately
+  /** Internal governance capability. Each call denies scoped exact-byte copies immediately
    * and advances at most 100 asset histories. Continue with the returned asset cursor. */
   async suppressIdenticalCopies(originalDigest: string, after: string | null = null, limit = 100,
     basis?: CopySuppression,
@@ -1337,7 +1341,8 @@ export class MediaStore {
     suppressed: number; continuation: string | null }> {
     if (!sha.test(originalDigest) || (after !== null && !uuid.test(after))
       || !Number.isInteger(limit) || limit < 1 || limit > 100
-      || (basis && ![basis.id, basis.caseId, basis.decisionId].every(value => uuid.test(value))))
+      || (basis && (!['all', 'imported-cover'].includes(basis.scope ?? 'all')
+        || ![basis.id, basis.caseId, basis.decisionId].every(value => uuid.test(value)))))
       throw new MediaInvalid('invalid copy suppression');
     const suppressionId = await transaction(this.pool, async client => {
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
@@ -1348,9 +1353,11 @@ export class MediaStore {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${originalDigest}`]);
       if ((await client.query('SELECT 1 FROM media.suppression_lift WHERE suppression_id = $1',
         [suppressionId])).rowCount) throw new MediaStale('copy suppression has been lifted');
-      const candidates = await client.query<{ id: string }>(`SELECT DISTINCT asset_id AS id FROM media.representation
-        WHERE kind = 'original' AND byte_digest = $1 AND ($2::uuid IS NULL OR asset_id > $2)
-        ORDER BY asset_id LIMIT $3`, [originalDigest, after, limit + 1]);
+      const candidates = await client.query<{ id: string }>(`SELECT DISTINCT p.asset_id AS id
+        FROM media.representation p JOIN media.asset a ON a.id = p.asset_id
+        WHERE p.kind = 'original' AND p.byte_digest = $1 AND ($2::uuid IS NULL OR p.asset_id > $2)
+          AND ($4 = 'all' OR a.cover_only)
+        ORDER BY p.asset_id LIMIT $3`, [originalDigest, after, limit + 1, basis?.scope ?? 'all']);
       const batch = candidates.rows.slice(0, limit);
       let suppressed = 0;
       for (const asset of batch) {
@@ -1386,7 +1393,8 @@ export class MediaStore {
       || (lift && (suppressed || ![lift.id, lift.caseId, lift.decisionId,
         lift.reversesDecisionId].every(value => uuid.test(value))))
       || (suppression && (!suppressed || lift ||
-        ![suppression.id, suppression.caseId, suppression.decisionId].every(value => uuid.test(value))))) {
+        ![suppression.id, suppression.caseId, suppression.decisionId].every(value => uuid.test(value))))
+      || !['all', 'imported-cover'].includes((lift ?? suppression)?.scope ?? 'all')) {
       throw new MediaInvalid('invalid moderation original');
     }
     const requestDigest = hash(JSON.stringify(lift
@@ -1395,10 +1403,13 @@ export class MediaStore {
     return transaction(this.pool, async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
       const previous = await prior(client, operationId, requestDigest, 'media.screen.review');
-      const original = (await client.query<{ byte_digest: string }>(
-        "SELECT byte_digest FROM media.representation WHERE id = $1 AND kind = 'original'",
+      const original = (await client.query<{ byte_digest: string; cover_only: boolean }>(
+        `SELECT p.byte_digest,a.cover_only FROM media.representation p
+          JOIN media.asset a ON a.id = p.asset_id WHERE p.id = $1 AND p.kind = 'original'`,
         [source])).rows[0];
       if (!original) throw new MediaStale('media original is unavailable');
+      if ((lift ?? suppression)?.scope === 'imported-cover' && !original.cover_only)
+        throw new MediaStale('copy scope does not cover this asset');
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`media-copy:${original.byte_digest}`]);
       // Keep existing operation digests replayable. The saved governance plan
@@ -1410,7 +1421,7 @@ export class MediaStore {
       }
       const row = (
         await client.query(
-          `SELECT a.id,a.state_head,s.*,p.byte_digest FROM media.asset a
+          `SELECT a.id,a.state_head,a.cover_only,s.*,p.byte_digest FROM media.asset a
         JOIN media.asset_state s ON s.id = a.state_head
         JOIN media.representation p ON p.asset_id = a.id AND p.id = $1 AND p.kind = 'original'
         WHERE p.availability = 'available' FOR UPDATE OF a,p`,
@@ -1421,15 +1432,16 @@ export class MediaStore {
         throw new MediaStale('media state changed');
       if (lift) {
         const basis = (await client.query(`SELECT 1 FROM media.suppressed_digest d
-          WHERE d.id = $1 AND d.digest = $2 AND d.case_id = $3 AND d.decision_id = $4
+          WHERE d.id = $1 AND d.digest = $2 AND d.case_id = $3 AND d.decision_id = $4 AND d.scope = $5
             AND NOT EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id)
             AND NOT EXISTS (SELECT 1 FROM media.suppressed_digest other
-              WHERE other.digest = d.digest AND other.id <> d.id AND NOT EXISTS (
+              WHERE other.digest = d.digest AND other.id <> d.id AND (other.scope = 'all' OR $6)
+                AND NOT EXISTS (
                 SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = other.id))`,
-        [lift.id, row.byte_digest, lift.caseId, lift.reversesDecisionId])).rowCount;
+        [lift.id, row.byte_digest, lift.caseId, lift.reversesDecisionId, lift.scope ?? 'all', row.cover_only])).rowCount;
         if (!basis) throw new MediaStale('appeal suppression basis changed');
       } else if (!suppressed && (await client.query(
-        'SELECT 1 WHERE media.digest_suppressed($1)', [row.byte_digest])).rowCount) {
+        'SELECT 1 WHERE media.digest_suppressed($1,$2)', [row.byte_digest, row.cover_only])).rowCount) {
         throw new MediaStale('identical-copy restoration requires an upheld appeal');
       }
       if (suppression) await registerCopySuppression(client, original.byte_digest, suppression);
@@ -1442,8 +1454,8 @@ export class MediaStore {
         payload: { asset: row.asset_id, source, suppressed, lift: lift ?? null },
       });
       if (lift) await client.query(`INSERT INTO media.suppression_lift
-        (suppression_id,case_id,decision_id,operation_id) VALUES ($1,$2,$3,$4)`,
-      [lift.id, lift.caseId, lift.decisionId, operationId]);
+        (suppression_id,case_id,decision_id,operation_id,scope) VALUES ($1,$2,$3,$4,$5)`,
+      [lift.id, lift.caseId, lift.decisionId, operationId, lift.scope ?? 'all']);
       const decision = operationUuid(operationId);
       await client.query(
         `INSERT INTO media.clearance_decision (id,source_id,decision_id,clearance,operation_id)
@@ -1476,21 +1488,26 @@ export class MediaStore {
   async restoreIdenticalCopies(lift: CopySuppressionLift, after: string | null = null, limit = 100):
     Promise<{ restored: number; continuation: string | null }> {
     if (![lift.id, lift.caseId, lift.decisionId, lift.reversesDecisionId].every(value => uuid.test(value))
+      || !['all', 'imported-cover'].includes(lift.scope ?? 'all')
       || (after !== null && !uuid.test(after)) || !Number.isInteger(limit) || limit < 1 || limit > 100)
       throw new MediaInvalid('invalid copy restoration');
     return transaction(this.pool, async client => {
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
-      const row = (await client.query<{ digest: string }>(`SELECT d.digest
+      const row = (await client.query<{ digest: string; scope: CopySuppressionScope }>(`SELECT d.digest,d.scope
         FROM media.suppressed_digest d JOIN media.suppression_lift l ON l.suppression_id = d.id
-        WHERE d.id = $1 AND d.decision_id = $2 AND l.case_id = $3 AND l.decision_id = $4`,
-      [lift.id, lift.reversesDecisionId, lift.caseId, lift.decisionId])).rows[0];
+        WHERE d.id = $1 AND d.decision_id = $2 AND l.case_id = $3 AND l.decision_id = $4
+          AND d.scope = $5 AND l.scope = d.scope`,
+      [lift.id, lift.reversesDecisionId, lift.caseId, lift.decisionId, lift.scope ?? 'all'])).rows[0];
       if (!row) throw new MediaStale('upheld appeal receipt is unavailable');
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${row.digest}`]);
-      if ((await client.query('SELECT 1 WHERE media.digest_suppressed($1)', [row.digest])).rowCount)
+      if ((await client.query('SELECT 1 WHERE media.digest_suppressed($1,$2)',
+        [row.digest, row.scope === 'imported-cover'])).rowCount)
         throw new MediaStale('a later decision suppressed these copies');
-      const candidates = await client.query<{ id: string }>(`SELECT DISTINCT asset_id AS id FROM media.representation
-        WHERE kind = 'original' AND byte_digest = $1 AND ($2::uuid IS NULL OR asset_id > $2)
-        ORDER BY asset_id LIMIT $3`, [row.digest, after, limit + 1]);
+      const candidates = await client.query<{ id: string }>(`SELECT DISTINCT p.asset_id AS id
+        FROM media.representation p JOIN media.asset a ON a.id = p.asset_id
+        WHERE p.kind = 'original' AND p.byte_digest = $1 AND ($2::uuid IS NULL OR p.asset_id > $2)
+          AND ($4 = 'all' OR a.cover_only)
+        ORDER BY p.asset_id LIMIT $3`, [row.digest, after, limit + 1, row.scope]);
       const batch = candidates.rows.slice(0, limit);
       let restored = 0;
       for (const asset of batch) {
@@ -1498,7 +1515,9 @@ export class MediaStore {
           p.operation_id AS activation,p.clearance_reason,p.availability
           FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
           JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original' AND p.byte_digest = $2
-          WHERE a.id = $1 ORDER BY p.id LIMIT 1 FOR UPDATE OF a,p`, [asset.id, row.digest])).rows[0]!;
+          WHERE a.id = $1 AND NOT media.digest_suppressed(p.byte_digest,a.cover_only)
+          ORDER BY p.id LIMIT 1 FOR UPDATE OF a,p`, [asset.id, row.digest])).rows[0];
+        if (!current) continue;
         if (current.lifecycle !== 'active' || current.availability !== 'available'
           || current.moderation !== 'suppressed'
           || (current.operation_id !== `media-copy:${lift.id}:${asset.id}`

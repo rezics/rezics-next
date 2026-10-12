@@ -6,7 +6,7 @@ import type { DecisionOutcome, DecisionTargetInput } from './store.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable } from './store.ts';
 import type { Pool } from 'pg';
 import { MediaStore, MediaStale, copySuppressionId,
-  type CopySuppression, type CopySuppressionLift } from '../media/store.ts';
+  type CopySuppression, type CopySuppressionLift, type CopySuppressionScope } from '../media/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 
 export interface EffectPlan {
@@ -44,6 +44,7 @@ export interface ModerationEffects {
   plan?(target: DecisionTargetInput, outcome: DecisionOutcome, context?: {
     caseId: string; decisionId: string; reversesDecisionId: string | null;
     ncii: boolean; appealUpheld: boolean;
+    copyright?: boolean; restorationAuthorized?: boolean;
   }): Promise<EffectPlan>;
   apply(operationId: string, ordinal: number, target: DecisionTargetInput,
     plan?: EffectPlan,
@@ -91,13 +92,14 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             state_head: string;
             id: string;
             byte_digest: string;
+            cover_only: boolean;
           }>(
             target.owner === 'media' && target.component === 'media_use'
-              ? `SELECT a.owner,a.state_head,p.id,p.byte_digest FROM media.use u
+              ? `SELECT a.owner,a.state_head,p.id,p.byte_digest,a.cover_only FROM media.use u
            JOIN media.asset a ON a.id = u.asset_id
            JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original'
            WHERE u.target = $1 AND u.asset_revision_id = $2::uuid AND u.id = $3::uuid LIMIT 1`
-              : `SELECT a.owner,a.state_head,p.id,p.byte_digest FROM media.asset a
+              : `SELECT a.owner,a.state_head,p.id,p.byte_digest,a.cover_only FROM media.asset a
            JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original'
            LEFT JOIN content.revision r ON r.id = $2::uuid
                       WHERE a.id = $1 AND (p.id = $2::uuid OR (r.variant_id = a.variant_id AND r.body @> jsonb_build_object(
@@ -119,21 +121,32 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             state: original.state_head,
             digest: original.byte_digest,
           };
-          if (context?.ncii) {
+          const scope = context?.ncii ? 'all'
+            : context?.copyright && original.cover_only ? 'imported-cover' : null;
+          if (context) {
             if (['restore', 'reverse'].includes(outcome)) {
-              if (!context.appealUpheld || !context.reversesDecisionId)
-                throw new GovernanceStale('identical-copy restoration requires an upheld appeal');
-              const suppression = (await media.pool.query<{ id: string }>(
-                `SELECT id FROM media.suppressed_digest d WHERE digest = $1
-                  AND case_id = $2 AND decision_id = $3 AND NOT EXISTS (
-                    SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id)`,
-                [original.byte_digest, context.caseId, context.reversesDecisionId])).rows[0];
-              if (!suppression) throw new GovernanceStale('appealed copy suppression is unavailable');
-              plan.lift = { id: suppression.id, caseId: context.caseId, decisionId: context.decisionId,
-                reversesDecisionId: context.reversesDecisionId };
-            } else {
+              // Restoration follows the saved decision's scope, including when
+              // later evidence classifies the case differently. Older copyright
+              // restrictions without a digest basis retain original-only lifts.
+              const suppression = (await media.pool.query<{
+                id: string; scope: CopySuppressionScope; lifted: boolean;
+              }>(`SELECT d.id,d.scope,EXISTS (
+                  SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id) AS lifted
+                FROM media.suppressed_digest d WHERE digest = $1 AND case_id = $2 AND decision_id = $3`,
+              [original.byte_digest, context.caseId, context.reversesDecisionId])).rows[0];
+              if (suppression) {
+                if (suppression.lifted || !context.reversesDecisionId
+                  || !(suppression.scope === 'all' ? context.ncii && context.appealUpheld
+                    : context.restorationAuthorized))
+                  throw new GovernanceStale('identical-copy restoration requires its authorized reversal');
+                plan.lift = { id: suppression.id, caseId: context.caseId, decisionId: context.decisionId,
+                  reversesDecisionId: context.reversesDecisionId, scope: suppression.scope };
+              } else if (context.ncii) {
+                throw new GovernanceStale('appealed copy suppression is unavailable');
+              }
+            } else if (scope) {
               plan.suppression = { id: copySuppressionId(context.decisionId, original.byte_digest),
-                caseId: context.caseId, decisionId: context.decisionId };
+                caseId: context.caseId, decisionId: context.decisionId, scope };
             }
           }
         }
@@ -173,8 +186,8 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
           if (plan.ncii && !(restricted ? plan.suppression : plan.lift))
             throw new GovernanceStale('NCII decision has no saved suppression basis');
           await store.moderateOriginal(receipt, plan.media.source, plan.media.state, restricted, plan.lift,
-            restricted && plan.ncii ? plan.suppression : undefined);
-          if (restricted && plan.ncii) {
+            restricted ? plan.suppression : undefined);
+          if (restricted && plan.suppression) {
             const result = await store.suppressIdenticalCopies(
               plan.media.digest,
               continuation ?? null,
