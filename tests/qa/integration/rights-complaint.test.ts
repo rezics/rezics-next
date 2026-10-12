@@ -11,6 +11,7 @@ import { GovernanceStore } from '../../../services/main/src/modules/governance/s
 import { RightsCounterNotices } from '../../../services/main/src/modules/rights/counter-notice-worker.ts';
 import { addBusinessDays } from '../../../services/main/src/modules/public-report/contract.ts';
 import { RightsStore, rightsExportUseScope } from '../../../services/main/src/modules/rights/store.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { planExport, type VerifiedExportMember } from '../../../services/main/src/modules/export/planner.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
@@ -187,10 +188,10 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
       };
       await grant(account.a.id, submitter, 'governance.appeal');
       await grant(account.b.id, decider, 'governance.rights.decide');
-      await access.query(`INSERT INTO access.scope_gate (id) VALUES ('rights:assess') ON CONFLICT DO NOTHING`);
-      await access.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id,
-        action, valid_until) VALUES ($1, $2, $2, 'rights:assess', 'rights.assess', now() + interval '1 hour')`,
-      [randomUUID(), submitter]);
+      await grantFixtureAuthority(access, { scope: 'rights:assess', requireDispatch: true,
+        representations: [{ principalId: principals.get(account.a.id)!, actor: submitter,
+          action: 'rights.assess', lifetime: '8 hours' }],
+        grant: { actor: submitter, action: 'rights.assess', lifetime: '8 hours' } });
 
       const intake = (revision: string) => source.submit(principals.get(account.a.id)!, `intake-${revision}`,
         { provider: 'fixture', namespace: 'book', externalId: 'reported-book', sourceRevision: revision,
