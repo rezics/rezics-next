@@ -114,7 +114,7 @@ test('a private Zone-only home needs Zone read authority and private Realm homes
   expect((await readZoneHomeTarget(h.env, h.resource, undefined, {
     zoneReadable: async zone => { zones.push(zone); return zone === h.zone; },
   }))?.disclosure).toBe('restricted');
-  expect(zones).toEqual([h.zone]);
+  expect(zones).toEqual([h.zone, h.zone]);
   const realm = id();
   h.visibilityRows[0]!.realm = cell(realm);
   expect(await readZoneHomeTarget(h.env, h.resource, undefined, { zoneReadable: async () => true })).toBeNull();
@@ -159,7 +159,7 @@ test('restricted and erased homes return absent before Content reads while the s
   state.bundle!.homeErased = true;
   expect(await readZonePublishedHomeContent(work, state, ['fr'])).toBeNull();
   expect(contentReads).toBe(0);
-  expect(h.policyTargets).toHaveLength(5);
+  expect(h.policyTargets).toHaveLength(4);
   expect(state.bundle!.navigationRevision).toBe(navigationRevision);
   expect(state.bundle!.pages).toHaveLength(2);
   expect(state.cost).toEqual(originalCost);

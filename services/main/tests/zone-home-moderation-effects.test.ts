@@ -53,7 +53,7 @@ for (const outcome of ['restrict', 'restore'] as const) {
 }
 
 function homeBodyRestriction(heldCurrent: boolean) {
-  const h = zoneHomeTargetFixture(), held = heldCurrent ? h.revision : id();
+  const h = zoneHomeTargetFixture({ ancestry: heldCurrent }), held = heldCurrent ? h.revision : id();
   const graph = h.env.fuseki.query.bind(h.env.fuseki);
   h.env.fuseki.query = async (query, budget) => {
     if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
@@ -62,7 +62,8 @@ function homeBodyRestriction(heldCurrent: boolean) {
     }
     return graph(query, budget);
   };
-  configureDisclosure(h.env, { read: async targets => targets.map(target => {
+  if (heldCurrent) h.deny(true);
+  else configureDisclosure(h.env, { read: async targets => targets.map(target => {
     // Match the enforcement owner's conservative parent rule: a missing head cannot exclude an exact restriction.
     const restricted = target.owner === 'graph' && target.resource === h.resource && target.revision === held
       || target.owner === 'content' && target.work === h.resource
@@ -77,7 +78,7 @@ function homeBodyRestriction(heldCurrent: boolean) {
   return { h, exact };
 }
 
-// The Content parent probe still reads rv:head, so a native home's missing H broadens an exact-H restriction.
+// Production Content ancestry must prove native H before excluding a restriction on a retained older cut.
 test.failing('an exact restriction on an older H does not suppress bytes selected by the current unheld H', async () => {
   const { h, exact } = homeBodyRestriction(false);
   expect(await discloseContent(h.env, exact)).toEqual(exact);

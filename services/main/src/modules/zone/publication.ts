@@ -162,7 +162,7 @@ export async function readZonePublishedHomeContent(
   state: Awaited<ReturnType<typeof readZonePublication>>, languages: readonly string[] = [], variantId?: string) {
   if (variantId !== undefined && (!Value.Check(ZonePublishedPage.properties.variantId, variantId)
     || !state.bundle)) throw new ZoneUnavailable('Published Zone home is unavailable');
-  if (!state.bundle || state.disclosure !== 'public') return null;
+  if (!state.bundle || state.disclosure !== 'public' || state.bundle.homeErased) return null;
   const visible = await homeCutVisible(work.environment, state);
   if (state.bundle.homeErased || !visible) return null;
   const pages = state.bundle.pages.filter(page => page.page === (state.bundle!.homeDocument ?? state.zone));

@@ -42,6 +42,7 @@ export function zoneHomeTargetFixture(options: { ancestry?: boolean } = {}) {
       if (query.includes('?kind ?space ?realm ?disclosure')) return { results: { bindings: visibilityRows } };
       if (query.includes('SELECT ?zone ?revision ?routesRevision')) return { results: { bindings: rows } };
       if (query.includes('SELECT ?target WHERE')) return { results: { bindings: [] } };
+      if (query.includes('SELECT DISTINCT ?kind ?head')) return { results: { bindings: [{ kind: { type: 'uri', value: `${RV}Space` } }] } };
       if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
         return { results: { bindings: [{ work: zoneHomeTargetCell(resource) }] } };
       }
