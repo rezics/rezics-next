@@ -1985,11 +1985,16 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', '/r/last.md', '-C', '/w']));
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1]
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
-    // Fresh and resumed sessions both compact far below the account's window.
-    expect(args).toContain('model_auto_compact_token_limit=200000');
+    // Sol states its real window and compacts at 80% of it; the account's own config declares more than the model takes.
+    expect(args).toContain('model_context_window=500000');
+    expect(args).toContain('model_auto_compact_token_limit=400000');
     expect(args).toContain('tool_output_token_limit=4000');
+    // Luna keeps its own limit and no window override, fresh or resumed.
     const resumed = launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'luna' })[1];
     expect(resumed).toContain('model_auto_compact_token_limit=200000');
+    expect(resumed.some(arg => arg.startsWith('model_context_window='))).toBe(false);
+    expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1])
+      .toContain('model_auto_compact_token_limit=400000');
     const previous = process.env.GOAL_CODEX_COMPACT_TOKENS;
     try {
       process.env.GOAL_CODEX_COMPACT_TOKENS = '120000';

@@ -627,7 +627,8 @@ export function launchCommand(options: { id: string; effort: string; session: st
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
-      '-c', `model_auto_compact_token_limit=${codexCompactTokens()}`,
+      ...(engine === 'luna' ? [] : ['-c', `model_context_window=${SOL_CONTEXT_WINDOW}`]),
+      '-c', `model_auto_compact_token_limit=${codexCompactTokens(engine)}`,
       '-c', `tool_output_token_limit=${codexToolOutputTokens()}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
@@ -639,13 +640,22 @@ export function launchCommand(options: { id: string; effort: string; session: st
     '--output-format', 'json', '--', prompt]];
 }
 
-/** A worker compacts its context at this size. The account's own limit is 900,000 tokens, and every
- * model call resends the whole context: over 949 attempts to 2026-10-10, resumed sessions averaged
- * 780,000 tokens a call and took 73% of all input tokens. `GOAL_CODEX_COMPACT_TOKENS` overrides it. */
-export const CODEX_COMPACT_TOKENS = 200_000;
-function codexCompactTokens(): number {
+/** Sol's context window in Codex since 2026-10-12 (it was 272,000). The account's own config still declares
+ * 1,000,000 with compaction at 900,000, which is more than the model takes, so a worker states the real one. */
+export const SOL_CONTEXT_WINDOW = 500_000;
+/** Where a worker compacts its context. Every model call resends the whole context, so a larger limit
+ * costs tokens and time on each step of a long session; a smaller one compacts sooner, and a compaction
+ * loses detail the worker then reads again or gets wrong. Measured to 2026-10-12, counting each resumed
+ * session by its growth and not by its running total: a step carries 44,000 tokens on average (Sol
+ * 57,000), so the limit binds only on long sessions. Sol compacts at 80% of its window; Luna's window is
+ * not published the same way and stays at 200,000. `GOAL_CODEX_COMPACT_TOKENS` overrides both.
+ * (An earlier note here said resumed sessions averaged 780,000 tokens a call: that counted a resumed
+ * session's cumulative total once per attempt. Their real average before any limit was 118,000.) */
+export const CODEX_COMPACT_TOKENS = { sol: 400_000, luna: 200_000 } as const;
+function codexCompactTokens(engine: Engine): number {
   const override = Number(process.env.GOAL_CODEX_COMPACT_TOKENS);
-  return Number.isSafeInteger(override) && override > 0 ? override : CODEX_COMPACT_TOKENS;
+  if (Number.isSafeInteger(override) && override > 0) return override;
+  return engine === 'luna' ? CODEX_COMPACT_TOKENS.luna : CODEX_COMPACT_TOKENS.sol;
 }
 
 /** What one command's output may add to a worker's context. Sol's own default is 10,000 tokens; a token

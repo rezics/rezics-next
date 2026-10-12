@@ -199,16 +199,22 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   the real thing (real endpoints, real tool output), not only mocks.
 - **Token efficiency** (maintainer, 2026-10-11: "token 效率不高，任务安排不合理 …
   luna max 实现只不过成本低了，不一定能降低 token 效率，你得想办法提高效率"). A cheaper
-  model lowers the price of a token, not the number spent. Measured over 949
-  Codex attempts on 519 tasks up to 2026-10-10 (26 billion input tokens):
-  - **Context size.** Every model call resends the whole context. A resumed
-    session averaged 780,000 tokens a call and a fresh one 116,000; the 39% of
-    attempts that resumed a session took 73% of the input. `goalctl` now compacts
-    a Codex worker at 200,000 tokens (`GOAL_CODEX_COMPACT_TOKENS`), so resuming
-    for a review fix is affordable again; start fresh when the task changes
-    direction.
-  - **Cancelled work.** 29% of the input went to tasks that were later
-    cancelled, and the 46 tasks with four or more attempts took 63%. A task
+  model lowers the price of a token, not the number spent. Measured over 946
+  Codex attempts on 516 tasks up to 2026-10-10: 10.3 billion input tokens,
+  counting a resumed session by its growth (its log carries a running total,
+  and summing those totals gave 26 billion and the wrong conclusions first
+  written here):
+  - **Context size.** Every model call resends the whole context. A step
+    carried 85,000 tokens on average, 118,000 in a resumed session and 68,000
+    in a fresh one. Since 2026-10-11 a command's output is cut at 4,000 tokens
+    and a worker compacts at a fixed size, and a step carries 44,000. A Sol
+    worker now states the model's real window (500,000 since 2026-10-12) and
+    compacts at 400,000; Luna compacts at 200,000
+    (`GOAL_CODEX_COMPACT_TOKENS` overrides both). The limit only binds on long
+    sessions, where a compaction costs re-reading and review rounds.
+  - **Cancelled work.** 18% of the input went to tasks that were later
+    cancelled, and the 37 tasks with four or more attempts took 33%; on
+    2026-10-11 the cancelled share was 3% and the many-attempt share 40%. A task
     that has not landed after three attempts stops: it goes back to analysis and
     is split, re-specified or cancelled. Attempts lost to a dropped session or
     a quota pause do not count, and neither does a resume that starts the next
