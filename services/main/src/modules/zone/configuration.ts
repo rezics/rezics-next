@@ -366,7 +366,7 @@ export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironm
 export async function publishZoneSite(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'activePrincipalId' | 'withOwnerAuthority'>>,
+    & Partial<Pick<AccessAdmissionRegistry, 'activePrincipalId' | 'withOwnerAuthority' | 'withPreservationFence'>>,
   request: Request, input: ZoneSitePublicationInput, content?: ContentCore,
 ): Promise<ZoneSitePublicationReceipt & { replayed: boolean }> {
   const { zone, expectedHead, actingSubject, idempotencyKey, ...publication } = input;
@@ -408,13 +408,14 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
     & Partial<Pick<AccessAdmissionRegistry, 'canMarkOfficialZone' | 'activePrincipalId' | 'withOwnerAuthority'
-      | 'assertAuthority'>>,
+      | 'assertAuthority' | 'withPreservationFence'>>,
   request: Request, input: ZoneRevisionInput, media?: Pick<MediaDependencies, 'store' | 'objects'>,
   content?: ContentCore) {
   if (input.operation === 'publish') {
     checkZoneSitePublishSelection(input.publication);
     if (input.patch !== undefined) throw new InvalidZoneConfiguration('Site publication cannot patch configuration');
     if (!content) throw new ZonePublicationUnavailable('Content owner is unavailable');
+    if (!access.withPreservationFence) throw new ZonePublicationUnavailable('Home publication fence is unavailable');
   } else if (input.publication !== undefined) {
     throw new InvalidZoneConfiguration('Only site publication may select page revisions');
   }
@@ -804,8 +805,13 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         // Pinning and the graph switch are separate owner effects. Recheck and
         // hold the Zone edit proof during the switch so revocation in between
         // cannot publish a page from a now-denied editor.
-        await access.withOwnerAuthority({ principal, actingSubject: input.actingSubject,
-          action: 'zone.edit', scope }, dispatch);
+        // H enters the retained erasure closure at this switch. The document's
+        // shared fence keeps inventory, journaling and suppression ahead of any
+        // competing cut; native erasure policy still refuses erased exact bytes.
+        const fenced = await access.withPreservationFence!(config.homeDocument!, admission.id,
+          () => access.withOwnerAuthority!({ principal, actingSubject: input.actingSubject,
+            action: 'zone.edit', scope }, dispatch));
+        if (fenced.held) throw new ZonePublicationUnavailable('Home publication is unavailable');
       } else await dispatch();
     } catch (error) {
       if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {

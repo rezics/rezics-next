@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
@@ -10,8 +10,8 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { FusekiClient, type CommandEnvelope, type CommandResult, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { readErasure, sha256 } from '../src/modules/erasure/journal.ts';
 import { ErasureService, requestContentErasure } from '../src/modules/erasure/request.ts';
-import { lockPreservationTarget } from '../src/modules/public-report/preservation.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { createZoneHomePublicationFixture } from './support/zone-home-publication-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const graphProfile = 'erasure-graph-v1';
@@ -154,28 +154,38 @@ class HomeClosureGraph extends FusekiClient {
   }
 }
 
-async function contentRevision(homeDocument: string): Promise<string> {
-  const variant = `urn:rezics:variant:${randomUUID()}`;
-  const revision = randomUUID();
-  await contentPool!.query(`INSERT INTO content.variant (id, resource_id, language_kind, direction)
-    VALUES ($1, $2, 'zxx', 'none')`, [variant, homeDocument]);
+async function contentRevision(publication: Pick<ReturnType<typeof createZoneHomePublicationFixture>,
+  'reference' | 'serializedJson' | 'body'>): Promise<string> {
+  const { reference, serializedJson, body } = publication;
+  const { language } = reference;
+  await contentPool!.query(`INSERT INTO content.variant
+    (id, resource_id, language_kind, language_tag, original_language_tag, direction)
+    VALUES ($1, $2, $3, $4, $5, $6)`, [reference.variantId, reference.resourceId, language.kind,
+    language.kind === 'tag' ? language.tag : null, language.kind === 'tag' ? language.originalTag : null, reference.direction]);
   await contentPool!.query(`INSERT INTO content.revision (id, variant_id, operation_id, format, model, provenance,
     byte_digest, byte_length, serialized_bytes, body)
-    VALUES ($1, $2, $3, 'rezics-content-json-v1', 'fixture', '{}'::jsonb, $4, 2, $5, '{}'::jsonb)`,
-  [revision, variant, `home-erasure-${revision}`, createHash('sha256').update('{}').digest('hex'), Buffer.from('{}')]);
-  return revision;
+    VALUES ($1, $2, $3, 'rezics-content-json-v1', $4, '{}'::jsonb, $5, $6, $7, $8::jsonb)`,
+  [reference.revisionId, reference.variantId, `home-erasure-${reference.revisionId}`, reference.model,
+    reference.byteDigest, reference.byteLength, Buffer.from(serializedJson), JSON.stringify(body)]);
+  return reference.revisionId;
 }
 
 // Home erasure closure ordering rule: fence, inventory, journal, suppression proof, release; retries recompute closure under the fence.
 test.failing('a racing home cut is journaled under the publication fence and remains complete on retry', async () => {
-  const homeDocument = resource(), firstHome = resource(), racingHome = resource();
-  const revision = await contentRevision(homeDocument);
+  const homeDocument = resource(), firstHome = resource();
   let signalAttempt!: () => void;
   const fence: FenceProbe = { held: false, attempts: 0,
     firstAttempt: new Promise<void>(resolveAttempt => { signalAttempt = resolveAttempt; }),
     signalAttempt: () => signalAttempt() };
   const graph = new HomeClosureGraph(inspectionPool!, homeDocument, firstHome,
     { dataEpoch: randomUUID(), routingEpoch: randomUUID() }, fence);
+  let racingHome!: string, signalPublisher!: () => void, releasePublisher!: () => void;
+  const publisherEntered = new Promise<void>(resolveEntered => { signalPublisher = resolveEntered; });
+  const publisherGate = new Promise<void>(resolveGate => { releasePublisher = resolveGate; });
+  const publication = createZoneHomePublicationFixture({ preservationPool: preservationPool!, homeDocument, firstHome,
+    onBeforeCommit: async home => { racingHome = home; signalPublisher(); await publisherGate; },
+    onCommit: home => { graph.homes.push(home); } });
+  const revision = await contentRevision(publication);
   const environment = { fuseki: graph, lineage: graph.lineage, objectDirectory: join(root, '.temp') } as unknown as WorkActivationEnvironment;
   const admissionId = randomUUID(), principalId = randomUUID();
   const input = { actingSubject: resource(), resourceId: homeDocument,
@@ -191,15 +201,17 @@ test.failing('a racing home cut is journaled under the publication fence and rem
     recordGraphOutcome: async () => undefined,
   } as never;
   const service = new ErasureService(relayPool!, contentPool!, probeFence(preservationPool!, fence));
-  const publication = await inspectionPool!.connect();
-  await publication.query('BEGIN');
-  await lockPreservationTarget(publication, homeDocument);
+  const published = publication.publish().then(result => ({ result, error: undefined }),
+    (error: unknown) => ({ result: undefined, error }));
   const request = () => requestContentErasure(service, environment, account, access,
     new Request('http://main.local'), input).then(result => ({ result, error: undefined }),
       (error: unknown) => ({ result: undefined, error }));
-  let released = false;
-  const initial = request();
+  let initial: ReturnType<typeof request> | undefined;
   try {
+    await Promise.race([publisherEntered, published.then(outcome => {
+      throw new Error(`site publication ended before its native switch: ${String(outcome.error)}`);
+    })]);
+    initial = request();
     await Promise.race([fence.firstAttempt, initial.then(outcome => {
       throw new Error(`erasure ended before the publication fence: ${String(outcome.error)}`);
     })]);
@@ -207,9 +219,10 @@ test.failing('a racing home cut is journaled under the publication fence and rem
       `SELECT target.target_ref FROM relay.erasure_target target
        JOIN relay.erasure intent ON intent.id = target.erasure_id WHERE intent.operation_id = $1`,
       [`erasure:${admissionId}`])).rows.map(target => target.target_ref).sort();
-    graph.homes.push(racingHome);
-    await publication.query('COMMIT');
-    released = true;
+    releasePublisher();
+    const publicationResult = await published;
+    expect(publicationResult.error).toBeUndefined();
+    expect(publicationResult.result?.homeRevision).toBe(racingHome);
     const first = await initial;
     const journalId = (await inspectionPool!.query<{ id: string }>(
       'SELECT id FROM relay.erasure WHERE operation_id = $1', [`erasure:${admissionId}`])).rows[0]!.id;
@@ -231,8 +244,9 @@ test.failing('a racing home cut is journaled under the publication fence and rem
     }).toEqual({ journalBeforeFence: [], inventoryUnderFence: true, initialTargets: expectedRefs, retryTargets: expectedRefs,
       firstError: undefined, retryError: undefined, replayed: true, retryStage: 'inventory_complete', completed: true });
   } finally {
-    if (!released) await publication.query('ROLLBACK');
-    publication.release();
+    releasePublisher();
+    await published;
     await initial;
+    publication.cleanup();
   }
 }, 15_000);
