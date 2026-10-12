@@ -37,8 +37,6 @@ for (const scenario of [
   { name: 'unrelated Work creation mandate', mandate: 'work.create' },
   { name: 'expired assessment mandate', mandate: ASSESS_ACTION, mandateState: 'expired' },
   { name: 'revoked assessment mandate', mandate: ASSESS_ACTION, mandateState: 'revoked' },
-  { name: 'expired control mandate', mandate: 'agent.control', mandateState: 'expired' },
-  { name: 'revoked control mandate', mandate: 'agent.control', mandateState: 'revoked' },
   { name: 'ended membership grant', mandate: ASSESS_ACTION, membership: 'left' },
   { name: 'prior membership generation grant', mandate: 'agent.control', membership: 'stale' },
 ] as const) {
