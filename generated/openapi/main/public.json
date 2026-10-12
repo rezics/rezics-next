@@ -301423,6 +301423,37 @@
                                       ],
                                       "type": "string"
                                     },
+                                    "contentSelections": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "byteDigest": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "language": {
+                                            "type": "string"
+                                          },
+                                          "revisionId": {
+                                            "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "variantId": {
+                                            "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "revisionId",
+                                          "variantId",
+                                          "byteDigest"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 32,
+                                      "minItems": 1,
+                                      "type": "array"
+                                    },
                                     "disclosure": {
                                       "enum": [
                                         "public",
@@ -301511,6 +301542,37 @@
                                   "projection"
                                 ],
                                 "type": "string"
+                              },
+                              "contentSelections": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "byteDigest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "language": {
+                                      "type": "string"
+                                    },
+                                    "revisionId": {
+                                      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "variantId": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "variantId",
+                                    "byteDigest"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 32,
+                                "minItems": 1,
+                                "type": "array"
                               },
                               "disclosure": {
                                 "enum": [
@@ -302001,6 +302063,37 @@
                                     ],
                                     "type": "string"
                                   },
+                                  "contentSelections": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "byteDigest": {
+                                          "pattern": "^[0-9a-f]{64}$",
+                                          "type": "string"
+                                        },
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "revisionId": {
+                                          "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "variantId": {
+                                          "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "revisionId",
+                                        "variantId",
+                                        "byteDigest"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  },
                                   "disclosure": {
                                     "enum": [
                                       "public",
@@ -302089,6 +302182,37 @@
                                 "projection"
                               ],
                               "type": "string"
+                            },
+                            "contentSelections": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "byteDigest": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "variantId": {
+                                    "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "revisionId",
+                                  "variantId",
+                                  "byteDigest"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "minItems": 1,
+                              "type": "array"
                             },
                             "disclosure": {
                               "enum": [
@@ -303051,6 +303175,37 @@
                                 ],
                                 "type": "string"
                               },
+                              "contentSelections": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "byteDigest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "language": {
+                                      "type": "string"
+                                    },
+                                    "revisionId": {
+                                      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "variantId": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "variantId",
+                                    "byteDigest"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 32,
+                                "minItems": 1,
+                                "type": "array"
+                              },
                               "disclosure": {
                                 "enum": [
                                   "public",
@@ -303139,6 +303294,37 @@
                             "projection"
                           ],
                           "type": "string"
+                        },
+                        "contentSelections": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "revisionId": {
+                                "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "variantId": {
+                                "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "revisionId",
+                              "variantId",
+                              "byteDigest"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array"
                         },
                         "disclosure": {
                           "enum": [
@@ -303612,6 +303798,37 @@
                                     ],
                                     "type": "string"
                                   },
+                                  "contentSelections": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "byteDigest": {
+                                          "pattern": "^[0-9a-f]{64}$",
+                                          "type": "string"
+                                        },
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "revisionId": {
+                                          "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "variantId": {
+                                          "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "revisionId",
+                                        "variantId",
+                                        "byteDigest"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  },
                                   "disclosure": {
                                     "enum": [
                                       "public",
@@ -303700,6 +303917,37 @@
                                 "projection"
                               ],
                               "type": "string"
+                            },
+                            "contentSelections": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "byteDigest": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "variantId": {
+                                    "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "revisionId",
+                                  "variantId",
+                                  "byteDigest"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "minItems": 1,
+                              "type": "array"
                             },
                             "disclosure": {
                               "enum": [
@@ -304658,6 +304906,37 @@
                                 ],
                                 "type": "string"
                               },
+                              "contentSelections": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "byteDigest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "language": {
+                                      "type": "string"
+                                    },
+                                    "revisionId": {
+                                      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "variantId": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "variantId",
+                                    "byteDigest"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 32,
+                                "minItems": 1,
+                                "type": "array"
+                              },
                               "disclosure": {
                                 "enum": [
                                   "public",
@@ -304746,6 +305025,37 @@
                             "projection"
                           ],
                           "type": "string"
+                        },
+                        "contentSelections": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "revisionId": {
+                                "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "variantId": {
+                                "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "revisionId",
+                              "variantId",
+                              "byteDigest"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array"
                         },
                         "disclosure": {
                           "enum": [
@@ -305219,6 +305529,37 @@
                                     ],
                                     "type": "string"
                                   },
+                                  "contentSelections": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "byteDigest": {
+                                          "pattern": "^[0-9a-f]{64}$",
+                                          "type": "string"
+                                        },
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "revisionId": {
+                                          "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "variantId": {
+                                          "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "revisionId",
+                                        "variantId",
+                                        "byteDigest"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  },
                                   "disclosure": {
                                     "enum": [
                                       "public",
@@ -305307,6 +305648,37 @@
                                 "projection"
                               ],
                               "type": "string"
+                            },
+                            "contentSelections": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "byteDigest": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "variantId": {
+                                    "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "revisionId",
+                                  "variantId",
+                                  "byteDigest"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "minItems": 1,
+                              "type": "array"
                             },
                             "disclosure": {
                               "enum": [
@@ -606870,6 +607242,37 @@
                           ],
                           "type": "string"
                         },
+                        "contentSelections": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "revisionId": {
+                                "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "variantId": {
+                                "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "revisionId",
+                              "variantId",
+                              "byteDigest"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array"
+                        },
                         "disclosure": {
                           "enum": [
                             "public",
@@ -707019,6 +707422,37 @@
                                 ],
                                 "type": "string"
                               },
+                              "contentSelections": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "byteDigest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "language": {
+                                      "type": "string"
+                                    },
+                                    "revisionId": {
+                                      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "variantId": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "variantId",
+                                    "byteDigest"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 32,
+                                "minItems": 1,
+                                "type": "array"
+                              },
                               "disclosure": {
                                 "enum": [
                                   "public",
@@ -789443,6 +789877,10 @@
                       "null"
                     ]
                   },
+                  "prepareHomeDocument": {
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "presentation": {
                     "additionalProperties": false,
                     "properties": {
@@ -790551,6 +790989,10 @@
                       "null"
                     ]
                   },
+                  "prepareHomeDocument": {
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "presentation": {
                     "additionalProperties": false,
                     "properties": {
@@ -791658,6 +792100,10 @@
                       "object",
                       "null"
                     ]
+                  },
+                  "prepareHomeDocument": {
+                    "const": true,
+                    "type": "boolean"
                   },
                   "presentation": {
                     "additionalProperties": false,
@@ -811192,6 +811638,14 @@
                     "dataEpoch": {
                       "type": "string"
                     },
+                    "homeDocument": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "homeRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "navigationRevision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -811204,6 +811658,10 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "byteDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
                           "language": {
                             "maxLength": 100,
                             "type": "string"
@@ -811309,6 +811767,14 @@
                     "dataEpoch": {
                       "type": "string"
                     },
+                    "homeDocument": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "homeRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "navigationRevision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -811321,6 +811787,10 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "byteDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
                           "language": {
                             "maxLength": 100,
                             "type": "string"
