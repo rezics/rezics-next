@@ -93,10 +93,11 @@ export function memoryInvitations(options: { refuse?: boolean } = {}) {
   return { main: { v1: { realms } } as unknown as MainClient, calls };
 }
 
-export function inboxWindow(items: StreamItem[], from = '0', head = '108'): NotificationWindow {
+export function inboxWindow(items: StreamItem[], next: string | null = null, head = '108'): NotificationWindow {
   const groups = [...new Set(items.flatMap(entry => entry.display?.groupKey ? [entry.display.groupKey] : []))]
     .map(key => ({ kind: 'reply', key, itemIds: items.filter(entry => entry.display?.groupKey === key).map(entry => entry.id) }));
-  return { generation: '1', head, readThrough: '100', items: [...items].reverse(), groups, from };
+  return { generation: '1', head, readThrough: '100', reset: false, items: [...items].reverse(), groups,
+    next };
 }
 
 /** One correction notice, active even though it has no social display. */
@@ -111,7 +112,9 @@ export function governance(sequence: number, topic: string, reason: NonNullable<
 }
 
 /** The Eden calls the page makes, answered from `stream`; each call is recorded. */
-export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; refuseTriage?: boolean; staleTriage?: boolean } = {}) {
+export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; refuseTriage?: boolean; staleTriage?: boolean;
+  generation?: string } = {}) {
+  const generation = options.generation ?? '1';
   const calls: string[] = [];
   const answer = <T>(data: T) => Promise.resolve(options.refuse
     ? { data: null, error: { status: 503, value: null } } : { data, error: null });
@@ -131,19 +134,24 @@ export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; r
       return answer({ profile: 'notification-item-triage-v1', id: params.item, saved, done, revision });
     } },
   }), {
-    get: ({ query }: { query: { after: string; limit: number; view?: string; reason?: string } }) => {
+    get: ({ query }: { query: { after?: string; limit: number; view?: string; reason?: string } }) => {
       calls.push(`page:${query.after}:${query.limit}${query.view ? `:${query.view}` : ''}${query.reason ? `:${query.reason}` : ''}`);
-      const after = Number(query.after.split(':')[1]);
-      const page = stream.filter(entry => Number(entry.sequence) > after).slice(0, query.limit);
-      return answer({ profile: 'notification-stream-page-v1', generation: '1', head: '108', reset: false,
-        readThrough: '100', items: page, groups: [], next: null });
+      const reset = query.after !== undefined && query.after.split(':')[0] !== generation;
+      const after = reset ? 0 : Number(query.after?.split(':')[1] ?? '0');
+      const remaining = stream.filter(entry => Number(entry.sequence) > after
+        && (query.view === 'saved' ? entry.saved : query.view === 'done' ? entry.done : !entry.done)
+        && (!query.reason || entry.reason === query.reason));
+      const page = remaining.slice(0, query.limit);
+      return answer({ profile: 'notification-stream-page-v1', generation, head: stream.at(-1)?.sequence ?? '0', reset,
+        readThrough: generation === '1' ? '100' : '0', items: page, groups: [],
+        next: remaining.length > query.limit ? `${generation}:${page.at(-1)!.sequence}` : null });
     },
-    hint: { get: () => answer({ profile: 'notification-stream-hint-v1', generation: '1', head: '108' }) },
+    hint: { get: () => answer({ profile: 'notification-stream-hint-v1', generation, head: stream.at(-1)?.sequence ?? '0' }) },
   });
   const main = { v1: { me: { notifications, 'notification-read-watermarks': { inbox: { put: (body: {
     readThrough: string }) => {
     calls.push(`read-through:${body.readThrough}`);
-    return answer({ profile: 'notification-read-watermark-v1', generation: '1', readThrough: body.readThrough });
+    return answer({ profile: 'notification-read-watermark-v1', generation, readThrough: body.readThrough });
   } } } } } } as unknown as MainClient;
   return { main, calls };
 }

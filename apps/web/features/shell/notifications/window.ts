@@ -1,17 +1,15 @@
 import type { MainClient } from '../../feed/types.ts';
 import { settle, type Loaded } from '../../feed/types.ts';
 
-// Main's notification stream (`services/main/src/routes/notifications.ts`) is
-// read forward from a cursor, oldest first, as a device syncs it. The page
-// shows newest first, so it reads windows ending at the stream's head and
-// walks back one window at a time.
+// Main pages filtered matches forward, oldest first. Its continuation owns
+// coverage: sequence gaps cannot tell the client whether more matches remain.
 
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 type StreamPage = Ok<MainClient['v1']['me']['notifications']['get']>;
 export type StreamItem = StreamPage['items'][number];
 type StreamGroup = StreamPage['groups'][number];
 
-/** Notifications per window: Main's largest page. */
+/** Matches per page: Main's largest page. */
 const NOTIFICATION_WINDOW = 50;
 
 /**
@@ -45,36 +43,32 @@ export interface NotificationWindow {
   generation: string;
   head: string;
   readThrough: string;
-  /** Newest first. */
+  reset: boolean;
+  /** Newest first within this page. */
   items: StreamItem[];
   groups: StreamGroup[];
-  /** The sequence this window starts after; "0" when it reaches the oldest. */
-  from: string;
+  /** Main's forward continuation, or null after the last matching item. */
+  next: string | null;
 }
 
-/** The window of at most 50 notifications ending at sequence `to`, within one view and reason. */
-export async function readWindow(main: MainClient, generation: string, to: string,
+/** Read at most 50 matches using Main's continuation unchanged. */
+export async function readWindow(main: MainClient, after: string | null,
   selection: NotificationSelection = { view: 'inbox', reason: null }):
-  Promise<Loaded<Omit<NotificationWindow, 'head'>>> {
-  const end = BigInt(to);
-  const start = end > BigInt(NOTIFICATION_WINDOW) ? end - BigInt(NOTIFICATION_WINDOW) : 0n;
-  const limit = Number(end - start);
-  if (limit === 0) return { ok: true, data: { generation, readThrough: '0', items: [], groups: [], from: '0' } };
-  const query: { after: string; limit: number; view?: 'saved' | 'done'; reason?: InboxReason } = {
-    after: `${generation}:${start}`, limit };
+  Promise<Loaded<NotificationWindow>> {
+  const query: { after?: string; limit: number; view?: 'saved' | 'done'; reason?: InboxReason } = {
+    limit: NOTIFICATION_WINDOW };
+  if (after !== null) query.after = after;
   if (selection.view !== 'inbox') query.view = selection.view;
   if (selection.reason) query.reason = selection.reason;
   const page = await settle(() => main.v1.me.notifications.get({ query }));
   if (!page.ok) return page;
-  return { ok: true, data: { generation: page.data.generation, readThrough: page.data.readThrough,
-    items: [...page.data.items].reverse(), groups: page.data.groups, from: String(start) } };
+  return { ok: true, data: { generation: page.data.generation, head: page.data.head,
+    readThrough: page.data.readThrough, reset: page.data.reset,
+    items: [...page.data.items].reverse(), groups: page.data.groups, next: page.data.next } };
 }
 
-/** The newest window: the stream's head first, then the window ending there. */
+/** Start the selected list; the page response carries the current head too. */
 export async function readLatest(main: MainClient,
   selection: NotificationSelection = { view: 'inbox', reason: null }): Promise<Loaded<NotificationWindow>> {
-  const hint = await settle(() => main.v1.me.notifications.hint.get());
-  if (!hint.ok) return hint;
-  const window = await readWindow(main, hint.data.generation, hint.data.head, selection);
-  return window.ok ? { ok: true, data: { ...window.data, head: hint.data.head } } : window;
+  return readWindow(main, null, selection);
 }

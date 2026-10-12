@@ -23,7 +23,7 @@ import { NotificationsUnavailable, NotificationsView } from './notifications-vie
 
 // The notifications page, newest first, over an in-memory stream: sentences
 // built from Main's facts, groups shown once, unread marked, mark all read,
-// and older windows on request.
+// and further matching pages on request.
 
 type Args = Parameters<typeof NotificationsView>[0] & { calls?: string[] };
 
@@ -37,11 +37,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function args(options: { from?: string; refuse?: boolean } = {}): Args {
+function args(options: { next?: string; refuse?: boolean } = {}): Args {
   const { main, calls } = memoryInbox(inbox, { refuse: options.refuse });
-  const latest = options.from ? inbox.slice(4) : inbox;
+  const latest = options.next ? inbox.slice(0, 4) : inbox;
   return {
-    initial: inboxWindow(latest, options.from ?? '0'),
+    initial: inboxWindow(latest, options.next ?? null),
     now: NOW,
     avatarQuery: '',
     main,
@@ -84,15 +84,60 @@ export const Latest: Story = {
   },
 };
 
-export const OlderOnRequest: Story = {
-  args: args({ from: '104' }),
+export const MoreOnRequest: Story = {
+  args: args({ next: '1:104' }),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
+    await expect(canvas.queryByText('Your submission “Middlemarch: A Study of Provincial Life” was accepted')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(await canvas.findByText('Your submission “Middlemarch: A Study of Provincial Life” was accepted')).toBeVisible();
+    await expect(args.calls).toEqual(['page:1:104:50']);
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+  },
+};
+
+/** Sparse Saved matches carry their reason and cursor across unrelated notifications. */
+export const SparseSavedPagination: Story = {
+  args: (() => {
+    const saved = [137, 274, 5000, 10000].map((sequence, index) =>
+      governance(sequence, 'proposal-revised', 'manual', { saved: true, proposal: 950 + index }));
+    const stream = [saved[0]!, saved[1]!, governance(1000, 'proposal-revised', 'manual'),
+      governance(2000, 'proposal-revised', 'author', { saved: true }), saved[2]!, saved[3]!];
+    const { main, calls } = memoryInbox(stream);
+    return { initial: inboxWindow(saved.slice(0, 2), '1:274', '10000'), now: NOW, avatarQuery: '', main, calls,
+      selection: { view: 'saved', reason: 'manual' } as const };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('listitem')).toHaveLength(2);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(canvas.getAllByRole('listitem')).toHaveLength(4));
+    const links = canvas.getAllByRole('link', { name: 'A correction was revised' });
+    await expect(new Set(links.map(link => link.getAttribute('href'))).size).toBe(4);
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+    await expect(args.calls).toEqual(['page:1:274:50:saved:manual']);
+  },
+};
+
+/** A reset replaces the old generation, including its read watermark. */
+export const ContinuationReset: Story = {
+  args: (() => {
+    const replacement = [governance(1, 'proposal-revised', 'manual', { proposal: 960 })];
+    const { main, calls } = memoryInbox(replacement, { generation: '2' });
+    return { initial: inboxWindow(inbox.slice(0, 4), '1:104'), now: NOW, avatarQuery: '', main, calls };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Aria Wang 王雅 followed you')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(await canvas.findByRole('link', { name: 'A correction was revised' })).toBeVisible();
+    await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
     await expect(canvas.queryByText('Aria Wang 王雅 followed you')).toBeNull();
-    await userEvent.click(canvas.getByRole('button', { name: 'Show older' }));
-    await expect(await canvas.findByText('Aria Wang 王雅 followed you')).toBeVisible();
-    // Each window ends where the last began: sequences 55–104, fifty at most.
-    await expect(args.calls).toEqual(['page:1:54:50']);
+    await expect(canvas.getByText('Unread')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
+    await waitFor(() => expect(canvas.queryByText('Unread')).toBeNull());
+    await expect(args.calls).toEqual(['page:1:104:50', 'read-through:1']);
   },
 };
 
@@ -108,7 +153,7 @@ export const MarkAllRefused: Story = {
 
 /** Reviews of the reader's Work, and their own review helping others. */
 export const Reviews: Story = {
-  args: { ...args(), initial: inboxWindow(reviews, '0', '112') },
+  args: { ...args(), initial: inboxWindow(reviews, null, '112') },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Aria Wang 王雅 reviewed “雨夜书店”')).toBeVisible();
@@ -135,7 +180,7 @@ function invitationArgs(): Args {
   const responses = memoryInvitations();
   return {
     ...args(),
-    initial: inboxWindow([invitationNotice], '0', '113'),
+    initial: inboxWindow([invitationNotice], null, '113'),
     actingSubject: 'https://rezics.com/id/00000801-5555-4a6f-8c2d-3e7b5c1a9f40',
     main: { v1: { ...stream.main.v1, realms: responses.main.v1.realms } } as typeof stream.main,
     calls: responses.calls,
@@ -162,7 +207,7 @@ export const InvitationNotification: Story = {
 
 /** A ban states the Realm, the reason and the end, and links to the Realm page. It does not name a moderator. */
 export const Ban: Story = {
-  args: { ...args(), initial: inboxWindow(banNotices, '0', '117') },
+  args: { ...args(), initial: inboxWindow(banNotices, null, '117') },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const timed = sanctionSentence('en', { action: 'ban', realm: 'Fiction · 小说',
@@ -181,7 +226,7 @@ export const Ban: Story = {
 };
 
 export const RoleTaken: Story = {
-  args: { ...args(), initial: inboxWindow([roleTaken], '0', '114') },
+  args: { ...args(), initial: inboxWindow([roleTaken], null, '114') },
   async play({ canvasElement }) {
     await expect(
       within(canvasElement).getByRole('link', {
@@ -222,7 +267,7 @@ export const Invitation: Story = {
 };
 
 export const Empty: Story = {
-  args: { ...args(), initial: inboxWindow([], '0', '0') },
+  args: { ...args(), initial: inboxWindow([], null, '0') },
   async play({ canvasElement }) {
     await expect(
       within(canvasElement).getByRole('heading', { name: 'Nothing here yet' }),
@@ -305,7 +350,7 @@ function mixedArgs(): Args {
     governance(212, 'review-requested', 'steward', { proposal: 912, revision: 1 }),
   ];
   const { main, calls } = memoryInbox(items);
-  return { initial: inboxWindow(items, '0', '212'), now: NOW, avatarQuery: '', main, calls };
+  return { initial: inboxWindow(items, null, '212'), now: NOW, avatarQuery: '', main, calls };
 }
 
 /** Inbox, Saved and Done, with corrections of more than one reason beside ordinary notices. */
@@ -356,7 +401,7 @@ function savedArgs(): Args {
   ];
   const { main, calls } = memoryInbox(saved);
   return {
-    initial: inboxWindow(saved, '0', '221'),
+    initial: inboxWindow(saved, null, '221'),
     now: NOW,
     avatarQuery: '',
     main,
@@ -391,7 +436,7 @@ function doneArgs(): Args {
   const done = [governance(230, 'proposal-withdrawn', 'manual', { done: true, proposal: 930 })];
   const { main, calls } = memoryInbox(done);
   return {
-    initial: inboxWindow(done, '0', '230'),
+    initial: inboxWindow(done, null, '230'),
     now: NOW,
     avatarQuery: '',
     main,
@@ -417,7 +462,7 @@ export const DoneUndo: Story = {
 export const EmptySaved: Story = {
   args: {
     ...args(),
-    initial: inboxWindow([], '0', '0'),
+    initial: inboxWindow([], null, '0'),
     selection: { view: 'saved', reason: null },
   },
   async play({ canvasElement }) {
@@ -432,7 +477,7 @@ export const EmptyDark: Story = { ...Empty, globals: { theme: 'dark' } };
 function triageErrorArgs(): Args {
   const items = [governance(240, 'review-requested', 'steward')];
   const { main, calls } = memoryInbox(items, { refuseTriage: true });
-  return { initial: inboxWindow(items, '0', '240'), now: NOW, avatarQuery: '', main, calls };
+  return { initial: inboxWindow(items, null, '240'), now: NOW, avatarQuery: '', main, calls };
 }
 
 /** A refused triage leaves the item where it was and says so. */
@@ -461,7 +506,7 @@ export const FailedDark: Story = { ...Failed, globals: { theme: 'dark' } };
 /** Followed topics and named saved views lead to the Work's current canonical address. */
 export const NewWorks: Story = {
   args: {
-    initial: inboxWindow(newWorks, '0', '123'),
+    initial: inboxWindow(newWorks, null, '123'),
     now: NOW,
     avatarQuery: '',
     main: memoryInbox(newWorks).main,

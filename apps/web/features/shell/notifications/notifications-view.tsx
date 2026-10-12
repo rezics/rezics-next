@@ -251,10 +251,10 @@ function collapse(window: Pick<NotificationWindow, 'items' | 'groups'>): { item:
 }
 
 /**
- * The notifications page: newest first, unread marked, one press to mark all
+ * The notifications page: loaded matches newest first, unread marked, one press to mark all
  * read; opening one marks it read. Saved and Done are a separate triage, kept
  * in the URL with the reason filter so a reload shows what Main returns.
- * Older windows load on request. `main` is the browser client (stories pass
+ * Further matching pages load on request. `main` is the browser client (stories pass
  * an in-memory one).
  */
 export function NotificationsView({ initial, now, avatarQuery, invitations, main, actingSubject,
@@ -273,14 +273,15 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const [busy, setBusy] = useState<string | null>(null);
   const [triageNote, setTriageNote] = useState<string | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
-  const oldest = windows.at(-1)!;
+  const loadingMore = useRef(false);
+  const lastWindow = windows.at(-1)!;
   const isRead = (item: StreamItem) => item.read || readHere.has(item.id)
     || BigInt(item.sequence) <= BigInt(readThrough);
   const unread = windows.some(window => window.items.some(item => !isRead(item)));
 
   async function markAll() {
     const result = await settle(() => client().v1.me['notification-read-watermarks'].inbox.put({
-      profile: 'notification-read-watermark-v1', generation: initial.generation, readThrough: initial.head }));
+      profile: 'notification-read-watermark-v1', generation: lastWindow.generation, readThrough: lastWindow.head }));
     if (!result.ok) { setState('mark-failed'); return; }
     setReadThrough(result.data.readThrough);
     setUnread({ count: 0, overflow: false });
@@ -297,10 +298,20 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   }
 
   async function older() {
+    if (loadingMore.current || lastWindow.next === null) return;
+    loadingMore.current = true;
     setState('loading');
-    const next = await readWindow(client(), oldest.generation, oldest.from, selection);
+    const next = await readWindow(client(), lastWindow.next, selection);
+    loadingMore.current = false;
     if (!next.ok) { setState('older-failed'); return; }
-    setWindows(current => [...current, { ...next.data, head: initial.head }]);
+    if (next.data.reset || next.data.generation !== lastWindow.generation) {
+      setWindows([next.data]);
+      setReadThrough(next.data.readThrough);
+      setReadHere(new Set());
+    } else {
+      setWindows(current => [...current, next.data]);
+      setReadThrough(current => BigInt(current) > BigInt(next.data.readThrough) ? current : next.data.readThrough);
+    }
     setState('idle');
   }
 
@@ -322,7 +333,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       : patch.saved ? t.triageSaved : t.triageUnsaved);
   }
 
-  const rows = windows.flatMap(window => collapse(window));
+  const rows = [...windows].reverse().flatMap(window => collapse(window));
   const empty = selection.reason ? { title: t.noFiltered, description: t.noFilteredBody }
     : selection.view === 'saved' ? { title: t.noSaved, description: t.noSavedBody }
       : selection.view === 'done' ? { title: t.noDone, description: t.noDoneBody }
@@ -363,7 +374,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
         grouped={grouped} now={now} avatarQuery={avatarQuery} onRead={markOne} onTriage={(entry, patch) => void triage(entry, patch)}
         triageBusy={busy === item.id} actingSubject={actingSubject} main={client} />)}
     </ul> : <EmptyState icon={BellIcon} title={empty.title} description={empty.description} />}
-    {oldest.from !== '0' ? <div className="flex flex-col items-center gap-2">
+    {lastWindow.next !== null ? <div className="flex flex-col items-center gap-2">
       {state === 'older-failed' ? <p role="alert" className="text-muted-foreground text-sm">{t.olderFailed}</p> : null}
       <Button variant="outline" isLoading={state === 'loading'} onClick={() => void older()}>
         {state === 'older-failed' ? <RotateCwIcon aria-hidden="true" /> : null}{t.olderNotifications}</Button>
