@@ -7,6 +7,10 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
+import { migrateContent } from '../../content/src/index.ts';
+import { MediaStore } from '../src/modules/media/store.ts';
+import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { discloseContent } from '../src/modules/disclosure/assembly.ts';
 import { DISCLOSURE_SUBMISSION_LIMIT } from '../src/modules/disclosure/contract-batching.ts';
 import { discloseSearchMatches } from '../src/modules/disclosure/search.ts';
@@ -38,6 +42,7 @@ let reader: DisclosureStore;
 beforeAll(async () => {
   cluster = await startPostgresCluster();
   pool = new Pool({ ...cluster.connection, max: 6 });
+  await migrateContent(pool);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -305,9 +310,14 @@ for (const size of [65, 501, 512, 1_024, 1_536, 2_048]) {
     statements.length = 0;
     const cuts = await captureDisclosure(environment, inputs, ANONYMOUS_VIEWER, 'read', client as PoolClient);
     expect(cuts.map(cut => cut.decision)).toEqual(read.decisions);
+    expect(cuts.cost!.statements).toBe(statements.length);
+    expect(cuts.cost!.ownerStatements).toBe(chunks);
     expect(statements).toHaveLength(chunks);
     statements.length = 0;
-    expect(await fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'read', client as PoolClient)).toEqual(read.decisions);
+    const fenced = await fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'read', client as PoolClient);
+    expect(fenced).toEqual(read.decisions);
+    expect(fenced.cost!.statements).toBe(statements.length);
+    expect(fenced.cost!.ownerStatements).toBe(chunks);
     expect(statements).toHaveLength(chunks * 2); // one isolation and one policy statement per chunk
     const regrouped = [cuts[64]!, cuts[1]!, cuts[0]!, cuts.at(-1)!];
     expect(await fenceDisclosure(environment, regrouped, ANONYMOUS_VIEWER, 'read', client as PoolClient))
@@ -405,7 +415,10 @@ test('a public 512-match body search admits all 1,536 expanded descriptors in 24
   const matches = Array.from({ length: 512 }, () => ({ work: work.resource,
     contribution: contribution.resource, revision: work.revision, matchedField: 'body' }));
   const originalQuery = environment.fuseki.query;
-  environment.fuseki.query = async (query, ...args) => query.includes('SELECT ?work ?head WHERE')
+  environment.fuseki.query = async (query, ...args) => query.includes('AS ?nameOwner')
+    ? { results: { bindings: [work, contribution].filter(input => query.includes(`<${input.resource}>`))
+      .map(input => ({ work: { type: 'uri', value: input.resource } })) } }
+    : query.includes('SELECT ?work ?head WHERE')
     ? { results: { bindings: [{ work: { type: 'uri', value: work.resource },
       head: { type: 'uri', value: work.revision } }] } }
     : originalQuery.call(environment.fuseki, query, ...args);
@@ -433,4 +446,42 @@ test('a public 512-match body search admits all 1,536 expanded descriptors in 24
       reread: async bases => bases.map(basis => evidence.get(basis.targetResource)!),
     });
   }
+});
+
+
+test('resolve reports all source SQL, and inventory includes real media visibility SQL', async () => {
+  const input = target('media', 'body');
+  const { client, statements } = measured(pool);
+  const mediaEnv = { ...environment };
+  configureDisclosure(mediaEnv, new DisclosureStore(client as unknown as Pool));
+  configureDisclosureAncestrySource(mediaEnv, 'media', {
+    read: async inputs => {
+      await client.query('SELECT 1');
+      return inputs.map(input => ({ resource: input.resource, resourceKind: 'other', status: 'complete',
+        relationshipBasis: { owner: 'media', kind: 'media-use', resource: input.resource,
+          revision: input.revision!, targetResource: input.resource, targetRevision: input.revision!,
+          token: 'a'.repeat(64), dataEpoch: 'epoch' }, parents: [] }));
+    },
+    reread: async () => [],
+  });
+  const selections = await resolveDisclosureSelections(mediaEnv, Array(65).fill(input));
+  expect(selections.cost!.statements).toBe(statements.length);
+  expect(statements).toHaveLength(2);
+  // A raw MediaStore executes its real visibilityFacts SQL. Empty owner rows
+  // avoid attachment projections while still exercising the media owner read.
+  const mediaPool = new Pool({ ...cluster!.connection, max: 2 });
+  const mediaMeasured = measured(mediaPool);
+  // Register this pool at the same SQL boundary as an ordinary owner store.
+  new DisclosureStore(mediaMeasured.client as unknown as Pool);
+  configureMediaVisibility({ environment: mediaEnv, media: {
+    store: new MediaStore(mediaMeasured.client as unknown as Pool, {} as never),
+  }, access: {} } as unknown as MainWorkDependencies);
+  statements.length = 0;
+  try {
+    const result = await discloseInventoryWithCost(mediaEnv, [input], ANONYMOUS_VIEWER, 'media', client as PoolClient);
+    expect(result.cost.statements).toBe(statements.length + mediaMeasured.statements.length);
+    expect(mediaMeasured.statements).toHaveLength(1);
+    expect(result.cost.mediaStatements).toBe(1);
+    expect(result.decisions).toEqual(['hidden']);
+  } finally { await mediaPool.end(); }
 });

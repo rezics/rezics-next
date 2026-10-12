@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { context, trace } from '@opentelemetry/api';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
+import { observeStatementPool } from './statement-cost.ts';
 import { currentWorkerTick } from '../worker-tick.ts';
 
 /**
@@ -371,6 +372,7 @@ export function boundedPool(
       }
     });
   });
+  observeStatementPool(pool);
   trackNestedCheckout(pool);
   return pool;
 }

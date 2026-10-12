@@ -1,3 +1,4 @@
+import { measureStatements } from '../../infrastructure/statement-cost.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { DisclosureTarget } from '../disclosure/read.ts';
@@ -146,9 +147,10 @@ export async function mediaVisibility(
   probes: readonly MediaVisibilityProbe[] = targets.map(target => ({ reference: target.resource, exactUse: false })),
 ) {
   const gate = (env as MediaEnvironment)[gateOwner];
-  if (!gate) return targets.map(() => true);
+  if (!gate) return Object.assign(targets.map(() => true), { cost: { mediaStatements: 0 } });
   try {
-    return await gate(targets, viewer, probes);
+    const { result, statements } = await measureStatements(() => gate(targets, viewer, probes));
+    return Object.assign(result, { cost: { mediaStatements: statements } });
   } catch (cause) {
     throw new MediaUnavailable('Media visibility owner is unavailable', { cause });
   }

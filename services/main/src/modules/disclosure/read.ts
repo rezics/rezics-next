@@ -47,6 +47,7 @@
  * collection hidden is omitted before selection/counting/ranking.
  */
 import type { Pool, PoolClient } from 'pg';
+import { measureStatements, observeStatementPool } from '../../infrastructure/statement-cost.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { GovernanceComponent, GovernanceOwner } from '../governance/store.ts';
 import { GLOBAL_CONTEXT, governanceOwners, governanceComponents } from '../governance/schema.ts';
@@ -95,6 +96,15 @@ export interface OwnerEstablishedDisclosureAncestry {
   readonly resourceKind: 'realm' | 'work' | 'other';
   readonly relationshipBasis: DisclosureRelationshipBasis;
   readonly parents: OwnerEstablishedGraphParents;
+}
+export type DisclosureResults<T> = T[] & { readonly cost?: Readonly<Record<string, number>> };
+function costedResults<T>(results: readonly T[], cost: Readonly<Record<string, number>>): DisclosureResults<T> {
+  return Object.defineProperty([...results], 'cost', { value: Object.freeze({ ...cost }) });
+}
+async function measuredSubmission<T>(run: () => Promise<{ results: readonly T[];
+  cost: Readonly<Record<string, number>> }>, client?: PoolClient) {
+  const { result, statements } = await measureStatements(run, client);
+  return { ...result, cost: { ...result.cost, statements } };
 }
 export interface DisclosureFenceBasis { recoveryGeneration: string; enforcementCut: string }
 export interface DisclosureParentDescriptor extends OwnerEstablishedGraphParent {
@@ -149,6 +159,7 @@ export interface DisclosureTarget {
 }
 export type DisclosureDecision = 'visible' | 'tombstone' | 'hidden';
 export interface DisclosureWithAnonymousNames {
+  readonly cost?: Readonly<Record<string, number>>;
   decisions: DisclosureDecision[];
   /** Same exact targets, revisions, context and channel at the same owner cut.
    * Only graph names/titles receive an anonymous classification. */
@@ -199,7 +210,7 @@ const usesSuitabilityDefault = (channel: DisclosureChannel) =>
  * The recovery fence is held through evaluation; no policy result is cached.
  * Revocation fences future disclosure; independent bytes already delivered cannot be recalled. */
 export class DisclosureStore implements DisclosureReader {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool) { observeStatementPool(pool); }
   get environment(): WorkActivationEnvironment | undefined { return poolEnvironments.get(this.pool); }
   set environment(env: WorkActivationEnvironment | undefined) {
     if (env) poolEnvironments.set(this.pool, env);
@@ -214,15 +225,17 @@ export class DisclosureStore implements DisclosureReader {
 
   async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient) {
-    if (!targets.length) return [];
-    return (await this.readSubmission(targets, viewer, channel, false, client)).decisions;
+    if (!targets.length) return costedResults<DisclosureDecision>([], {});
+    const result = await this.readSubmission(targets, viewer, channel, false, client);
+    return costedResults(result.decisions, result.cost);
   }
 
   async readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient): Promise<DisclosureWithAnonymousNames> {
-    if (!targets.length) return { decisions: [], anonymousNames: [] };
-    const { decisions, anonymousNames } = await this.readSubmission(targets, viewer, channel, true, client);
-    return { decisions, anonymousNames };
+    if (!targets.length) return Object.defineProperty({ decisions: [], anonymousNames: [] },
+      'cost', { value: Object.freeze({}) });
+    const { decisions, anonymousNames, cost } = await this.readSubmission(targets, viewer, channel, true, client);
+    return Object.defineProperty({ decisions, anonymousNames }, 'cost', { value: cost });
   }
 
   readAtCut(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
@@ -232,11 +245,11 @@ export class DisclosureStore implements DisclosureReader {
 
   private async readSubmission(targets: readonly DisclosureTarget[], viewer: Viewer,
     channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient) {
-    const submission = await chunkDisclosureSubmission(targets, async chunk => {
+    const submission = await chunkDisclosureSubmission(targets, async chunk => measuredSubmission(async () => {
       const evaluated = await this.readDecisions(chunk, viewer, channel, anonymousNames, client);
       return { results: evaluated.decisions.map((decision, index) => ({ decision,
         name: evaluated.anonymousNames[index], fenceBasis: evaluated.fenceBases[index]! })), cost: evaluated.cost };
-    });
+    }, client));
     return { decisions: submission.results.map(result => result.decision),
       anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
       fenceBases: submission.results.map(result => result.fenceBasis), cost: submission.cost };
@@ -470,8 +483,9 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
 
 /** The contract bounds and chunks the complete caller inventory before work. */
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
-  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
-  return (await discloseInventoryWithCost(env, targets, viewer, channel, client)).decisions;
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureDecision>> {
+  const result = await discloseInventoryWithCost(env, targets, viewer, channel, client);
+  return costedResults(result.decisions, result.cost);
 }
 
 /** Cost comes from the established dependencies actually queried, rather than
@@ -608,10 +622,12 @@ function requireReader(env: WorkActivationEnvironment): DisclosureReader & Requi
 /** No omitted descriptor means independent publication. Only the selected owner
  * may positively establish that result, including the current source revision. */
 export async function resolveDisclosureSelections(env: WorkActivationEnvironment,
-  targets: readonly DisclosureTarget[]): Promise<readonly DisclosureSelection[]> {
-  return (await chunkDisclosureSubmission(targets, async chunk => ({
-    results: await resolveDisclosureSelectionChunk(env, chunk), cost: {},
-  }))).results;
+  targets: readonly DisclosureTarget[]): Promise<DisclosureResults<DisclosureSelection>> {
+  const submission = await chunkDisclosureSubmission(targets, async chunk => measuredSubmission(async () => ({
+    results: await resolveDisclosureSelectionChunk(env, chunk),
+    cost: { ancestryReads: new Set(chunk.map(target => target.owner)).size },
+  })));
+  return costedResults(submission.results, submission.cost);
 }
 async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[]): Promise<readonly DisclosureSelection[]> {
@@ -713,7 +729,7 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
         || evaluated.anonymousNames.some(decision => !['visible', 'hidden', 'tombstone'].includes(decision)))) {
       throw new DisclosureUnavailable('Disclosure cut result is incomplete');
     }
-    return { ...evaluated, fenceBases: evaluated.fenceBases,
+    return { ...evaluated, cost: { ...evaluated.cost, ...mediaAllowed.cost }, fenceBases: evaluated.fenceBases,
       decisions: evaluated.decisions.map((decision, index) => mediaAllowed[index] ? decision : 'hidden'),
       anonymousNames: evaluated.anonymousNames.map((decision, index) => mediaAllowed[index] ? decision : 'hidden') };
   } catch (cause) {
@@ -722,21 +738,23 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
   }
 }
 export async function captureDisclosure(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
-  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<readonly DisclosureReadCut[]> {
-  return (await chunkDisclosureSubmission(selections, async chunk => ({
-    results: await captureDisclosureChunk(env, chunk, viewer, channel, client), cost: {},
-  }))).results;
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureReadCut>> {
+  const submission = await chunkDisclosureSubmission(selections, chunk => measuredSubmission(async () => {
+    const results = await captureDisclosureChunk(env, chunk, viewer, channel, client);
+    return { results, cost: results.cost! };
+  }, client));
+  return costedResults(submission.results, submission.cost);
 }
 async function captureDisclosureChunk(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
-  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<readonly DisclosureReadCut[]> {
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureReadCut>> {
   requireSelections(env, selections);
   requireReader(env);
-  if (!selections.length) return [];
+  if (!selections.length) return costedResults([], {});
   await rereadRelationships(env, selections);
-  const { heads } = await currentHeads(env, selections);
+  const { heads, graphQueries } = await currentHeads(env, selections);
   const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
   const state = ancestryState(env);
-  return Object.freeze(selections.map((selection, index) => {
+  return costedResults(selections.map((selection, index) => {
     const fenceBasis = Object.freeze({ ...evaluated.fenceBases[index]! });
     const cut = Object.freeze({ selection, parents: Object.freeze(selection.ancestry.parents.map(parent =>
       Object.freeze({ ...parent, fenceBasis }))), fenceBasis, decision: evaluated.decisions[index]! });
@@ -745,7 +763,8 @@ async function captureDisclosureChunk(env: WorkActivationEnvironment, selections
       viewer, audience: JSON.stringify(viewer), channel,
       source: state.sources.get(selection.target.owner)!, reader: requireReader(env) });
     return cut;
-  }));
+  }), { ...evaluated.cost, parentHeadQueries: graphQueries,
+    ancestryReads: new Set(selections.map(selection => selection.target.owner)).size });
 }
 async function rereadRelationships(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]) {
   for (const sourceOwner of new Set(selections.map(selection => selection.target.owner))) {
@@ -772,13 +791,15 @@ async function rereadRelationships(env: WorkActivationEnvironment, selections: r
 /** Revalidate the original selected occurrence, never seek an alternate public
  * placement. A failed reread cannot turn a confirmed hidden cut into visible. */
 export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
-  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
-  return [...(await chunkDisclosureSubmission(cuts, async chunk => ({
-    results: await fenceDisclosureChunk(env, chunk, viewer, channel, client), cost: {},
-  }))).results];
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureDecision>> {
+  const submission = await chunkDisclosureSubmission(cuts, chunk => measuredSubmission(async () => {
+    const results = await fenceDisclosureChunk(env, chunk, viewer, channel, client);
+    return { results, cost: results.cost! };
+  }, client));
+  return costedResults(submission.results, submission.cost);
 }
 async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
-  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureDecision>> {
   requireBatch(cuts);
   const state = ancestryState(env), reader = requireReader(env);
   const saved = cuts.map(cut => {
@@ -789,24 +810,25 @@ async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readon
     }
     return saved;
   });
-  if (!cuts.length) return [];
+  if (!cuts.length) return costedResults([], {});
   const selections = cuts.map(cut => cut.selection);
   try {
     if (reader instanceof DisclosureStore) await reader.assertFinalSnapshot(client);
     else await requireFreshSnapshot(client);
     await rereadRelationships(env, selections);
-    const { heads } = await currentHeads(env, selections);
+    const { heads, graphQueries } = await currentHeads(env, selections);
     if (saved.some(basis => [...basis.heads].some(([resource, head]) => heads.get(resource) !== head))) {
       throw new DisclosureUnavailable('Disclosure parent head moved');
     }
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
-    return evaluated.decisions.map((decision, index) => {
+    return costedResults(evaluated.decisions.map((decision, index) => {
       if (cuts[index]!.decision === 'hidden') return 'hidden';
       if (JSON.stringify(evaluated.fenceBases[index]) !== JSON.stringify(cuts[index]!.fenceBasis)) {
         throw new DisclosureUnavailable('Disclosure enforcement cut moved');
       }
       return decision;
-    });
+    }), { ...evaluated.cost, parentHeadQueries: graphQueries,
+      ancestryReads: new Set(selections.map(selection => selection.target.owner)).size });
   } catch (cause) {
     if (cause instanceof DisclosureUnavailable) throw cause;
     throw new DisclosureUnavailable('Disclosure final ancestry is unavailable', { cause });
@@ -823,14 +845,15 @@ async function readInventory(env: WorkActivationEnvironment, targets: readonly D
   viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
   Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number;
     cost: Readonly<Record<string, number>> }> {
-  const submission = await chunkDisclosureSubmission(targets, async chunk => {
+  const submission = await chunkDisclosureSubmission(targets, async chunk => measuredSubmission(async () => {
     requireReader(env);
     const selections = await resolveDisclosureSelectionChunk(env, chunk);
     const parentHeadQueries = (await currentHeads(env, selections)).graphQueries;
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, anonymousNames);
     return { results: evaluated.decisions.map((decision, index) => ({ decision, name: evaluated.anonymousNames[index] })),
-      cost: { ...evaluated.cost, parentHeadQueries, anonymousNameProbes: 0 } };
-  });
+      cost: { ...evaluated.cost, parentHeadQueries, anonymousNameProbes: 0,
+        ancestryReads: new Set(chunk.map(target => target.owner)).size } };
+  }, client));
   return { decisions: submission.results.map(result => result.decision),
     anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
     anonymousNameProbes: submission.cost.anonymousNameProbes ?? 0,

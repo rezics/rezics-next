@@ -115,11 +115,11 @@ function fixture(pool: Pool) {
     if (query.includes('SELECT ?epoch ?hold ?context')) return { results: { bindings: [] } };
     throw new Error(`Unexpected summary query: ${query.slice(0, 160)}`);
   };
-  const fuseki = meterFuseki(graph), contentPool = meterPool(pool);
+  const fuseki = meterFuseki(graph), allSql = meterPool(pool), contentPool = meterPool(allSql);
   const store = new MediaStore(contentPool, new ContentCore(contentPool));
   const environment = { fuseki, objectDirectory: '.temp/media-disclosure',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  configureDisclosure(environment, new DisclosureStore(pool));
+  configureDisclosure(environment, new DisclosureStore(allSql));
   configureFixtureDisclosureAncestry(environment, target => {
     // Each publication Use retains its own Work. Bare Assets rely on their
     // bounded attachment inventory rather than an invented single owner.
@@ -142,8 +142,8 @@ function fixture(pool: Pool) {
     useTargets.set(iri(use), target);
     return { target, use };
   };
-  const reset = () => { fuseki.reset(); contentPool.reset(); probes.length = 0; };
-  const cost = () => ({ graphQueries: fuseki.queries, graphBytes: fuseki.bytes,
+  const reset = () => { fuseki.reset(); contentPool.reset(); allSql.reset(); probes.length = 0; };
+  const cost = () => ({ statements: allSql.queries, graphQueries: fuseki.queries, graphBytes: fuseki.bytes,
     ownerQueries: contentPool.queries, ownerBytes: contentPool.bytes, probes: [...probes] });
   const visibilityPlan = async (reference: string): Promise<Plan> => {
     let plan: Plan | undefined;
@@ -252,8 +252,11 @@ test('exact Use disclosure has identical summary probes and bytes at 1, 16, 64 a
     for (const size of [1, 16, 64, 256]) {
       while (count < size) { await f.attach(); count++; }
       f.reset();
-      expect(await f.read(iri(ownUse))).toEqual(['visible']);
+      const disclosed = await f.read(iri(ownUse));
+      expect(disclosed).toEqual(['visible']);
       const cost = f.cost();
+      expect(disclosed.cost!.statements).toBe(cost.statements);
+      expect(disclosed.cost!.mediaStatements).toBeGreaterThan(1);
       expect(cost.probes).toEqual([ownTarget]);
       expect(cost.graphQueries).toBeGreaterThan(0);
       expect(cost.ownerQueries).toBe(1);
