@@ -1,17 +1,143 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { slideIsCurrent, ZONE_SHOWCASE_DISCLOSURE_COST } from '../src/modules/zone/showcase-disclosure.ts';
 import { bindZoneCampaignArtVariant, readZoneCampaignArt, requestNewZoneCampaignRenditions } from '../src/modules/zone/campaign-art.ts';
-import type { DisclosureTarget } from '../src/modules/disclosure/read.ts';
+import { configureDisclosure, configureDisclosureAncestrySource, type DisclosureTarget,
+  type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureReader } from '../src/modules/disclosure/read.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MediaStore } from '../src/modules/media/store.ts';
 import type { MediaDependencies } from '../src/modules/media/commands.ts';
 import { MediaPresentationStore } from '../src/modules/media/presentation.ts';
 import { withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
-import { campaignFixtureEnvironment, configureCampaignFixtureReader } from './support/campaign-disclosure.ts';
+import { fixtureDisclosureReader, configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
+import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const ref = () => `https://rezics.com/id/${randomUUID()}`;
+
+/** Explicit fixture evidence for selected campaign media. Each Asset/Use pair
+ * shares the same immutable Use receipt; only mounted art receives a Realm. */
+function configureCampaignFixtureAncestry(env: WorkActivationEnvironment,
+  realm?: { resource: string; head: string }) {
+  const selected = new Map<string, DisclosureAncestryEvidence>();
+  const evidence = (target: DisclosureTarget, use: string): DisclosureAncestryEvidence => {
+    const relationshipBasis: DisclosureRelationshipBasis = {
+      owner: 'media', kind: 'media-use', resource: use, revision: use,
+      targetResource: target.resource, targetRevision: target.revision ?? null,
+      token: createHash('sha256').update(JSON.stringify([use, realm])).digest('hex'),
+      dataEpoch: env.lineage.dataEpoch,
+    };
+    const result: DisclosureAncestryEvidence = { resource: target.resource, resourceKind: 'other',
+      relationshipBasis, status: 'complete', parents: realm ? [{ owner: 'graph', kind: 'realm',
+        resource: realm.resource, head: realm.head, relationshipBasis: { ...relationshipBasis, kind: 'realm-placement' } }] : [] };
+    selected.set(`${relationshipBasis.token}\0${target.resource}`, result);
+    return result;
+  };
+  configureDisclosureAncestrySource(env, 'media', {
+    read: async targets => targets.map((target, index) => evidence(target,
+      target.component === 'cover' ? targets[index + 1]!.resource : target.resource)),
+    reread: async bases => bases.map(basis => selected.get(`${basis.token}\0${basis.targetResource}`)!),
+  });
+}
+
+function campaignFixtureEnvironment(realm?: { resource: string; head: string }): WorkActivationEnvironment {
+  const env = { objectDirectory: '.temp/campaign-disclosure',
+    lineage: { dataEpoch: 'campaign-fixture', routingEpoch: 'campaign-routing' },
+    fuseki: { query: async () => ({ results: { bindings: realm ? [{ resource: { type: 'uri', value: realm.resource },
+      head: { type: 'uri', value: realm.head } }] : [] } }) },
+  } as unknown as WorkActivationEnvironment;
+  configureCampaignFixtureAncestry(env, realm);
+  return env;
+}
+
+function configureCampaignFixtureReader(env: WorkActivationEnvironment, read: DisclosureReader['read']) {
+  configureDisclosure(env, fixtureDisclosureReader(read));
+}
+
+for (const audience of ['private', 'restricted'] as const) {
+  for (const selectedVisible of [true, false]) {
+    test(`campaign art ${selectedVisible ? 'renders its own image beside an unrelated' : 'withholds its own image despite another public'} ${audience} attachment`, async () => {
+      const realm = ref(), otherTarget = ref(), zone = ref(), asset = randomUUID(), use = randomUUID(), otherUse = ref();
+      const representation = randomUUID(), useRef = `https://rezics.com/id/${use}`, assetRef = `https://rezics.com/id/${asset}`;
+      const environment = campaignFixtureEnvironment();
+      const probes: string[][] = [], summaries: string[] = [];
+      const privateTarget = selectedVisible ? otherTarget : realm;
+      const uri = (value: string) => ({ type: 'uri', value });
+      const literal = (value: string) => ({ type: 'literal', value });
+      environment.fuseki.query = async query => {
+        const refs = (variable: string) => [...(new RegExp(`VALUES \\?${variable} \\{([^}]+)\\}`)
+          .exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)].map(match => match[1]!);
+        if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) {
+          const resources = refs('r');
+          summaries.push(...resources);
+          const control = { epoch: literal(environment.lineage.dataEpoch), sequence: literal('1') };
+          return { results: { bindings: [control, ...resources.map(resource => ({ ...control,
+            r: uri(resource), type: literal('work'), work: uri(resource), head: uri(resource),
+            public: literal(String(audience !== 'private' || resource !== privateTarget)),
+            label: { ...literal('Campaign'), 'xml:lang': 'en' } }))] } };
+        }
+        if (query.includes('SELECT ?resource ?head')) return { results: { bindings: refs('resource')
+          .map(resource => ({ resource: uri(resource), head: uri(resource) })) } };
+        if (query.includes('SELECT ?epoch ?hold ?context')) return { results: { bindings: [] } };
+        throw new Error(`Unexpected campaign query: ${query.slice(0, 100)}`);
+      };
+      configureFixtureDisclosureAncestry(environment, target => ({ resource: target.work ?? target.resource,
+        head: target.work ?? target.resource, ...(target.workRevision !== undefined
+          ? { protectedRevision: target.workRevision } : {}) }));
+      configureCampaignFixtureAncestry(environment);
+      configureCampaignFixtureReader(environment, async targets => targets.map(target =>
+        target.owner === 'graph' && target.resource === privateTarget && audience === 'restricted' ? 'hidden' : 'visible'));
+      const facts = (targets: string[]) => ({ owner: ref(), disclosure: 'public', pending: false,
+        blocked: false, attachmentOverflow: false,
+        attachments: targets.map(target => ({ target, context: DEFAULT_MEDIA_CONTEXT })) });
+      const inventory = new Map([[useRef, facts([realm])], [otherUse, facts([otherTarget])],
+        [assetRef, facts([realm, otherTarget])]]);
+      configureMediaVisibility({ environment, media: { store: {
+        visibilityFacts: async (references: readonly string[]) => {
+          probes.push([...references]);
+          return new Map(references.map(reference => [reference, inventory.get(reference)!]));
+        },
+      } }, access: {} } as unknown as MainWorkDependencies);
+      const store = { itemDeliveryBatch: async () => new Map([[use, { asset, representation, target: realm,
+        role: 'publication-item', availability: 'available', disclosure: 'public', moderation: 'none',
+        lifecycle: 'active', width: 1280, height: 720, mediaType: 'image/png' }]]),
+      renditions: { candidatesBatch: async () => new Map() } } as unknown as MediaStore;
+      const image = { use: useRef };
+      const [result] = await readZoneCampaignArt(store, realm, [{ id: 'campaign', href: '/launch', art: {
+        landscape: image, portrait: image, cutout: image,
+        logos: [{ ...image, language: 'en', tone: 'light' as const, anchor: 'center-middle' as const }],
+      } }], { environment, zone });
+      if (selectedVisible) {
+        const images = [result!.art.landscape, result!.art.portrait, result!.art.cutout, ...result!.art.logos];
+        expect(images).toHaveLength(4);
+        for (const rendered of images) expect(rendered?.url)
+          .toBe(`/v1/media/representations/${representation}/bytes?use=${use}`);
+      } else expect(result!.art).toEqual({ landscape: null, portrait: null, cutout: null, logos: [] });
+      expect(probes).toEqual([[useRef], [useRef]]);
+      expect(summaries).toEqual([realm, realm]);
+    });
+  }
+}
+
+test('campaign art fences a newly held Asset after rendition hydration', async () => {
+  const realm = ref(), zone = ref(), asset = randomUUID(), use = randomUUID();
+  const environment = campaignFixtureEnvironment();
+  let held = false, candidateReads = 0;
+  configureCampaignFixtureReader(environment, async targets => targets.map(target =>
+    held && target.resource.endsWith(asset) ? 'hidden' : 'visible'));
+  const store = { itemDeliveryBatch: async () => new Map([[use, { asset, target: realm,
+    availability: 'available', disclosure: 'public', moderation: 'none', lifecycle: 'active',
+    width: 1280, height: 720, mediaType: 'image/png' }]]),
+  renditions: { candidatesBatch: async () => { candidateReads++; held = true; return new Map(); } } } as unknown as MediaStore;
+  const [result] = await readZoneCampaignArt(store, realm,
+    [{ id: 'campaign', href: '/launch', art: { landscape: { use: `https://rezics.com/id/${use}` } } }],
+    { environment, zone });
+  expect(result!.art.landscape).toBeNull();
+  expect(candidateReads).toBe(1);
+});
 
 test('public slide schedules include their start and exclude their end', () => {
   const now = Date.parse('2026-10-05T12:00:00.000Z');

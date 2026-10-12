@@ -91,11 +91,13 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
   }
   const candidates: Map<string, RenditionCandidate[]> = store && items.size
     ? await store.renditions.candidatesBatch([...items.keys()]) : new Map();
-  if (disclosure) for (const batch of batches) {
-    const decisions = await fenceDisclosure(disclosure.environment, batch.cuts, viewer, 'media');
-    batch.uses.forEach((use, index) => {
-      if (decisions[index * 2] !== 'visible' || decisions[index * 2 + 1] !== 'visible') items.delete(use);
-    });
+  if (disclosure) {
+    for (const batch of batches) {
+      const decisions = await fenceDisclosure(disclosure.environment, batch.cuts, viewer, 'media');
+      batch.uses.forEach((use, index) => {
+        if (decisions[index * 2] !== 'visible' || decisions[index * 2 + 1] !== 'visible') items.delete(use);
+      });
+    }
   }
   const resolve = (image: ZoneCampaignArt['landscape'], role: string) => {
     if (!image) return null;
