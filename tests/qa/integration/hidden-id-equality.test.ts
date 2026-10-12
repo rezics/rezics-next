@@ -8,6 +8,7 @@ import { profileValidations } from '../../../services/main/src/infrastructure/pr
 import { DATE_PUBLISHED_DEFINITION_NOTATION } from '../../../services/main/src/modules/statement/qualification.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { RealmAboutThreadStore } from '../../../services/main/src/modules/realm-reply/about-store.ts';
 import { readReplyGraphReceipt } from '../../../services/main/src/modules/realm-reply/graph.ts';
 import { realmReplyDigest } from '../../../services/main/src/modules/realm-reply/store.ts';
@@ -34,7 +35,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     return originalQuery.apply(this, args);
   };
   try {
-    const owner = await stack.member('hidden-owner');
+    const owner = await stack.member('hidden-owner', { verified: true });
     const outsider = await stack.member('hidden-outsider');
     const hiddenWork = await stack.privateWork(owner.actor, `Hidden work ${randomUUID()}`);
     await owner.grant('work:create:root', 'work.create');
@@ -189,6 +190,10 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       expect(response.status, body).toBe(expected);
       return JSON.parse(body) as T;
     };
+    // Reply authors need a controlled, provisioned Person; draft grants cannot replace that proof.
+    const { agent: threadActor } = await createdJson<{ agent: string }>(await owner.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Thread equality author',
+    }));
     await owner.grant('space:create:root', 'space.create');
     const threadRealm = await createdJson<{ realm: string }>(await owner.send('POST', '/v1/spaces', {
       profile: 'space-realm-v2', name: `Thread equality ${randomUUID()}`, capabilities: ['realm'],
@@ -210,21 +215,22 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       session => resolveTargets(session, [threadAbout.work], 'discussion'));
     const aboutThreads = new RealmAboutThreadStore(stack.contentPool);
     const selected = await aboutThreads.reserve({ realm: threadRealm.realm, about: threadAbout.work,
-      actor: owner.actor, intentKey: randomUUID(), intentDigest: createHash('sha256').update(threadAbout.work).digest('hex'),
+      actor: threadActor, intentKey: randomUUID(), intentDigest: createHash('sha256').update(threadAbout.work).digest('hex'),
       rootRevision: threadTarget!.revision });
-    await owner.grant(`content:draft:${selected.reply}`, 'content.draft');
-    await owner.grant(`reply:create:${threadAbout.work}`, 'reply.create');
-    await owner.grant(`reply:place:${threadRealm.realm}`, 'reply.place');
+    await grantFixtureAuthority(stack.accessPool, { scope: `reply:place:${threadRealm.realm}`, requireDispatch: true,
+      representations: [{ principalId: owner.principalId, actor: threadActor, action: 'reply.place', lifetime: '1 hour' }],
+      grant: { actor: threadActor, action: 'reply.place', lifetime: '1 hour' },
+    });
     const replyDraft = await createdJson<{ revisionId: string; revisionDigest: string }>(
       await owner.send('POST', '/v1/member-reply-drafts', { profile: 'member-reply-draft-v1',
         reply: selected.reply, variantId: selected.variantId, rootTarget: threadAbout.work,
         rootRevision: selected.rootRevision, originRealm: threadRealm.realm, expectedHead: null,
         language: 'en', direction: 'ltr', body: 'The accepted opener later withheld from disclosure.',
-        actingSubject: owner.actor }));
+        actingSubject: threadActor }));
     await aboutThreads.recordDraftRevision(selected.id, replyDraft.revisionId);
     const identity = {
       reply: selected.reply, variantId: selected.variantId, revisionId: replyDraft.revisionId,
-      author: owner.actor, rootTarget: threadAbout.work, rootRevision: selected.rootRevision,
+      author: threadActor, rootTarget: threadAbout.work, rootRevision: selected.rootRevision,
       originRealm: threadRealm.realm, parentReply: null, parentRevision: null, contextRevision: null };
     // The canonical identity has server-only origin coordinates; the standalone
     // identity HTTP contract cannot carry them. Use the same owner as the command.
@@ -234,7 +240,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     await stack.composition.dependencies.realmReplies!.create(principal, identity, randomUUID(), realmReplyDigest(identity));
     await createdJson(await owner.send('POST', '/v1/realm-reply-placements', { profile: 'realm-reply-placement-v1',
       realm: threadRealm.realm, reply: selected.reply, revisionId: replyDraft.revisionId,
-      revisionDigest: replyDraft.revisionDigest, reviewDecisionId: null, expectedHead: null, actingSubject: owner.actor }));
+      revisionDigest: replyDraft.revisionDigest, reviewDecisionId: null, expectedHead: null, actingSubject: threadActor }));
     const preparation = await stack.contentPool.query<{ operation_id: string }>(
       'SELECT operation_id FROM content.realm_placement_preparation WHERE realm=$1 AND variant_id=$2 AND revision_id=$3',
       [threadRealm.realm, selected.variantId, replyDraft.revisionId]);
