@@ -20,6 +20,13 @@ void mock.module('next/headers', () => ({
   cookies: async () => ({ get: () => undefined }),
   headers: async () => new Headers(),
 }));
+void mock.module('next/navigation', () => ({
+  usePathname: () => `/en/z/${zone}`,
+  useParams: () => ({ locale: 'en' }),
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }),
+  notFound: () => { throw new Error('Unexpected missing home'); },
+}));
 // The route renders supplied packages; Vite's installed-package glob is not part of this Bun fixture.
 void mock.module('../../zones/official/index.ts', () => ({
   installedDigest: async () => null,
