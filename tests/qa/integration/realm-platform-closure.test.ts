@@ -461,9 +461,14 @@ for (const state of states) describe(state, () => {
       ready(); completed(replyRestriction, 'Independent reply restriction');
       expect((await get(`/v1/realms/${short(realm.realm)}/threads/${short(restrictedReply.reply)}`, reader)).status).toBe(404);
       if (state !== 'closed') {
-        const thread = await json<{ items: { reply: string }[] }>(await get(
+        const thread = await json<{ items: { reply: string; body: string; title: string | null;
+          author: unknown; document?: unknown }[] }>(await get(
           `/v1/realms/${short(realm.realm)}/threads/${short(opener.reply)}`, reader));
-        expect(thread.items.map(item => item.reply)).not.toContain(restrictedReply.reply);
+        // A body restriction may retain a neutral position in the parent chain.
+        const retained = thread.items.find(item => item.reply === restrictedReply.reply);
+        if (retained) expect(retained).toMatchObject({ body: '', title: null, author: null });
+        expect(retained?.document).toBeUndefined();
+        expect(JSON.stringify(thread)).not.toContain('Independently restricted reply');
       }
     });
   }
