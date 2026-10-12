@@ -57,7 +57,7 @@ interface CoverageScan {
 }
 
 async function scanRelayCoverage(client: PoolClient, consumer: string,
-  targetSequence?: string, prefix?: RelayHandoffPosition, live = false): Promise<CoverageScan> {
+  targetSequence?: string, prefix?: RelayHandoffPosition): Promise<CoverageScan> {
   const checkpoint = await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
     'SELECT stream_scope, data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
   const row = checkpoint.rows[0];
@@ -69,7 +69,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     throw new RelayCheckpointConflict('retained prefix differs from relay checkpoint');
   }
   const throughSequence = prefix?.sequence ?? row.sequence;
-  if (!prefix && !live) {
+  if (!prefix) {
     const uncheckpointed = await client.query(
       `SELECT 1 FROM relay.delivered_event WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2
        UNION ALL SELECT 1 FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2 LIMIT 1`,
@@ -92,10 +92,6 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
        ORDER BY batch.sequence LIMIT 1000`,
       [row.data_epoch, batchCount.toString(), throughSequence]);
     for (const batch of page.rows) {
-      if (live && (BigInt(batch.sequence) !== batchCount + 1n
-        || BigInt(batch.actual_count) < BigInt(batch.event_count))) {
-        throw new RelayHandoffIncomplete(row.data_epoch, (batchCount + 1n).toString());
-      }
       if (BigInt(batch.sequence) !== batchCount + 1n || batch.actual_count !== String(batch.event_count)) {
         throw new RelayCheckpointConflict('retained batch or event coverage is incomplete');
       }
@@ -111,7 +107,6 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     if (page.rows.length < 1000) break;
   }
   if (batchCount !== BigInt(throughSequence)) {
-    if (live) throw new RelayHandoffIncomplete(row.data_epoch, (batchCount + 1n).toString());
     throw new RelayCheckpointConflict('retained batch coverage is incomplete');
   }
   const digest = createHash('sha256');
@@ -235,15 +230,83 @@ function retainedEnvelopePosition(event: MainCloudEvent | DeliveredMainEvent, st
   return { ...event, data: { ...event.data, relayPosition: position } } as MainCloudEvent | DeliveredMainEvent;
 }
 
-/**
- * One complete, verified page of the acknowledged handoff after a broker gap.
- * Delivery commits its header/events before its checkpoint. The unacknowledged
- * tail is retryable work, not captured coverage and not a reader conflict.
- * A passed client must be idle. This opens and commits its own snapshot and
- * leaves that checkout held; a session advisory lock survives the commit.
- */
+export interface DeliveredRelayHeader {
+  stream_scope: string;
+  data_epoch: string;
+  sequence: string;
+  batch_id: string;
+  routing_epoch: string;
+  event_count: number;
+  actual_count: string;
+}
+export type RelayBatchClassification =
+  | { state: 'complete'; header: DeliveredRelayHeader; events?: DeliveredMainEvent[] }
+  | { state: 'incomplete-healing'; error: RelayHandoffIncomplete }
+  | { state: 'gap-conflict'; error: RelayCheckpointConflict };
+
+/** Shared commit-boundary decision for polling, preparation and operator recovery. */
+export async function classifyDeliveredRelayBatch(client: Pick<PoolClient, 'query'>,
+  position: RelayHandoffPosition, options: { readEvents?: boolean;
+    custody?: () => Promise<CustodiedOutbox | null> } = {}): Promise<RelayBatchClassification> {
+  const conflict = (message: string): RelayBatchClassification => ({ state: 'gap-conflict',
+    error: new RelayCheckpointConflict(message) });
+  const found = await client.query<DeliveredRelayHeader>(`SELECT batch.stream_scope, batch.data_epoch,
+    batch.sequence::text, batch.batch_id, batch.routing_epoch, batch.event_count,
+    (SELECT count(*)::text FROM relay.delivered_event AS event WHERE event.stream_scope = batch.stream_scope
+      AND event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence) AS actual_count
+    FROM relay.delivered_batch AS batch
+    WHERE batch.stream_scope = $1 AND batch.data_epoch = $2 AND batch.sequence = $3::numeric`,
+  [position.streamScope, position.dataEpoch, position.sequence]);
+  if (found.rows.length > 1) return conflict('retained relay header is ambiguous');
+  let header = found.rows[0];
+  if (header && (header.stream_scope !== position.streamScope || header.data_epoch !== position.dataEpoch
+    || header.sequence !== position.sequence || !header.batch_id || !header.routing_epoch
+    || !Number.isSafeInteger(header.event_count) || header.event_count < 0
+    || !/^(0|[1-9][0-9]*)$/.test(header.actual_count))) return conflict('retained relay header position or count differs');
+  let retained: CustodiedOutbox | null = null;
+  if (!header || BigInt(header.actual_count) < BigInt(header.event_count)) {
+    try { retained = await options.custody?.() ?? null; }
+    catch (error) {
+      if (error instanceof OutboxIncomplete || error instanceof OutboxEpochChanged
+        || error instanceof RelayCheckpointConflict) return conflict(error.message);
+      throw error;
+    }
+    if (!retained) return { state: 'incomplete-healing',
+      error: new RelayHandoffIncomplete(position.dataEpoch, position.sequence) };
+    const batch = retained.batch;
+    if (batch.streamScope !== position.streamScope || batch.dataEpoch !== position.dataEpoch
+      || batch.sequence !== position.sequence || retained.events.length !== batch.eventIds.length
+      || header && (header.batch_id !== batch.batchId || header.routing_epoch !== batch.routingEpoch
+        || header.event_count !== retained.events.length)) return conflict('custodied relay header differs');
+    header = { stream_scope: position.streamScope, data_epoch: position.dataEpoch, sequence: position.sequence,
+      batch_id: batch.batchId, routing_epoch: batch.routingEpoch, event_count: retained.events.length,
+      actual_count: String(retained.events.length) };
+  }
+  if (header.actual_count !== String(header.event_count)) return conflict('retained relay batch has excess events');
+  if (!options.readEvents && !retained) return { state: 'complete', header };
+  const events = retained?.events ?? (await client.query<{ envelope: DeliveredMainEvent }>(
+    `SELECT envelope FROM relay.delivered_event WHERE stream_scope = $1 AND data_epoch = $2
+      AND sequence = $3::numeric ORDER BY event_id`,
+    [position.streamScope, position.dataEpoch, position.sequence])).rows.map(row => row.envelope);
+  try {
+    const ordered = events.map(event => retainedEnvelopePosition(event, position.streamScope,
+      position.dataEpoch, position.sequence)).sort((left, right) => left.data.ordinal - right.data.ordinal);
+    if (ordered.length !== header.event_count || ordered.some((event, ordinal) => event.data.ordinal !== ordinal
+      || event.data.batchId !== header.batch_id || event.data.routingEpoch !== header.routing_epoch)) {
+      return conflict('retained event envelope differs from batch header');
+    }
+    return { state: 'complete', header, events: ordered };
+  } catch { return conflict('retained event envelope position differs'); }
+}
+
+interface VerifiedRelayWatermark { dataEpoch: string; routingEpoch: string; sequence: string }
+const verifiedRelayWatermarks = new WeakMap<Pool, Map<string, VerifiedRelayWatermark>>();
+
+/** At most 100 batches across verification and the requested page. Caught-up polls read only the acknowledgement and its
+ * routing epoch. The watermark is process-local and resets on either epoch or
+ * an acknowledgement rewind; offline captures still prove the entire cut. */
 export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
-  afterSequence: string, limit = 100, client?: PoolClient): Promise<{ coverage: RelayCoverage;
+  afterSequence: string, limit = 100, client?: PoolClient): Promise<{ coverage: RelayHandoffPosition & { consumer: string };
     batches: RetainedRelayBatch[] }> {
   if (!/^(0|[1-9][0-9]*)$/.test(afterSequence)
     || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
@@ -252,43 +315,58 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
   const held = client ?? await pool.connect();
   try {
     await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const { coverage } = await scanRelayCoverage(held, consumer, undefined, undefined, true);
-    if (BigInt(coverage.sequence) < BigInt(afterSequence)) {
+    const checkpoint = (await held.query<{ stream_scope: string; data_epoch: string; sequence: string; routing_epoch: string | null }>(
+      `SELECT checkpoint.stream_scope, checkpoint.data_epoch, checkpoint.sequence::text,
+        batch.routing_epoch FROM relay.checkpoint AS checkpoint
+        LEFT JOIN relay.delivered_batch AS batch ON batch.stream_scope = checkpoint.stream_scope
+          AND batch.data_epoch = checkpoint.data_epoch AND batch.sequence = checkpoint.sequence
+        WHERE checkpoint.consumer = $1`, [consumer])).rows[0];
+    if (!checkpoint || checkpoint.stream_scope !== MAIN_RELAY_STREAM_SCOPE
+      || !/^(0|[1-9][0-9]*)$/.test(checkpoint.sequence)) throw new RelayCheckpointConflict('relay checkpoint is invalid');
+    const coverage = { streamScope: checkpoint.stream_scope, dataEpoch: checkpoint.data_epoch,
+      sequence: checkpoint.sequence, consumer };
+    if (BigInt(afterSequence) > BigInt(coverage.sequence)) {
       throw new RelayHandoffIncomplete(coverage.dataEpoch, afterSequence);
     }
-    const rows = await held.query<{ sequence: string; batch_id: string;
-      routing_epoch: string; event_count: number }>(
-      `SELECT batch.sequence::text, batch_id, routing_epoch, event_count
-       FROM relay.delivered_batch AS batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
-       ORDER BY batch.sequence LIMIT $4`, [coverage.dataEpoch, afterSequence, coverage.sequence, limit]);
-    const batches: RetainedRelayBatch[] = [];
-    let next = BigInt(afterSequence) + 1n;
-    for (const row of rows.rows) {
-      if (BigInt(row.sequence) !== next++) {
-        throw new RelayCheckpointConflict('retained relay batch range is not contiguous');
-      }
-      const events = await held.query<{ envelope: DeliveredMainEvent }>(
-        `SELECT envelope FROM relay.delivered_event
-         WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence = $2 ORDER BY event_id`,
-        [coverage.dataEpoch, row.sequence]);
-      const ordered = events.rows.map(event => retainedEnvelopePosition(event.envelope,
-        coverage.streamScope, coverage.dataEpoch, row.sequence))
-        .sort((left, right) => left.data.ordinal - right.data.ordinal);
-      if (ordered.length !== row.event_count || ordered.some((event, ordinal) =>
-        event.data.ordinal !== ordinal || event.data.batchId !== row.batch_id
-        || event.data.routingEpoch !== row.routing_epoch
-        || event.data.relayPosition?.streamScope !== coverage.streamScope
-        || event.data.relayPosition.dataEpoch !== coverage.dataEpoch
-        || event.data.relayPosition.sequence !== row.sequence)) {
-        throw new RelayCheckpointConflict('retained event envelope differs from batch header');
-      }
-      batches.push({ streamScope: MAIN_RELAY_STREAM_SCOPE, sequence: row.sequence, batchId: row.batch_id,
-        routingEpoch: row.routing_epoch, events: ordered });
+    const watermarks = verifiedRelayWatermarks.get(pool) ?? new Map<string, VerifiedRelayWatermark>();
+    verifiedRelayWatermarks.set(pool, watermarks);
+    const routingEpoch = checkpoint.routing_epoch ?? '';
+    const previous = watermarks.get(consumer);
+    const watermark: VerifiedRelayWatermark = previous && previous.dataEpoch === coverage.dataEpoch
+      && previous.routingEpoch === routingEpoch && BigInt(previous.sequence) <= BigInt(coverage.sequence)
+      ? { ...previous } : { dataEpoch: coverage.dataEpoch, routingEpoch, sequence: '0' };
+    const verified = new Map<string, RetainedRelayBatch>();
+    const needed = BigInt(afterSequence) + BigInt(limit);
+    const through = needed < BigInt(coverage.sequence) ? needed : BigInt(coverage.sequence);
+    for (let index = 0; index < limit && BigInt(watermark.sequence) < through; index++) {
+      const sequence = String(BigInt(watermark.sequence) + 1n);
+      const result = await classifyDeliveredRelayBatch(held, { ...coverage, sequence }, { readEvents: true });
+      if (result.state !== 'complete') throw result.error;
+      verified.set(sequence, { streamScope: coverage.streamScope, sequence,
+        batchId: result.header.batch_id, routingEpoch: result.header.routing_epoch, events: result.events! });
+      watermark.sequence = sequence;
     }
-    if (BigInt(coverage.sequence) > BigInt(afterSequence) && batches.length === 0) {
-      throw new RelayCheckpointConflict('retained relay batch range is missing');
+    // An older restored cursor is not evidence that its skipped prefix was
+    // verified in this process. Continue that bounded verification next poll.
+    if (BigInt(afterSequence) > BigInt(watermark.sequence)) {
+      await held.query('COMMIT');
+      watermarks.set(consumer, watermark);
+      throw new RelayHandoffIncomplete(coverage.dataEpoch,
+        String(BigInt(watermark.sequence) + 1n));
+    }
+    const batches: RetainedRelayBatch[] = [];
+    for (let index = 0, next = BigInt(afterSequence) + 1n;
+      index < limit && next <= BigInt(watermark.sequence); index++, next++) {
+      const sequence = String(next);
+      const cached = verified.get(sequence);
+      if (cached) { batches.push(cached); continue; }
+      const result = await classifyDeliveredRelayBatch(held, { ...coverage, sequence }, { readEvents: true });
+      if (result.state !== 'complete') throw result.error;
+      batches.push({ streamScope: coverage.streamScope, sequence, batchId: result.header.batch_id,
+        routingEpoch: result.header.routing_epoch, events: result.events! });
     }
     await held.query('COMMIT');
+    watermarks.set(consumer, watermark);
     return { coverage, batches };
   } catch (error) {
     try { await held.query('ROLLBACK'); } catch { /* retain original error */ }

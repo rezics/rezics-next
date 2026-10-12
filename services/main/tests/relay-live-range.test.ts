@@ -19,32 +19,24 @@ function fixture() {
     if (sql.startsWith('BEGIN')) { snapshot = structuredClone(state); return { rows: [] }; }
     if (sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
     if (sql.includes('FROM relay.checkpoint')) return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
-      data_epoch: 'epoch', sequence: snapshot.acknowledged }] };
+      data_epoch: 'epoch', sequence: snapshot.acknowledged, routing_epoch: 'routing' }] };
     if (sql.includes('SELECT 1 FROM relay.delivered_event')) {
       const tail = [...snapshot.headers, ...snapshot.events].some(sequence => BigInt(sequence) > BigInt(String(values[1])));
       return { rows: tail ? [{}] : [], rowCount: tail ? 1 : 0 };
     }
     if (sql.includes('AS actual_count')) {
-      return { rows: snapshot.headers.filter(sequence => BigInt(sequence) > BigInt(String(values[1]))
-        && BigInt(sequence) <= BigInt(String(values[2]))).map(sequence => ({ sequence,
-        batch_id: `batch-${sequence}`, routing_epoch: 'routing', event_count: 1,
-        actual_count: snapshot.events.includes(sequence) ? '1' : '0' })) };
+      const sequence = String(values[2]);
+      return { rows: snapshot.headers.includes(sequence) ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
+        data_epoch: 'epoch', sequence, batch_id: `batch-${sequence}`, routing_epoch: 'routing', event_count: 1,
+        actual_count: snapshot.events.includes(sequence) ? '1' : '0' }] : [] };
     }
     if (sql.includes('event.envelope::text AS body')) {
       return { rows: snapshot.events.filter(sequence => BigInt(sequence) <= BigInt(String(values[1])))
         .map(sequence => ({ sequence, source: 'https://rezics.com/services/main',
           event_id: `event-${sequence}`, body: JSON.stringify(envelope(sequence)) })) };
     }
-    if (sql.includes('FROM relay.delivered_batch AS batch')) {
-      expect(sql).toContain('batch.sequence <= $3');
-      expect(values[0]).toBe('epoch');
-      expect(values.slice(2)).toEqual([snapshot.acknowledged, 100]);
-      return { rows: snapshot.headers.filter(sequence => BigInt(sequence) > BigInt(String(values[1]))
-        && BigInt(sequence) <= BigInt(snapshot.acknowledged))
-        .map(sequence => ({ sequence, batch_id: `batch-${sequence}`, routing_epoch: 'routing', event_count: 1 })) };
-    }
     if (sql.includes('SELECT envelope FROM relay.delivered_event')) {
-      return { rows: snapshot.events.filter(sequence => sequence === values[1]).map(sequence => ({ envelope: envelope(sequence) })) };
+      return { rows: snapshot.events.filter(sequence => sequence === values[2]).map(sequence => ({ envelope: envelope(sequence) })) };
     }
     throw new Error(`unexpected live range query: ${sql}`);
   };
@@ -58,8 +50,8 @@ test('live recovery verifies only the acknowledged prefix while offline capture 
   f.state.events.push('3');
   const page = await verifiedRetainedRelayRange(f.pool, 'relay', '0');
   expect(page.coverage.sequence).toBe('1');
-  expect(page.coverage.batchCount).toBe('1');
-  expect(page.coverage.eventCount).toBe('1');
+  expect(page.batches).toHaveLength(1);
+  expect(page.batches[0]!.events).toHaveLength(1);
   expect(page.batches.map(batch => batch.sequence)).toEqual(['1']);
   await expect(relayCoverage(f.pool, 'relay')).rejects.toBeInstanceOf(RelayCheckpointConflict);
 });

@@ -39,7 +39,8 @@ function slimCustody(): CustodiedOutbox {
 function fixture(count = 65) {
   const graph = { rows: adoptions(count), sequence: '100', relaySequence: '5', available: true,
     malformed: false, failPage: false };
-  const headers = new Set(['5']);
+  const headers = new Set(['1', '2', '3', '4', '5']);
+  const actualCounts = new Map<string, number>();
   const headerCounts = new Map<string, number>();
   const delivered = { sequence: '5', epoch: 'epoch' };
   const acknowledged = { sequence: '5', epoch: 'epoch' };
@@ -89,23 +90,19 @@ function fixture(count = 65) {
       return { rows: [{ minimum_sequence: [...headers].sort((a, b) => Number(BigInt(a) - BigInt(b)))[0] ?? null,
         newest_delivered_sequence: delivered.sequence }] };
     }
-    if (statement.includes('coalesce(max(sequence),0)::text AS sequence')) {
-      expect(statement).toContain('FROM relay.checkpoint');
-      expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', 'test-relay']);
-      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: acknowledged.epoch, sequence: acknowledged.sequence }] };
-    }
     if (statement.includes('FROM relay.checkpoint')) {
       expect(values).toEqual(['test-relay']);
-      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: acknowledged.sequence }] };
+      expect(statement).not.toContain('data_epoch =');
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: acknowledged.epoch, sequence: acknowledged.sequence }] };
     }
     if (statement.includes('FROM relay.delivered_batch AS batch')) {
-      expect(statement).toContain('ORDER BY batch.sequence LIMIT 1');
-      const next = [...headers].filter(sequence => BigInt(sequence) > BigInt(String(values[2])))
-        .sort((a, b) => Number(BigInt(a) - BigInt(b)))[0];
-      return { rows: next ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: next,
-        event_count: headerCounts.get(next) ?? 0 }] : [] };
+      const sequence = String(values[2]);
+      expect(values.slice(0,2)).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
+      return { rows: headers.has(sequence) ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch',
+        sequence, batch_id: sequence === '4' ? 'urn:rezics:outbox:metadata' : `batch-${sequence}`,
+        routing_epoch: 'routing', event_count: headerCounts.get(sequence) ?? 0,
+        actual_count: String(actualCounts.get(sequence) ?? 0) }] : [] };
     }
-    if (statement.includes('count(*)::text AS actual_count')) return { rows: [{ actual_count: '0' }] };
     if (statement.includes('FROM relay.delivered_event')) return { rows: [] };
     throw new Error(`unexpected relay query: ${statement}`);
   };
@@ -144,31 +141,34 @@ function fixture(count = 65) {
   } };
   const env = { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as unknown as WorkActivationEnvironment;
   const instance = new ZoneBrowseProjection(access, relay, env, 'test-relay');
-  const state = instance as unknown as { ready: boolean; checkpoint: RelayHandoffPosition };
-  state.ready = true;
+  const state = instance as unknown as { usableCut: boolean; checkpoint: RelayHandoffPosition };
+  state.usableCut = true;
   state.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '3' };
   const current = () => instance.current({ dataEpoch: 'epoch', sequence: graph.sequence });
   const gap = async () => {
-    await expect(instance.tick()).rejects.toThrow('missing batch');
+    actualCounts.set('4', 1);
+    await expect(instance.tick()).rejects.toThrow('excess events');
+    actualCounts.delete('4');
     expect(state.checkpoint.sequence).toBe('3');
     expect(await current()).toBe(false);
   };
   const finish = async () => {
-    for (let page = 0; page < 32 && !state.ready; page++) {
+    for (let page = 0; page < 32 && !state.usableCut; page++) {
       const before = calls.project.length;
       await instance.tick();
       expect(calls.project.length - before).toBeLessThanOrEqual(1);
-      if (!state.ready) {
+      if (!state.usableCut) {
         expect(state.checkpoint.sequence).toBe('3');
         expect(await current()).toBe(false);
       }
     }
-    expect(state.ready).toBe(true);
+    expect(state.usableCut).toBe(true);
     expect(await current()).toBe(true);
   };
   return { instance, state, graph, headers, headerCounts, delivered, acknowledged, custody, calls, failures, gap, finish, current,
     supplyCustody: (value: CustodiedOutbox | null) => {
       custody.value = value;
+      if (!headerCounts.has('4')) headers.delete('4');
       env.receiptCustody = { read: async (epoch: string, sequence: string) => {
         custody.reads.push({ epoch, sequence });
         return custody.value;
@@ -182,7 +182,7 @@ function fixture(count = 65) {
 test('explicit backfill waits for all pages and remains idempotent for preparation callers', async () => {
   const f = fixture(130);
   await f.instance.backfill();
-  expect(f.state.ready).toBe(true);
+  expect(f.state.usableCut).toBe(true);
   expect(await f.current()).toBe(true);
   expect(f.candidates().size).toBe(130);
   expect(f.state.checkpoint.sequence).toBe('5');
@@ -191,7 +191,7 @@ test('explicit backfill waits for all pages and remains idempotent for preparati
   expect(await f.current()).toBe(true);
 });
 
-test('a missing header that never arrives recovers all authoritative candidates in bounded pages', async () => {
+test('a repaired gap conflict recovers all authoritative candidates in bounded pages', async () => {
   const f = fixture(130);
   await f.gap();
   f.calls.budgets.length = 0;
@@ -203,7 +203,7 @@ test('a missing header that never arrives recovers all authoritative candidates 
   await f.finish();
   expect([...f.candidates().keys()].sort()).toEqual(f.graph.rows.map(key).sort());
   expect(f.state.checkpoint.sequence).toBe('5');
-  expect(f.headers.has('4')).toBe(false);
+  expect(f.headers.has('4')).toBe(true);
   expect(f.calls.project.every(size => size <= 64)).toBe(true);
   expect(f.calls.prune.every(size => size <= 64)).toBe(true);
   expect(f.calls.budgets.every(Boolean)).toBe(true);
@@ -211,7 +211,7 @@ test('a missing header that never arrives recovers all authoritative candidates 
   expect(f.calls.sql.some(statement => /SET LOCAL.*statement_timeout/.test(statement))).toBe(true);
 });
 
-test('the missing-batch worker fault records the requested sequence, checkpoint and relay epoch', async () => {
+test('the gap-conflict worker fault records the requested sequence, checkpoint and relay epoch', async () => {
   const f = fixture(1);
   f.graph.relaySequence = '8';
   f.acknowledged.sequence = '5';
@@ -225,13 +225,13 @@ test('the missing-batch worker fault records the requested sequence, checkpoint 
       event: 'worker_fault', level: 'error',
       'rezics.worker.name': 'main.zone-browse.projection',
       'error.class': 'WorkReadUnavailable',
-      'error.code': new WorkReadUnavailable('Zone browse Main relay has a missing batch').code,
+      'error.code': new WorkReadUnavailable('retained relay batch has excess events').code,
       'rezics.relay.requested_sequence': '4',
       'rezics.projection.checkpoint_sequence': '3',
       'rezics.relay.data_epoch': 'epoch',
       'rezics.relay.routing_epoch': 'routing',
       'rezics.relay.retention_floor': 'absent',
-      'rezics.relay.minimum_retained_sequence': '5',
+      'rezics.relay.minimum_retained_sequence': '1',
       'rezics.relay.newest_committed_sequence': '8',
       'rezics.relay.newest_delivered_sequence': '5',
       'rezics.relay.acknowledged_sequence': '5',
@@ -249,7 +249,7 @@ test('slim receipt custody supplies a missing batch without reconstructing SQL r
   try {
     expect(await f.instance.tick()).toBe(1);
     expect(f.state.checkpoint.sequence).toBe('4');
-    expect(f.state.ready).toBe(true);
+    expect(f.state.usableCut).toBe(true);
     expect(f.calls.project).toEqual([]);
     expect(lines).toEqual([]);
     expect(f.custody.reads.length).toBeGreaterThanOrEqual(2);
@@ -293,17 +293,19 @@ test('custody from a foreign stream, epoch, routing cut or mismatched envelope c
   }
 });
 
-test('a supplied custody owner with no requested batch is distinguished in the gap fault', async () => {
+test('finding 1: absent custody and a healing missing header defer without a gap fault', async () => {
   const f = fixture(1);
   f.supplyCustody(null);
   const lines: string[] = [];
-  const consoleError = spyOn(console, 'error').mockImplementation((line: unknown) => { lines.push(String(line)); });
+  const consoleError = spyOn(console, 'error').mockImplementation(line => { lines.push(String(line)); });
   try {
-    await f.gap();
+    expect(await f.instance.tick()).toBe(0);
     expect(f.custody.reads).toContainEqual({ epoch: 'epoch', sequence: '4' });
-    const fault = lines.map(line => JSON.parse(line) as Record<string, unknown>)
-      .find(line => line.event === 'worker_fault');
-    expect(fault).toMatchObject({ 'rezics.relay.custody_supplied': true, 'rezics.relay.custody_found': false });
+    expect(f.instance.recoveryStatus().state).toBe('incomplete-healing');
+    expect(lines).toEqual([]);
+    f.headers.add('4');
+    expect(await f.instance.tick()).toBe(0);
+    expect(f.state.checkpoint.sequence).toBe('4');
   } finally { consoleError.mockRestore(); }
 });
 
@@ -330,7 +332,7 @@ test('an incomplete restored batch preserves the usable cut, defers without faul
     for (let poll = 0; poll < 4; poll++) {
       expect(await f.instance.tick()).toBe(0);
       expect(f.state.checkpoint.sequence).toBe('3');
-      expect(f.state.ready).toBe(true);
+      expect(f.state.usableCut).toBe(true);
       expect(await f.current()).toBe(false);
       expect(f.candidates().size).toBe(1);
     }
@@ -355,7 +357,7 @@ test('a restored Zone cursor ahead of acknowledgement preserves its cut and resu
     for (let poll = 0; poll < 4; poll++) {
       expect(await f.instance.tick()).toBe(0);
       expect(f.state.checkpoint.sequence).toBe('3');
-      expect(f.state.ready).toBe(true);
+      expect(f.state.usableCut).toBe(true);
       expect(await f.current()).toBe(false);
       expect(f.candidates().size).toBe(1);
     }
@@ -468,7 +470,7 @@ test('a source head behind delivered coverage cannot validate a graph rebuild', 
   let unavailable: unknown;
   for (let page = 0; page < 8 && !unavailable; page++) {
     try { await f.instance.tick(); } catch (error) { unavailable = error; }
-    expect(f.state.ready).toBe(false);
+    expect(f.state.usableCut).toBe(false);
   }
   expect(unavailable).toBeInstanceOf(WorkReadUnavailable);
   expect(f.state.checkpoint.sequence).toBe('3');

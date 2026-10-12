@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { RelayCheckpointConflict, verifiedRetainedRelayRange,
+import { RelayCheckpointConflict, RelayHandoffIncomplete, verifiedRetainedRelayRange,
   type RetainedRelayBatch } from '../outbox/relay.ts';
 
 export class RelayGapConflict extends Error {}
@@ -90,7 +90,7 @@ async function rebuildInbox(access: Pool, input: RelayGapInput,
 
 /**
  * Rebuild at most 100 contiguous broker-lost batches from the complete retained
- * relay handoff. Cost is one O(N) coverage scan plus O(K+E) indexed range reads
+ * relay handoff. Cost is bounded O(K+E) verified-page reads
  * and Access writes for K <= 100 batches and E retained events. A crash after
  * Access commit resumes against the exact immutable envelopes before settling
  * the relay reconciliation ledger.
@@ -149,7 +149,7 @@ export async function reconcileRelayGap(relay: Pool, access: Pool,
         throw new RelayCheckpointConflict('retained handoff has a gap before recovery cut');
       }
     } catch (error) {
-      if (!(error instanceof RelayCheckpointConflict)) throw error;
+      if (!(error instanceof RelayCheckpointConflict) && !(error instanceof RelayHandoffIncomplete)) throw error;
       await client.query('BEGIN');
       try {
         await client.query(`INSERT INTO relay.owner_reconciliation_item
