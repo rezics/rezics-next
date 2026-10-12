@@ -32,7 +32,7 @@ beforeAll(async () => {
         await client.query("UPDATE access.notification_stream SET head_sequence = 1 WHERE principal_id = $1", [owner.id]);
         await client.query(`INSERT INTO access.notification_item (id,principal_id,stream,generation,sequence,
           purpose,topic,source_owner,source_event,subject_owner,subject_ref,disclosure_basis)
-          VALUES ($1,$2,'inbox',1,1,'governance','proposal-revised','access',$1::text,'access','fixture','proposal')`,
+          VALUES ($1::uuid,$2,'inbox',1,1,'governance','proposal-revised','access',$1::text,'access','fixture','proposal')`,
         [itemId, owner.id]);
         await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
           VALUES ($1,$2,true,true)`, [owner.id, itemId]);
