@@ -201,7 +201,8 @@ export async function readRestoredGraphReleaseExpectation(
   fuseki: FusekiClient, lineage: GraphLineage, coverage: RecoveryCoverage,
 ): Promise<RestoredGraphReleaseExpectation> {
   const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
-  const cuts = (await fuseki.query(`PREFIX rv: <${RV}>
+  let result: Awaited<ReturnType<FusekiClient['query']>>;
+  try { result = await fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence ?reconciledSequence WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
@@ -210,7 +211,11 @@ export async function readRestoredGraphReleaseExpectation(
         OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
         OPTIONAL { ${iri(marker)} rv:priorMainSequence ?savedMainSequence }
         OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?reconciledMainSequence }
-      } } LIMIT 2`)).results?.bindings ?? [];
+      } } LIMIT 2`); }
+  catch (error) {
+    throw new RestoreLineageConflict('restored graph release expectation is unavailable', { cause: error });
+  }
+  const cuts = result.results?.bindings ?? [];
   const cut = cuts[0];
   const canonical = /^(0|[1-9][0-9]*)$/;
   if (cuts.length !== 1 || !cut
