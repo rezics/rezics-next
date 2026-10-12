@@ -6,6 +6,7 @@ import {
   configureDisclosure,
   configureDisclosureAncestrySource,
   DisclosureStore,
+  DisclosureUnavailable,
   fenceDisclosure,
   resolveDisclosureSelections,
   type DisclosureAncestryEvidence,
@@ -29,6 +30,7 @@ interface PolicyTarget {
 function fixture(target: DisclosureTarget, resourceKind: DisclosureAncestryEvidence['resourceKind'],
   nativeHome = false) {
   let heldRevision = oldHead;
+  let liveHead = currentHead;
   const policyTargets: PolicyTarget[] = [];
   const graphQueries: string[] = [];
   const pool = {
@@ -56,7 +58,7 @@ function fixture(target: DisclosureTarget, resourceKind: DisclosureAncestryEvide
           && query.includes('rv:homeDocumentHead');
         const named = query.includes('SELECT ?work');
         return { results: { bindings: hasHead
-          ? [{ [named ? 'work' : 'resource']: { value: resource }, head: { value: currentHead } }]
+          ? [{ [named ? 'work' : 'resource']: { value: resource }, head: { value: liveHead } }]
           : named ? [{ work: { value: resource } }] : [] } };
       },
     },
@@ -80,7 +82,8 @@ function fixture(target: DisclosureTarget, resourceKind: DisclosureAncestryEvide
   configureDisclosureAncestrySource(env, target.owner, {
     read: async () => [evidence], reread: async () => [evidence],
   });
-  return { env, reader, policyTargets, graphQueries, holdCurrent: () => { heldRevision = currentHead; } };
+  return { env, reader, policyTargets, graphQueries,
+    holdCurrent: () => { heldRevision = currentHead; }, moveHead: () => { liveHead = native(104); } };
 }
 
 test('current graph names use the established identity head without a self-parent', async () => {
@@ -105,6 +108,9 @@ test('current graph names use the established identity head without a self-paren
       const historicalCuts = await captureDisclosure(historical.env, historicalSelections, ANONYMOUS_VIEWER, 'read');
       expect(historicalCuts[0]!.decision).toBe('tombstone');
       expect(historical.policyTargets[0]!.revision).toBe(oldHead);
+      f.moveHead();
+      await expect(fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read'))
+        .rejects.toBeInstanceOf(DisclosureUnavailable);
     }
   }
 });
