@@ -58,7 +58,7 @@ const fixedDimensions: CorpusDimensions = {
   conceptVocabulary: 0,
 };
 const recipeVersion = 'recipe-work-page-growth-v1';
-const sectionCount = STRUCTURE_LIMITS.maxDepth;
+const sectionCount = STRUCTURE_LIMITS.maxDepth - 1;
 const ingredientCount = 100;
 const stepCount = 20;
 const recipeOccurrenceCount = sectionCount + ingredientCount + stepCount;
