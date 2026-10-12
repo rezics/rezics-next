@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
-import { context, propagation, trace } from '@opentelemetry/api';
+import { context, propagation, trace, type Attributes } from '@opentelemetry/api';
 import { httpTelemetry } from './elysia.ts';
 import { logWorkerFault, telemetryLog } from './log.ts';
 import { telemetryEnabled } from './runtime.ts';
@@ -70,9 +70,89 @@ test('a wrapped database failure keeps the outer class and the provider code', a
     'rezics.worker.name': 'main.ranking.build',
     'error.class': 'RecommendationUnavailable',
     'error.code': '08006',
+    'error.chain.classes': ['RecommendationUnavailable', 'Error'],
+    'error.chain.codes': ['08006'],
   });
   expect(line).not.toContain('provider connection lost');
   expect(line).not.toContain('Access owner is unavailable');
+});
+
+test('fault chains retain at most five levels and stop at a repeated error', async () => {
+  const errors = Array.from({ length: 7 }, (_, index) => Object.assign(new Error('reader@example.com'), {
+    code: `E${index}`,
+  }));
+  for (let index = 0; index < errors.length - 1; index++) errors[index]!.cause = errors[index + 1];
+  const outer = new RecommendationUnavailable('wrapped failure', { cause: errors[0] });
+  const cycle = new RecommendationUnavailable('cyclic failure', { cause: errors[0] });
+  const [bounded, cyclic] = await capture(() => {
+    logWorkerFault('main.route.work_read_unavailable', outer);
+    errors[0]!.cause = cycle;
+    logWorkerFault('main.route.work_read_unavailable', cycle);
+  });
+  expect(logged(bounded!)).toMatchObject({
+    'error.chain.classes': ['RecommendationUnavailable', 'Error', 'Error', 'Error', 'Error'],
+    'error.chain.codes': ['E0', 'E1', 'E2', 'E3'],
+  });
+  expect(logged(cyclic!)).toMatchObject({
+    'error.chain.classes': ['RecommendationUnavailable', 'Error'], 'error.chain.codes': ['E0'],
+  });
+  expect(bounded).not.toContain('reader@example.com');
+  expect(cyclic).not.toContain('cyclic failure');
+});
+
+test('a provider code beyond the fifth error level is not inspected', async () => {
+  let error: Error = Object.assign(new Error('private root'), { code: 'DEEP_CODE' });
+  for (let index = 0; index < 5; index++) error = new Error('private wrapper', { cause: error });
+  const [line] = await capture(() => logWorkerFault('main.route.work_read_unavailable', error));
+  expect(logged(line!)).toEqual({ level: 'error', event: 'worker_fault',
+    'rezics.worker.name': 'main.route.work_read_unavailable', 'error.class': 'Error',
+    'error.chain.classes': ['Error', 'Error', 'Error', 'Error', 'Error'] });
+});
+
+test('fault chains omit malformed names and codes, messages, stacks and non-error payloads', async () => {
+  const privateText = "VALUES ('reader@example.com')";
+  const cause = Object.assign(new Error(privateText), { code: privateText, constructor: { name: privateText } });
+  cause.stack = privateText;
+  cause.cause = { code: 23505, message: privateText, stack: privateText, cause: new Error(privateText) };
+  const [line, payload] = await capture(() => {
+    logWorkerFault('main.route.work_read_unavailable', new RecommendationUnavailable(privateText, { cause }));
+    logWorkerFault('main.route.work_read_unavailable', new Error(privateText, { cause: privateText }));
+  });
+  expect(logged(line!)).toMatchObject({
+    'error.class': 'RecommendationUnavailable', 'error.code': '23505',
+    'error.chain.classes': ['RecommendationUnavailable', 'Unknown', 'Unknown'], 'error.chain.codes': ['23505'],
+  });
+  expect(logged(payload!)).not.toHaveProperty('error.chain.classes');
+  for (const output of [line!, payload!]) {
+    expect(output).not.toContain(privateText);
+    expect(output).not.toContain('reader@example.com');
+    expect(output).not.toContain('message');
+    expect(output).not.toContain('stack');
+  }
+});
+
+test('caller-supplied fault chain fields are bounded and sanitized at the telemetry boundary', async () => {
+  const [valid, invalid, boundary] = await capture(() => {
+    telemetryLog('worker_fault', 'error', {
+      'error.chain.classes': Array.from({ length: 7 }, () => 'Error'),
+      'error.chain.codes': ['08006', 23505, 'E2', 'E3', 'E4', 'E5'],
+    } as unknown as Attributes);
+    telemetryLog('worker_fault', 'error', {
+      'error.chain.classes': ['reader@example.com', 'E'.repeat(82), 'Error'],
+      'error.chain.codes': ['duplicate key value', 'E'.repeat(33), Number.NaN, Number.POSITIVE_INFINITY, '23505'],
+      'error.code': Number.NaN,
+    } as unknown as Attributes);
+    telemetryLog('worker_fault', 'error', {
+      'error.chain.classes': ['E'.repeat(81)], 'error.chain.codes': ['E'.repeat(32)],
+    });
+  });
+  expect(logged(valid!)).toEqual({ level: 'error', event: 'worker_fault',
+    'error.chain.classes': ['Error', 'Error', 'Error', 'Error', 'Error'],
+    'error.chain.codes': ['08006', '23505', 'E2', 'E3', 'E4'] });
+  expect(logged(invalid!)).toEqual({ level: 'error', event: 'worker_fault',
+    'error.chain.classes': ['Error'], 'error.chain.codes': ['23505'] });
+  expect(logged(boundary!)).toEqual({ level: 'error', event: 'worker_fault',
+    'error.chain.classes': ['E'.repeat(81)], 'error.chain.codes': ['E'.repeat(32)] });
 });
 
 test('a library backfill event carries counts and durations only', async () => {

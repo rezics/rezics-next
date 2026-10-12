@@ -26,6 +26,8 @@ const allowed = new Set([
   'rezics.worker.trigger',
   'error.class',
   'error.code',
+  'error.chain.classes',
+  'error.chain.codes',
   'rezics.backfill.examined',
   'rezics.backfill.skipped',
   'rezics.backfill.duration_ms',
@@ -63,6 +65,7 @@ const relayDiagnosticPositions = new Set([
 ]);
 const classToken = /^[A-Za-z_][A-Za-z0-9_]{0,80}$/;
 const codeToken = /^[A-Za-z0-9_]{1,32}$/;
+const ERROR_CHAIN_LIMIT = 5;
 const workerName = /^[a-z][a-z0-9._-]{0,63}$/;
 /** Repository-relative caller `path:line` and an optional function name. */
 const checkoutOrigin = /^[A-Za-z0-9_./:-]+:\d{1,7}(?: [A-Za-z_$][A-Za-z0-9_$.#]*)?$/;
@@ -145,9 +148,18 @@ function publicAttributes(attributes: Attributes): Attributes {
       continue;
     }
     if (key === 'error.code') {
-      if ((typeof value === 'string' || typeof value === 'number') && codeToken.test(String(value))) {
-        result[key] = String(value);
-      }
+      const code = boundedCodeValue(value);
+      if (code) result[key] = code;
+      continue;
+    }
+    if (key === 'error.chain.classes' || key === 'error.chain.codes') {
+      if (!Array.isArray(value)) continue;
+      const tokens = value.slice(0, ERROR_CHAIN_LIMIT).flatMap(item => {
+        if (key === 'error.chain.classes') return typeof item === 'string' && classToken.test(item)
+          && !logLineCarriesPersonalData(item) ? [item] : [];
+        return boundedCodeValue(item) ?? [];
+      });
+      if (tokens.length) result[key] = tokens;
       continue;
     }
     if (key === 'rezics.worker.name') {
@@ -169,29 +181,44 @@ function boundedClass(error: unknown): string {
   return typeof name === 'string' && classToken.test(name) ? name : 'Unknown';
 }
 
-/** The first bounded code on the error or its causes. Messages are never codes. */
+/** Only provider codes are public; messages and arbitrary object fields are not. */
+function boundedCodeValue(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) return undefined;
+  return codeToken.test(String(raw)) ? String(raw) : undefined;
+}
+
 function boundedCode(error: unknown): string | undefined {
-  const seen = new Set<unknown>();
-  let current: unknown = error;
-  while (current && typeof current === 'object' && !seen.has(current)) {
-    seen.add(current);
-    if ('code' in current) {
-      const raw = (current as { code?: unknown }).code;
-      if ((typeof raw === 'string' || typeof raw === 'number') && codeToken.test(String(raw))) return String(raw);
-    }
-    current = current instanceof Error ? current.cause : undefined;
+  if (error && typeof error === 'object' && 'code' in error) {
+    return boundedCodeValue((error as { code?: unknown }).code);
   }
   return undefined;
 }
 
-/** One fixed event: error class, code, and a nested checkout's caller locations.
+/** The outer error and at most four causes; cyclic chains stop at the first repeat. */
+function boundedErrorChain(error: unknown): unknown[] {
+  const chain: unknown[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (chain.length < ERROR_CHAIN_LIMIT && current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    chain.push(current);
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return chain;
+}
+
+/** One fixed event: bounded error classes/codes and a nested checkout's caller locations.
  * Never the message, stack, row, or query text. */
 export function logWorkerFault(worker: string, error: unknown): void {
-  const code = boundedCode(error);
+  const chain = boundedErrorChain(error);
+  const codes = chain.flatMap(item => boundedCode(item) ?? []);
+  const code = codes[0];
   telemetryLog('worker_fault', 'error', {
     ...(workerName.test(worker) && !logLineCarriesPersonalData(worker) ? { 'rezics.worker.name': worker } : {}),
     'error.class': boundedClass(error),
     ...(code ? { 'error.code': code } : {}),
+    ...(chain.length > 1 ? { 'error.chain.classes': chain.map(boundedClass),
+      ...(codes.length ? { 'error.chain.codes': codes } : {}) } : {}),
     ...checkoutAttributes(error),
   });
 }
