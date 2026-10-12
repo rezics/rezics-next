@@ -22,6 +22,7 @@ export interface LaunchCoverage {
 
 const api = (file: string, test: string, evidence?: string): ApiProof => ({ file, test, evidence });
 const browser = api;
+const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
 const missing = (item: string, reason?: string): MissingProof => ({ missing: item, reason });
 
 export const launchCoverage: readonly LaunchCoverage[] = [
@@ -141,7 +142,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     capability: 'Catalogue browse and search in its Zone',
     // Global release queries do not prove the Realm-scoped release search used by this Zone.
     api: missing('L21'),
-    browser: missing('gap', 'apps/web/tests/journeys/zones.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: journeyBrowser('apps/web/tests/g-853-zones.e2e.ts',
+      'apps/web/tests/journeys/zones.ts',
+      'Visual Novels: the filter works by keyboard alone',
+      'Submits English, Windows and Complete in the Visual Novels Zone, checks matching results, then removes Complete and sees the trial.'),
   },
   {
     kind: 'visual-novels',
@@ -169,7 +173,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/anime-manga-zones.test.ts',
       'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first',
       'Pages the Anime Realm browse API by imported format and status, checks complete result sets and excludes unclassified Works from format filters.'),
-    browser: missing('gap', 'apps/web/tests/anime-manga-zones.e2e.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: browser('apps/web/tests/anime-manga-zones.e2e.ts',
+      '${locale} at ${viewport.width}px: filter the long anime and manga by format and year',
+      'Filters the Anime Zone by TV format and publication year, checks the result and opens its imported episode and status facts.'),
   },
   {
     kind: 'anime',
@@ -197,7 +203,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/anime-manga-zones.test.ts',
       'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first',
       'Pages the Manga Realm browse API by imported manga and one-shot formats and status, checking complete result sets and exclusions.'),
-    browser: missing('gap', 'apps/web/tests/anime-manga-zones.e2e.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: browser('apps/web/tests/anime-manga-zones.e2e.ts',
+      '${locale} at ${viewport.width}px: filter the long anime and manga by format and year',
+      'Filters the Manga Zone by manga format and publication year, checks the result and opens its imported volume and status facts.'),
   },
   {
     kind: 'manga',
@@ -247,7 +255,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-946-join-requests.test.ts',
       'requests stay immutable, have one pending episode, paginate, withdraw, decline and accept exactly once without consent',
       'Creates, withdraws, declines and accepts Realm join requests through Main, enforcing one pending episode and exactly-once admission.'),
-    browser: missing('gap', 'apps/web/tests/direction-9.e2e.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: browser('apps/web/tests/direction-9.e2e.ts',
+      'visibility: outsider requests, manager approves, requester reloads the result',
+      'A requester submits a private-Realm admission request, a separate manager approves it and reload shows accepted membership.'),
   },
   {
     kind: 'realm',
@@ -347,7 +357,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/zone-document-home.test.ts',
       'public home resolves published Showcase and unknown placeholders while draft presentation and navigation stay private',
       'Reads the published Zone home through Main, resolves Showcase modules and unknown placeholders and keeps later presentation and navigation drafts outside the public bundle.'),
-    browser: missing('gap', 'apps/web/tests/zone-site-authoring.e2e.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      "Zone home rendering: a ${withRealm ? 'Realm-backed' : 'Realm-less'} Zone previews a new Showcase and publishes modules with saved presentation navigation",
+      'Both Realm-less and Realm-backed Zones preview a new Showcase, publish its modules and navigation for anonymous readers and keep later saved drafts private.'),
   },
   {
     kind: 'zone',
@@ -404,7 +416,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/launch-real-books.test.ts',
       'books / An exact pinned edition choice persists on an isolated restored corpus',
       'Lists same-title releases of one Book Work, saves an exact release and revision, and rereads it from a fresh session.'),
-    browser: missing('gap', 'apps/web/tests/launch-real-books.e2e.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: browser('apps/web/tests/launch-real-books.e2e.ts',
+      'books / Choose among ambiguous editions of one Work',
+      'Chooses distinct same-title editions by keyboard at 390 and 1440px, reloads their labels and verifies the exact saved release and revision.'),
   },
   {
     kind: 'books',
@@ -413,7 +427,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/launch-real-books.test.ts',
       'books / An exact pinned edition choice persists on an isolated restored corpus',
       'Reads paperback, ebook and audiobook releases and persists the exact audiobook choice across fresh sessions.'),
-    browser: missing('gap', 'apps/web/tests/launch-real-books.e2e.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: browser('apps/web/tests/launch-real-books.e2e.ts',
+      'books / Choose among mixed formats',
+      'Chooses ebook on a phone and audiobook on desktop, reloads both and verifies their exact saved release identities.'),
   },
   {
     kind: 'books',
@@ -431,7 +447,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-954-reading-position.test.ts',
       '1000-chapter chooser searches CJK and chapter numbers before paging and keeps disclosure and cursor fences',
       'Creates a Book with 1000 chapter occurrences through Main, searches distant CJK and numbered chapters and traverses every inventory page.'),
-    browser: missing('gap', 'apps/web/tests/journeys/wiki-claims.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: journeyBrowser('apps/web/tests/g-856-query07.e2e.ts',
+      'apps/web/tests/journeys/wiki-claims.ts',
+      '${viewport.width}: a reader can choose chapter 1000 without revealing the whole story',
+      'Searches the Pride and Prejudice Book’s 1000-chapter chooser, selects Chapter 1000 and checks the saved URL position and displayed boundary.'),
   },
   {
     kind: 'zone',
@@ -459,7 +478,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/long-series-progress.test.ts',
       'a chapter inside a volume resumes and discloses across the series, and a deeper nest is refused',
       'Writes chapter progress for a Book volume through Main, rereads the saved position across its series and verifies later updates and undo.'),
-    browser: missing('gap', 'apps/web/tests/journeys/reading-progress.ts declares the cited test inside a loop or function, outside a direct file or describe statement'),
+    browser: journeyBrowser('apps/web/tests/g-838-tracking.e2e.ts',
+      'apps/web/tests/journeys/reading-progress.ts',
+      'attempts on two devices, series progress and the offered correspondence',
+      'Starts a Sword Art Online Book attempt on desktop, reloads it on a phone, resolves stale pause and completion changes across both devices and checks the completed series totals.'),
   },
   {
     kind: 'books',
