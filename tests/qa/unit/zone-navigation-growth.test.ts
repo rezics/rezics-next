@@ -108,6 +108,9 @@ test('measured presentation includes every continuation and rejects a failed tai
       const result = await measurement;
       expect(result.presentation.result.navigation).toHaveLength(2);
       expect(result.presentation.result.navigationComplete).toBe(true);
+      expect(result.presentation.profile.postgresStatements).toBe(2);
+      expect(result.presentation.profile.fusekiRequests).toBe(2);
+      expect(result.presentation.profile.nativeVisitTotal).toBe(2);
     } else await expect(measurement).rejects.toThrow();
     expect(paths).toEqual(['/v1/zones/zone/routes?path=%2Fentry', '/v1/zones/zone/presentation',
       '/v1/zones/zone/presentation?after=tail+%2F%26']);
@@ -143,7 +146,7 @@ test('restore cancellation reaches in-flight census requests and prevents the ne
   const controller = new AbortController();
   const observed: AbortSignal[] = [];
   const api: CorpusApi = {
-    async command<T>() { throw new Error('Cancelled command must not start'); },
+    async command<T>(): Promise<T> { throw new Error('Cancelled command must not start'); },
     async read<T>(_path, signal) {
       observed.push(signal!);
       controller.abort(new Error('restore deadline'));

@@ -14,6 +14,7 @@ import type { RetainedSeed, RetainedSeedCut } from './seed-checkpoints.ts';
 import {
   profileRequest,
   assertWorkCostAtScales,
+  assertWorkMeterObserved,
   type WorkCostContract,
   type WorkCostField,
   type WorkProfile,
@@ -245,20 +246,15 @@ async function openRestoredStack(input: CorpusRestoreSmokeInput, label: string):
 }
 
 export async function profileRead(sink: ZoneGrowthSink, restored: RestoredMeasurement, path: string,
-  unrelatedWorks: number, completePresentation = false) {
+  unrelatedWorks: number) {
   sink.clear();
   const { result, profile } = await profileRequest(
     sink,
     headers => withoutVerifiedImmutableObjectCache(async () => {
-      const read = async (after?: string) => {
-        const url = new URL(path, 'http://main.local');
-        if (after) url.searchParams.set('after', after);
-        const response = await restored.stack.main.handle(new Request(url, { headers }));
-        const body = await response.text();
-        expect(response.status, body).toBe(200);
-        return JSON.parse(body);
-      };
-      return completePresentation ? readCompletePresentation(read) : read();
+      const response = await restored.stack.main.handle(new Request(new URL(path, 'http://main.local'), { headers }));
+      const body = await response.text();
+      expect(response.status, body).toBe(200);
+      return JSON.parse(body) as Record<string, unknown>;
     }),
     {
       service: 'main',
@@ -270,6 +266,7 @@ export async function profileRead(sink: ZoneGrowthSink, restored: RestoredMeasur
   // A number (including zero) is a measured counter; null means the field was not observed.
   expect(profile.postgresStatements).not.toBeNull();
   expect(profile.fusekiRequests).not.toBeNull();
+  assertWorkMeterObserved(profile, { minimumObserved: { postgresStatements: 1, fusekiRequests: 1 } });
   return {
     result,
     profile: { ...profile, unrelatedWorks } satisfies ScaledProfile,
@@ -297,7 +294,32 @@ export async function measureZoneSite(sink: ZoneGrowthSink, restored: RestoredMe
   const routePath = routePathFor(zoneId, segment);
   const presentationPath = presentationPathFor(zoneId);
   const route = await profileRead(sink, restored, routePath, scale);
-  const presentation = await profileRead(sink, restored, presentationPath, scale, true);
+  const pages: ScaledProfile[] = [];
+  const result = await readCompletePresentation(async after => {
+    const url = new URL(presentationPath, 'http://main.local');
+    if (after) url.searchParams.set('after', after);
+    const page = await profileRead(sink, restored, url.pathname + url.search, scale);
+    pages.push(page.profile);
+    return page.result as ZonePresentationRead;
+  });
+  // Each HTTP request owns one trace. Compose their measured work after the
+  // site's traversal succeeds; the shared verdict still owns all comparisons.
+  const profile = { ...pages[0]! };
+  for (const field of ['mainCalls', 'fusekiRequests', 'fusekiSentBytes', 'fusekiReceivedBytes', 'fusekiEngineMs',
+    'postgresStatements', 'accountCalls', 'otherFetches'] as const)
+    profile[field] = pages.some(page => page[field] === null) ? null
+      : pages.reduce((sum, page) => sum + page[field]!, 0);
+  for (const field of ['nativeVisitTotal', 'unclassifiedFetches', 'serverLatencyMs', 'totalLatencyMs'] as const)
+    profile[field] = pages.reduce((sum, page) => sum + page[field], 0);
+  profile.nativeVisits = {};
+  for (const page of pages)
+    for (const [counter, visits] of Object.entries(page.nativeVisits))
+      profile.nativeVisits[counter] = (profile.nativeVisits[counter] ?? 0) + visits;
+  profile.fusekiCalls = pages.flatMap(page => page.fusekiCalls);
+  profile.postgres = pages.flatMap(page => page.postgres);
+  profile.spans = pages.flatMap(page => page.spans);
+  profile.unobserved = [...new Set(pages.flatMap(page => page.unobserved))];
+  const presentation = { result, profile };
   return { routePath, presentationPath, route, presentation };
 }
 
@@ -311,6 +333,7 @@ export function profileDump(operation: string, cut: string, path: string, profil
     operation,
     cut,
     path,
+    traceIds: [...new Set(profile.spans.map(span => span.traceId))],
     counters: measuredCounters(profile),
     postgres: profile.spans.filter(span => span.attributes['db.system.name'] === 'postgresql').map(span => ({
       spanName: span.name,
