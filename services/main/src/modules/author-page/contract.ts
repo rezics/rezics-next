@@ -24,11 +24,13 @@ const authorKeyPattern = '^/authors/OL[1-9][0-9]{0,11}A$';
 const count = t.Object({ value: t.Integer({ minimum: 0 }),
   kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) });
 
-/** An author of a listed Work, as its own page is addressed. */
+/** An author of a listed Work; deleted Agent attribution has no profile navigation. */
 export const authorCredit = t.Union([
   t.Object({ kind: t.Literal('external'), provider: t.Literal('open-library'),
     key: t.String({ pattern: authorKeyPattern }), displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })) }),
-  t.Object({ kind: t.Literal('agent'), agent: readId, handle: t.Nullable(t.String({ minLength: 1, maxLength: 30 })),
+  t.Object({ kind: t.Literal('agent'), agent: readId,
+    identityStatus: t.Union([t.Literal('active'), t.Literal('deleted')]),
+    handle: t.Nullable(t.String({ minLength: 1, maxLength: 30 })),
     displayName: t.String({ minLength: 1, maxLength: 200 }) }),
 ]);
 export const authorWork = t.Object({ id: readId, title: readName, cover: readAvatar,

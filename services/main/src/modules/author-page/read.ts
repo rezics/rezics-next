@@ -130,7 +130,8 @@ async function workAuthors(session: WorkReadSession, key: string, works: readonl
     if (credit.key) return [{ kind: 'external', provider: 'open-library', key: credit.key,
       displayName: names.get(credit.key)?.displayName ?? null }];
     const agent = agents.get(credit.agent!);
-    return agent ? [{ kind: 'agent', agent: credit.agent!, handle: agent.handle, displayName: agent.displayName }] : [];
+    return agent ? [{ kind: 'agent', agent: credit.agent!, identityStatus: agent.identityStatus,
+      handle: agent.handle, displayName: agent.displayName }] : [];
   })]));
 }
 
