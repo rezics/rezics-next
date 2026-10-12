@@ -26,7 +26,8 @@
  * channel, client?): Promise<DisclosureDecision[]> rereads those exact owner bases,
  * heads and Access policy on a fresh statement snapshot; a lent snapshot-isolated
  * transaction is refused. Stale proof/cut discards hydration as unavailable.
- * Missing source/reader/evidence is unavailable, never visible. Realm closure is
+ * Registered owners require complete source/reader/evidence. Unregistered owners
+ * retain their legacy Work hints, inventory bounds and Access recovery fencing. Realm closure is
  * only platform/global graph/record/null-revision disclosure and always hidden.
  *
  * DISCLOSURE_COST: submissionLimit=2,048 (512 search matches x 3 descriptors = 1,536),
@@ -94,6 +95,18 @@ export type OwnerEstablishedGraphParents = readonly []
   | readonly [OwnerEstablishedGraphParent]
   | readonly [OwnerEstablishedGraphParent, OwnerEstablishedGraphParent];
 const establishedAncestry: unique symbol = Symbol('disclosure.ancestry');
+const legacyAncestry: unique symbol = Symbol('disclosure.legacy');
+/** Retired as soon as this owner registers its authoritative source. */
+export interface LegacyDisclosureAncestry {
+  readonly [legacyAncestry]: true;
+  readonly kind: 'legacy';
+  readonly resourceKind: 'other';
+  readonly parents: readonly [];
+}
+type DisclosureAncestry = OwnerEstablishedDisclosureAncestry | LegacyDisclosureAncestry;
+function isLegacy(ancestry: DisclosureAncestry): ancestry is LegacyDisclosureAncestry {
+  return legacyAncestry in ancestry;
+}
 export interface OwnerEstablishedDisclosureAncestry {
   readonly [establishedAncestry]: true;
   readonly resourceKind: 'realm' | 'work' | 'other';
@@ -131,8 +144,8 @@ export interface DisclosureAncestrySource {
   reread(bases: readonly DisclosureRelationshipBasis[]): Promise<readonly DisclosureAncestryEvidence[]>;
 }
 export interface DisclosureSelection {
-  target: Omit<DisclosureTarget, 'work' | 'workRevision' | 'ancestry'>;
-  ancestry: OwnerEstablishedDisclosureAncestry;
+  target: Omit<DisclosureTarget, 'ancestry'>;
+  ancestry: DisclosureAncestry;
 }
 export interface DisclosureReadCut {
   selection: DisclosureSelection;
@@ -152,7 +165,7 @@ export interface DisclosureTarget {
   workRevision?: string | null;
   occurrence?: DisclosureOccurrenceReference;
   /** Only issued selections may carry this internal proof to the policy reader. */
-  ancestry?: OwnerEstablishedDisclosureAncestry;
+  ancestry?: DisclosureAncestry;
   /** Owner-established Agent whose name this occurrence carries. Readability
    * of resource or work does not grant permission to disclose this name. */
   nameOwner?: string;
@@ -181,6 +194,37 @@ export interface DisclosureReader {
     }>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
+/** Require strict owner evidence when inspecting a selection's relationship basis. */
+export function requireEstablishedAncestry(selection: Pick<DisclosureTarget, 'ancestry'>): OwnerEstablishedDisclosureAncestry {
+  const ancestry = selection.ancestry;
+  if (!ancestry || isLegacy(ancestry)) {
+    throw new DisclosureUnavailable('Disclosure selection was not established by its owner');
+  }
+  return ancestry;
+}
+async function ownerSubmission<T, R>(legacy: boolean, inputs: readonly T[],
+  run: (chunk: readonly T[], offset: number) => Promise<{ results: readonly R[]; cost: Readonly<Record<string, number>> }>) {
+  if (!legacy) return chunkDisclosureSubmission(inputs, run);
+  const accepted = [...inputs], results: R[] = [], cost: Record<string, number> = {};
+  for (let offset = 0; offset < accepted.length; offset += DISCLOSURE_COST.batch) {
+    const chunk = accepted.slice(offset, offset + DISCLOSURE_COST.batch);
+    const submission = await run(chunk, offset);
+    if (submission.results.length !== chunk.length) throw new DisclosureUnavailable('Disclosure chunk result is incomplete');
+    results.push(...submission.results);
+    for (const [counter, count] of Object.entries(submission.cost)) cost[counter] = (cost[counter] ?? 0) + count;
+  }
+  return { results, cost };
+}
+function legacyPolicyTarget(target: DisclosureTarget): boolean {
+  return !target.ancestry || isLegacy(target.ancestry);
+}
+function enforcementBasisSql(targets: readonly DisclosureTarget[]): string {
+  if (targets.every(legacyPolicyTarget)) return "'" + '0'.repeat(64) + "'::text";
+  if (targets.some(legacyPolicyTarget)) {
+    return `CASE WHEN wanted.legacy THEN '${'0'.repeat(64)}'::text ELSE ${SCOPED_ENFORCEMENT_BASIS_SQL} END`;
+  }
+  return SCOPED_ENFORCEMENT_BASIS_SQL;
+}
 function requireBatch(items: readonly unknown[]): void {
   if (items.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Disclosure batch is invalid');
 }
@@ -245,7 +289,7 @@ export class DisclosureStore implements DisclosureReader {
 
   private async readSubmission(targets: readonly DisclosureTarget[], viewer: Viewer,
     channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient) {
-    const submission = await chunkDisclosureSubmission(targets, async chunk => measuredSubmission(async () => {
+    const submission = await ownerSubmission(targets.every(legacyPolicyTarget), targets, async chunk => measuredSubmission(async () => {
       const evaluated = await this.readDecisions(chunk, viewer, channel, anonymousNames, client);
       return { results: evaluated.decisions.map((decision, index) => ({ decision,
         name: evaluated.anonymousNames[index], fenceBasis: evaluated.fenceBases[index]! })), cost: evaluated.cost };
@@ -264,7 +308,7 @@ export class DisclosureStore implements DisclosureReader {
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
         || target.work != null && !native.test(target.work)
-        || !validIssuedTarget(target, this.environment)
+        || !validPolicyTarget(target, this.environment)
         || target.nameOwner !== undefined && !native.test(target.nameOwner)
         || (target.context?.length ?? 0) > 512 || (target.revision?.length ?? 0) > 512)
       || typeof viewer.signedIn !== 'boolean' || !['unknown', 'under-15', '15-17', 'adult'].includes(viewer.age)
@@ -273,6 +317,13 @@ export class DisclosureStore implements DisclosureReader {
       throw new DisclosureUnavailable('Disclosure batch is invalid');
     }
     if (!targets.length) throw new DisclosureUnavailable('An empty batch has no Access cut');
+    const identities = targets.map(target => JSON.stringify(target));
+    const requireUnchangedTargets = () => {
+      if (targets.length !== identities.length
+        || targets.some((target, index) => JSON.stringify(target) !== identities[index])) {
+        throw new DisclosureUnavailable('Disclosure target moved during policy lookup');
+      }
+    };
     const suitabilityDefault = usesSuitabilityDefault(channel);
     const source = client ?? accessClient(this.pool) ?? this.pool;
     let nameOwnerQueries = 0, nameOwnerStatements = 0;
@@ -312,6 +363,10 @@ export class DisclosureStore implements DisclosureReader {
           || rows.some(row => !resources.includes(row.agent))) throw new DisclosureUnavailable('Name ownership is unavailable');
         for (const row of rows) nameOwners.set(row.agent, row.agent);
       }
+      requireUnchangedTargets();
+      if (targets.some(target => !validPolicyTarget(target, this.environment))) {
+        throw new DisclosureUnavailable('Disclosure target moved during policy lookup');
+      }
       const owners = targets.map(target => target.nameOwner ?? nameOwners.get(target.resource));
       const distinct = [...new Set(owners.filter((owner): owner is string => owner !== undefined))];
       const principal = namePolicyViewerPrincipal(viewer, channel);
@@ -328,7 +383,7 @@ export class DisclosureStore implements DisclosureReader {
             FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE),
           requested AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(
             ordinal int, owner text, resource text, component text, revision text, context text,
-            "resourceKind" text, parents jsonb, "nameOwner" text)),
+            "resourceKind" text, parents jsonb, work text, "workRevision" text, legacy boolean, "nameOwner" text)),
           parent_edges AS MATERIALIZED (SELECT wanted.ordinal, edge.* FROM requested wanted
             CROSS JOIN LATERAL jsonb_to_recordset(wanted.parents) AS edge(
               kind text, resource text, head text, "protectedRevision" text)),
@@ -336,7 +391,7 @@ export class DisclosureStore implements DisclosureReader {
             UNION ALL SELECT ordinal,resource FROM parent_edges WHERE kind = 'realm'),
           name_policy AS MATERIALIZED (${nameOwnerPolicySql(4, 5, 6, 7)})
           SELECT wanted.ordinal, fence.open, fence.generation AS "recoveryGeneration",
-            ${SCOPED_ENFORCEMENT_BASIS_SQL} AS "enforcementCut",
+            ${enforcementBasisSql(targets)} AS "enforcementCut",
             EXISTS (SELECT 1 FROM realm_candidates realm CROSS JOIN LATERAL (
               SELECT 1 FROM access.governance_enforcement e
               JOIN access.moderation_decision d ON d.id = e.decision_id
@@ -377,6 +432,13 @@ export class DisclosureStore implements DisclosureReader {
                       AND replace(e.revision, 'urn:rezics:content:revision:', '')
                         = replace(wanted.revision, 'urn:rezics:content:revision:', '')))
                 LIMIT 1) matched)
+              OR EXISTS (SELECT 1 FROM access.governance_enforcement e
+                WHERE wanted.legacy AND e.owner = 'graph' AND e.resource = wanted.work
+                  AND (wanted.owner <> 'graph' OR wanted.work <> wanted.resource)
+                  AND e.state = 'restricted' AND e.effect = ANY($2::text[])
+                  AND e.context = ANY(ARRAY[$3::text, wanted.context])
+                  AND e.component IN ('title', 'name', 'record', 'publication')
+                  AND (e.revision IS NULL OR wanted."workRevision" IS NULL OR e.revision = wanted."workRevision"))
               OR EXISTS (SELECT 1 FROM parent_edges parent CROSS JOIN LATERAL (
                     SELECT 1 FROM access.governance_enforcement e
                     WHERE e.owner = 'graph' AND e.resource = parent.resource AND e.state = 'restricted'
@@ -390,11 +452,13 @@ export class DisclosureStore implements DisclosureReader {
                     WHERE parent.ordinal = wanted.ordinal AND parent.kind = 'work')
               OR EXISTS (SELECT 1 FROM (
                 SELECT wanted.resource WHERE wanted."resourceKind" = 'work'
+                UNION SELECT wanted.work WHERE wanted.legacy AND wanted.work IS NOT NULL
                 UNION SELECT resource FROM parent_edges WHERE ordinal = wanted.ordinal AND kind = 'work'
                 ) work_ref CROSS JOIN LATERAL (SELECT 1 FROM access.scope_gate gate
                   WHERE gate.id = 'work:read:' || work_ref.resource AND NOT gate.open LIMIT 1) matched) AS restricted,
             ${suitabilityDefault ? `COALESCE((SELECT jsonb_agg(head.labels) FROM
-              (SELECT wanted.resource AS ref UNION SELECT resource FROM parent_edges
+              (SELECT wanted.resource AS ref UNION SELECT wanted.work WHERE wanted.legacy AND wanted.work IS NOT NULL
+                UNION SELECT resource FROM parent_edges
                 WHERE ordinal = wanted.ordinal) refs
               CROSS JOIN LATERAL (SELECT a.labels FROM access.suitability_assessment a
                 WHERE a.target = refs.ref ORDER BY a.revision_number DESC LIMIT 1) head), '[]'::jsonb)`
@@ -405,14 +469,18 @@ export class DisclosureStore implements DisclosureReader {
             && ['name', 'title'].includes(target.component)
             ? currentNameHead(target) : null),
           context: target.context ?? GLOBAL_CONTEXT,
-          resourceKind: target.ancestry!.resourceKind,
-          parents: target.ancestry!.parents,
+          legacy: legacyPolicyTarget(target),
+          work: legacyPolicyTarget(target) ? target.work ?? null : null,
+          resourceKind: target.ancestry?.resourceKind ?? 'other',
+          parents: target.ancestry?.parents ?? [],
           nameOwner: owners[ordinal] ?? null,
         }))), effects(channel), GLOBAL_CONTEXT, distinct, principal?.issuer ?? null,
         principal?.subject ?? null, BASELINE_MEMBER_POLICY])).rows;
+        requireUnchangedTargets();
         if (rows.length !== targets.length || rows.some((row, index) =>
             !row.open ||
             row.ordinal !== index
+          || !validPolicyTarget(targets[index]!, this.environment)
           || typeof row.restricted !== 'boolean' || !Array.isArray(row.assessments)
           || typeof row.realmClosed !== 'boolean' || !validFenceBasis(row)
           || row.recoveryGeneration !== rows[0]?.recoveryGeneration
@@ -470,6 +538,7 @@ export function disclosurePoolReader(pool: Pool): DisclosureStore | undefined {
   return poolReaders.get(pool);
 }
 export function configureDisclosure(env: WorkActivationEnvironment, reader: DisclosureReader | null): void {
+  ancestryState(env);
   graphEnvironments.set(env.fuseki, env);
   if (reader) {
     (env as ComposedEnvironment)[owner] = reader;
@@ -506,12 +575,15 @@ export function discloseInventoryWithAnonymousNames(env: WorkActivationEnvironme
 const ancestryOwner = Symbol('disclosureAncestry');
 interface AncestryState {
   sources: Map<GovernanceOwner, DisclosureAncestrySource>;
-  selections: WeakMap<OwnerEstablishedDisclosureAncestry, DisclosureSelection>;
+  selections: WeakMap<DisclosureAncestry, DisclosureSelection>;
   cuts: WeakMap<DisclosureReadCut, { heads: ReadonlyMap<string, string>; viewer: Viewer;
-    audience: string; channel: DisclosureChannel; source: DisclosureAncestrySource; reader: DisclosureReader }>;
+    audience: string; channel: DisclosureChannel; source: DisclosureAncestrySource | undefined;
+    reader: DisclosureReader | undefined }>;
 }
 type AncestryEnvironment = WorkActivationEnvironment & { [ancestryOwner]?: AncestryState };
-const issuedAncestry = new WeakMap<OwnerEstablishedDisclosureAncestry, DisclosureSelection>();
+const issuedAncestry = new WeakMap<DisclosureAncestry, {
+  selection: DisclosureSelection; environment: WorkActivationEnvironment;
+}>();
 function ancestryState(env: WorkActivationEnvironment): AncestryState {
   const composed = env as AncestryEnvironment;
   return composed[ancestryOwner] ??= { sources: new Map(), selections: new WeakMap(), cuts: new WeakMap() };
@@ -522,6 +594,22 @@ export function configureDisclosureAncestrySource(env: WorkActivationEnvironment
     throw new DisclosureUnavailable('Disclosure ancestry source is invalid');
   }
   ancestryState(env).sources.set(sourceOwner, source);
+}
+/** Registration switches only this owner to the mandatory ancestry contract. */
+function ownerHasAncestrySource(env: WorkActivationEnvironment | undefined, sourceOwner: GovernanceOwner): boolean {
+  if (!governanceOwners.includes(sourceOwner)) throw new DisclosureUnavailable('Disclosure owner is invalid');
+  return !!env && ancestryState(env).sources.has(sourceOwner);
+}
+function legacySelection(env: WorkActivationEnvironment, target: DisclosureTarget): DisclosureSelection {
+  if (!ownerReference.test(target.resource) || !governanceComponents.includes(target.component)
+    || target.work != null && !native.test(target.work) || target.ancestry
+    || ownerHasAncestrySource(env, target.owner)) {
+    throw new DisclosureUnavailable('Disclosure target is invalid');
+  }
+  const ancestry: LegacyDisclosureAncestry = Object.freeze({ [legacyAncestry]: true as const,
+    kind: 'legacy', resourceKind: 'other', parents: Object.freeze([]) as readonly [] });
+  return Object.freeze({ target: Object.freeze({ ...target,
+    ...(target.occurrence ? { occurrence: Object.freeze({ ...target.occurrence }) } : {}) }), ancestry });
 }
 /** A relationship cannot prove independence by omitting its required parents. */
 const relationshipParents = {
@@ -585,29 +673,41 @@ function validateEvidence(env: WorkActivationEnvironment, target: DisclosureTarg
   return { resourceKind: evidence.resourceKind, relationshipBasis: copyBasis(evidence.relationshipBasis), parents };
 }
 function validIssuedTarget(target: DisclosureTarget, env?: WorkActivationEnvironment): boolean {
-  const selection = target.ancestry && issuedAncestry.get(target.ancestry);
+  const issued = target.ancestry && issuedAncestry.get(target.ancestry);
+  const selection = issued?.selection;
   return !!selection && (!env || ancestryState(env).selections.get(selection.ancestry) === selection)
+    && (!isLegacy(selection.ancestry) || !ownerHasAncestrySource(issued!.environment, target.owner)
+      && !ownerHasAncestrySource(env, target.owner))
     && JSON.stringify(selection.target) === JSON.stringify(stripAncestry(target));
 }
+function validPolicyTarget(target: DisclosureTarget, env?: WorkActivationEnvironment): boolean {
+  // Pool-only readers have no composition in which to establish an owner's
+  // registration state; they still require an issued selection.
+  return target.ancestry ? validIssuedTarget(target, env) : !!env && !ownerHasAncestrySource(env, target.owner);
+}
 function stripAncestry(target: DisclosureTarget): DisclosureSelection['target'] {
-  const { work: _work, workRevision: _workRevision, ancestry: _ancestry, ...selected } = target;
-  return selected;
+  const { ancestry: _ancestry, ...selected } = target;
+  if (!target.ancestry || isLegacy(target.ancestry)) return selected;
+  const { work: _work, workRevision: _workRevision, ...strict } = selected;
+  return strict;
 }
 function validFenceBasis(basis: DisclosureFenceBasis): boolean {
   return typeof basis.recoveryGeneration === 'string' && /^\d+$/.test(basis.recoveryGeneration)
     && typeof basis.enforcementCut === 'string' && /^[0-9a-f]{64}$/.test(basis.enforcementCut);
 }
 function currentNameHead(target: DisclosureTarget): string | null {
-  const ancestry = target.ancestry!;
+  const ancestry = target.ancestry;
+  if (!ancestry || isLegacy(ancestry)) return target.revision ?? null;
   return isGraphIdentity(target, ancestry)
     ? ancestry.relationshipBasis.revision
     : ancestry.parents.find(parent => parent.kind === 'work' && parent.resource === target.resource)?.head ?? null;
 }
-function isGraphIdentity(target: DisclosureTarget, ancestry: OwnerEstablishedDisclosureAncestry): boolean {
-  return target.owner === 'graph' && ancestry.relationshipBasis.owner === 'graph'
+function isGraphIdentity(target: DisclosureTarget, ancestry: DisclosureAncestry): boolean {
+  return !isLegacy(ancestry) && target.owner === 'graph' && ancestry.relationshipBasis.owner === 'graph'
     && ancestry.relationshipBasis.kind === 'identity' && ancestry.relationshipBasis.resource === target.resource;
 }
 function headDependencies(selection: DisclosureSelection): string[] {
+  if (isLegacy(selection.ancestry)) return [];
   return [
     ...selection.ancestry.parents.map(parent => parent.resource),
     ...(selection.ancestry.resourceKind !== 'other' || isGraphIdentity(selection.target, selection.ancestry)
@@ -619,11 +719,18 @@ function requireReader(env: WorkActivationEnvironment): DisclosureReader & Requi
   if (!reader?.readAtCut) throw new DisclosureUnavailable('Disclosure cut reader is unavailable');
   return reader as DisclosureReader & Required<Pick<DisclosureReader, 'readAtCut'>>;
 }
+function selectionReader(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]) {
+  return selections.some(selection => !isLegacy(selection.ancestry))
+    ? requireReader(env) : (env as ComposedEnvironment)[owner];
+}
+// No Access owner existed in these legacy environments. This basis is never
+// accepted for an established selection or used as evidence of Access recovery.
+const unconfiguredLegacyFence = Object.freeze({ recoveryGeneration: '0', enforcementCut: '0'.repeat(64) });
 /** No omitted descriptor means independent publication. Only the selected owner
  * may positively establish that result, including the current source revision. */
 export async function resolveDisclosureSelections(env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[]): Promise<DisclosureResults<DisclosureSelection>> {
-  const submission = await chunkDisclosureSubmission(targets, async chunk => measuredSubmission(async () => ({
+  const submission = await ownerSubmission(targets.every(target => !ownerHasAncestrySource(env, target.owner)), targets, async chunk => measuredSubmission(async () => ({
     results: await resolveDisclosureSelectionChunk(env, chunk),
     cost: { ancestryReads: new Set(chunk.map(target => target.owner)).size },
   })));
@@ -631,14 +738,28 @@ export async function resolveDisclosureSelections(env: WorkActivationEnvironment
 }
 async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[]): Promise<readonly DisclosureSelection[]> {
-  requireBatch(targets);
+  requireOwnerBatch(env, targets);
+  if (targets.some(target => target.ancestry && isLegacy(target.ancestry)
+    && ownerHasAncestrySource(env, target.owner))) {
+    throw new DisclosureUnavailable('Disclosure selection was not established by its owner');
+  }
   const state = ancestryState(env);
   const selected: DisclosureSelection[] = [];
   try {
     for (const sourceOwner of new Set(targets.map(target => target.owner))) {
-      const source = state.sources.get(sourceOwner);
-      if (!source) throw new DisclosureUnavailable('Disclosure ancestry source is unavailable');
       const indexes = targets.flatMap((target, index) => target.owner === sourceOwner ? [index] : []);
+      if (!ownerHasAncestrySource(env, sourceOwner)) {
+        indexes.forEach(index => {
+          const target = targets[index]!;
+          if (target.ancestry) {
+            if (!validIssuedTarget(target, env)) throw new DisclosureUnavailable('Disclosure target is invalid');
+            selected[index] = issuedAncestry.get(target.ancestry)!.selection;
+          } else selected[index] = legacySelection(env, target);
+        });
+        continue;
+      }
+      const source = state.sources.get(sourceOwner)!;
+
       const evidence = await source.read(indexes.map(index => targets[index]!));
       if (evidence.length !== indexes.length) throw new DisclosureUnavailable('Disclosure ancestry result is incomplete');
       indexes.forEach((index, ordinal) => {
@@ -657,8 +778,9 @@ async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
     // Register only after the entire ordered batch has been established.
     for (const selection of selected) {
       state.selections.set(selection.ancestry, selection);
-      issuedAncestry.set(selection.ancestry, selection);
+      issuedAncestry.set(selection.ancestry, { selection, environment: env });
     }
+    requireSelections(env, selected);
     return Object.freeze(selected);
   } catch (cause) {
     if (cause instanceof DisclosureUnavailable) throw cause;
@@ -666,11 +788,81 @@ async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
   }
 }
 function requireSelections(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]): void {
-  requireBatch(selections);
+  requireOwnerBatch(env, selections.map(selection => selection?.target));
   if (selections.some(selection => !selection
-    || ancestryState(env).selections.get(selection.ancestry) !== selection)) {
+    || ancestryState(env).selections.get(selection.ancestry) !== selection
+    || isLegacy(selection.ancestry) && ownerHasAncestrySource(env, selection.target.owner))) {
     throw new DisclosureUnavailable('Disclosure selection was not established by its owner');
   }
+}
+function requireOwnerBatch(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[]): void {
+  requireBatch(targets.filter(target => target && ownerHasAncestrySource(env, target.owner)));
+}
+/** The previous owner contract resolved Work hints and structural ownership.
+ * It did not establish Realm ancestry or require a complete graph-head proof. */
+async function legacyTargets(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[]) {
+  // The pre-ancestry Content adapter named the resource itself as its Work.
+  // This is only a legacy lookup hint, never proof for a registered owner.
+  targets = targets.map(target => target.owner === 'content' && target.component === 'body'
+    && target.work === undefined && native.test(target.resource) ? { ...target, work: target.resource } : target);
+  if (targets.some(target => !ownerReference.test(target.resource)
+    || !governanceComponents.includes(target.component) || target.work != null && !native.test(target.work))) {
+    throw new DisclosureUnavailable('Disclosure target is invalid');
+  }
+  const resources = [...new Set(targets.flatMap(target => [
+    ...(target.work && target.workRevision == null ? [target.work] : []),
+    ...(target.owner === 'graph' && (target.work == null
+      || ['name', 'title'].includes(target.component) && target.revision == null) ? [target.resource] : []),
+  ]))];
+  const heads = new Map<string, string>();
+  const owners = new Map<string, { work: string; revision: string | undefined }>();
+  for (let offset = 0; offset < resources.length; offset += DISCLOSURE_COST.batch) {
+    const batch = resources.slice(offset, offset + DISCLOSURE_COST.batch);
+    try {
+      const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        SELECT ?work ?head ?owningWork ?owningHead WHERE {
+        VALUES ?work { ${batch.map(iri).join(' ')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
+        OPTIONAL {
+          VALUES ?work { ${batch.map(iri).join(' ')} }
+          {
+          { GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork }
+            BIND(?work AS ?owningWork) }
+          UNION { GRAPH ${iri(GRAPHS.current)} { ?work a ?ownerType ; rv:work ?owningWork .
+            VALUES ?ownerType { rv:MainVersion rv:TextContribution rv:Realization rv:Release } } }
+          UNION { GRAPH ${iri(GRAPHS.revisions)} { ?work a rv:FixedRelease ; rv:work ?owningWork } }
+          UNION { GRAPH ${iri(GRAPHS.current)} { ?work a schema:ListItem ; rv:structure ?structure .
+            ?structure rv:structureOf ?component ; rv:selectedGeneration ?generation .
+            ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?work .
+            FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+            { ?component a rv:MainVersion ; rv:work ?owningWork }
+            UNION { ?component a schema:CreativeWork . BIND(?component AS ?owningWork) } } }
+          }
+          OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?owningWork rv:head ?owningHead } }
+        }
+      } LIMIT ${batch.length + 1}`, 131_072)).results?.bindings ?? [];
+      if (rows.length > batch.length || new Set(rows.map(row => row.work?.value)).size !== rows.length
+        || rows.some(row => !row.work || !batch.includes(row.work.value)
+          || row.owningWork && !native.test(row.owningWork.value))) {
+        throw new DisclosureUnavailable('Disclosure heads are invalid');
+      }
+      for (const row of rows) {
+        if (row.head) heads.set(row.work!.value, row.head.value);
+        if (row.owningWork) owners.set(row.work!.value,
+          { work: row.owningWork.value, revision: row.owningHead?.value });
+      }
+    } catch (cause) {
+      throw new DisclosureUnavailable('Disclosure heads are unavailable', { cause });
+    }
+  }
+  return { graphQueries: Math.ceil(resources.length / DISCLOSURE_COST.batch), targets: targets.map(target => {
+    const inferred = target.owner === 'graph' && target.work == null ? owners.get(target.resource) : undefined;
+    const work = target.work ?? inferred?.work;
+    return { ...target, ...(work ? { work,
+      workRevision: target.workRevision ?? (target.work ? heads.get(work) : inferred?.revision) } : {}),
+      ...(target.owner === 'graph' && ['name', 'title'].includes(target.component)
+        && target.revision == null ? { revision: heads.get(target.resource) } : {}) };
+  }) };
 }
 async function currentHeads(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]) {
   const resources = [...new Set(selections.flatMap(headDependencies))];
@@ -697,7 +889,7 @@ async function currentHeads(env: WorkActivationEnvironment, selections: readonly
       for (const row of rows) heads.set(row.resource!.value, row.head!.value);
     }
     if (selections.some(selection => selection.ancestry.parents.some(parent => heads.get(parent.resource) !== parent.head)
-      || isGraphIdentity(selection.target, selection.ancestry)
+      || !isLegacy(selection.ancestry) && isGraphIdentity(selection.target, selection.ancestry)
         && heads.get(selection.target.resource) !== selection.ancestry.relationshipBasis.revision)) {
       throw new DisclosureUnavailable('Disclosure parent head moved');
     }
@@ -710,17 +902,41 @@ async function currentHeads(env: WorkActivationEnvironment, selections: readonly
 async function evaluateSelections(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
   viewer: Viewer, channel: DisclosureChannel, client: PoolClient | undefined, anonymousNames: boolean) {
   requireSelections(env, selections);
-  const reader = requireReader(env);
-  const targets = selections.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
+  const reader = selectionReader(env, selections);
+  const selectedTargets = selections.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
   // Governance still checks the Asset. Its audience comes from the exact Use
   // receipt the ancestry owner issued for this occurrence, never Asset inventory.
-  const mediaAllowed = await mediaVisibility(env, targets, viewer, selections.map(selection => {
+  const mediaAllowed = await mediaVisibility(env, selectedTargets, viewer, selections.map(selection => {
+    if (isLegacy(selection.ancestry)) return { reference: selection.target.resource, exactUse: false };
     const basis = selection.ancestry.relationshipBasis;
     const exactUse = selection.target.owner === 'media' && basis.owner === 'media' && basis.kind === 'media-use';
     return { reference: exactUse ? basis.resource : selection.target.resource, exactUse };
   }));
   try {
-    const evaluated = await reader.readAtCut(targets, viewer, channel, client, anonymousNames);
+  const legacyTargetsToRead = selections.filter(selection => isLegacy(selection.ancestry)).map(selection => selection.target);
+  const legacy = reader ? await legacyTargets(env, legacyTargetsToRead)
+    : { targets: legacyTargetsToRead, graphQueries: 0 };
+  let legacyIndex = 0;
+  const targets = selections.map(selection => {
+    if (!isLegacy(selection.ancestry)) return { ...selection.target, ancestry: selection.ancestry };
+    const current = legacySelection(env, legacy.targets[legacyIndex++]!);
+    ancestryState(env).selections.set(current.ancestry, current);
+    issuedAncestry.set(current.ancestry, { selection: current, environment: env });
+    return { ...current.target, ancestry: current.ancestry };
+  });
+  requireSelections(env, selections);
+    const evaluated = reader?.readAtCut
+      ? await reader.readAtCut(targets, viewer, channel, client, anonymousNames)
+      : { ...(reader
+        ? anonymousNames && reader.readWithAnonymousNames
+          ? await reader.readWithAnonymousNames(targets, viewer, channel, client)
+          : { decisions: await reader.read(targets, viewer, channel, client),
+            anonymousNames: anonymousNames ? await reader.read(targets, ANONYMOUS_VIEWER, channel, client) : [] }
+        : { decisions: targets.map(() => 'visible' as const),
+          anonymousNames: anonymousNames ? targets.map(() => 'visible' as const) : [] }),
+        fenceBases: targets.map(() => unconfiguredLegacyFence) };
+    requireSelections(env, selections);
+
     if (mediaAllowed.length !== targets.length || mediaAllowed.some(allowed => typeof allowed !== 'boolean')
       || evaluated.decisions.length !== targets.length || !Array.isArray(evaluated.fenceBases)
       || evaluated.fenceBases.length !== targets.length || evaluated.fenceBases.some(basis => !validFenceBasis(basis))
@@ -729,7 +945,7 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
         || evaluated.anonymousNames.some(decision => !['visible', 'hidden', 'tombstone'].includes(decision)))) {
       throw new DisclosureUnavailable('Disclosure cut result is incomplete');
     }
-    return { ...evaluated, cost: { ...evaluated.cost, ...mediaAllowed.cost }, fenceBases: evaluated.fenceBases,
+    return { ...evaluated, cost: { ...evaluated.cost, ...mediaAllowed.cost, parentHeadQueries: legacy.graphQueries }, fenceBases: evaluated.fenceBases,
       decisions: evaluated.decisions.map((decision, index) => mediaAllowed[index] ? decision : 'hidden'),
       anonymousNames: evaluated.anonymousNames.map((decision, index) => mediaAllowed[index] ? decision : 'hidden') };
   } catch (cause) {
@@ -739,7 +955,7 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
 }
 export async function captureDisclosure(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureReadCut>> {
-  const submission = await chunkDisclosureSubmission(selections, chunk => measuredSubmission(async () => {
+  const submission = await ownerSubmission(selections.every(selection => isLegacy(selection.ancestry)), selections, chunk => measuredSubmission(async () => {
     const results = await captureDisclosureChunk(env, chunk, viewer, channel, client);
     return { results, cost: results.cost! };
   }, client));
@@ -748,7 +964,7 @@ export async function captureDisclosure(env: WorkActivationEnvironment, selectio
 async function captureDisclosureChunk(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureReadCut>> {
   requireSelections(env, selections);
-  requireReader(env);
+  selectionReader(env, selections);
   if (!selections.length) return costedResults([], {});
   await rereadRelationships(env, selections);
   const { heads, graphQueries } = await currentHeads(env, selections);
@@ -761,23 +977,24 @@ async function captureDisclosureChunk(env: WorkActivationEnvironment, selections
     const dependencies = new Set(headDependencies(selection));
     state.cuts.set(cut, { heads: new Map([...heads].filter(([resource]) => dependencies.has(resource))),
       viewer, audience: JSON.stringify(viewer), channel,
-      source: state.sources.get(selection.target.owner)!, reader: requireReader(env) });
+      source: state.sources.get(selection.target.owner), reader: selectionReader(env, selections) });
     return cut;
   }), { ...evaluated.cost, parentHeadQueries: graphQueries,
     ancestryReads: new Set(selections.map(selection => selection.target.owner)).size });
 }
 async function rereadRelationships(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]) {
   for (const sourceOwner of new Set(selections.map(selection => selection.target.owner))) {
+    if (!ownerHasAncestrySource(env, sourceOwner)) continue;
     const indexes = selections.flatMap((selection, index) => selection.target.owner === sourceOwner ? [index] : []);
     const source = ancestryState(env).sources.get(sourceOwner);
     if (!source) throw new DisclosureUnavailable('Disclosure ancestry source is unavailable');
     try {
-      const evidence = await source.reread(indexes.map(index => selections[index]!.ancestry.relationshipBasis));
+      const evidence = await source.reread(indexes.map(index => requireEstablishedAncestry(selections[index]!).relationshipBasis));
       if (evidence.length !== indexes.length) throw new DisclosureUnavailable('Disclosure final ancestry is incomplete');
       for (const [ordinal, index] of indexes.entries()) {
         const original = selections[index]!;
         const fresh = validateEvidence(env, original.target, evidence[ordinal]!);
-        const { resourceKind, relationshipBasis, parents } = original.ancestry;
+        const { resourceKind, relationshipBasis, parents } = requireEstablishedAncestry(original);
         if (JSON.stringify(fresh) !== JSON.stringify({ resourceKind, relationshipBasis, parents })) {
           throw new DisclosureUnavailable('Disclosure relationship moved');
         }
@@ -792,7 +1009,7 @@ async function rereadRelationships(env: WorkActivationEnvironment, selections: r
  * placement. A failed reread cannot turn a confirmed hidden cut into visible. */
 export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureDecision>> {
-  const submission = await chunkDisclosureSubmission(cuts, chunk => measuredSubmission(async () => {
+  const submission = await ownerSubmission(cuts.every(cut => isLegacy(cut.selection.ancestry)), cuts, chunk => measuredSubmission(async () => {
     const results = await fenceDisclosureChunk(env, chunk, viewer, channel, client);
     return { results, cost: results.cost! };
   }, client));
@@ -801,7 +1018,7 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
 async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureResults<DisclosureDecision>> {
   requireBatch(cuts);
-  const state = ancestryState(env), reader = requireReader(env);
+  const state = ancestryState(env), reader = selectionReader(env, cuts.map(cut => cut.selection));
   const saved = cuts.map(cut => {
     const saved = state.cuts.get(cut);
     if (!saved || saved.viewer !== viewer || saved.audience !== JSON.stringify(viewer) || saved.channel !== channel
@@ -812,6 +1029,7 @@ async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readon
   });
   if (!cuts.length) return costedResults([], {});
   const selections = cuts.map(cut => cut.selection);
+  requireSelections(env, selections);
   try {
     if (reader instanceof DisclosureStore) await reader.assertFinalSnapshot(client);
     else await requireFreshSnapshot(client);
@@ -822,6 +1040,13 @@ async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readon
     }
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
     return costedResults(evaluated.decisions.map((decision, index) => {
+      if (isLegacy(selections[index]!.ancestry)) {
+        if (cuts[index]!.decision === 'hidden' || decision === 'hidden') return 'hidden';
+        if (evaluated.fenceBases[index]!.recoveryGeneration !== cuts[index]!.fenceBasis.recoveryGeneration) {
+          throw new DisclosureUnavailable('Disclosure enforcement cut moved');
+        }
+        return decision;
+      }
       if (JSON.stringify(evaluated.fenceBases[index]) !== JSON.stringify(cuts[index]!.fenceBasis)) {
         throw new DisclosureUnavailable('Disclosure enforcement cut moved');
       }
@@ -845,6 +1070,10 @@ async function readInventory(env: WorkActivationEnvironment, targets: readonly D
   viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
   Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number;
     cost: Readonly<Record<string, number>> }> {
+  if (targets.every(target => !ownerHasAncestrySource(env, target.owner))) {
+    const legacy = await readLegacyInventory(env, targets, viewer, channel, anonymousNames, client);
+    return { ...legacy, cost: { parentHeadQueries: legacy.parentHeadQueries, anonymousNameProbes: legacy.anonymousNameProbes } };
+  }
   const submission = await chunkDisclosureSubmission(targets, async chunk => measuredSubmission(async () => {
     requireReader(env);
     const selections = await resolveDisclosureSelectionChunk(env, chunk);
@@ -858,4 +1087,71 @@ async function readInventory(env: WorkActivationEnvironment, targets: readonly D
     anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
     anonymousNameProbes: submission.cost.anonymousNameProbes ?? 0,
     parentHeadQueries: submission.cost.parentHeadQueries ?? 0, cost: submission.cost };
+}
+
+async function readLegacyInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
+  viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
+  Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number }> {
+  requireOwnerBatch(env, targets);
+  const reader = (env as ComposedEnvironment)[owner];
+  if (!reader && targets.every(target => !ownerHasAncestrySource(env, target.owner))) {
+    const allowed = await mediaVisibility(env, targets, viewer);
+    if (targets.some(target => ownerHasAncestrySource(env, target.owner))) {
+      throw new DisclosureUnavailable('Disclosure cut reader is unavailable');
+    }
+    return { decisions: allowed.map(visible => visible ? 'visible' : 'hidden'), anonymousNames: [],
+      anonymousNameProbes: 0, parentHeadQueries: 0 };
+  }
+  if (reader && targets.every(target => !ownerHasAncestrySource(env, target.owner))) {
+    const selections = await resolveDisclosureSelections(env, targets);
+    const allowed = await mediaVisibility(env, targets, viewer);
+    const current = await legacyTargets(env, selections.map(selection => selection.target));
+    requireSelections(env, selections);
+    let anonymousNameProbes = 0;
+    const evaluated: DisclosureWithAnonymousNames = { decisions: [], anonymousNames: [] };
+    for (let offset = 0; offset < current.targets.length; offset += DISCLOSURE_COST.batch) {
+      const batch = current.targets.slice(offset, offset + DISCLOSURE_COST.batch);
+      const result = anonymousNames && reader.readWithAnonymousNames
+        ? await reader.readWithAnonymousNames(batch, viewer, channel, client)
+        : { decisions: await reader.read(batch, viewer, channel, client), anonymousNames: [] as DisclosureDecision[] };
+      if (anonymousNames && !reader.readWithAnonymousNames) {
+        const indexes = batch.flatMap((target, index) => target.owner === 'graph'
+          && ['name', 'title'].includes(target.component) ? [index] : []);
+        const names = indexes.length
+          ? await reader.read(indexes.map(index => batch[index]!), ANONYMOUS_VIEWER, channel, client) : [];
+        if (names.length !== indexes.length) throw new DisclosureUnavailable('Paired disclosure result is incomplete');
+        anonymousNameProbes += indexes.length ? 1 : 0;
+        result.anonymousNames = batch.map(() => 'hidden');
+        indexes.forEach((index, ordinal) => { result.anonymousNames[index] = names[ordinal]!; });
+      }
+      if (result.decisions.length !== batch.length
+        || anonymousNames && result.anonymousNames.length !== batch.length) {
+        throw new DisclosureUnavailable('Paired disclosure result is incomplete');
+      }
+      evaluated.decisions.push(...result.decisions);
+      evaluated.anonymousNames.push(...result.anonymousNames);
+    }
+    requireSelections(env, selections);
+    if (evaluated.decisions.length !== targets.length
+      || anonymousNames && evaluated.anonymousNames.length !== targets.length) {
+      throw new DisclosureUnavailable('Paired disclosure result is incomplete');
+    }
+    return { decisions: evaluated.decisions.map((decision, index) => allowed[index] ? decision : 'hidden'),
+      anonymousNames: evaluated.anonymousNames, anonymousNameProbes, parentHeadQueries: current.graphQueries };
+  }
+  requireReader(env);
+  const decisions: DisclosureDecision[] = [], names: DisclosureDecision[] = [];
+  const processed: DisclosureSelection[] = [];
+  let parentHeadQueries = 0;
+  for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
+    const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
+    processed.push(...selections);
+    parentHeadQueries += (await currentHeads(env, selections)).graphQueries;
+    const evaluated = await evaluateSelections(env, selections, viewer, channel, client, anonymousNames);
+    parentHeadQueries += evaluated.parentHeadQueries;
+    decisions.push(...evaluated.decisions);
+    names.push(...evaluated.anonymousNames);
+  }
+  requireSelections(env, processed);
+  return { decisions, anonymousNames: names, anonymousNameProbes: 0, parentHeadQueries };
 }

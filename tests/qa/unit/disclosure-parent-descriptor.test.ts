@@ -236,6 +236,7 @@ test('disclosure policy batches reject missing ancestry, forged descriptors and 
     .rejects.toBeInstanceOf(DisclosureUnavailable);
   const unproven = { lineage: f.env.lineage, fuseki: f.env.fuseki } as WorkActivationEnvironment;
   configureDisclosure(unproven, reader);
+  configureDisclosureAncestrySource(unproven, 'content', { read: async () => [], reread: async () => [] });
   await expect(disclose(unproven, [{ ...target, work }], ANONYMOUS_VIEWER, 'read'))
     .rejects.toBeInstanceOf(DisclosureUnavailable);
 });
@@ -339,6 +340,7 @@ test('disclosure ancestry: incomplete, ambiguous and malformed owner descriptors
 
 test('disclosure ancestry: request context and legacy Work hints never substitute for a source or reader', async () => {
   const f = fixture();
+  configureDisclosureAncestrySource(f.env, 'graph', { read: async () => [], reread: async () => [] });
   const graphTarget: DisclosureTarget = {
     owner: 'graph',
     resource: native(90),

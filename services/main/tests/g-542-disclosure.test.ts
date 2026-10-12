@@ -100,6 +100,7 @@ test('G-542: configured recovery and incomplete results fail closed; absent gove
   await expect(reader.read(targets, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure result is incomplete');
   const env = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: '.temp/g-542',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
+  configureFixtureDisclosureAncestry(env, () => undefined);
   await expect(disclose(env, fixtures)).rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
