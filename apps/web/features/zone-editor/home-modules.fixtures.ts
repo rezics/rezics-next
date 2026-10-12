@@ -21,6 +21,7 @@ export const previewSummary = {
 export function collectionPreview(state = 'complete'): ZoneAuthoringPreview {
   return {
     page: null,
+    publicationStatus: 'private',
     presentation: {
       profile: 'zone-presentation-v2', preset: 'clean', tokens: presetTokens.clean,
       navigation: [{ label: 'Saved visitor guide', href: '/harbor-guide' }], slides: [],

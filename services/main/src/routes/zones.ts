@@ -25,7 +25,7 @@ import { InvalidZoneConfiguration, ZoneSitePublicationSelection, ZoneSitePublish
 import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
 import { listOfficialZones, readZoneModuleData,
-  readZoneCampaignArt, readZoneHomeDocument, readZonePublication, ZonePublicPage, ZONE_PUBLICATION_COST }
+  readZoneCampaignArt, readZoneHomeDocument, readZonePublication, zoneSavedPublicationStatus, ZonePublicPage, ZONE_PUBLICATION_COST }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
   from '../modules/theme/first-party-lifecycle.ts';
@@ -231,6 +231,7 @@ const showcaseDraftRead = t.Object({ variantId: t.String(), revisionId: t.Nullab
 const showcaseEditorRead = t.Object({ ...configRead.properties,
   draft: showcaseDraftRead,
   preview: t.Object({ page: t.Nullable(ZonePageDocument), presentation: ZonePresentation,
+    publicationStatus: t.Union([t.Literal('private'), t.Literal('live'), t.Literal('behind')]),
     moduleData: publicationRead.properties.moduleData,
     slideMedia: publicationRead.properties.slideMedia,
     renderTokens: publicationRead.properties.renderTokens,
@@ -480,7 +481,10 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
                 });
                 const current = await readCompositionHeader(work.environment, header.structure);
                 if (current?.head !== header.head) throw new WorkReadMoved('Zone draft navigation changed');
-                return { ...resolved, navigation: { navigation: header.structure, revision: navigation.revision,
+                return { ...resolved,
+                  publicationStatus: zoneSavedPublicationStatus(state, publication, {
+                    variantId, revisionId: head?.revisionId ?? null, navigationRevision: navigation.revision }),
+                  navigation: { navigation: header.structure, revision: navigation.revision,
                   mounts: navigation.occurrences,
                   next: navigation.next ? encodeReadCursor(binding, position, navigation.next) : null,
                   sourcePosition: navigation.sourcePosition } };

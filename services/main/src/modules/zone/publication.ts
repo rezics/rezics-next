@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readZoneConfiguration, readZoneRevisionConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable } from './configuration.ts';
@@ -83,6 +84,28 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
     etag: `"${hash(JSON.stringify({ revision: publishedRevision, presentation,disclosure,listing:state.listing,address }))}"`,
     cost: { ...ZONE_PUBLICATION_COST, graphReads: bundle ? 4 : state.documentSite ? 3 : 1,
       objectReads: bundle || state.documentSite ? 4 : 2 } };
+}
+
+/** Publication advances the configuration head without changing its saved
+ * meaning. Compare the complete saved home selection to the retained bundle,
+ * including layout and links, rather than treating that revision as a draft. */
+export function zoneSavedPublicationStatus(
+  saved: Awaited<ReturnType<typeof readZoneConfiguration>>,
+  published: Awaited<ReturnType<typeof readZonePublication>>,
+  selection: { variantId: string; revisionId: string | null; navigationRevision: string },
+): 'private' | 'live' | 'behind' {
+  const bundle = published.bundle;
+  if (published.disclosure !== 'public' || !bundle) return 'private';
+  const page = bundle.pages.find(page => page.page === saved.zone);
+  if (!page || page.variantId !== selection.variantId || page.revisionId !== selection.revisionId
+    || bundle.navigationRevision !== selection.navigationRevision
+    || bundle.routesRevision !== selection.navigationRevision) return 'behind';
+  const effective = (configuration: ZoneConfiguration) => ({ ...configuration,
+    presentation: typeof configuration.presentation === 'object' ? configuration.presentation : DEFAULT_ZONE_PRESENTATION });
+  return saved.name === published.name && saved.language === published.language
+    && saved.direction === published.direction
+    && isDeepStrictEqual(effective(saved.configuration), effective(published.configuration))
+    ? 'live' : 'behind';
 }
 
 /** Indexed membership of the current public bundle. The configuration head
