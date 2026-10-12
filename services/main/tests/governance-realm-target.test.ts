@@ -12,7 +12,7 @@ import { ownerEvidenceCapture, ownerTargetHeads } from '../src/modules/governanc
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
   type DecisionTargetInput } from '../src/modules/governance/store.ts';
-import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { waitForRealmDirectory } from '../../../tests/qa/integration/support/realm-directory.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { resolveRealmProfile } from '../src/modules/space/policy.ts';
