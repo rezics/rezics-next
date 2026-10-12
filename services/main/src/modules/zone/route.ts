@@ -355,10 +355,8 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
       revision, ...(cursor ? { after: cursor.after } : {}),
       limit: ZONE_ROUTE_COST.maxNavigation,
-      canReadTarget: async target => {
-        const summary = await read.target(target);
-        return summary?.type === 'collection' || summary?.type === 'work';
-      },
+      canReadTargets: async targets => new Set((await read.targets(targets))
+        .flatMap(summary => summary?.type === 'collection' || summary?.type === 'work' ? [summary.reference] : [])),
       visible: item => item.role === 'mount' && !!item.target && item.qualifier?.type === 'zone-mount'
         && item.qualifier.zone === state.zone && item.qualifier.disclosure === 'public' });
     const items: ZoneNavigationItem[] = [];
@@ -596,7 +594,6 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     const cursor = decodeReadCursor(input.cursor, binding, collectionPosition);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
       ...(cursor ? { after: cursor.after } : {}), limit: ZONE_ROUTE_COST.pageSize,
-      canReadTarget: async target => !!await read.target(target),
       canReadTargets: async targets => new Set((await read.targets(targets))
         .flatMap(summary => summary ? [summary.reference] : [])),
       visible: item => item.role === 'member' && !!item.target && NATIVE_ID.test(item.target) });

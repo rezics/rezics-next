@@ -6,6 +6,7 @@ import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.t
 import { readVisibleCompositionPage } from '../src/modules/collection/visible-page.ts';
 import { collectionTargetBatchReader } from '../src/modules/composition/visible-targets.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
 import type { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
@@ -57,11 +58,16 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
   const header: CompositionHeader = { structure, head: revision, generation, manifest: `urn:rezics:sha256:${digest}`,
     placementCount: count, profile: 'collection-membership', owner, component: owner, work: owner, mainVersion: owner };
   const queries: string[] = [], hydrated: string[][] = [], positionBatches: string[][] = [];
-  let graphSequence = '1', positionGeneration = '1', ambiguous = false;
+  let graphSequence = '1', graphEpoch = 'epoch', positionGeneration = '1', ambiguous = false;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async query => {
     queries.push(query);
     const bindings: NonNullable<SparqlResult['results']>['bindings'] = [];
+    if (query.includes('SELECT ?resource ?head')) {
+      const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
+      return { results: { bindings: resources.map(resource => ({ resource: uri(resource), head: uri(revision) })) } };
+    }
     if (query.includes('SELECT ?manifest ?predecessor')) {
       bindings.push({ manifest: term(header.manifest), count: term(String(count)), epoch: term('epoch'), sequence: term('1') });
     } else {
@@ -70,24 +76,26 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
       for (const resource of resources) {
         const index = indexes.get(resource)!;
         if (query.includes('SELECT ?epoch ?sequence ?hold')) {
-          bindings.push({ epoch: term('epoch'), sequence: term(graphSequence), r: uri(resource), type: term('work'),
+          bindings.push({ epoch: term(graphEpoch), sequence: term(graphSequence), r: uri(resource), type: term('work'),
             work: uri(resource), head: uri(revision), public: term('true'), erased: term('false'),
             label: { ...term('Collection target'), 'xml:lang': 'en' } });
         } else if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
           if (options.missingRevision?.(index)) continue;
-          bindings.push({ epoch: term('epoch'), sequence: term(graphSequence), r: uri(resource),
+          bindings.push({ epoch: term(graphEpoch), sequence: term(graphSequence), r: uri(resource),
             revision: uri(revision), type: uri('https://schema.org/CreativeWork') });
           if (ambiguous) bindings.push({ ...bindings.at(-1)!, revision: uri(derivedId('other-revision')) });
         } else throw new Error(`Unexpected graph query: ${query}`);
       }
-      if (!bindings.length) bindings.push({ epoch: term('epoch'), sequence: term(graphSequence) });
+      if (!bindings.length) bindings.push({ epoch: term(graphEpoch), sequence: term(graphSequence) });
     }
     return { results: { bindings } };
   };
   const environment = { fuseki: graph, structureObjects: objects, objectDirectory: '.temp/g-908-unit',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  configureDisclosure(environment, { read: async targets => targets.map(target =>
-    options.hidden?.(indexes.get(target.resource)!) ? 'tombstone' : 'visible') });
+  configureFixtureDisclosureAncestry(environment, target => target.work
+    ? { resource: target.work, head: revision, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    options.hidden?.(indexes.get(target.resource)!) ? 'tombstone' : 'visible')));
   const deps = { environment, access: {}, account: {},
     media: { store: { avatarRows: async (resources: string[]) => {
       hydrated.push([...resources]);
@@ -106,11 +114,11 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
     boundary.visible = async resources => { const result = await visible(resources); onVisible?.(); return result; };
     return readVisibleCompositionPage(environment, { structure, header, limit, after, occurrence, readingBoundary: boundary,
       visible: row => row.role !== 'member' || !!row.target,
-      canReadTarget: async () => { throw new Error('Scalar target hydration must not run'); },
       canReadTargets: collectionTargetBatchReader(current) });
   };
   return { records, read, queries, hydrated, positionBatches, session,
-    moveGraph: () => { graphSequence = '2'; }, movePosition: () => { positionGeneration = '2'; },
+    moveGraph: () => { graphEpoch = 'recovered'; }, moveSequence: () => { graphSequence = '2'; },
+    movePosition: () => { positionGeneration = '2'; },
     ambiguous: () => { ambiguous = true; } };
 }
 
@@ -127,14 +135,15 @@ test('G-908: distinct 10/100-item pages share one range pass with two bounded hy
     expect(f.hydrated.flat()).toEqual(f.records.map(record => record.target!));
     expect(f.positionBatches.map(batch => batch.length)).toEqual([50, 50]);
   }
-  expect(counts).toEqual([5, 5]);
+  // Each resolver batch now includes two exact owner-parent head statements.
+  expect(counts).toEqual([9, 9]);
 });
 
 test('G-908: 100 duplicate targets hydrate once and retain every occurrence', async () => {
   const f = await fixture(100, { duplicate: true });
   const page = await f.read(100);
   expect(page.occurrences).toEqual(f.records);
-  expect(f.queries).toHaveLength(3);
+  expect(f.queries).toHaveLength(5);
   expect(f.hydrated).toEqual([[f.records[0]!.target!]]);
   expect(f.positionBatches).toEqual([[f.records[0]!.target!]]);
 });
@@ -167,16 +176,22 @@ test('G-908: mixed hidden, position-gated and revision-missing members are withh
     .rejects.toBeInstanceOf(TargetUnavailable);
 });
 
-test('G-908: batched resolution rejects graph movement and ambiguous heads; position changes fence the page', async () => {
+test('batched Collection resolution rejects recovery epoch movement and ambiguous heads; position changes fence the page', async () => {
   const moved = await fixture(2);
   moved.moveGraph();
-  await expect(moved.read(100)).rejects.toBeInstanceOf(WorkReadMoved);
+  await expect(moved.read(100)).rejects.toThrow('graph lineage is unavailable');
   const ambiguous = await fixture(2);
   ambiguous.ambiguous();
   await expect(resolveVisibleTargets(ambiguous.session(), ambiguous.records.map(record => record.target!), 'collection-member'))
     .rejects.toBeInstanceOf(WorkReadUnavailable);
   const position = await fixture(2);
   await expect(position.read(100, undefined, undefined, position.movePosition)).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('Collection selected-unit admission tolerates unrelated graph sequence movement', async () => {
+  const f = await fixture(4);
+  f.moveSequence();
+  expect((await f.read(100)).occurrences).toEqual(f.records);
 });
 
 test('G-908: cancellation stops a batched page before graph or target hydration', async () => {

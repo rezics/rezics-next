@@ -19,6 +19,8 @@ import { resolveTargets, TargetUnavailable } from '../src/modules/target/resolve
 import { compositionRoutes } from '../src/routes/compositions.ts';
 import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
 import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
+import { wikiMembers } from '../src/modules/wiki/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const term = (value: string) => ({ type: 'literal' as const, value });
 const uri = (value: string) => ({ type: 'uri' as const, value });
@@ -80,6 +82,11 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
     queries.push(query);
     const bindings: NonNullable<SparqlResult['results']>['bindings'] = [];
     if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?resource ?head')) {
+      const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
+      return { results: { bindings: resources.map(resource => ({ resource: uri(resource), head: uri(revision) })) } };
+    }
     if (query.includes('SELECT ?revision ?manifest ?coverage')) return { results: { bindings: [{
       revision: uri(revision), manifest: term(`urn:rezics:sha256:${sealDigest}`),
       coverage: uri('https://rezics.com/vocab/Complete'), unavailable: term('0'), epoch: term('epoch'), sequence: term('1'),
@@ -128,8 +135,10 @@ async function fixture(count: number, options: { duplicate?: boolean; hidden?: (
   };
   const environment = { fuseki: graph, structureObjects: objects, objectDirectory: '.temp/collection-page-admission-unit',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  configureDisclosure(environment, { read: async targets => targets.map(target =>
-    options.hidden?.(indexes.get(target.resource)!) ? 'tombstone' : 'visible') });
+  configureFixtureDisclosureAncestry(environment, target => target.work
+    ? { resource: target.work, head: revision, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    options.hidden?.(indexes.get(target.resource)!) ? 'tombstone' : 'visible')));
   const deps = { environment, access: { assertRecoveryOpen: async () => {},
       canReadWork: async (_principal: unknown, _actor: string, target: string) => !!options.granted?.(indexes.get(target)!),
     }, account: {},
@@ -181,10 +190,11 @@ test('public Collection pages batch duplicate and distinct 4/16/64 members in co
       expect(result.body.next).toBeNull();
       counts.push(result.queries);
       expect(result.hydrated.filter(batch => batch.includes(f.records[0]!.target!)))
-        .toEqual([[...new Set(f.records.map(record => record.target!))]]);
+        .toEqual(Array.from({ length: 2 }, () => [...new Set(f.records.map(record => record.target!))]));
     }
     expect(counts).toEqual([counts[0]!, counts[0]!, counts[0]!]);
-    expect(counts[0]!).toBeLessThanOrEqual(12);
+    // The selected-unit fence rereads the same bounded target summary batch.
+    expect(counts[0]!).toBeLessThanOrEqual(20);
     console.info(`Collection ${duplicate ? 'duplicate' : 'distinct'}-target admission counts: ${JSON.stringify(counts)}`);
   }
 });
@@ -224,25 +234,30 @@ test('Work scalar, batch, Collection page and seal reads all refuse a merge cycl
   expect((await f.readSeal()).status).toBe(503);
 });
 
-test('scalar compatibility establishes limit-50 lookahead before a later failing target, with and without a reading boundary', async () => {
+test('visible page requests expose only batch admission', () => {
+  type Request = Parameters<typeof readVisibleCompositionPage>[1];
+  const scalarOptionExists: 'canReadTarget' extends keyof Request ? true : false = false;
+  expect(scalarOptionExists).toBe(false);
+});
+
+test('batch-only pages admit the immutable range once, with and without a reading boundary', async () => {
   for (const boundary of [false, true]) {
     const f = await fixture(64);
-    const checked: string[] = [], later = f.records[51]!.target!;
+    const batches: string[][] = [];
     const page = await readVisibleCompositionPage(f.environment, { structure: f.header.structure, header: f.header,
       limit: 50, visible: record => !!record.target,
       ...(boundary ? { readingBoundary: new ReadingBoundary(f.session()) } : {}),
-      canReadTarget: async target => {
-        checked.push(target);
-        if (target === later) throw new Error('Later target owner unavailable');
-        return true;
+      canReadTargets: async targets => {
+        batches.push([...targets]);
+        return new Set(targets);
       } });
     expect(page.occurrences).toEqual(f.records.slice(0, 50));
     expect(page.next).not.toBeNull();
-    expect(checked).toEqual(f.records.slice(0, 51).map(record => record.target!));
+    expect(batches).toEqual([f.records.map(record => record.target!)]);
   }
 });
 
-test('scalar compatibility stops at cancellation between target callbacks with and without a reading boundary', async () => {
+test('batch-only pages stop on admission cancellation with and without a reading boundary', async () => {
   for (const boundary of [false, true]) {
     const f = await fixture(64), controller = new AbortController();
     let checks = 0;
@@ -250,9 +265,49 @@ test('scalar compatibility stops at cancellation between target callbacks with a
       () => readVisibleCompositionPage(f.environment, { structure: f.header.structure, header: f.header,
         limit: 50, visible: record => !!record.target,
         ...(boundary ? { readingBoundary: new ReadingBoundary(f.session()) } : {}),
-        canReadTarget: async () => { checks++; controller.abort(new Error('Read cancelled')); return false; },
+        canReadTargets: async targets => { checks++; controller.abort(new Error('Read cancelled')); return new Set(targets); },
       }))).rejects.toThrow('Read cancelled');
     expect(checks).toBe(1);
+  }
+});
+
+test('wiki membership admits duplicate and distinct 4/16/64 targets in one owner batch per range', async () => {
+  for (const duplicate of [true, false]) {
+    const costs: number[] = [];
+    for (const count of [4, 16, 64]) {
+      const f = await fixture(count, { duplicate }), batches: string[][] = [];
+      Object.assign(f.deps.access, {
+        canReadSemanticResource: async () => { throw new Error('Wiki page must use the semantic batch'); },
+        canReadSemanticResources: async (_principal: unknown, _actor: string, targets: readonly string[]) => {
+          batches.push([...targets]); return new Set(targets);
+        },
+      });
+      const requested = [...new Set(f.records.map(record => record.target!))];
+      const result = await wikiMembers({ work: f.deps, session: f.session(),
+        principal: { issuer: 'account', subject: 'reader' }, actingSubject: derivedId('wiki-reader') },
+      new Map([['characters', f.header]]));
+      expect(result).toEqual(requested);
+      expect(batches).toEqual([requested]);
+      costs.push(f.queries.length);
+    }
+    expect(costs).toEqual([1, 1, 1]);
+    console.info(`Wiki ${duplicate ? 'duplicate' : 'distinct'}-target admission counts: ${JSON.stringify(costs)}`);
+  }
+});
+
+test('wiki semantic batches and distinct scalar owner adapters preserve the same denied and admitted identities', async () => {
+  for (const batch of [true, false]) {
+    const f = await fixture(4), requested = f.records.map(record => record.target!);
+    const allowed = new Set([requested[1]!, requested[3]!]);
+    const ownerDecision = async (targets: readonly string[]) => new Set(targets.filter(target => allowed.has(target)));
+    Object.assign(f.deps.access, {
+      canReadSemanticResource: async (_principal: unknown, _actor: string, target: string) =>
+        (await ownerDecision([target])).has(target),
+      canReadSemanticResources: batch ? (_principal: unknown, _actor: string, targets: readonly string[]) => ownerDecision(targets) : undefined,
+    });
+    expect(await wikiMembers({ work: f.deps, session: f.session(),
+      principal: { issuer: 'account', subject: 'reader' }, actingSubject: derivedId('wiki-reader') },
+    new Map([['characters', f.header]]))).toEqual([...allowed]);
   }
 });
 

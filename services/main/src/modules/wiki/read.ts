@@ -105,6 +105,19 @@ export async function wikiScope(read: WikiRead, target: string, zone: string) {
  * members never enter name matching or its inventory budget. A truncated
  * disclosed inventory fails explicitly, rather than inventing a `new` name. */
 export async function wikiMembers(read: WikiRead, collections: ReadonlyMap<string, CompositionHeader>) {
+  const canReadTargets = async (targets: readonly string[]): Promise<ReadonlySet<string>> => {
+    const access = read.work.access;
+    if (access.canReadSemanticResources) return access.canReadSemanticResources(
+      read.principal, read.actingSubject, targets);
+    const readable = new Set<string>();
+    // Older owner adapters still use the same decision for each distinct
+    // target; normal requests use Access's scalar-equivalent batch above.
+    for (const target of new Set(targets)) {
+      read.session.checkDeadline();
+      if (await access.canReadSemanticResource?.(read.principal, read.actingSubject, target)) readable.add(target);
+    }
+    return readable;
+  };
   const targets = new Set<string>();
   let records = 0, pages = 0;
   for (const [segment, header] of collections) {
@@ -115,8 +128,7 @@ export async function wikiMembers(read: WikiRead, collections: ReadonlyMap<strin
       const scan = queue.shift()!;
       const page = await readVisibleCompositionPage(read.work.environment, { structure: header.structure, header,
         parent: scan.parent, after: scan.after, limit: 100,
-        canReadTarget: target => Promise.resolve(read.work.access.canReadSemanticResource?.(
-          read.principal, read.actingSubject, target) ?? false),
+        canReadTargets,
         visible: item => item.role === 'member' || item.role === 'group' });
       records += page.occurrences.length;
       if (records > WIKI_READ_COST.inventory) throw new WikiRejected('wiki_query_budget');

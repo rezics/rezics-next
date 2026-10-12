@@ -197,6 +197,7 @@ export interface MainWorkDependencies {
       | 'publicRealmCount' | 'realmDirectory'
       | 'withWorkEditAuthority'
       | 'canReadSemanticResource'
+      | 'canReadSemanticResources'
       | 'canReadZoneNavigationTargets'
       | 'canMarkOfficialZone'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'

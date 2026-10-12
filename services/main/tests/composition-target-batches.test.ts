@@ -6,6 +6,7 @@ import { canReadCompositionWork, compositionTargetBatchReader } from '../src/mod
 import { readWorkParts, readWorkWholes } from '../src/modules/composition/read.ts';
 import { compositionWorkBatchReader } from '../src/modules/composition/visible-targets.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { checkedComponentState } from '../src/modules/semantic/change.ts';
 import { PROFILES } from '../src/modules/semantic/schema.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
@@ -14,7 +15,7 @@ import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
 import { derivedId, orderTreeKey } from '../src/modules/structure/graph.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
-import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { prepareWorkComponent } from '../src/modules/work/activate.ts';
 import { PublishedStructureSourceUnavailable, type PublishedStructuredWorkSource }
   from '../src/modules/work/public-patterns.ts';
@@ -45,10 +46,15 @@ function fixture(input: Target[], signedIn = false) {
     if (!bytes) throw new Error('Missing semantic fixture object');
     return bytes;
   } };
-  let sequence = '1', ambiguous = false, failOwner = false;
+  let sequence = '1', graphEpoch = 'epoch', ambiguous = false, failOwner = false;
   let graphBytes = 0;
   graph.query = async query => {
     queries.push(query);
+    if (query.includes('SELECT ?resource ?head')) {
+      const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
+      return { results: { bindings: resources.map(resource => ({ resource: uri(resource), head: uri(revision) })) } };
+    }
     const publication = structuredWorkPublicationAnswer(query);
     if (publication) {
       graphBytes += Buffer.byteLength(JSON.stringify(publication));
@@ -82,7 +88,7 @@ function fixture(input: Target[], signedIn = false) {
       if (!target) continue;
       if (query.includes('SELECT ?epoch ?sequence ?hold')) {
         const base = target.base ?? 'work';
-        bindings.push({ epoch: literal('epoch'), sequence: literal(sequence), r: uri(resource),
+        bindings.push({ epoch: literal(graphEpoch), sequence: literal(sequence), r: uri(resource),
           type: literal(base), ...(base !== 'resource' ? {
             work: uri(base === 'work' ? resource : derivedId('composition-target-parent')), head: uri(revision),
             label: { ...literal('Work target'), 'xml:lang': 'en' } } : {}),
@@ -94,22 +100,24 @@ function fixture(input: Target[], signedIn = false) {
           : base === 'resource' ? ['https://schema.org/Episode']
             : base === 'occurrence' ? ['https://schema.org/ListItem']
               : [`https://rezics.com/vocab/${base === 'realization' ? 'Realization' : 'Release'}`];
-        for (const type of types) bindings.push({ epoch: literal('epoch'), sequence: literal(sequence), r: uri(resource),
+        for (const type of types) bindings.push({ epoch: literal(graphEpoch), sequence: literal(sequence), r: uri(resource),
           revision: uri(revision), type: uri(type) });
         if (ambiguous) bindings.push({ ...bindings.at(-1)!, revision: uri(derivedId('composition-other-revision')) });
       } else throw new Error(`Unexpected target query: ${query}`);
     }
-    if (!bindings.length) bindings.push({ epoch: literal('epoch'), sequence: literal(sequence) });
+    if (!bindings.length) bindings.push({ epoch: literal(graphEpoch), sequence: literal(sequence) });
     const result = { results: { bindings } };
     graphBytes += Buffer.byteLength(JSON.stringify(result));
     return result;
   };
   const environment = { fuseki: graph, workObjects: objects, objectDirectory: '.temp/composition-target-batches',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  configureDisclosure(environment, { read: async resources => {
+  configureFixtureDisclosureAncestry(environment, target => target.work
+    ? { resource: target.work, head: revision, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async resources => {
     disclosure.push(resources.map(target => target.resource));
     return resources.map(target => indexed.get(target.resource)?.hidden ? 'tombstone' : 'visible');
-  } });
+  }));
   const canReadSemantic = (principal: unknown, resource: string) => {
     const target = indexed.get(resource);
     return !!target && (!target.private || !!principal && !!target.granted);
@@ -134,12 +142,13 @@ function fixture(input: Target[], signedIn = false) {
   } } } } as unknown as MainWorkDependencies;
   const session = () => {
     const read = new WorkReadSession(deps, new Request('http://main.test/v1/compositions'),
-      signedIn ? { actingSubject: derivedId('composition-reader') } : {}, { dataEpoch: 'epoch', sequence: '1' });
+      signedIn ? { actingSubject: derivedId('composition-reader') } : {},
+      { dataEpoch: 'epoch', sequence: '1' });
     if (signedIn) read.principal = { issuer: 'account', subject: 'reader' };
     return read;
   };
   return { deps, input, graph, revision, session, queries, hydration, disclosure, grants, objects, semanticManifests, semanticBatches,
-    graphBytes: () => graphBytes, move: () => { sequence = '2'; },
+    graphBytes: () => graphBytes, move: () => { graphEpoch = 'recovered'; }, moveSequence: () => { sequence = '2'; },
     ambiguous: () => { ambiguous = true; }, failOwner: () => { failOwner = true; } };
 }
 
@@ -149,7 +158,8 @@ test('Composition profile batches hydrate 100 distinct Work identities in two bo
     const read = compositionTargetBatchReader(f.session(), structureProfileFor(profile))!;
     const visible = await read(f.input.map(target => target.resource));
     expect([...visible]).toEqual(f.input.map(target => target.resource));
-    expect(f.queries).toHaveLength(4);
+    // Two resolver probes and two owner-parent head statements per batch.
+    expect(f.queries).toHaveLength(8);
     expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
     expect(f.hydration.flat()).toEqual([...visible]);
     expect(f.disclosure.map(batch => batch.length)).toEqual([64, 64, 36, 36]);
@@ -174,7 +184,7 @@ test('Composition batches retain 100 admitted Episode resource grains with bound
   expect(f.semanticBatches.map(batch => batch.length)).toEqual([64, 36]);
   expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
   expect(f.disclosure.map(batch => batch.length)).toEqual([64, 64, 36, 36]);
-  expect(f.queries).toHaveLength(10);
+  expect(f.queries).toHaveLength(6);
   expect(f.graphBytes()).toBeLessThan(4 * 1024 * 1024);
   expect([...await compositionWorkBatchReader(f.session())(resources)]).toEqual([]);
   expect(f.semanticBatches.map(batch => batch.length)).toEqual([64, 36, 64, 36]);
@@ -186,7 +196,7 @@ test('Composition batching deduplicates targets and accepts empty candidate sets
   expect([...await read([])]).toEqual([]);
   expect(f.queries).toEqual([]);
   expect([...await read(Array(100).fill(f.input[0]!.resource))]).toEqual([f.input[0]!.resource]);
-  expect(f.queries).toHaveLength(2);
+  expect(f.queries).toHaveLength(4);
   expect(f.hydration).toEqual([[f.input[0]!.resource]]);
 });
 
@@ -232,16 +242,23 @@ test('Work parts batching filters non-Work grains while generic Composition batc
     .toEqual([input[0]!.resource]);
 });
 
-test('Composition batches fail closed on graph movement, ambiguous revisions and owner failures', async () => {
+test('Composition batches fail closed on recovery epoch movement, ambiguous revisions and owner failures', async () => {
   for (const state of ['move', 'ambiguous', 'failOwner'] as const) {
     const f = fixture(targets(1));
     f[state]();
     const read = compositionTargetBatchReader(f.session(), structureProfileFor('work-composition'))!;
     const result = read(f.input.map(target => target.resource));
-    if (state === 'move') await expect(result).rejects.toBeInstanceOf(WorkReadMoved);
+    if (state === 'move') await expect(result).rejects.toThrow('graph lineage is unavailable');
     else if (state === 'ambiguous') await expect(result).rejects.toBeInstanceOf(WorkReadUnavailable);
     else await expect(result).rejects.toThrow('Media owner unavailable');
   }
+});
+
+test('Composition selected-unit admission tolerates unrelated graph sequence movement', async () => {
+  const f = fixture(targets(4));
+  f.moveSequence();
+  expect(await compositionTargetBatchReader(f.session(), structureProfileFor('work-composition'))(
+    f.input.map(target => target.resource))).toEqual(new Set(f.input.map(target => target.resource)));
 });
 
 test('Composition Work admission checks exact sources in its existing probe and retains Structure disclosure', async () => {
@@ -252,8 +269,8 @@ test('Composition Work admission checks exact sources in its existing probe and 
     structureRevision: f.revision, selectedGeneration: derivedId('composition-source-generation'),
     sourceRoot: `urn:rezics:sha256:${'a'.repeat(64)}` };
   let visible = true, exact = true, duplicate = false;
-  configureDisclosure(f.deps.environment, { read: async targets => targets.map(target =>
-    target.component === 'structure' && !visible ? 'hidden' : 'visible') });
+  configureDisclosure(f.deps.environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    target.component === 'structure' && !visible ? 'hidden' : 'visible')));
   const queryTargets = f.graph.query.bind(f.graph);
   f.graph.query = async query => {
     if (query.includes('SELECT ?main ?public')) {
@@ -347,8 +364,8 @@ test('Work parts disclose 100 distinct Work targets without scalar target probes
   expect(result.next).toBeNull();
   expect(scalarProbes).toBe(1);
   expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
-  expect(f.queries).toHaveLength(11);
-  expect(f.queries.filter(query => query.includes('SELECT ?work ?head ?owningWork ?owningHead'))).toHaveLength(1);
+  expect(f.queries).toHaveLength(15);
+  expect(f.queries.filter(query => query.includes('SELECT ?resource ?head'))).toHaveLength(5);
   missingMain = true;
   await expect(readWorkParts(f.session(), owner, { limit: 100 })).rejects.toBeInstanceOf(WorkReadUnavailable);
 });
@@ -384,6 +401,7 @@ test('Work wholes skip a sparse range and hydrate repeated whole identities once
   expect(ranges).toBe(2);
   expect(scalarProbes).toBe(1);
   expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
-  expect(f.queries).toHaveLength(9);
-  expect(f.queries.filter(query => query.includes('SELECT ?work ?head ?owningWork ?owningHead'))).toHaveLength(1);
+  // The first hidden whole still gets its initial exact parent-head statement.
+  expect(f.queries).toHaveLength(14);
+  expect(f.queries.filter(query => query.includes('SELECT ?resource ?head'))).toHaveLength(6);
 });

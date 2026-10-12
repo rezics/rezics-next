@@ -14,6 +14,9 @@ import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { zoneRoutes } from '../src/routes/zones.ts';
+import { readZonePresentation } from '../src/modules/zone/route.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = (name: string) => derivedId(`zone-presentation-admission:${name}`);
 const principal = { issuer: 'https://account.test', subject: 'reader' };
@@ -61,7 +64,7 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
     format: ZONE_CONFIG_FORMAT, zone, space, navigation: structure, state: 'active', disclosure: 'public',
     budget: { timeMs: 500, rows: 100 }, queryBlocks: [], model: ZONE_PROFILE,
   } }, ZONE_PROFILE);
-  const sql: string[] = [], queries: string[] = [], batches: string[][] = [];
+  const sql: string[] = [], queries: string[] = [], batches: string[][] = [], summaryBatches: string[][] = [];
   const viewer: VerifiedPrincipal = { ...principal, emailVerified: true };
   const proofOnly = !!options.maintainer || !!options.successor || !!options.platform;
   const grantId = (scope: string) => id(`grant:${scope}`).slice(-36);
@@ -134,10 +137,23 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
     }
     return result([]);
   } };
-  const pool = { connect: async () => client } as unknown as Pool;
+  const pool = { connect: async () => client, query: client.query } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async query => {
     queries.push(query);
+    if (query.includes('SELECT ?sequence WHERE')) return rows([{ sequence: '1' }]);
+    if (query.includes('SELECT ?spaceDisclosure WHERE')) return rows([{ spaceDisclosure: `${RV}Public` }]);
+    if (query.includes('SELECT ?epoch ?sequence ?hold')) {
+      const requested = [...new Set([...query.matchAll(/VALUES \?r \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!)))];
+      summaryBatches.push(requested);
+      return { results: { bindings: requested.map(resource => ({
+        epoch: { type: 'literal', value: 'epoch' }, sequence: { type: 'literal', value: '1' },
+        r: { type: 'uri', value: resource }, type: { type: 'literal', value: 'collection' },
+        public: { type: 'literal', value: 'true' }, erased: { type: 'literal', value: String(!readable.has(resource)) },
+        label: { type: 'literal', value: 'Mounted Collection', 'xml:lang': 'en' },
+      })) } };
+    }
     if (query.includes('ASK')) return { boolean: query.includes('rv:admissionId') ? !!options.maintainer
       : query.includes('a schema:CreativeWork') ? [...works].some(work => query.includes(`<${work}>`)) : true };
     if (query.includes('SELECT ?creation WHERE')) return rows([{ creation: revision }]);
@@ -189,6 +205,8 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
       return viewer;
     } },
   } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(work.environment, () => undefined);
+  configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const app = zoneRoutes(graph, work);
   const read = async (after?: string) => {
     sql.length = queries.length = batches.length = semanticBatches = 0;
@@ -206,11 +224,37 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
     }
     return allowed;
   };
-  return { read, records, targets, sql, queries, scalar, batch: () => originalBatch(viewer,
+  const readPublic = async () => {
+    queries.length = summaryBatches.length = 0;
+    const result = await readZonePresentation(work, new Request('http://main.test/v1/zones/public'), zone, undefined,
+      async (_state, navigation, _viewer, _visibleSlides, continuation) => ({ navigation, ...continuation }));
+    return { ...result, queries: queries.length, summaryBatches: [...summaryBatches] };
+  };
+  return { read, readPublic, records, targets, sql, queries, scalar, batch: () => originalBatch(viewer,
     options.workScope === false ? null : viewer, actor, targets), close: () => rmSync(directory, { recursive: true, force: true }),
     holdRecovery: () => { recoveryOpen = false; }, failGraph: () => { failureBatch = 2; },
     corruptTypes: () => { ambiguous = true; }, revoke: () => { readable.clear(); } };
 }
+
+test('public Zone navigation batches duplicate and distinct 4/16/64 targets under its existing summary decision', async () => {
+  for (const distinct of [false, true]) {
+    const costs: number[] = [];
+    for (const count of [4, 16, 64]) {
+      const f = await fixture(count, { distinct });
+      try {
+        const result = await f.readPublic();
+        expect(result.navigation.map(item => item.target)).toEqual(f.records.slice(0, 50).map(record => record.target!));
+        expect(result.navigationComplete).toBe(count <= 50);
+        expect(result.summaryBatches.slice(0, Math.ceil(f.targets.length / 50))).toEqual(
+          Array.from({ length: Math.ceil(f.targets.length / 50) }, (_, index) => f.targets.slice(index * 50, index * 50 + 50)));
+        costs.push(result.queries);
+      } finally { f.close(); }
+    }
+    if (!distinct) expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
+    else expect(costs[2]! - costs[0]!).toBeLessThanOrEqual(4);
+    console.info(`Public Zone ${distinct ? 'distinct' : 'duplicate'}-target navigation counts: ${JSON.stringify(costs)}`);
+  }
+});
 
 test('Zone presentation navigation batches duplicate 4/16/64 mounts in constant owner queries', async () => {
   const costs: Array<{ sql: number; fuseki: number }> = [];

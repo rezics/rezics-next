@@ -15,6 +15,8 @@ import { derivedId } from '../src/modules/structure/graph.ts';
 import { resolveTargets, resolveVisibleTargets } from '../src/modules/target/resolve.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 /** Real summary, capability admission and export readers; the retained
  * projection still frames its source Work after that Work is merged. */
@@ -31,6 +33,11 @@ function mergedProjectionFixture(currentUsesSurvivor = false) {
   const resourcesIn = (query: string) => [...new Set([...query.matchAll(/VALUES \?r \{([^}]+)\}/g)]
     .flatMap(match => [...match[1]!.matchAll(/<([^>]+)>/g)].map(reference => reference[1]!)))];
   graph.query = async query => {
+    if (query.includes('SELECT ?resource ?head')) {
+      const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
+      return { results: { bindings: resources.map(resource => ({ resource: uri(resource), head: uri(revision(resource)) })) } };
+    }
     const resources = resourcesIn(query);
     if (query.includes('SELECT ?epoch ?sequence ?hold')) {
       const bindings = resources.flatMap((resource): Row[] => {
@@ -58,6 +65,9 @@ function mergedProjectionFixture(currentUsesSurvivor = false) {
   };
   const deps = { environment: { fuseki: graph, objectDirectory: '.temp/projection-export-merge',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, access: {}, account: {} } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: revision(target.work), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const session = new WorkReadSession(deps, new Request('http://main.test/v1/exports'), {},
     { dataEpoch: 'epoch', sequence: '1' });
   return { session, source, survivor, subject, projection, revision, retained };

@@ -47,7 +47,15 @@ async function fixture(count: number, disclosed: (index: number) => boolean, onT
   } } } as unknown as WorkActivationEnvironment;
   const read = (limit: number, after?: string, occurrence?: string) => readVisibleCompositionPage(env, { structure, header,
     limit, after, occurrence, visible: row => row.role !== 'member' || !!row.target,
-    canReadTarget: async target => { targetChecks++; onTarget?.(); return readable.has(target); } });
+    canReadTargets: async targets => {
+      const admitted = new Set<string>();
+      for (const target of targets) {
+        fusekiReadBudget.getStore()?.signal.throwIfAborted();
+        targetChecks++; onTarget?.();
+        if (readable.has(target)) admitted.add(target);
+      }
+      return admitted;
+    } });
   return { records, read, graphCalls: () => graphCalls, targetChecks: () => targetChecks };
 }
 

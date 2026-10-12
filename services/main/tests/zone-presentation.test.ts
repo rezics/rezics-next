@@ -16,6 +16,8 @@ import { checkZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
   ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS, ZONE_PRESENTATION_PROFILE, zoneRenderTokens, type ZonePresentation }
   from '../src/modules/zone/presentation-format.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = (value: string) => `https://rezics.com/id/${value}`;
 const one = id('00000000-0000-4000-8000-000000000001');
@@ -206,6 +208,9 @@ function publishedHomeFixture() {
         language: { kind: 'tag', tag: page.language, originalTag: page.language },
         sourceRevision: null, predecessor: null, provenance: {} } }] satisfies ExactReadResult[];
   } };
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    mutable.erased && target.owner === 'content' ? 'hidden' : 'visible')));
   const work = { environment, content, contentAuthoring: { readExactMetadataBatch: async (ids: string[]) =>
     new Map(ids.map(revisionId => [revisionId, { availability: mutable.metadataAvailable ? 'available' : 'erased',
       byteDigest: mutable.metadataDigest }])) } } as unknown as MainWorkDependencies;

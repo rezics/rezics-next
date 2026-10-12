@@ -4,6 +4,8 @@ import { compositionTargetReader } from '../src/modules/composition/disclosure-r
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -16,6 +18,9 @@ function fixture(options: { post?: boolean; public?: boolean; granted?: boolean;
   graph.query = async query => {
     queries.push(query);
     if (options.unavailable) throw new Error('target graph unavailable');
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: [{
+      resource: { type: 'uri', value: target }, head: { type: 'uri', value: actor },
+    }] } };
     // A Post has no CreativeWork/MainVersion result. The regression's Work-only
     // probe returns no rows; the existing resource summary sees its Post head.
     if (!query.includes('SELECT ?epoch ?sequence ?hold')) return { results: { bindings: [] } };
@@ -36,6 +41,9 @@ function fixture(options: { post?: boolean; public?: boolean; granted?: boolean;
     access: { canReadWork: async (_principal: unknown, _actor: string, resource: string) => {
       grants.push(resource); return options.granted ?? false;
     } } } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: actor, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const session = new WorkReadSession(deps, new Request('http://main.local/v1/compositions'),
     { actingSubject: actor }, { dataEpoch: 'epoch', sequence: '7' });
   session.principal = { issuer: 'account', subject: 'reader' };

@@ -307,16 +307,13 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
     visible: item => item.role === 'mount' && !!item.target,
     canReadTargets: work.access.canReadZoneNavigationTargets
       ? targets => work.access.canReadZoneNavigationTargets!(principal, workPrincipal, input.actingSubject, targets)
-      : undefined,
-    canReadTarget: async target => {
-      return canReadStructureTarget(structureProfileFor(header.profile), {
+      : targets => canReadStructureTargets(structureProfileFor(header.profile), {
         environment: work.environment, access: {
           canReadWork: (_principal, actor, resource) => workPrincipal
             ? work.access.canReadWork(workPrincipal, actor, resource) : Promise.resolve(false),
           canReadSemanticResource: (semanticPrincipal, actor, resource) =>
             work.access.canReadSemanticResource?.(semanticPrincipal, actor, resource) ?? Promise.resolve(false),
-        }, principal, actingSubject: input.actingSubject, target });
-    } });
+        }, principal, actingSubject: input.actingSubject }, targets) });
   // The optional revision selects navigation history; metadata names the current owner head.
   return { zone, navigation: structure, revision: result.revision,
     ownerRevision: state.revision, name: state.name, language: state.language, direction: state.direction,

@@ -20,6 +20,8 @@ import { AccountAssertionDenied, AccountAssertionInsufficientScope, AccountAsser
 import { fusekiReadBudget, FusekiReadBudgetExceeded, type FusekiClient } from '../src/infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { zoneRoutes } from '../src/routes/zones.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 function fixture(input: { verificationError?: Error; authorityError?: Error; missingAuthority?: boolean } = {}) {
   const zone = `https://rezics.com/id/${randomUUID()}`;
@@ -43,6 +45,8 @@ function fixture(input: { verificationError?: Error; authorityError?: Error; mis
         if (input.authorityError) throw input.authorityError;
       },
     }) } } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(work.environment, () => undefined);
+  configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const app = zoneRoutes(fuseki, work);
   return { probes, read: (endpoint: string) => app.handle(new Request(
     `http://main.local/v1/zones/${zone.slice(-36)}/${endpoint}?actingSubject=${encodeURIComponent(actor)}`,
@@ -178,6 +182,8 @@ async function savedSite(mountCount = 1, foreignMount = false) {
       readExactBatch: async () => { state.bodyReads++; return [state.exact]; },
       ownerPosition: async () => ({ owner: 'content', dataEpoch: 'epoch', sequence: '2' }),
     } } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(work.environment, () => undefined);
+  configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const app = zoneRoutes(fuseki, work);
   return { work, state, zone, variantId, contentRevision, navRevision, records, document, publishedContent,
     read: (input: { anonymous?: boolean; after?: string } = {}) => app.handle(new Request(
