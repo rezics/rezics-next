@@ -5,7 +5,8 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { ChoiceSelect } from '@rezics/ui/select';
-import { useEffect, useId, useState } from 'react';
+import { Skeleton } from '@rezics/ui/skeleton';
+import { useEffect, useId, useRef, useState } from 'react';
 import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -15,8 +16,9 @@ import { EpisodeProgress } from './episode-progress.tsx';
 import { MediumProgress } from './medium-progress.tsx';
 import { copyOf, type Copy } from './messages.ts';
 import { SeriesStates } from './series-states.tsx';
+import { applyEditionPage, EditionContinuation, editionRequest } from './tracking-sheet.tsx';
 import type { ReadFailure } from '../feed/types.ts';
-import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Relations, SeriesPart, SeriesSummary } from './types.ts';
+import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Realization, Release, Relations, SeriesPart, SeriesSummary } from './types.ts';
 
 
 /** A correspondence Main records as equivalent between this Work and another. */
@@ -65,20 +67,80 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
   work: string; preference: EditionPreference | null; language: string; editions: Editions | null; api: TrackingApi;
   locale: UiLocale; t: Copy; onSaved: (preference: EditionPreference | null) => void; onLanguage: (language: string) => void;
 }) {
-  const [edition, setEdition] = useState(preference?.edition ? `${preference.edition.kind}|${preference.edition.resource}` : '');
+  // The saved resource and revision are a choice, not a lookup into the current catalogue page.
+  const [edition, setEdition] = useState<EditionChoice['edition']>(preference?.edition ?? null);
+  const [listed, setListed] = useState(editions);
+  const [selectedDetail, setSelectedDetail] = useState<Realization | Release | null>(null);
+  const [moreFailed, setMoreFailed] = useState(!editions);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const generation = useRef(0);
+  const readingMore = useRef(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<'saved' | 'failed' | null>(null);
   const [stale, setStale] = useState<{ current: EditionPreference | null; mine: EditionChoice } | null>(null);
+  useEffect(() => { setEdition(preference?.edition ?? null); }, [preference]);
+  useEffect(() => {
+    const ticket = ++generation.current;
+    setListed(editions);
+    setMoreFailed(!editions);
+    setMoreBusy(false);
+    readingMore.current = false;
+    return () => { if (generation.current === ticket) generation.current++; };
+  }, [editions, work, api]);
+  useEffect(() => {
+    let current = true;
+    setSelectedDetail(null);
+    if (preference?.edition) void api.edition(work, preference.edition).then(read => {
+      if (current && read.ok) setSelectedDetail(read.data);
+    });
+    return () => { current = false; };
+  }, [api, work, preference?.edition]);
+  const realizations = [...(listed?.realizations ?? [])];
+  const releases = [...(listed?.releases ?? [])];
+  if (selectedDetail && 'contentLanguages' in selectedDetail) {
+    if (!releases.some(item => item.id === selectedDetail.id)) releases.push(selectedDetail);
+  } else if (selectedDetail && !realizations.some(item => item.id === selectedDetail.id)) realizations.push(selectedDetail);
   // The interface languages, the current choice and every language the Work's own editions are in.
-  const languages = [...new Map([...uiLocales, language, ...(editions?.realizations ?? []).map(item => item.language),
-    ...(editions?.releases ?? []).flatMap(item => item.contentLanguages)].map(tag => [tag.toLowerCase(), tag])).values()];
+  const languages = [...new Map([...uiLocales, language, ...realizations.map(item => item.language),
+    ...releases.flatMap(item => item.contentLanguages)].map(tag => [tag.toLowerCase(), tag])).values()];
   const same = (tag: string | null) => tag?.toLowerCase() === language.toLowerCase();
   const offered = [
-    ...(editions?.realizations ?? []).filter(item => same(item.language)).map(item => ({ kind: 'realization' as const,
+    ...realizations.filter(item => same(item.language)).map(item => ({ kind: 'realization' as const,
       resource: item.id, revision: item.revision, name: (item.kind === 'original' ? t.originalText : t.translationText)({
         language: languageName(item.language, locale) }) })),
-    ...(editions?.releases ?? []).filter(item => item.contentLanguages.some(same)).map(item => ({ kind: 'release' as const,
+    ...releases.filter(item => item.contentLanguages.some(same)).map(item => ({ kind: 'release' as const,
       resource: item.id, revision: item.revision, name: releaseChoiceName(item, locale, t) }))];
+  const editionKey = (choice: NonNullable<EditionChoice['edition']>) => `${choice.kind}|${choice.resource}`;
+  if (edition && !offered.some(item => editionKey(item) === editionKey(edition))) {
+    offered.push({ ...edition, name: t.unnamedEdition });
+  }
+
+  async function moreEditions() {
+    if (readingMore.current) return;
+    const next = listed ? editionRequest(listed) : null;
+    if (listed && !next) return;
+    const ticket = generation.current;
+    readingMore.current = true;
+    setMoreBusy(true);
+    setMoreFailed(false);
+    try {
+      const read = await api.editions(work, next?.query);
+      if (ticket !== generation.current) return;
+      if (listed && next) {
+        const applied = applyEditionPage(listed, read, next.requested);
+        setListed(applied.editions);
+        setMoreFailed(applied.retry);
+      } else {
+        if (read.ok) setListed(read.data);
+        setMoreFailed(!read.ok);
+      }
+    } finally {
+      if (ticket === generation.current) {
+        readingMore.current = false;
+        setMoreBusy(false);
+      }
+    }
+  }
 
   async function save(choice: EditionChoice, version: number) {
     setBusy(true);
@@ -89,27 +151,35 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
     else if (written.failure === 'stale') setStale({ current: written.current, mine: written.submitted });
     else setNote('failed');
   }
-  const mine = (): EditionChoice => {
-    const chosen = offered.find(item => `${item.kind}|${item.resource}` === edition);
-    return { language, edition: chosen ? { kind: chosen.kind, resource: chosen.resource, revision: chosen.revision } : null };
-  };
+  const mine = (): EditionChoice => ({ language, edition });
   return <form className="grid min-w-0 gap-3 [&_[data-slot=select-content]]:max-w-[calc(100vw-2rem)] [&_[data-slot=select-positioner]]:max-w-[calc(100vw-2rem)]"
     onSubmit={event => { event.preventDefault(); void save(mine(), preference?.version ?? 0); }}>
     <div className="flex flex-wrap items-end gap-3">
       <Field className="min-w-0 gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.language}</FieldLabel>
-        <ChoiceSelect portalled={false} size="sm" value={language} onValueChange={value => { setEdition(''); onLanguage(value); }}
+        <ChoiceSelect portalled={false} size="sm" disabled={busy} value={language} onValueChange={value => {
+          if (value.toLowerCase() !== language.toLowerCase()) setEdition(null);
+          onLanguage(value);
+        }}
           label={t.language} options={languages.map(tag => ({ value: tag, label: languageName(tag, locale) }))} />
       </Field>
       <Field className="min-w-0 flex-1 basis-60 gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.edition}</FieldLabel>
-        <ChoiceSelect portalled={false} size="sm" value={edition} onValueChange={setEdition} label={t.edition}
+        <ChoiceSelect portalled={false} size="sm" disabled={busy} value={edition ? editionKey(edition) : ''} onValueChange={value => {
+          const chosen = offered.find(item => editionKey(item) === value);
+          setEdition(chosen ? { kind: chosen.kind, resource: chosen.resource, revision: chosen.revision } : null);
+        }} label={t.edition}
           className="h-auto min-h-8 py-1.5 [&_[data-part=value-text]]:whitespace-normal [&_[data-part=value-text]]:text-start"
           options={[{ value: '', label: t.anyEdition },
             ...offered.map(item => ({ value: `${item.kind}|${item.resource}`, label: item.name }))]} />
       </Field>
       <Button type="submit" size="sm" variant="outline" disabled={busy}>{t.savePreference}</Button>
     </div>
+    {listed ? <EditionContinuation editions={listed} failed={moreFailed} busy={moreBusy} t={t} onMore={() => void moreEditions()} />
+      : <div className="flex flex-wrap items-center gap-2">
+        {moreFailed ? <p role="alert" className="text-destructive-foreground text-xs">{t.moreEditionsFailed}</p> : null}
+        <Button size="sm" variant="outline" disabled={moreBusy} onClick={() => void moreEditions()}>{t.retry}</Button>
+      </div>}
     {note === 'saved' ? <p role="status" className="text-muted-foreground text-xs">{t.preferenceSaved}</p> : null}
     {note === 'failed' ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
     {stale ? <Alert variant="warning" role="alert"><AlertDescription className="grid gap-2">
@@ -121,7 +191,7 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
           onClick={() => {
             const current = stale.current;
             setStale(null);
-            setEdition(current?.edition ? `${current.edition.kind}|${current.edition.resource}` : '');
+            setEdition(current?.edition ?? null);
             onSaved(current);
             if (current) onLanguage(current.language);
           }}>{t.useTheirs}</Button>
@@ -154,8 +224,9 @@ function Correspondences({ offers, marked, counterparts, failed, onMark, t }: {
 export const EDITION_SAVED = 'rezics:edition-preference-saved';
 
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
-interface Setup { preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
-type Progress = { language: string; value: ProgressSummary } | { language: string; failure: ReadFailure };
+interface Setup { work: string; preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
+type Progress = { work: string; language: string; value: ProgressSummary }
+  | { work: string; language: string; failure: ReadFailure; previous: ProgressSummary | null };
 
 /**
  * Where the reader stands in a series, as Main reports it: the four states as separate lines, the
@@ -199,12 +270,12 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
       .then(([saved, offered, relations, equivalent]) => {
         if (!current) return;
         const preference = saved.ok ? saved.data : null;
-        if (preference) setLanguage(preference.language);
-        setSetup({ preference, editions: offered.ok ? offered.data : null,
+        setLanguage(preference?.language ?? locale);
+        setSetup({ work, preference, editions: offered.ok ? offered.data : null,
           counterparts: relations.ok && equivalent.ok ? equivalentCounterparts(relations.data, equivalent.data.definition) : [] });
       });
     return () => { current = false; };
-  }, [api, work]);
+  }, [api, work, locale]);
 
   useEffect(() => {
     const saved = (event: Event) => {
@@ -226,18 +297,22 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   // Kept on screen while the write is out: the shelf it changes would otherwise withdraw the offer first.
   const [marking, setMarking] = useState(false);
   useEffect(() => {
-    if (!api || !setup) return;
+    if (!api || !setup || setup.work !== work) return;
     let current = true;
     void api.series(work, language).then(result => {
-      if (current) setProgress(result.ok ? { language, value: result.data } : { language, failure: result.failure });
+      if (current) setProgress(held => result.ok ? { work, language, value: result.data }
+        : { work, language, failure: result.failure,
+          previous: held?.work === work ? ('value' in held ? held.value : held.previous) : null });
     });
     return () => { current = false; };
   }, [api, work, language, setup, ownStatus]);
 
-  if (!api || !setup || !progress) return null;
+  if (!api || !setup || setup.work !== work || !progress || progress.work !== work) return null;
   const ready = actions.kind === 'ready' ? actions : null;
-  const value = 'value' in progress && progress.language === language ? progress.value : null;
-  const failure = 'failure' in progress ? progress.failure : null;
+  const pending = progress.language !== language;
+  // Keep the chooser mounted while its new language's progress is read, including pages already loaded.
+  const value = 'value' in progress ? progress.value : progress.previous;
+  const failure = 'failure' in progress && !pending ? progress.failure : null;
   const counterparts = setup.counterparts;
   // A Work with no composition answers for itself; only a composition has parts, a next part and a series to report.
   const series = value?.scope === 'disclosed-composition' ? value : null;
@@ -258,15 +333,16 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
     else setMarkFailed(counterpart.work);
   }
 
-  return <section aria-labelledby={headingId} data-series-progress={series ? 'series' : 'work'}
+  return <section aria-labelledby={headingId} aria-busy={pending} data-series-progress={series ? 'series' : 'work'}
     className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{series ? t.seriesProgress : t.workProgress}</h2>
-    {failure && !value ? <Alert variant="destructive" role="alert"><AlertDescription>{t.seriesUnavailable}</AlertDescription></Alert> : null}
-    {standalone ? <p className="text-sm" data-work-status={standalone.status ?? 'unknown'}>
+    {failure ? <Alert variant="destructive" role="alert"><AlertDescription>{t.seriesUnavailable}</AlertDescription></Alert> : null}
+    {pending ? <Skeleton className="h-48 rounded-xl" /> : null}
+    {standalone && !pending && !failure ? <p className="text-sm" data-work-status={standalone.status ?? 'unknown'}>
       {standalone.status === 'finished' ? t.stateFinished : standalone.status === 'reading' ? t.stateActive
         : standalone.status === 'dropped' ? t.workDropped
         : standalone.status === 'not-started' ? t.notStarted : t.unknown}</p> : null}
-    {series ? <>
+    {series && !pending && !failure ? <>
       <SeriesStates states={series.states} t={t} />
       {series.partial ? <p className="text-muted-foreground text-xs" data-partial>{t.partialNote}</p> : null}
       <p className="text-sm">{t.countsLine({ count: series.counts.required, completedRequired: String(series.counts.completedRequired) })}
@@ -288,7 +364,7 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
     {hasParts && preferenceForm ? <div className="grid gap-2 border-border/60 border-t pt-3">
       <h3 className="font-medium text-sm">{t.preference}</h3>
       <p className="text-muted-foreground text-xs">{t.preferenceNote}</p>
-      <PreferenceForm work={work} preference={preference} language={language}
+      <PreferenceForm key={work} work={work} preference={preference} language={language}
         editions={setup.editions} api={api} locale={locale} t={t}
         onSaved={saved => setSetup({ ...setup, preference: saved })} onLanguage={setLanguage} />
     </div> : null}

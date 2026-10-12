@@ -102,6 +102,12 @@ export function memoryTracking(main: MemoryMain): TrackingApi {
       return { ok: true, data: next };
     },
     async editions() { return { ok: true, data: main.editions }; },
+    async edition(_work, choice) {
+      const found = choice.kind === 'realization'
+        ? main.editions.realizations.find(item => item.id === choice.resource)
+        : main.editions.releases.find(item => item.id === choice.resource);
+      return found ? { ok: true, data: found } : { ok: false, failure: 'missing' };
+    },
     async series(_resource, language) {
       const found = (language && main.summaries[language]) || Object.values(main.summaries)[0];
       return found ? { ok: true, data: typeof found === 'function' ? found() : found } : { ok: false, failure: 'missing' };

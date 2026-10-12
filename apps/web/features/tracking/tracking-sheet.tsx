@@ -35,7 +35,7 @@ export function applyEditionPage(current: Editions, read: Awaited<ReturnType<Tra
 }
 
 /** The next page to ask for: only lists that still have a cursor. */
-function editionRequest(editions: Editions): { query: { realizations?: string; releases?: string }; requested: EditionPageRequest } | null {
+export function editionRequest(editions: Editions): { query: { realizations?: string; releases?: string }; requested: EditionPageRequest } | null {
   const requested = { realizations: Boolean(editions.realizationsCursor), releases: Boolean(editions.releasesCursor) };
   if (!requested.realizations && !requested.releases) return null;
   return { requested, query: {

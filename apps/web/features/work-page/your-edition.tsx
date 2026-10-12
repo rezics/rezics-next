@@ -11,7 +11,7 @@ import { copyOf } from '../tracking/messages.ts';
 import type { EditionPreference, Editions } from '../tracking/types.ts';
 import type { WorkPageMessages } from './messages.ts';
 
-interface Setup { preference: EditionPreference | null; editions: Editions | null }
+interface Setup { work: string; preference: EditionPreference | null; editions: Editions | null }
 
 /**
  * The reader's private edition choice for this Work, where it is made: the language and the realization or
@@ -35,18 +35,18 @@ export function YourEdition({ work, signInHref, locale, messages }: {
     void Promise.all([api.preference(work), api.editions(work)]).then(([saved, offered]) => {
       if (!current) return;
       const preference = saved.ok ? saved.data : null;
-      if (preference) setLanguage(preference.language);
-      setSetup({ preference, editions: offered.ok ? offered.data : null });
+      setLanguage(preference?.language ?? locale);
+      setSetup({ work, preference, editions: offered.ok ? offered.data : null });
     });
     return () => { current = false; };
-  }, [api, work]);
+  }, [api, work, locale]);
   if (actions.kind === 'signed-out') {
     return <p className="text-muted-foreground text-sm">
       <Link href={signInHref} className="text-primary underline underline-offset-4 hover:no-underline">{t.signInForEdition}</Link></p>;
   }
-  if (!api || !setup) return null;
+  if (!api || !setup || setup.work !== work) return null;
   return <div data-your-edition>
-    <PreferenceForm work={work} preference={setup.preference} language={language} editions={setup.editions} api={api}
+    <PreferenceForm key={work} work={work} preference={setup.preference} language={language} editions={setup.editions} api={api}
       locale={locale} t={copyOf(locale)} onLanguage={setLanguage}
       onSaved={preference => {
         setSetup(current => current ? { ...current, preference } : current);

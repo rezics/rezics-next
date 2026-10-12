@@ -5,7 +5,7 @@ import { failureOf, type Loaded, type ReadFailure, settle, uuidOf } from '../fee
 import { type EpisodeApi, mainEpisodeApi } from './episode-api.ts';
 import { type MediaApi, mainMediaApi } from './media-api.ts';
 import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Relations, Session, SessionChanges,
-  SessionPage } from './types.ts';
+  SessionPage, Realization, Release } from './types.ts';
 
 // The browser side of tracking. Every call acts as the session's Agent and the BFF adds the bearer
 // token. Writes compare and set: a stale version is answered with Main's current state and the
@@ -39,6 +39,8 @@ export interface TrackingApi {
    * cursors it carries, so a finished list is not fetched again.
    */
   editions(work: string, page?: EditionPageQuery): Promise<Loaded<Editions>>;
+  /** Read the saved choice independently of catalogue pages; its stored revision remains the write's basis. */
+  edition(work: string, choice: NonNullable<EditionChoice['edition']>): Promise<Loaded<Realization | Release>>;
   /** Main's series progress for a Work's composition, in the chosen language (the preference's when unset). */
   series(resource: string, language?: string): Promise<Loaded<ProgressSummary>>;
   relations(resource: string): Promise<Loaded<Relations>>;
@@ -151,6 +153,11 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
       return { ok: true, data: { realizations: realizations.data.items, releases: releases.data.items,
         realizationsCursor, releasesCursor, more: Boolean(realizationsCursor || releasesCursor) } };
     },
+    edition: (work, choice) => choice.kind === 'realization'
+      ? settle(() => main().v1.works({ id: uuidOf(work) }).realizations({ realization: uuidOf(choice.resource) }).get({
+        query: { actingSubject, revision: choice.revision } }))
+      : settle(() => main().v1.works({ id: uuidOf(work) }).releases({ release: uuidOf(choice.resource) }).get({
+        query: { actingSubject } })),
     series: (resource, language) => settle(() => main().v1.me['progress-summaries']({ resource: uuidOf(resource) }).get({
       query: { actingSubject, ...(language ? { language } : {}) } })),
     async relations(resource) {
