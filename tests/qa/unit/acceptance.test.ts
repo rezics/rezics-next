@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, hungTestFile, parseJUnit, selectedTestExecuted, testArgs, titleIds, UNEXECUTED_FILE_TEST, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
+import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, hungTestFile, inputSelectedNativeTests, ownerTierFiles, parseJUnit, selectedTestExecuted, testArgs, titleIds, UNEXECUTED_FILE_TEST, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
+import { affectedOwnerTierEntries } from '../../../scripts/qa/affected.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 import { inventoryFingerprint, selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
 import { integrationGateFiles } from '../../../scripts/qa/integration-gate-files.ts';
@@ -10,6 +11,24 @@ import { createHash } from 'node:crypto';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
+
+test('owner defaults and Goal expansion share one selector for the supplied root', () => {
+  const fixture = mkdtempSync(join(scratch, 'owner-selection-'));
+  const owner = 'scripts/ops/selected.test.ts';
+  try {
+    for (const directory of ['services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts',
+      'infra/dev/tests', 'infra/jena/tests']) mkdirSync(join(fixture, directory), { recursive: true });
+    for (const file of [owner, ...inputSelectedNativeTests]) {
+      mkdirSync(join(fixture, file, '..'), { recursive: true });
+      writeFileSync(join(fixture, file), '');
+    }
+    expect(affectedOwnerTierEntries).toBe(ownerTierFiles);
+    expect(ownerTierFiles(fixture)).toEqual([owner]);
+    expect(testArgs('owner', undefined, undefined, fixture)).toEqual([owner]);
+    for (const file of inputSelectedNativeTests)
+      expect(testArgs('owner', undefined, { files: [file] }, fixture)).toEqual([file]);
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+});
 mkdirSync(scratch, { recursive: true });
 
 test('QA04: every migrated acceptance scenario and required result retains its ID and owning page', () => {

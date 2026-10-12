@@ -12,7 +12,8 @@ import { newRunId, type Tier } from '../qa/core.ts';
 import { directoryLeaseHeld, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
-import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
+import { admittedCommandBudgetEnv, BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
+import { qaMemoryDeadline } from '../qa/memory-admission.ts';
 import type { DeclaredTestTimeout } from './goalctl.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
@@ -468,7 +469,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
   const files: ExpectedFile[] = [];
   files.push({ file: jenaCliFile, tier: 'jena:check', outcome: 'pending' });
   for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'] as const) {
-    const discovered = core.splitTestArgs(registry.testArgs(tier)).paths;
+    const discovered = core.splitTestArgs(registry.testArgs(tier, undefined, undefined, checkout)).paths;
     const paths = tier === 'unit' || tier === 'owner'
       ? discovered.filter(file => !nativeFiles.has(file)) : discovered;
     if (tier === 'unit') paths.push(...registry.unitHarnessFiles);
@@ -785,10 +786,11 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   const report = join(directory, 'slot.json');
   const junitXmlPath = join(directory, 'batch.xml');
   const started = Date.now();
+  const nativeProof = batch.tier === 'jena:check' && batch.files.some(file => nativeImageProofs.has(file));
   // Older resumed manifests have no budget; derive it from their pinned files while preserving their plan.
   const budgetMs = batch.tier === 'owner' ? batch.budgetMs
     ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values())
-    : batch.tier === 'jena:check' && batch.files.some(file => nativeImageProofs.has(file)) ? batch.budgetMs
+    : nativeProof ? batch.budgetMs
       ?? Math.max(ownerTierBudgetMs(), ...(await ownerFileBudgets(checkout, batch.files, ownerTierBudgetMs())).values())
       : undefined;
   const deadlineMs = batch.tier === 'jena:check' ? Math.max(jenaCheckDefaultBudgetMs, budgetMs ?? 0)
@@ -798,9 +800,13 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   }
   const effectiveDeadlineMs = options.deadlineCapMs === undefined
     ? deadlineMs : Math.min(deadlineMs, options.deadlineCapMs);
+  // Slot acquisition has one hour; memory admission has its own bounded wait. Neither is proof time.
+  const outerDeadlineMs = nativeProof ? effectiveDeadlineMs + 3_600_000
+    + Math.max(0, qaMemoryDeadline(process.env) - started) + defaultStopGraceMs : effectiveDeadlineMs;
+  const env = regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs);
+  if (nativeProof) env[admittedCommandBudgetEnv] = String(effectiveDeadlineMs);
   const code = await command(checkout, regressionBatchCommand(batch, report, junitXmlPath), join(directory, 'runner.log'),
-    effectiveDeadlineMs,
-    regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs));
+    outerDeadlineMs, env);
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);
   const tests: TestResult[] = [];

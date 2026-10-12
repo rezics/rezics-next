@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { GiB } from '../../../scripts/qa/memory-admission.ts';
-import { BUILD_ADMISSION_GIB, hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission, SERIAL_ADMISSION_GIB } from '../../../scripts/qa/host-admission.ts';
+import { admittedCommandBudgetEnv, BUILD_ADMISSION_GIB, hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission, SERIAL_ADMISSION_GIB } from '../../../scripts/qa/host-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
@@ -72,6 +72,20 @@ test('host admission keeps a configured reserve and does not start after the dea
   expect(messages.every(message => message.startsWith('Waiting;'))).toBe(true);
 });
 
+test('memory wait does not consume the admitted command budget or pass it to grandchildren', async () => {
+  let reads = 0;
+  const started = Date.now();
+  const status = await runHostAdmission(4, ['bun', '-e',
+    `if (process.env.${admittedCommandBudgetEnv} !== undefined) process.exit(7);`], {
+    env: { ...process.env, ...qaEnv, [admittedCommandBudgetEnv]: '200' },
+    deadline: started + 5_000, pollMs: 300, announce: () => {},
+    read: async () => host(++reads === 1 ? 0 : 12 * GiB),
+  });
+  expect(Date.now() - started).toBeGreaterThan(200);
+  expect(reads).toBe(2);
+  expect(status).toBe(0);
+});
+
 test('host admission runs the command without measuring memory outside a local Goal run', async () => {
   const dir = mkdtempSync(join(scratch, 'host-admission-'));
   const seen: (readonly string[])[] = [];
@@ -132,4 +146,29 @@ test('a large need runs again under the host-wide lock, and a small or already l
 
 test('long builds are admitted below the size that takes the serial turn', () => {
   expect(BUILD_ADMISSION_GIB).toBeLessThan(SERIAL_ADMISSION_GIB);
+});
+
+test('the serial lock wait preserves the budget for the finally admitted command', async () => {
+  const dir = mkdtempSync(join(scratch, 'serial-budget-'));
+  const lock = join(dir, 'admission.lock');
+  const holder = Bun.spawn(['flock', lock, 'bun', '-e',
+    "console.log('held'); setTimeout(() => {}, 1_200);"], { stdout: 'pipe', stderr: 'inherit' });
+  try {
+    const reader = holder.stdout.getReader();
+    const acquired = await reader.read();
+    expect(new TextDecoder().decode(acquired.value)).toContain('held');
+    reader.releaseLock();
+    const started = Date.now();
+    const status = await runHostAdmission(SERIAL_ADMISSION_GIB, ['bun', '-e',
+      `if (process.env.${admittedCommandBudgetEnv} !== undefined) process.exit(7);`], {
+      serialLock: lock,
+      env: { ...process.env, ...qaEnv, REZICS_QA_HOST_RESERVE_GIB: '0', [admittedCommandBudgetEnv]: '500' },
+    });
+    expect(Date.now() - started).toBeGreaterThan(500);
+    expect(status).toBe(0);
+  } finally {
+    holder.kill();
+    await holder.exited;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

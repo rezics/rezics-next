@@ -374,6 +374,7 @@ test('native container work hangs until its batch deadline', async () => {
         id: 'native-timeout', tier: 'jena:check', files: [file], state: 'pending', attempts: [],
       }, directory, 1, 1, undefined, { deadlineCapMs: 5_000 });
       expect(result.code).toBe(124);
+      expect(result.classification).toBe('deadline');
       expect(result.outcomes[file]).toBe('failed');
       const calls = readFileSync(dockerLog, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
       const run = calls.find(args => args[0] === 'run');
@@ -392,6 +393,49 @@ test('native container work hangs until its batch deadline', async () => {
       r.cleanup();
     }
   });
+
+  test('a native proof queued longer than its proof budget is still recorded passed', async () => {
+    const r = repo();
+    const file = inputSelectedNativeTests[0];
+    const directory = join(r.dir, '.temp/native-queued');
+    const slotDirectory = join(r.options.stateDir!, 'qa-slots');
+    mkdirSync(slotDirectory, { recursive: true });
+    const lease = tryAcquireDirectoryLease(join(slotDirectory, '0'));
+    if (!lease || lease === 'held') throw new Error('fixture slot was not free');
+    r.files.push({ file, tier: 'jena:check', outcome: 'pending' });
+    r.write(file, "import { test } from 'bun:test';\ntest('admitted proof passes', () => {});\n");
+    r.commit();
+    const savedProfile = process.env.REZICS_STACK_PROFILE;
+    process.env.REZICS_STACK_PROFILE = 'dev';
+    let pending: Promise<Execution> | undefined;
+    try {
+      // Run in the fixture root so its actual slot wrapper sees the held fixture lease.
+      pending = runBatch(r.dir, { id: 'native-queued', tier: 'jena:check', files: [file],
+        state: 'pending', attempts: [] }, directory, 1, 1, undefined, { deadlineCapMs: 1_000 });
+      const waitDeadline = Date.now() + 15_000;
+      while (!existsSync(join(directory, 'runner.log'))
+        || !readFileSync(join(directory, 'runner.log'), 'utf8').includes('waiting for QA slot')) {
+        if (Date.now() >= waitDeadline) throw new Error('native proof never queued for its slot');
+        await Bun.sleep(25);
+      }
+      await Bun.sleep(1_100);
+      lease.release();
+      const execution = await pending;
+      expect(execution.code).toBe(0);
+      expect(execution.classification).toBeUndefined();
+      expect(execution.outcomes[file]).toBe('passed');
+      const result = await r.run({ runId: 'native-queued-pass', runner: async (...args) =>
+        args[1].files.includes(file) ? execution : r.runner(...args) });
+      expect(result.files).toContainEqual({ file, tier: 'jena:check', outcome: 'passed' });
+      expect(r.manifest('native-queued-pass').files).toContainEqual({ file, tier: 'jena:check', outcome: 'passed' });
+    } finally {
+      lease.release();
+      await pending;
+      if (savedProfile === undefined) delete process.env.REZICS_STACK_PROFILE;
+      else process.env.REZICS_STACK_PROFILE = savedProfile;
+      r.cleanup();
+    }
+  }, 30_000);
 
   test('a batch timeout names the hanging file and reruns only the files that never started', async () => {
     const recorded = join(import.meta.dir, '../../tests/qa/fixtures/regression-hang');

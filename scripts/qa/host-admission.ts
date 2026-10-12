@@ -25,6 +25,8 @@ export const SERIAL_ADMISSION_GIB = 5;
  * refresh held the turn for eleven minutes and every merge gate's web type check ran out of time behind it. */
 export const BUILD_ADMISSION_GIB = 4;
 const SERIAL_ADMISSION_MARK = 'REZICS_QA_SERIAL_ADMISSION';
+/** Consumed by this wrapper so nested admissions cannot restart the proof's clock. */
+export const admittedCommandBudgetEnv = 'REZICS_QA_ADMITTED_COMMAND_BUDGET_MS';
 
 export interface HostAdmissionOptions {
   root?: string;
@@ -40,8 +42,14 @@ export interface HostAdmissionOptions {
   run?: (command: readonly string[]) => Promise<number>;
 }
 
-async function spawnInherited(command: readonly string[]): Promise<number> {
-  const child = spawn(command[0]!, command.slice(1), { detached: true, stdio: 'inherit' });
+async function spawnInherited(command: readonly string[], env: NodeJS.ProcessEnv, admitted = true): Promise<number> {
+  const rawBudget = admitted ? env[admittedCommandBudgetEnv] : undefined;
+  const budgetMs = rawBudget === undefined ? undefined : Number(rawBudget);
+  if (budgetMs !== undefined && (!Number.isSafeInteger(budgetMs) || budgetMs < 1))
+    throw new Error(`${admittedCommandBudgetEnv} must be a positive integer`);
+  const childEnv = { ...env };
+  if (admitted) delete childEnv[admittedCommandBudgetEnv];
+  const child = spawn(command[0]!, command.slice(1), { detached: true, stdio: 'inherit', env: childEnv });
   const exited = new Promise<number>((resolve, reject) => {
     child.once('error', reject);
     child.once('exit', code => resolve(code ?? 1));
@@ -53,11 +61,18 @@ async function spawnInherited(command: readonly string[]): Promise<number> {
   };
   process.on('SIGINT', forward);
   process.on('SIGTERM', forward);
+  let timedOut = false;
+  const timer = budgetMs === undefined ? undefined : setTimeout(() => {
+    timedOut = true;
+    forward();
+  }, budgetMs);
   try {
     const code = await exited;
     if (stopping) await stopping;
-    return code;
+    if (timedOut) console.error('Command deadline exceeded');
+    return timedOut ? 124 : code;
   } finally {
+    clearTimeout(timer);
     process.off('SIGINT', forward);
     process.off('SIGTERM', forward);
   }
@@ -71,12 +86,13 @@ export async function runHostAdmission(gib: number, command: readonly string[],
   if (command.length === 0) throw new Error(hostAdmissionUsage);
   const env = options.env ?? process.env;
   const root = options.root ?? resolve(import.meta.dir, '../..');
-  const run = options.run ?? spawnInherited;
+  const run = options.run ?? (command => spawnInherited(command, env));
   if (!await isLocalQaRun(root, env)) return await run(command);
   if (gib >= SERIAL_ADMISSION_GIB && options.serialLock && !env[SERIAL_ADMISSION_MARK]) {
     mkdirSync(dirname(options.serialLock), { recursive: true });
     // The whole admission and command run again under the lock, so the memory reading is taken by its holder.
-    return await run(['flock', options.serialLock, 'env', `${SERIAL_ADMISSION_MARK}=1`, process.execPath,
+    const relaunch = options.run ?? (command => spawnInherited(command, env, false));
+    return await relaunch(['flock', options.serialLock, 'env', `${SERIAL_ADMISSION_MARK}=1`, process.execPath,
       import.meta.path, '--gib', String(gib), '--', ...command]);
   }
   const reserve = qaMemoryNeed(root, 'other', undefined, env).hostReserve;

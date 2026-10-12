@@ -265,6 +265,11 @@ export function ownerGateFiles(root = join(import.meta.dir, '../..')): string[] 
   return bunOwnerFiles(root).filter(isQaOwnerPath);
 }
 
+/** Ordinary owner batches leave image-input proofs to their Jena stage. Explicit selections still admit them. */
+export function ownerTierFiles(root = join(import.meta.dir, '../..')): string[] {
+  return ownerGateFiles(root).filter(file => !nativeProofOwnerFileSet.has(file));
+}
+
 export function isQaIntegrationPath(path: string): boolean {
   return path.startsWith('tests/qa/integration/') || integrationGateFiles.some(file => file === path);
 }
@@ -349,15 +354,16 @@ export function testArgs(
   tier: 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'load',
   selection?: FailedSelection,
   chosen?: { files?: string[]; id?: string },
+  root = join(import.meta.dir, '../..'),
 ): string[] {
   const base = tier === 'model' || tier === 'owner' ? '' : tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
     : tier === 'model' ? [...modelGateFiles]
     : tier === 'fault/recovery' ? [...faultGateFiles]
-    : tier === 'load' ? [] : tier === 'owner' ? ownerGateFiles() : unitOwnerFiles();
+    : tier === 'load' ? [] : tier === 'owner' ? ownerGateFiles(root) : unitOwnerFiles(root);
   // The Jena image regression owns these Docker/Maven proofs; direct --file selections remain supported below.
-  const tierFiles = tier === 'owner' ? extraGates.filter(file => !nativeProofOwnerFileSet.has(file)) : extraGates;
+  const tierFiles = tier === 'owner' ? ownerTierFiles(root) : extraGates;
   const defaults = [...(base ? [base] : []), ...tierFiles];
   const supportedGates = tier === 'unit' ? [...extraGates, ...unitHarnessFiles] : extraGates;
   if (chosen) {

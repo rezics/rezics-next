@@ -14,13 +14,16 @@ import {
   legacyHostJenaGateFiles,
   nativeIntegerPreservationTest,
   nativeUnionTest,
-  ownerGateFiles,
+  ownerTierFiles as affectedOwnerTierEntries,
   testArgs,
   testExclusions,
   unitHarnessFiles,
   workNameScopeBasisTest,
 } from './acceptance.ts';
 import { expandTestPaths } from './core.ts';
+import { WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
+
+export { affectedOwnerTierEntries };
 
 export {
   erasureCampaignNativeTest,
@@ -140,10 +143,6 @@ export function affectedUnitTierEntries(): string[] {
 export function affectedUnitTierFiles(root: string): string[] {
   return expandTestPaths(root, affectedUnitTierEntries());
 }
-/** Registered owner files in a widened affected plan, excluding native proofs selected by their image inputs. */
-export function affectedOwnerTierEntries(root?: string): string[] {
-  return ownerGateFiles(root).filter((file) => !inputSelectedNative.has(file));
-}
 
 // The registered unit tier: `tests/qa/unit` plus its gate files.
 const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
@@ -242,6 +241,8 @@ export function classify(path: string): Rule | undefined {
 }
 
 export function routeTest(path: string): { tier: AffectedTier } | { deferred: string } | { workspace: FrontendWorkspace } | undefined {
+  if (path === WORK_PROFILE_SEED_BUILD_FILE)
+    return { deferred: 'Retained seed preparation; select its build command explicitly alone' };
   const excluded = testExclusions.find(item => item.file === path && path.startsWith('apps/web/'));
   if (excluded) return { deferred: excluded.reason };
   const workspace = frontendWorkspace(path);

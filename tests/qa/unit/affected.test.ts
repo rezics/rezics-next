@@ -6,6 +6,7 @@ import { testArgs } from '../../../scripts/qa/acceptance.ts';
 import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { regressionBatchCommand, regressionRegistry } from '../../../scripts/goal/regress.ts';
+import { WORK_PROFILE_SEED_BUILD_FILE } from '../../../scripts/qa/preparation-selection.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -485,11 +486,21 @@ test('main-wide regression stages module-input native proofs with the Jena image
     expect(registry.some(item => item.file === file && (item.tier === 'unit' || item.tier === 'owner'))).toBe(false);
     const command = regressionBatchCommand({ id: batchId, tier: 'jena:check', files: [file],
       state: 'pending', attempts: [] }, join(artifactDirectory, 'slot.json'), junitXmlPath);
-    expect(command.slice(0, 2)).toEqual(['bun', 'test']);
-    expect(command[2]?.startsWith('--preload=')).toBe(true);
-    expect(command[2]?.endsWith('/scripts/qa/container-reaper.ts')).toBe(true);
-    expect(command.slice(3)).toEqual(['--reporter=junit', `--reporter-outfile=${junitXmlPath}`, file]);
+    expect(command).toEqual([
+      'bun', resolve('scripts/goal/goalctl.ts'), 'slot', '--',
+      'bun', resolve('scripts/qa/host-admission.ts'), '--gib', '4', '--',
+      'bun', 'test', `--preload=${resolve('scripts/qa/container-reaper.ts')}`,
+      '--reporter=junit', `--reporter-outfile=${junitXmlPath}`, file,
+    ]);
   }
+});
+
+test('affected selection defers retained seed preparation even when its own file changes', () => {
+  const reason = 'Retained seed preparation; select its build command explicitly alone';
+  expect(routeTest(WORK_PROFILE_SEED_BUILD_FILE)).toEqual({ deferred: reason });
+  const result = plan([WORK_PROFILE_SEED_BUILD_FILE], { exists: () => true });
+  expect(Object.values(result.tests).flat()).not.toContain(WORK_PROFILE_SEED_BUILD_FILE);
+  expect(result.deferred).toContainEqual({ file: WORK_PROFILE_SEED_BUILD_FILE, reason });
 });
 
 test('affected selection defers the explicitly excluded live browser fixture', () => {
