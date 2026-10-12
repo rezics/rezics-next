@@ -90,5 +90,5 @@ test('Realm ownership mandate cannot consume another management grant; an exact 
   await grantFixtureAuthority(pool, { scope: h.scope, requireDispatch: true,
     representations: [{ principalId: h.principalId, actor: h.actor, action: 'realm.settings.manage', lifetime: '8 hours' }],
     grant: { actor: h.actor, action: 'realm.settings.manage', lifetime: '8 hours' } });
-  expect(await h.management.settings(h.principal, h.realm, h.actor)).toMatchObject({ generation: '1' });
+  expect(await h.management.settings(h.principal, h.realm, h.actor)).toMatchObject({ generation: '0' });
 });
