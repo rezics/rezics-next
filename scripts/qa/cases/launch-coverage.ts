@@ -379,7 +379,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Attaches a Realm from another Space through Main only with both authorities, publishes its binding and refuses an outsider’s attachment.'),
     browser: browser('apps/web/tests/zone-realm-attachment.e2e.ts',
       'a Realm steward can attach, list, and withdraw a Zone',
-      'A Realm steward attaches a Zone through its editor, sees the attached Realm after publication and finds the Zone in the steward’s list.'),
+      'A Realm steward attaches a Zone through its editor, sees the attached Realm’s name and finds the Zone in the steward’s list.'),
   },
   {
     kind: 'zone',
