@@ -68,6 +68,9 @@ export async function writeContentPreferences(pool: Pool, userId: string, input:
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
+    // A newly learned age may impose a security hold. Take security before
+    // identity so that hold cannot invert operator/session admission locks.
+    await client.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR UPDATE', [userId]);
     if (!(await client.query('SELECT id FROM "user" WHERE id = $1 FOR UPDATE', [userId])).rowCount)
       throw new AccountProblem('unauthenticated', 401);
     const prior = (await client.query<Row>(select, [userId])).rows[0];

@@ -323,6 +323,9 @@ export async function activateAccountRecovery(pool: Pool, input: {
     if (row.not_before.getTime() > now || row.expires_at.getTime() <= now) {
       throw new AccountRecoveryStale('recovery waiting period or window is not open');
     }
+    // The password-fence trigger updates security; acquire it before identity
+    // so recovery follows the same security -> user order as operator actions.
+    await client.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR UPDATE', [row.target_user_id]);
     const target = await client.query<{ email: string }>(`SELECT email FROM public."user"
       WHERE id = $1 FOR UPDATE`, [row.target_user_id]);
     if (!target.rows[0]) throw new AccountRecoveryDenied('Account is unavailable');

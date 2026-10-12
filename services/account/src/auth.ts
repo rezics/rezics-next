@@ -98,10 +98,14 @@ function accountVerification(config: AccountConfig, owners: SessionOwners) {
           findUserByEmail: async (...args: Parameters<typeof ctx.context.internalAdapter.findUserByEmail>) => {
             const selected = await ctx.context.internalAdapter.findUserByEmail(...args);
             if (!selected) return selected;
-            // Recovery locks policy before identity. Hold both through the
-            // provider's email-keyed update and immutable-id session insertion.
+            // Account lock order: security -> user -> session admission.
+            // Admission's trigger reuses security, so take it before holding
+            // the identity against writers (including note-insertion FKs).
+            // Keep recovery's policy lock outside and before that sequence.
             await sql`SELECT id FROM rezics_account_recovery_policy
               WHERE id = ${selected.user.id} FOR SHARE`.execute(ownerDb);
+            await sql`SELECT user_id FROM rezics_account_security
+              WHERE user_id = ${selected.user.id} FOR SHARE`.execute(ownerDb);
             const locked = await sql<{ email: string }>`SELECT email FROM "user"
               WHERE id = ${selected.user.id} FOR UPDATE`.execute(ownerDb);
             // Read again after the identity lock: a first recovery policy may
@@ -453,6 +457,8 @@ export function accountAuthOptions(config: AccountConfig) {
           await client.query('BEGIN');
           await client.query("SET LOCAL lock_timeout = '2s'");
           await client.query("SET LOCAL statement_timeout = '5s'");
+          // Follow the Account security -> user order before marking deletion.
+          await client.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR UPDATE', [user.id]);
           // Acceptance takes this identity lock too. A deletion fence cannot
           // race a newly accepted duty and then partially delete credentials.
           await client.query('SELECT id FROM public."user" WHERE id = $1 FOR UPDATE', [user.id]);
