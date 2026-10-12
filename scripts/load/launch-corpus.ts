@@ -19,6 +19,8 @@ import { restoreCatalogueBackup } from './catalogue-backup.ts';
 import { pollUntilDeadline } from '../qa/readiness.ts';
 import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
 import type { MediaStack } from '../../tests/qa/integration/media-support.ts';
+import type { LaunchBookEdition, LaunchBooksCorpus, LaunchRecipeRecord, LaunchRecipesCorpus } from './launch-corpus-types.ts';
+export type { LaunchBookEdition, LaunchBooksCorpus, LaunchRecipeRecord, LaunchRecipesCorpus } from './launch-corpus-types.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const budgetMs = 600_000;
@@ -58,36 +60,6 @@ export function launchBookSources() {
       throw new Error(`Wrong launch fixture grain: ${id}`);
     return { entry, record, bytes, externalId };
   });
-}
-
-export interface LaunchBookEdition {
-  externalId: string;
-  release: string;
-  revision: string;
-  observation: string;
-  title: string;
-  sourceFormat: string | null;
-  /** Catalogue seeds expose their medium through release-v2.platform. */
-  platform: string | null;
-  format: string | null;
-  language: string;
-  contentLanguages: string[];
-  publisher: string | null;
-  publicationYear: number | null;
-  realization: string | null;
-  realizationRevision: string | null;
-}
-
-export interface LaunchBooksCorpus {
-  recipe: typeof recipe;
-  id: string;
-  compatibility: LoadCompatibility;
-  sources: { id: string; sha256: string; reuseBasis: string }[];
-  counts: { works: 1; realizations: 1; releases: 6; contentObservations: 7; librarySlice: 0; wikidataLabels: 0; covers: 0 };
-  work: string;
-  editions: LaunchBookEdition[];
-  backup: string;
-  buildMs: number;
 }
 
 /** Writes only public Main commands. Authority setup belongs to the caller's
@@ -296,35 +268,6 @@ export function launchRecipeSources(): LaunchRecipeSource[] {
   }
   if (extracted.length !== 30) throw new Error('The launch recipe corpus must contain exactly 30 extracts');
   return extracted;
-}
-
-export interface LaunchRecipeRecord {
-  recipeId: string;
-  pinId: string;
-  title: string;
-  language: 'en' | 'it';
-  caseIds: string[];
-  sourceIngredients: string[];
-  sourceMethods: string[];
-  work: string;
-  mainVersion: string;
-  structure: string;
-  revision: string;
-}
-
-export interface LaunchRecipesCorpus {
-  recipe: typeof launchRecipesRecipe;
-  id: string;
-  compatibility: LoadCompatibility;
-  sources: { id: string; sha256: string; reuseBasis: string }[];
-  realm: string;
-  realmHandle: 'launch-recipes';
-  zone: string;
-  records: LaunchRecipeRecord[];
-  counts: { works: 30; recipes: 30; ingredientLines: 173; fractionLines: 47; rangeLines: 2;
-    englishRecipes: 20; italianRecipes: 10 };
-  backup: string;
-  buildMs: number;
 }
 
 type RecipeWorkReceipt = { work: string; mainVersion: string };

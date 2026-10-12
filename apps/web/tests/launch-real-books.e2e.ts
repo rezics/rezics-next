@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import type { LaunchBooksCorpus } from '../../../scripts/load/launch-corpus.ts';
+import type { LaunchBooksCorpus } from '../../../scripts/load/launch-corpus-types.ts';
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';

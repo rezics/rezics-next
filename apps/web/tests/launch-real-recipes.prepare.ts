@@ -1,7 +1,8 @@
-import { restoreBrowserRecipes } from '../../../scripts/load/launch-corpus.ts';
-
-// Restore retained owner stores before the browser applications start.
-export const restoreStack = restoreBrowserRecipes;
+// The runner loads storage tooling; this browser declaration carries only its location.
+export const restoreStack = {
+  module: 'scripts/load/launch-corpus.ts',
+  exportName: 'restoreBrowserRecipes',
+};
 export const preparation = {
   command: ['bun', 'scripts/load/launch-corpus.ts', '--browser-recipes-prepare'],
   budgetMs: 600_000,

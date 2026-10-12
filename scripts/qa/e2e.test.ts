@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { e2eArgs, failedSelection, parseJUnit, selectedTestExecuted } from './acceptance.ts';
@@ -198,6 +198,11 @@ describe('browser storage ownership', () => {
 });
 
 describe('journey preparation isolation', () => {
+  test('the browser recipe preparation declares its storage hook without importing execution tooling', () => {
+    const declaration = readFileSync(resolve(import.meta.dir, '../../apps/web/tests/launch-real-recipes.prepare.ts'), 'utf8');
+    expect(new Bun.Transpiler({ loader: 'ts' }).scanImports(declaration)).toEqual([]);
+  });
+
   test('simulated admission keeps preparation timing independent of host memory and its full execution budget', async () => {
     const f = fixture();
     let clock = 0;
@@ -222,24 +227,31 @@ describe('journey preparation isolation', () => {
     } finally { f.cleanup(); }
   });
 
-  test('discovery retains a stack restore hook instead of falling back to fresh data preparation', async () => {
+  test('discovery defers storage module loading until the runner restores its selected journey', async () => {
     const f = fixture();
     try {
       f.journey('retained');
-      writeFileSync(join(f.root, 'prepare.ts'), '');
-      writeFileSync(join(f.root, 'apps/web/tests/retained.prepare.ts'), `
-        export const preparation = ${JSON.stringify({ command: ['bun', 'prepare.ts'],
-          step: 'Retained corpus', slug: 'retained', budgetMs: 1000 })};
-        export async function restoreStack(input) {
+      const loaded = join(f.root, 'storage-loaded');
+      writeFileSync(join(f.root, 'prepare.ts'), `
+        import { writeFileSync } from 'node:fs';
+        writeFileSync(${JSON.stringify(loaded)}, 'loaded');
+        export async function restore(input) {
           return { runId: input.runId + '-copy', apps: { MAIN_PORT: '4321' }, stop: async () => {} };
         }
       `);
+      writeFileSync(join(f.root, 'apps/web/tests/retained.prepare.ts'), `
+        export const preparation = ${JSON.stringify({ command: ['bun', 'prepare.ts'],
+          step: 'Retained corpus', slug: 'retained', budgetMs: 1000 })};
+        export const restoreStack = { module: 'prepare.ts', exportName: 'restore' };
+      `);
       const [selected] = await discoverJourneyPreparations(f.root);
       expect(selected?.restoreStack).toBeFunction();
+      expect(existsSync(loaded)).toBe(false);
       const restored = await selected!.restoreStack!({ runId: 'browser', webOrigin: 'http://127.0.0.1:3003',
         accountsPort: '3004' });
       expect(restored.runId).toBe('browser-copy');
       expect(restored.apps).toEqual({ MAIN_PORT: '4321' });
+      expect(existsSync(loaded)).toBe(true);
       await restored.stop();
     } finally { f.cleanup(); }
   });
@@ -253,8 +265,48 @@ describe('journey preparation isolation', () => {
           step: 'Invalid restore', slug: 'invalid', budgetMs: 1000 })};
         export const restoreStack = true;
       `);
-      await expect(discoverJourneyPreparations(f.root)).rejects.toThrow('restoreStack must be a function');
+      await expect(discoverJourneyPreparations(f.root)).rejects.toThrow('restoreStack must declare module and exportName');
     } finally { f.cleanup(); }
+  });
+
+  test('restore declarations reject missing or external modules and invalid export names before startup', async () => {
+    for (const declaration of [
+      { module: 'missing.ts', exportName: 'restore' },
+      { module: '../prepare.ts', exportName: 'restore' },
+      { module: '/tmp/prepare.ts', exportName: 'restore' },
+      { module: 'prepare.ts', exportName: 'restore()' },
+      { module: 'prepare.ts', exportName: 'restore', extra: true },
+    ]) {
+      const f = fixture();
+      try {
+        f.journey('invalid');
+        writeFileSync(join(f.root, 'prepare.ts'), '');
+        writeFileSync(join(f.root, 'apps/web/tests/invalid.prepare.ts'), `
+          export const preparation = ${JSON.stringify({ command: ['bun', 'prepare.ts'],
+            step: 'Invalid restore', slug: 'invalid', budgetMs: 1000 })};
+          export const restoreStack = ${JSON.stringify(declaration)};
+        `);
+        await expect(discoverJourneyPreparations(f.root)).rejects.toThrow('existing repository module and exported function');
+      } finally { f.cleanup(); }
+    }
+  });
+
+  test('a missing or non-callable module export reports the restore failure on invocation', async () => {
+    for (const moduleSource of ['export const other = true;', 'export const restore = true;']) {
+      const f = fixture();
+      try {
+        f.journey('invalid');
+        writeFileSync(join(f.root, 'prepare.ts'), moduleSource);
+        writeFileSync(join(f.root, 'apps/web/tests/invalid.prepare.ts'), `
+          export const preparation = ${JSON.stringify({ command: ['bun', 'prepare.ts'],
+            step: 'Invalid restore', slug: 'invalid', budgetMs: 1000 })};
+          export const restoreStack = { module: 'prepare.ts', exportName: 'restore' };
+        `);
+        const [selected] = await discoverJourneyPreparations(f.root);
+        await expect(selected!.restoreStack!({ runId: 'browser', webOrigin: 'http://127.0.0.1:3003', accountsPort: '3004' }))
+          .rejects.toThrow('restoreStack export restore must be a function');
+      } finally { f.cleanup(); }
+    }
   });
 
   for (const error of ['Prepare first failed (1)', 'Prepare first exceeded its 1s budget']) {

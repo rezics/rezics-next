@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import type { LaunchRecipesCorpus } from '../../../scripts/load/launch-corpus.ts';
+import type { LaunchRecipesCorpus } from '../../../scripts/load/launch-corpus-types.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { realmWorkHref, siteHref } from '../features/realm/route.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
@@ -59,7 +59,7 @@ test('recipes / Browse every recipe page in its Zone', async ({ page }) => {
   await signInAtAccounts(page, browsePath(), reader.member);
 
   const titles = corpus.records.map(record => record.title).sort();
-  const firstSearch = await waitForRecipeBrowse(page);
+  await waitForRecipeBrowse(page);
   const browsePages = async () => {
     const visibleTitles: string[] = [];
     for (let pageNumber = 0; pageNumber < 5; pageNumber++) {

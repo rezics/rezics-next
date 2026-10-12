@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isQaE2ePath } from './acceptance.ts';
 
@@ -17,7 +17,7 @@ export interface JourneyPreparation {
   step: string;
   /** Log file `logs/e2e-<slug>.log`. */
   slug: string;
-  /** Restore retained owner stores before any application opens them. */
+  /** The runner resolves a preparation's { module, exportName } declaration into this hook. */
   restoreStack?: (input: { runId: string; webOrigin: string; accountsPort: string }) => Promise<{
     runId: string; apps: Record<string, string>; stop: () => Promise<void>;
   }>;
@@ -31,6 +31,26 @@ type Declaration = Omit<JourneyPreparation, 'journey'>;
 
 function display(root: string, file: string): string {
   return relative(root, file).replaceAll('\\', '/');
+}
+
+function resolveRestoreStack(value: unknown, source: string, root: string): JourneyPreparation['restoreStack'] {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(`${source} restoreStack must declare module and exportName`);
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).sort().join() !== 'exportName,module'
+    || typeof record.module !== 'string' || !/^[A-Za-z0-9_/-]+\.ts$/.test(record.module)
+    || record.module.startsWith('/') || !existsSync(resolve(root, record.module))
+    || typeof record.exportName !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(record.exportName))
+    throw new Error(`${source} restoreStack must name an existing repository module and exported function`);
+  const moduleUrl = pathToFileURL(resolve(root, record.module)).href;
+  const exportName = record.exportName;
+  return async input => {
+    const imported = await import(moduleUrl) as Record<string, unknown>;
+    const restore = imported[exportName];
+    if (typeof restore !== 'function') throw new Error(`${source} restoreStack export ${exportName} must be a function`);
+    return (restore as NonNullable<JourneyPreparation['restoreStack']>)(input);
+  };
 }
 
 function validatePreparation(value: unknown, source: string, root: string): Declaration {
@@ -122,7 +142,7 @@ export async function discoverJourneyPreparations(root: string): Promise<Journey
     if (!existsSync(join(directory, journeyName))) {
       throw new Error(`${display(root, preparePath)} has no journey file ${journeyName}`);
     }
-    let imported: { preparation?: unknown; restoreStack?: JourneyPreparation['restoreStack'] };
+    let imported: { preparation?: unknown; restoreStack?: unknown };
     try {
       imported = (await import(pathToFileURL(preparePath).href)) as { preparation?: unknown };
     } catch (error) {
@@ -132,13 +152,12 @@ export async function discoverJourneyPreparations(root: string): Promise<Journey
     if (imported.preparation === undefined) {
       throw new Error(`${display(root, preparePath)} must export preparation`);
     }
-    if (imported.restoreStack !== undefined && typeof imported.restoreStack !== 'function')
-      throw new Error(`${display(root, preparePath)} restoreStack must be a function`);
+    const restoreStack = resolveRestoreStack(imported.restoreStack, display(root, preparePath), root);
     remember(
       found,
       journey,
       { ...validatePreparation(imported.preparation, display(root, preparePath), root),
-        ...(imported.restoreStack ? { restoreStack: imported.restoreStack } : {}) },
+        ...(restoreStack ? { restoreStack } : {}) },
       file,
     );
   }
