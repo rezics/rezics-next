@@ -105,8 +105,14 @@ const stepUpProof = new AsyncLocalStorage<{ userId: string; verified: boolean }>
  * used, and end a step-up ceremony before the provider creates a session. */
 export async function afterPasskeyAssertion(pool: Pool, credentialId: string, newCounter: number): Promise<void> {
   const proof = stepUpProof.getStore();
+  // The provider converts ordinary errors in this hook into a rejected proof.
+  // Mark persistence faults explicitly so admission can roll back its charge.
+  const persist = async (sql: string, values: unknown[]) => {
+    try { return await pool.query(sql, values); }
+    catch { throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account passkey persistence unavailable' }); }
+  };
   if (!proof) {
-    await pool.query('UPDATE passkey SET "rezicsLastUsedAt" = now() WHERE "credentialID" = $1', [credentialId]);
+    await persist('UPDATE passkey SET "rezicsLastUsedAt" = now() WHERE "credentialID" = $1', [credentialId]);
     return;
   }
   // Better Auth 1.7.5 invokes this hook before persisting newCounter. The
@@ -114,7 +120,7 @@ export async function afterPasskeyAssertion(pool: Pool, credentialId: string, ne
   // rechecked after concurrent row writers; a stale assertion cannot lower or
   // reuse a nonzero counter. Authenticators without counters may stay at zero.
   // https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion
-  const used = await pool.query(`UPDATE passkey SET counter = $3, "rezicsLastUsedAt" = now()
+  const used = await persist(`UPDATE passkey SET counter = $3, "rezicsLastUsedAt" = now()
     WHERE "credentialID" = $1 AND "userId" = $2
       AND (counter < $3 OR (counter = 0 AND $3 = 0)) RETURNING id`,
   [credentialId, proof.userId, newCounter]);
