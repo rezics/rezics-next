@@ -369,8 +369,7 @@ function fixture(options: { actualCapturedRelay?: boolean } = {}) {
   const state = { failAt: undefined as OwnerCheck | undefined, failError: undefined as Error | undefined, callbackCalls: 0,
     historicalRoot: 'retired-model-root', historicalDigest: digest,
     journalGeneration: '11', authorityGeneration: '7', interruptEvidence: false,
-    advanceJournalAfterChecks: false, advanceAuthorityAfterChecks: false,
-    verifyReleasedCustody: undefined as undefined | (() => Promise<void>) };
+    advanceJournalAfterChecks: false, advanceAuthorityAfterChecks: false };
   const validate = async (check: OwnerCheck, client?: PoolClient) => {
     if (client) await client.query(`SELECT 1 /* signed restore coverage: ${check} */`);
     trace.push(`validated:${check}`);
@@ -559,7 +558,6 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, c
     spyOn(erasureReconciliation, 'assertReleasedErasuresCurrent').mockImplementation(
       async (_relay, owners, record, captured, _authority, clients, outerId) => {
         if (failures.closure) throw failures.closure;
-        await run.state.verifyReleasedCustody?.();
         expect(record).toBe('retained-erasures');
         expect(captured).toBe('5');
         expect(outerId).toBe(row.id);
@@ -931,7 +929,7 @@ for (const method of ['GET', 'HEAD'] as const) {
       const owner = outerRestore(run, false, true);
       try {
         await owner.qualify();
-        run.state.verifyReleasedCustody = async () => {
+        const verifyReleasedCustody = async () => {
           try {
             const retained = await readExactModelGeneration(model.environment, model.generation);
             expect(retained.manifestSha256).toBe(model.manifestDigest);
@@ -941,6 +939,11 @@ for (const method of ['GET', 'HEAD'] as const) {
             throw new erasureReconciliation.ErasureRestoreHold(
               'restored command or model custody is unavailable or divergent', { cause: error });
           }
+        };
+        const releaseErasures = run.evidence.releaseErasures!;
+        run.evidence.releaseErasures = async (clients, releaseGraph) => {
+          await verifyReleasedCustody();
+          await releaseErasures(clients, releaseGraph);
         };
         armed = true;
 
@@ -955,22 +958,21 @@ for (const method of ['GET', 'HEAD'] as const) {
           expect(cause).toBeInstanceOf(ObjectUnavailable);
           expect((cause as ObjectUnavailable).status).toBe(503);
           expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
-          expect(run.fuseki.held).toBe(false);
-          expect(run.access.open).toBe(true);
-          expect(run.access.generation).toBe('6');
-          expect(run.fuseki.releaseEffects).toBe(1);
+          expectBothHeld(run);
+          expect(run.fuseki.releaseEffects).toBe(0);
 
           armed = false;
           expect(await owner.attempt()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
           expect(run.fuseki.commands).toHaveLength(1);
           expect(run.fuseki.releaseEffects).toBe(1);
+          expect(run.access.open).toBe(true);
+          expect(run.access.generation).toBe('6');
           expect(owner.qualifications).toBe(1);
         } else {
           expect(await owner.attempt()).toMatchObject({ state: 'held', replayed: true });
           expect(owner.row.state).toBe('held');
-          expect(run.fuseki.held).toBe(false);
-          expect(run.access.open).toBe(true);
-          expect(run.fuseki.releaseEffects).toBe(1);
+          expectBothHeld(run);
+          expect(run.fuseki.releaseEffects).toBe(0);
           const commandCount = run.fuseki.commands.length;
           expect(await owner.attempt()).toMatchObject({ state: 'held', replayed: true });
           expect(run.fuseki.commands).toHaveLength(commandCount);
