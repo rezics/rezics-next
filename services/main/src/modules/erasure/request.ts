@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
+import { lockPreservationTarget, withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { ERASURE_DEFERRED_REASON, ERASURE_TARGET_OWNERS } from './schema.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
@@ -9,7 +9,7 @@ import { assetNamespace, assetVariant, MediaFenced, MediaStale } from '../media/
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequired,
   probeContentErasure, commandCustodyErasureTargets, applyCommandCustodyErasure,
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
@@ -19,7 +19,7 @@ import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnav
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
   createErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
-  markErasureBlocked, markErasureSuppressed, readErasure, type ErasureTargetInput,
+  markErasureBlocked, markErasureSuppressed, readErasure, extendErasureTargets, type ErasureTargetInput,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
   sha256 } from './journal.ts';
 
@@ -83,19 +83,49 @@ function proof(admission: Pick<RegisteredAdmission, 'id' | 'requestDigest' | 'au
  * tombstone, the journal fence, the Access seal and the retention inventory.
  */
 async function completeContentErasure(service: ErasureService, graph: WorkActivationEnvironment,
-  access: ErasureAccess,
-  admission: RegisteredAdmission,
-  erasureId: string, mediaApplied = false): Promise<void> {
-  const journaled = await readErasure(service.relay, erasureId);
+  access: ErasureAccess, admission: RegisteredAdmission, erasureId: string): Promise<void> {
+  const finish = await withPublicationFence(service, admission.scope.slice('erasure:'.length),
+    client => completeFencedContentErasure(service, graph, access, admission, erasureId, false, client));
+  await finish();
+}
+
+async function completeFencedContentErasure(service: ErasureService, graph: WorkActivationEnvironment,
+  access: ErasureAccess, admission: RegisteredAdmission, erasureId: string,
+  mediaApplied: boolean, publicationClient: PoolClient, preflightComplete = false): Promise<() => Promise<void>> {
+  let journaled = await readErasure(service.relay, erasureId);
   if (journaled.stage === 'blocked') {
-    await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
-    return;
+    return () => access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
   }
   validateCompletion(journaled, admission);
   const resourceId = admission.scope.slice('erasure:'.length);
+  const budget = createErasurePreflightBudget();
+  budget.targets = journaled.targets.map(({ kind, ref }) => ({ kind, ref }));
+  if (!preflightComplete) {
+    const contentIds = journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
+    if (contentIds.length) {
+      // Revalidate the admitted resource even when its bytes already carry this tombstone.
+      const resolved = await resolveErasureRevisions(service.content, graph.fuseki, resourceId, contentIds);
+      if (resolved.some(revision => revision.content?.erasureId
+        && (revision.content.erasureId !== erasureId || revision.content.erasureEpoch !== journaled.erasureEpoch))) {
+        throw new ContentErasureStale('Content revision is no longer available to erase');
+      }
+      const homes = await selectingHomeTargets(graph, resourceId, contentIds, graphRevisionIds(journaled.targets).length);
+      await extendErasureTargets(service.relay, erasureId, journaled.erasureEpoch, admission.id, homes);
+      journaled = await readErasure(service.relay, erasureId);
+      budget.targets = journaled.targets.map(({ kind, ref }) => ({ kind, ref }));
+    }
+    await preflightGraphErasure(graph.fuseki, graphRevisionIds(journaled.targets), budget);
+    const custody = await commandCustodyErasureTargets(publicationClient,
+      journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`), budget);
+    for (const target of custody.filter(target => !target.payloadAbsent)) {
+      const source = await graph.receiptCustody?.readCommitted(target.receipt, budget, publicationClient);
+      if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
+        throw new ContentErasureStale('command custody is unavailable for erasure');
+      }
+    }
+  }
   const guarded = await withErasureFence(service, resourceId, erasureId,
     async (fence, accessClient) => {
-      await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient);
       if (!mediaApplied) {
         const variants = journaled.targets.filter(target => target.kind === 'content_variant');
         if (variants.length) {
@@ -106,60 +136,94 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
           await replayMediaErasure(service.content, { asset: resourceId.slice(-36),
             revisionIds: journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref),
             admission }, fence, { relay: service.relay, erasureId, erasureEpoch: journaled.erasureEpoch,
-            graph }, service.mediaObjects);
+            graph }, service.mediaObjects, budget, () => suppressGraphContentRevisions(graph.fuseki,
+            graph.lineage, journaled.erasureId, journaled.erasureEpoch, graphRevisionIds(journaled.targets)));
         }
       }
+      // Media commits its exact namespace inventory before other owners clear their bytes.
+      await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient);
       await markErasureSuppressed(service.relay, erasureId);
       // Disclosure is suppressed even while physical objects await retry.
       return completeLiveTargets(service, graph, journaled, accessClient);
-    });
+    }, publicationClient);
   if (guarded.held) {
     if (journaled.stage !== 'requested') throw new ContentErasureStale('Content erasure is deferred');
     await markErasureBlocked(service.relay, erasureId, ERASURE_DEFERRED_REASON);
+    return () => access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
+  }
+  return async () => {
     await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
-    return;
-  }
-  await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
-  await ensureRetentionDomain(service.relay, { label: CONTENT_LIVE_DOMAIN, owner: 'content',
-    store: 'postgresql', custody: 'live' });
-  await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
-    store: 'postgresql_wal', custody: 'live' });
-  const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
-    journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
-  if (hasCustody) {
-    for (const [store, label] of [['postgresql', 'access:postgresql:live'],
-      ['postgresql_wal', 'access:postgresql-wal:live']] as const) {
-      await ensureRetentionDomain(service.relay, { label, owner: 'access', store, custody: 'live' });
+    await ensureRetentionDomain(service.relay, { label: CONTENT_LIVE_DOMAIN, owner: 'content',
+      store: 'postgresql', custody: 'live' });
+    await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
+      store: 'postgresql_wal', custody: 'live' });
+    const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
+      journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
+    if (hasCustody) {
+      for (const [store, label] of [['postgresql', 'access:postgresql:live'],
+        ['postgresql_wal', 'access:postgresql-wal:live']] as const) {
+        await ensureRetentionDomain(service.relay, { label, owner: 'access', store, custody: 'live' });
+      }
     }
-  }
-  for (const [store, label] of [
-    ['tdb2_generation', `graph:tdb2:live:${graph.lineage.dataEpoch}`],
-    ['lucene', `graph:lucene:live:${graph.lineage.dataEpoch}`],
-  ] as const) {
-    await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody: 'live' });
-  }
-  for (const [store, label, holdReason, custody] of [
-    ['snapshot', 'graph:snapshot:unverified', 'Snapshot destruction evidence is required', 'archive'],
-    ['tdb2', 'graph:backup:unverified', 'Backup destruction evidence is required', 'backup'],
-    ['media', 'graph:media:unverified', 'Media destruction evidence is required', 'archive'],
-  ] as const) {
-    await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason });
-  }
-  await recordErasureInventory(service.relay, erasureId,
-    { owners: hasCustody ? ['content', 'graph', 'access'] : ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
-      liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
-  // Target flags can commit before sealing or inventory. Only this last marker
-  // lets the bounded pending worker skip a fully completed live transaction.
-  if (guarded.value) await service.relay.query(`UPDATE relay.erasure SET stage = 'reconciling'
-    WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`, [erasureId]);
+    for (const [store, label] of [
+      ['tdb2_generation', `graph:tdb2:live:${graph.lineage.dataEpoch}`],
+      ['lucene', `graph:lucene:live:${graph.lineage.dataEpoch}`],
+    ] as const) {
+      await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody: 'live' });
+    }
+    for (const [store, label, holdReason, custody] of [
+      ['snapshot', 'graph:snapshot:unverified', 'Snapshot destruction evidence is required', 'archive'],
+      ['tdb2', 'graph:backup:unverified', 'Backup destruction evidence is required', 'backup'],
+      ['media', 'graph:media:unverified', 'Media destruction evidence is required', 'archive'],
+    ] as const) {
+      await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason });
+    }
+    await recordErasureInventory(service.relay, erasureId,
+      { owners: hasCustody ? ['content', 'graph', 'access'] : ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
+        liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
+    // Target flags can commit before sealing or inventory. Only this last marker
+    // lets the bounded pending worker skip a fully completed live transaction.
+    if (guarded.value) await service.relay.query(`UPDATE relay.erasure SET stage = 'reconciling'
+      WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`, [erasureId]);
+  };
 }
 
 /** The Access transaction holds the existing preservation fence. Bounded reads
  * borrow its client; custody mutation retains its own receipt-session commit. */
 function withErasureFence<T>(service: ErasureService, resourceId: string, operationId: string,
-  write: (fence: PreservationFence, client: PoolClient) => Promise<T>) {
+  write: (fence: PreservationFence, client: PoolClient) => Promise<T>, borrowed?: PoolClient) {
+  if (borrowed) return withPreservationFence(borrowed, resourceId, operationId, fence => write(fence, borrowed));
   return relayTransaction(service.preservationAccess, client =>
     withPreservationFence(client, resourceId, operationId, fence => write(fence, client)));
+}
+
+async function selectingHomeTargets(graph: WorkActivationEnvironment, resourceId: string,
+  contentIds: readonly string[], retainedGraphCount: number): Promise<ErasureTargetInput[]> {
+  if (!contentIds.length) return [];
+  if (retainedGraphCount > 64) throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+  const result = await graph.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT DISTINCT ?revision ?owner ?erased ?owned WHERE {
+      VALUES ?content { ${contentIds.map(id => iri(`urn:rezics:content:revision:${id}`)).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?binding rv:contentRevision ?content .
+        ?revision a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?owner ; rv:publishedPage ?binding .
+        BIND(EXISTS { ?revision a rv:ErasedRevision } AS ?erased)
+        BIND(?owner = ${iri(resourceId)} AS ?owned)
+      }
+    } ORDER BY ?revision LIMIT 65`, 65_536);
+  const rows = result.results?.bindings;
+  if (!rows || rows.some(row => row.revision?.type !== 'uri'
+    || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(row.revision.value)
+    || row.owner?.type !== 'uri' || row.owner.value !== resourceId
+    || row.owned?.value !== 'true' || !['true', 'false'].includes(row.erased?.value ?? ''))) {
+    throw new ContentErasureInvalid('Home erasure targets are unavailable');
+  }
+  const targets = rows.map(row => ({ kind: 'semantic_revision' as const, ref: row.revision!.value.slice(-36) }));
+  // The retry caller merges retained H identities before applying the aggregate bound.
+  if (new Set(targets.map(target => target.ref)).size !== targets.length || targets.length > 64) {
+    throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+  }
+  return targets;
 }
 
 function validateCompletion(report: ErasureReport, admission: RegisteredAdmission): void {
@@ -305,10 +369,19 @@ async function cancel(access: ErasureAccess, admission: RegisteredAdmission, err
  * Content applies its tombstone and Access seals the admission with the journal
  * epoch as its source position.
  */
+function withPublicationFence<T>(service: ErasureService, resourceId: string,
+  operation: (client: PoolClient) => Promise<T>): Promise<T> {
+  return relayTransaction(service.preservationAccess, async client => {
+    await lockPreservationTarget(client, resourceId);
+    return operation(client);
+  });
+}
+
+/** Content and its selecting home cuts share the publisher's resource fence. */
 export async function requestContentErasure(service: ErasureService,
-  graph: WorkActivationEnvironment,
-  account: Pick<AccountAssertionVerifier, 'verify'>, access: ErasureAccess, request: Request,
-  input: ContentErasureInput): Promise<{ report: ErasureReport; replayed: boolean }> {
+  graph: WorkActivationEnvironment, account: Pick<AccountAssertionVerifier, 'verify'>,
+  access: ErasureAccess, request: Request, input: ContentErasureInput):
+  Promise<{ report: ErasureReport; replayed: boolean }> {
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.resourceId)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.actingSubject)) {
     throw new ContentErasureInvalid('Content erasure request is invalid');
@@ -319,7 +392,7 @@ export async function requestContentErasure(service: ErasureService,
     scope: `erasure:${input.resourceId}`, action: ERASURE_ACTION,
     idempotencyKey: input.idempotencyKey, requestDigest });
   const operationId = `erasure:${registered.id}`;
-  let erasureId = await findErasureByOperation(service.relay, operationId);
+  const erasureId = await findErasureByOperation(service.relay, operationId);
   if (registered.state === 'sealed') {
     if (!erasureId) throw new ErasureNotApplied('erasure admission was cancelled');
     await completeContentErasure(service, graph, access, registered, erasureId);
@@ -329,104 +402,119 @@ export async function requestContentErasure(service: ErasureService,
   catch (error) {
     if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
     // A journaled erasure is committed intent; an unjournaled one is cancelled.
-    if (!erasureId) await cancel(access, registered, new ErasureDenied('erasure dispatch is not admitted'));
+    if (!erasureId) await cancel(access, registered, new ErasureDenied('erasure dispatch is not admitted', { cause: error }));
   }
+  try {
+    const result = await withPublicationFence(service, input.resourceId,
+      client => requestFencedContentErasure(service, graph, access, registered, input, erasureId, client));
+    await result.finish();
+    return { report: await readErasure(service.relay, result.erasureId), replayed: result.replayed };
+  } catch (error) {
+    if (error instanceof ContentErasureInvalid || error instanceof ContentErasureStale
+      || error instanceof ContentErasureGraphRequired || error instanceof ErasureStale
+      || error instanceof GraphErasureUnavailable || error instanceof MediaErasureUnsupported
+      || error instanceof ErasurePreflightUnsupported || error instanceof MediaFenced || error instanceof MediaStale) {
+      if (!await findErasureByOperation(service.relay, operationId)) await cancel(access, registered, error);
+    }
+    throw error;
+  }
+}
+
+async function requestFencedContentErasure(service: ErasureService, graph: WorkActivationEnvironment,
+  access: ErasureAccess, registered: RegisteredAdmission, input: ContentErasureInput,
+  erasureId: string | null, publicationClient: PoolClient):
+  Promise<{ erasureId: string; replayed: boolean; finish: () => Promise<void> }> {
+  const operationId = `erasure:${registered.id}`, requestDigest = registered.requestDigest;
+  let finish: (() => Promise<void>) | undefined;
   let replayed = Boolean(erasureId);
   let finished = false;
   if (!erasureId) {
-    try {
-      const resolved = await resolveErasureRevisions(service.content, graph.fuseki,
-        input.resourceId, input.revisionIds);
-      if (resolved.some(revision => revision.erased)) {
-        throw new ContentErasureStale('Erasure revision is already erased');
+    const budget = createErasurePreflightBudget();
+    const resolved = await resolveErasureRevisions(service.content, graph.fuseki,
+      input.resourceId, input.revisionIds);
+    if (resolved.some(revision => revision.erased)) {
+      throw new ContentErasureStale('Erasure revision is already erased');
+    }
+    const privatePayloads = await inventoryContributionPayloads(
+      graph.fuseki, graph.objectDirectory, resolved, budget);
+    const custody = await commandCustodyErasureTargets(publicationClient,
+      resolved.filter(revision => isGraphErasureKind(revision.kind)).map(revision => revision.graphIri), budget);
+    for (const target of custody) {
+      if (!Number.isSafeInteger(target.payloadBytes) || target.payloadBytes! < 0
+        || target.payloadBytes! > erasurePreflightRemaining(budget, 'metadataBytes')) {
+        throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
       }
-      const budget = createErasurePreflightBudget();
-      const privatePayloads = await inventoryContributionPayloads(
-        graph.fuseki, graph.objectDirectory, resolved, budget);
-      const custody = await commandCustodyErasureTargets(service.preservationAccess,
-        resolved.filter(revision => isGraphErasureKind(revision.kind)).map(revision => revision.graphIri), budget);
-      for (const target of custody) {
-        if (!Number.isSafeInteger(target.payloadBytes) || target.payloadBytes! < 0
-          || target.payloadBytes! > erasurePreflightRemaining(budget, 'metadataBytes')) {
-          throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
-        }
-        if (!graph.receiptCustody || !graph.workObjects || target.payloadAbsent || target.erasureId) {
-          throw new ContentErasureStale('command custody is unavailable for erasure');
-        }
-        const source = await graph.receiptCustody.readCommitted(target.receipt, budget);
-        if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
-          throw new ContentErasureStale('command custody is unavailable for erasure');
-        }
+      if (!graph.receiptCustody || !graph.workObjects || target.payloadAbsent || target.erasureId) {
+        throw new ContentErasureStale('command custody is unavailable for erasure');
       }
-      const targets: ErasureTargetInput[] = [
-        ...resolved.map(revision => ({ kind: revision.kind, ref: revision.ref })),
-        ...[...new Set([...privatePayloads.map(payload => payload.payloadRef),
-          ...custody.map(target => `sha256:${target.payloadSha256}`)])]
-          .map(ref => ({ kind: 'object' as const, ref })),
-      ];
-      budget.targets = targets;
-      assertErasureJournalTargetBound(targets);
-      const contentTargets = resolved.filter(revision => revision.kind === 'content_revision');
-      if (contentTargets.length) {
-        assertFreshContentTargets(contentTargets.map(revision => ({
-          id: revision.ref, resource_id: revision.resourceId,
-          availability: revision.content?.availability ?? '',
-          pending_pin: revision.content?.pendingPin === true,
-          active_pin: revision.content?.activePin === true,
-          erasure_id: revision.content?.erasureId ?? null,
-          erasure_epoch: revision.content?.erasureEpoch ?? null,
-        })), contentTargets.map(revision => revision.ref), input.resourceId, true);
+      const source = await graph.receiptCustody.readCommitted(target.receipt, budget, publicationClient);
+      if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
+        throw new ContentErasureStale('command custody is unavailable for erasure');
       }
-      await preflightGraphErasure(graph.fuseki,
-        resolved.map(revision => revision.kind === 'content_revision' ? revision.ref : revision.graphIri), budget);
-      const journal = async (completeTargets: readonly ErasureTargetInput[]) => {
-        assertErasureJournalTargetBound(completeTargets);
-        const journaled = await journalErasure(service.relay, { operationId, requestDigest,
-          kind: 'revision', principalId: registered.principalId, admissionId: registered.id,
-          authorityEpoch: registered.authorityEpoch, targets: [...completeTargets] });
-        erasureId = journaled.erasureId;
-        replayed = journaled.replayed;
-        return readErasure(service.relay, erasureId);
-      };
-      const asset = contentTargets.length ? (await service.content.query<{ id: string }>(
-        'SELECT id::text FROM media.asset WHERE id=$1', [input.resourceId.slice(-36)])).rows[0]?.id : undefined;
-      if (asset) {
-        if (!service.mediaObjects) throw new MediaErasureUnsupported('media object inventory is unavailable');
-        const guarded = await withErasureFence(service, input.resourceId, operationId,
-          async fence => {
-            await withMediaErasureInventory(service.content, { asset,
-              revisionIds: contentTargets.map(target => target.ref), admission: registered }, fence,
-            service.mediaObjects!, async (_inventory, apply) => {
-              const report = await journal(budget.targets);
-              validateCompletion(report, registered);
-              await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId,
-                report.erasureEpoch, graphRevisionIds(report.targets));
-              await apply({ relay: service.relay, erasureId: report.erasureId,
-                erasureEpoch: report.erasureEpoch, graph });
-            }, budget);
-          });
-        if (guarded.held) throw new MediaFenced('media is retained under a preservation hold');
-        // Both owner pools are free here. A new hold can still refuse object deletion.
-        await markErasureSuppressed(service.relay, erasureId!);
-        await completeContentErasure(service, graph, access, registered, erasureId!, true);
-        finished = true;
-      } else {
-        await journal(targets);
-      }
-    } catch (error) {
-      if (error instanceof ContentErasureInvalid || error instanceof ContentErasureStale
-        || error instanceof ContentErasureGraphRequired || error instanceof ErasureStale
-        || error instanceof GraphErasureUnavailable || error instanceof MediaErasureUnsupported
-        || error instanceof ErasurePreflightUnsupported
-        || error instanceof MediaFenced || error instanceof MediaStale) {
-        if (erasureId) throw error;
-        await cancel(access, registered, error);
-      }
-      throw error;
+    }
+    const targets: ErasureTargetInput[] = [
+      ...resolved.map(revision => ({ kind: revision.kind, ref: revision.ref })),
+      ...await selectingHomeTargets(graph, input.resourceId,
+        resolved.filter(revision => revision.kind === 'content_revision').map(revision => revision.ref), resolved.length),
+      ...[...new Set([...privatePayloads.map(payload => payload.payloadRef),
+        ...custody.map(target => `sha256:${target.payloadSha256}`)])]
+        .map(ref => ({ kind: 'object' as const, ref })),
+    ];
+    budget.targets = targets;
+    if (graphRevisionIds(targets).length > 64) {
+      throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+    }
+    assertErasureJournalTargetBound(targets);
+    const contentTargets = resolved.filter(revision => revision.kind === 'content_revision');
+    if (contentTargets.length) {
+      assertFreshContentTargets(contentTargets.map(revision => ({
+        id: revision.ref, resource_id: revision.resourceId,
+        availability: revision.content?.availability ?? '',
+        pending_pin: revision.content?.pendingPin === true,
+        active_pin: revision.content?.activePin === true,
+        erasure_id: revision.content?.erasureId ?? null,
+        erasure_epoch: revision.content?.erasureEpoch ?? null,
+      })), contentTargets.map(revision => revision.ref), input.resourceId, true);
+    }
+    await preflightGraphErasure(graph.fuseki,
+      graphRevisionIds(targets), budget);
+    const journal = async (completeTargets: readonly ErasureTargetInput[]) => {
+      assertErasureJournalTargetBound(completeTargets);
+      const journaled = await journalErasure(service.relay, { operationId, requestDigest,
+        kind: 'revision', principalId: registered.principalId, admissionId: registered.id,
+        authorityEpoch: registered.authorityEpoch, targets: [...completeTargets] });
+      erasureId = journaled.erasureId;
+      replayed = journaled.replayed;
+      return readErasure(service.relay, erasureId);
+    };
+    const asset = contentTargets.length ? (await service.content.query<{ id: string }>(
+      'SELECT id::text FROM media.asset WHERE id=$1', [input.resourceId.slice(-36)])).rows[0]?.id : undefined;
+    if (asset) {
+      if (!service.mediaObjects) throw new MediaErasureUnsupported('media object inventory is unavailable');
+      const guarded = await withErasureFence(service, input.resourceId, operationId,
+        async fence => {
+          await withMediaErasureInventory(service.content, { asset,
+            revisionIds: contentTargets.map(target => target.ref), admission: registered }, fence,
+          service.mediaObjects!, async (_inventory, apply) => {
+            const report = await journal(budget.targets);
+            validateCompletion(report, registered);
+            await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId,
+              report.erasureEpoch, graphRevisionIds(report.targets));
+            await apply({ relay: service.relay, erasureId: report.erasureId,
+              erasureEpoch: report.erasureEpoch, graph });
+          }, budget);
+        }, publicationClient);
+      if (guarded.held) throw new MediaFenced('media is retained under a preservation hold');
+      // Both owner pools are free here. A new hold can still refuse object deletion.
+      await markErasureSuppressed(service.relay, erasureId!);
+      finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, true, publicationClient, true);
+      finished = true;
+    } else {
+      await journal(targets);
     }
   }
-  if (!finished) await completeContentErasure(service, graph, access, registered, erasureId!);
-  return { report: await readErasure(service.relay, erasureId!), replayed };
+  if (!finished) finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, false, publicationClient, !replayed);
+  return { erasureId: erasureId!, replayed, finish: finish! };
 }
 
 /** Exact read for the principal who requested the erasure; others see no record. */

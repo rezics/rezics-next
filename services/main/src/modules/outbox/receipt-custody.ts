@@ -734,7 +734,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     try { bytes = await this.objects.get(digest, remaining); }
     catch (error) {
       if (error instanceof ObjectReadBudgetExceeded) {
-        throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+        throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound', { cause: error });
       }
       throw error;
     }
@@ -914,7 +914,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   /** Read an already committed source; recovery must never dispatch a live
    * command or turn a pending admission into historical authority. */
-  async readCommitted(receipt: string, budget?: ErasurePreflightBudget): Promise<CommittedCustodySource | null> {
+  async readCommitted(receipt: string, budget?: ErasurePreflightBudget, client?: PoolClient): Promise<CommittedCustodySource | null> {
     nativeIri(receipt);
     return this.store.withReceipt(receipt, async session => {
       const stored = await session.read(budget ? erasurePreflightRemaining(budget, 'metadataBytes') : undefined);
@@ -926,7 +926,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       }
       if (budget) consumeErasurePreflight(budget, 'metadataBytes', row.payload.byteLength);
       return this.verifyCommitted(row, false, budget);
-    });
+    }, client);
   }
 
   /** Upgrade legacy reconciled receipts under their lock before an exact erasure clears their payload. */

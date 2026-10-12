@@ -364,7 +364,9 @@ export async function withMediaErasureInventory<T>(content: Pool, selection: Med
  * terminal Media outcome only needs bounded SQL repair; completion re-probes its objects. */
 export async function replayMediaErasure(content: Pool, selection: MediaErasureSelection,
   preservationAccess: PreservationAccess, journal: MediaErasureJournal,
-  objects?: (namespace: string) => ImmutableObjects): Promise<void> {
+  objects?: (namespace: string) => ImmutableObjects,
+  budget: MediaErasureBudget = { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 },
+  beforeApply?: () => Promise<void>): Promise<void> {
   checkSelection(selection);
   const guarded = await withPreservationFence(preservationAccess, assetIri(selection.asset), journal.erasureId, async () => {
     const client = await content.connect();
@@ -379,10 +381,19 @@ export async function replayMediaErasure(content: Pool, selection: MediaErasureS
         // Content tombstone can replace its raw manifest, and the retained closure
         // must still cover every current physical key before the owner may terminalize.
         inventory = await inventoryLocked(client, selection, row, objects,
-          { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 },
-          fence.signal, journal);
+          budget, fence.signal, journal);
+      } else {
+        // Terminal repair still preflights its indexed closure with the request's budget.
+        await revisionIdentities(client, selection, budget);
+        const { representations, uploads } = await indexedRows(client, selection.asset, budget);
+        representationTargets(selection.asset, representations, uploads, budget);
+        const report = await readErasure(journal.relay, journal.erasureId);
+        if (budget.targets.some(target => !report.targets.some(retained => retained.kind === target.kind && retained.ref === target.ref))) {
+          throw new MediaFenced('media replay representation differs from its retained journal inventory');
+        }
       }
       await assertTransactionFence(client, fence);
+      await beforeApply?.();
       const operationId = await applyLocked(client, selection, row, journal, inventory);
       fence.signal.throwIfAborted();
       await client.query('COMMIT');

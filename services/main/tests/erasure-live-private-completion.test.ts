@@ -121,6 +121,9 @@ class Graph extends FusekiClient {
     } }; }
   override async query(query: string): Promise<SparqlResult> {
     this.queries.push(query);
+    if (query.includes('SELECT DISTINCT ?revision ?owner ?erased ?owned')) {
+      return { results: { bindings: [] } };
+    }
     if (query.includes('SELECT ?revision ?kind ?owner ?manifest ?erased')) {
       return { results: { bindings: [...this.revisions].filter(([id]) => query.includes(`<${resourceIri(id)}>`))
         .map(([id, row]) => ({ revision: uri(resourceIri(id)), kind: lit(row.kind), owner: uri(row.owner),
@@ -406,6 +409,35 @@ test('D3 graph and Media indexed units share one preflight ceiling; exactly 64 p
       expect(f.objects.data.size).toBe(0);
       expect(f.outcomes).toEqual(['succeeded']);
     }
+  });
+});
+
+test('D3 a retained mixed closure re-preflights graph and Media together before retry mutation', async () => {
+  await fixture(async f => {
+    const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bd335b' } }).png().toBuffer();
+    const { upload, revision } = await media(f, image);
+    for (let at = 0; at < 62; at++) f.graph.units.push({ graph: 'urn:rezics:search:private',
+      unit: `urn:rezics:retry-unit:${at}`, target: `urn:rezics:content:revision:${revision}` });
+    const input = f.input(assetIri(upload.asset), [revision]);
+    const command = f.graph.commandWithReceipt.bind(f.graph);
+    f.graph.commandWithReceipt = async () => { throw new Error('graph suppression outage'); };
+    await expect(f.call(input)).rejects.toThrow();
+    const id = (await f.relay.query<{ id: string }>('SELECT id FROM relay.erasure')).rows[0]!.id;
+    const retained = await readErasure(f.relay, id);
+    expect(retained.targets.every(target => target.completionState === 'pending')).toBe(true);
+    f.graph.commandWithReceipt = command;
+    f.graph.units.push({ graph: 'urn:rezics:search:private', unit: 'urn:rezics:retry-unit:overflow',
+      target: `urn:rezics:content:revision:${revision}` });
+    await expect(f.call(input)).rejects.toThrow(MediaErasureUnsupported);
+    expect(f.graph.commands).toEqual([]);
+    expect(f.objects.deletes).toEqual([]);
+    expect((await f.pool.query('SELECT availability,serialized_bytes IS NOT NULL AS present FROM content.revision WHERE id=$1',
+      [revision])).rows[0]).toEqual({ availability: 'available', present: true });
+    f.graph.units.pop();
+    const completed = await f.call(input);
+    expect(completed.report.erasureId).toBe(retained.erasureId);
+    expect(completed.report.erasureEpoch).toBe(retained.erasureEpoch);
+    expect(completed.report.targets.every(target => target.completionState === 'completed')).toBe(true);
   });
 });
 

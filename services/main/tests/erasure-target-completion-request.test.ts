@@ -59,6 +59,7 @@ class RequestGraph extends FusekiClient {
   }
 
   override async query(sparql: string): Promise<SparqlResult> {
+    if (sparql.includes('SELECT DISTINCT ?revision ?owner ?erased ?owned')) return { results: { bindings: [] } };
     if (sparql.includes('SELECT DISTINCT ?target ?sequence ?receiptEpoch ?currentSequence')) {
       return { results: { bindings: structuredClone(this.proofRows) } };
     }

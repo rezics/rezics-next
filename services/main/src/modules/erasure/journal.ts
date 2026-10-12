@@ -242,6 +242,44 @@ export async function journalErasure(relay: Pool, intent: ErasureIntent): Promis
   });
 }
 
+/** Reconcile freshly selected home cuts under the caller's publication fence.
+ * Original ordinals, admission, request digest and epoch remain immutable. */
+export async function extendErasureTargets(relay: Pool, erasureId: string, erasureEpoch: string,
+  admissionId: string, selected: readonly ErasureTargetInput[]): Promise<void> {
+  if (!selected.length) return;
+  if (!isValidErasureTargetList(selected)
+    || selected.some(target => target.kind !== 'semantic_revision')) {
+    throw new ErasureInvalid('Home erasure targets are invalid');
+  }
+  await relayTransaction(relay, async client => {
+    const entry = (await client.query<{ admission_id: string; erasure_epoch: string; stage: string }>(
+      `SELECT admission_id, erasure_epoch::text, stage FROM relay.erasure WHERE id=$1 FOR UPDATE`,
+      [erasureId])).rows[0];
+    if (!entry || entry.admission_id !== admissionId || entry.erasure_epoch !== erasureEpoch) {
+      throw new ErasureInvalid('Home erasure journal identity differs');
+    }
+    const retained = (await client.query<{ target_kind: ErasureTargetKind; target_ref: string }>(
+      'SELECT target_kind, target_ref FROM relay.erasure_target WHERE erasure_id=$1 ORDER BY ordinal LIMIT 257',
+      [erasureId])).rows.map(row => ({ kind: row.target_kind, ref: row.target_ref }));
+    const additions = selected.filter(target => !retained.some(prior => prior.kind === target.kind && prior.ref === target.ref));
+    const combined = [...retained, ...additions];
+    if (!isValidErasureTargetList(combined) || combined.filter(target =>
+      target.kind === 'content_revision' || ERASURE_TARGET_OWNERS[target.kind] === 'graph').length > 64) {
+      throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
+    }
+    if (!additions.length) return;
+    if (entry.stage === 'verified' || entry.stage === 'blocked') {
+      throw new ErasureInvalid('terminal erasure cannot acquire new home targets');
+    }
+    await client.query(`INSERT INTO relay.erasure_target (erasure_id, ordinal, owner, target_kind, target_ref)
+      SELECT $1, $2 + ordinal, 'graph', kind, ref
+      FROM unnest($3::text[], $4::text[]) WITH ORDINALITY AS t(kind, ref, ordinal)`,
+    [erasureId, retained.length, additions.map(target => target.kind), additions.map(target => target.ref)]);
+    await client.query(`UPDATE relay.erasure SET stage='requested', suppression_status='pending'
+      WHERE id=$1`, [erasureId]);
+  });
+}
+
 /** The journal's disclosure fence after every live owner applied its tombstone. */
 export async function markErasureSuppressed(relay: Queryable, erasureId: string): Promise<void> {
   await relay.query(`UPDATE relay.erasure SET stage = 'fenced', suppression_status = 'suppressed',
