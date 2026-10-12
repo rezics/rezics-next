@@ -33,13 +33,14 @@ export async function captureHomeDisclosureFence(env: WorkActivationEnvironment,
   const noteCut = (cuts: readonly DisclosureReadCut[]) => {
     if (!cost || !cuts.length) return;
     cost.accessQueries += DISCLOSURE_COST.ownerStatements;
-    const heads = new Set(cuts.flatMap(({ selection }) => [
-      ...selection.ancestry.parents.map(parent => parent.resource),
-      ...(selection.ancestry.resourceKind !== 'other' || selection.target.owner === 'graph'
-        && selection.ancestry.relationshipBasis.owner === 'graph'
-        && selection.ancestry.relationshipBasis.kind === 'identity'
-        && selection.ancestry.relationshipBasis.resource === selection.target.resource ? [selection.target.resource] : []),
-    ]));
+    const heads = new Set(cuts.flatMap(({ selection }) => {
+      const ancestry = selection.ancestry;
+      if (!('relationshipBasis' in ancestry)) return [];
+      return [...ancestry.parents.map(parent => parent.resource),
+        ...(ancestry.resourceKind !== 'other' || selection.target.owner === 'graph'
+          && ancestry.relationshipBasis.owner === 'graph' && ancestry.relationshipBasis.kind === 'identity'
+          && ancestry.relationshipBasis.resource === selection.target.resource ? [selection.target.resource] : [])];
+    }));
     cost.graphQueries += Math.ceil(heads.size / DISCLOSURE_COST.parentHeadBatch);
   };
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {

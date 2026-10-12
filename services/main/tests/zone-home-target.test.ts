@@ -44,7 +44,8 @@ for (const ancestry of [true, false]) for (const authority of ['zone', 'realm'] 
     if (!ancestry) {
       const selections = await resolveDisclosureSelections(h.env, [{ owner: 'graph', resource: h.resource,
         revision: h.revision, component: 'record' }]);
-      expect(selections[0]!.ancestry.relationshipBasis.kind).toBe('publication');
+      const ancestry = selections[0]!.ancestry;
+      expect('relationshipBasis' in ancestry ? ancestry.relationshipBasis.kind : undefined).toBe('publication');
     }
     expect(await readZoneHomeTarget(h.env, h.resource, h.revision, {
       zoneReadable: async () => readable,

@@ -15,10 +15,10 @@ import { fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
-// The native graph effect writer still selects the Work shape and rv:head for home records.
+// Native home effects use their publication shape and head without affecting the Zone.
 for (const outcome of ['restrict', 'restore'] as const) {
   for (const scopeKind of ['component', 'exact_revision'] as const) {
-    test.failing(`native home ${outcome} at ${scopeKind} scope uses its publication shape and head`, async () => {
+    test(`native home ${outcome} at ${scopeKind} scope uses its publication shape and head`, async () => {
       const resource = id(), head = id(), zone = id();
       const target: DecisionTargetInput = { owner: 'graph', resource, component: 'record',
         scopeKind, revision: scopeKind === 'component' ? null : head,
@@ -87,7 +87,8 @@ function homeBodyRestriction(heldCurrent: boolean) {
     });
   }
   configureDisclosure(h.env, fixtureDisclosureReader(async targets => targets.map(target => {
-    const publication = target.ancestry?.relationshipBasis;
+    const ancestry = target.ancestry;
+    const publication = ancestry && 'relationshipBasis' in ancestry ? ancestry.relationshipBasis : undefined;
     // The exact native publication is authoritative; legacy parent hints cannot broaden it.
     const restricted = target.owner === 'graph' && target.resource === h.resource && target.revision === held
       || target.owner === 'content' && (publication?.kind === 'publication'

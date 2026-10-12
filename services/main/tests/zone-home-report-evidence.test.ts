@@ -264,7 +264,8 @@ for (const ancestry of [true, false]) for (const authority of ['zone', 'realm'] 
     if (!ancestry) {
       const selections = await resolveDisclosureSelections(h.env, [{ owner: 'graph', resource: h.resource,
         revision: h.revision, component: 'record' }]);
-      expect(selections[0]!.ancestry.relationshipBasis.kind).toBe('publication');
+      const ancestry = selections[0]!.ancestry;
+      expect('relationshipBasis' in ancestry ? ancestry.relationshipBasis.kind : undefined).toBe('publication');
     }
     await expect(capturePublishedHomeEvidence(h.env, h.core, h.registry, principal, actor,
       { owner: 'graph', resource: h.resource, component: 'record', revision: h.revision, locator: null }))
@@ -353,8 +354,8 @@ for (const owner of ['graph', 'content'] as const) {
       expect(h.transactions()).toBe(2);
     });
     for (const disclosure of ['parties', 'public_summary'] as const) {
-      // Case admission currently preserves private reply evidence but omits the private home provenance guard.
-      test.failing(`private ${owner} home evidence refuses ${disclosure} ${kind} case disclosure`, async () => {
+      // Case admission cannot widen the disclosure of private home evidence.
+      test(`private ${owner} home evidence refuses ${disclosure} ${kind} case disclosure`, async () => {
         const h = privateHomeReport(owner, kind);
         await expect(h.store.submitReport(principal, { ...h.input, disclosure }))
           .rejects.toThrow('Private home evidence requires private case disclosure');
