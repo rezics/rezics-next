@@ -47,7 +47,8 @@ const target = (expectedHead = head): DecisionTargetInput => ({
 });
 
 test('Governance derives primary ownership from the semantic admission policy for every model class', async () => {
-  expect([...semanticOwnerTypes].sort()).toEqual([...new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES])].sort());
+  expect([...semanticOwnerTypes].sort()).toEqual([...new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES])]
+    .filter(type => semanticChangeTypeOutcome(type) === 'reserved-owner').sort());
   const types = new Set([...semanticOwnerTypes, `${RV}Character`, `${RV}Role`,
     'http://www.w3.org/2000/01/rdf-schema#Resource', 'https://example.org/Genre']);
   for (const definition of authoredProfiles) {
@@ -73,8 +74,10 @@ test('Governance derives primary ownership from the semantic admission policy fo
 
 test('Governance classification and atomic guards consult the live semantic owner policy', async () => {
   const kind = 'https://example.org/NewCanonicalOwner';
-  const registry = semanticOwnerTypes as Set<string>;
-  registry.add(kind);
+  const canonical = CANONICAL_TYPES as Set<string>;
+  const owners = semanticOwnerTypes as Set<string>;
+  canonical.add(kind);
+  owners.add(kind);
   try {
     expect(semanticChangeTypeOutcome(kind)).toBe('reserved-owner');
     const f = graph();
@@ -84,7 +87,7 @@ test('Governance classification and atomic guards consult the live semantic owne
     f.state.extraKinds = [];
     await f.effects.apply(operation, 1, target());
     expect(f.commands[0]!.update).toContain(`<${kind}>`);
-  } finally { registry.delete(kind); }
+  } finally { canonical.delete(kind); owners.delete(kind); }
 });
 
 /** The owner simulator retains committed receipts independently of response delivery.

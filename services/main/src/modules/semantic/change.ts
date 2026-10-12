@@ -33,13 +33,16 @@ export const CANONICAL_TYPES: ReadonlySet<string> = new Set((JSON.parse(readFile
   join(import.meta.dir, '../../../../../generated/model/manifest.json'), 'utf8')) as {
   canonical: { type: string }[] }).canonical.map(entry => entry.type));
 
-/** The semantic owner's complete reserved registry, including canonical routing. */
-export const semanticOwnerTypes: ReadonlySet<string> = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]);
-
 /** Shared admission policy: descriptive assertions cannot select another owner. */
 export function semanticChangeTypeOutcome(type: string): TermOutcome {
-  return semanticOwnerTypes.has(type) ? 'reserved-owner' : semanticTypeOutcome(type);
+  const outcome = semanticTypeOutcome(type);
+  return outcome === 'admitted' && CANONICAL_TYPES.has(type) ? 'reserved-owner' : outcome;
 }
+
+/** The semantic owner's complete reserved registry. Schema envelopes such as
+ * rdfs:Resource retain their schema outcome even when they have a routed shape. */
+export const semanticOwnerTypes: ReadonlySet<string> = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]
+  .filter(type => semanticChangeTypeOutcome(type) === 'reserved-owner'));
 
 export interface SemanticProperty { predicate: string; value: SemanticValue }
 /** A stored assertion keeps its identified value node so history resolves exactly. */
