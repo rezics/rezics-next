@@ -10,11 +10,11 @@ import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import {
   configureDisclosure, configureDisclosureAncestrySource, DisclosureUnavailable,
-  type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureTarget,
+  resolveDisclosureSelections, type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureTarget,
 } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import {
-  captureClosedRealmFeedScope, captureClosedRealmFeedSources, readClosedRealmFeedSources,
+  captureClosedRealmFeedScope, captureClosedRealmFeedSources, closedRealmFeedTargets, readClosedRealmFeedSources,
 } from '../src/modules/feed/closed-realm-feed.ts';
 import { rankCandidates } from '../src/modules/feed/ranking.ts';
 import type { FeedSource } from '../src/modules/feed/source.ts';
@@ -28,12 +28,15 @@ export type ClosedFeedReader = 'anonymous' | 'member' | 'manager' | 'case-party'
 const native = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const realm = native(1), work = native(2), head = 'urn:rezics:revision:feed-parent:1';
 const binding = (value: string) => ({ type: 'uri' as const, value });
+// Publication receipts belong to the fixture owner, independently of submitted
+// descriptors and mutable hydrated sources.
+const publicationReceipts = new Map([0, 2, 4].map(index => [native(10 + index), `revision-${index}`]));
 
 export function closedFeedOwner(actor: ClosedFeedReader) {
   const state = { closed: false, workHidden: false, contentHidden: false, ancestry: true,
     realmParent: true, preparation: true, approval: true, placement: 'current', parentHead: head,
     generation: '0', enforcementCut: fixtureDisclosureCut.enforcementCut, available: true, hydrate: () => {},
-    privateRealm: false, member: true, proof: 'membership:1',
+    privateRealm: false, member: true, proof: 'membership:1', restrictedContentRevision: null as string | null,
     reviewGrain: null as null | 'work' | 'realization' | 'release' | 'occurrence' | 'resource' };
   const sources: FeedSource[] = Array.from({ length: 6 }, (_, index) => ({
     id: native(10 + index), sequence: String(index + 1), kind: index % 2 === 0 ? 'discussion' : 'work',
@@ -72,7 +75,9 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
       kind: state.reviewGrain && state.reviewGrain !== 'work' ? 'publication' : target.occurrence?.kind ?? 'identity',
       resource: target.occurrence?.resource ?? realm,
       revision: target.occurrence?.revision ?? head,
-      targetResource: target.resource, targetRevision: target.revision ?? null,
+      targetResource: target.resource,
+      targetRevision: target.owner === 'content' ? publicationReceipts.get(source!.id) ?? null
+        : target.owner === 'review' ? 'review-revision' : null,
       token: createHash('sha256').update(JSON.stringify([target, state.placement])).digest('hex'),
       dataEpoch: env.lineage.dataEpoch,
     };
@@ -96,7 +101,8 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
       return { decisions: targets.map(target => state.closed && (target.resource === realm
         || target.ancestry?.parents.some(parent => parent.kind === 'realm' && parent.resource === realm))
         || state.workHidden && target.ancestry?.parents.some(parent => parent.resource === work)
-        || state.contentHidden && target.owner === 'content' ? 'hidden' as const : 'visible' as const),
+        || target.owner === 'content' && (state.contentHidden || state.restrictedContentRevision !== null
+          && target.revision === state.restrictedContentRevision) ? 'hidden' as const : 'visible' as const),
       anonymousNames: [], fenceBases: targets.map(() => ({ recoveryGeneration: state.generation, enforcementCut: state.enforcementCut })) };
     },
   });
@@ -154,6 +160,27 @@ export function closedFeedCases(actor: ClosedFeedReader) {
     owner.state.closed = true;
     expect(await counted.fence()).toEqual([]);
   });
+  test(`closed-feed-${actor}: the owner refuses a null descriptor revision independently of the adapter`, async () => {
+    const owner = closedFeedOwner(actor);
+    const target = closedRealmFeedTargets(owner.sources[0]!)[1]!;
+    expect(target.revision).toBe('revision-0');
+    await expect(resolveDisclosureSelections(owner.session.deps.environment, [{ ...target, revision: null }]))
+      .rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(resolveDisclosureSelections(owner.session.deps.environment, [{ ...target, revision: 'revision-old' }]))
+      .rejects.toBeInstanceOf(DisclosureUnavailable);
+  });
+  for (const channel of ['feed', 'count'] as const) {
+    test(`closed-feed-${actor}: ${channel} fences the admitted revision while preserving a different revision`, async () => {
+      const owner = closedFeedOwner(actor);
+      owner.state.restrictedContentRevision = 'revision-old';
+      const captured = await captureClosedRealmFeedSources(owner.session, [owner.sources[0]!], channel);
+      expect(captured.sources).toEqual([owner.sources[0]!]);
+      expect(owner.calls.flatMap(call => call.targets).filter(target => target.owner === 'content')
+        .map(target => target.revision)).toEqual(['revision-0']);
+      owner.state.restrictedContentRevision = 'revision-0';
+      expect(await captured.fence()).toEqual([]);
+    });
+  }
   test(`closed-feed-${actor}: closure during hydration discards cards and their continuation attribution`, async () => {
     const owner = closedFeedOwner(actor);
     const batch = await captureClosedRealmFeedSources(owner.session, owner.sources);
