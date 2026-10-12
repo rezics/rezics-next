@@ -131,7 +131,9 @@ async function isolated(run: (f: Awaited<ReturnType<typeof fixture>>) => Promise
   try { await run(fixture(pool)); }
   finally {
     const exercised = performance.now();
-    await pool.end(); await admin.query(`DROP DATABASE ${name}`);
+    // The whole disposable cluster is removed afterAll. Closing each pool keeps
+    // cases isolated without DROP DATABASE forcing a checkpoint inside the case.
+    await pool.end();
     console.info('Imported-cover owner fixture timing (ms)', {
       clone: Math.round(cloned - started), exercise: Math.round(exercised - cloned),
       cleanup: Math.round(performance.now() - exercised),
