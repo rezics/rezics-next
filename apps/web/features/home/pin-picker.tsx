@@ -24,6 +24,8 @@ import { mainSavedFilterApi, type SavedFilterApi } from '../saved-filter/api.ts'
 import { currentFiltersName, filterTitle, MAX_PINNED } from '../saved-filter/tabs.ts';
 import type { CommandFailure, ConceptDetail, SavedFilter, SavedFilters } from '../saved-filter/types.ts';
 import type { HomeMessages } from './messages.ts';
+import type { FollowedConceptTab } from './followed-concept-feed.ts';
+import { followHomeTopic, pinHomeFilter, saveHomeFilter } from './topic-actions.ts';
 
 type T = ReturnType<typeof materializeData<HomeMessages>>;
 interface Topic { id: string; name: { value: string; language?: string } }
@@ -39,7 +41,8 @@ export interface PinPickerProps {
   locale: UiLocale;
   messages: HomeMessages;
   actingSubject: string;
-  filters: SavedFilters;
+  filters: SavedFilters | null;
+  concepts?: readonly FollowedConceptTab[];
   /** Home's active Filters (languages and communities) and their names, which can be saved as a tab. */
   current: { document: FilterDocument; labels: string[] } | null;
   /** Stories: an in-memory Main. */
@@ -57,7 +60,7 @@ export interface PinPickerProps {
  * as the invitation Home gives a reader who skipped choosing topics.
  */
 export function PinPicker({ state, defaults, locale, messages, actingSubject, filters, current, api: given,
-  gate: givenGate, defaultOpen = false }: PinPickerProps) {
+  gate: givenGate, concepts = [], defaultOpen = false }: PinPickerProps) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
   // What the reader may do follows the grants the layout read; the client asks it at each call.
@@ -65,16 +68,17 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
   const gate = givenGate ?? shellGate;
   const gateRef = useRef(gate);
   gateRef.current = gate;
-  const canCreate = gate('postV1MeSaved-filters');
-  const canPin = gate('patchV1MeSaved-filtersById');
+  // Saved actions finish by opening their tab, which also needs the inventory read.
+  const canCreate = gate('getV1MeSaved-filters') && gate('postV1MeSaved-filters');
+  const canPin = gate('getV1MeSaved-filters') && gate('patchV1MeSaved-filtersById');
   const api = useRef<SavedFilterApi | null>(given ?? null);
   const client = useCallback(() => api.current ??= mainSavedFilterApi(actingSubject, undefined,
     operation => gateRef.current(operation)), [actingSubject]);
   const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<CommandFailure | null>(null);
-  const full = filters.pinned.length >= MAX_PINNED;
-  const empty = !filters.pinned.length;
+  const full = (filters?.pinned.length ?? 0) >= MAX_PINNED;
+  const empty = !filters?.pinned.length && !concepts.length;
 
   const go = (id: string) => {
     setOpen(false);
@@ -82,43 +86,31 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
   };
   const fail = (reason: CommandFailure) => {
     setBusy(null);
-    // A grant that went away: the refreshed page no longer offers the picker, and says nothing about it.
+    // A grant that went away: refresh the optional Saved Filter controls while public topics stay available.
     if (reason === 'closed') { setOpen(false); router.refresh(); return; }
     setFailure(reason);
   };
 
   async function pinConcept(topic: Topic) {
     setBusy(topic.id); setFailure(null);
-    const known = [...filters.pinned, ...filters.unpinned].find(filter => filter.concept?.id === topic.id);
-    if (known?.position !== null && known) return go(known.id);
-    if (known) {
-      const pinned = await client().update(known, { pinned: true });
-      return pinned.ok ? go(known.id) : fail(pinned.failure);
-    }
-    const followed = await client().followConcept(topic.id, true);
-    if (!followed.ok) return fail(followed.failure);
-    const listed = await client().list(locale);
-    const made = listed.ok ? listed.data.items.find(item => item.concept?.id === topic.id) : undefined;
-    if (!made) return fail('unavailable');
-    if (made.position === null) return fail('full');
-    go(made.id);
+    const followed = await followHomeTopic(client(), topic.id);
+    return followed.ok ? go(followed.data.tab) : fail(followed.failure);
   }
 
   async function pinFilter(filter: SavedFilter) {
     setBusy(filter.id); setFailure(null);
-    const pinned = await client().update(filter, { pinned: true });
+    const pinned = await pinHomeFilter(client(), filter, operation => gateRef.current(operation));
     return pinned.ok ? go(filter.id) : fail(pinned.failure);
   }
 
   async function saveCurrent(name: string) {
     if (!current) return;
     setBusy('current'); setFailure(null);
-    const created = await client().create({ name, filter: current.document, pinned: true });
+    const created = await saveHomeFilter(client(), { name, filter: current.document, pinned: true },
+      operation => gateRef.current(operation));
     return created.ok && created.data.id ? go(created.data.id) : fail(created.ok ? 'unavailable' : created.failure);
   }
 
-  // Neither way of adding a tab is open: nothing here would work, so there is no `+`.
-  if (!canCreate && !canPin) return null;
   return <Dialog open={open} onOpenChange={details => { setOpen(details.open); if (!details.open) setFailure(null); }}>
     <DialogTrigger aria-label={empty ? undefined : t.pinMore} title={empty ? undefined : t.pinMore}
       className={cn('flex h-12 shrink-0 items-center gap-1.5 border-border/60 border-s px-3.5 font-medium text-sm',
@@ -130,15 +122,13 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
     <DialogContent size="md">
       <DialogHeader title={t.pinTitle} description={t.pinBody} />
       <DialogBody className="grid gap-5">
-        {full ? <p role="status" className="rounded-xl bg-muted px-3 py-2 text-muted-foreground text-sm">{t.tabsFull}</p>
-          : null}
         {failure && !(full && failure === 'full') ? <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2
           text-destructive-foreground text-sm">{failure === 'full' ? t.tabsFull : failure === 'unsupported'
             ? t.tabUnsupported : t.pinFailed}</p> : null}
         <TopicSearch t={t} locale={locale} api={client} disabled={full} busy={busy}
-          pinned={filters.pinned.flatMap(filter => filter.concept ? [filter.concept.id] : [])}
-          known={[...filters.pinned, ...filters.unpinned].flatMap(filter => filter.concept ? [filter.concept.id] : [])}
-          unpinned={canPin ? filters.unpinned : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
+          pinned={concepts.map(concept => concept.id)}
+          known={concepts.map(concept => concept.id)}
+          unpinned={canPin ? filters?.unpinned ?? [] : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
         {current && canCreate ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
           onSave={name => void saveCurrent(name)} /> : null}
       </DialogBody>
@@ -194,7 +184,7 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
       </> : null}
       {pinned.includes(selected.id) ? <Button className="justify-self-start" variant="soft" isLoading={busy === selected.id}
         onClick={() => onPin({ id: selected.id, name })}>{t.openTab}</Button>
-        : <Button className="justify-self-start" disabled={disabled} isLoading={busy === selected.id}
+        : <Button className="justify-self-start" disabled={busy !== null} isLoading={busy === selected.id}
           onClick={() => onPin({ id: selected.id, name })}><PinIcon aria-hidden="true" />
           {t.pinThis({ topic: name.value })}</Button>}
     </div>;
@@ -229,6 +219,7 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
         {new Intl.NumberFormat(locale).format(item.usageCount)} {browseMessages[locale].usage}</span> : null}</span>} />
     {unpinned.length ? <section aria-label={t.yourTopics} className="grid gap-2">
       <h3 className="font-medium text-muted-foreground text-xs">{t.yourTopics}</h3>
+      {disabled ? <p role="status" className="text-muted-foreground text-sm">{t.tabsFull}</p> : null}
       <ul className="-mx-3 grid">{unpinned.map(filter => {
         const title = filterTitle(filter);
         return <li key={filter.id}><button type="button" className={row}
@@ -252,6 +243,7 @@ function SaveCurrent({ t, labels, disabled, busy, onSave }: { t: T; labels: read
       <h3 className="font-semibold text-sm">{t.saveFilters}</h3>
       <p className="text-muted-foreground text-sm">{t.saveFiltersBody}</p>
     </div>
+    {disabled ? <p role="status" className="text-muted-foreground text-sm">{t.tabsFull}</p> : null}
     <ul className="flex flex-wrap gap-1.5">
       {labels.map(label => <li key={label} className="rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary
         text-xs">{label}</li>)}

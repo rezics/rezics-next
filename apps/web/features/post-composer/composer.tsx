@@ -9,7 +9,7 @@ import { Checkbox } from '@rezics/ui/checkbox';
 import { Input } from '@rezics/ui/input';
 import { CircleAlertIcon, SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
@@ -23,6 +23,7 @@ import { bodyText, restoreCachedBody } from '../document-editor/body.ts';
 import { parseStoredDocument } from '@rezics/document';
 import type { RealmHeader } from '../realm/types.ts';
 import Link from '../shell/localized-link.tsx';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 import { newPostProgress, submitPost, type PostProgress } from './api.ts';
 import { postText as words } from './messages.ts';
 
@@ -74,6 +75,9 @@ export function PostComposer({
   /** The resource a page asked to discuss; it replaces any stored choice and cannot be searched away. */
   target?: WorkChoice | null;
 }) {
+  const operationOpen = useOperationGate();
+  const operationGate = useRef(operationOpen);
+  operationGate.current = operationOpen;
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => blank(initial, target));
   const [hydrated, setHydrated] = useState(false);
@@ -323,6 +327,7 @@ export function PostComposer({
         projectionVisible = visible;
         setCheckingProjection(false);
       },
+      operation => operationGate.current(operation),
     );
     setBusy(false);
     if (result.kind === 'posted') {

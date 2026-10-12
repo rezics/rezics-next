@@ -5,6 +5,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { CopyTextButton } from '../catalogue/copy-button.tsx';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { OperationGate } from '../shell/operation-gate.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 
 /** Featured Works use the same verb as their catalogue action. */
@@ -36,10 +37,12 @@ export function PrimaryAction({
         : work.kind === 'game'
           ? [Gamepad2Icon, messages.play]
           : [BookOpenIcon, messages.read];
-  return (
+  const action = (
     <LocalizedLink href={work.href} className={buttonVariants({ size: 'sm', pill: true })}>
       <Icon aria-hidden="true" />
       {label}
     </LocalizedLink>
   );
+  return work.hub?.kind === 'skill'
+    ? <OperationGate operation="getV1HubWorksById">{action}</OperationGate> : action;
 }

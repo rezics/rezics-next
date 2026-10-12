@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, spyOn, userEvent, within } from 'storybook/test';
+import { NO_PLATFORM_ACCESS, type PlatformAccess } from '../api/platform-access.ts';
+import { ShellProvider } from '../shell/shell-provider.tsx';
+import { messages as shellMessages } from '../shell/messages.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { PostComposer } from './composer.tsx';
 import { postText } from './messages.ts';
@@ -7,10 +10,14 @@ import { postText } from './messages.ts';
 const realm = 'https://rezics.com/id/7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
 const actor = 'https://rezics.com/id/a2d4f6e8-1c3b-4a5d-9e7f-0b2c4d6e8f1a';
 const draftKey = `rezics:post-draft:${actor}`;
+const appealAccess: PlatformAccess = { groups: ['realm-appeals'], operations: [], generation: 'granted' };
 
 const meta = {
   title: 'Compose/Post',
   component: PostComposer,
+  decorators: [(Story, context) => <ShellProvider locale={context.args.locale} messages={shellMessages}
+    initialTheme="light" initialCollapsed={false} signedIn
+    platformAccess={context.parameters.platformAccess ?? appealAccess}><Story /></ShellProvider>],
   args: {
     locale: 'en',
     actingSubject: actor,
@@ -107,6 +114,29 @@ export const BannedMember: Story = {
 };
 
 export const BannedMemberChinese: Story = { ...BannedMember, args: { locale: 'zh-Hans' } };
+
+export const BanDiagnosticOperationGranted: Story = {
+  ...BannedMember,
+  parameters: { platformAccess: { groups: [], operations: ['getV1RealmsByRealmMember-ban'], generation: 'operation' } },
+};
+
+/** Posting is public even when the optional ban diagnostic is closed. */
+export const BanDiagnosticClosed: Story = {
+  parameters: { platformAccess: NO_PLATFORM_ACCESS },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] }), 'A letter worth discussing');
+    await userEvent.type(canvas.getByRole('textbox', { name: postText.body[args.locale] }), 'What did you think of the ending?');
+    await expect(canvas.getByRole('button', { name: postText.post[args.locale] })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: postText.post[args.locale] }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(postText.failed[args.locale]);
+    const requests = (window.fetch as typeof fetch & {
+      mock: { calls: [RequestInfo | URL, RequestInit?][] };
+    }).mock.calls.map(([input]) => input instanceof Request ? input.url : String(input));
+    await expect(requests.some(path => path.includes('/member-ban'))).toBe(false);
+    await expect(canvas.getByRole('textbox', { name: postText.titleLabel[args.locale] })).toHaveValue('A letter worth discussing');
+  },
+};
 
 /** A placement receipt is success even while the new discussion projection catches up. */
 export const ProjectionCatchingUp: Story = {

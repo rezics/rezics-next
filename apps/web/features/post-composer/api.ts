@@ -11,6 +11,7 @@ import {
 } from '@rezics/document';
 import { browserMainApi } from '../api/browser.ts';
 import { banSchedule } from '../realm-appeal/view.ts';
+import { gateFor, type OperationGate } from '../api/platform-access.ts';
 
 /** `work` is the resource the post is about: a Work (named with its `mainVersion`, whose selected draft roots the
  *  post) or any other target (named with the `revision` its page gave, which roots the post itself). */
@@ -121,6 +122,7 @@ export async function submitPost(
   main = browserMainApi(),
   onPlaced?: (reply: string) => void,
   onProjection?: (visible: boolean) => void,
+  operationOpen: OperationGate = gateFor(null),
 ): Promise<PostOutcome> {
   const step = { ...original };
   if (step.restartRequired) {
@@ -146,7 +148,7 @@ export async function submitPost(
     );
   };
   const banned = async (status: number | undefined): Promise<boolean> => {
-    if (status !== 403) return false;
+    if (status !== 403 || !operationOpen('getV1RealmsByRealmMember-ban')) return false;
     // A generic denial does not identify its cause. Only the member's own ban read can.
     try {
       const { data } = await main.v1.realms({ realm: intent.realm.slice(-36) })['member-ban'].get({

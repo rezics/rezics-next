@@ -23,6 +23,7 @@ import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
 import { Rail } from './rail.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
+import { gateFor, NO_PLATFORM_ACCESS } from '../api/platform-access.ts';
 
 // Home as each kind of visitor meets it, over an in-memory Main. The feed's
 // own rules are in Feed/Posts; these stories carry the frame: signed out,
@@ -94,7 +95,7 @@ type Story = StoryObj<typeof meta>;
 
 /** Signed out: why to join, and All · Best under one control line. The official Zones are in the navigation. */
 export const SignedOut: Story = {
-  args: props({ signedIn: false }),
+  args: props({ signedIn: false, operationGate: gateFor(NO_PLATFORM_ACCESS) }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
@@ -102,6 +103,7 @@ export const SignedOut: Story = {
     await expect(canvas.getByRole('link', { name: 'Join REZICS' })).toHaveAttribute('href', `${signInHref}&create=1`);
     // There is no Following without an account; the sort is one menu, never hidden.
     await expect(canvas.queryByRole('navigation', { name: 'Feed' })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /Pin a topic/ })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
     await expect(await screen.findByRole('menuitemradio', { name: /^Best/ })).toBeChecked();
     await waitFor(() => expect(screen.getByRole('menuitemradio', { name: /^Top/ })).toBeVisible());
@@ -338,7 +340,7 @@ async function openTopics(search: HTMLElement, name: string) {
 
 /** `+` searches topics in the reader's language, refines through broader and narrower ones, and pins one. */
 export const PinATopic: Story = {
-  args: props(),
+  args: props({ operationGate: gateFor({ groups: ['saved-views'], operations: [], generation: '1' }) }),
   beforeEach: ignoreResizeObserverLoop,
   async play({ canvasElement, args }) {
     const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
@@ -366,6 +368,7 @@ export const PinATopic: Story = {
     await chooseOption(screen, 'Cozy games');
     await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Cozy games”' }));
     await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
+    await expect(api.calls.some(call => call === 'list' || call.startsWith('update:'))).toBe(false);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
   },
 };
@@ -388,15 +391,27 @@ export const SaveFiltersAsTab: Story = {
   },
 };
 
-/** Eight tabs fill Home: `+` says so instead of failing a pin. */
+/** Full saved tabs disable saving filters while a public topic can still be followed. */
 export const TabsFull: Story = {
-  args: props({ filters: { revision: readerFilters.revision, unpinned: [], pinned: Array.from({ length: 8 },
+  args: props({ state: state({ tab: 'all', languages: ['ja'] }), filters: { revision: readerFilters.revision, unpinned: [], pinned: Array.from({ length: 8 },
     (_, index) => ({ ...readerFilters.pinned[1]!, id: `00000000-0000-4000-8000-0000000007${index}0`,
       name: `Tab ${index + 1}`, position: index })) } }),
-  async play({ canvasElement }) {
+  beforeEach: ignoreResizeObserverLoop,
+  async play({ canvasElement, args }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
     await expect(dialog.getByRole('status')).toHaveTextContent('Home has room for eight tabs');
+    await expect(dialog.getByRole('button', { name: 'Save as tab' })).toBeDisabled();
+    const search = dialog.getByRole('combobox', { name: 'Search topics' });
+    await waitFor(() => expect(search).toHaveFocus());
+    await openTopics(search, 'Cozy games');
+    await chooseOption(screen, 'Cozy games');
+    const follow = await dialog.findByRole('button', { name: 'Pin “Cozy games”' });
+    await expect(follow).toBeEnabled();
+    await userEvent.click(follow);
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
+    await expect(api.calls.some(call => call === 'list' || call.startsWith('update:'))).toBe(false);
   },
 };
 
@@ -429,7 +444,7 @@ export const FollowedTopic: Story = {
     const topic = within(tabs).getByRole('link', { name: 'Fantasy' });
     await expect(topic).toHaveAttribute('aria-current', 'page');
     await expect(topic).toHaveAttribute('href', `/en?tab=${fantasyTab}`);
-    await expect(within(tabs).queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+    await expect(within(tabs).getByRole('button', { name: /Pin a topic/ })).toBeVisible();
     await expect(within(tabs).queryByRole('button', { name: /^Options for / })).toBeNull();
     await expect(within(tabs).getByRole('button', { name: 'Unfollow Fantasy' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: /^Sort:/ })).toBeNull();
@@ -551,29 +566,128 @@ export const FollowedTopicMoved: Story = {
   },
 };
 
-/** Saved Filters closed for the reader: Following and All only, with nothing to pin and no menu to open. */
+/** Public topic discovery stays open when Saved Filters are closed. */
 export const SavedViewsClosed: Story = {
-  args: props({ savedFilters: null, state: state({ tab: 'all' }) }),
+  args: props({ savedFilters: null, state: state({ tab: 'all' }), operationGate: gateFor(NO_PLATFORM_ACCESS) }),
   async play({ canvasElement }) {
     const tabs = within(canvasElement).getByRole('navigation', { name: 'Feed' });
     await expect(within(tabs).getAllByRole('link').map(link => link.textContent)).toEqual(['Following', 'All']);
-    await expect(within(tabs).queryByRole('button')).toBeNull();
-    await expect(within(canvasElement).queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+    await expect(within(tabs).getByRole('button', { name: 'Pin a topic' })).toBeVisible();
+    await userEvent.click(within(tabs).getByRole('button', { name: 'Pin a topic' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.getByRole('combobox', { name: 'Search topics' })).toBeVisible();
+    await expect(dialog.queryByRole('form', { name: 'Save these filters as a tab' })).toBeNull();
+    await expect(dialog.queryByRole('region', { name: 'Your topics' })).toBeNull();
   },
 };
 
 /** Only reading Saved Filters is open: the tabs show, with no way to change them. */
 export const SavedViewsReadOnly: Story = {
-  args: props({ state: pinnedState(), operationGate: operation => operation === 'getV1MeSaved-filters' }),
+  args: props({ state: pinnedState(), operationGate: gateFor({ groups: [], operations: ['getV1MeSaved-filters'], generation: '1' }) }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'English & Japanese' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Options for English & Japanese' })).toBeNull();
-    await expect(canvas.queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+    await expect(canvas.getByRole('button', { name: /Pin a topic/ })).toBeVisible();
     // A followed topic's tab still unfollows it, since following is its own open operation.
     await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Unfollow Fantasy' })).toBeVisible());
     await expect(screen.getAllByRole('menuitem')).toHaveLength(1);
+  },
+};
+
+/** A known, unpinned topic follows publicly; it never takes the closed patch path. */
+export const PublicTopicWithoutGrant: Story = {
+  args: props({ operationGate: gateFor(NO_PLATFORM_ACCESS) }),
+  beforeEach: ignoreResizeObserverLoop,
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.queryByRole('region', { name: 'Your topics' })).toBeNull();
+    const search = dialog.getByRole('combobox', { name: 'Search topics' });
+    await waitFor(() => expect(search).toHaveFocus());
+    await openTopics(search, 'Mystery');
+    await chooseOption(screen, 'Mystery');
+    await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Mystery”' }));
+    await waitFor(() => expect(api.calls).toContain(`follow:${topics.mystery.id.slice(-12)}:true`));
+    await expect(api.calls.some(call => call === 'list' || call.startsWith('update:') || call.startsWith('create:'))).toBe(false);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+  },
+};
+
+/** A create grant alone cannot finish Save as tab, while public topics remain discoverable. */
+export const SavedViewCreateGrant: Story = {
+  args: props({ savedFilters: null, state: state({ tab: 'all', languages: ['ja'] }),
+    operationGate: gateFor({ groups: [], operations: ['postV1MeSaved-filters'], generation: '1' }) }),
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.queryByRole('region', { name: 'Your topics' })).toBeNull();
+    await expect(dialog.queryByRole('form', { name: 'Save these filters as a tab' })).toBeNull();
+    await expect(dialog.getByRole('combobox', { name: 'Search topics' })).toBeVisible();
+  },
+};
+
+/** The individually granted create and read operations together finish Save as tab. */
+export const SavedViewCreateAndReadGrants: Story = {
+  args: props({ state: state({ tab: 'all', languages: ['ja'] }), operationGate: gateFor({ groups: [],
+    operations: ['postV1MeSaved-filters', 'getV1MeSaved-filters'], generation: '1' }) }),
+  async play({ canvasElement, args }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.queryByRole('region', { name: 'Your topics' })).toBeNull();
+    const form = within(dialog.getByRole('form', { name: 'Save these filters as a tab' }));
+    await userEvent.click(form.getByRole('button', { name: 'Save as tab' }));
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await waitFor(() => expect(api.calls).toContain('create:Japanese'));
+    await expect(api.calls.some(call => call === 'list' || call.startsWith('update:'))).toBe(false);
+  },
+};
+
+/** A patch grant alone does not expose rows whose saved-tab destination cannot be read. */
+export const SavedViewPatchGrant: Story = {
+  args: props({ operationGate: gateFor({ groups: [], operations: ['patchV1MeSaved-filtersById'], generation: '1' }) }),
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.queryByRole('region', { name: 'Your topics' })).toBeNull();
+    await expect(dialog.queryByRole('form', { name: 'Save these filters as a tab' })).toBeNull();
+    await expect(dialog.getByRole('combobox', { name: 'Search topics' })).toBeVisible();
+  },
+};
+
+/** Individually granted read and patch operations expose the existing saved-filter pin job. */
+export const SavedViewPatchAndReadGrants: Story = {
+  args: props({ operationGate: gateFor({ groups: [],
+    operations: ['patchV1MeSaved-filtersById', 'getV1MeSaved-filters'], generation: '1' }) }),
+  async play({ canvasElement, args }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.queryByRole('form', { name: 'Save these filters as a tab' })).toBeNull();
+    await userEvent.click(within(dialog.getByRole('region', { name: 'Your topics' })).getByRole('button', { name: 'Mystery' }));
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await waitFor(() => expect(api.calls).toContain('update:04:{"pinned":true}'));
+    await expect(api.calls.some(call => call === 'list' || call.startsWith('follow:'))).toBe(false);
+  },
+};
+
+/** A revoked Saved Filters grant leaves the public topic follow available. */
+export const PublicTopicAfterRevocation: Story = {
+  ...PublicTopicWithoutGrant,
+  args: props({ savedFilters: null, operationGate: gateFor({ groups: [], operations: [], generation: 'revoked' }) }),
+  async play({ canvasElement, args }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const search = dialog.getByRole('combobox', { name: 'Search topics' });
+    await waitFor(() => expect(search).toHaveFocus());
+    await openTopics(search, 'Mystery');
+    await chooseOption(screen, 'Mystery');
+    await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Mystery”' }));
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await waitFor(() => expect(api.calls).toContain(`follow:${topics.mystery.id.slice(-12)}:true`));
+    await expect(api.calls.some(call => call === 'list' || call.startsWith('update:'))).toBe(false);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
   },
 };
 

@@ -193,9 +193,9 @@ export function HomePage(props: HomePageProps) {
     actingSubject={actingSubject} filters={props.savedFilters} concepts={concepts}
     conceptCursor={props.conceptCursor} loadTopics={props.loadTopics} api={props.filtersApi}
     gate={props.operationGate}
-    picker={props.savedFilters ? <PinPicker state={state} defaults={defaults} locale={locale} messages={messages.home}
+    picker={<PinPicker state={state} defaults={defaults} locale={locale} messages={messages.home}
       actingSubject={actingSubject} filters={props.savedFilters} current={current} api={props.filtersApi}
-      gate={props.operationGate} /> : null} />
+      gate={props.operationGate} concepts={concepts} />} />
     : undefined;
   return <FeedProvider locale={locale} messages={messages.feed} now={props.now} signedIn={signedIn}
     actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={state.tab}

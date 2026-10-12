@@ -8,9 +8,14 @@ import {
 import {
   newPostProgress,
   postDocument,
-  submitPost,
+  submitPost as submitPostCommand,
   type PostProgress,
 } from '../features/post-composer/api.ts';
+import { gateFor, type OperationGate, type PlatformAccess } from '../features/api/platform-access.ts';
+
+const appealAccess: PlatformAccess = { groups: ['realm-appeals'], operations: [], generation: 'granted' };
+const submitPost: typeof submitPostCommand = (intent, progress, persist, main, placed, projection, operationOpen = gateFor(appealAccess)) =>
+  submitPostCommand(intent, progress, persist, main, placed, projection, operationOpen);
 
 const postIntent = {
   realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
@@ -133,6 +138,49 @@ function unplacedReplyMain(
     },
   };
 }
+
+const diagnosticAccess: Array<[string, PlatformAccess, boolean]> = [
+  ['anonymous', { groups: [], operations: [], generation: '' }, false],
+  ['signed in without a grant', { groups: [], operations: [], generation: 'signed-in' }, false],
+  ['group granted', appealAccess, true],
+  ['operation granted', { groups: [], operations: ['getV1RealmsByRealmMember-ban'], generation: 'operation' }, true],
+  ['another appeal operation granted', { groups: [], operations: ['postV1RealmsByRealmMember-receiptsByReceiptIdAppeal'], generation: 'other' }, false],
+  ['revoked', { groups: [], operations: [], generation: 'revoked' }, false],
+];
+
+test.each(diagnosticAccess)('the optional ban diagnostic respects %s access', async (_state, access, allowed) => {
+  const api = unplacedReplyMain({ failStep: 'draft', failure: 'denied', ban: activeBan });
+  const result = await submitPostCommand(postIntent, newPostProgress(), () => undefined,
+    api.main, undefined, undefined, gateFor(access));
+  expect(result.kind).toBe(allowed ? 'banned' : 'failed');
+  expect(api.banReads).toHaveLength(allowed ? 1 : 0);
+  expect(api.calls.map(call => call.step)).toEqual(['draft']);
+});
+
+test('a caller without a supplied operation gate skips the optional closed read', async () => {
+  const api = unplacedReplyMain({ failStep: 'draft', failure: 'denied', ban: activeBan });
+  expect((await submitPostCommand(postIntent, newPostProgress(), () => undefined, api.main)).kind).toBe('failed');
+  expect(api.banReads).toHaveLength(0);
+});
+
+test('revocation before a refusal skips the diagnostic through the current gate', async () => {
+  let current = appealAccess;
+  const api = unplacedReplyMain({ failStep: 'draft', failure: 'denied', ban: activeBan });
+  const operationOpen: OperationGate = operation => gateFor(current)(operation);
+  current = { groups: [], operations: [], generation: 'revoked' };
+  expect((await submitPostCommand(postIntent, newPostProgress(), () => undefined,
+    api.main, undefined, undefined, operationOpen)).kind).toBe('failed');
+  expect(api.banReads).toHaveLength(0);
+});
+
+test.each(diagnosticAccess)('public posting remains available with %s appeal access', async (_state, access) => {
+  const api = unplacedReplyMain();
+  const progress = newPostProgress();
+  expect(await submitPostCommand(postIntent, progress, () => undefined,
+    api.main, undefined, undefined, gateFor(access))).toEqual({ kind: 'posted', reply: progress.reply });
+  expect(api.calls.map(call => call.step)).toEqual(['draft', 'identity', 'place']);
+  expect(api.banReads).toHaveLength(0);
+});
 
 test('a fresh post uses its draft receipt, then waits for the placed reply projection', async () => {
   const api = unplacedReplyMain();

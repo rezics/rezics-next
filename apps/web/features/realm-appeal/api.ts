@@ -1,9 +1,11 @@
 import { BFF_PREFIX } from '../api/browser.ts';
+import { gateFor, platformClosed, type OperationGate } from '../api/platform-access.ts';
 import { parseBanReading, type BanReading } from './reading.ts';
 
 export type AppealSubmit =
   | { kind: 'sent'; reading: BanReading }
   | { kind: 'invalid' }
+  | { kind: 'closed' }
   | { kind: 'failed'; reuseKey: boolean };
 
 const realmId = (realm: string) => encodeURIComponent(realm.slice(-36));
@@ -14,7 +16,8 @@ async function problemCode(response: Response): Promise<string | null> {
 }
 
 /** Appeal through the BFF. The receipt comes from the member's own ban read. */
-export function appealClient(realm: string, receiptId: string, fetchImpl: typeof fetch = fetch): {
+export function appealClient(realm: string, receiptId: string, fetchImpl: typeof fetch = fetch,
+  operationOpen: OperationGate = gateFor(null)): {
   submit(statement: string, key: string): Promise<AppealSubmit>;
 } {
   const path = `${BFF_PREFIX}/v1/realms/${realmId(realm)}/member-receipts/${encodeURIComponent(receiptId)}/appeal`;
@@ -23,16 +26,20 @@ export function appealClient(realm: string, receiptId: string, fetchImpl: typeof
     if (typeof window !== 'undefined') result.set('x-rezics-page-url', window.location.href);
     return result;
   };
-  async function read(): Promise<BanReading | null> {
+  async function read(): Promise<BanReading | null | 'closed'> {
+    if (!operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return 'closed';
     const response = await fetchImpl(path, { headers: headers(), credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) {
-      await response.body?.cancel();
+      const code = await problemCode(response);
+      if (platformClosed(response.status, { code })) return 'closed';
       return null;
     }
     return parseBanReading(await response.json());
   }
   return {
     async submit(statement, key) {
+      if (!operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ||
+        !operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return { kind: 'closed' };
       const outgoing = headers();
       outgoing.set('content-type', 'application/json');
       outgoing.set('idempotency-key', key);
@@ -43,11 +50,14 @@ export function appealClient(realm: string, receiptId: string, fetchImpl: typeof
       if (response.ok) {
         await response.body?.cancel();
         const reading = await read();
+        if (reading === 'closed') return { kind: 'closed' };
         return reading ? { kind: 'sent', reading } : { kind: 'failed', reuseKey: true };
       }
       const code = await problemCode(response);
+      if (platformClosed(response.status, { code })) return { kind: 'closed' };
       if (code === 'appeal_already_open' || code === 'stale_appeal') {
         const reading = await read();
+        if (reading === 'closed') return { kind: 'closed' };
         if (reading && reading.appeal.state !== 'none') return { kind: 'sent', reading };
       }
       if (code === 'invalid_appeal') return { kind: 'invalid' };

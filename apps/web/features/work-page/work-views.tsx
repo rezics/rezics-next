@@ -4,6 +4,8 @@ import { type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
+import { readPlatformAccess } from '../api/main.ts';
+import { operationOpen } from '../api/platform-access.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
 import { lifespan } from '../author/facts.ts';
@@ -309,7 +311,7 @@ async function Adoption(props: ScopedProps) {
 }
 
 /** The Work's recipe, prompt, skill or guide, laid out from the section its projection listed. */
-async function TypeExperience({ id, work, experience, locale, messages }: Common & { id: string; work: Header;
+export async function TypeExperience({ id, work, experience, locale, messages }: Common & { id: string; work: Header;
   experience: WorkExperience }) {
   const section = experience.typeSection;
   if (experience.kind === 'recipe' && section) {
@@ -322,6 +324,7 @@ async function TypeExperience({ id, work, experience, locale, messages }: Common
   }
   if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {
     const hub = await readHubWorkPage(section.href);
+    if (!hub) return null;
     if (!hub.ok) return <RegionFailure title={messages.hubUnavailable} failure={hub.failure} messages={messages} />;
     return hub.data ? <HubExperience page={hub.data} locale={locale} messages={messages} />
       : <Region id="hub-experience" title={messages.hubNotPublished}><p>{messages.hubNotPublished}</p></Region>;
@@ -343,13 +346,16 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
   lead?: readonly HubSection[];
 }) {
   const [experience, plan] = await Promise.all([readExperience(id, work.types), readHubPlan(id)]);
+  const access = await readPlatformAccess();
   const t = messages;
   const loading = t.loadingRegion;
   const common = { id, locale, messages };
   return <OverviewLayout messages={messages} plan={plan} lead={lead}
     // Specialist reading or cooking leads; the description and tags follow.
     // A recipe's description reads straight under its title, before the method.
-    type={experience.kind === 'book' || experience.kind === 'plain' ? null : <>
+    type={experience.kind === 'book' || experience.kind === 'plain'
+      || ((experience.kind === 'prompt' || experience.kind === 'skill')
+        && !operationOpen('getV1HubWorksById', access)) ? null : <>
       {experience.kind === 'recipe' ? <WorkAbout work={work} locale={locale} messages={messages} /> : null}
       <Suspense fallback={<RegionSkeleton
         id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>

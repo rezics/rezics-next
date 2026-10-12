@@ -1,6 +1,6 @@
 import { direction } from '@rezics/main/language';
 import { browserMainApi } from '../api/browser.ts';
-import { platformClosed } from '../api/platform-access.ts';
+import { platformClosed, type OperationGate } from '../api/platform-access.ts';
 import type { MainClient } from '../discover/types.ts';
 import type { ThreadRead } from '../feed/thread.ts';
 
@@ -32,9 +32,12 @@ export interface AboutDiscussionApi {
 }
 const uuid = (iri: string) => iri.slice(-36);
 
-/** One command per attempt. The complete intent and key stay unchanged on recovery. */
-export function mainAboutDiscussionApi(main: () => MainClient = browserMainApi): AboutDiscussionApi {
+/** One command per attempt. The complete intent and key stay unchanged on recovery.
+ * Production supplies its current viewer gate; isolated tests and stories can omit it. */
+export function mainAboutDiscussionApi(main: () => MainClient = browserMainApi,
+  operationOpen: OperationGate = () => true): AboutDiscussionApi {
   return { async post(intent) {
+    if (!operationOpen('postV1RealmsByRealmAbout-posts')) return { kind: 'closed' };
     try {
       const { realm, ...basis } = intent.basis;
       const answer = await main().v1.realms({ realm: uuid(realm) })['about-posts'].post({

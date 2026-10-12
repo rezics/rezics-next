@@ -14,6 +14,7 @@ import { textAttributes } from '../content-language/writing-language.ts';
 import { spaceHref, threadHref } from '../address/path.ts';
 import { MarkdownBody } from '../post-composer/markdown.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 import { mainAboutDiscussionApi, type AboutDiscussionApi, type AboutDiscussionRead,
   type AboutPostIntent, type AboutPostOutcome } from './about-discussion-api.ts';
 import { aboutDiscussionMessages } from './about-discussion-messages.ts';
@@ -39,6 +40,9 @@ export function AboutDiscussion(props: AboutDiscussionProps) {
 }
 
 function AboutDiscussionEntry({ read, locale, href, api, retain = true, recoveryScope }: AboutDiscussionProps) {
+  const operationOpen = useOperationGate();
+  const operationGate = useRef(operationOpen);
+  operationGate.current = operationOpen;
   const t = aboutDiscussionMessages[locale];
   const router = useRouter();
   const id = useId();
@@ -95,7 +99,8 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
   const retained = intent.current !== null;
   const locked = busy || retained;
   const tooLong = new TextEncoder().encode(body).length > 8192;
-  const postingOpen = mode !== 'closed' && recoveryScope?.postingOpen !== false && outcome?.kind !== 'closed';
+  const postingOpen = operationOpen('postV1RealmsByRealmAbout-posts') && mode !== 'closed'
+    && recoveryScope?.postingOpen !== false && outcome?.kind !== 'closed';
   const canRecover = postingOpen && retained && Boolean(actingSubject) && mode !== 'sign-in' && mode !== 'identity';
   const canWrite = postingOpen && read.kind === 'ready' && mode === 'open' && Boolean(actingSubject);
   const post = async () => {
@@ -108,7 +113,8 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
     }
     dispatching.current = true; setBusy(true);
     let result: AboutPostOutcome;
-    try { result = await (api ?? mainAboutDiscussionApi()).post(intent.current); }
+    try { result = await (api ?? mainAboutDiscussionApi(undefined,
+      operation => operationGate.current(operation))).post(intent.current); }
     catch { result = { kind: 'recovery' }; }
     setOutcome(result); setBusy(false); dispatching.current = false;
     if (result.kind === 'posted') {

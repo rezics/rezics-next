@@ -9,6 +9,7 @@ import { ArrowBigDownIcon, ArrowBigUpIcon, BellOffIcon, BookOpenIcon, CheckIcon,
 import { useState } from 'react';
 import { ShelfButton } from '../catalogue/reader-actions.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 import { commandKey } from './api.ts';
 import { useFeed } from './feed-context.tsx';
 import { barAction } from './post-row.tsx';
@@ -80,6 +81,7 @@ export function VoteControl({ target, plain = false }: { target: VoteTarget; pla
 /** The one action that fits what the post is about: read, install, use, or put on a shelf. */
 export function PrimaryAction({ item, title }: { item: FeedItem; title: string }) {
   const { t, locale } = useFeed();
+  const operationOpen = useOperationGate();
   const action = item.primaryAction;
   const link = (href: string, icon: typeof BookOpenIcon, label: string) => {
     const Icon = icon;
@@ -94,8 +96,8 @@ export function PrimaryAction({ item, title }: { item: FeedItem; title: string }
       return link(action.href, BookOpenIcon, number ? t.readChapter({ number }) : t.read);
     }
     case 'next-unread': return link(action.href, BookOpenIcon, t.continueReading);
-    case 'install': return link(action.href, DownloadIcon, t.install);
-    case 'copy-prompt': return link(action.href, CopyIcon, t.usePrompt);
+    case 'install': return operationOpen('getV1HubWorksById') ? link(action.href, DownloadIcon, t.install) : null;
+    case 'copy-prompt': return operationOpen('getV1HubWorksById') ? link(action.href, CopyIcon, t.usePrompt) : null;
     case 'want-to-read': return <ShelfButton work={action.work} title={title} locale={locale} size="sm" variant="outline"
       className="ms-1 w-auto [&_a]:h-7 [&_button]:h-7" />;
     case 'read-review': return link(action.href, MessageSquareQuoteIcon, t.readReview);

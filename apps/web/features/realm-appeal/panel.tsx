@@ -7,8 +7,10 @@ import { Textarea } from '@rezics/ui/textarea';
 import { cn } from '@rezics/ui/utils';
 import { BanIcon, CircleAlertIcon, CircleCheckIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
+import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 import { appealClient, type AppealSubmit } from './api.ts';
 import type { RealmAppealMessages } from './messages.ts';
 import type { BanReading } from './reading.ts';
@@ -33,6 +35,10 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
   actions?: AppealActions;
   className?: string;
 }) {
+  const operationOpen = useOperationGate();
+  const operationGate = useRef(operationOpen);
+  operationGate.current = operationOpen;
+  const router = useRouter();
   const t = materializeData(messages, { locale });
   const [pendingReading, setPendingReading] = useState<BanReading | null>(null);
   const [statement, setStatement] = useState('');
@@ -50,6 +56,8 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
   };
 
   async function submit() {
+    if (!operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ||
+      !operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return;
     const problem = statementProblem(statement);
     if (problem) {
       setError(problems[problem]);
@@ -60,9 +68,14 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
     keyFor.current = { statement: text, key: held };
     setPending(true);
     setError(null);
-    const client = actions ?? appealClient(realm, current.receiptId);
+    const client = actions ?? appealClient(realm, current.receiptId, undefined,
+      operation => operationGate.current(operation));
     const result = await client.submit(text, held).catch((): AppealSubmit => ({ kind: 'failed', reuseKey: true }));
     setPending(false);
+    if (result.kind === 'closed') {
+      router.refresh();
+      return;
+    }
     if (result.kind === 'sent') {
       setPendingReading(result.reading);
       setStatement('');
@@ -102,7 +115,8 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
           <h3 className="font-medium text-sm">{t.reasonLabel}</h3>
           <blockquote className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">{current.reason}</blockquote>
         </div>
-        {appeal.kind === 'appeal' ? <form noValidate className="space-y-3" onSubmit={event => {
+        {appeal.kind === 'appeal' ? (operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') &&
+          operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ? <form noValidate className="space-y-3" onSubmit={event => {
           event.preventDefault();
           void submit();
         }}>
@@ -119,7 +133,7 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
           {error ? <Alert variant="destructive" role="alert">
             <CircleAlertIcon aria-hidden="true" /><AlertDescription>{error}</AlertDescription></Alert> : null}
           <Button type="submit" isLoading={pending} className="w-full sm:w-auto">{t.send}</Button>
-        </form> : <div className="space-y-2">
+        </form> : null) : <div className="space-y-2">
           {appeal.kind === 'received' ? <>
             <h3 className="font-medium text-sm">{t.receivedTitle}</h3>
             <p className="text-sm">{t.receivedBody}</p>

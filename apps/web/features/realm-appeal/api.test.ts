@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
 import { appealClient } from './api.ts';
+import { gateFor, type PlatformAccess } from '../api/platform-access.ts';
+
+const appealAccess: PlatformAccess = { groups: ['realm-appeals'], operations: [], generation: 'granted' };
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const receiptId = '00000000-0000-4000-8000-0000000000aa';
@@ -39,7 +42,7 @@ test('a sent appeal is read back without the decider, and a lost response can re
     { status: 503, body: { code: 'governance_unavailable' } },
     { status: 409, body: { code: 'idempotency_conflict' } },
   ]);
-  const client = appealClient(realm, receiptId, fetchImpl);
+  const client = appealClient(realm, receiptId, fetchImpl, gateFor(appealAccess));
   const sent = await client.submit('I posted it once.', 'key-1');
   expect(sent.kind).toBe('sent');
   if (sent.kind !== 'sent') return;
@@ -56,10 +59,62 @@ test('a second appeal finds the one already open instead of offering another', a
     { status: 200, body: open },
     { status: 400, body: { code: 'invalid_appeal' } },
   ]);
-  const client = appealClient(realm, receiptId, fetchImpl);
+  const client = appealClient(realm, receiptId, fetchImpl, gateFor(appealAccess));
   const again = await client.submit('Please review this again.', 'key-3');
   expect(again.kind).toBe('sent');
   if (again.kind !== 'sent') return;
   expect(again.reading.appeal.state).toBe('open');
   expect(await client.submit(' ', 'key-4')).toEqual({ kind: 'invalid' });
+});
+
+const operationAccess: PlatformAccess = { groups: [], operations: [
+  'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
+  'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
+], generation: 'operations' };
+const accessCases: Array<[string, PlatformAccess, boolean]> = [
+  ['anonymous', { groups: [], operations: [], generation: '' }, false],
+  ['signed in without a grant', { groups: [], operations: [], generation: 'signed-in' }, false],
+  ['group granted', appealAccess, true],
+  ['individual operations granted', operationAccess, true],
+  ['missing confirmation grant', { ...operationAccess, operations: [operationAccess.operations[0]!] }, false],
+  ['missing write grant', { ...operationAccess, operations: [operationAccess.operations[1]!] }, false],
+  ['only ban read granted', { ...operationAccess, operations: ['getV1RealmsByRealmMember-ban'] }, false],
+  ['revoked', { groups: [], operations: [], generation: 'revoked' }, false],
+];
+
+test.each(accessCases)('appeal submission respects %s access before writing', async (_state, access, allowed) => {
+  const { fetchImpl, seen } = responder([{ status: 201, body: {} }, { status: 200, body: open }]);
+  const result = await appealClient(realm, receiptId, fetchImpl, gateFor(access)).submit('I posted it once.', 'key');
+  expect(result.kind).toBe(allowed ? 'sent' : 'closed');
+  expect(seen.map(request => request.method)).toEqual(allowed ? ['POST', 'GET'] : []);
+});
+
+test('an appeal client without a supplied gate fails closed', async () => {
+  const { fetchImpl, seen } = responder([]);
+  expect(await appealClient(realm, receiptId, fetchImpl).submit('I posted it once.', 'key')).toEqual({ kind: 'closed' });
+  expect(seen).toEqual([]);
+});
+
+test('revocation after a write skips the confirmation read', async () => {
+  let access = appealAccess;
+  const { fetchImpl, seen } = responder([{ status: 201, body: {} }]);
+  const revokeAfterWrite = (async (input, init) => {
+    const response = await fetchImpl(input, init);
+    access = { groups: [], operations: [], generation: 'revoked' };
+    return response;
+  }) as typeof fetch;
+  const result = await appealClient(realm, receiptId, revokeAfterWrite,
+    operation => gateFor(access)(operation)).submit('I posted it once.', 'key');
+  expect(result).toEqual({ kind: 'closed' });
+  expect(seen.map(request => request.method)).toEqual(['POST']);
+});
+
+test.each(['POST', 'GET'])('platform closure of the %s refreshes access instead of reporting an unsent appeal', async method => {
+  const { fetchImpl, seen } = responder([
+    ...(method === 'GET' ? [{ status: 201, body: {} }] : []),
+    { status: 403, body: { code: 'platform_closed' } },
+  ]);
+  expect(await appealClient(realm, receiptId, fetchImpl, gateFor(appealAccess))
+    .submit('I posted it once.', 'key')).toEqual({ kind: 'closed' });
+  expect(seen.map(request => request.method)).toEqual(method === 'GET' ? ['POST', 'GET'] : ['POST']);
 });

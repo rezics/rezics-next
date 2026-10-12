@@ -6,6 +6,7 @@ import { ArrowRightIcon, CornerDownLeftIcon, FolderOpenIcon, SquareTerminalIcon 
 import type { ComponentType } from 'react';
 import { CopyButton } from './copy-button.tsx';
 import { strings } from './strings.ts';
+import { OperationGate } from '../../../features/shell/operation-gate.tsx';
 
 // Slots of the official AI Workshop Zone, a gallery of prompts and skills.
 // Every card leads with copying the pick and trying it; the platform keeps
@@ -28,12 +29,13 @@ function Actions({ zone, work, title, t, Link, compact }: {
 }) {
   const { hub } = work;
   const words = t.copy[hub?.kind ?? 'link'];
+  const tryIt = <Link href={work.href} className="aw-try" data-compact={compact ? '' : undefined}>
+    <span className={compact ? 'sr-only' : undefined}>{t.tryIt}</span><span className="sr-only"> {title}</span>
+    <ArrowRightIcon aria-hidden="true" /></Link>;
   return <div className="aw-actions">
     <CopyButton text={hub?.copyText ?? null} href={zoneLocalizedHref(work.href, zone.locale)} title={title} label={words.label}
       copied={words.copied} failed={words.failed} compact={compact} />
-    <Link href={work.href} className="aw-try" data-compact={compact ? '' : undefined}>
-      <span className={compact ? 'sr-only' : undefined}>{t.tryIt}</span><span className="sr-only"> {title}</span>
-      <ArrowRightIcon aria-hidden="true" /></Link>
+    {hub ? <OperationGate operation="getV1HubWorksById">{tryIt}</OperationGate> : tryIt}
   </div>;
 }
 

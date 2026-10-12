@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { useState, type ComponentProps } from 'react';
+import { NO_PLATFORM_ACCESS, type PlatformAccess } from '../api/platform-access.ts';
+import { ShellProvider } from '../shell/shell-provider.tsx';
+import { messages as shellMessages } from '../shell/messages.ts';
 import type { BanReading } from './reading.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -18,10 +22,19 @@ function ban(appeal: BanReading['appeal'], bannedUntil: string | null = null): B
 }
 
 const longReason = `${reason}\n${'https://example.invalid/'.repeat(12)}and a note that stays with the recorded words.`;
+const appealAccess: PlatformAccess = { groups: ['realm-appeals'], operations: [], generation: 'granted' };
+const operationAccess: PlatformAccess = { groups: [], operations: [
+  'getV1RealmsByRealmMember-ban',
+  'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
+  'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
+], generation: 'operations' };
 
 const meta = {
   title: 'Realm/Ban appeal',
   component: RealmBanPanel,
+  decorators: [(Story, context) => <ShellProvider locale={context.args.locale} messages={shellMessages}
+    initialTheme="light" initialCollapsed={false} signedIn={context.parameters.signedIn !== false}
+    platformAccess={context.parameters.platformAccess ?? appealAccess}><Story /></ShellProvider>],
   args: {
     reading: ban({ state: 'none' }),
     realm,
@@ -46,6 +59,75 @@ export const Default: Story = {
     await expect(canvas.getByRole('button', { name: 'Send appeal' })).toBeVisible();
     await expect(canvas.queryByRole('alert')).toBeNull();
     await expect(canvas.getByRole('textbox', { name: 'Your statement' })).toHaveValue('');
+  },
+};
+
+async function closedForm(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await expect(canvas.getByText(reason)).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: 'Send appeal' })).toBeNull();
+  await expect(canvas.queryByRole('textbox', { name: 'Your statement' })).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: 'Appeal this ban' })).toBeNull();
+}
+
+export const Anonymous: Story = {
+  args: { reading: null },
+  parameters: { signedIn: false, platformAccess: NO_PLATFORM_ACCESS },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('region', { name: 'Your ban' })).toBeNull();
+    await expect(within(canvasElement).queryByRole('button', { name: 'Send appeal' })).toBeNull();
+  },
+};
+
+/** Closing submission preserves a ban already disclosed by an authorized read. */
+export const NoSubmissionGrant: Story = {
+  parameters: { platformAccess: NO_PLATFORM_ACCESS },
+  play: async ({ canvasElement }) => closedForm(canvasElement),
+};
+
+export const BanReadOnly: Story = {
+  ...NoSubmissionGrant,
+  parameters: { platformAccess: { ...operationAccess, operations: ['getV1RealmsByRealmMember-ban'] } },
+};
+
+/** The individual POST grant is insufficient without its confirmation read. */
+export const MissingConfirmationGrant: Story = {
+  parameters: { platformAccess: { ...operationAccess,
+    operations: ['getV1RealmsByRealmMember-ban', 'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal'] } },
+  play: async ({ canvasElement }) => closedForm(canvasElement),
+};
+
+export const MissingWriteGrant: Story = {
+  parameters: { platformAccess: { ...operationAccess,
+    operations: ['getV1RealmsByRealmMember-ban', 'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal'] } },
+  play: async ({ canvasElement }) => closedForm(canvasElement),
+};
+
+export const OperationGranted: Story = {
+  ...Default,
+  parameters: { platformAccess: operationAccess },
+};
+
+function RevocableAppeal(props: ComponentProps<typeof RealmBanPanel>) {
+  const [access, setAccess] = useState(appealAccess);
+  return <ShellProvider locale={props.locale} messages={shellMessages} initialTheme="light" initialCollapsed={false}
+    signedIn platformAccess={access}>
+    <button type="button" onClick={() => setAccess(NO_PLATFORM_ACCESS)}>Revoke appeal access</button>
+    <button type="button" onClick={() => setAccess(appealAccess)}>Restore appeal access</button>
+    <RealmBanPanel {...props} />
+  </ShellProvider>;
+}
+
+export const Revoked: Story = {
+  render: args => <RevocableAppeal {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Your statement' }), 'I posted it once.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Revoke appeal access' }));
+    await closedForm(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Restore appeal access' }));
+    await expect(canvas.getByRole('textbox', { name: 'Your statement' })).toHaveValue('I posted it once.');
+    await expect(canvas.getByRole('button', { name: 'Send appeal' })).toBeVisible();
   },
 };
 

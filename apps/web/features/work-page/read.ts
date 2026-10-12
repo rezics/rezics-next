@@ -9,7 +9,8 @@ import { followHref } from '../entity-page/href.ts';
 import { readRecipePage, recipePageQuery } from '../recipe-editor/pages.ts';
 import { failureOf } from './failure.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
-import { mainApiWithToken } from '../api/main.ts';
+import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
+import { operationOpen, platformClosed } from '../api/platform-access.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { BrowseReadError, discoveryApi, type ListPage, type RatingPopulation } from '../discover/api.ts';
 import { sessionAgentState } from '../auth/session.ts';
@@ -59,7 +60,7 @@ export async function readingAgent(): Promise<{ signedIn: boolean; actingSubject
 
 export { failureOf };
 
-export type Answer<T> = { data: T | null; error: { status: number } | null };
+export type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
 
 /**
  * One Main read as a `Loaded` result. Main answers 409 when the graph moved
@@ -147,9 +148,15 @@ export async function readRecipeWorkPage(href: string, servings?: number): Promi
 }
 
 /** A Work's prompt or skill section, read from the link its projection gave. */
-export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage | null>> {
+export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage | null> | null> {
+  if (!operationOpen('getV1HubWorksById', await readPlatformAccess())) return null;
   const { main, actingSubject } = await reader();
-  return settleNullable(followHref<HubWorkPage | null>(main, href, { actingSubject }));
+  try {
+    const { data, error } = await followHref<HubWorkPage | null>(main, href, { actingSubject })();
+    // The grant may have been revoked after the request's access summary was read.
+    if (error && platformClosed(error.status, error.value)) return null;
+    return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
+  } catch { return { ok: false, failure: 'unavailable' }; }
 }
 
 /** A chapter Post with the Books that place it, as Main's Post read gives them. */
