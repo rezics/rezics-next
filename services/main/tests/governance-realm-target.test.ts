@@ -965,7 +965,7 @@ for (const kind of ['Character', 'Role']) {
       expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
         WHERE resource=$1 AND component='record' AND effect='search'`, [resource])).rowCount).toBe(1);
       expect((await f.stack.accessPool.query('SELECT receipt FROM access.safety_decision_effect WHERE decision_id=$1',
-        [result.decisionId])).rows).toEqual([{ receipt: `access:governance-enforcement:${result.decisionId}:1` }]);
+        [result.decisionId])).rows).toEqual([{ receipt: `access:governance-enforcement:governance-moderation:${result.decisionId}:1` }]);
       expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.receipts}> {
         ?receipt rv:moderationTarget <${resource}> } }`, 1024)).boolean).toBe(false);
     } finally { await f.stack.stop(); }
