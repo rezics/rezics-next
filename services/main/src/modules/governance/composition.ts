@@ -18,6 +18,7 @@ import { GovernanceDenied, GovernanceInvalid, GovernanceUnavailable, sha256,
 import { readZoneHomeOwner, readZoneHomeTarget } from '../zone/home-target.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { VisibilityReader } from '../space/visibility.ts';
+import { readResourceVisibility } from '../space/visibility.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 
 /** The publication owner supplies a published cut, never a variant draft head. */
@@ -31,20 +32,28 @@ export interface HomeDocumentEvidenceCut {
   realm?: string | null;
 }
 
-/** Report and notice capture share one bounded exact Content read. The digest
+/** Report and notice capture share bounded exact Content reads. The digest
  * covers only this H's selections; a later publication cannot widen evidence. */
 export async function captureHomeDocumentEvidence(core: Pick<ContentCore, 'readExactBatch'>,
   home: HomeDocumentEvidenceCut, selectedRevision?: string): Promise<CapturedEvidence> {
   const pages = selectedRevision ? home.pages.filter(page => page.revisionId === selectedRevision) : home.pages;
-  if (!pages.length || pages.length > 32 || new Set(pages.map(page => page.revisionId)).size !== pages.length) {
+  if (!pages.length) {
     throw new GovernanceDenied('Target is unavailable');
   }
-  const exact = await core.readExactBatch(pages.map(page => page.revisionId), async ids => new Set(ids))
-    .catch(() => { throw new GovernanceUnavailable('Content owner is unavailable'); });
-  if (exact.length !== pages.length) throw new GovernanceUnavailable('Exact home evidence is unavailable');
-  for (const [index, page] of pages.entries()) {
-    const read = exact[index];
-    if (!read || read.status !== 'available') throw new GovernanceDenied('Target is unavailable');
+  if (pages.length > 32 || new Set(pages.map(page => page.revisionId)).size !== pages.length) {
+    throw new GovernanceUnavailable('Exact home evidence exceeds its bound');
+  }
+  let firstReference: Extract<Awaited<ReturnType<ContentCore['readExactBatch']>>[number], { status: 'available' }>['reference'] | undefined;
+  // Each admitted body fits Content's 4 MiB bound; their multilingual sum need
+  // not. Sequential singleton reads also release each body before the next one.
+  for (const page of pages) {
+    const exact = await core.readExactBatch([page.revisionId], async ids => new Set(ids))
+      .catch(() => { throw new GovernanceUnavailable('Content owner is unavailable'); });
+    const read = exact[0];
+    if (exact.length !== 1 || !read || ['missing', 'unavailable', 'corrupt'].includes(read.status)) {
+      throw new GovernanceUnavailable('Exact home evidence is unavailable');
+    }
+    if (read.status !== 'available') throw new GovernanceDenied('Target is unavailable');
     if (read.revisionId !== page.revisionId || read.reference.resourceId !== home.resource || read.reference.variantId !== page.variantId
       || read.reference.revisionId !== page.revisionId || read.reference.byteDigest !== page.byteDigest) {
       throw new GovernanceUnavailable('Exact home evidence differs from the published cut');
@@ -52,16 +61,16 @@ export async function captureHomeDocumentEvidence(core: Pick<ContentCore, 'readE
     if (['media-set-v1', 'member-reply-v1'].includes(read.reference.model)) {
       throw new GovernanceInvalid('Home evidence does not name a document body');
     }
+    firstReference ??= read.reference;
   }
-  const read = exact[0]!;
-  if (read.status !== 'available') throw new GovernanceDenied('Target is unavailable');
+  if (!firstReference) throw new GovernanceUnavailable('Exact home evidence is unavailable');
   return { owner: selectedRevision ? 'content' : 'graph', resource: home.resource,
     component: selectedRevision ? 'body' : 'record', locator: null,
     revision: selectedRevision ?? home.revision, state: 'available',
-    revisionDigest: selectedRevision ? read.reference.byteDigest
+    revisionDigest: selectedRevision ? firstReference.byteDigest
       : sha256(JSON.stringify([home.resource, home.revision, pages.map(page =>
         [page.variantId, page.revisionId, page.byteDigest])])),
-    representation: selectedRevision ? read.reference.format : 'zone-home-cut-v1',
+    representation: selectedRevision ? firstReference.format : 'zone-home-cut-v1',
     provenance: { capturedBy: 'zone-home-exact-cut-v1', zone: home.zone,
       homeRevision: home.revision, disclosure: home.disclosure,
       ...(home.author ? { author: home.author } : {}), ...(home.realm ? { realm: home.realm } : {}) } };
@@ -73,6 +82,55 @@ export function homeDocumentVisibilityReader(registry: Partial<Pick<AccessAdmiss
   return { realmReadProof: realm => principal && actingSubject
     ? registry.realmReadProof?.(principal, actingSubject, realm) ?? Promise.resolve(null) : Promise.resolve(null),
   zoneReadable: zone => registry.canReadSemanticResource?.(principal, actingSubject ?? null, zone) ?? Promise.resolve(false) };
+}
+
+/** Legacy Content keeps Z as its resource after the document receives P. Its
+ * read authority and notice participants still belong to Z's Space. */
+async function legacyZoneContentOwner(env: WorkActivationEnvironment, resource: string): Promise<string | null> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?legacySpace WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} a rv:Zone .
+      OPTIONAL { ${iri(resource)} rv:space ?legacySpace . ?legacySpace a rv:Space } }
+  } LIMIT 2`, 8192).catch(error => {
+    throw new GovernanceUnavailable('Legacy home owner is unavailable', { cause: error });
+  })).results?.bindings ?? [];
+  if (!rows.length) return null;
+  if (rows.length !== 1 || !rows[0]?.legacySpace?.value) {
+    throw new GovernanceUnavailable('Legacy home owner is unavailable');
+  }
+  return rows[0].legacySpace.value;
+}
+
+export function governanceContentEvidenceReader(content: Pick<ContentCore, 'owningResourceForRevision'>,
+  contentPool: Pick<Pool, 'query'>, registry: Pick<AccessAdmissionRegistry,
+    'realmReadProof' | 'canReadSemanticResource' | 'canReadWork'>, env: WorkActivationEnvironment) {
+  return async (principal: VerifiedPrincipal, actingSubject: string, ids: readonly string[]) => {
+    const disclosed = new Set<string>();
+    for (const id of ids) {
+      const resource = await content.owningResourceForRevision(id);
+      if (!resource) continue;
+      if (await readZoneHomeOwner(env, resource)) {
+        const home = await readZoneHomeTarget(env, resource, undefined,
+          homeDocumentVisibilityReader(registry, principal, actingSubject), disclosureViewer(principal));
+        if (home?.selections.some(page => page.revisionId === id)) disclosed.add(id);
+        continue;
+      }
+      if (await legacyZoneContentOwner(env, resource)) {
+        const visibility = await readResourceVisibility(env, resource,
+          homeDocumentVisibilityReader(registry, principal, actingSubject)).catch(error => {
+          throw new GovernanceUnavailable('Legacy home visibility is unavailable', { cause: error });
+        });
+        if (visibility?.readable) disclosed.add(id);
+        continue;
+      }
+      if (await registry.canReadWork(principal, actingSubject, resource)
+        || (await contentPool.query(
+          `SELECT 1 FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
+            WHERE a.id = $1 AND s.disclosure = 'public' AND s.lifecycle = 'active' AND s.moderation = 'none'`,
+          [resource.slice(-36)],
+        )).rowCount) disclosed.add(id);
+    }
+    return disclosed;
+  };
 }
 
 /** Known home identities do not fall through to Work authority or draft reads. */
@@ -106,28 +164,7 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
   const evidence = ownerEvidenceCapture({
     reply: { pool: contentPool, core: content,
       reader: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, registry, env) },
-    content: { core: content, canRead: async (principal, actingSubject, ids) => {
-      const disclosed = new Set<string>();
-      for (const id of ids) {
-        const resource = await content.owningResourceForRevision(id);
-        if (resource && await readZoneHomeOwner(env, resource)) {
-          const home = await readZoneHomeTarget(env, resource, undefined,
-            homeDocumentVisibilityReader(registry, principal, actingSubject), disclosureViewer(principal));
-          if (home?.selections.some(page => page.revisionId === id)) disclosed.add(id);
-          continue;
-        }
-        if (resource &&
-            ((await registry.canReadWork(principal, actingSubject, resource)) ||
-              (
-                await contentPool.query(
-                  `SELECT 1 FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
-            WHERE a.id = $1 AND s.disclosure = 'public' AND s.lifecycle = 'active' AND s.moderation = 'none'`,
-                  [resource.slice(-36)],
-                )
-              ).rowCount)) disclosed.add(id);
-      }
-      return disclosed;
-    } },
+    content: { core: content, canRead: governanceContentEvidenceReader(content, contentPool, registry, env) },
     graph: { env, canReadWork: (principal, actingSubject, work) =>
       registry.canReadWork(principal, actingSubject, work) },
     media: { pool: contentPool, canReadWork: (principal, actingSubject, work) =>
@@ -181,7 +218,10 @@ export function governanceNoticeParticipants(env: WorkActivationEnvironment) {
   return { async participants(target: Parameters<NonNullable<typeof graph.participants>>[0],
     after: string | null, limit: number) {
     const zone = await readZoneHomeOwner(env, target.resource);
-    if (!zone) return graph.participants!(target, after, limit);
+    if (!zone) {
+      const space = await legacyZoneContentOwner(env, target.resource);
+      return graph.participants!(space ? { ...target, resource: space } : target, after, limit);
+    }
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
         rv:homeDocument ${iri(target.resource)} . ?space a rv:Space }

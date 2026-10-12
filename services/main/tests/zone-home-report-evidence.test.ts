@@ -77,7 +77,7 @@ test('condition 1: a notice captures P and exact multilingual H, without later C
   expect(notice).toMatchObject({ owner: 'graph', resource: h.home.resource,
     revision: h.home.revision, component: 'record', state: 'available',
     provenance: { homeRevision: h.home.revision, zone: h.home.zone } });
-  expect(h.requested).toEqual([h.home.pages.map(page => page.revisionId)]);
+  expect(h.requested).toEqual(h.home.pages.map(page => [page.revisionId]));
   expect(notice.resource).not.toBe(h.home.zone);
   expect(notice.revisionDigest).toMatch(/^[0-9a-f]{64}$/);
 });
@@ -105,11 +105,52 @@ test('condition 1: resource, variant, revision and digest tampering refuse exact
   }
 });
 
-test('condition 1: erased or missing selected bytes refuse the complete home cut', async () => {
-  for (const status of ['erased', 'missing', 'denied', 'corrupt'] as const) {
+test('condition 1: erased or denied selected bytes refuse the complete home cut', async () => {
+  for (const status of ['erased', 'denied'] as const) {
     const h = cut();
     h.results[1] = { revisionId: h.home.pages[1]!.revisionId, status };
     await expect(captureHomeDocumentEvidence(h.core, h.home)).rejects.toBeInstanceOf(GovernanceDenied);
+  }
+});
+
+test('missing, unavailable and corrupt custody are retryable owner failures, not refused targets', async () => {
+  for (const status of ['missing', 'unavailable', 'corrupt'] as const) {
+    const h = cut();
+    h.results[1] = { revisionId: h.home.pages[1]!.revisionId, status };
+    await expect(captureHomeDocumentEvidence(h.core, h.home)).rejects.toBeInstanceOf(GovernanceUnavailable);
+  }
+});
+
+test('32 admitted language bodies exceeding the aggregate Content byte bound still complete exact evidence', async () => {
+  const h = cut();
+  const template = h.results[0]!;
+  if (template.status !== 'available') throw new Error('fixture');
+  const pages = Array.from({ length: 32 }, () => ({ revisionId: randomUUID(),
+    variantId: `urn:rezics:variant:${randomUUID()}`, byteDigest: 'a'.repeat(64) }));
+  h.home.pages = pages;
+  h.results.splice(0, h.results.length, ...pages.map(page => ({ ...template, revisionId: page.revisionId,
+    reference: { ...template.reference, ...page, byteLength: 256 * 1024 } })));
+  const read = h.core.readExactBatch.bind(h.core);
+  h.core.readExactBatch = async (ids, authorize) => {
+    if (ids.length * 256 * 1024 > 4 * 1024 * 1024) throw new Error('exact read exceeds 4 MiB');
+    return read(ids, authorize);
+  };
+  expect((await captureHomeDocumentEvidence(h.core, h.home)).state).toBe('available');
+  expect(h.requested).toEqual(pages.map(page => [page.revisionId]));
+});
+
+test('oversized custody produces an explicit retryable owner failure', async () => {
+  const h = cut();
+  h.core.readExactBatch = async () => { throw new Error('exact read exceeds 4 MiB'); };
+  await expect(captureHomeDocumentEvidence(h.core, h.home)).rejects.toBeInstanceOf(GovernanceUnavailable);
+});
+
+test('an oversized or duplicate owner inventory is retryable before reading custody', async () => {
+  for (const length of [2, 33]) {
+    const h = cut();
+    h.home.pages = Array.from({ length }, () => h.home.pages[0]!);
+    await expect(captureHomeDocumentEvidence(h.core, h.home)).rejects.toBeInstanceOf(GovernanceUnavailable);
+    expect(h.requested).toEqual([]);
   }
 });
 
@@ -162,7 +203,7 @@ test('conditions 1 and 3: a public reader completes a report and copyright notic
     expect(result.evidence).toMatchObject({ owner: 'graph', resource: h.resource,
       revision: h.revision, component: 'record', state: 'available' });
     expect(result.author).toBe(h.author);
-    expect(h.source.requested).toEqual([h.selections.map(page => page.revisionId)]);
+    expect(h.source.requested).toEqual(h.selections.map(page => [page.revisionId]));
   }
 });
 
@@ -199,9 +240,31 @@ test('conditions 1 and 3: erasure, draft cuts and reader revocation give the sam
     await expect(capturePublishedHomeEvidence(h.env, core, h.registry, principal, actor,
       { owner: 'graph', resource: h.resource, component: 'record', revision: h.revision, locator: null }))
       .rejects.toThrow('Target is unavailable');
-    expect(h.source.requested.length).toBe(mode === 'revoked' ? 1 : 0);
+    expect(h.source.requested.length).toBe(mode === 'revoked' ? 2 : 0);
   }
 });
+
+for (const authority of ['zone', 'realm'] as const) {
+  // Disclosure final fence must recheck authority after the last receipt read.
+  test.failing(`evidence withholds its digest when ${authority} authority is revoked during the final receipt read`, async () => {
+    const h = published(), actor = id(), realm = id();
+    h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
+    h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
+    if (authority === 'realm') h.visibilityRows[0]!.realm = cell(realm);
+    let readable = true, receipts = 0;
+    h.registry.canReadSemanticResource = async () => readable;
+    h.registry.realmReadProof = async () => readable ? 'membership' : null;
+    const query = h.env.fuseki.query.bind(h.env.fuseki);
+    h.env.fuseki.query = async (text, budget) => {
+      const result = await query(text, budget);
+      if (text.includes('SELECT ?zone ?revision ?routesRevision') && ++receipts === 2) readable = false;
+      return result;
+    };
+    await expect(capturePublishedHomeEvidence(h.env, h.core, h.registry, principal, actor,
+      { owner: 'graph', resource: h.resource, component: 'record', revision: h.revision, locator: null }))
+      .rejects.toBeInstanceOf(GovernanceDenied);
+  });
+}
 
 test('conditions 1 and 3: an anonymous non-reader cannot report or inspect a private /e/ home', async () => {
   const h = published();

@@ -25,6 +25,27 @@ test('native home target returns P, H and exactly the receipt selections in ever
   expect(cutQuery).not.toContain('draftHead');
 });
 
+for (const authority of ['zone', 'realm'] as const) {
+  // Disclosure final fence must follow the receipt read and recheck Zone authority.
+  test.failing(`home target withholds ids and digests when ${authority} authority is revoked during the receipt read`, async () => {
+    const h = fixture(), realm = id();
+    h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
+    h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
+    if (authority === 'realm') h.visibilityRows[0]!.realm = cell(realm);
+    let readable = true;
+    const query = h.env.fuseki.query.bind(h.env.fuseki);
+    h.env.fuseki.query = async (text, budget) => {
+      const result = await query(text, budget);
+      if (text.includes('SELECT ?zone ?revision ?routesRevision')) readable = false;
+      return result;
+    };
+    expect(await readZoneHomeTarget(h.env, h.resource, h.revision, {
+      zoneReadable: async () => readable,
+      realmReadProof: async () => readable ? 'membership' : null,
+    })).toBeNull();
+  });
+}
+
 test('a retained historical H stays fixed when P advances to another home cut', async () => {
   const h = fixture(), next = id();
   h.ownerRows[0]!.head = cell(next);
