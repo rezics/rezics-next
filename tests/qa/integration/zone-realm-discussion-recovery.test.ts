@@ -107,6 +107,12 @@ async function recovered(home: HomeStack, response: Response): Promise<Posted> {
   return home.json<Posted>(response, response.status);
 }
 
+async function refusal(response: Response, status: 403 | 409) {
+  const body = await response.text();
+  expect(response.status, body).toBe(status);
+  return { status: response.status, body };
+}
+
 test('lost about-post responses after each durable owner phase resume one opener and preserve a pending child', async () => {
   const home = await startHomeStack('zone-realm-discussion-recovery');
   try {
@@ -178,6 +184,7 @@ test('cancelled and expired first posts release their reservation while retainin
     const revokedPage = await a.page('revoked-dispatch'), revokeKey = randomUUID();
     const replies = home.deps.realmReplies, originalPlace = replies.place;
     let revoked = false;
+    let revokedRefusal: Awaited<ReturnType<typeof refusal>> | undefined;
     replies.place = async function (...args) {
       if (!revoked) {
         revoked = true;
@@ -187,13 +194,13 @@ test('cancelled and expired first posts release their reservation while retainin
     };
     try {
       const response = await a.post(revokedPage, a.author, 'Revoked before dispatch', home.author.token, revokeKey);
-      expect(response.status, await response.text()).toBe(403);
+      revokedRefusal = await refusal(response, 403);
       expect(revoked).toBe(true);
     } finally { replies.place = originalPlace; }
     const revokedOp = await operation(home, a.realm.realm, revokedPage.about);
     await noOrphanPublicReply(home, a.realm.realm, revokedOp.reply);
     const retry = await a.post(revokedPage, a.author, 'Revoked before dispatch', home.author.token, revokeKey);
-    expect([403, 409], await retry.text()).toContain(retry.status);
+    expect(await refusal(retry, 403)).toEqual(revokedRefusal);
     expect((await a.effects(revokedPage.about)).threads).toBe(0);
     await a.policy(a.realm.realm, 'open');
     const reopenedPage = { ...revokedPage, routeRevision: (await a.route(revokedPage.path)).revision };
@@ -202,7 +209,7 @@ test('cancelled and expired first posts release their reservation while retainin
     expect(reopened.reply).not.toBe(revokedOp.reply);
     expect((await a.rows(revokedPage.about)).find(row => row.reply === reopened.reply)).toMatchObject({ parent_reply: null });
     const oldRetry = await a.post(revokedPage, a.author, 'Revoked before dispatch', home.author.token, revokeKey);
-    expect(oldRetry.status, await oldRetry.text()).toBe(409);
+    expect(await refusal(oldRetry, 403)).toEqual(revokedRefusal);
     expect((await a.effects(revokedPage.about)).threads).toBe(1);
 
     const expiredPage = await a.page('expired-preparation'), expiredKey = randomUUID();
@@ -221,24 +228,27 @@ test('cancelled and expired first posts release their reservation while retainin
     expect(expiry.remaining).toBeLessThanOrEqual(30_000);
     await Bun.sleep(Math.ceil(expiry.remaining) + 100);
     const expiredRetry = await a.post(expiredPage, a.author, 'Expired prepared contribution', home.author.token, expiredKey);
-    expect([403, 409], await expiredRetry.text()).toContain(expiredRetry.status);
+    const expiredRefusal = await refusal(expiredRetry, 409);
     await noOrphanPublicReply(home, a.realm.realm, expired.reply);
     expect((await a.effects(expiredPage.about)).threads).toBe(0);
     const expiredPreparation = await home.stack.contentPool.query(`SELECT status,pin_active
       FROM content.publication_preparation WHERE operation_id=$1`, [expired.placement_admission_id]);
     expect(expiredPreparation.rows).toEqual([{ status: 'rejected', pin_active: false }]);
     const expiredAgain = await a.post(expiredPage, a.author, 'Expired prepared contribution', home.author.token, expiredKey);
-    expect([403, 409], await expiredAgain.text()).toContain(expiredAgain.status);
+    expect(await refusal(expiredAgain, 409)).toEqual(expiredRefusal);
     expect((await operation(home, a.realm.realm, expiredPage.about)).reply).toBe(expired.reply);
     const afterExpiry = await home.json<Posted>(await a.post(expiredPage, a.reader,
       'A fresh intent after native expiry', home.reader.token), 201);
     expect(afterExpiry.reply).not.toBe(expired.reply);
     expect((await a.rows(expiredPage.about)).find(row => row.reply === afterExpiry.reply)).toMatchObject({ parent_reply: null });
+    expect(await refusal(await a.post(expiredPage, a.author,
+      'Expired prepared contribution', home.author.token, expiredKey), 409)).toEqual(expiredRefusal);
     expect((await a.effects(expiredPage.about)).threads).toBe(1);
 
     const page = await a.page('withdrawn-dispatch'), key = randomUUID();
     const graph = home.stack.fuseki, originalCommand = graph.commandWithReceipt;
     let withdrawn = false;
+    let withdrawnRefusal: Awaited<ReturnType<typeof refusal>> | undefined;
     graph.commandWithReceipt = async function (command) {
       if (!withdrawn && command.update.includes('a rv:RealmReplyPlacement')) {
         withdrawn = true;
@@ -248,7 +258,7 @@ test('cancelled and expired first posts release their reservation while retainin
     };
     try {
       const response = await a.post(page, a.author, 'Withdrawal before graph dispatch', home.author.token, key);
-      expect(response.status, await response.text()).toBe(409);
+      withdrawnRefusal = await refusal(response, 409);
       expect(withdrawn).toBe(true);
     } finally { graph.commandWithReceipt = originalCommand; }
     const selected = await operation(home, a.realm.realm, page.about);
@@ -258,7 +268,7 @@ test('cancelled and expired first posts release their reservation while retainin
       WHERE r.variant_id=$1`, [selected.variant_id]);
     expect(preparations.rows).toEqual([{ status: 'rejected', pin_active: false }]);
     const retryWithdrawn = await a.post(page, a.author, 'Withdrawal before graph dispatch', home.author.token, key);
-    expect(retryWithdrawn.status, await retryWithdrawn.text()).toBe(409);
+    expect(await refusal(retryWithdrawn, 409)).toEqual(withdrawnRefusal);
     expect((await a.effects(page.about)).threads).toBe(0);
   } finally { await home.stop(); }
 }, 300_000);
@@ -321,7 +331,7 @@ test('stale pre-placement bases release retained draft and identity intents so a
       const before = await operation(home, a.realm.realm, page.about);
       const current = await editPage(home, a, page);
       const retry = await a.post(page, a.author, text, home.author.token, key);
-      expect(retry.status, await retry.text()).toBe(409);
+      const staleRefusal = await refusal(retry, 409);
       const failed = await operation(home, a.realm.realm, page.about);
       expect(failed).toEqual({ ...before, terminal_refusal: true });
       expect((await a.effects(page.about)).threads).toBe(0);
@@ -332,12 +342,13 @@ test('stale pre-placement bases release retained draft and identity intents so a
       expect((await a.rows(page.about)).find(row => row.reply === winner.reply)).toMatchObject({
         parent_reply: null, root_revision: current.targetRevision, author: a.reader });
       const sameKey = await a.post(page, a.author, text, home.author.token, key);
-      expect(sameKey.status, await sameKey.text()).toBe(409);
+      expect(await refusal(sameKey, 409)).toEqual(staleRefusal);
       expect(await acceptedPlacements(home, a.realm.realm, failed.reply)).toHaveLength(0);
     }
     const page = await a.page('changed-after-draft'), key = randomUUID();
     const owner = RealmAboutThreadStore.prototype, original = owner.recordDraftRevision;
     let edited: Page | undefined;
+    let draftRefusal: Awaited<ReturnType<typeof refusal>> | undefined;
     owner.recordDraftRevision = async function (...args) {
       const saved = await original.apply(this, args);
       if (!edited) edited = await editPage(home, a, page);
@@ -345,7 +356,7 @@ test('stale pre-placement bases release retained draft and identity intents so a
     };
     try {
       const refused = await a.post(page, a.author, 'Words drafted before the page edit', home.author.token, key);
-      expect(refused.status, await refused.text()).toBe(409);
+      draftRefusal = await refusal(refused, 409);
     } finally { owner.recordDraftRevision = original; }
     const failed = await operation(home, a.realm.realm, page.about);
     expect(failed).toMatchObject({ phase: 'drafted', terminal_refusal: true, placement_admission_id: null });
@@ -353,6 +364,8 @@ test('stale pre-placement bases release retained draft and identity intents so a
     if (!edited) throw new Error('Expected the native page edit');
     const winner = await home.json<Posted>(await a.post(edited, a.reader, 'Fresh corrected words', home.reader.token), 201);
     expect(winner.reply).not.toBe(failed.reply);
+    expect(await refusal(await a.post(page, a.author,
+      'Words drafted before the page edit', home.author.token, key), 409)).toEqual(draftRefusal);
   } finally { await home.stop(); }
 }, 300_000);
 
@@ -363,7 +376,7 @@ test('exact Content draft refusal and identity admission refusal release their u
     const input = { ...a.input(page, a.author, 'Words retained after Content refusal'), language: 'x-rezics' };
     const endpoint = `/v1/realms/${local(a.realm.realm)}/about-posts`;
     const refused = await home.call('POST', endpoint, input, home.author.token, key);
-    expect(refused.status, await refused.text()).toBe(409);
+    const contentRefusal = await refusal(refused, 409);
     const failed = await operation(home, a.realm.realm, page.about);
     expect(failed).toMatchObject({ phase: 'selected', terminal_refusal: true, placement_admission_id: null });
     expect((await a.effects(page.about)).threads).toBe(0);
@@ -375,20 +388,22 @@ test('exact Content draft refusal and identity admission refusal release their u
     const terminal = await home.stack.content.readDraftReceipt(`content-draft:${draftAdmission!.id}`);
     expect(terminal?.outcome).toBe('cancelled');
     const oldRetry = await home.call('POST', endpoint, input, home.author.token, key);
-    expect(oldRetry.status, await oldRetry.text()).toBe(409);
+    expect(await refusal(oldRetry, 409)).toEqual(contentRefusal);
     const fresh = await home.json<Posted>(await a.post(page, a.reader, 'A supported-language opener', home.reader.token), 201);
     expect(fresh.reply).not.toBe(failed.reply);
+    expect(await refusal(await home.call('POST', endpoint, input, home.author.token, key), 409)).toEqual(contentRefusal);
 
     const identityPage = await a.page('identity-refusal'), identityKey = randomUUID();
     const replies = home.deps.realmReplies, original = replies.create;
     let edited: Page | undefined;
+    let identityRefusal: Awaited<ReturnType<typeof refusal>> | undefined;
     replies.create = async function (...args) {
       if (!edited) edited = await editPage(home, a, identityPage);
       return original.apply(this, args);
     };
     try {
       const response = await a.post(identityPage, a.author, 'Drafted before identity refusal', home.author.token, identityKey);
-      expect([403, 409], await response.text()).toContain(response.status);
+      identityRefusal = await refusal(response, 403);
     } finally { replies.create = original; }
     const identityFailed = await operation(home, a.realm.realm, identityPage.about);
     expect(identityFailed).toMatchObject({ phase: 'drafted', terminal_refusal: true, placement_admission_id: null });
@@ -397,6 +412,8 @@ test('exact Content draft refusal and identity admission refusal release their u
     if (!edited) throw new Error('Expected the native identity basis edit');
     const winner = await home.json<Posted>(await a.post(edited, a.reader, 'Current identity basis', home.reader.token), 201);
     expect(winner.reply).not.toBe(identityFailed.reply);
+    expect(await refusal(await a.post(identityPage, a.author,
+      'Drafted before identity refusal', home.author.token, identityKey), 403)).toEqual(identityRefusal);
   } finally { await home.stop(); }
 }, 300_000);
 
@@ -415,7 +432,7 @@ test('prepared-only dispatch recovers native cancellation after the attachment c
     await a.configure({ defaultRealm: a.realm.realm });
     const current = { ...page, routeRevision: (await a.route(page.path)).revision };
     const retry = await a.post(page, a.author, 'Prepared on the old attachment', home.author.token, key);
-    expect([403, 409], await retry.text()).toContain(retry.status);
+    const preparedRefusal = await refusal(retry, 409);
     expect((await a.effects(page.about)).threads).toBe(0);
     await noOrphanPublicReply(home, a.realm.realm, failed.reply);
     const prep = await home.stack.contentPool.query('SELECT status,pin_active FROM content.publication_preparation WHERE operation_id=$1',
@@ -423,6 +440,8 @@ test('prepared-only dispatch recovers native cancellation after the attachment c
     expect(prep.rows).toEqual([{ status: 'rejected', pin_active: false }]);
     const winner = await home.json<Posted>(await a.post(current, a.reader, 'Fresh attachment basis', home.reader.token), 201);
     expect(winner.reply).not.toBe(failed.reply);
+    expect(await refusal(await a.post(page, a.author,
+      'Prepared on the old attachment', home.author.token, key), 409)).toEqual(preparedRefusal);
   } finally { await home.stop(); }
 }, 300_000);
 
@@ -460,6 +479,7 @@ test('native placement registration refusal releases before dispatch while uncer
     const a = await arrange(home), page = await a.page('admission-refusal'), key = randomUUID();
     const owner = home.stack.access, original = owner.register;
     let revoked = false;
+    let registrationRefusal: Awaited<ReturnType<typeof refusal>> | undefined;
     owner.register = async function (request, ...rest) {
       if (!revoked && request.action === 'reply.place') {
         revoked = true;
@@ -469,7 +489,7 @@ test('native placement registration refusal releases before dispatch while uncer
     };
     try {
       const response = await a.post(page, a.reader, 'Refused native registration', home.reader.token, key);
-      expect(response.status, await response.text()).toBe(403);
+      registrationRefusal = await refusal(response, 403);
       expect(revoked).toBe(true);
     } finally { owner.register = original; }
     const refused = await operation(home, a.realm.realm, page.about);
@@ -480,6 +500,8 @@ test('native placement registration refusal releases before dispatch while uncer
     const current = { ...page, routeRevision: (await a.route(page.path)).revision };
     const winner = await home.json<Posted>(await a.post(current, a.author, 'After registration refusal', home.author.token), 201);
     expect(winner.reply).not.toBe(refused.reply);
+    expect(await refusal(await a.post(page, a.reader,
+      'Refused native registration', home.reader.token, key), 403)).toEqual(registrationRefusal);
 
     for (const failure of [new AdmissionUnavailable('Owner unavailable'), new AdmissionConflict('Receipt differs'),
       new WorkReadLimit('Owner budget exhausted')]) {
