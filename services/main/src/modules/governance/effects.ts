@@ -199,7 +199,9 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
     return realm;
   };
   const accessReceipt = async (operationId: string, ordinal: number, target: DecisionTargetInput) => {
-    if (target.expectedHead !== null) {
+    // ReviewReportOwner.lockCurrent already verifies this head under the same
+    // Access transaction lock before dispatch. External heads need this probe.
+    if (target.expectedHead !== null && target.owner !== 'review') {
       let current: string | null;
       if (target.owner === 'graph') {
         const home = target.component === 'record' && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
