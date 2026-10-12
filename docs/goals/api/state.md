@@ -30,6 +30,7 @@ is dropped.
 | Erasure service, second half | First half on `main` | The 409 or 503 mapping for unsupported inventories, the composition hunk with media objects, the reverse pool-order sites |
 | Security review remainder | The High finding is closed on `main` | Anonymous requests can grow a counter table without bound; a forged token with an unknown key triggers a key exchange; the others are in the archived tables |
 | Imported recipe structure under decision 55 | The Gutenberg loader imports through a member's file-import route with rights basis "unknown", publishes the text as the seed author's original contribution and never publishes the structure | Design how an import states "public domain, from this source" before any route or grant |
+| Typeahead on short prefixes | Reads for each request are bounded on `main` (18 for any prefix). Measured on the shared stack after that change, at host load 7: `harry` answers in 0.04 s, but `a`, `the`, `b` and a single Chinese character take 1.3 to 1.5 s and answer 503 at the 1.5 s deadline about half the time | One query of about 0.6 s dominates the request and the fence replays it. Find it in Fuseki's request log before changing anything; the number of reads was not the cause |
 | Seed set | The fixture half is on `main`; the retained load set refuses to restore on `main` | Rebuild the seed population and its growth axes; until then growth checks run at the set's source commit |
 
 ## Mechanisms and their notes

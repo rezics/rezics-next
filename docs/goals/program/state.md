@@ -19,8 +19,11 @@ The supermanager's checkpoint for [this Goal](GOAL.md); live tasks:
 The maintainer powered the host off after this state was written.
 
 1. `systemctl --user start docker-desktop`, then wait until `docker info` answers.
-2. In the main checkout, `task dev` (it starts the Aspire AppHost; `task urls`
-   lists the addresses). The backend serves the revision of the last refresh.
+2. In the main checkout, `task stack:up` (the Compose storage stack was stopped
+   with its data kept), then `task dev` (the Aspire AppHost; `task urls` lists
+   the addresses). The backend serves the revision of the last refresh, which
+   succeeded on 2026-10-12 at 16:22 UTC at `main` 75409ac3c with native image
+   `rezics/fuseki:6.2.0-cmd0.5.39-5bc9e305cb80`; only documents changed after it.
 3. `task dev:refresh -- --wait` when `main` has moved. Its last step (re-approve
    the official Zones) failed twice on 2026-10-12 within seconds of the restart
    on a rate-limit refusal; run it again once the stack has been up a minute.
