@@ -3,6 +3,7 @@ import {
   commitNavigation,
   foldMountPages,
   isNavigationDirty,
+  hasInvalidNavigationPaths,
   isSegment,
   linksFromZone,
   NAV_COMMAND_LIMIT,
@@ -62,6 +63,22 @@ function state(links: SiteLink[], saved = links): NavigationState {
     notice: { kind: 'idle' },
   };
 }
+
+test('invalid and duplicate displayed paths stay in the draft and block the saved path selection', () => {
+  const chartsLink = link('Charts', charts, 'charts', 1);
+  const addition = link('Tides', tides, 'tides', null);
+  const added = reduceNavigation(state([chartsLink]), { type: 'add', link: addition });
+  const invalid = reduceNavigation(added, { type: 'path-input', id: addition.id, value: 'Invalid Path!' });
+  expect(invalid.pathBuffers?.[addition.id]).toBe('Invalid Path!');
+  expect(invalid.links[1]?.segment).toBe('tides');
+  expect(hasInvalidNavigationPaths(invalid)).toBe(true);
+  const duplicate = reduceNavigation(invalid, { type: 'path-input', id: addition.id, value: 'charts' });
+  expect(duplicate.pathBuffers?.[addition.id]).toBe('charts');
+  expect(hasInvalidNavigationPaths(duplicate)).toBe(true);
+  const corrected = reduceNavigation(duplicate, { type: 'path-input', id: addition.id, value: 'tidal-notes' });
+  expect(corrected.links[1]?.segment).toBe('tidal-notes');
+  expect(hasInvalidNavigationPaths(corrected)).toBe(false);
+});
 
 /** Fixture intent is explicit at the adapter boundary; acceptance tests use reducer operations. */
 function fixtureEdits(saved: readonly SiteLink[], desired: readonly SiteLink[]): NavigationEdit[] {

@@ -37,6 +37,7 @@ import {
 import {
   commitNavigation,
   isNavigationDirty,
+  hasInvalidNavigationPaths,
   isSegment,
   NAV_COMMAND_LIMIT,
   pathEditBlocked,
@@ -93,7 +94,7 @@ export function ZoneNavigationEditor({
   const [review, setReview] = useZoneEditorSessionState<PublicationReview | null>('navigation-review', null);
   const [query, setQuery] = useZoneEditorSessionState('navigation-query', '');
   const [picked, setPicked] = useZoneEditorSessionState<PageChoice | null>('navigation-picked', null);
-  const [paths, setPaths] = useState<Record<string, string>>({});
+  const paths = state.pathBuffers ?? {};
   const [addNotice, setAddNotice] = useState<string | null>(null);
   const [saveCompleted, setSaveCompleted] = useZoneEditorSessionState('navigation-save-completed', 0);
   const saveSession = useZoneEditorRef<{ choice: NavigationState; progress?: NavigationSaveProgress } | null>(
@@ -243,7 +244,7 @@ export function ZoneNavigationEditor({
   }
 
   function save(next: NavigationState = stateRef.current) {
-    if (busy || !draftReady || !pageReady || !next.complete || !isNavigationDirty(next)) return;
+    if (busy || !draftReady || !pageReady || !next.complete || !isNavigationDirty(next) || hasInvalidNavigationPaths(next)) return;
     track(
       'save',
       saveLane
@@ -309,7 +310,6 @@ export function ZoneNavigationEditor({
       after = page.data.after;
       complete = page.data.complete;
     }
-    setPaths({});
     saveSession.current = null;
     setSaveCompleted(0);
     put({ type: 'review', links, head: snapshot.head, navigation: snapshot.navigation });
@@ -422,10 +422,7 @@ export function ZoneNavigationEditor({
 
   function onPath(link: SiteLink, value: string) {
     if (pathEditBlocked(link)) return;
-    setPaths((current) => ({ ...current, [link.id]: value }));
-    if (value === link.segment || !isSegment(value)) return;
-    if (state.links.some((other) => other.id !== link.id && other.segment === value)) return;
-    put({ type: 'segment', id: link.id, segment: value });
+    put({ type: 'path-input', id: link.id, value });
   }
 
   const savedNotice =
@@ -458,7 +455,7 @@ export function ZoneNavigationEditor({
             copy={resumable ? { ...copy, save: copy.navResume } : copy}
             canEdit
             busy={busy === 'continue' ? null : busy}
-            saveDisabled={!draftReady || !!busy || !dirty || !state.complete || state.notice.kind === 'stale'}
+            saveDisabled={!draftReady || !!busy || !dirty || !state.complete || hasInvalidNavigationPaths(state) || state.notice.kind === 'stale'}
             publishDisabled={
               !draftReady || !pageReady || !!busy || !publishable || !state.complete || page.notice.kind === 'publish-stale'
             }

@@ -16,6 +16,7 @@ import { ZoneNavigationEditor } from './navigation-editor.tsx';
 import type { NavigationState, NavPosition, SiteLink } from './navigation.ts';
 import { ZoneDraftPreview } from './preview.tsx';
 import { presetTokens } from '../zones/presentation.ts';
+import { ZoneEditorDraftProvider } from './draft-provider.tsx';
 
 const zoneId = '00000000-0000-4000-8000-000000000301';
 const zoneIri = `https://rezics.com/id/${zoneId}`;
@@ -726,6 +727,41 @@ export const ReviewedPublicationCanBecomeStaleAgain: Story = {
     await expect(canvas.getByText(messages.en.navReviewClean)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: messages.en.refreshAndPublish }));
     await expect(await canvas.findByRole('button', { name: messages.en.publishReviewed })).toBeEnabled();
+  },
+};
+
+function NavigationPathSections() {
+  const [visible, setVisible] = useState(true);
+  return <ZoneEditorDraftProvider zoneId="path-validation" actingSubject={actor}>
+    <nav className="flex gap-2 p-3">
+      <button onClick={() => setVisible(false)}>Leave Navigation section</button>
+      <button onClick={() => setVisible(true)}>Return to Navigation section</button>
+    </nav>
+    {visible ? <NavigationPage mode="paths" /> : <p>Home section</p>}
+  </ZoneEditorDraftProvider>;
+}
+
+export const InvalidAndDuplicatePathsBlockSavingAcrossSections: Story = {
+  render: () => <NavigationPathSections />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await addPage(canvas, 'Harbor soundings');
+    const field = canvas.getByRole('textbox', { name: 'Path Harbor soundings' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Invalid Path!');
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: 'Leave Navigation section' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Return to Navigation section' }));
+    const restored = canvas.getByRole('textbox', { name: 'Path Harbor soundings' });
+    await expect(restored).toHaveValue('Invalid Path!');
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await userEvent.clear(restored);
+    await userEvent.type(restored, 'harbor-charts');
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await userEvent.clear(restored);
+    await userEvent.type(restored, 'new-soundings');
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeEnabled();
+    await expect(navCalls).toHaveLength(0);
   },
 };
 

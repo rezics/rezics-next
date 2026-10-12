@@ -51,6 +51,8 @@ export type NavNotice =
 
 export interface NavigationState {
   links: SiteLink[];
+  /** Displayed path text, including invalid input that must never become a different saved path. */
+  pathBuffers?: Record<string, string>;
   /** The list the server last confirmed, in its order. */
   saved: SiteLink[];
   /** Identity-keyed operations authored only against a complete list. */
@@ -76,6 +78,7 @@ export type NavEvent =
   | { type: 'add'; link: SiteLink }
   | { type: 'remove'; id: string }
   | { type: 'segment'; id: string; segment: string }
+  | { type: 'path-input'; id: string; value: string }
   | { type: 'stale'; currentHead: string | null }
   | { type: 'saved'; links: SiteLink[]; head: string; replayed: boolean }
   | { type: 'progress'; progress: NavigationSaveProgress }
@@ -162,7 +165,12 @@ export function isSegment(value: string): boolean {
 }
 
 export function isNavigationDirty(state: NavigationState): boolean {
-  return state.pending.length > 0;
+  return state.pending.length > 0 || hasInvalidNavigationPaths(state);
+}
+
+export function hasInvalidNavigationPaths(state: NavigationState): boolean {
+  const paths = state.links.map(link => pathEditBlocked(link) ? link.segment : state.pathBuffers?.[link.id] ?? link.segment);
+  return paths.some(path => !isSegment(path)) || new Set(paths).size !== paths.length;
 }
 
 /** Place only named identities. Untouched server entries retain their relative order. */
@@ -446,7 +454,7 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
     (event.type === 'move' ||
       event.type === 'add' ||
       event.type === 'remove' ||
-      event.type === 'segment')
+      event.type === 'segment' || event.type === 'path-input')
   )
     return state;
   switch (event.type) {
@@ -505,6 +513,12 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         ),
       );
     }
+    case 'path-input': {
+      const link = state.links.find(link => link.id === event.id);
+      if (!link || pathEditBlocked(link)) return state;
+      const next = reduceNavigation(state, { type: 'segment', id: event.id, segment: event.value });
+      return { ...next, pathBuffers: { ...state.pathBuffers, [event.id]: event.value } };
+    }
     case 'stale':
       return { ...state, notice: { kind: 'stale', currentHead: event.currentHead } };
     case 'saved':
@@ -513,6 +527,7 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         links: event.links,
         saved: event.links.map((link) => ({ ...link })),
         pending: [],
+        pathBuffers: {},
         head: event.head,
         notice: { kind: 'saved', replayed: event.replayed },
       };
@@ -532,6 +547,7 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         links: event.links,
         saved: event.links.map((link) => ({ ...link })),
         pending: [],
+        pathBuffers: {},
         head: event.head,
         navigation: event.navigation,
         complete: event.complete,
@@ -576,6 +592,7 @@ export function reduceNavigation(state: NavigationState, event: NavEvent): Navig
         complete: true,
         after: null,
         notice: { kind: 'review', dropped },
+        pathBuffers: {},
       };
     }
     case 'revision':
