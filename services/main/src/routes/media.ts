@@ -24,7 +24,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
-import { discloseInventory, discloseInventoryWithAnonymousNames, type DisclosureTarget } from '../modules/disclosure/read.ts';
+import { disclose, discloseInventory, discloseInventoryWithAnonymousNames, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
 import { mediaVisibility } from '../modules/media/visibility.ts';
 
@@ -290,22 +290,27 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
     }
     const facts: DisclosureTarget[]=[];
+    const assetFences: DisclosureTarget[]=[];
     const indexes=bases.map(basis=>{
       if (!basis) return [];
       const own=[facts.length];
-      facts.push({owner:'media',resource:`https://rezics.com/id/${basis.metadata.asset}`,component:'cover',
-        context:basis.context,work:basis.target});
+      const asset: DisclosureTarget={owner:'media',resource:`https://rezics.com/id/${basis.metadata.asset}`,
+        component:'cover',context:basis.context};
+      assetFences.push(asset);
+      // A page image names one attachment. Its sibling Uses cannot determine
+      // this audience; direct Asset governance still fences every occurrence.
       if (basis.metadata.use) {
-        own.push(facts.length);
         facts.push({owner:'media',resource:`https://rezics.com/id/${basis.metadata.use}`,component:'media_use',
           context:basis.context,work:basis.target});
-      }
+      } else facts.push({...asset,work:basis.target});
       return own;
     });
     const decisions=await discloseInventory(work.environment,facts,reader.viewer??ANONYMOUS_VIEWER,'media');
+    const assetDecisions=await disclose(work.environment,assetFences,reader.viewer??ANONYMOUS_VIEWER,'media');
     const publicMedia=await mediaVisibility(work.environment,facts,ANONYMOUS_VIEWER);
     return Promise.all(bases.map(async (basis,index)=>{
-      if (!basis || basis.target && !available.has(`${basis.context}\0${basis.target}`)
+      const assetDecision=assetDecisions[indexes[index]![0]!];
+      if (!basis || assetDecision!=='visible' || basis.target && !available.has(`${basis.context}\0${basis.target}`)
         || indexes[index]!.some(index=>decisions[index]!=='visible')
         || basis.disclosure!=='public' && !(controlsActor && basis.owner===actingSubject)) return null;
       const canProtectLabels=!!(administrator && principal && actingSubject && await work.access.canProtectMedia?.(principal,actingSubject,
