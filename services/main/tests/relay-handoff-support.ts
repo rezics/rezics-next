@@ -70,12 +70,12 @@ export function relayHandoffFixture(history = 1) {
     return { rows, rowCount: rows.length };
   };
   const relay = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool;
-  let accessSequence = '0';
+  const accessPosition = { sequence: '0' };
   const accessQuery = async (sql: string, values: unknown[] = []) => {
     if (sql.includes('SELECT data_epoch, sequence::text FROM access.owner_consumer_checkpoint')) {
-      return { rows: [{ data_epoch: state.epoch, sequence: accessSequence }], rowCount: 1 };
+      return { rows: [{ data_epoch: state.epoch, sequence: accessPosition.sequence }], rowCount: 1 };
     }
-    if (sql.includes('UPDATE access.owner_consumer_checkpoint')) accessSequence = String(values[2]);
+    if (sql.includes('UPDATE access.owner_consumer_checkpoint')) accessPosition.sequence = String(values[2]);
     return { rows: [], rowCount: 1 };
   };
   const access = { query: accessQuery, connect: async () => ({ query: accessQuery, release() {} }) } as unknown as Pool;
@@ -89,6 +89,6 @@ export function relayHandoffFixture(history = 1) {
     }
     throw new Error(`Unexpected handoff graph query: ${sql}`);
   } } } as unknown as WorkActivationEnvironment;
-  return { relay, access, env, state, stats, queries, ledger,
+  return { relay, access, accessPosition, env, state, stats, queries, ledger,
     resetStats() { stats.statements = 0; stats.rows = 0; stats.headers = 0; } };
 }

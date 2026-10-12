@@ -11,17 +11,18 @@ const states = ['complete', 'incomplete-healing', 'gap-conflict'] as const;
 for (const caller of callers) for (const boundary of states) {
   test(`finding ${caller.finding}: ${caller.name} classifies ${boundary} at the same handoff boundary`, async () => {
     for (const missing of ['header', 'events']) {
-      const f = relayHandoffFixture();
-      if (boundary === 'incomplete-healing') (missing === 'header' ? f.state.missing : f.state.partial).add(1);
-      if (boundary === 'gap-conflict') f.state.excess.add(1);
+      const f = relayHandoffFixture(3);
+      if (boundary === 'incomplete-healing') (missing === 'header' ? f.state.missing : f.state.partial).add(3);
+      if (boundary === 'gap-conflict') f.state.excess.add(3);
       expect((await classifyDeliveredRelayBatch(f.relay, { streamScope: MAIN_RELAY_STREAM_SCOPE,
-        dataEpoch: 'epoch', sequence: '1' })).state).toBe(boundary);
+        dataEpoch: 'epoch', sequence: '3' })).state).toBe(boundary);
       const errors: string[] = [];
       const error = spyOn(console, 'error').mockImplementation(line => { errors.push(String(line)); });
       try {
         if (caller.name === 'operator') {
+          f.accessPosition.sequence = '2';
           expect(await reconcileRelayGap(f.relay, f.access, { consumer: 'reader', relayConsumer: 'relay',
-            dataEpoch: 'epoch', afterSequence: '0', throughSequence: '1' }, 'boundary')).toMatchObject({
+            dataEpoch: 'epoch', afterSequence: '2', throughSequence: '3' }, 'boundary')).toMatchObject({
             state: boundary === 'complete' ? 'reconciled' : 'held',
             disposition: boundary === 'complete' ? 'rebuilt' : 'gap',
           });
@@ -30,24 +31,25 @@ for (const caller of callers) for (const boundary of states) {
           continue;
         }
         const projection = new ZoneBrowseProjection(f.access, f.relay, f.env, 'relay');
-        const internal = projection as unknown as { usableCut: boolean };
+        const internal = projection as unknown as { usableCut: boolean; checkpoint: { streamScope: string; dataEpoch: string; sequence: string } };
+        internal.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '2' };
         internal.usableCut = caller.name === 'tick';
         if (boundary === 'gap-conflict') {
           await expect(projection.tick()).rejects.toBeInstanceOf(WorkReadUnavailable);
-          expect(projection.recoveryStatus().checkpoint.sequence).toBe('0');
+          expect(projection.recoveryStatus().checkpoint.sequence).toBe('2');
           continue;
         }
         await projection.tick();
         if (boundary === 'incomplete-healing') {
           expect(projection.recoveryStatus()).toMatchObject({ state: 'incomplete-healing',
-            checkpoint: { sequence: '0' }, deferral: { code: 'main_relay_handoff_incomplete', retries: 1, intervalMs: 500 } });
+            checkpoint: { sequence: '2' }, deferral: { code: 'main_relay_handoff_incomplete', retries: 1, intervalMs: 500 } });
           expect(await projection.current({ dataEpoch: 'epoch', sequence: '10' })).toBe(false);
           expect(await projection.batch('realm', 'newest', null)).toEqual([]);
           expect(errors).toEqual([]);
           f.state.missing.clear(); f.state.partial.clear();
         }
         for (let poll = 0; poll < 3; poll++) await projection.tick();
-        expect(projection.recoveryStatus()).toMatchObject({ state: 'ready', checkpoint: { sequence: '1' } });
+        expect(projection.recoveryStatus()).toMatchObject({ state: 'ready', checkpoint: { sequence: '3' } });
         expect(await projection.current({ dataEpoch: 'epoch', sequence: '10' })).toBe(true);
         expect(errors).toEqual([]);
       } finally { error.mockRestore(); }
@@ -81,4 +83,16 @@ test('finding 2: startup retains its checkpoint behind an acknowledged partial s
   f.state.partial.clear();
   await projection.tick(); await projection.tick();
   expect(projection.recoveryStatus()).toMatchObject({ state: 'ready', checkpoint: { sequence: '2' } });
+});
+
+test('finding 3: a complete operator window is reconciled independently of a cold poll watermark', async () => {
+  for (const history of [10, 1000]) {
+    const f = relayHandoffFixture(history);
+    f.accessPosition.sequence = String(history - 1);
+    expect(await reconcileRelayGap(f.relay, f.access, { consumer: 'reader', relayConsumer: 'relay',
+      dataEpoch: 'epoch', afterSequence: String(history - 1), throughSequence: String(history) }, 'cold-window'))
+      .toMatchObject({ state: 'reconciled', disposition: 'rebuilt' });
+    expect(f.accessPosition.sequence).toBe(String(history));
+    expect(f.stats.headers).toBe(1);
+  }
 });

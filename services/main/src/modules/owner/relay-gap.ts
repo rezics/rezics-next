@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { RelayCheckpointConflict, RelayHandoffIncomplete, verifiedRetainedRelayRange,
+import { classifyDeliveredRelayBatch, RelayCheckpointConflict, RelayHandoffIncomplete,
   type RetainedRelayBatch } from '../outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE, RelayHandoffPositions } from '../outbox/relay-position.ts';
 
 export class RelayGapConflict extends Error {}
 export class RelayGapInvalid extends Error {}
@@ -134,21 +135,32 @@ export async function reconcileRelayGap(relay: Pool, access: Pool,
       row = { id, request_digest: requestDigest, state: 'running' };
     }
     if (row.state !== 'running') return view(client, row.id, true);
-    let batches: RetainedRelayBatch[];
+    const batches: RetainedRelayBatch[] = [];
+    let snapshotOpen = false;
     try {
-      const retained = await verifiedRetainedRelayRange(relay, input.relayConsumer,
-        input.afterSequence, Number(BigInt(input.throughSequence) - BigInt(input.afterSequence)),
-        client);
-      if (retained.coverage.dataEpoch !== input.dataEpoch
-        || BigInt(retained.coverage.sequence) < BigInt(input.throughSequence)) {
-        throw new RelayCheckpointConflict('retained handoff is behind requested recovery cut');
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      snapshotOpen = true;
+      const coverage = await new RelayHandoffPositions(client, input.relayConsumer).read();
+      if (!coverage || coverage.streamScope !== MAIN_RELAY_STREAM_SCOPE || coverage.dataEpoch !== input.dataEpoch
+        || !number.test(coverage.sequence) || BigInt(coverage.sequence) < BigInt(input.throughSequence)) {
+        throw new RelayCheckpointConflict('retained handoff is behind or differs from requested recovery cut');
       }
-      batches = retained.batches;
-      if (batches.length !== Number(BigInt(input.throughSequence) - BigInt(input.afterSequence))
-        || batches.at(-1)?.sequence !== input.throughSequence) {
-        throw new RelayCheckpointConflict('retained handoff has a gap before recovery cut');
+      // The product checkpoint is validated by rebuildInbox before advancement.
+      // An operator classifies its requested window, independently of a poller's
+      // process-local prefix watermark, and never certifies that skipped prefix.
+      for (let sequence = BigInt(input.afterSequence) + 1n;
+        sequence <= BigInt(input.throughSequence); sequence++) {
+        const classified = await classifyDeliveredRelayBatch(client, { ...coverage, sequence: String(sequence) },
+          { readEvents: true });
+        if (classified.state !== 'complete') throw classified.error;
+        batches.push({ streamScope: coverage.streamScope, sequence: String(sequence),
+          batchId: classified.header.batch_id, routingEpoch: classified.header.routing_epoch,
+          events: classified.events! });
       }
+      await client.query('COMMIT');
+      snapshotOpen = false;
     } catch (error) {
+      if (snapshotOpen) await client.query('ROLLBACK');
       if (!(error instanceof RelayCheckpointConflict) && !(error instanceof RelayHandoffIncomplete)) throw error;
       await client.query('BEGIN');
       try {
