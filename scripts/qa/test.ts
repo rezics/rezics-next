@@ -66,12 +66,15 @@ function selectParsedTestGroups(args: string[], timeout: readonly string[] = [])
   const stories = files.filter(file => file.includes('.stories.'));
   if (stories.length) {
     const workspace = stories[0]!.startsWith('apps/accounts/') ? 'apps/accounts' : 'apps/web';
-    if (stories.length !== files.length || !stories.every(file => file.startsWith(`${workspace}/`)
+    if (!stories.every(file => file.startsWith(`${workspace}/`)
       || (workspace === 'apps/web' && file.startsWith('packages/ui/')))) {
-      throw new Error('Run each workspace’s stories separately from other tests');
+      throw new Error('Run each workspace’s stories separately');
     }
-    return [{ files, command: ['task', [workspace === 'apps/web' ? 'storybook:test' : 'accounts:storybook:test', '--',
-      ...args.map(arg => testFile.test(arg) ? relative(resolve(root, workspace), resolve(root, arg)) : arg),
+    const storyArgs = args.filter(arg => !testFile.test(arg) || arg.includes('.stories.'));
+    const ordinaryArgs = args.filter(arg => !arg.includes('.stories.'));
+    const ordinaryGroups = stories.length === files.length ? [] : selectParsedTestGroups(ordinaryArgs, timeout);
+    return [...ordinaryGroups, { files: stories, command: ['task', [workspace === 'apps/web' ? 'storybook:test' : 'accounts:storybook:test', '--',
+      ...storyArgs.map(arg => testFile.test(arg) ? relative(resolve(root, workspace), resolve(root, arg)) : arg),
       ...timeout]] }];
   }
   const tierOf = registeredTier;
@@ -233,13 +236,12 @@ export interface TestDispatchOptions {
 }
 
 async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions): Promise<number> {
-  const runner = options.runner ?? run;
   const artifactRoot = join(root, '.artifacts', 'qa');
   const lines: string[] = [];
   let failed = false;
   for (const group of groups) {
     const before = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
-    const code = await runner(group.command);
+    const code = await dispatchSelectedTest([group], group.command, options);
     failed ||= code !== 0;
     const created = (existsSync(artifactRoot) ? readdirSync(artifactRoot) : []).filter(name => !before.has(name));
     lines.push(formatTierRunLine(group.tier ?? 'bun', created.length === 1 ? created[0]! : 'no run id',
@@ -254,7 +256,10 @@ export async function dispatchTest(args: string[], options: TestDispatchOptions 
   const groups = selectTestGroups(args);
   const commands = commandsFor(groups, splitCallerTimeout(args).timeout ?? []);
   if (commands.length !== 1) return runTierGroups(groups, options);
-  const command = commands[0]!;
+  return dispatchSelectedTest(groups, commands[0]!, options);
+}
+
+async function dispatchSelectedTest(groups: TestGroup[], command: [string, string[]], options: TestDispatchOptions): Promise<number> {
   const env = options.env ?? process.env;
   const stories = command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!);
   if (stories && await isLocalQaRun(root, env)) {

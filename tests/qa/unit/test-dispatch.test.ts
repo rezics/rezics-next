@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { qaArtifactDirectory } from '../../../scripts/qa/core.ts';
 import { STORY_SCREENSHOTS_ENV } from '../../../scripts/qa/story-screenshots.ts';
-import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
+import { dispatchTest, selectTestCommand, selectTestGroups } from '../../../scripts/qa/test.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const directories: string[] = [];
@@ -18,6 +18,38 @@ function artifactRoot(): string {
 
 afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('one mixed unit and story invocation keeps sequential execution and story screenshot artifacts', async () => {
+  const artifacts = artifactRoot();
+  const unit = 'apps/web/features/tracking/series-progress-panel.test.tsx';
+  const story = 'apps/web/features/tracking/edition-preference.stories.tsx';
+  const groups = selectTestGroups([unit, story]);
+  expect(groups.map(group => group.files)).toEqual([[unit], [story]]);
+  let launches = 0;
+  let admissions = 0;
+  let screenshotDirectory = '';
+  const code = await dispatchTest([unit, story], {
+    env: { REZICS_STACK_PROFILE: 'qa', REZICS_QA_ARTIFACT_ROOT: artifacts },
+    admission: async () => { admissions++; },
+    runner: async (command, env) => {
+      expect(command).toEqual(groups[launches]!.command);
+      if (launches++ === 0) {
+        expect(env?.[STORY_SCREENSHOTS_ENV]).toBeUndefined();
+        return 1;
+      }
+      screenshotDirectory = env![STORY_SCREENSHOTS_ENV]!;
+      expect(isAbsolute(screenshotDirectory)).toBe(true);
+      expect(existsSync(screenshotDirectory)).toBe(true);
+      return 0;
+    },
+  });
+  expect(code).toBe(1);
+  expect(launches).toBe(2);
+  expect(admissions).toBe(1);
+  const summary = readFileSync(join(dirname(screenshotDirectory), 'summary.md'), 'utf8');
+  expect(summary).toContain(story);
+  expect(summary).toContain('passed');
 });
 
 for (const workspace of ['apps/web', 'apps/accounts', 'packages/ui']) {
