@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
-import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { png, startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import {
   startPostgresCluster,
   type PostgresCluster,
@@ -26,6 +26,7 @@ import {
   type ReportInput,
 } from '../src/modules/governance/store.ts';
 import { recordCounterNotice } from '../src/modules/rights/counter-notice.ts';
+import { MediaStore } from '../src/modules/media/store.ts';
 import { SPACE_REALM_PROFILE } from '../src/modules/space/create.ts';
 import { RULE_PUBLISH_ACTION } from '../src/modules/governance/rules.ts';
 import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
@@ -474,6 +475,47 @@ test('production resume rejects a saved non-Realm plan before live Realm dispatc
   expect(completed.operation.status).toBe('completed');
   expect(completed.enforcement).toMatchObject([{ resource: f.realm, state: 'restricted' }]);
   expect((await receipts()).results?.bindings ?? []).toHaveLength(1);
+});
+
+test('production graph Realm dispatch cannot bypass saved owner validation through a media plan', async () => {
+  const f = await productionFixture();
+  const uploaded = await f.member.upload(png(16, 16));
+  const media = (await f.stack.contentPool.query<{ source: string; state: string; digest: string }>(`
+    SELECT p.id::text AS source,a.state_head::text AS state,p.byte_digest AS digest
+    FROM media.asset a JOIN media.representation p ON p.asset_id=a.id
+    WHERE a.id=$1 AND p.kind='original'`, [uploaded.asset.slice(-36)])).rows[0]!;
+  expect(media).toBeDefined();
+  const accepted = await f.store.decide(f.member.principal, f.input, true);
+  expect(accepted.operation.status).toBe('accepted');
+  const scope = `governance:resource:${f.space}`;
+  await f.grant(scope, DECIDE_ACTION.content_report);
+  const original = MediaStore.prototype.moderateOriginal;
+  let mediaCalls = 0;
+  MediaStore.prototype.moderateOriginal = async function (this: MediaStore,
+    ...args: Parameters<MediaStore['moderateOriginal']>) {
+    mediaCalls++;
+    return original.apply(this, args);
+  };
+  try {
+    const result = await withSavedRead(f.stack.accessPool, accepted.decisionId, row => {
+      if ('authority_kind' in row) return { ...row, authority_kind: 'resource_owner', authority_scope_id: scope };
+      if (row.plan) return { ...row, plan: { ...row.plan as Record<string, unknown>, realm: null, media } };
+      return row;
+    }, () => f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId));
+    expect(result.operation.status).not.toBe('completed');
+    expect(mediaCalls).toBe(0);
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE decision_id=$1',
+      [accepted.decisionId])).rowCount).toBe(0);
+    expect((await f.stack.accessPool.query('SELECT state FROM access.safety_decision_effect WHERE decision_id=$1',
+      [accepted.decisionId])).rows[0]!.state).not.toBe('confirmed');
+    expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:moderationTarget ${iri(f.realm)} }
+    } LIMIT 2`, 4096)).results?.bindings ?? []).toHaveLength(0);
+    const completed = await f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId);
+    expect(completed.operation.status).toBe('completed');
+    expect(completed.enforcement).toMatchObject([{ resource: f.realm, state: 'restricted' }]);
+    expect(mediaCalls).toBe(0);
+  } finally { MediaStore.prototype.moderateOriginal = original; }
 });
 
 async function expectNoDecision(f: Fixture) {
