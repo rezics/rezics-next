@@ -278944,6 +278944,17 @@
           },
           {
             "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "description": "Use latest to start with the newest matching notifications, then pass next unchanged to page older. Cannot be combined with after.",
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "view",
             "required": false,
             "schema": {
@@ -281503,6 +281514,10 @@
                     "count": {
                       "type": "number"
                     },
+                    "generation": {
+                      "pattern": "^[1-9][0-9]{0,18}$",
+                      "type": "string"
+                    },
                     "overflow": {
                       "type": "boolean"
                     },
@@ -281513,6 +281528,7 @@
                   },
                   "required": [
                     "profile",
+                    "generation",
                     "count",
                     "overflow"
                   ],
