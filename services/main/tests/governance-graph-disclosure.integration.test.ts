@@ -161,7 +161,9 @@ test('an ordinary Realm rating-context bundle binds structurally and native SHAC
             GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
               rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:outcome rv:Succeeded }
             GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${digest}`)} a rv:OutboxBatch ;
-              rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 }
+              rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ;
+              rv:eventCount 1 ; rv:event ${iri(`${receipt}:event`)} .
+              ${iri(`${receipt}:event`)} a rv:ModelProbeEvent ; rv:ordinal 0 ; rv:receipt ${iri(receipt)} }
           }
           WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n ;
               rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(stack.env.lineage.routingEpoch)} }
