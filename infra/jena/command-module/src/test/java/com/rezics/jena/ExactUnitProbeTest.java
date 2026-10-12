@@ -171,21 +171,15 @@ public class ExactUnitProbeTest {
 
     @Test(timeout = 30_000) public void postingAndPhraseUseTheSameCutWhenSelectedUnitCommitsDuringTheProbe() throws Exception {
         try (var fixture = new ConsistentReadCaptureTest.Fixture(); ExecutorService workers = Executors.newSingleThreadExecutor()) {
-            var captured = new CountDownLatch(1);
-            var release = new CountDownLatch(1);
+            var published = new java.util.concurrent.atomic.AtomicBoolean();
             fixture.afterPrivateRead = () -> {
-                captured.countDown();
-                ConsistentReadCaptureTest.await(release);
+                ConsistentReadCaptureTest.publishDuringRead(workers, () -> fixture.replace(CommandPolicy.PRIVATE_SEARCH,
+                    ConsistentReadCaptureTest.PRIVATE_UNIT, "gamma delta replaced passage", "en"));
+                published.set(true);
             };
-            var probe = workers.submit(() -> probe(fixture, CommandPolicy.PRIVATE_SEARCH,
-                ConsistentReadCaptureTest.PRIVATE_UNIT, "alpha beta"));
-            try {
-                ConsistentReadCaptureTest.await(captured);
-                fixture.replace(CommandPolicy.PRIVATE_SEARCH, ConsistentReadCaptureTest.PRIVATE_UNIT,
-                    "gamma delta replaced passage", "en");
-            } finally { release.countDown(); }
             assertEquals("captured old RDF, posting and phrase agree after a later commit", "present",
-                probe.get(2, TimeUnit.SECONDS));
+                probe(fixture, CommandPolicy.PRIVATE_SEARCH, ConsistentReadCaptureTest.PRIVATE_UNIT, "alpha beta"));
+            assertTrue("replacement committed during the captured RDF probe", published.get());
             assertEquals("a new probe must see the new cut and detect the stale expected body", "damaged",
                 probe(fixture, CommandPolicy.PRIVATE_SEARCH, ConsistentReadCaptureTest.PRIVATE_UNIT, "alpha beta"));
         }

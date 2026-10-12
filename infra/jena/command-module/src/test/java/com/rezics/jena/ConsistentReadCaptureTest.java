@@ -185,6 +185,15 @@ public class ConsistentReadCaptureTest {
         catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new AssertionError(interrupted); }
     }
 
+    /** Publish on a separate transaction thread at the read's exact seam.
+     * The enclosing test/request deadline owns cancellation; no servlet phase
+     * timer may inject an assertion into an already streaming JSON response. */
+    static void publishDuringRead(ExecutorService writer, Runnable publication) {
+        try { writer.submit(publication).get(); }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new AssertionError(interrupted); }
+        catch (java.util.concurrent.ExecutionException failed) { throw new AssertionError("native publication failed", failed.getCause()); }
+    }
+
     @Test(timeout = 30_000) public void unrelatedOpenWriterDoesNotDelayOrMixTheCapturedCut() throws Exception {
         try (var fixture = new Fixture(); ExecutorService workers = Executors.newFixedThreadPool(2)) {
             var entered = new CountDownLatch(1);
@@ -345,14 +354,14 @@ public class ConsistentReadCaptureTest {
             String function = "urn:test:consistent-read:lazy-row";
             var functions = org.apache.jena.sparql.function.FunctionRegistry.get();
             var previous = functions.get(function);
-            var entered = new CountDownLatch(1);
-            var release = new CountDownLatch(1);
+            var published = new java.util.concurrent.atomic.AtomicBoolean();
             functions.put(function, ignored -> new org.apache.jena.sparql.function.FunctionBase1() {
                 @Override public org.apache.jena.sparql.expr.NodeValue exec(org.apache.jena.sparql.expr.NodeValue row) {
-                    if (row.getInteger().intValueExact() == 2) {
-                        entered.countDown();
-                        await(release);
-                    }
+                    // Row 1's padding flushes before lazy row 2 evaluates. Commit
+                    // here, then read row 2 from the same request-local capture.
+                    if (row.getInteger().intValueExact() == 2 && published.compareAndSet(false, true))
+                        publishDuringRead(workers, () -> fixture.replace(CommandPolicy.PRIVATE_SEARCH,
+                            PRIVATE_UNIT, "gamma delta replacement passage", "en"));
                     String value = fixture.hits(CommandPolicy.PRIVATE_SEARCH, "\"alpha beta\"") + ":"
                         + fixture.hits(CommandPolicy.PRIVATE_SEARCH, "\"gamma delta\"") + ":"
                         + fixture.containsBody(CommandPolicy.PRIVATE_SEARCH, PRIVATE_UNIT, BODY, "en");
@@ -374,13 +383,10 @@ public class ConsistentReadCaptureTest {
                     .header("Accept", "application/sparql-results+json")
                     .timeout(java.time.Duration.ofSeconds(15))
                     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(query)).build();
-                var response = workers.submit(() -> java.net.http.HttpClient.newHttpClient().send(request,
-                    java.net.http.HttpResponse.BodyHandlers.ofString()));
-                await(entered);
-                fixture.replace(CommandPolicy.PRIVATE_SEARCH, PRIVATE_UNIT, "gamma delta replacement passage", "en");
-                release.countDown();
-                var received = response.get(5, TimeUnit.SECONDS);
+                var received = java.net.http.HttpClient.newHttpClient().send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
                 assertEquals(received.body(), 200, received.statusCode());
+                assertTrue("replacement committed during lazy row evaluation", published.get());
                 var rows = org.apache.jena.atlas.json.JSON.parse(received.body()).get("results").getAsObject()
                     .get("bindings").getAsArray();
                 assertEquals(2, rows.size());
@@ -396,7 +402,6 @@ public class ConsistentReadCaptureTest {
                 assertEquals("0:1:false", nextRows.get(0).getAsObject().get("probe").getAsObject()
                     .get("value").getAsString().value());
             } finally {
-                release.countDown();
                 server.stop();
                 if (previous == null) functions.remove(function); else functions.put(function, previous);
             }
