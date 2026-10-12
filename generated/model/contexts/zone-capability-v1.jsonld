@@ -51,6 +51,10 @@
       "@id": "https://rezics.com/vocab/disclosure",
       "@type": "@id"
     },
+    "rv:homeDocumentHead": {
+      "@id": "https://rezics.com/vocab/homeDocumentHead",
+      "@type": "@id"
+    },
     "rv:manifest": {
       "@id": "https://rezics.com/vocab/manifest",
       "@type": "@id"
@@ -74,6 +78,14 @@
     "rv:presentation": {
       "@id": "https://rezics.com/vocab/presentation",
       "@type": "@id"
+    },
+    "rv:publishedPage": {
+      "@id": "https://rezics.com/vocab/publishedPage",
+      "@type": "@id"
+    },
+    "rv:publishedPageCount": {
+      "@id": "https://rezics.com/vocab/publishedPageCount",
+      "@type": "xsd:integer"
     },
     "rv:routeSegment": {
       "@id": "https://rezics.com/vocab/routeSegment"

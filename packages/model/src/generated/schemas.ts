@@ -1286,6 +1286,14 @@ export const ZoneCapabilityV1ZoneShapeSchema = Type.Object({ "@id": Type.String(
 
 export type ZoneCapabilityV1ZoneShape = Static<typeof ZoneCapabilityV1ZoneShapeSchema>;
 
+export const ZoneCapabilityV1HomeDocumentShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/ZoneHomeDocument"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:homeDocumentHead": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ZoneCapabilityV1HomeDocumentShape = Static<typeof ZoneCapabilityV1HomeDocumentShapeSchema>;
+
+export const ZoneCapabilityV1HomeRevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/ZoneHomeRevision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { uniqueItems: true, minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { uniqueItems: true, maxItems: 1 })), "rv:publishedPage": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 32 }), "rv:publishedPageCount": Type.Array(Type.Integer({"minimum":1,"maximum":32}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/zone-capability-v1"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/zone-capability-v1"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ZoneCapabilityV1HomeRevisionShape = Static<typeof ZoneCapabilityV1HomeRevisionShapeSchema>;
+
 export const ZoneCapabilityV1MountShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/ZoneMount"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:zone": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:routeSegment": Type.Array(Type.String({"maxLength":64,"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:disclosure": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Public"), Type.Literal("https://rezics.com/vocab/Private")]), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:presentation": Type.Optional(Type.Array(Type.String({}), { uniqueItems: true, maxItems: 1 })) }, { additionalProperties: true });
 
 export type ZoneCapabilityV1MountShape = Static<typeof ZoneCapabilityV1MountShapeSchema>;
@@ -1624,6 +1632,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-type-v3/work-revision-shape": WorkTypeV3WorkRevisionShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/navigation-link-shape": ZoneCapabilityV1NavigationLinkShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/zone-shape": ZoneCapabilityV1ZoneShapeSchema,
+  "https://rezics.com/definition/zone-capability-v1/home-document-shape": ZoneCapabilityV1HomeDocumentShapeSchema,
+  "https://rezics.com/definition/zone-capability-v1/home-revision-shape": ZoneCapabilityV1HomeRevisionShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/mount-shape": ZoneCapabilityV1MountShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/revision-shape": ZoneCapabilityV1RevisionShapeSchema,
   "https://rezics.com/definition/zone-presentation-v1/zone-shape": ZonePresentationV1ZoneShapeSchema,

@@ -13,6 +13,8 @@ export const zoneCapabilityDeclaration = {
     revision: {
       types: ['rv:ZoneRevision'],
     },
+    'home-document': { types: ['rv:ZoneHomeDocument'] },
+    'home-revision': { types: ['rv:ZoneHomeRevision'] },
   },
 } as const satisfies TurtleDeclaration;
 

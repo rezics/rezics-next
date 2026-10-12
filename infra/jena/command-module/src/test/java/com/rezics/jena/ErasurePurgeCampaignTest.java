@@ -36,6 +36,64 @@ public class ErasurePurgeCampaignTest {
     }
     private static Path directory() throws Exception { return Files.createTempDirectory(Path.of(System.getProperty("java.io.tmpdir")), "campaign-"); }
 
+    @Test public void purgedHomeCutDropsAllBindingDigestsAndRetainsTheSiteAndCutIdentity() throws Exception {
+        Path base = directory(), sourcePath = base.resolve("source"), destPath = base.resolve("destination");
+        String home = "https://rezics.com/id/00000000-0000-4000-8000-0000000000d1";
+        Node cut = iri(home), page = iri("urn:home:document"), site = iri("urn:home:site");
+        Dataset source = TDB2Factory.connectDataset(sourcePath.toString());
+        source.begin(ReadWrite.WRITE);
+        var graph = source.asDatasetGraph();
+        graph.add(REVISIONS, cut, RDF.type.asNode(), rv("ZoneHomeRevision"));
+        graph.add(REVISIONS, cut, rv("component"), page);
+        graph.add(REVISIONS, cut, RDF.type.asNode(), rv("ErasedRevision"));
+        graph.add(REVISIONS, cut, EPOCH, NodeFactory.createLiteralDT("4", org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+        graph.add(iri(CommandPolicy.CURRENT), page, rv("homeDocumentHead"), cut);
+        graph.add(REVISIONS, site, rv("homeRevision"), cut);
+        graph.add(REVISIONS, site, rv("navigationRevision"), iri("urn:home:navigation"));
+        for (int n = 1; n <= 2; n++) {
+            Node binding = iri("urn:home:binding:" + n);
+            graph.add(REVISIONS, cut, rv("publishedPage"), binding);
+            graph.add(REVISIONS, binding, rv("contentRevision"), iri(target(n)));
+            graph.add(REVISIONS, binding, rv("byteDigest"), NodeFactory.createLiteralString("digest-" + n));
+            graph.add(REVISIONS, binding, rv("page"), page);
+        }
+        source.commit(); source.end(); source.close();
+        ErasurePurge.main(new String[]{sourcePath.toString(), destPath.toString(), home, "4"});
+        Dataset output = TDB2Factory.connectDataset(destPath.toString()); output.begin(ReadWrite.READ);
+        var copied = output.asDatasetGraph();
+        for (int n = 1; n <= 2; n++)
+            assertFalse(copied.contains(Node.ANY, iri("urn:home:binding:" + n), Node.ANY, Node.ANY));
+        assertTrue(copied.contains(REVISIONS, cut, RDF.type.asNode(), rv("ErasedRevision")));
+        assertTrue(copied.contains(iri(CommandPolicy.CURRENT), page, rv("homeDocumentHead"), cut));
+        assertTrue(copied.contains(REVISIONS, site, rv("homeRevision"), cut));
+        assertTrue(copied.contains(REVISIONS, site, rv("navigationRevision"), iri("urn:home:navigation")));
+        assertFalse(copied.contains(REVISIONS, cut, rv("component"), Node.ANY));
+        output.end(); output.close();
+    }
+
+    @Test public void replacementHomeCutMayRetainOnlyItsOwnErasedPredecessorIdentity() {
+        String old = "https://rezics.com/id/00000000-0000-4000-8000-0000000000d1";
+        String next = "https://rezics.com/id/00000000-0000-4000-8000-0000000000d2";
+        String page = "https://rezics.com/id/00000000-0000-4000-8000-0000000000d3";
+        DatasetGraph graph = DatasetGraphFactory.createTxnMem();
+        graph.add(REVISIONS, iri(old), RDF.type.asNode(), rv("ErasedRevision"));
+        graph.add(iri(CommandPolicy.CURRENT), iri(page), rv("homeDocumentHead"), iri(old));
+        String prefix = "PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH <" + CommandPolicy.REVISIONS + "> { <"
+            + next + "> a rv:ZoneHomeRevision ; rv:component <" + page + "> ; ";
+        for (String predicate : new String[]{"predecessor", "contentRevision", "publishedPage"}) {
+            var request = org.apache.jena.update.UpdateFactory.create(prefix + "rv:" + predicate + " <" + old + "> . } }");
+            var plan = new CommandPolicy.Plan(request, Set.of(CommandPolicy.REVISIONS), Set.of(), Set.of(next), Set.of(), false, false, false);
+            String refusal = ErasurePolicy.preflight(graph, plan, "urn:rezics:receipt:home-publication");
+            if (predicate.equals("predecessor")) assertNull(refusal);
+            else assertEquals("erased exact revision cannot be reactivated", refusal);
+        }
+        graph.deleteAny(iri(CommandPolicy.CURRENT), iri(page), rv("homeDocumentHead"), Node.ANY);
+        var request = org.apache.jena.update.UpdateFactory.create(prefix + "rv:predecessor <" + old + "> . } }");
+        var plan = new CommandPolicy.Plan(request, Set.of(CommandPolicy.REVISIONS), Set.of(), Set.of(next), Set.of(), false, false, false);
+        assertEquals("erased exact revision cannot be reactivated", ErasurePolicy.preflight(graph, plan, "urn:rezics:receipt:home-publication"));
+        graph.close();
+    }
+
     @Test public void exactInputDigestBoundRejectsMixedDuplicateAndInvalidPairs() throws Exception {
         String exact = row(2) + row(1);
         var parsed = ErasurePurge.campaign(exact.getBytes(StandardCharsets.US_ASCII));

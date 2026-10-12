@@ -54,10 +54,31 @@ final class ErasurePolicy {
         List<Quad> inserts = update instanceof UpdateModify modify ? modify.getInsertQuads()
             : update instanceof UpdateDataInsert insert ? insert.getQuads() : new ArrayList<>();
         for (Quad quad : inserts) {
-            if (erased(data, quad.getSubject()) || erased(data, quad.getObject()))
+            if (erased(data, quad.getSubject()) || (erased(data, quad.getObject())
+                && !retainedHomePredecessor(data, inserts, quad)))
                 return "erased exact revision cannot be reactivated";
         }
         return null;
+    }
+
+    /** A fresh home cut retains its predecessor's identity without restoring
+     * that cut's bytes. Even after compaction the owner's retained head proves
+     * which tombstone it replaces; no other reference to erased data is allowed. */
+    private static boolean retainedHomePredecessor(DatasetGraph data, List<Quad> inserts, Quad quad) {
+        Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
+        Node predecessor = NodeFactory.createURI("https://rezics.com/vocab/predecessor");
+        Node component = NodeFactory.createURI("https://rezics.com/vocab/component");
+        Node homeHead = NodeFactory.createURI("https://rezics.com/vocab/homeDocumentHead");
+        Node homeType = NodeFactory.createURI("https://rezics.com/vocab/ZoneHomeRevision");
+        if (!quad.getGraph().equals(revisions) || !quad.getPredicate().equals(predecessor)
+            || !inserts.contains(new Quad(revisions, quad.getSubject(), RDF.type.asNode(), homeType))) return false;
+        for (Quad candidate : inserts) {
+            if (candidate.getGraph().equals(revisions) && candidate.getSubject().equals(quad.getSubject())
+                && candidate.getPredicate().equals(component)
+                && data.contains(current, candidate.getObject(), homeHead, quad.getObject())) return true;
+        }
+        return false;
     }
 
     private static String markerFootprint(CommandPolicy.Plan plan, String receipt) {

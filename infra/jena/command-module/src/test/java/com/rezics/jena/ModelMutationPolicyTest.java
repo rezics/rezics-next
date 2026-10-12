@@ -224,6 +224,47 @@ public class ModelMutationPolicyTest {
             ? Path.of("profiles") : Path.of("../../../generated/model"));
     }
 
+    @Test public void homeDocumentHeadAdvancePreservesErasedHistoryAndChecksItsOwnFields() {
+        ProfileRegistry profiles = zoneProfiles();
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String home = "https://rezics.com/id/00000000-0000-4000-8000-0000000000c1";
+            Node document = uri(home), current = uri(CommandPolicy.CURRENT), revisions = uri(CommandPolicy.REVISIONS);
+            Node old = uri("urn:probe:home:old"), next = uri("urn:probe:home:next");
+            data.add(current, document, RDF.type.asNode(), uri(RV + "ZoneHomeDocument"));
+            data.add(current, document, uri(RV + "homeDocumentHead"), old);
+            // These unedited anchors are deliberately outside the live publication
+            // shape. Head maintenance must not resurrect or restage erased history.
+            for (int i = 0; i < 300; i++) {
+                Node cut = i == 0 ? old : uri("urn:probe:home:history:" + i);
+                data.add(revisions, cut, RDF.type.asNode(), uri(RV + "ZoneHomeRevision"));
+                data.add(revisions, cut, RDF.type.asNode(), uri(RV + "ErasedRevision"));
+                data.add(revisions, cut, uri(RV + "component"), document);
+            }
+            data.add(revisions, next, RDF.type.asNode(), uri(RV + "ZoneHomeRevision"));
+            CommandPolicy.Plan plan = zonePlan(home);
+            ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(profiles, data, plan);
+            data.delete(current, document, uri(RV + "homeDocumentHead"), old);
+            data.add(current, document, uri(RV + "homeDocumentHead"), next);
+            ReadLog log = new ReadLog(data);
+            assertNull(ModelMutationPolicy.check(profiles, log, plan, "urn:rezics:receipt:home:probe", before));
+            for (String read : log.reads) {
+                String[] part = read.split(" ");
+                assertFalse(read, part[2].equals("*") && part[4].equals(home));
+            }
+            data.delete(current, document, uri(RV + "homeDocumentHead"), next);
+            String missing = report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:home:probe", before));
+            assertTrue(missing, missing.contains(RV + "homeDocumentHead"));
+            data.add(current, document, uri(RV + "homeDocumentHead"), uri("urn:probe:not-a-cut"));
+            String invalid = report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:home:probe", before));
+            assertTrue(invalid, invalid.contains(RV + "homeDocumentHead"));
+            data.delete(current, document, RDF.type.asNode(), uri(RV + "ZoneHomeDocument"));
+            assertEquals("prestate canonical type removed: " + home,
+                report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:home:probe", before)));
+        } finally { data.abort(); data.end(); }
+    }
+
     private static Node zoneRevision(DatasetGraph data, String id, Node zone, Node predecessor) {
         Node revision = uri("urn:probe:zone-revision:" + id);
         Node revisions = uri(CommandPolicy.REVISIONS);

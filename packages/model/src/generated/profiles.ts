@@ -1695,17 +1695,21 @@ export const profileRegistry = {
     ]
   },
   "zone-capability-v1": {
-    "sha256": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
+    "sha256": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "file": "shapes/zone-capability-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/zone-capability-v1/navigation-link-shape",
       "https://rezics.com/definition/zone-capability-v1/zone-shape",
+      "https://rezics.com/definition/zone-capability-v1/home-document-shape",
+      "https://rezics.com/definition/zone-capability-v1/home-revision-shape",
       "https://rezics.com/definition/zone-capability-v1/mount-shape",
       "https://rezics.com/definition/zone-capability-v1/revision-shape"
     ],
     "focusRoles": [
       "navigation-link",
       "zone",
+      "home-document",
+      "home-revision",
       "mount",
       "revision"
     ]

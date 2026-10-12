@@ -63,6 +63,7 @@ public final class RevisionClasses {
         "VotingCharterRevision",
         "WorkMetadataDetailsV2Revision",
         "WorkMetadataRevision",
+        "ZoneHomeRevision",
         "ZoneRevision"
     );
 
@@ -132,6 +133,7 @@ public final class RevisionClasses {
         "VotingCharterRevision",
         "WorkMetadataDetailsV2Revision",
         "WorkMetadataRevision",
+        "ZoneHomeRevision",
         "ZoneRevision"
     );
 

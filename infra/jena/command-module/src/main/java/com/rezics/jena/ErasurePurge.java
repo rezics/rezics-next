@@ -25,6 +25,8 @@ import org.apache.jena.vocabulary.RDF;
  */
 public final class ErasurePurge {
     private static final Node RV_CONTENT_REVISION = uri("https://rezics.com/vocab/contentRevision");
+    private static final Node RV_PUBLISHED_PAGE = uri("https://rezics.com/vocab/publishedPage");
+    private static final Node ZONE_HOME_REVISION = uri("https://rezics.com/vocab/ZoneHomeRevision");
     private static final Node RV_REVISION = uri("https://rezics.com/vocab/revision");
     private static final Node RV_PROJECTION = uri("https://rezics.com/vocab/projection");
     private static final Node RV_MATCH_UNIT = uri("https://rezics.com/vocab/matchUnit");
@@ -173,6 +175,14 @@ public final class ErasurePurge {
                         // A Content URN still drops its projection and every edge that names it.
                         // A revision IRI drops only its own revision-graph quads and its text documents.
                         Set<Node> removed = new HashSet<>(contentTargets);
+                        // The cut owns its immutable exact-byte bindings. Remove
+                        // those subjects too, including every retained digest;
+                        // incoming H naming edges still retain the absent cut.
+                        for (Node target : revisionTargets) {
+                            if (!input.contains(REVISIONS, target, RDF.type.asNode(), ZONE_HOME_REVISION)) continue;
+                            var bindings = input.find(REVISIONS, target, RV_PUBLISHED_PAGE, Node.ANY);
+                            while (bindings.hasNext()) removed.add(bindings.next().getObject());
+                        }
                         addDependents(input, removed);
                         Set<Node> textDocuments = textIndexDocuments(input, revisionTargets);
                         long retained = 0;

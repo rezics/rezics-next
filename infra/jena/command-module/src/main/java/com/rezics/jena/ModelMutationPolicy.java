@@ -123,7 +123,8 @@ final class ModelMutationPolicy {
             // on an unedited neighbour is not this change's responsibility.
             if (stableCompositionClass(data, entry.getKey(), entry.getValue())
                 || stableAgentIdentity(data, entry.getKey(), entry.getValue())
-                || stableZoneIdentity(data, entry.getKey(), entry.getValue())) continue;
+                || stableZoneIdentity(data, entry.getKey(), entry.getValue())
+                || stableHomeDocumentIdentity(data, entry.getKey(), entry.getValue())) continue;
             boolean agentTombstone = agentCompensation(data, receipt, entry.getKey(), entry.getValue());
             String overflow = dependents(profiles, data, entry.getKey(), plan,
                 dependentCurrent, dependentRevisions, inboundQuads,
@@ -398,6 +399,15 @@ final class ModelMutationPolicy {
     private static boolean stableZoneIdentity(DatasetGraph data, String name, Subject before) {
         if (before.selection() == null || typeChanged(data, name, before)) return false;
         return before.selection().type().equals(RV + "Zone");
+    }
+
+    /** Historical home cuts read only the document's class through rv:component.
+     * Advancing its head cannot invalidate those immutable cuts, including erased
+     * cuts whose publication shape no longer applies. The edited document and
+     * newly staged cut still receive their own validation. */
+    private static boolean stableHomeDocumentIdentity(DatasetGraph data, String name, Subject before) {
+        if (before.selection() == null || typeChanged(data, name, before)) return false;
+        return before.selection().type().equals(RV + "ZoneHomeDocument");
     }
 
     private static String dependents(ProfileRegistry profiles, DatasetGraph data, String child,

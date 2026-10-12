@@ -20,6 +20,14 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
   cpSync(join(root, 'infra/jena/command-module/src/main'), join(build, 'src/main'), {
     recursive: true,
   });
+  cpSync(
+    join(root, 'infra/jena/command-module/src/test/resources'),
+    join(build, 'src/test/resources'),
+    {
+      recursive: true,
+    },
+  );
+  cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
   mkdirSync(join(build, 'src/test/java/com/rezics/jena'), { recursive: true });
   cpSync(
     join(
@@ -27,6 +35,13 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
       'infra/jena/command-module/src/test/java/com/rezics/jena/ErasurePurgeCampaignTest.java',
     ),
     join(build, 'src/test/java/com/rezics/jena/ErasurePurgeCampaignTest.java'),
+  );
+  cpSync(
+    join(
+      root,
+      'infra/jena/command-module/src/test/java/com/rezics/jena/ModelMutationPolicyTest.java',
+    ),
+    join(build, 'src/test/java/com/rezics/jena/ModelMutationPolicyTest.java'),
   );
   mkdirSync(join(build, 'tmp'));
   try {
@@ -51,7 +66,7 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
         '-ntp',
         '-Dmaven.repo.local=/maven-cache',
         '-Djava.io.tmpdir=/build/tmp',
-        '-Dtest=ErasurePurgeCampaignTest',
+        '-Dtest=ErasurePurgeCampaignTest,ModelMutationPolicyTest',
         'test',
       ],
       {
