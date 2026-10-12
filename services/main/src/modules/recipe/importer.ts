@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { OccurrenceRecord } from '../structure/format.ts';
-import { isStructureUnitReference } from '../structure/format.ts';
-import { recognizeUnit, RECIPE_UNIT_DEFINITIONS, type RecipeUnitImportability } from './display.ts';
+import { isStructureUnitReference, checkOccurrenceQualifier, checkIngredientTextParts } from '../structure/format.ts';
+import { matchRecipeUnit, type RecipeUnitImportability } from './display.ts';
 
 export interface ImportedIngredient {
   sourceKey: string;
@@ -32,10 +32,10 @@ export const MAX_RECIPE_IMPORT_OCCURRENCES = 128;
 export const MAX_RECIPE_SECTION_DEPTH = 16;
 export const MAX_RECIPE_JSON_DEPTH = 32;
 
-/** Schema instruction-list arrays add cardinality, not an extra nesting level. */
+/** Every object-property and array-element edge contributes to parsed JSON depth. */
 export function measureRecipeJSON(value: unknown): { depth: number; values: number } {
-  const pending: Array<{ value: unknown; depth: number; location: 'root' | 'list' | 'node' | 'other' }> = [
-    { value, depth: 0, location: 'root' },
+  const pending: Array<{ value: unknown; depth: number }> = [
+    { value, depth: 0 },
   ];
   let depth = 0, values = 0;
   while (pending.length) {
@@ -43,18 +43,16 @@ export function measureRecipeJSON(value: unknown): { depth: number; values: numb
     depth = Math.max(depth, item.depth);
     values++;
     if (Array.isArray(item.value)) {
-      for (const child of item.value) pending.push({ value: child,
-        depth: item.depth + (item.location === 'list' ? 0 : 1),
-        location: item.location === 'list' ? 'node' : 'other' });
+      for (const child of item.value) pending.push({ value: child, depth: item.depth + 1 });
     } else if (item.value && typeof item.value === 'object') {
       const row = item.value as Record<string, unknown>;
       for (const [key, child] of Object.entries(row)) {
         // The fixed context is checked separately by intake, as before this shared measure.
-        if (item.location === 'root' && key === '@context' && child === 'https://schema.org') continue;
-        pending.push({ value: child, depth: item.depth + 1,
-          location: (item.location === 'root' && key === 'recipeInstructions')
-            || ((item.location === 'list' || item.location === 'node')
-              && row['@type'] === 'HowToSection' && key === 'itemListElement') ? 'list' : 'other' });
+        if (item.depth === 0 && key === '@context' && child === 'https://schema.org') {
+          depth = Math.max(depth, item.depth + 1);
+          continue;
+        }
+        pending.push({ value: child, depth: item.depth + 1 });
       }
     }
   }
@@ -63,7 +61,7 @@ export function measureRecipeJSON(value: unknown): { depth: number; values: numb
 
 export type RecipeCapacityRefusal = {
   status: 'not-importable'; code: 'recipe_not_importable';
-  limit: 'occurrences' | 'bytes' | 'depth'; measured: number; allowed: number;
+  limit: 'occurrences' | 'bytes' | 'depth' | 'section-depth'; measured: number; allowed: number;
 };
 export type RecipeImportability = { status: 'importable' } | RecipeCapacityRefusal | RecipeUnitImportability;
 
@@ -120,15 +118,16 @@ const vulgarFractions: Readonly<Record<string, readonly [number, number]>> = {
   '⅚': [5, 6], '⅛': [1, 8], '⅜': [3, 8], '⅝': [5, 8], '⅞': [7, 8],
 };
 const amountToken = String.raw`(?:\d+\s+\d+[\/⁄]\d+|\d+[\/⁄]\d+|\d+\s*[¼-¾⅐-⅞]|[¼-¾⅐-⅞]|\d+\.\d+|\d+)`;
-const amountEnd = String.raw`(?:\s+|(?=[\p{L}])|$)`;
-const amountPrefix = new RegExp(String.raw`^\s*(${amountToken})${amountEnd}`, 'u');
-const rangePrefix = new RegExp(String.raw`^\s*(${amountToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${amountToken})${amountEnd}`, 'u');
+const amountEnd = String.raw`(?=$|[^\p{L}\p{N}])`;
+const amountPrefix = new RegExp(String.raw`^(\s*)(${amountToken})${amountEnd}`, 'u');
+const rangePrefix = new RegExp(String.raw`^(\s*)(${amountToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${amountToken})${amountEnd}`, 'u');
 
 interface ExactAmount { numerator: number; denominator: number }
 interface ParsedAmount {
   amount: ExactAmount;
   amountUpper?: ExactAmount;
   amountLexical: string;
+  span: { start: number; end: number };
   remainder: string;
 }
 
@@ -161,32 +160,36 @@ function exactAmount(lexical: string): ExactAmount | undefined {
 function ingredientAmount(lexical: string): ParsedAmount | undefined {
   const range = rangePrefix.exec(lexical);
   if (range) {
-    const amount = exactAmount(range[1]!);
-    const amountUpper = exactAmount(range[2]!);
+    const amount = exactAmount(range[2]!);
+    const amountUpper = exactAmount(range[3]!);
     if (!amount || !amountUpper || BigInt(amount.numerator) * BigInt(amountUpper.denominator)
       > BigInt(amountUpper.numerator) * BigInt(amount.denominator)) return undefined;
-    return { amount, amountUpper, amountLexical: range[0].trim(), remainder: lexical.slice(range[0].length) };
+    const span = { start: range[1]!.length, end: range[0].length };
+    return { amount, amountUpper, span, amountLexical: lexical.slice(span.start, span.end),
+      remainder: lexical.slice(span.end) };
   }
   const match = amountPrefix.exec(lexical);
   if (!match) return undefined;
   // A failed range must not fall back to its lower endpoint as a scalar amount.
   const remainder = lexical.slice(match[0].length);
-  if (/^(?:(?:to|or)\s+|[-–]\s*)[\d¼-¾⅐-⅞]/u.test(remainder)) return undefined;
-  const amount = exactAmount(match[1]!);
-  return amount ? { amount, amountLexical: match[1]!, remainder } : undefined;
-}
-
-/** Return the quantity prefix recognized by the same parser used for imports. */
-export function ingredientAmountLexical(value: string): string | undefined {
-  return ingredientAmount(value)?.amountLexical;
+  if (/^\s*(?:(?:to|or)\s+|[-–]\s*)[\d¼-¾⅐-⅞]/u.test(remainder)) return undefined;
+  const amount = exactAmount(match[2]!);
+  const span = { start: match[1]!.length, end: match[0].length };
+  return amount ? { amount, span, amountLexical: lexical.slice(span.start, span.end), remainder } : undefined;
 }
 
 function ingredient(value: string, sourceKey: string): ImportedIngredient {
   const parsed = ingredientAmount(value);
-  const unitText = parsed?.remainder.match(/^([\p{L}]+)\b/u)?.[1];
+  const afterSpace = (start: number) => {
+    while (start < value.length && /\s/u.test(value[start]!)) start++;
+    return start;
+  };
+  const unitSpan = parsed ? matchRecipeUnit(value, afterSpace(parsed.span.end)) : undefined;
+  const unitText = unitSpan ? value.slice(unitSpan.start, unitSpan.end) : undefined;
+  const textParts = parsed ? { amount: parsed.span, ...(unitSpan ? { unit: unitSpan } : {}),
+    name: { start: afterSpace(unitSpan?.end ?? parsed.span.end), end: value.length } } : undefined;
   return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value, language: 'en' },
-    ...(parsed ? { amountLexical: parsed.amountLexical }
-      : value.length <= 100 && !/^\s*[-\d¼-¾⅐-⅞⅟]/u.test(value) ? { amountLexical: value } : {}),
+    ...(parsed ? { amountLexical: parsed.amountLexical, textParts } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
     ...(unitText ? { unitText } : {}), optional: false,
     scaling: 'linear', substituteFor: [], parseStatus: parsed ? 'partial' : 'unparsed' } };
@@ -194,7 +197,7 @@ function ingredient(value: string, sourceKey: string): ImportedIngredient {
 
 function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
   language: string): ImportedIngredient | undefined {
-  const name = textOf(value.name);
+  const name = typeof value.name === 'string' ? value.name : undefined;
   const quantityText = (input: unknown) => typeof input === 'number' && Number.isFinite(input)
     ? String(input) : textOf(input);
   const rawValue = quantityText(value.value);
@@ -203,30 +206,25 @@ function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
   const unit = isStructureUnitReference(code) ? code : undefined;
   const unitText = (value.parseStatus === undefined ? textOf(value.unitText)
     : originalTextOf(value.unitText)) ?? (unit ? undefined : code);
-  const symbol = unitText ?? (unit ? RECIPE_UNIT_DEFINITIONS.get(unit) : undefined);
-  const named = name ? ingredientAmount(name) : undefined;
-  const namedUnit = named?.remainder.match(/^([\p{L}]+)/u)?.[1];
-  // A number in a food name is not a complete quantity unless its written unit is recognizable.
-  const completeName = named && namedUnit && (recognizeUnit(namedUnit) || namedUnit === symbol);
   const hasQuantity = Object.hasOwn(value, 'value') || Object.hasOwn(value, 'maxValue');
   const quantity = Object.hasOwn(value, 'maxValue') ? `${rawValue ?? ''} to ${rawUpper ?? ''}`
     : hasQuantity ? rawValue ?? '' : undefined;
-  const original = originalTextOf(value.text) ?? (completeName ? name
-    : [quantity, symbol, name].filter(Boolean).join(' '));
-  if (!original) return undefined;
+  const original = typeof value.text === 'string' ? value.text : name;
+  if (original === undefined) return undefined;
   const fields = quantity !== undefined ? ingredientAmount(quantity) : undefined;
-  const parsed = quantity !== undefined ? (fields && !fields.remainder ? fields : undefined)
-    : value.parseStatus === undefined ? (completeName ? named : ingredientAmount(original)) : undefined;
-  const amountLexical = originalTextOf(value.amountLexical)
-    ?? (value.parseStatus === undefined ? parsed?.amountLexical : undefined);
-  return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value: original, language },
-    ...(amountLexical ? { amountLexical } : {}),
+  const parsed = fields && !fields.remainder.trim() ? fields : undefined;
+  const textParts = value.textParts === undefined ? undefined : checkIngredientTextParts(value.textParts);
+  const amountLexical = textParts ? original.slice(textParts.amount.start, textParts.amount.end) : undefined;
+  const qualifier: ImportedIngredient['qualifier'] = { type: 'ingredient-line', originalText: { value: original, language },
+    ...(name !== undefined ? { name } : {}),
+    ...(textParts ? { textParts, amountLexical } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
     ...(unit ? { unit } : {}), ...(unitText ? { unitText } : {}), optional: value.optional === true,
     scaling: 'linear', substituteFor: [], parseStatus: quantity !== undefined && !parsed ? 'unparsed'
       : value.parseStatus === 'parsed'
       || value.parseStatus === 'partial' || value.parseStatus === 'unparsed'
-      ? value.parseStatus : parsed ? 'partial' : 'unparsed' } };
+      ? value.parseStatus : parsed ? 'partial' : 'unparsed' };
+  return { sourceKey, qualifier: checkOccurrenceQualifier(qualifier) as ImportedIngredient['qualifier'] };
 }
 
 function instruction(value: unknown): string | undefined {
@@ -263,7 +261,7 @@ export function importRecipe(value: unknown, sourceKey: string): RecipeImport {
       ? (root.recipeIngredient as { itemListElement: unknown[] }).itemListElement : [];
   const ingredients = ingredientRows.flatMap((item, index) => {
     const pointer = `${sourceKey}#/recipeIngredient/${index}`;
-    const direct = textOf(item);
+    const direct = originalTextOf(item);
     if (direct) {
       const imported = ingredient(direct, pointer);
       imported.qualifier.originalText.language = language;
@@ -279,7 +277,7 @@ export function importRecipe(value: unknown, sourceKey: string): RecipeImport {
   const addInstructions = (value: unknown, section: number, pointer: string, inheritedLanguage: string,
     depth = 0) => {
     if (depth > MAX_RECIPE_SECTION_DEPTH) throw new RecipeNotImportable({ status: 'not-importable',
-      code: 'recipe_not_importable', limit: 'depth', measured: depth, allowed: MAX_RECIPE_SECTION_DEPTH });
+      code: 'recipe_not_importable', limit: 'section-depth', measured: depth, allowed: MAX_RECIPE_SECTION_DEPTH });
     const rows = oneOrMany(value);
     for (const [index, item] of rows.entries()) {
       const sourcePointer = Array.isArray(value) ? `${pointer}/${index}` : pointer;

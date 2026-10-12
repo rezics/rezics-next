@@ -107,8 +107,8 @@ export function isStructureUnitReference(value: unknown): value is string {
 }
 const objectRef = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
 const orderKey = Type.String({ pattern: '^[0-9a-z]+$', maxLength: STRUCTURE_LIMITS.orderKeyBytes });
-const text = (maxLength: number) => Type.Object({
-  value: Type.String({ minLength: 1, maxLength }),
+const text = (maxLength: number, minLength = 1) => Type.Object({
+  value: Type.String({ minLength, maxLength }),
   language: Type.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
 }, { additionalProperties: false });
 const bounded = (minimum: number) => Type.Integer({ minimum, maximum: 1_000_000_000_000 });
@@ -116,6 +116,14 @@ const bounded = (minimum: number) => Type.Integer({ minimum, maximum: 1_000_000_
 const rational = Type.Object({ numerator: bounded(0), denominator: bounded(1) },
   { additionalProperties: false });
 const scaling = Type.Union([Type.Literal('linear'), Type.Literal('non-linear'), Type.Literal('not-scalable')]);
+const textSpan = Type.Object({ start: Type.Integer({ minimum: 0, maximum: 1000 }),
+  end: Type.Integer({ minimum: 0, maximum: 1000 }) }, { additionalProperties: false });
+export const ingredientTextParts = Type.Object({ amount: textSpan, unit: Type.Optional(textSpan),
+  name: textSpan }, { additionalProperties: false });
+export function checkIngredientTextParts(value: unknown): Static<typeof ingredientTextParts> {
+  if (!Value.Check(ingredientTextParts, value)) throw new InvalidStructureObject('ingredient text spans differ from their format');
+  return value as Static<typeof ingredientTextParts>;
+}
 
 const selection = Type.Union([
   Type.Object({ mode: Type.Literal('follow-context') }, { additionalProperties: false }),
@@ -141,7 +149,9 @@ const qualifier = Type.Union([
     presentation: Type.Optional(reference),
   }, { additionalProperties: false }),
   Type.Object({
-    type: Type.Literal('ingredient-line'), originalText: text(1000),
+    type: Type.Literal('ingredient-line'), originalText: text(1000, 0),
+    name: Type.Optional(Type.String({ maxLength: 1000 })),
+    textParts: Type.Optional(ingredientTextParts),
     amountLexical: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     amount: Type.Optional(rational), amountUpper: Type.Optional(rational),
     unit: Type.Optional(reference), unitText: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
@@ -427,6 +437,17 @@ export function checkOccurrenceQualifier(value: unknown): NonNullable<Occurrence
   }
   if (checked.type === 'ingredient-line' && checked.amountUpper !== undefined && checked.amount === undefined) {
     throw new InvalidStructureObject('an amount range needs its lower bound');
+  }
+  if (checked.type === 'ingredient-line' && checked.textParts) {
+    const parts = checked.textParts, source = checked.originalText.value;
+    const spans = [parts.amount, parts.name, ...(parts.unit ? [parts.unit] : [])];
+    if (!checked.amount || checked.name !== undefined || spans.some(span => span.start > span.end || span.end > source.length)
+      || parts.amount.start === parts.amount.end || parts.amount.end > (parts.unit?.start ?? parts.name.start)
+      || (parts.unit?.end ?? parts.amount.end) > parts.name.start
+      || checked.amountLexical !== source.slice(parts.amount.start, parts.amount.end)
+      || (parts.unit && checked.unitText !== source.slice(parts.unit.start, parts.unit.end))) {
+      throw new InvalidStructureObject('ingredient text spans differ from their retained source');
+    }
   }
   return checked;
 }

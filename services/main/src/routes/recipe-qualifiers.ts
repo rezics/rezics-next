@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { languageTag } from '../modules/display-language/schema.ts';
+import { ingredientTextParts } from '../modules/structure/format.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const rational = t.Object(
@@ -21,7 +22,10 @@ const text = (max: number) =>
 export const ingredientLine = t.Object(
   {
     type: t.Literal('ingredient-line'),
-    originalText: text(1000),
+    originalText: t.Object({ value: t.String({ minLength: 0, maxLength: 1000 }), language: languageTag },
+      { additionalProperties: false }),
+    name: t.Optional(t.String({ maxLength: 1000 })),
+    textParts: t.Optional(ingredientTextParts),
     amountLexical: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
     amount: t.Optional(rational),
     amountUpper: t.Optional(rational),

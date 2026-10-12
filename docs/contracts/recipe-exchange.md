@@ -24,6 +24,8 @@ Foreign ingredient strings remain text. Every native ingredient is a
 | Field | Meaning |
 | --- | --- |
 | `text` | Exact original ingredient line, including its quantity, unit and whitespace. |
+| `name` | Structured food name, stored verbatim, including leading numbers, quantity-looking text and an empty name. |
+| `textParts` | Source spans `{ amount, unit?, name }`, each `{ start, end }` using half-open UTF-16 offsets into `text`; recorded when free text is parsed. |
 | `value` | Exact lower amount as an integer or numerator/denominator string; absent when no amount is stored. |
 | `maxValue` | Exact upper endpoint for a range, as a numerator/denominator string. |
 | `amountLexical` | Original quantity wording, independent of the exact value; absent when no wording is stored. |
@@ -39,19 +41,39 @@ conventions alongside Schema.org's
 remain independent from wording: an authored `1/2` amount with “about half” as
 its lexical text keeps both.
 
-Import uses a nonempty `text` verbatim. Quantity fields (`value`, `maxValue` and
-the unit) describe the quantity; `name` describes the food. Both endpoints accept
-finite numbers or strings and go through the same exact scalar/range parser as
-free text. Descending or invalid ranges retain their source line as unparsed,
-with neither endpoint admitted. A quantity in `name` is parsed once: a leading
-quantity followed by a recognized written unit (or the explicitly supplied unit)
-is a complete line and receives no prefix. Thus `½cup flour` and
-`1.5–2 cups cream` remain exact, while `name: "5 spice powder", value: "2", unitText: "g"`
-becomes `2 g 5 spice powder`. Otherwise the supplied quantity, written unit and
-name compose the line. An IRI never becomes written unit text: composition uses
-the registered symbol, or omits an unresolved symbol while retaining the IRI
-separately. Short unparsed free-text quantities retain their wording in
-`amountLexical`, within its native 100-character bound, as well as `originalText`.
+Manager decision after the second exchange review: source text is never rebuilt
+or surgically edited. Quantity fields (`value`, `maxValue`, `unitCode`, `unitText`)
+are the quantity. A structured `name` is retained verbatim; no prefix is added or
+removed, even when it already contains a quantity. Its `originalText` is the
+supplied `text`, or the unchanged name when no text was supplied. Both endpoints
+accept finite numbers or strings and use the same exact scalar/range validator.
+Invalid ranges admit neither endpoint; their retained source remains available.
+
+Free text is parsed only when its leading quantity token ends at whitespace or a
+non-letter boundary. Thus `7up soda`, `3M tape`, `200g butter` and `½cup flour`
+remain unparsed. The written-unit registry matches its complete labels, longest
+first, at Unicode token boundaries; it recognizes `克` and `fluid ounces` rather
+than guessing from the first word. Parsing records `textParts` once. For a parsed
+line, `amountLexical` is exactly `text.slice(amount.start, amount.end)`; the food
+name is exactly its recorded name span. An unparsed line retains the whole text
+only in `originalText`, with no amount or amount lexical. Structured quantities
+do not manufacture a lexical from `value` or interpret numbers in `name`.
+
+Display and scaling derive quantities from exact amounts and names from these
+spans or the verbatim structured name. Doubling `1.50 cups cream` displays
+`3 cups cream`; doubling `200 克 牛奶` displays `400 克 牛奶`. Given structured
+`name: "2 fluid ounces milk", value: 2, unitText: "fluid ounces"`, display is
+`2 fluid ounces 2 fluid ounces milk` and doubled display is
+`4 fluid ounces 2 fluid ounces milk`: the source's duplication survives.
+Structured IRI units use their registered display symbols without putting an IRI
+into retained text. Opening an unparsed line exposes the whole food text; a
+no-op save preserves it, and editing the quantity does not remove food text.
+
+Native qualifier storage and exchange preserve `name` and `textParts`; Structure
+validates span bounds and their correspondence to source lexical and unit text.
+The Recipe projection retains these as `rv:ingredientName` and the bounded
+`rv:ingredientTextParts` JSON literal. No text-matching fallback infers spans for
+stored lines that do not have them; their retained text remains their food name.
 
 The exporter returns `{ recipe, residuals, sourceObservations, importability }`; the file is
 `recipe`. Residuals and original source observation identifiers are sidecar
@@ -113,10 +135,11 @@ Schema.org context remains the other exception.
 HTML, scripts, graph references, nested contexts, multiple Recipes, invalid
 UTF-8/JSON, JSON depth above 32 and more than 8,192 inspected values remain
 `RecipeFileInvalid`. Export and intake use `measureRecipeJSON` on the serialized
-shape. Only recognized instruction-list arrays are transparent cardinality
-wrappers for this depth measure; arbitrary metadata objects and arrays still
-count every nesting edge against 32. Section nesting separately admits 16 levels
-and refuses level 17 with a typed `depth` outcome. Native text and source-key
+shape. Every object-property and array-element edge counts against depth 32.
+Sixteen nested sections followed by a step have JSON depth 35 and are therefore
+not importable as a file; export metadata reports the same depth. Section nesting
+is a separate `section-depth` rule admitting 16 levels and refusing level 17.
+Native text and source-key
 bounds still apply.
 
 ## Capacity outcomes
@@ -138,8 +161,8 @@ independently of its larger export capacity. An exceeded import capacity throws
 { "status": "not-importable", "code": "recipe_not_importable", "limit": "occurrences", "measured": 129, "allowed": 128 }
 ```
 
-`limit` is `occurrences`, `bytes` or `depth`. Section-depth refusals allow 16;
-general shape-depth capacity allows 32. `measured` is the total normalized occurrence
+`limit` is `occurrences`, `bytes`, `depth` or `section-depth`. Section-depth
+refusals allow 16; ordinary JSON depth allows 32. `measured` is the total normalized occurrence
 count, the serialized source/file byte count, the declared request length, or
 the cumulative bytes observed when a stream crosses the ceiling. Streaming
 admission cancels the unread body at that point. `RecipeFileTooLarge` is the

@@ -21,7 +21,8 @@ test('structured ingredients retain exact decimal behavior alongside Unicode fra
     const [imported] = importRecipe({ recipeIngredient: [{ name: 'flour', value, unitText: 'cups' }] }, 'recipe').ingredients;
     expect(imported?.qualifier.amount).toEqual(expected);
     expect(imported?.qualifier.amountUpper).toEqual(upper);
-    expect(imported?.qualifier.amountLexical).toBe(expected ? String(value).trim() : undefined);
+    expect(imported?.qualifier.amountLexical).toBeUndefined();
+    expect(imported?.qualifier.name).toBe('flour');
     expect(imported?.qualifier.unitText).toBe('cups');
     expect(imported?.qualifier.parseStatus).toBe(expected ? 'partial' : 'unparsed');
   }
@@ -54,10 +55,13 @@ test('fraction imports retain source support pointers, language, unit references
   expect(recipeSourceSupportCandidates(source, imported)).toEqual([{
     sourceKey: 'recipe#/recipeIngredient/0', sourceField: 'recipeIngredient',
     sourcePointer: '/recipeIngredient/0', slot: 'structure-occurrence-v1#qualifier.originalText.value',
+  }, {
+    sourceKey: 'recipe#/recipeIngredient/1', sourceField: 'recipeIngredient',
+    sourcePointer: '/recipeIngredient/1/name', slot: 'structure-occurrence-v1#qualifier.originalText.value',
   }]);
 });
 
-test('complete ingredient names never receive a duplicated quantity or unit', () => {
+test('structured ingredient names are retained verbatim without added or removed quantity text', () => {
   for (const [name, value, unitText] of [
     ['200 g butter', '200', 'g'], ['200g butter', 200, 'g'],
     ['1.5 cups cream', 1.5, 'cups'], ['½–¾ cup flour', '½–¾', 'cup'],
@@ -67,24 +71,25 @@ test('complete ingredient names never receive a duplicated quantity or unit', ()
     expect(imported.ingredients[0]?.qualifier.originalText.value).toBe(name);
   }
   const foreign = importRecipe({ recipeIngredient: [{ name: 'butter', value: '200', unitText: 'g' }] }, 'recipe');
-  expect(foreign.ingredients[0]?.qualifier.originalText.value).toBe('200 g butter');
+  expect(foreign.ingredients[0]?.qualifier.originalText.value).toBe('butter');
+  expect(foreign.ingredients[0]?.qualifier.name).toBe('butter');
   const explicit = importRecipe({ recipeIngredient: [{ text: '  200 g butter\t',
     name: 'butter', value: '200', unitText: 'g' }] }, 'recipe');
   expect(explicit.ingredients[0]?.qualifier.originalText.value).toBe('  200 g butter\t');
 });
 
-test('structured quantities preserve numbered names and parse complete fraction or decimal-range names once', () => {
+test('structured endpoints remain separate from the verbatim name and reject descending ranges', () => {
   for (const [input, original, lower, upper] of [
-    [{ name: '5 spice powder', value: '2', unitText: 'g' }, '2 g 5 spice powder', 2, undefined],
+    [{ name: '5 spice powder', value: '2', unitText: 'g' }, '5 spice powder', 2, undefined],
     [{ name: '½cup flour', value: '1/2', unitText: 'cup' }, '½cup flour', 0.5, undefined],
     [{ name: '1.5–2 cups cream', value: 1.5, maxValue: 2, unitText: 'cups' }, '1.5–2 cups cream', 1.5, 2],
-    [{ name: '1.5–2 cups cream' }, '1.5–2 cups cream', 1.5, 2],
-    [{ name: 'flour', value: 1, maxValue: 2, unitText: 'cups' }, '1 to 2 cups flour', 1, 2],
-    [{ name: 'flour', value: '2', maxValue: '1', unitText: 'cups' }, '2 to 1 cups flour', undefined, undefined],
-    [{ name: 'flour', value: 2, maxValue: 1, unitText: 'cups', parseStatus: 'parsed' }, '2 to 1 cups flour', undefined, undefined],
-    [{ name: 'flour', value: 1, maxValue: null, unitText: 'cups' }, '1 to  cups flour', undefined, undefined],
-    [{ name: 'flour', value: 1, maxValue: '1/0', unitText: 'cups' }, '1 to 1/0 cups flour', undefined, undefined],
-    [{ name: 'flour', value: '1/2', maxValue: '3/4', unitText: 'cup' }, '1/2 to 3/4 cup flour', 0.5, 0.75],
+    [{ name: '1.5–2 cups cream' }, '1.5–2 cups cream', undefined, undefined],
+    [{ name: 'flour', value: 1, maxValue: 2, unitText: 'cups' }, 'flour', 1, 2],
+    [{ name: 'flour', value: '2', maxValue: '1', unitText: 'cups' }, 'flour', undefined, undefined],
+    [{ name: 'flour', value: 2, maxValue: 1, unitText: 'cups', parseStatus: 'parsed' }, 'flour', undefined, undefined],
+    [{ name: 'flour', value: 1, maxValue: null, unitText: 'cups' }, 'flour', undefined, undefined],
+    [{ name: 'flour', value: 1, maxValue: '1/0', unitText: 'cups' }, 'flour', undefined, undefined],
+    [{ name: 'flour', value: '1/2', maxValue: '3/4', unitText: 'cup' }, 'flour', 0.5, 0.75],
   ] as const) {
     const qualifier = importRecipe({ recipeIngredient: [input] }, 'recipe').ingredients[0]!.qualifier;
     expect(qualifier.originalText.value).toBe(original);

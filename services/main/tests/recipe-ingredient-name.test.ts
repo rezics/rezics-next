@@ -22,7 +22,7 @@ test('imported quantity prefixes keep ingredient names through naming, display a
     { line: '⅔ cup sugar', lexical: '⅔', name: 'sugar' },
     { line: '1 1/2 cups flour', lexical: '1 1/2', name: 'flour' },
     { line: '2 to 3 tablespoons butter', lexical: '2 to 3', name: 'butter' },
-    { line: 'salt to taste', lexical: 'salt to taste', name: 'salt to taste' },
+    { line: 'salt to taste', lexical: undefined, name: 'salt to taste' },
   ];
   const imported = importRecipe({ recipeIngredient: cases.map(item => item.line) }, 'recipe');
   expect(imported.ingredients).toHaveLength(cases.length);
@@ -35,7 +35,7 @@ test('imported quantity prefixes keep ingredient names through naming, display a
   cases.forEach((item, index) => {
     const qualifier = imported.ingredients[index]!.qualifier;
     expect(qualifier.amountLexical).toBe(item.lexical);
-    expect(ingredientName(qualifier.originalText.value, qualifier.amountLexical, qualifier.unitText)).toBe(item.name);
+    expect(ingredientName(qualifier)).toBe(item.name);
     expect(displayed[index]?.line.endsWith(item.name)).toBe(true);
     expect(exported[index]).toMatchObject({ text: item.line });
     expect(roundTrip[index]?.qualifier).toEqual(qualifier);
@@ -50,16 +50,18 @@ test('imported quantity prefixes keep ingredient names through naming, display a
   });
 });
 
-test('a legacy whole-line amount lexical is parsed before deriving its ingredient name', () => {
+test('name extraction reads only recorded spans, never a supplied whole-line lexical', () => {
   const [imported] = importRecipe({ recipeIngredient: ['1½ cups flour'] }, 'recipe').ingredients;
-  const qualifier = { ...imported!.qualifier, amountLexical: imported!.qualifier.originalText.value };
+  const qualifier = { ...imported!.qualifier };
   const legacy = record(0, qualifier);
 
-  expect(ingredientName(qualifier.originalText.value, qualifier.amountLexical, qualifier.unitText)).toBe('flour');
+  expect(ingredientName(qualifier)).toBe('flour');
+  expect(ingredientName({ ...qualifier, textParts: undefined, amountLexical: qualifier.originalText.value }))
+    .toBe('1½ cups flour');
   expect(scaleIngredients([legacy], factor)[0]?.line.endsWith(' flour')).toBe(true);
   const exported = exportRecipe([legacy], structure).recipe.recipeIngredient;
   expect(exported).toMatchObject([{ text: '1½ cups flour', value: '3/2',
-    amountLexical: '1½ cups flour' }]);
+    amountLexical: '1½' }]);
   expect(importRecipe({ recipeIngredient: exported }, 'round-trip').ingredients[0]?.qualifier)
     .toEqual(qualifier);
 });

@@ -26,11 +26,12 @@ test('RECIPE03: structured PropertyValue quantities retain exact values and unre
     { '@type': 'PropertyValue', value: 1.25, name: 'leche', unitText: 'cups' },
   ] }, 'observation');
   expect(result.ingredients.map(item => item.qualifier)).toMatchObject([
-    { originalText: { language: 'es' }, amountLexical: '3/4',
+    { originalText: { value: 'azúcar', language: 'es' }, name: 'azúcar',
       amount: { numerator: 3, denominator: 4 }, unitText: 'G21' },
-    { originalText: { language: 'es' }, amountLexical: '1.25',
+    { originalText: { value: 'leche', language: 'es' }, name: 'leche',
       amount: { numerator: 5, denominator: 4 }, unitText: 'cups' },
   ]);
+  expect(result.ingredients.every(item => item.qualifier.amountLexical === undefined)).toBe(true);
 });
 
 test('RECIPE03: free text instructions and unknown quantities remain source text', () => {
@@ -51,6 +52,8 @@ test('RECIPE06: only exact retained source text becomes a Recipe child support c
   const parsed = importRecipe(source, 'observation');
   expect(recipeSourceSupportCandidates(source, parsed)).toMatchObject([
     { sourceKey: 'observation#/recipeIngredient/0', sourcePointer: '/recipeIngredient/0',
+      slot: 'structure-occurrence-v1#qualifier.originalText.value' },
+    { sourceKey: 'observation#/recipeIngredient/1', sourcePointer: '/recipeIngredient/1/name',
       slot: 'structure-occurrence-v1#qualifier.originalText.value' },
     { sourceKey: 'observation#/recipeInstructions/0', sourcePointer: '/recipeInstructions/0/text',
       slot: 'structure-occurrence-v1#qualifier.instructionText.value' },

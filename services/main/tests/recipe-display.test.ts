@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { scaleIngredients } from '../src/modules/recipe/operations.ts';
+import { importRecipe } from '../src/modules/recipe/importer.ts';
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
 
 const line = (originalText: string, numerator: number, denominator: number, unitText: string,
@@ -9,8 +10,7 @@ const line = (originalText: string, numerator: number, denominator: number, unit
   parent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002', segmentKey: 'a',
   orderKey: 'a', role: 'ingredient', labels: [],
   introducedBy: 'https://rezics.com/id/00000000-0000-4000-8000-000000000003',
-  qualifier: { type: 'ingredient-line', originalText: { value: originalText, language: 'en' },
-    amountLexical: originalText.split(' ').slice(0, originalText.startsWith('1 ') ? 2 : 1).join(' '),
+  qualifier: { ...importRecipe({ recipeIngredient: [originalText] }, 'display-source').ingredients[0]!.qualifier,
     amount: { numerator, denominator }, unitText, optional: false, scaling: 'linear', substituteFor: [],
     parseStatus: 'parsed', ...overrides },
 });
@@ -66,7 +66,10 @@ test('salt and leavening scale through a doubling and hold beyond it', () => {
 test('grams offer ounces and an unknown unit stays as written', () => {
   const [grams] = scaleIngredients([line('100 g chocolate', 100, 1, 'g')], { numerator: 1n, denominator: 1n });
   expect(grams).toMatchObject({ line: '100 g chocolate', alternateLine: '3 ⅝ ounces chocolate', alternateSystem: 'us' });
-  const [splash] = scaleIngredients([line('1 splash vanilla', 1, 1, 'splash')], { numerator: 2n, denominator: 1n });
+  const unknown = line('1 splash vanilla', 1, 1, 'splash');
+  unknown.qualifier = importRecipe({ recipeIngredient: [{ name: 'vanilla', value: 1, unitText: 'splash' }] }, 'display-source')
+    .ingredients[0]!.qualifier;
+  const [splash] = scaleIngredients([unknown], { numerator: 2n, denominator: 1n });
   expect(splash?.line).toBe('2 splash vanilla');
   expect(splash?.alternateLine).toBeUndefined();
 });

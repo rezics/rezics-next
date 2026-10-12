@@ -90,8 +90,8 @@ const original = {
     '285ec402959903105f0ef378efe165d51dc16dc659bd4b24c9f52ca6af3f7dd9',
   ],
   'recipe-structure-v1': [
-    'b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72',
-    '3d1837287c51ea1b96be9b20d4937df8e65f85a82a30cce80fcd302914a2fe6f',
+    '994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16',
+    'f4c4c45371649a7e47437e9cb4639a2d099069699616c606308d8513a127389d',
   ],
   'structure-book-v1': [
     '5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242',
@@ -209,7 +209,7 @@ function collectionRevision(dynamic = false): Record<string, unknown> {
   };
 }
 
-test('five Structure and Collection discoveries preserve exact pins, 91 properties, nine alternatives and roles', () => {
+test('five Structure and Collection discoveries preserve exact pins, 93 properties, nine alternatives and roles', () => {
   const path = directory();
   for (const id of ids)
     writeFileSync(
@@ -221,7 +221,7 @@ test('five Structure and Collection discoveries preserve exact pins, 91 properti
   expect(profiles.map((profile) => profile.id)).toEqual(ids);
   const shapes = discovered.flatMap((profile) => profile.shapes);
   expect(shapes).toHaveLength(11);
-  expect(shapes.flatMap((shape) => shape.properties)).toHaveLength(91);
+  expect(shapes.flatMap((shape) => shape.properties)).toHaveLength(93);
   expect(shapes.flatMap((shape) => shape.or ?? [])).toHaveLength(9);
   expect(shapes.flatMap((shape) => (shape.or ?? []).flat())).toHaveLength(32);
   const published = commandProfiles(discovered, options);
@@ -741,6 +741,6 @@ test('Structure and Collection authors preserve all thirty-nine earlier Turtle b
     sourceSha256: digest(readFileSync(join(root, `model/definitions/${id}.ttl`), 'utf8')),
   }));
   expect(digest(JSON.stringify(recorded))).toBe(
-    'e0684173a78929e8da0570fe048eef9079cf2fc127f8f88f3ddbb65b0b59b73e',
+    '26761c2f2789ff236b22e293c07710bd6dfd5a4c2229f0282376d6bf34db5c5a',
   );
 });

@@ -1,4 +1,4 @@
-import { ingredientName, judgmentOf, largeRatio, presentQuantity, recognizeUnit } from './display.ts';
+import { ingredientName, judgmentOf, largeRatio, presentQuantity, recognizeUnit, RECIPE_UNIT_DEFINITIONS } from './display.ts';
 import { exactRational, scaleExact, type ExactRational } from './quantity.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
 
@@ -38,8 +38,9 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
     const line = record.qualifier;
     const sourceAmount = line.amount ? rational(line.amount) : undefined;
     const sourceUpper = line.amountUpper ? rational(line.amountUpper) : undefined;
-    const unit = recognizeUnit(line.unitText);
-    const name = ingredientName(line.originalText.value, line.amountLexical, line.unitText);
+    const unitText = line.unitText ?? (line.unit ? RECIPE_UNIT_DEFINITIONS.get(line.unit) : undefined);
+    const unit = recognizeUnit(unitText);
+    const name = ingredientName(line);
     const judgment = judgmentOf(name);
     const countOverride = line.scaling === 'not-scalable' && unit?.kind === 'count'
       && line.parseStatus !== 'unparsed' && sourceAmount !== undefined;
@@ -56,10 +57,10 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
       ...(line.amountLexical ? { sourceLexical: line.amountLexical } : {}),
       ...(amount ? { amount } : {}),
       ...(amountUpper ? { amountUpper } : {}),
-      ...(line.unitText ? { unitText: line.unitText } : {}),
+      ...(unitText ? { unitText } : {}),
       scaled: apply,
       ...(reason ? { reason } : {}),
-      ...presentQuantity({ original: line.originalText.value, name, ...(line.unitText ? { unitText: line.unitText } : {}),
+      ...presentQuantity({ original: line.originalText.value, name, ...(unitText ? { unitText } : {}),
         ...(unit ? { unit } : {}), ...(amount ? { amount } : {}), ...(amountUpper ? { amountUpper } : {}),
         changed: apply && checkedFactor.numerator !== checkedFactor.denominator,
         ...(holdJudgment && judgment ? { judgment } : {}) }) }];

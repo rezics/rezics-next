@@ -31,25 +31,27 @@ const line = (index: number, original: string, language = 'en',
 test('serialized recipe intake preserves ingredient lines, quantities, units, flags and languages', () => {
   const records = [
     line(2, '200 g butter', 'en', { amount: { numerator: 200, denominator: 1 },
-      amountLexical: '200', unit: 'https://qudt.org/vocab/unit/GM', unitText: 'g', parseStatus: 'parsed' }),
+      amountLexical: '200', textParts: { amount: { start: 0, end: 3 }, unit: { start: 4, end: 5 }, name: { start: 6, end: 12 } },
+      unit: 'https://qudt.org/vocab/unit/GM', unitText: 'g', parseStatus: 'parsed' }),
     line(3, '½–¾ l lait', 'fr', { amount: { numerator: 1, denominator: 2 },
       amountUpper: { numerator: 3, denominator: 4 }, amountLexical: '½–¾',
+      textParts: { amount: { start: 0, end: 3 }, unit: { start: 4, end: 5 }, name: { start: 6, end: 10 } },
       unit: 'https://qudt.org/vocab/unit/L', unitText: 'l', optional: true }),
     line(4, '  1½ cups 小麦粉\t', 'ja', { amount: { numerator: 3, denominator: 2 },
-      amountLexical: '1½', unitText: 'cups' }),
+      amountLexical: '1½', textParts: { amount: { start: 2, end: 4 }, unit: { start: 5, end: 9 }, name: { start: 10, end: 14 } }, unitText: 'cups' }),
     line(5, '香菜（可选）', 'zh', { optional: true, parseStatus: 'unparsed' }),
     line(6, ' a handful of herbs ', 'en', { parseStatus: 'unparsed' }),
     line(7, 'about half cup flour', 'en', { amount: { numerator: 1, denominator: 2 },
-      amountLexical: 'about half', unitText: 'cup' }),
+      unitText: 'cup' }),
     line(8, '200 g butter', 'en', { optional: true, parseStatus: 'unparsed' }),
     line(9, '½ cup farine', 'fr', { amount: { numerator: 1, denominator: 3 },
-      amountLexical: '½', unitText: 'cup' }),
+      amountLexical: '½', textParts: { amount: { start: 0, end: 1 }, unit: { start: 2, end: 5 }, name: { start: 6, end: 12 } }, unitText: 'cup' }),
     line(10, 'une pincée de sel', 'fr', { amount: { numerator: 1, denominator: 8 } }),
     line(11, '200 g butter', 'en', { parseStatus: 'unparsed' }),
     line(12, 'water', 'en', { parseStatus: 'parsed' }),
-    line(13, 'salt', 'en', { amountLexical: 'a pinch' }),
+    line(13, 'salt', 'en'),
     line(14, '200 g butter', 'en', { unitText: ' g ' }),
-    line(15, 'salt', 'en', { amountLexical: ' ', unitText: '\t' }),
+    line(15, 'salt', 'en', { unitText: '\t' }),
     line(16, ' \t', 'en', { parseStatus: 'unparsed' }),
   ];
   const { recipe, sourceObservations } = exportRecipe(records, structure);
@@ -131,11 +133,12 @@ test('module normalization preserves sixteen section levels and rejects a sevent
   expect(() => importRecipe(source(17), 'recipe')).toThrow(RecipeNotImportable);
 });
 
-test('structured unit composition uses a registered symbol and survives export then intake', () => {
+test('structured names stay verbatim with registered units through export then intake', () => {
   const unitCode = 'https://qudt.org/vocab/unit/GM';
   const imported = importRecipe({ recipeIngredient: [{ name: 'butter', value: '200', unitCode }] }, id(99));
   const qualifier = imported.ingredients[0]!.qualifier;
-  expect(qualifier.originalText.value).toBe('200 g butter');
+  expect(qualifier.originalText.value).toBe('butter');
+  expect(qualifier.name).toBe('butter');
   const exported = exportRecipe([{ ...base(10, structure, 'ingredient'), qualifier }], structure);
   expect(parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json')
     .preview.ingredients[0]?.qualifier).toEqual(qualifier);
@@ -181,16 +184,23 @@ test('empty sections alone are importable occurrences and survive file exchange'
   expect(imported.ingredients).toHaveLength(0);
 });
 
-test('sixteen exported section levels round-trip through the shared shape measure and seventeen are typed refusals', () => {
+test('raw JSON depth and section depth remain independent admission limits', () => {
   const records = (depth: number) => [
     ...Array.from({ length: depth }, (_, index) => group(index + 10,
       index ? id(index + 9) : structure, `Layer ${index}`)),
     step(99, id(depth + 9), 'Serve.'),
   ];
-  for (const depth of [15, 16]) {
+  for (const depth of [14, 15, 16]) {
     const exported = exportRecipe(records(depth), structure);
+    expect(measureRecipeJSON(exported.recipe).depth).toBe(depth * 2 + 3);
+    if (depth >= 15) {
+      expect(exported.importability).toEqual({ status: 'not-importable', code: 'recipe_not_importable',
+        limit: 'depth', measured: depth * 2 + 3, allowed: 32 });
+      expect(() => parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json'))
+        .toThrow(RecipeFileInvalid);
+      continue;
+    }
     expect(exported.importability).toEqual({ status: 'importable' });
-    expect(measureRecipeJSON(exported.recipe).depth).toBeLessThanOrEqual(32);
     const preview = parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json').preview;
     expect(preview.sections.map(item => item.parent))
       .toEqual(Array.from({ length: depth }, (_, index) => index - 1));
@@ -199,7 +209,7 @@ test('sixteen exported section levels round-trip through the shared shape measur
   let refusal: unknown;
   try { exportRecipe(records(17), structure); } catch (error) { refusal = error; }
   expect(refusal).toBeInstanceOf(RecipeNotImportable);
-  expect(refusal).toMatchObject({ code: 'recipe_not_importable', limit: 'depth', measured: 17, allowed: 16 });
+  expect(refusal).toMatchObject({ code: 'recipe_not_importable', limit: 'section-depth', measured: 17, allowed: 16 });
   let metadata: unknown = 'safe';
   for (let index = 0; index < 33; index++) metadata = { nested: metadata };
   const hostile = { '@type': 'Recipe', recipeIngredient: ['salt'], metadata };

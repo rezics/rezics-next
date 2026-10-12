@@ -35,7 +35,9 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
       ...(line.amount ? { value: line.amount.denominator === 1 ? String(line.amount.numerator)
         : `${line.amount.numerator}/${line.amount.denominator}` } : {}),
       ...(line.amountUpper ? { maxValue: `${line.amountUpper.numerator}/${line.amountUpper.denominator}` } : {}),
-      ...(line.amountLexical ? { amountLexical: line.amountLexical } : {}),
+      ...(line.textParts ? { amountLexical: line.originalText.value.slice(line.textParts.amount.start, line.textParts.amount.end) } : {}),
+      ...(line.name !== undefined ? { name: line.name } : {}),
+      ...(line.textParts ? { textParts: line.textParts } : {}),
       ...(line.unit ? { unitCode: line.unit } : {}), ...(line.unitText ? { unitText: line.unitText } : {}),
       ...(line.optional ? { optional: true } : {}), parseStatus: line.parseStatus,
       inLanguage: line.originalText.language });
@@ -43,7 +45,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
   let instructionOccurrences = 0;
   const instructions = (parent: string, depth: number): Array<Record<string, unknown>> => {
     if (depth > MAX_RECIPE_SECTION_DEPTH) throw new RecipeNotImportable({ status: 'not-importable',
-      code: 'recipe_not_importable', limit: 'depth', measured: depth, allowed: MAX_RECIPE_SECTION_DEPTH });
+      code: 'recipe_not_importable', limit: 'section-depth', measured: depth, allowed: MAX_RECIPE_SECTION_DEPTH });
     return (children.get(parent) ?? []).flatMap((record): Record<string, unknown>[] => {
       if (record.role === 'step' && record.qualifier?.type === 'recipe-step') {
         instructionOccurrences++;

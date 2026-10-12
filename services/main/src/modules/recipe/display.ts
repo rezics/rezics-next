@@ -5,7 +5,7 @@
 // of those cups (480 mL) and a pound is sixteen of those ounces (448 g).
 
 import { exactRational, type ExactRational } from './quantity.ts';
-import { ingredientAmountLexical } from './importer.ts';
+import type { OccurrenceRecord } from '../structure/format.ts';
 
 export interface IngredientPresentation {
   /** Full ingredient in the unit system the recipe was written in. */
@@ -77,7 +77,18 @@ const units = new Map<string, Unit>([
   ['rasher', count('rasher')], ['rashers', count('rasher')],
   ['link', count('link')], ['links', count('link')],
   ['pat', count('pat')], ['pats', count('pat')],
+  ['克', gram], ['千克', kilogram], ['毫升', milliliter], ['升', liter],
 ]);
+
+/** The longest registered label at a Unicode token boundary, with its exact source span. */
+export function matchRecipeUnit(text: string, start: number): { start: number; end: number } | undefined {
+  for (const label of [...units.keys()].sort((a, b) => b.length - a.length)) {
+    const end = start + label.length;
+    if (text.slice(start, end).toLowerCase() === label.toLowerCase()
+      && !/^[\p{L}\p{M}\p{N}_]/u.test(text.slice(end, end + 2))) return { start, end };
+  }
+  return undefined;
+}
 
 /** Inert identities of the written units this owner knows; no namespace implies membership. */
 export const RECIPE_UNIT_DEFINITIONS: ReadonlyMap<string, string> = new Map([
@@ -112,10 +123,6 @@ const snaps = [
   [5n, 8n, '⅝'], [2n, 3n, '⅔'], [3n, 4n, '¾'], [7n, 8n, '⅞'], [1n, 1n, '1'],
 ] as const;
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 export function recognizeUnit(unitText: string | undefined): Unit | undefined {
   if (!unitText) return undefined;
   return units.get(unitText.trim().toLowerCase().replace(/\.$/, ''));
@@ -133,21 +140,11 @@ export function judgmentOf(name: string): 'seasoning' | 'leavening' | undefined 
   return undefined;
 }
 
-/** The food named by a line, after its written amount and unit. */
-export function ingredientName(original: string, lexical: string | undefined, unitText: string | undefined): string {
-  let rest = original.trim();
-  const storedLead = lexical?.trim();
-  const lead = storedLead?.toLowerCase() === rest.toLowerCase()
-    ? ingredientAmountLexical(rest) : storedLead;
-  if (lead && rest.toLowerCase().startsWith(lead.toLowerCase())) rest = rest.slice(lead.length).trim();
-  const forms = new Set<string>();
-  if (unitText?.trim()) forms.add(unitText.trim());
-  const known = recognizeUnit(unitText);
-  if (known) forms.add(known.singular).add(known.plural);
-  for (const form of [...forms].sort((a, b) => b.length - a.length)) {
-    rest = rest.replace(new RegExp(`^${escapeRegExp(form)}\\b`, 'i'), '').trim();
-  }
-  return rest.replace(/^of\s+/i, '');
+/** A structured name is source text; a parsed name is the recorded source span. */
+export function ingredientName(line: Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'ingredient-line' }>): string {
+  if (line.name !== undefined) return line.name;
+  const span = line.textParts?.name;
+  return span ? line.originalText.value.slice(span.start, span.end) : line.originalText.value;
 }
 
 function atLeast(quantity: ExactRational, whole: bigint): boolean {
@@ -196,8 +193,10 @@ function phrase(amount: ExactRational, upper: ExactRational | undefined, unit: U
   rawUnit: string | undefined, name: string): string {
   const main = formatKitchen(amount);
   const end = upper ? formatKitchen(upper) : null;
+  const written = rawUnit?.trim();
   const unitText = unit
-    ? (unit.abbreviation ?? ((main.aboveOne || end?.aboveOne) ? unit.plural : unit.singular))
+    ? (written && written !== unit.singular && written !== unit.plural ? written
+      : unit.abbreviation ?? ((main.aboveOne || end?.aboveOne) ? unit.plural : unit.singular))
     : rawUnit ?? '';
   const amountText = end ? `${main.text}\u2013${end.text}` : main.text;
   return [amountText, unitText, name].filter(part => part.length > 0).join(' ');

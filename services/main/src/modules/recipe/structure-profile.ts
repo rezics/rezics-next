@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { StructureProfileRegistration } from '../structure/profiles.ts';
-import type { OccurrenceRecord } from '../structure/format.ts';
+import { checkOccurrenceQualifier, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
 import type { PlacementState } from '../structure/graph.ts';
 
 const RECIPE_PROFILE = 'https://rezics.com/definition/recipe-structure-v1';
@@ -29,6 +29,8 @@ function project(state: PlacementState, generation: string) {
   if (qualifier.type === 'ingredient-line') {
     add('originalText', `${lit(qualifier.originalText.value)}@${qualifier.originalText.language}`);
     if (qualifier.amountLexical) add('amountLexical', lit(qualifier.amountLexical));
+    if (qualifier.name !== undefined) add('ingredientName', lit(qualifier.name));
+    if (qualifier.textParts) add('ingredientTextParts', lit(JSON.stringify(qualifier.textParts)));
     if (qualifier.amount) {
       add('amountNumerator', String(qualifier.amount.numerator));
       add('amountDenominator', String(qualifier.amount.denominator));
@@ -70,7 +72,7 @@ async function hydrate(env: WorkActivationEnvironment, state: PlacementState):
     const predicate = row.p?.value?.slice(row.p.value.lastIndexOf('#') + 1)
       .replace(/^.*\//, '') ?? '';
     const item = row.o;
-    if (!predicate || !item?.value) continue;
+    if (!predicate || item?.value === undefined) continue;
     const list = values.get(predicate) ?? [];
     list.push({ value: item.value, ...(item['xml:lang'] ? { language: item['xml:lang'] } : {}) });
     values.set(predicate, list);
@@ -95,9 +97,15 @@ async function hydrate(env: WorkActivationEnvironment, state: PlacementState):
     const amountDenominator = number('amountDenominator');
     const upperNumerator = number('amountUpperNumerator');
     const upperDenominator = number('amountUpperDenominator');
+    let textParts: unknown;
+    try { textParts = one('ingredientTextParts') ? JSON.parse(one('ingredientTextParts')!.value) : undefined; }
+    catch { throw new InvalidStructureObject('ingredient text spans are not valid JSON'); }
     const qualifier: NonNullable<OccurrenceRecord['qualifier']> = {
       type: 'ingredient-line', originalText,
       ...(one('amountLexical') ? { amountLexical: one('amountLexical')!.value } : {}),
+      ...(one('ingredientName') ? { name: one('ingredientName')!.value } : {}),
+      ...(textParts ? { textParts: textParts as Extract<NonNullable<OccurrenceRecord['qualifier']>,
+        { type: 'ingredient-line' }>['textParts'] } : {}),
       ...(amountNumerator !== undefined && amountDenominator !== undefined
         ? { amount: { numerator: amountNumerator, denominator: amountDenominator } } : {}),
       ...(upperNumerator !== undefined && upperDenominator !== undefined
@@ -113,7 +121,7 @@ async function hydrate(env: WorkActivationEnvironment, state: PlacementState):
         : status.endsWith('Unparsed') ? 'unparsed' : 'parsed',
       ...(one('residual') ? { residual: one('residual')!.value.replace('urn:rezics:', '') } : {}),
     };
-    return qualifier;
+    return checkOccurrenceQualifier(qualifier);
   }
   if (rdfType?.endsWith('RecipeStep')) {
     const instructionText = text('instructionText');
