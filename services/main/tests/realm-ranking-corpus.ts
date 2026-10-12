@@ -9,6 +9,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import { stream } from '../../../scripts/fixture/stack.ts';
 import {
   createCorpusBackupDriver,
   type CorpusBackupDriverOptions,
@@ -20,6 +22,7 @@ import {
   type LoadCompatibility,
 } from '../../../scripts/load/compatibility.ts';
 import { startHomeStack, type HomeStack } from '../../../tests/qa/integration/feed-read-support.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const stageStarted = performance.now();
@@ -255,6 +258,62 @@ export interface RealmRankingRestore {
   close: () => Promise<void>;
 }
 
+/** Migration 024 leaves old empty headers unresolved. Only the relay's source
+ * verification can establish their graph cuts; repair the isolated copy before
+ * any feed projection or ranking smoke read, keeping the stopped corpus intact. */
+async function repairRestoredEmptyGraphCuts(
+  apps: Record<string, string>,
+  signal: AbortSignal,
+): Promise<number> {
+  const pool = new Pool({
+    connectionString: apps.MAIN_RELAY_DATABASE_URL,
+    max: 1,
+    connectionTimeoutMillis: 5_000,
+  });
+  try {
+    const unresolved = (
+      await pool.query<{ data_epoch: string; sequence: string }>(
+        `SELECT data_epoch, sequence::text FROM relay.delivered_batch
+        WHERE stream_scope=$1 AND event_count=0 AND graph_sequence IS NULL
+        ORDER BY data_epoch, sequence`,
+        [MAIN_RELAY_STREAM_SCOPE],
+      )
+    ).rows;
+    for (const header of unresolved) {
+      signal.throwIfAborted();
+      await stream(
+        'task',
+        [
+          'main:relay',
+          '--',
+          '--repair-graph-cut',
+          '--data-epoch',
+          header.data_epoch,
+          '--sequence',
+          header.sequence,
+        ],
+        { ...process.env, ...apps, OTEL_SDK_DISABLED: 'true' },
+        undefined,
+        60_000,
+        signal,
+      );
+    }
+    const remaining = (
+      await pool.query<{ count: string }>(
+        `SELECT count(*) FROM relay.delivered_batch
+      WHERE stream_scope=$1 AND event_count=0 AND graph_sequence IS NULL`,
+        [MAIN_RELAY_STREAM_SCOPE],
+      )
+    ).rows[0]!.count;
+    if (remaining !== '0')
+      throw new Error('Restored empty Main batch graph cuts remain unresolved');
+    console.log(JSON.stringify({ realmRankingGraphCutsRepaired: unresolved.length, remaining }));
+    return unresolved.length;
+  } finally {
+    await pool.end();
+  }
+}
+
 /** Restore one retained cut into its own QA project, then read it through Main before returning. */
 export async function restoreRealmRankingCorpus(
   size: RealmRankingScale,
@@ -287,6 +346,11 @@ export async function restoreRealmRankingCorpus(
         };
         for (const key of Object.keys(environment)) previous.set(key, Bun.env[key]);
         Object.assign(Bun.env, environment);
+        await timeRealmRankingStage(
+          'graph-cut-repair',
+          () => repairRestoredEmptyGraphCuts(input.apps, input.signal),
+          { threads: size, target },
+        );
         const restoredHome = await timeRealmRankingStage(
           'startup',
           () =>

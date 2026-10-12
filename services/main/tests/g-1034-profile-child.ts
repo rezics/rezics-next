@@ -1018,15 +1018,18 @@ try {
     },
   });
   try {
-    await project();
+    await timeRealmRankingStage('post-revocation-projection', project, {
+      threads: 1600,
+      target: restored.target,
+    });
   } catch (error) {
     if (
       error instanceof Error &&
       error.message === 'Main feed graph reference cut is unavailable'
     ) {
-      // Kernel's gated-reads-design.md names this feed-cut case separately from
-      // Realm's epoch-wide admission gate. Retain batch and event custody at
-      // both cut positions; a legal zero-event batch cannot supply an event row.
+      // Kernel's gated-reads-design.md now requires retained zero-event batch
+      // headers to supply their source-verified graph cuts. Keep custody evidence
+      // if that qualification regresses; projection must succeed after revocation.
       try {
         const after = (
           await stack.accessPool.query<{
@@ -1048,7 +1051,7 @@ try {
         const batches = (
           await home.relay.query(
             `SELECT stream_scope,data_epoch,
-          sequence::text,batch_id,routing_epoch,event_count FROM relay.delivered_batch
+          sequence::text,batch_id,routing_epoch,event_count,graph_sequence::text FROM relay.delivered_batch
           WHERE stream_scope=$1 AND data_epoch=$2 AND sequence=ANY($3::numeric[])
           ORDER BY sequence LIMIT 4`,
             [through.streamScope, through.dataEpoch, sequences],
@@ -1094,6 +1097,7 @@ try {
     ).rowCount,
     0,
   );
+  evidence.push({ reviewRevocationProjection: { outcome: 'passed', removedReply: opening.reply } });
   // Strong gates remove a whole denied population before the next seek.
   await stack.accessPool.query(
     `INSERT INTO access.scope_gate(id,open) VALUES($1,false) ON CONFLICT(id) DO UPDATE SET open=false`,
