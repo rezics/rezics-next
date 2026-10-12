@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { png, sha, startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
+import { DEFAULT_PERSON_CHOICES, PersonPreferencesStore } from '../src/modules/preferences/store.ts';
 
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 type PersonAvatar = { member: Member; agent: string; selection: string; url: string; digest: string };
@@ -8,6 +11,7 @@ type PersonAvatar = { member: Member; agent: string; selection: string; url: str
 let stack: MediaStack | undefined;
 let deleting: PersonAvatar;
 let unrelated: PersonAvatar;
+let privatePerson: PersonAvatar;
 
 function mediaStack(): MediaStack {
   if (!stack) throw new Error('Person avatar fixture is not ready');
@@ -22,7 +26,23 @@ async function json<T>(response: Response, status: number): Promise<T> {
 
 async function personAvatar(displayName: string): Promise<PersonAvatar> {
   const current = mediaStack();
-  const member = await current.member(`person-avatar-${randomUUID()}`, { verified: true });
+  // Seed stable identities so MediaStack.member reuses Access-owned grants
+  // rather than entering its legacy direct-insert grant path.
+  const name = `person-avatar-${randomUUID()}`;
+  const fixtureId = (key: string) => {
+    const hex = sha(`rezics-fixture:${key}`);
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  };
+  const principalId = fixtureId(`principal:${name}`), actor = `https://rezics.com/id/${fixtureId(`actor:${name}`)}`;
+  await current.accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    [principalId, 'https://qa-wiki-fixture.test', name]);
+  await current.accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
+  for (const action of ['media.upload', 'media.manage']) await grantFixtureAuthority(current.accessPool, {
+    scope: `media:owner:${actor}`, requireDispatch: true,
+    representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+    grant: { actor, action, lifetime: '8 hours' },
+  });
+  const member = await current.member(name, { stable: true, verified: true });
   const { agent } = await json<{ agent: string }>(await member.send('POST', '/v1/agents', {
     profile: 'agent-provision-v1', kind: 'person', displayName,
   }), 201);
@@ -63,6 +83,7 @@ beforeAll(async () => {
   stack = await startMediaStack('account-deletion-person-avatar');
   deleting = await personAvatar('Closing Person');
   unrelated = await personAvatar('Unrelated Person');
+  privatePerson = await personAvatar('Private Person');
 }, 180_000);
 
 afterAll(async () => { await stack?.stop(); });
@@ -74,14 +95,44 @@ test('known adopted Person avatar URLs deliver bytes before Account deletion', a
 
 test('recovery-held name owner refuses known avatar delivery and recovers after release', async () => {
   const current = mediaStack();
-  await current.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');
+  const before = (await current.accessPool.query<{ generation: string }>(
+    'SELECT generation::text FROM access.recovery_fence WHERE id')).rows[0]!.generation;
+  const generation = await engageAccessRecoveryFence(current.accessPool);
+  expect(BigInt(generation)).toBe(BigInt(before) + 1n);
+  expect(await engageAccessRecoveryFence(current.accessPool)).toBe(generation);
   try {
+    expect((await current.accessPool.query('SELECT open, generation::text FROM access.recovery_fence WHERE id')).rows)
+      .toEqual([{ open: false, generation }]);
     await json(await current.call('GET', unrelated.url), 503);
     await json(await unrelated.member.send('GET', unrelated.url), 503);
   } finally {
-    await current.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');
+    expect((await current.accessPool.query(`SELECT
+      EXISTS (SELECT 1 FROM access.search_read_lease WHERE state = 'delivering')
+      OR EXISTS (SELECT 1 FROM access.download_read_lease WHERE state = 'delivering') AS delivering`)).rows)
+      .toEqual([{ delivering: false }]);
+    await releaseAccessRecoveryFence(current.accessPool, generation);
   }
+  expect((await current.accessPool.query('SELECT open, generation::text FROM access.recovery_fence WHERE id')).rows)
+    .toEqual([{ open: true, generation: String(BigInt(generation) + 1n) }]);
   await available(unrelated);
+});
+
+async function privateName(person: PersonAvatar): Promise<void> {
+  // Keep the public graph profile to exercise the independent name owner,
+  // including the interval before its derived-name projection catches up.
+  const preferences = new PersonPreferencesStore(mediaStack().accessPool, async () => {});
+  const current = await preferences.read(person.member.principal, person.agent);
+  await preferences.write(person.member.principal, person.agent,
+    { ...DEFAULT_PERSON_CHOICES, profileVisibility: 'private' }, current.version, randomUUID());
+}
+
+test('controller receives a retained public-graph avatar with private name preferences only in a private cache', async () => {
+  await privateName(privatePerson);
+  await json(await mediaStack().call('GET', privatePerson.url), 404);
+  const response = await privatePerson.member.send('GET', privatePerson.url);
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(privatePerson.digest);
 });
 
 test('Account deletion ends its Person and refuses retained avatar URLs without affecting another Person', async () => {
