@@ -5,6 +5,7 @@ import {
   summarizeWorkProfile,
   WorkMeterBlindError,
   type WorkCostContract,
+  type WorkObservationContract,
   type WorkProfile,
   type WorkSpan,
 } from '../support/work-profile.ts';
@@ -120,6 +121,17 @@ test('a zero-call successful profile is meter blind with or without a minimum', 
     assertWorkCostAtScales([noCalls, noCalls, noCalls], { minimumObserved: {} }),
   ).toThrow(WorkMeterBlindError);
   expect(() => assertWorkMeterObserved(noCalls)).toThrow(WorkMeterBlindError);
+});
+
+test('a removed no-backend allowance is ignored at runtime and cannot excuse a zero-call profile', () => {
+  const noCalls = profile();
+  const stale = { noBackendCalls: true, reason: 'health snapshot' };
+  expect(() =>
+    assertWorkCostAtScales([noCalls, noCalls, noCalls], stale as unknown as WorkCostContract),
+  ).toThrow(WorkMeterBlindError);
+  expect(() =>
+    assertWorkMeterObserved(noCalls, stale as unknown as WorkObservationContract),
+  ).toThrow(WorkMeterBlindError);
 });
 
 test('meter validation does not turn unsuccessful reads or incomplete attribution into growth verdicts', () => {
