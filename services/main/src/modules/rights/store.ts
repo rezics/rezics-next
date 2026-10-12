@@ -179,7 +179,8 @@ function publicDomainAssessmentSelection(work = '$1', assessment = '$2'): string
 
 function supportedPublicDomainHead(row: { assessment_head: string; basis: string; outcome: string },
   assessmentId: string): boolean {
-  return row.assessment_head === assessmentId && row.basis === 'public_domain' && row.outcome === 'supported';
+  return row.assessment_head === assessmentId.toLowerCase()
+    && row.basis === 'public_domain' && row.outcome === 'supported';
 }
 
 /**
