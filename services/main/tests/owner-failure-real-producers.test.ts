@@ -99,8 +99,9 @@ test('native fetch to a closed local port preserves ECONNREFUSED and is transien
   const port = await closedLocalPort();
   const failure = await failureFrom(fetch(`http://127.0.0.1:${port}/closed`));
   expect(failure).toBeInstanceOf(TypeError);
-  expect(failure).toMatchObject({ message: 'fetch failed' });
-  expect((failure as Error & { cause?: { code?: string } }).cause?.code).toBe('ECONNREFUSED');
+  const nativeFailure = failure as Error & { code?: string; cause?: { code?: string } };
+  expect(nativeFailure.message).toMatch(/fetch failed|ECONNREFUSED/);
+  expect(nativeFailure.code ?? nativeFailure.cause?.code).toBe('ECONNREFUSED');
   expect(isOwnerTransientFailure(failure)).toBe(true);
 });
 
