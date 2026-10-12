@@ -128,6 +128,7 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
     updatedAt: null,
   }));
   const batches: number[] = [];
+  const queries: string[] = [];
   const session = {
     options: { limit: 20, cursor },
     position: { dataEpoch: 'epoch', sequence: '1' },
@@ -135,6 +136,7 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
     observeDependency: () => {},
     realm: async () => ({ visibility: 'public', realmRevision: reference(999) }),
     query: async (sparql: string) => {
+      queries.push(sparql);
       const ids = [...sparql.matchAll(/<(https:\/\/rezics\.com\/id\/[^>]+)>/g)]
         .map((match) => match[1]!)
         .filter((value) => entries.some((entry) => entry.work === value));
@@ -178,7 +180,7 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
       discovery: { active: async () => ({ stale: false }), workTerms: async () => [] },
     },
   } as unknown as WorkReadSession;
-  return { session, batches };
+  return { session, batches, queries };
 }
 
 test('a year match beyond member 300 remains reachable after an empty bounded page', async () => {
@@ -196,6 +198,18 @@ test('a year match beyond member 300 remains reachable after an empty bounded pa
   );
   expect(second.matches).toEqual({ value: 10, kind: 'exact' });
   expect(second.nextCursor).toBeNull();
+});
+
+test('the year predicate binds the Statement meaning key before it asks for acceptance', async () => {
+  const fixture = browseSession();
+  await readZoneBrowse(fixture.session, realm, { publicationYear: '1995' });
+  const filters = fixture.queries.filter((sparql) => sparql.includes('YEAR(?published)'));
+  expect(filters.length).toBeGreaterThan(0);
+  for (const sparql of filters) {
+    // A Statement without a meaning key has no exact acceptance to match.
+    expect(sparql).toContain('rv:meaningKey ?yearkey');
+    expect(sparql.indexOf('rv:meaningKey ?yearkey')).toBeLessThan(sparql.indexOf('rv:acceptanceContext'));
+  }
 });
 
 test('the fallback removes the new all-years directory control from Main admission', () => {

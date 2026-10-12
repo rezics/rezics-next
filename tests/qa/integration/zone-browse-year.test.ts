@@ -1,217 +1,186 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import {
-  createRealmSpace,
-  spaceCreationDigest,
-} from '../../../services/main/src/modules/space/create.ts';
-import { GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
+import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
+import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
+import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
+import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
+import { seedFirstPublicationDate } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { startMediaStack } from './media-support.ts';
-import { configureFixtureDisclosureAncestry } from '../../../services/main/tests/support/disclosure-ancestry.ts';
 
-const id = () => `https://rezics.com/id/${randomUUID()}`;
+const XSD = 'http://www.w3.org/2001/XMLSchema#';
+/** The ordinary QA Fuseki class holds a few hundred command writes. A first match past the
+ * 256-row request budget needs about 1,800 and is covered by the owner test. */
+const MATCHES = 12;
+const PAGE = 5;
+
 type Page = {
   items: { id: string }[];
   nextCursor: string | null;
   query: { publicationYear?: string };
   matches: { value: number; kind: string };
-  facets: { type: { value: string; count: number }[] };
   window: { complete: boolean };
 };
+type Written = { statement: string; revision: string; meaningKey: string };
+type Row = { work: string; contribution: string; decision: string; mainVersion: string };
 
-test('Zone year browse reaches member 300 through qualified-fact support and rejects a keyless unaccepted date', async () => {
+test('Zone year browse pages the accepted Statements of a Realm through the API, with real acceptance', async () => {
   const stack = await startMediaStack('zone-browse-year');
+  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
   try {
-    const actor = id(),
-      input = { name: `Year browse ${randomUUID()}`, actingSubject: actor };
-    const created = await createRealmSpace(
-      stack.env,
-      stack.admission(actor, 'space:create:root', 'space.create', spaceCreationDigest(input)),
-      input,
-    );
-    if (created.outcome !== 'succeeded' || !created.realm) throw new Error('Realm creation failed');
-    const realm = created.realm;
-    // The graph, public hydration and HTTP contract are real. Only projection
-    // order is deterministic here; its recovery has separate owner coverage.
-    const works = Array.from({ length: 350 }, (_, index) => ({
-      index,
-      work: id(),
-      main: id(),
-      head: id(),
-      slot: id(),
-      selection: id(),
-      contribution: id(),
-      decision: id(),
-      draft: id(),
-      statement: id(),
-      statementHead: id(),
-      yearSlot: id(),
-      yearDecision: id(),
-      meaningKey: `urn:rezics:meaning:${String(index).padStart(64, '0')}`,
-    }));
-    for (let start = 0; start < works.length; start += 64) {
-      const batch = works.slice(start, start + 64);
-      await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        INSERT DATA {
-        GRAPH ${iri(GRAPHS.current)} { ${batch
-          .map(
-            (row) => `
-          ${iri(row.work)} a schema:CreativeWork, schema:Book ; rv:mainVersion ${iri(row.main)} ;
-            rv:head ${iri(row.head)} ; rdfs:label ${lit(`Year story ${row.index}`)}@en .
-          ${row.index === 348 ? '' : `${iri(row.work)} rv:catalogueVisible true .`}
-          ${iri(row.main)} a rv:MainVersion ; rv:work ${iri(row.work)} .
-          ${iri(row.contribution)} rv:publicationHead ${iri(row.decision)} .
-          ${iri(row.slot)} a rv:RealmResourceSlot ; rv:realm ${iri(realm)} ; rv:work ${iri(row.work)} ;
-            rv:mainVersion ${iri(row.main)} ; rv:selectionHead ${iri(row.selection)} .
-          ${
-            row.index === 347
-              ? ''
-              : `${iri(row.statement)} a rdf:Statement ; rdf:subject ${iri(row.work)} ;
-            rdf:predicate schema:datePublished ; rdf:object "${row.index < 300 ? '2001' : '1995'}"^^xsd:${row.index === 349 ? 'string' : 'gYear'} ;
-            ${row.index === 345 ? '' : `rv:meaningKey ${iri(row.meaningKey)} ;`}
-            rv:statementState rv:${row.index === 346 ? 'Withdrawn' : 'Active'} ; rv:head ${iri(row.statementHead)} .
-          ${iri(row.yearSlot)} a rv:DecisionSlot ; rv:decisionTarget ${iri(row.index === 300 ? row.meaningKey : row.statement)} ;
-            rv:targetKind rv:${row.index === 300 ? 'QualifiedFactTarget' : 'StatementTarget'} ;
-            rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ${iri(row.yearDecision)} .`
-          }`,
-          )
-          .join('\n')} }
-        GRAPH ${iri(GRAPHS.revisions)} { ${batch
-          .map(
-            (row) => `
-          ${iri(row.selection)} a rv:RealmSubmissionSelection ; rv:component ${iri(row.slot)} ; rv:context ${iri(realm)} ;
-            rv:work ${iri(row.work)} ; rv:mainVersion ${iri(row.main)} ; rv:contribution ${iri(row.contribution)} ;
-            rv:publicationDecision ${iri(row.decision)} ; rv:selectedDraft ${iri(row.draft)} ;
-            rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ${row.index + 1} .
-          ${iri(row.decision)} rv:disclosure rv:Public .
-          ${iri(row.yearDecision)} a rv:StatementDecision ; rv:component ${iri(row.yearSlot)} ;
-            rv:outcome rv:${row.index === 345 ? 'Rejected' : 'Accepted'} .
-          ${row.index === 300 ? `${iri(row.yearDecision)} rv:support ${iri(row.statement)} .` : ''}`,
-          )
-          .join('\n')} } }`);
-    }
-    const duplicate = works[301]!,
-      duplicateStatement = id(),
-      duplicateSlot = id(),
-      duplicateDecision = id();
-    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(duplicateStatement)} a rdf:Statement ; rdf:subject ${iri(duplicate.work)} ; rdf:predicate schema:datePublished ;
-          rdf:object "1995-06-01"^^xsd:date ; rv:meaningKey <urn:rezics:meaning:${'e'.repeat(64)}> ;
-          rv:statementState rv:Active ; rv:head ${iri(id())} .
-        ${iri(duplicateSlot)} a rv:DecisionSlot ; rv:decisionTarget ${iri(duplicateStatement)} ; rv:targetKind rv:StatementTarget ;
-          rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ${iri(duplicateDecision)} . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(duplicateDecision)} a rv:StatementDecision ; rv:component ${iri(duplicateSlot)} ; rv:outcome rv:Accepted . } }`);
-    const entries = works.map((row) => ({
-      work: row.work,
-      adoptedOrder: String(350 - row.index),
-      words: null,
-      updatedAt: null,
-    }));
-    const projection = {
-      current: async () => true,
-      batch: async (
-        _realm: string,
-        _sort: string,
-        after: { work: string; key: string | null } | null,
-      ) =>
-        entries
-          .filter((entry) => !after || Number(entry.adoptedOrder) < Number(after.key))
-          .slice(0, 64),
+    const author = await stack.member('zone-year-editor');
+    for (const [scope, action] of [
+      ['semantic:create:root', 'semantic.change'],
+      [`statement:speak:${author.actor}`, 'statement.record'],
+      [`statement:speak:${author.actor}`, 'statement.withdraw'],
+      ['classification:decide:global', 'statement.decide'],
+    ] as const) await author.grant(scope, action);
+    const send = async <T>(method: string, path: string, body: object, key?: string): Promise<T> => {
+      const response = await author.send(method, path, body, key);
+      const text = await response.text();
+      if (!response.ok) throw new Error(`${method} ${path} ${response.status}: ${text.slice(0, 400)}`);
+      return JSON.parse(text) as T;
     };
+    await ensureGlobalClassificationContext(stack.env);
+    const published = await seedFirstPublicationDate({
+      post: <T>(path: string, body: object, key: string) => send<T>('POST', path, body, key),
+      authorizeDefinition: async receipt => {
+        await author.grant(`semantic:read:${receipt.component}`, 'semantic.read');
+      },
+    }, author.actor);
+    const record = (work: string, lexical: string, datatype = `${XSD}date`) =>
+      send<Written>('POST', '/v1/statements', {
+        profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work,
+        predicate: published.component, relationDefinition: published.revision,
+        value: { kind: 'literal', lexical, datatype, language: null },
+        applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: author.actor,
+      });
+    const decide = (target: object, outcome: 'accepted' | 'rejected') =>
+      send('POST', '/v1/statement-decisions', {
+        profile: 'statement-decision-v1', target, acceptance: { kind: 'global' },
+        expectedDecisionHead: null, outcome, actingSubject: author.actor,
+      });
+    const accept = async (work: string, lexical: string, datatype?: string) => {
+      const written = await record(work, lexical, datatype);
+      await decide({ kind: 'statement', statement: written.statement }, 'accepted');
+      return written;
+    };
+
+    const input = { name: `Year browse ${Date.now()}`, actingSubject: author.actor };
+    const space = await createRealmSpace(stack.env,
+      stack.admission(author.actor, 'space:create:root', 'space.create', spaceCreationDigest(input)), input);
+    if (space.outcome !== 'succeeded' || !space.realm) throw new Error('Realm creation failed');
+    const realm = space.realm;
+
+    const prepare = async (title: string): Promise<Row> => {
+      const created = await stack.catalogueWork(author.actor, title);
+      const text = await stack.contribution(created.work, author.actor, 'en', title);
+      const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
+        work: created.work, contribution: text.contribution, publicationDecision: text.decision,
+        expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: author.actor };
+      const selected = await selectMainDefault(stack.env, stack.admission(author.actor,
+        `publication:select:${created.mainVersion}`, 'publication.select', mainSelectionDigest(selection)), selection);
+      if (selected.outcome !== 'succeeded') throw new Error(`Main selection failed for ${title}`);
+      return { work: created.work, contribution: text.contribution, decision: text.decision,
+        mainVersion: created.mainVersion };
+    };
+    const prepared = (titles: string[]) => Promise.all(titles.map(prepare));
+    const matching = await prepared(Array.from({ length: MATCHES }, (_, index) => `Year match ${index}`));
+    const [qualified, duplicate, unaccepted, rejected, withdrawn, otherYear, undated, textual] =
+      await prepared(['qualified', 'duplicate', 'unaccepted', 'rejected', 'withdrawn', 'other year', 'undated',
+        'textual date'].map(name => `Year ${name}`)) as [Row, Row, Row, Row, Row, Row, Row, Row];
+
+    for (const [index, row] of matching.entries()) {
+      await accept(row.work, index % 2 ? '1995-01-01' : '1995-07-12');
+    }
+    // The Statement is not accepted itself: its exact meaning is, with the Statement as support.
+    const support = await record(qualified.work, '1995-05-05');
+    await decide({ kind: 'qualified-fact', meaningKey: support.meaningKey, support: [support.statement] }, 'accepted');
+    // Two accepted dates in one year are one browse row.
+    await accept(duplicate.work, '1995-03-01');
+    await accept(duplicate.work, '1995-06-01');
+    await record(unaccepted.work, '1995-02-02');
+    const refused = await record(rejected.work, '1995-02-03');
+    await decide({ kind: 'statement', statement: refused.statement }, 'rejected');
+    const retired = await accept(withdrawn.work, '1995-02-04');
+    await send('POST', `/v1/statements/${retired.statement.slice(-36)}/withdrawals`, {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, expectedHead: retired.revision,
+      actingSubject: author.actor,
+    });
+    await accept(otherYear.work, '2001-01-01');
+    await accept(textual.work, '1995', `${XSD}string`).catch(() => undefined);
+
+    const adopt = async (row: Row) => {
+      const adoption = { context: { kind: 'realm-local' as const, id: realm }, work: row.work,
+        mainVersion: row.mainVersion, contribution: row.contribution, publicationDecision: row.decision,
+        expectedSelectionHead: null, selectionBasis: 'realm-manager-review' as const, actingSubject: author.actor };
+      const adopted = await selectRealmLocal(stack.env, stack.admission(author.actor, `publication:adopt:${realm}`,
+        'publication.adopt', realmSelectionDigest(adoption)), adoption);
+      if (adopted.outcome !== 'succeeded') throw new Error(`Adoption failed for ${row.work}`);
+    };
+    const groups = [...matching, qualified, duplicate, unaccepted, rejected, withdrawn, otherYear, undated, textual];
+    for (const row of groups) await adopt(row);
+    // Newest adoption first: the matches in reverse adoption order.
+    const expected = [...matching, qualified, duplicate].reverse().map(row => row.work);
+
+    const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
+    await projection.backfill();
     const app = createMainApp(stack.fuseki, {
       ...stack.composition.dependencies,
-      zoneBrowse: projection as never,
+      zoneBrowse: projection,
       discovery: { active: async () => ({ stale: false }), workTerms: async () => [] } as never,
     });
-    // These standalone catalogue Works have no Content ancestry. Retain the
-    // real policy reader and declare their fixture-owned current Work heads.
-    configureFixtureDisclosureAncestry(stack.env, (target) => {
-      const row = works.find((row) => row.work === (target.work ?? target.resource));
-      return row
-        ? { resource: row.work, head: row.head, protectedRevision: target.workRevision }
-        : undefined;
-    });
     const path = `http://main.local/v1/realms/${realm.slice(-36)}/modules/browse`;
+    const call = (parameters: Record<string, string>) =>
+      app.handle(new Request(`${path}?${new URLSearchParams(parameters)}`));
     const read = async (publicationYear: string, cursor?: string) => {
-      const query = new URLSearchParams({
-        publicationYear,
-        ...(cursor ? { cursor } : {}),
-      });
-      const response = await app.handle(new Request(`${path}?${query}`));
+      const response = await call({ publicationYear, limit: String(PAGE), ...(cursor ? { cursor } : {}) });
       if (response.status !== 200) throw new Error(`${response.status}: ${await response.text()}`);
       return response.json() as Promise<Page>;
     };
-    const first = await read('1995');
-    expect(first.query.publicationYear).toBe('1995');
-    expect(first.items).toEqual([]);
-    expect(first.matches).toEqual({ value: 0, kind: 'lower-bound' });
-    expect(first.facets.type).toEqual([]);
-    expect(first.nextCursor).not.toBeNull();
-    const second = await read('1995', first.nextCursor!);
-    expect(second.items.map((item) => item.id)).toEqual(
-      works.slice(300, 320).map((row) => row.work),
-    );
-    expect(second.items[0]!.id).toBe(works[300]!.work);
-    expect(second.matches).toEqual({ value: 20, kind: 'lower-bound' });
-    expect(second.facets.type).toEqual([{ value: 'https://schema.org/Book', count: 20 }]);
-    const third = await read('1995', second.nextCursor!);
-    const last = await read('1995', third.nextCursor!);
-    expect([...second.items, ...third.items, ...last.items].map((item) => item.id)).toEqual(
-      works.slice(300, 345).map((row) => row.work),
-    );
-    expect(last.matches).toEqual({ value: 45, kind: 'exact' });
-    expect(last.facets.type).toEqual([{ value: 'https://schema.org/Book', count: 5 }]);
+
+    const pages: Page[] = [];
+    for (let cursor: string | undefined; pages.length < 10;) {
+      const page: Page = await read('1995', cursor);
+      pages.push(page);
+      expect(page.query.publicationYear).toBe('1995');
+      // The count comes from the response that carries the items, not from another read.
+      expect(page.matches.value).toBe(pages.reduce((sum, item) => sum + item.items.length, 0));
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    expect(pages.map(page => page.items.length)).toEqual([PAGE, PAGE, expected.length - 2 * PAGE]);
+    const seen = pages.flatMap(page => page.items.map(item => item.id));
+    expect(seen).toEqual(expected);
+    expect(pages[0]!.matches).toEqual({ value: PAGE, kind: 'lower-bound' });
+    const last = pages.at(-1)!;
+    expect(last.matches).toEqual({ value: expected.length, kind: 'exact' });
     expect(last.nextCursor).toBeNull();
     expect(last.window.complete).toBe(true);
-    // Row 345 has an active date but no meaningKey and no acceptance. Row 300's
-    // unrelated qualified-fact decision must not bind a key on its behalf.
-    expect([...second.items, ...third.items, ...last.items].map((item) => item.id)).not.toContain(
-      works[345]!.work,
-    );
-    const changed = await app.handle(
-      new Request(
-        `${path}?${new URLSearchParams({
-          publicationYear: '2001',
-          cursor: first.nextCursor!,
-        })}`,
-      ),
-    );
-    expect(changed.status).toBe(400);
-    expect((await read('1990-2000')).items.map((item) => item.id)).toEqual(
-      first.items.map((item) => item.id),
-    );
-    const post = await app.handle(
-      new Request('http://main.local/v1/query', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          profile: 'filter-document-v2',
-          context: { realm },
-          scope: { kind: 'realm', realm },
-          sort: 'newest',
-          page: { size: 20 },
-          filter: { all: [{ facet: 'publicationYear', range: { min: '01995', max: '1995' } }] },
-        }),
-      }),
-    );
+    for (const row of [unaccepted, rejected, withdrawn, otherYear, undated, textual]) {
+      expect(seen).not.toContain(row.work);
+    }
+    expect(seen.filter(work => work === duplicate.work)).toHaveLength(1);
+
+    expect((await read('1990-2000')).items.map(item => item.id)).toEqual(pages[0]!.items.map(item => item.id));
+    // A year change does not reuse another year's continuation.
+    expect((await call({ publicationYear: '2001', cursor: pages[0]!.nextCursor! })).status).toBe(400);
+    // The shared Query read admits the same year Facet.
+    const post = await app.handle(new Request('http://main.local/v1/query', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'filter-document-v2', context: { realm }, scope: { kind: 'realm', realm },
+        sort: 'newest', page: { size: PAGE },
+        filter: { all: [{ facet: 'publicationYear', range: { min: '01995', max: '1995' } }] } }),
+    }));
     if (post.status !== 200) throw new Error(`${post.status}: ${await post.text()}`);
-    expect(((await post.json()) as { result: Page }).result.items.map((item) => item.id)).toEqual(
-      first.items.map((item) => item.id),
-    );
+    expect(((await post.json()) as { result: Page }).result.items.map(item => item.id))
+      .toEqual(pages[0]!.items.map(item => item.id));
     for (const invalid of ['2000-1990', '10000', '1995) UNION {}']) {
-      expect(
-        (
-          await app.handle(
-            new Request(`${path}?${new URLSearchParams({ publicationYear: invalid })}`),
-          )
-        ).status,
-      ).toBe(400);
+      expect((await call({ publicationYear: invalid })).status).toBe(400);
     }
   } finally {
+    await relay.end();
     await stack.stop();
   }
-}, 120_000);
+}, 900_000);
