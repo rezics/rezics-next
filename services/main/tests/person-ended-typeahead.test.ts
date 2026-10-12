@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
+import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { backfillCatalogueNames } from '../src/modules/search/names.ts';
 import { GRAPHS, iri, lit } from '../src/modules/work/activate.ts';
 import { prefixWalkRequest } from '../src/modules/search/prefix-walk.ts';
 
-type Member = Awaited<ReturnType<MediaStack['member']>>;
+type Member = Awaited<ReturnType<typeof fixtureMember>>;
 type Item = { work: string; matchedText: string; authors: Array<{ agent: string; displayName: string }> };
 let stack: MediaStack;
 let closing: Member;
@@ -21,6 +23,38 @@ const alias = `alias${marker.slice(0, 20)}`;
 const liveName = `Continuing${marker} Author`;
 const similarName = `Ended${marker} Authorship`;
 const absent = `Absent${marker}`;
+
+const bearers = new Map<string, VerifiedPrincipal>();
+
+async function fixtureMember(subject: string) {
+  const principal = { issuer: 'https://qa-person-disclosure.test', subject, emailVerified: true };
+  const principalId = randomUUID();
+  const actor = `https://rezics.com/id/${randomUUID()}`;
+  const token = randomUUID();
+  const client = await stack.accessPool.connect();
+  try {
+    await client.query('BEGIN');
+    await registerFixtureIdentity(client, { principalId, ...principal, actor });
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK'); throw error; }
+  finally { client.release(); }
+  bearers.set(token, principal);
+  const grant = async (scope: string, action: string) => {
+    const client = await stack.accessPool.connect();
+    try {
+      await client.query('BEGIN');
+      const lifetime = action === 'agent.control' ? 'infinity' : '8 hours';
+      await grantFixtureAuthority(client, { scope, requireDispatch: true,
+        representations: [{ principalId, actor, action, lifetime }],
+        grant: { actor, action, lifetime } });
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  };
+  const send = (method: string, path: string, body?: unknown) =>
+    stack.call(method, path, { token, body, key: randomUUID() });
+  return { principal, principalId, actor, token, grant, send };
+}
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -52,11 +86,17 @@ async function bytes(response: Response) {
 
 beforeAll(async () => {
   stack = await startMediaStack('person-ended-typeahead');
-  closing = await stack.member(`closing-${marker}`, { verified: true });
-  reader = await stack.member(`reader-${marker}`, { verified: true });
+  // Replace only the Account bearer table; Access owns every fixture identity.
+  stack.composition.dependencies.account.verify = async request => {
+    const principal = bearers.get(request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '');
+    if (!principal) throw new Error('unknown fixture bearer');
+    return { ...principal, currentAssertion: async () => principal };
+  };
+  closing = await fixtureMember(`closing-${marker}`);
+  reader = await fixtureMember(`reader-${marker}`);
   person = await provision(closing, name);
   coauthor = await provision(reader, liveName);
-  similar = await provision(await stack.member(`similar-${marker}`, { verified: true }), similarName);
+  similar = await provision(await fixtureMember(`similar-${marker}`), similarName);
   // Person aliases belong to the address owner; credit typeahead currently
   // matches display names, so the alias must never resurrect an ended name.
   await json(await closing.send('POST', '/v1/addresses/claims', {
