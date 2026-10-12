@@ -55,12 +55,12 @@ export function WholesLines({
       {pages && (pages.first || next) ? (
         <nav aria-label={t.partOfList} className="flex flex-wrap gap-2">
           {pages.first ? (
-            <Link href={pages.first} className={outline}>
+            <Link documentNavigation href={pages.first} className={outline}>
               {t.firstPage}
             </Link>
           ) : null}
           {next ? (
-            <Link href={pages.next(next)} className={outline}>
+            <Link documentNavigation href={pages.next(next)} className={outline}>
               {t.showMore}
             </Link>
           ) : null}
@@ -135,7 +135,7 @@ function PartRow({
             unnamed={t.unnamed}
           />
         ) : (
-          <Link
+          <Link documentNavigation
             href={connectionsHref(
               workRef,
               { ...query, parent: part.occurrence.slice(-36), partsAfter: undefined },
@@ -192,7 +192,7 @@ export function PartsSection({
       <>
         {page ? <Completion completion={page.completion} t={t} /> : null}
         {query.parent ? (
-          <Link
+          <Link documentNavigation
             href={connectionsHref(
               workRef,
               { ...query, parent: undefined, partsAfter: undefined },
@@ -230,14 +230,14 @@ export function PartsSection({
         {query.partsAfter || page?.next ? (
           <nav aria-label={t.partsPages} className="flex flex-wrap justify-between gap-2">
             {query.partsAfter ? (
-              <Link href={first} className={outline}>
+              <Link documentNavigation href={first} className={outline}>
                 {t.firstPage}
               </Link>
             ) : (
               <span />
             )}
             {page?.next ? (
-              <Link
+              <Link documentNavigation
                 href={connectionsHref(workRef, { ...query, partsAfter: page.next }, anchors.parts)}
                 className={outline}
               >

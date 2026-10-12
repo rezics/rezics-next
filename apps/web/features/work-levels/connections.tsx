@@ -34,7 +34,7 @@ function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy
     // A contributor is one REZICS Agent wherever they are named: the link is their profile, not a page of this Zone.
     const person = target.agent ? people?.get(target.agent) : undefined;
     return person && target.agent
-      ? <Link href={authorHref({ kind: 'agent', handle: person.handle, agent: target.agent })}
+      ? <Link documentNavigation href={authorHref({ kind: 'agent', handle: person.handle, agent: target.agent })}
         title={person.handle ? `@${person.handle}` : undefined} data-contributor={target.agent}
         className="rounded-sm font-medium outline-none decoration-1 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
         {person.name}</Link>
@@ -66,7 +66,7 @@ function CreditedAs({ credit, item, t, hrefFor, people }: {
 }) {
   if ('status' in credit) {
     return <span data-credited-name data-credited-unavailable className="text-muted-foreground">{t.creditedAs}{' '}
-      <Link href={creditPage(credit.reference, item, hrefFor, people)} documentNavigation className={creditLink}>{t.nameNotShown}</Link></span>;
+      <Link documentNavigation href={creditPage(credit.reference, item, hrefFor, people)} className={creditLink}>{t.nameNotShown}</Link></span>;
   }
   return <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
     <bdi lang={credit.language} dir="auto">{credit.lexical}</bdi></span>;
@@ -110,7 +110,7 @@ function Target(props: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; peo
 /** The mark a derivation carries when its source's Main Version is not pinned: the link is known, its version is not. */
 function Unresolved({ item, t }: { item: RelationItem; t: Copy }) {
   return item.unresolvedSource
-    ? <Badge variant="outline" title={t.unresolvedHint}><LinkIcon aria-hidden="true" />{t.unresolvedSource}</Badge> : null;
+    ? <Badge variant="outline" title={t.unresolvedHint}><Link documentNavigationIcon aria-hidden="true" />{t.unresolvedSource}</Badge> : null;
 }
 
 /** Main's label, in its own language and direction, with a quiet note when it is not in the language asked for. */
@@ -166,7 +166,7 @@ function GrainSwitch({ workRef, query, t }: { workRef: string; query: Connection
   return <nav aria-label={t.grainSwitch} className="flex flex-wrap items-center gap-2">
     <span className="text-muted-foreground text-sm">{t.grainLabel}</span>
     <div role="group" aria-label={t.grainSwitch} className="inline-flex rounded-lg border border-border/80 p-0.5">
-      {grains.map(grain => <Link key={grain} scroll={false} aria-current={query.grain === grain ? 'true' : undefined}
+      {grains.map(grain => <Link documentNavigation key={grain} scroll={false} aria-current={query.grain === grain ? 'true' : undefined}
         href={connectionsHref(workRef, { ...query, grain, membersAfter: undefined }, anchors.franchises)}
         className={cn('rounded-md px-3 py-1 font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
           query.grain === grain ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
@@ -201,7 +201,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
                   <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
                   {part.displayLabel ? <> <bdi className="tabular-nums">({part.displayLabel})</bdi></> : null}
                 </li>)}
-                {parts.data.next && workPage ? <li><Link href={`${workPage}/connections#parts`} documentNavigation
+                {parts.data.next && workPage ? <li><Link documentNavigation href={`${workPage}/connections#parts`}
                   className="text-primary underline-offset-4 hover:underline">{t.morePartsExist}</Link></li> : null}
               </ol>
               : parts.failure === 'missing' ? null
@@ -210,7 +210,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
         </li>;
       })}
     </ol>
-    {members.data.next ? <Link className={`${outline} w-fit`} scroll={false}
+    {members.data.next ? <Link documentNavigation className={`${outline} w-fit`} scroll={false}
       href={connectionsHref(workRef, { ...query, franchise: id, membersAfter: members.data.next }, anchors.franchises)}>
       {t.showMore}</Link> : null}
   </div>;
@@ -261,8 +261,8 @@ export function ConnectionsSection({ relations, franchises, names, people, workR
       </>}
     {query.relationsAfter || relations.data.next
       ? <nav aria-label={t.relationsPages} className="flex flex-wrap justify-between gap-2">
-        {query.relationsAfter ? <Link href={first} className={outline}>{t.firstPage}</Link> : <span />}
-        {relations.data.next ? <Link href={connectionsHref(workRef, { ...query, relationsAfter: relations.data.next },
+        {query.relationsAfter ? <Link documentNavigation href={first} className={outline}>{t.firstPage}</Link> : <span />}
+        {relations.data.next ? <Link documentNavigation href={connectionsHref(workRef, { ...query, relationsAfter: relations.data.next },
           anchors.relations)} className={outline}>{t.showMore}</Link> : null}
       </nav> : null}
   </Region>;

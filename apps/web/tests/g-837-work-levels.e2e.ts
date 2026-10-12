@@ -319,6 +319,7 @@ test('franchise connections retain the selected volumes and parts level', async 
     'aria-current',
     'true',
   );
+  await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
 });
 
 test.fixme(
