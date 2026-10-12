@@ -262,6 +262,12 @@ export const EDITION_SAVED = 'rezics:edition-preference-saved';
 
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
 interface Setup { work: string; api: TrackingApi; preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
+
+/** Relations and editions are Work-scoped reads; a save during that read still owns the preference. */
+export function mergeSeriesSetup(current: Setup | null, loaded: Setup): Setup {
+  return current?.work === loaded.work && current.api === loaded.api
+    ? { ...loaded, preference: current.preference } : loaded;
+}
 type Progress = { work: string; language: string; value: ProgressSummary }
   | { work: string; language: string; failure: ReadFailure; previous: ProgressSummary | null };
 
@@ -300,19 +306,19 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   const [language, setLanguage] = useState<string>(locale);
   const subject = usePreferenceSubject(work, api,
     setup?.work === work && setup.api === api ? setup.preference?.version ?? 0 : 0);
+  const initialSubject = usePreferenceSubject(work, api, 0);
   const [progress, setProgress] = useState<Progress | null>(null);
 
   useEffect(() => {
     if (!api) return;
     let current = true;
-    const owner = subject.capture();
+    const owner = initialSubject.capture();
     void Promise.all([api.preference(work), api.editions(work), api.relations(work), api.definition('correspondence-equivalent')])
       .then(([saved, offered, relations, equivalent]) => {
-        if (!current || !subject.applies(owner)) return;
+        if (!current || !initialSubject.applies(owner)) return;
         const preference = saved.ok ? saved.data : null;
-        setLanguage(preference?.language ?? locale);
-        setSetup({ work, api, preference, editions: offered.ok ? offered.data : null,
-          counterparts: relations.ok && equivalent.ok ? equivalentCounterparts(relations.data, equivalent.data.definition) : [] });
+        setSetup(held => mergeSeriesSetup(held, { work, api, preference, editions: offered.ok ? offered.data : null,
+          counterparts: relations.ok && equivalent.ok ? equivalentCounterparts(relations.data, equivalent.data.definition) : [] }));
       });
     return () => { current = false; };
   }, [api, work, locale]);
@@ -324,16 +330,21 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
       const owner = subject.capture();
       if (!api || owner.work !== work || !subject.applies(owner) || detail.preference
         && (detail.preference.work !== work || detail.preference.version < owner.version)) return;
-      setSetup(current => current?.work === work && current.api === api
-        ? { ...current, preference: detail.preference }
-        : { work, api, preference: detail.preference, editions: null, counterparts: [] });
-      if (detail.preference) setLanguage(detail.preference.language);
+      setSetup(current => {
+        if (current?.work !== work || current.api !== api) {
+          return { work, api, preference: detail.preference, editions: null, counterparts: [] };
+        }
+        return detail.preference && detail.preference.version < (current.preference?.version ?? 0)
+          ? current : { ...current, preference: detail.preference };
+      });
     };
     window.addEventListener(EDITION_SAVED, saved);
     return () => window.removeEventListener(EDITION_SAVED, saved);
   }, [work, api, setup?.preference?.version]);
 
-  const preference = setup?.preference ?? null;
+  const preference = setup?.work === work && setup.api === api ? setup.preference : null;
+  // Read the committed choice after merges, so a batched late load cannot reset an event's language.
+  useEffect(() => { setLanguage(preference?.language ?? locale); }, [work, api, locale, preference?.version, preference?.language]);
   const headingId = useId();
   // Shelving or finishing this Work elsewhere on the page changes what Main reports: read it again.
   const ownStatus = actions.kind === 'ready' ? actions.stateOf(work).status : null;

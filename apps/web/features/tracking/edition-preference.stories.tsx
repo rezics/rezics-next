@@ -149,6 +149,26 @@ function pendingContinuationFixture(kind: Kind) {
   return { source, complete: () => pending.resolve({ ok: false, failure: 'moved' }) };
 }
 
+function pendingSetupFixture() {
+  const source = preferenceFixture('release');
+  const relations = { ...fixture.spiderRelations(), resource: work };
+  const pending = deferred<Awaited<ReturnType<TrackingApi['relations']>>>();
+  const relationReads: string[] = [];
+  const progressReads: (string | undefined)[] = [];
+  const series = source.api.series;
+  source.api = { ...source.api,
+    async relations(resource) {
+      relationReads.push(resource);
+      return pending.promise;
+    },
+    async series(resource, language) {
+      progressReads.push(language);
+      return series(resource, language);
+    },
+  };
+  return { source, relationReads, progressReads, complete: () => pending.resolve({ ok: true, data: relations }) };
+}
+
 function languageProgressFixture(state: 'loading' | 'unavailable') {
   const source = preferenceFixture('realization', false);
   const series = source.api.series;
@@ -166,11 +186,12 @@ interface Args {
   surface: 'work' | 'series'; source: ReturnType<typeof preferenceFixture>;
   navigation?: ReturnType<typeof navigationFixture>;
   pendingContinuation?: ReturnType<typeof pendingContinuationFixture>;
+  pendingSetup?: ReturnType<typeof pendingSetupFixture>;
 }
 
 /** Reopening discards the catalogue page while keeping only what Main persisted. */
-function EditionPreference({ surface, source, navigation }: Args) {
-  const [actions] = useState(() => ({ ...memoryReader(source.main), tracking: source.api }));
+function EditionPreference({ surface, source, navigation, pendingSetup }: Args) {
+  const [actions] = useState(() => ({ ...memoryReader(source.main, pendingSetup ? { [work]: 'read' } : {}), tracking: source.api }));
   const [opening, setOpening] = useState(0);
   const [selectedWork, setSelectedWork] = useState(work);
   return <ReaderActionsProvider signedIn signInHref="/auth/start" actions={actions}>
@@ -184,6 +205,7 @@ function EditionPreference({ surface, source, navigation }: Args) {
         <h2 className="mb-3 font-semibold text-lg">Your edition</h2>
         <YourEdition work={selectedWork} signInHref="/auth/start" locale="en" messages={workMessages.en} />
       </section> : <SeriesProgressPanel key={opening} work={selectedWork} locale="en" />}
+      {pendingSetup ? <SeriesProgressPanel work={selectedWork} locale="en" preferenceForm={false} /> : null}
     </div>
   </ReaderActionsProvider>;
 }
@@ -491,4 +513,28 @@ const seriesPending = pendingContinuationFixture('realization');
 export const SeriesOldVersionContinuationIsDropped: Story = {
   args: { surface: 'series', source: seriesPending.source, pendingContinuation: seriesPending },
   async play({ canvasElement, args }) { await oldVersionContinuation(canvasElement, args.pendingContinuation!); },
+};
+
+const pendingSetup = pendingSetupFixture();
+export const WorkSaveBeforeRelationsKeepsCounterparts: Story = {
+  args: { surface: 'work', source: pendingSetup.source, pendingSetup },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const pending = args.pendingSetup!;
+    const offer = 'Also mark “So I’m a Spider, So What? (book)” as read';
+    await canvas.findByRole('combobox', { name: t.edition });
+    await expect(pending.relationReads).toEqual([work]);
+    await expect(canvas.queryByRole('button', { name: offer })).toBeNull();
+    await choose(canvas, t.language, 'English');
+    await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.preferenceSaved);
+    await expect(args.source.main.preferences.get(work)).toEqual({ work, language: 'en', edition: null, version: 2 });
+    pending.complete();
+    const panel = within(await canvas.findByRole('region', { name: t.seriesProgress }));
+    await expect(await panel.findByRole('button', { name: offer })).toBeVisible();
+    await expect(pending.relationReads).toEqual([work]);
+    await expect(pending.progressReads.at(-1)).toBe('en');
+    await expect(canvas.getByRole('combobox', { name: t.language })).toHaveTextContent('English');
+    await expect(args.source.main.calls.started).toEqual([]);
+  },
 };

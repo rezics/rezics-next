@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { editions as fixture, indexSummary, iri, saoOne } from './fixtures.ts';
 import { createMemoryMain, memoryTracking } from './memory.ts';
 import { copyOf } from './messages.ts';
-import { PreferenceForm } from './series-progress-panel.tsx';
+import { mergeSeriesSetup, PreferenceForm } from './series-progress-panel.tsx';
 import { applyEditionPage, editionRequest } from './tracking-sheet.tsx';
 import type { EditionPreference, Editions } from './types.ts';
 
@@ -78,4 +78,20 @@ test('independent edition details belong to the requested Work in the memory API
     expect(await api.edition(iri('other-work'), choice)).toEqual({ ok: false, failure: 'missing' });
     expect(await api.edition(saoOne, choice)).toEqual({ ok: true, data: item });
   }
+});
+
+test('an initial setup read supplies relations and editions without overwriting an intervening saved or cleared choice', () => {
+  const api = memoryTracking(createMemoryMain());
+  const loaded = { work: saoOne, api, preference: { ...preference, language: 'en', version: 1 },
+    editions: firstPage, counterparts: [{ work: iri('counterpart'), title: 'Equivalent book' }] };
+  for (const saved of [preference, null]) {
+    const event = { work: saoOne, api, preference: saved, editions: null, counterparts: [] };
+    const merged = mergeSeriesSetup(event, loaded);
+    expect(merged.preference).toBe(saved);
+    expect(merged.editions).toBe(firstPage);
+    expect(merged.counterparts).toEqual(loaded.counterparts);
+  }
+  expect(mergeSeriesSetup(null, loaded)).toBe(loaded);
+  expect(mergeSeriesSetup({ ...loaded, work: iri('other-work') }, loaded)).toBe(loaded);
+  expect(mergeSeriesSetup({ ...loaded, api: memoryTracking(createMemoryMain()) }, loaded)).toBe(loaded);
 });
