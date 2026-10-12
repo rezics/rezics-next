@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import type { ZoneConfiguration } from '../../../services/main/src/modules/zone/config-format.ts';
-import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { publicNavigationFixture } from './zone-public-navigation-support.ts';
 
@@ -19,7 +18,7 @@ test('saved preview publication status covers Content, navigation, layout and pr
     const saved = async () => f.json<SavedSelection>(await preview(), 200);
     const configure = async (presentation: ZonePresentation) => f.json<{ revision: string }>(
       await f.call('PUT', `${f.path}/configuration`, {
-        expectedHead: (await readZoneConfiguration(f.env, f.zone)).revision,
+        expectedHead: (await saved()).revision,
         presentation, actingSubject: f.actor,
       }), 200);
 

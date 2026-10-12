@@ -7,6 +7,7 @@ import { TARGET_RESOLVE_COST } from '../../../services/main/src/modules/target/r
 import { AccessInvitations } from '../../../services/main/src/modules/access/invitation.ts';
 import { AdmissionDenied, AdmissionExpired } from '../../../services/main/src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 test('G265: controlled Persons author exact contribution comments and replay without resurrection', async () => {
   const h = await memberFixture();
@@ -322,7 +323,7 @@ test('Account evidence changes Suitability eligibility for a semantic reply root
     h.fuseki.query = async (...args: Parameters<typeof h.fuseki.query>) => {
       const result = await originalQuery(...args);
       const query = args[0];
-      if (selectionCapture && query.includes('SELECT ?epoch ?sequence ?r ?revision ?type ?mergedInto')
+      if (foregroundCounted() && selectionCapture && query.includes('SELECT ?epoch ?sequence ?r ?revision ?type ?mergedInto')
         && query.includes(`VALUES ?r { <${root.component}> }`)) {
         const rows = result.results?.bindings ?? [];
         selectionCapture.push({ query, rows: rows.filter(row => row.r?.value === root.component).length });

@@ -8,11 +8,10 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { changeAdmittedComposition } from '../../../services/main/src/modules/structure/change-admitted.ts';
 import type { CompositionOperation } from '../../../services/main/src/modules/structure/change.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
-import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
 interface Draft { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
@@ -23,7 +22,7 @@ export async function publicNavigationFixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-public-navigation-${randomUUID()}`),
-    'openid agent:create work:create work:read space:create zone:edit collection:edit semantic:read');
+    'openid agent:create work:create work:edit work:read space:create zone:edit collection:edit semantic:read');
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
@@ -40,6 +39,8 @@ export async function publicNavigationFixture() {
     const content = new ContentCore(f.pool);
     const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
       access: f.access, content, contentAuthoring: content,
+      governance: { store: f.governance },
+      realmAdmin: new AccessRealmManagement(f.accessPool),
       agentProvisioning: new AgentProvisioning(f.accessPool, f.env) });
     const call = (method: string, path: string, body?: object, anonymous = false) =>
       app.handle(new Request(`http://main.local${path}`, { method,
@@ -60,14 +61,39 @@ export async function publicNavigationFixture() {
         capabilities: ['zone'], visibility: 'public', actingSubject: actor }), 201);
     await grant(`zone:edit:${created.zone}`, 'zone.edit');
     const path = `/v1/zones/${shortId(created.zone)}`;
-    const navigation = (await readZoneConfiguration(f.env, created.zone)).configuration.navigation;
-    const targets = [nativeId(), nativeId()];
-    for (const [index, collection] of targets.entries()) {
-      await grant(`collection:edit:${collection}`, 'collection.edit');
-      await grant(`semantic:read:${collection}`, 'semantic.read');
-      await f.json(await call('POST', '/v1/collections', { collection, name: `Navigation target ${index + 1}`,
-        disclosure: 'public', actingSubject: actor }), 201);
-    }
+    const configuration = async () => f.json<{ revision: string; configuration: { navigation: string } }>(
+      await call('GET', `${path}/configuration?actingSubject=${encodeURIComponent(actor)}`), 200);
+    const navigation = (await configuration()).configuration.navigation;
+    const collection = nativeId();
+    await grant(`collection:edit:${collection}`, 'collection.edit');
+    await grant(`semantic:read:${collection}`, 'semantic.read');
+    await f.json(await call('POST', '/v1/collections', { collection, name: 'Navigation collection',
+      disclosure: 'public', actingSubject: actor }), 201);
+    await grant('work:create:root', 'work.create');
+    const tail = await f.json<{ work: string; mainVersion: string; workRevision: string }>(
+      await call('POST', '/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
+        title: 'Navigation document', language: 'en', semanticTypes: ['https://schema.org/Recipe'],
+        actingSubject: actor }), 201);
+    await grant(`work:edit:${tail.work}`, 'work.edit');
+    await grant(`work:edit:${tail.work}`, 'recipe.edit');
+    await grant(`work:read:${tail.work}`, 'work.read');
+    await grant(`work:publish:${tail.work}`, 'work.publish');
+    await grant(`work:publish:${tail.work}`, 'work.withdraw-publication');
+    const composition = await f.json<{ structure: string; revision: string }>(
+      await call('POST', '/v1/compositions', { profile: 'recipe-composition', work: tail.work,
+        mainVersion: tail.mainVersion, actingSubject: actor }), 201);
+    let tailPublication: string | null = null;
+    const publishTail = async () => {
+      const result = await f.json<{ publicationDecision: string }>(await call('POST', '/v1/work-publications', {
+        profile: 'work-structure-publication-v1', operation: 'publish', work: tail.work, actingSubject: actor,
+        expectedWorkHead: tail.workRevision, expectedMainVersion: tail.mainVersion,
+        structure: composition.structure, expectedStructureHead: composition.revision,
+        expectedPublicationHead: tailPublication, disclosure: 'public', rightsBasis: 'original-contribution',
+      }), 201);
+      tailPublication = result.publicationDecision;
+    };
+    await publishTail();
+    const targets = [collection, tail.work];
     const changeNavigation = async (expectedHead: string, operations: readonly CompositionOperation[]) => {
       const result = await changeAdmittedComposition(f.env, f.account.verifier, f.access,
         new Request('http://main.local/navigation-fixture', { headers: { authorization: `Bearer ${f.account.tokenA}` } }),
@@ -89,16 +115,32 @@ export async function publicNavigationFixture() {
     };
     const publish = async (navigationRevision: string, page: PageSelection) => f.json<{ revision: string }>(
       await call('POST', `${path}/site-publications`, {
-        expectedHead: (await readZoneConfiguration(f.env, created.zone)).revision,
+        expectedHead: (await configuration()).revision,
         routesRevision: navigationRevision, navigationRevision, pages: [page], actingSubject: actor,
       }), 201);
     const presentation = (after?: string) => call('GET', `${path}/presentation${after ? `?after=${encodeURIComponent(after)}` : ''}`,
       undefined, true);
     const disclose = async (resource: string, visibility: 'public' | 'private') => {
-      await f.env.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-        DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:disclosure ?old } }
-        INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:disclosure rv:${visibility === 'public' ? 'Public' : 'Private'} } }
-        WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:disclosure ?old } }`);
+      // Withdrawal changes the target's live visibility without changing the Zone selection.
+      if (resource === tail.work) {
+        if (visibility === 'public') await publishTail();
+        else {
+          const withdrawn = await f.json<{ publicationDecision: string }>(await call('POST', '/v1/work-publications', {
+            profile: 'work-structure-publication-v1', operation: 'withdraw', work: tail.work,
+            actingSubject: actor, expectedPublicationHead: tailPublication,
+          }), 201);
+          tailPublication = withdrawn.publicationDecision;
+        }
+        return;
+      }
+      if (resource !== created.space) throw new Error('Navigation fixture visibility target is unknown');
+      const settingsPath = `/v1/spaces/${shortId(created.space)}/settings`;
+      const current = await f.json<{ generation: string; settings: { listing: 'listed' | 'unlisted' } }>(
+        await call('GET', `${settingsPath}?actingSubject=${encodeURIComponent(actor)}`), 200);
+      await f.json(await call('PUT', settingsPath, {
+        expectedGeneration: current.generation, actingSubject: actor,
+        reason: 'Exercise live navigation visibility', settings: { visibility, listing: current.settings.listing },
+      }), 201);
     };
     return { ...f, ...created, actor, path, navigation, targets, call, changeNavigation, save, publish, presentation, disclose };
   } catch (error) { await f.close(); throw error; }

@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import type { CompositionOperation } from '../../../services/main/src/modules/structure/change.ts';
-import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { shortId } from '../fixtures/author-credit.ts';
 import { publicNavigationFixture } from './zone-public-navigation-support.ts';
 
@@ -74,7 +73,9 @@ test('public navigation traverses fifty-one published mounts with current disclo
     await f.disclose(f.space, 'public');
 
     const retired = await f.json<{ revision: string }>(await f.call('POST', `${f.path}/retirements`, {
-      expectedHead: (await readZoneConfiguration(f.env, f.zone)).revision, actingSubject: f.actor,
+      expectedHead: (await f.json<{ revision: string }>(await f.call('GET',
+        `${f.path}/configuration?actingSubject=${encodeURIComponent(f.actor)}`), 200)).revision,
+      actingSubject: f.actor,
     }), 200);
     expect((await f.presentation(cursor)).status).toBe(404);
     expect((await f.presentation()).status).toBe(404);
