@@ -18,7 +18,7 @@ if (Bun.env.REZICS_TELEMETRY_RESTORE_CHILD === '1') {
   const cut = retained.cuts[0]!;
   const qaRunId = Bun.env.REZICS_QA_RUN_ID;
   if (!qaRunId) throw new Error('Run through goalctl integration QA');
-  await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId, '--persistent'], dockerEnvironment());
+  await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId], dockerEnvironment());
   const target = `telemetry-small-${qaRunId}`;
   const driver = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId, directory: seedDirectory,
