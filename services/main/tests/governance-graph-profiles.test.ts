@@ -266,6 +266,7 @@ for (const definition of authoredProfiles.filter(profile => profile.binding)) {
     const binding = manifest.profiles.find(profile => profile.id === definition.id)!.binding!;
     const selected = definition.shapes.find(shape => shape.iri.endsWith(`/${binding.roles[0]}-shape`))!;
     const read = commandBindingRead(definition.id, binding, selected.iri, ['urn:rezics:graph:current'], manifest);
+    expect(read.facts.every(fact => fact.predicate !== 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type')).toBe(true);
     const prefixes = new Map(definition.prefixes);
     for (const role of binding.roles) {
       const shape = definition.shapes.find(shape => shape.iri.endsWith(`/${role}-shape`))!;

@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import manifest from '../../../generated/model/manifest.json';
+import { commandBindingRead, commandBindingValue } from '../../../model/compiler/registry.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { profileValidations } from '../src/infrastructure/profile.ts';
 import { discloseInventory } from '../src/modules/disclosure/read.ts';
 import { unrecordedReasons } from '../src/modules/governance/notices.ts';
 import type { DecisionInput } from '../src/modules/governance/store.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
-import { GRAPHS, RV } from '../src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit } from '../src/modules/work/activate.ts';
 
 async function json<T>(response: Response, status = 201): Promise<T> {
   const body = await response.text();
@@ -106,5 +109,70 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
         expect(vocabulary.items.some(item => item.id === resource)).toBe(false);
       }
     }
+  } finally { await stack.stop(); }
+}, 180_000);
+
+test('an ordinary Realm rating-context bundle binds structurally and native SHACL rejects a retired role', async () => {
+  const stack = await startMediaStack('realm-rating-binding', { profileCredits: true });
+  try {
+    const editor = await stack.member(`rating-binding-${randomUUID()}`);
+    await editor.grant('space:create:root', 'space.create');
+    const space = await json<{ realm: string }>(await editor.send('POST', '/v1/spaces', {
+      profile: 'space-realm-v1', name: `Rating binding ${randomUUID()}`, capabilities: ['realm'], actingSubject: editor.actor,
+    }));
+    await editor.grant(`rating:context:${space.realm}`, 'rating.context.create');
+    const context = await json<{ context: string }>(await editor.send('POST', '/v1/rating-contexts', {
+      profile: 'realm-target-rating-context-v4', realm: space.realm, question: 'How did this subject do?',
+      language: 'en', targetGrain: 'resource', actingSubject: editor.actor,
+    }));
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(space.realm)} a rv:Realm . FILTER NOT EXISTS { ${iri(space.realm)} a rv:GlobalRatingPopulation }
+    } }`, 1024)).boolean).toBe(true);
+    const profile = 'realm-target-rating-context-v4';
+    const definition = manifest.profiles.find(entry => entry.id === profile)!.binding!;
+    const shape = `https://rezics.com/definition/${profile}/context-shape`;
+    const graphs = [GRAPHS.current, GRAPHS.revisions];
+    const read = commandBindingRead(profile, definition, shape, graphs, manifest);
+    const rows = (await stack.fuseki.query(`SELECT DISTINCT ${read.keys.map(key => `?${read.variables[key]}`).join(' ')} WHERE {
+      VALUES ${read.anchor} { ${iri(context.context)} } ${read.pattern}
+    } LIMIT 2`, 32_768)).results?.bindings ?? [];
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row[read.variables.realm!]!.value).toBe(space.realm);
+    const binding = Object.fromEntries([...definition.required, ...definition.optional]
+      .filter(key => row[read.variables[key]!])
+      .map(key => [key, commandBindingValue(key, row[read.variables[key]!]!.value)]));
+    const validations = await profileValidations(stack.fuseki, profile, definition.roles.map(role => ({
+      shape: `https://rezics.com/definition/${profile}/${role}-shape`,
+      focus: [row[read.variables[role]!]!.value], graphs,
+    })), binding);
+    for (const retired of [false, true]) {
+      const receipt = `urn:rezics:receipt:rating-binding:${randomUUID()}`;
+      const digest = hash(receipt);
+      const result = await stack.fuseki.commandWithReceipt({ receipt, digest, validations, deadlineMs: 10_000,
+        update: `PREFIX rv: <${RV}>
+          DELETE {
+            GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+            ${retired ? `GRAPH ${iri(GRAPHS.current)} { ${iri(space.realm)} rv:realmState rv:Active }` : ''}
+          }
+          INSERT {
+            GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+            ${retired ? `GRAPH ${iri(GRAPHS.current)} { ${iri(space.realm)} rv:realmState rv:Retired }` : ''}
+            GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
+              rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ?epoch ; rv:sequence ?next ; rv:outcome rv:Succeeded }
+            GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${digest}`)} a rv:OutboxBatch ;
+              rv:dataEpoch ?epoch ; rv:sequence ?next ; rv:eventCount 0 }
+          }
+          WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n ; rv:dataEpoch ?epoch }
+            BIND(?n + 1 AS ?next) FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+          }` });
+      expect(result.status, JSON.stringify(result)).toBe(retired ? 'invalid' : 'committed');
+      if (result.status === 'invalid') expect(JSON.stringify(result.report)).toContain('realm-shape');
+      expect((await stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`, 1024)).boolean)
+        .toBe(!retired);
+    }
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(space.realm)} rv:realmState rv:Active
+    } }`, 1024)).boolean).toBe(true);
   } finally { await stack.stop(); }
 }, 180_000);

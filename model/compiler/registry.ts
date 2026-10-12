@@ -184,7 +184,7 @@ export function buildCommandRegistry(profiles: readonly ProfileDefinition[],
  * arguments; native BindingPolicy remains the validator of their relationships.
  * Roles and keys always come from the registry, never a consumer's profile table. */
 export function commandBindingRead(profile: string, binding: RegistryBinding, shape: string,
-  graphs: readonly string[], registry: Pick<CommandRegistry, 'canonical'>) {
+  graphs: readonly string[], _registry: Pick<CommandRegistry, 'canonical'>) {
   const keys = [...new Set([...binding.roles, ...binding.required, ...binding.optional])];
   const variables = Object.fromEntries(keys.map((key, index) => [key, `b${index}`]));
   const variable = (key: string) => {
@@ -302,19 +302,8 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
       digest: 'bodyDigest', manifest: 'manifest', actor: 'sealedBy' });
     receipt('release', 'fixedRelease');
   } else throw new Error(`${profile} has no structural binding read`);
-  // Canonical role types exclude historical revision anchors that retain the
-  // same links. A structural bundle must identify the definition subjects.
-  for (const focus of binding.roles) {
-    const focusShape = `https://rezics.com/definition/${profile}/${focus}-shape`;
-    const types = registry.canonical.filter(entry => entry.routes.some(route => route.shape === focusShape))
-      .map(entry => entry.type);
-    if (!types.length) continue;
-    facts.push({ subject: focus, predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', types });
-    const graph = `?bindingGraph${graphIndex++}`, type = `?bindingType${graphIndex}`;
-    patterns.push(`VALUES ${graph} { ${graphs.map(value => `<${value}>`).join(' ')} }
-      VALUES ${type} { ${types.map(value => `<${value}>`).join(' ')} }
-      GRAPH ${graph} { ${variable(focus)} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ${type} }`);
-  }
+  // Routing selects a validation shape; it does not enumerate every type that
+  // shape admits. Native SHACL validates the structurally bound role subjects.
   // Catch newly declared roles or required arguments at the owning registry.
   const pattern = patterns.join('\n');
   for (const key of [...binding.roles, ...binding.required]) {
