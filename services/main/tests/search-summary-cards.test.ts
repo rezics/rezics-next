@@ -16,7 +16,7 @@ test('search card batch selects localized serial metadata and the matching graph
     expect(limit).toBe(2);
     return [{ work: field(work), head: field(id(2)), component: field(component),
       state: field(JSON.stringify(state)) }];
-  }, options: { language: 'en' }, position: { sequence: '42' },
+  }, observeDependency: () => '', options: { language: 'en' }, position: { sequence: '42' },
   deps: { serialStats: { batch: async (works: string[], sequence: string) => {
     expect(works).toEqual([work]);
     expect(sequence).toBe('42');

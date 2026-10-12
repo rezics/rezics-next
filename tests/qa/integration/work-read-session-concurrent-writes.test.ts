@@ -392,7 +392,7 @@ async function concurrentReadProfiles() {
     await command('POST', '/v1/me/feed-feedback', {
       actingSubject: actor, kind: 'work', target: unrelatedPublic.work, strength: 'hide',
     });
-    const excludedPath = `/v1/feed?sort=new&kinds=work&limit=2&actingSubject=${encodeURIComponent(actor)}`;
+    const excludedPath = `/v1/feed?scope=all&sort=new&kinds=work&limit=2&actingSubject=${encodeURIComponent(actor)}`;
     const excluded = await measure(excludedPath, undefined, home.author.token);
     assert.equal(excluded.result.status, 200);
     assert(JSON.stringify(excluded.result.body).includes(shown.work));
@@ -409,7 +409,7 @@ async function concurrentReadProfiles() {
     await home.json(await home.call('PUT', '/v1/me/blocked-people', {
       actingSubject: blockedReader, target: actor, blocked: true,
     }, home.reader.token));
-    const blockedPath = `/v1/feed?sort=new&kinds=work&limit=2&actingSubject=${encodeURIComponent(blockedReader)}`;
+    const blockedPath = `/v1/feed?scope=all&sort=new&kinds=work&limit=2&actingSubject=${encodeURIComponent(blockedReader)}`;
     const blocked = await measure(blockedPath, undefined, home.reader.token);
     assert.equal(blocked.result.status, 200);
     assert.deepEqual(blocked.result.body.items, []);

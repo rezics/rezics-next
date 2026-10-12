@@ -138,7 +138,7 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
     throw new WorkReadUnavailable('Decision cursor ordering is unavailable');
   }
   const epochs = await readEpochOrder(session);
-  const selected = await admittedPage<ReadRow>({
+  const selected = await session.selection(`realm-decisions:${realm}:${session.options.cursor ?? ""}:${limit}`, probe => admittedPage<ReadRow>({
     limit,
     after:
       cursor && order
@@ -150,7 +150,7 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
         : undefined,
     key: (row) => row.id!.value,
     fetch: async (after, size) => {
-      const rows = await session.query(
+      const rows = await probe.query(
         `SELECT DISTINCT ?id ?kind ?work ?main ?subject ?outcome
     ?revisionEpoch ?sequence ?epochOrder WHERE {
     ${epochs}
@@ -182,8 +182,8 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
       }
       return rows;
     },
-    admit: (rows) => admittedDecisions(session, rows, realm),
-  });
+    admit: (rows) => admittedDecisions(probe, rows, realm),
+  }), value => ({ page: value.page, hasMore: !!value.lookahead }));
   const page = selected.page;
   const items = page.map(decisionItem);
   await readRealmBasis(session, realm);

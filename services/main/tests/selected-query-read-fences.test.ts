@@ -2,6 +2,10 @@ import { expect, test } from 'bun:test';
 import { admittedPage } from '../src/modules/disclosure/admitted-page.ts';
 import { WorkReadSession, WorkReadMoved, type ReadRow } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import type { Pool } from 'pg';
+import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { readRealmWorks } from '../src/modules/realm-reads/read-works.ts';
+import type { ResourceSummary } from '../src/modules/media/summary.ts';
 
 const term = (value: string) => ({ type: 'literal', value });
 function fixture() {
@@ -51,3 +55,48 @@ test('ordinary exact query rows still fence every returned selected head', async
   f.rows[2]!.head = term('new-selected-head');
   await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
+
+function realmFixture() {
+  const f = fixture();
+  for (const row of f.rows) Object.assign(row, {
+    main: term(`main-${row.work!.value}`), selection: term(`selection-${row.work!.value}`),
+    contribution: term(`contribution-${row.work!.value}`), language: term('en'),
+  });
+  f.session.deps.environment.fuseki.query = async body => ({ results: { bindings:
+    body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row })) : [] } });
+  const pool = { query: async (sql: string, args?: unknown[]) => ({ rows: sql.includes('jsonb_to_recordset')
+    ? (JSON.parse(String(args![0])) as Array<{ ordinal: number }>).map(target => ({
+      open: true, ordinal: target.ordinal, restricted: false, assessments: [],
+    })) : [] }) } as unknown as Pool;
+  configureDisclosure(f.session.deps.environment, new DisclosureStore(pool));
+  f.session.realm = async realm => ({ realmRevision: 'realm-head', space: realm, visibility: 'public',
+    reviewMode: 'open', revision: null }) as never;
+  f.session.summaries = async resources => resources.map(reference => ({ reference, status: 'available',
+    type: 'work', disclosure: 'public', name: { value: reference }, avatar: { kind: 'fallback' },
+  }) as ResourceSummary);
+  return f;
+}
+
+test('Realm Work reader excludes unshown candidate and lookahead heads from its delivery fence', async () => {
+  const f = realmFixture();
+  const page = await readRealmWorks(f.session, 'realm');
+  expect(page.items.map(item => item.id)).toEqual(['001']);
+  expect(page.nextCursor).not.toBeNull();
+  f.rows[2]!.head = term('edited-third-candidate');
+  f.rows[1]!.head = term('edited-lookahead');
+  await f.session.fenceDependencies();
+});
+
+for (const change of ['shown head', 'earlier member', 'continuation'] as const) {
+  test(`Realm Work reader fences its selected ${change}`, async () => {
+    const f = realmFixture();
+    await readRealmWorks(f.session, 'realm');
+    if (change === 'shown head') f.rows[0]!.head = term('fresh-shown-head');
+    if (change === 'earlier member') {
+      f.rows.unshift({ ...f.rows[0], work: term('000') });
+      f.rows.length = 64;
+    }
+    if (change === 'continuation') f.rows.splice(1);
+    await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  });
+}

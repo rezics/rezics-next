@@ -14,7 +14,7 @@ const field = (value: string) => ({ value });
 const position = { dataEpoch: 'epoch', sequence: '7400' };
 const session = (own: object) => ({ options: { language: 'en' }, position,
   deps: { personPreferences: { visibleNameOwners: async (agents: readonly string[]) => new Set(agents) } },
-  checkDeadline() {}, ...own }) as unknown as WorkReadSession;
+  checkDeadline() {}, observeDependency: () => '', ...own }) as unknown as WorkReadSession;
 
 test('G1012: one damaged serial header leaves its healthy neighbour rich; authoritative reads still fail', async () => {
   const state = { kind: 'header' as const, originalTitle: null, localized: [{ language: 'en',

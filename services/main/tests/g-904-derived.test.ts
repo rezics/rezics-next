@@ -189,6 +189,9 @@ for (const signed of [false, true]) {
     f.session.query = async query => query.includes('SELECT DISTINCT ?work ?head ?main')
       ? [row({ work: id(1), head: id(900), main: id(11), selection: id(21), contribution: id(31), language: 'en' })]
       : query.includes('SELECT ?work ?head') ? serialHeads(query) : [];
+    const graphQuery = f.graph.query.bind(f.graph);
+    f.graph.query = async query => query.includes('SELECT DISTINCT ?work ?head ?main')
+      ? { results: { bindings: await f.session.query(query, 64) } } : graphQuery(query);
     expect((await readRealmWorks(f.session, id(99))).items.map(item => item.id)).toEqual([id(1)]);
     expect(f.hydrated.every(resources => resources.includes(id(1)))).toBe(true);
   });
@@ -225,6 +228,9 @@ for (const signed of [false, true]) {
         : query.includes('FILTER(?id =')
           ? [decisions[0]!]
           : decisions;
+    const graphQuery = f.graph.query.bind(f.graph);
+    f.graph.query = async query => query.includes('SELECT DISTINCT ?id ?kind')
+      ? { results: { bindings: await f.session.query(query, 64) } } : graphQuery(query);
     const page = await readRealmDecisions(f.session, realm);
     expect(page.items.map((item) => item.work)).toEqual([id(2), id(3)]);
     expect(page.count.value).toBe(2);
@@ -258,6 +264,9 @@ for (const signed of [false, true]) {
         : query.includes('SELECT ?work ?head')
           ? serialHeads(query)
           : [];
+    const graphQuery = f.graph.query.bind(f.graph);
+    f.graph.query = async query => query.includes('SELECT DISTINCT ?work ?head ?main')
+      ? { results: { bindings: await f.session.query(query, 64) } } : graphQuery(query);
     const page = await readRealmWorks(f.session, id(99));
     expect(page.items.map((item) => item.id)).toEqual([id(2), id(3)]);
     expect(page.count.value).toBe(2);

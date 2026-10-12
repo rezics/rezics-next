@@ -28,12 +28,12 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
   const limit = session.options.limit ?? 20;
   const binding = ['realm-works-v1', realm, session.options.language ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const selected = await admittedPage<ReadRow>({
+  const selected = await session.selection(`realm-works:${realm}:${session.options.cursor ?? ""}:${limit}`, probe => admittedPage<ReadRow>({
     limit,
     after: cursor ? { work: { type: 'uri', value: cursor.after } } : undefined,
     key: (row) => row.work!.value,
     fetch: async (after, size) => {
-      const rows = await session.query(
+      const rows = await probe.query(
         `SELECT DISTINCT ?work ?head ?main ?selection ?contribution ?language WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
@@ -71,7 +71,7 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
       return rows;
     },
     admit: async (rows) => {
-      const decisions = await session.disclosure(
+      const decisions = await probe.disclosure(
         rows.map((row) => ({
           owner: 'graph',
           resource: row.work!.value,
@@ -84,7 +84,7 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
       );
       return rows.filter((_, index) => decisions[index] === 'visible');
     },
-  });
+  }), value => ({ page: value.page, hasMore: !!value.lookahead }));
   const page = selected.page;
   const ids = page.map((row) => row.work!.value);
   const summaries = await session.summaries(ids);

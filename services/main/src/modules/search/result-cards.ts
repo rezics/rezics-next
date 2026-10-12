@@ -14,7 +14,7 @@ import { WorkReadMoved } from '../work/read-session.ts';
 import { searchPageRatings } from './ratings.ts';
 import { searchCardReadDependencies } from './card-reads.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
-import { EMPTY_SERIAL_SUMMARY } from '../work/summary-serial.ts';
+import { EMPTY_SERIAL_SUMMARY, readSerialStatistics } from '../work/summary-serial.ts';
 import { RatingAggregateBudgetExceeded } from '../rating/aggregate.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
 import { Value } from 'typebox/value';
@@ -49,8 +49,7 @@ export async function searchPageSerial(session: WorkReadSession, works: readonly
     || rows.some(row => !row.work || !works.includes(row.work.value))) {
     throw new WorkReadUnavailable('Search serial heads are ambiguous');
   }
-  const stats = preview ? await optionalPreview(session, async () => session.deps.serialStats?.batch(works, session.position.sequence))
-    : await session.deps.serialStats?.batch(works, session.position.sequence);
+  const stats = await readSerialStatistics(session, works, preview);
   for (const row of rows) {
     const work = row.work!.value;
     const readHeader = async () => {

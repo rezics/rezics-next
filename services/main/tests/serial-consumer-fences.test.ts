@@ -4,6 +4,7 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
 import { enrichSerialSearch, readSerialStatistics, readSerialSummaries } from '../src/modules/work/summary-serial.ts';
 import { SearchSnapshotMoved } from '../src/modules/work/search-readiness.ts';
+import { searchPageSerial } from '../src/modules/search/result-cards.ts';
 import { serialWork, serialId } from './serial-selected-fixture.ts';
 
 function fixture() {
@@ -18,11 +19,12 @@ function fixture() {
   return { state, session, deps };
 }
 
-for (const consumer of ['summary', 'shared'] as const) {
+for (const consumer of ['summary', 'shared', 'search card'] as const) {
   for (const changed of ['aggregate', 'disclosure'] as const) {
     test(`${consumer} serial facts fence selected ${changed} movement`, async () => {
       const f = fixture();
       if (consumer === 'summary') await readSerialSummaries(f.session, [serialWork]);
+      else if (consumer === 'search card') await searchPageSerial(f.session, [serialWork]);
       else await readSerialStatistics(f.session, [serialWork]);
       if (changed === 'aggregate') f.state.count++;
       else f.state.visible = false;
