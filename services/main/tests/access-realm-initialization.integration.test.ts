@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { AccessRealmManagement, type RealmInitializationInput } from '../src/modules/access/realm-management.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { initialRealmPolicyFacts, REALM_INITIALIZATION_COST } from '../src/modules/access/realm-initialization.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { RealmSubmissionStore } from '../src/modules/realm-submission/store.ts';
@@ -129,6 +130,7 @@ test('An ordinary policy publication after creation admits submissions at its ne
   h.input.settings = { visibility: 'public', reviewRequired: false, reviewMode: 'open',
     whoMaySubmit: 'members', selfJoin: true };
   await h.management.initializeCreated(h.principal, h.input, h.env);
+  await grantSettingsMandate(h);
   const created = initialRealmPolicyFacts(h.input, h.space, spaceCreationReceiptIri(h.admissionId));
   const memberPrincipal = { issuer: 'https://accounts.test', subject: randomUUID() };
   const memberId = randomUUID(), member = id(), scope = `submission:submit:${h.realm}`;
@@ -313,10 +315,19 @@ async function fixture(sealed = true) {
     hidePolicy: () => { policyAvailable = false; } };
 }
 
+async function grantSettingsMandate(h: Awaited<ReturnType<typeof fixture>>) {
+  await grantFixtureAuthority(pool, { scope: `governance:realm:${h.realm}`, requireDispatch: true,
+    representations: [{ principalId: h.principalId, actor: h.actor,
+      action: 'realm.settings.manage', lifetime: '1 hour' }],
+    grant: { actor: h.actor, action: 'realm.settings.manage', lifetime: '1 hour' } });
+}
+
 test('Created Realm initialization is atomic, creation-bound, replayable and bounded on host PostgreSQL', async () => {
   const h = await fixture();
   const first = await h.management.initializeCreated(h.principal, h.input, h.env);
   expect(first).toEqual({ realm: h.realm, accessRevision: '1', replayed: false });
+  await expect(h.management.settings(h.principal, h.realm, h.actor)).rejects.toBeInstanceOf(RealmAdminDenied);
+  await grantSettingsMandate(h);
   expect(await h.management.settings(h.principal, h.realm, h.actor)).toMatchObject({ generation: '1',
     settings: { ...h.input.settings, rules: [rule] }, ruleBasis: { revision: '1' } });
   const client = await pool.connect();
