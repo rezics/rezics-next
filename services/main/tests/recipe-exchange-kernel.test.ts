@@ -146,7 +146,8 @@ test('structured unit composition uses a registered symbol and survives export t
     .toThrow(RecipeUnitNotRegistered);
   try { parseRecipeFile(Buffer.from(JSON.stringify(unknown.recipe)), 'application/ld+json'); }
   catch (error) {
-    expect((error as RecipeUnitNotRegistered).importability).toEqual(unknown.importability);
+    if (!(error instanceof RecipeUnitNotRegistered)) throw error;
+    expect(unknown.importability).toEqual(error.importability);
   }
 });
 
