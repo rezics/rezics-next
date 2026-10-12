@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { json, png, safetyFixture, sha, type Receipt } from './g-744-support.ts';
@@ -624,18 +624,22 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
     }
   }, 300_000);
 
-test.failing('public Content phrase search stays available and excludes a restricted revision; open, kernel, gated reads public admission',
-  async () => {
-    if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
-    const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID,
-      ['access', 'content', 'relay', 'account'], 'owner');
-    const f = await safetyFixture('rights-content-search-admission', true, databases.urls);
-    try {
-      const maintainer = f.author;
-      const claimant = f.backup;
-      const work = await f.stack.publicWork(maintainer.actor, ['en'], `Rights Content ${randomUUID()}`);
-      await maintainer.grant(`work:read:${work.work}`, 'work.read');
+describe('', () => {
+  let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>> | undefined;
+  let fixture: Fixture | undefined;
+  let bodyText = '';
+  let contentRevision = '';
+  let replacementText = '';
+  let replacementRevision = '';
 
+  beforeAll(async () => {
+    if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
+    const databaseClones = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID,
+      ['access', 'content', 'relay', 'account'], 'owner');
+    databases = databaseClones;
+    const f = await safetyFixture('rights-content-search-admission', true, databaseClones.urls);
+    fixture = f;
+    try {
       f.deps.contentProjection = { content: f.stack.content, cursor: f.stack.contentCursor,
         consumer: f.stack.contentConsumer };
       await f.stack.contentCursor.initialize(f.stack.contentConsumer);
@@ -670,7 +674,11 @@ test.failing('public Content phrase search stays available and excludes a restri
         return true;
       };
 
-      const bodyText = `Rights body original ${randomUUID().replaceAll('-', '')}`;
+      const maintainer = f.author;
+      const claimant = f.backup;
+      const work = await f.stack.publicWork(maintainer.actor, ['en'], `Rights Content ${randomUUID()}`);
+      await maintainer.grant(`work:read:${work.work}`, 'work.read');
+      bodyText = `Rights body original ${randomUUID().replaceAll('-', '')}`;
       const content = await publishBody(f, maintainer, work.work, bodyText);
       expect(await projectContentToHead()).toBe(true);
       const beforeRestriction = await publicContentPhrase(f, bodyText);
@@ -689,33 +697,51 @@ test.failing('public Content phrase search stays available and excludes a restri
       });
       const decided = await decideThroughCompletion(f, restriction);
       expect(decided.outcome).toBe('interim_restrict');
+      contentRevision = content.revision;
 
+      replacementText = `Rights body replacement ${randomUUID().replaceAll('-', '')}`;
+      const replacement = await publishBody(f, maintainer, work.work, replacementText, content);
+      expect(await projectContentToHead()).toBe(true);
+      replacementRevision = replacement.revision;
+    } catch (error) {
+      await f.stop();
+      fixture = undefined;
+      throw error;
+    }
+  }, 300_000);
+
+  afterAll(async () => {
+    await fixture?.stop();
+    await databases?.close();
+  }, 300_000);
+
+  test.failing('public Content phrase search stays available and excludes a restricted revision; open, kernel, gated reads public admission',
+    async () => {
+      const f = fixture!;
       const query = (phrase: string) => f.call('POST', '/v1/queries', {
         profile: 'public-content-phrase-v1', phrase, language: 'en',
       });
       const restrictedSearch = await observed(await query(bodyText));
       const absentSearch = await observed(await query(randomUUID()));
-
-      const replacementText = `Rights body replacement ${randomUUID().replaceAll('-', '')}`;
-      const replacement = await publishBody(f, maintainer, work.work, replacementText, content);
-      expect(await projectContentToHead()).toBe(true);
       const replacementSearch = await observed(await query(replacementText));
-
-      expect(restrictedSearch.status).toBe(200);
-      expect(absentSearch.status).toBe(200);
-      expect(replacementSearch.status).toBe(200);
+      const codeOf = (response: { body: unknown }) => typeof response.body === 'object' && response.body !== null
+        && 'code' in response.body ? String(response.body.code) : 'none';
+      console.error(`public-content-phrase-v1 post-restriction: HTTP ${restrictedSearch.status} code=${codeOf(restrictedSearch)}`);
+      expect(restrictedSearch.status,
+        `POST /v1/queries after restriction: HTTP ${restrictedSearch.status} code=${codeOf(restrictedSearch)}`).toBe(200);
       const restrictedResults = restrictedSearch.body as { total: number; results: { revision: string }[] };
       const absentResults = absentSearch.body as { total: number; results: { revision: string }[] };
       const replacementResults = replacementSearch.body as { total: number; results: { revision: string }[] };
+      expect(restrictedResults.results.some(result => result.revision === revisionIri(contentRevision))).toBe(false);
       expect(restrictedResults.total).toBe(absentResults.total);
       expect(restrictedResults.results).toEqual(absentResults.results);
+      expect(absentSearch.status, `POST /v1/queries absent phrase: HTTP ${absentSearch.status} code=${codeOf(absentSearch)}`).toBe(200);
+      expect(replacementSearch.status,
+        `POST /v1/queries replacement phrase: HTTP ${replacementSearch.status} code=${codeOf(replacementSearch)}`).toBe(200);
       expect(replacementResults.total).toBe(1);
-      expect(replacementResults.results.some(result => result.revision === revisionIri(replacement.revision))).toBe(true);
-    } finally {
-      await f.stop();
-      await databases.close();
-    }
-  }, 300_000);
+      expect(replacementResults.results.some(result => result.revision === revisionIri(replacementRevision))).toBe(true);
+    }, 300_000);
+});
 
 test.failing('user-Use restriction scope: shared Asset still hides Work B\'s Use; open, trust-ops, report-g1937',
   async () => {
