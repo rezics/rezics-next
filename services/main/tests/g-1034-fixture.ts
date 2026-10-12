@@ -5,6 +5,31 @@ export interface PostedRealmReply {
   placement?: string;
 }
 
+interface TimedRealmThread {
+  reply: string;
+  placement: string;
+  score: number;
+  occurred_at: Date;
+}
+
+/** Use the replies' recorded build timestamps, rather than assuming a retained
+ * backup is still inside Top's seven-day or thirty-day window. */
+export function realmTopWindow<T extends TimedRealmThread>(
+  rows: readonly T[],
+  period: 'week' | 'month' | 'all',
+  now: Date,
+): T[] {
+  const duration = period === 'week' ? 7 * 86_400_000 : 30 * 86_400_000;
+  return rows
+    .filter((row) => period === 'all' || row.occurred_at.getTime() + duration > now.getTime())
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.occurred_at.getTime() - a.occurred_at.getTime() ||
+        a.placement.localeCompare(b.placement),
+    );
+}
+
 /**
  * Seed replies the way a reader does. `post` runs the Realm reply command
  * (draft, identity, review, and placement). The projector writes the slots,
@@ -24,7 +49,8 @@ export async function growRealmThreads(
 ): Promise<PostedRealmReply[]> {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid reply seed count');
   const startIndex = options.startIndex ?? 0;
-  if (!Number.isSafeInteger(startIndex) || startIndex < 0) throw new Error('Invalid reply seed index');
+  if (!Number.isSafeInteger(startIndex) || startIndex < 0)
+    throw new Error('Invalid reply seed index');
   const started = performance.now();
   const replies: PostedRealmReply[] = [];
   let cursor = options.parent
@@ -36,7 +62,10 @@ export async function growRealmThreads(
         ? cursor
         : { reply: options.parent.reply, revision: options.parent.revision }
       : undefined;
-    const posted = await post(`${options.keyPrefix ?? 'realm-reply'}:${startIndex + index}`, parent);
+    const posted = await post(
+      `${options.keyPrefix ?? 'realm-reply'}:${startIndex + index}`,
+      parent,
+    );
     replies.push(posted);
     if (options.parent?.chain) cursor = { reply: posted.reply, revision: posted.revision };
     if ((index + 1) % 100 === 0 || index + 1 === count) {

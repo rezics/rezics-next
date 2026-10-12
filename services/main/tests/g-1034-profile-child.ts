@@ -27,6 +27,8 @@ const { AccessRealmManagement } = await import('../src/modules/access/realm-mana
 const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { GRAPHS, iri } = await import('../src/modules/work/activate.ts');
+const { grantFixtureAuthority } = await import('../src/modules/access/fixture-authority.ts');
+const { realmTopWindow } = await import('./g-1034-fixture.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
 const {
   explainUnavailableCorpus,
@@ -203,20 +205,14 @@ try {
   const root = `/v1/realms/${realm.slice(-36)}` as const;
   const work = { work: corpus.identity.work, draftRevision: corpus.identity.draftRevision };
   const grant = async (scope: string, action: string, subject = actor) => {
-    await stack.accessPool.query(
-      'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
-      [scope],
-    );
-    await stack.accessPool.query(
-      `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
-      VALUES($1,$2,$3,$4,now()+interval '1 hour')`,
-      [randomUUID(), home.author.principalId, subject, action],
-    );
-    await stack.accessPool.query(
-      `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-      VALUES($1,$2,$2,$3,$4,now()+interval '1 hour')`,
-      [randomUUID(), subject, scope, action],
-    );
+    await grantFixtureAuthority(stack.accessPool, {
+      scope,
+      requireDispatch: true,
+      representations: [
+        { principalId: home.author.principalId, actor: subject, action, lifetime: '8 hours' },
+      ],
+      grant: { actor: subject, action, lifetime: '8 hours', requireSelfIssuer: true },
+    });
   };
   const grantRankingAuthority = async () => {
     // A retained corpus stores facts, while each live test establishes current
@@ -613,6 +609,7 @@ try {
   });
   let created = 0;
   let winner: string | undefined = corpus.identity.winner.reply;
+  let expiryReply: string | undefined;
   for (const size of REALM_RANKING_SCALES) {
     if (size !== 100) {
       await restored.close();
@@ -832,6 +829,7 @@ try {
       });
     }
     assert(posted.reply.startsWith('https://rezics.com/id/'));
+    expiryReply = posted.reply;
     const commandProfiles = replyCommandProfiles;
     replyCommandProfiles = undefined;
     assert.equal(
@@ -888,23 +886,46 @@ try {
   // The final write above advances the population after its per-scale reads.
   // Catch Home up before asserting the rolling-window pages are ready.
   await project();
+  const timedRoots = (
+    await stack.accessPool.query<{
+      reply: string;
+      placement: string;
+      score: number;
+      occurred_at: Date;
+    }>(
+      `SELECT reply,placement,score,occurred_at FROM access.realm_thread_reference
+       WHERE data_epoch=$1 AND realm=$2 AND parent IS NULL AND active`,
+      [epoch, realm],
+    )
+  ).rows;
+  const now = (await stack.accessPool.query<{ now: Date }>('SELECT clock_timestamp() AS now'))
+    .rows[0]!.now;
   // Rolling windows select their entire eligible populations before LIMIT.
-  for (const period of ['week', 'month', 'all']) {
+  for (const period of ['week', 'month', 'all'] as const) {
     const response = await app.handle(
       new Request(`http://main.local${root}/threads?sort=top&window=${period}&limit=2`),
     );
     assert.equal(response.status, 200, await response.clone().text());
-    assert.equal(
-      ((await response.json()) as { items: { reply: string }[] }).items[0]!.reply,
-      winner,
+    const expected = realmTopWindow(timedRoots, period, now).slice(0, 2);
+    assert.deepEqual(
+      ((await response.json()) as { items: { reply: string }[] }).items.map((item) => item.reply),
+      expected.map((row) => row.reply),
     );
+    evidence.push({
+      window: period,
+      now: now.toISOString(),
+      expected: expected.map((row) => row.reply),
+    });
   }
   // Top expiry crosses wall-clock time without changing the vote/age formula.
-  await stack.accessPool.query(
+  // The fresh measured reply has a live week row at any backup age; only its
+  // derived index expires for this recovery check, leaving source timestamps intact.
+  const expired = await stack.accessPool.query(
     `UPDATE access.realm_thread_order SET expires_at=clock_timestamp()-interval '1 second'
     WHERE data_epoch=$1 AND realm=$2 AND reply=$3 AND period='week'`,
-    [epoch, realm, winner],
+    [epoch, realm, expiryReply],
   );
+  assert.equal(expired.rowCount, 1, 'The expiry recovery fixture must target a live week row');
   assert.equal(
     (await app.handle(new Request(`http://main.local${root}/threads?sort=top&window=week&limit=2`)))
       .status,
@@ -915,7 +936,7 @@ try {
     (
       await stack.accessPool.query(
         `SELECT 1 FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2 AND reply=$3 AND period='week'`,
-        [epoch, realm, winner],
+        [epoch, realm, expiryReply],
       )
     ).rowCount,
     0,
