@@ -38,68 +38,124 @@ const requiredHardCaseRows = [
   { kind: 'anime', hardCase: 'thousand-chapters' },
 ] as const;
 
-function escaped(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function literalCondition(expression: ts.Expression | undefined): boolean | undefined {
+  if (!expression) return undefined;
+  if (ts.isParenthesizedExpression(expression)) return literalCondition(expression.expression);
+  if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
+    const operand = literalCondition(expression.operand);
+    return operand === undefined ? undefined : !operand;
+  }
+  return undefined;
+}
+
+function testApiPath(expression: ts.Expression): string[] {
+  if (ts.isCallExpression(expression)) return testApiPath(expression.expression);
+  if (ts.isPropertyAccessExpression(expression)) return [...testApiPath(expression.expression), expression.name.text];
+  return ts.isIdentifier(expression) ? [expression.text] : [];
+}
+
+function testCallback(call: ts.CallExpression): ts.ArrowFunction | ts.FunctionExpression | undefined {
+  // Playwright accepts (title, options, fn); Bun accepts (title, fn, timeout).
+  return call.arguments.findLast((argument): argument is ts.ArrowFunction | ts.FunctionExpression =>
+    ts.isArrowFunction(argument) || ts.isFunctionExpression(argument));
+}
+
+function isTestDeclaration(call: ts.CallExpression): boolean {
+  const [root, ...members] = testApiPath(call.expression);
+  return (root === 'test' || root === 'it') &&
+    members.every(member => ['only', 'skip', 'skipIf', 'todo', 'fixme', 'if', 'each'].includes(member)) &&
+    testCallback(call) !== undefined;
+}
+
+function isSuiteDeclaration(call: ts.CallExpression): boolean {
+  const path = testApiPath(call.expression);
+  return ['test', 'describe'].includes(path[0] ?? '') && path.includes('describe') && testCallback(call) !== undefined;
+}
+
+function disablesTest(call: ts.CallExpression): boolean {
+  if (!['test', 'it', 'describe'].includes(testApiPath(call.expression)[0] ?? '')) return false;
+  let expression: ts.Expression = call;
+  while (ts.isPropertyAccessExpression(expression) || ts.isCallExpression(expression)) {
+    if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression)) {
+      const modifier = expression.expression.name.text;
+      const condition = literalCondition(expression.arguments[0]);
+      if (modifier === 'todo' || (['skip', 'skipIf', 'fixme'].includes(modifier) && condition !== false) ||
+        (modifier === 'if' && condition !== true)) return true;
+    }
+    expression = expression.expression;
+  }
+  return false;
+}
+
+function scopeDisablesTest(scope: ts.Node, includeFunctions = false): boolean {
+  let disabled = false;
+  const visit = (node: ts.Node): void => {
+    if (disabled) return;
+    if (ts.isFunctionLike(node)) {
+      if (includeFunctions && 'body' in node && node.body) visit(node.body);
+      return;
+    }
+    if (ts.isIfStatement(node)) {
+      const condition = literalCondition(node.expression);
+      if (condition !== false) visit(node.thenStatement);
+      if (condition !== true && node.elseStatement) visit(node.elseStatement);
+      return;
+    }
+    if (ts.isBinaryExpression(node) && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken].includes(node.operatorToken.kind)) {
+      visit(node.left);
+      const condition = literalCondition(node.left);
+      if (condition === undefined || condition === (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)) visit(node.right);
+      return;
+    }
+    if (ts.isCallExpression(node)) {
+      // Sibling declarations and their hooks belong to their own test or suite.
+      if (isTestDeclaration(node) || isSuiteDeclaration(node)) return;
+      const path = testApiPath(node.expression);
+      if (['beforeEach', 'beforeAll'].includes(path.at(-1) ?? '') &&
+        (path.length === 1 || path[0] === 'test')) {
+        const callback = testCallback(node);
+        if (callback) disabled ||= scopeDisablesTest(callback.body, true);
+      }
+      // A todo/skip with a title but no body still declares an unrelated sibling.
+      if (!ts.isStringLiteralLike(node.arguments[0] ?? node) && disablesTest(node)) disabled = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(scope);
+  return disabled;
+}
+
+function activeTest(call: ts.CallExpression): boolean {
+  for (let node: ts.Node | undefined = call; node; node = node.parent) {
+    const parent = node.parent;
+    if (ts.isCallExpression(node) && disablesTest(node)) return false;
+    if ((ts.isBlock(node) || ts.isSourceFile(node)) && scopeDisablesTest(node)) return false;
+    // A declaration hidden behind a runtime condition cannot establish that it runs.
+    if (parent && ts.isIfStatement(parent) && literalCondition(parent.expression) !== (parent.thenStatement === node)) return false;
+    if (parent && ts.isConditionalExpression(parent) && node !== parent.condition &&
+      literalCondition(parent.condition) !== (parent.whenTrue === node)) return false;
+    if (parent && ts.isBinaryExpression(parent) && parent.right === node &&
+      [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken].includes(parent.operatorToken.kind) &&
+      literalCondition(parent.left) !== (parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)) return false;
+  }
+  const callback = testCallback(call);
+  return !callback || !scopeDisablesTest(callback.body, true);
 }
 
 function namedTestExists(source: string, title: string): boolean {
   const parsed = ts.createSourceFile('proof.ts', source, ts.ScriptTarget.Latest, true);
-  // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon or space); the registry names the
-  // exact source title after it, so no task identifier is copied into the registry.
+  // Older test titles open with a task tag; the registry keeps the exact title after it.
   const matches = (candidate: string) => candidate.replace(/^G-?\d+(?::\s*|\s+)/, '') === title;
-
-  function disablesTest(call: ts.CallExpression): boolean {
-    let expression: ts.Expression = call;
-    let disabled = false;
-    while (ts.isPropertyAccessExpression(expression) || ts.isCallExpression(expression)) {
-      if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) &&
-        ['skip', 'skipIf', 'fixme'].includes(expression.expression.name.text)) {
-        // Read the condition at the modifier, including Bun's curried describe.skipIf(condition)(...).
-        disabled ||= expression.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword;
-      }
-      expression = expression.expression;
-    }
-    return disabled && ts.isIdentifier(expression) && ['test', 'it', 'describe'].includes(expression.text);
-  }
-
-  function activeTest(call: ts.CallExpression): boolean {
-    function scopeDisablesTest(scope: ts.Node): boolean {
-      let disabled = false;
-      const visit = (node: ts.Node): void => {
-        // A sibling test's skip affects that test, not the suite being inspected.
-        if (ts.isFunctionLike(node)) return;
-        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
-          ['skip', 'fixme'].includes(node.expression.name.text) &&
-          !ts.isStringLiteralLike(node.arguments[0] ?? node) && disablesTest(node)) disabled = true;
-        ts.forEachChild(node, visit);
-      };
-      visit(scope);
-      return disabled;
-    }
-    for (let parent: ts.Node | undefined = call; parent; parent = parent.parent) {
-      if (ts.isCallExpression(parent) && disablesTest(parent)) return false;
-      if ((ts.isBlock(parent) || ts.isSourceFile(parent)) && scopeDisablesTest(parent)) return false;
-    }
-    // Playwright also disables a test from inside its body. Unknown runtime conditions cannot prove it runs.
-    let disabled = false;
-    const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node) && disablesTest(node)) disabled = true;
-      ts.forEachChild(node, visit);
-    };
-    const callback = call.arguments[1];
-    if (callback) visit(callback);
-    return !disabled;
-  }
 
   let found = false;
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-      ['test', 'it'].includes(node.expression.text)) {
-      const [argument, callback] = node.arguments;
+    if (ts.isCallExpression(node) && isTestDeclaration(node)) {
+      const argument = node.arguments[0];
       const candidate = argument && (ts.isStringLiteralLike(argument) ? argument.text
         : ts.isTemplateExpression(argument) ? argument.getText(parsed).slice(1, -1) : undefined);
-      if (candidate !== undefined && matches(candidate) && callback &&
-        (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && activeTest(node)) found = true;
+      if (candidate !== undefined && matches(candidate) && activeTest(node)) found = true;
     }
     ts.forEachChild(node, visit);
   };
@@ -126,11 +182,10 @@ function namedTestExists(source: string, title: string): boolean {
     if (!ts.isIdentifier(binding) || !ts.isExpressionStatement(body) || !ts.isCallExpression(body.expression)) continue;
     const call = body.expression;
     const argument = call.arguments[0];
-    const callback = call.arguments[1];
-    if (!ts.isIdentifier(call.expression) || !['test', 'it'].includes(call.expression.text) ||
+    if (!isTestDeclaration(call) ||
       !argument || !ts.isPropertyAccessExpression(argument) || !ts.isIdentifier(argument.expression) ||
       argument.expression.text !== binding.text || argument.name.text !== 'title' ||
-      !callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || !activeTest(call)) continue;
+      !activeTest(call)) continue;
     for (const entry of tables.get(loop.expression.text)?.elements ?? []) {
       if (!ts.isObjectLiteralExpression(entry) || entry.properties.some(property => ts.isSpreadAssignment(property) ||
         (property.name && ts.isComputedPropertyName(property.name)))) continue;
@@ -153,17 +208,34 @@ function journeyProof(proof: Proof): proof is JourneyProof {
 }
 
 function journeyRegistered(wrapper: string, moduleSpecifier: string): boolean {
-  const imports = /\bimport\s*\{([^}]*)\}\s*from\s*(['"])([^'"]+)\2/g;
-  for (const match of wrapper.matchAll(imports)) {
-    if (match[3] !== moduleSpecifier) continue;
-    for (const binding of match[1]!.split(',')) {
-      const names = binding.trim().match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/);
-      if (!names) continue;
-      const localName = names[2] ?? names[1]!;
-      if (new RegExp(`\\b${escaped(localName)}\\s*\\(`).test(wrapper)) return true;
+  const parsed = ts.createSourceFile('wrapper.ts', wrapper, ts.ScriptTarget.Latest, true);
+  const registrations = new Set<string>();
+  for (const statement of parsed.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== moduleSpecifier || statement.importClause?.isTypeOnly) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const binding of bindings.elements) {
+        if (!binding.isTypeOnly) registrations.add(binding.name.text);
+      }
     }
   }
-  return false;
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      registrations.has(node.expression.text) && activeTest(node)) {
+      // A call in an unused helper or a test body does not register a journey at collection time.
+      let collected = true;
+      for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent) {
+        if (ts.isFunctionLike(parent) &&
+          (!ts.isCallExpression(parent.parent) || !isSuiteDeclaration(parent.parent))) collected = false;
+      }
+      found ||= collected;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  return found;
 }
 
 function rowLabel(row: (typeof launchCoverage)[number]): string {
@@ -297,6 +369,91 @@ test('proof titles require runnable tests rather than skipped declarations or su
   expect(namedTestExists(`test('${title}');`, title)).toBe(false);
 });
 
+test('proof execution follows hooks, suite conditions and Playwright options', () => {
+  const title = 'a reader resumes on another device';
+  const declaration = `test('${title}', () => {});`;
+  const fixtures = [
+    { source: `test.beforeEach(() => { test.skip(); }); ${declaration}`, runnable: false },
+    { source: `beforeEach(() => { test.fixme(true); }); ${declaration}`, runnable: false },
+    { source: `test.beforeAll(() => { test.skip(disabled); }); ${declaration}`, runnable: false },
+    { source: `describe('suite', () => { beforeEach(() => { test.skip(true); }); ${declaration} });`, runnable: false },
+    { source: `describe('outer', () => { test.beforeEach(() => { test.skip(true); }); describe('inner', () => { ${declaration} }); });`, runnable: false },
+    { source: `test.beforeEach(() => { test.skip(false); }); ${declaration}`, runnable: true },
+    { source: `test.beforeEach(() => { if (false) test.skip(true); }); ${declaration}`, runnable: true },
+    { source: `test.beforeEach(async () => { await step(() => { test.skip(true); }); }); ${declaration}`, runnable: false },
+    { source: `describe.todo('suite', () => { ${declaration} });`, runnable: false },
+    { source: `describe.if(false)('suite', () => { ${declaration} });`, runnable: false },
+    { source: `describe.if(enabled)('suite', () => { ${declaration} });`, runnable: false },
+    { source: `describe.if(true)('suite', () => { ${declaration} });`, runnable: true },
+    { source: `describe.skipIf(enabled)('suite', () => { ${declaration} });`, runnable: false },
+    { source: `describe.skipIf(false)('suite', () => { ${declaration} });`, runnable: true },
+    { source: `if (false) { ${declaration} }`, runnable: false },
+    { source: `if (enabled) { ${declaration} }`, runnable: false },
+    { source: `if (true) { ${declaration} }`, runnable: true },
+    { source: `if (false) {} else { ${declaration} }`, runnable: true },
+    { source: `if (true) {} else { ${declaration} }`, runnable: false },
+    { source: `false && test('${title}', () => {});`, runnable: false },
+    { source: `true || test('${title}', () => {});`, runnable: false },
+    { source: `true && test('${title}', () => {});`, runnable: true },
+    { source: `false || test('${title}', () => {});`, runnable: true },
+    { source: `test.beforeEach(() => { false && test.skip(true); }); ${declaration}`, runnable: true },
+    { source: `test.todo('${title}', () => {});`, runnable: false },
+    { source: `test.if(false)('${title}', () => {});`, runnable: false },
+    { source: `test.if(true)('${title}', () => {});`, runnable: true },
+    { source: `test.skipIf(false)('${title}', () => {});`, runnable: true },
+    { source: `test.skipIf(enabled)('${title}', () => {});`, runnable: false },
+    { source: `test('${title}', { tag: '@launch' }, () => {});`, runnable: true },
+    { source: `test('${title}', () => {}, 180_000);`, runnable: true },
+    { source: `test('${title}', () => { test.skip(true); }, 180_000);`, runnable: false },
+    { source: `test('${title}', { tag: '@launch' }, () => { test.skip(true); });`, runnable: false },
+    { source: `test('${title}', { tag: '@launch' }, () => { test.fixme(enabled); });`, runnable: false },
+    { source: `test('${title}', () => { step(() => { test.skip(true); }); });`, runnable: false },
+    { source: `test.todo('another test'); ${declaration}`, runnable: true },
+    { source: `test.skip('another test', { tag: '@launch' }, () => {}); ${declaration}`, runnable: true },
+    { source: `describe.skip('another suite', () => { beforeEach(() => { test.skip(); }); }); ${declaration}`, runnable: true },
+    { source: `describe('another suite', () => { test.beforeEach(() => { test.skip(); }); }); ${declaration}`, runnable: true },
+  ];
+  for (const { source, runnable } of fixtures) expect(namedTestExists(source, title), source).toBe(runnable);
+});
+
+test('journey imports count only when their registration runs', () => {
+  const moduleSpecifier = './journeys/reading.ts';
+  const imported = `import { registerReadingJourney as register } from '${moduleSpecifier}';`;
+  const fixtures = [
+    { source: 'register();', runnable: true },
+    { source: `describe('suite', () => { register(); });`, runnable: true },
+    { source: `describe.skip('suite', () => { register(); });`, runnable: false },
+    { source: `test.describe.skip('suite', () => { register(); });`, runnable: false },
+    { source: `describe.todo('suite', () => { register(); });`, runnable: false },
+    { source: `describe.if(false)('suite', () => { register(); });`, runnable: false },
+    { source: `describe.if(true)('suite', () => { register(); });`, runnable: true },
+    { source: `describe.skipIf(disabled)('suite', () => { register(); });`, runnable: false },
+    { source: `describe.skipIf(false)('suite', () => { register(); });`, runnable: true },
+    { source: 'test.skip(true); register();', runnable: false },
+    { source: 'test.beforeEach(() => { test.fixme(true); }); register();', runnable: false },
+    { source: `describe('suite', () => { test.beforeEach(() => { test.skip(); }); register(); });`, runnable: false },
+    { source: 'if (false) register();', runnable: false },
+    { source: 'if (enabled) register();', runnable: false },
+    { source: 'if (true) register();', runnable: true },
+    { source: 'false && register();', runnable: false },
+    { source: 'true || register();', runnable: false },
+    { source: 'true && register();', runnable: true },
+    { source: 'false || register();', runnable: true },
+    { source: `describe.skip('another suite', () => {}); register();`, runnable: true },
+    { source: `test('another test', () => { test.skip(true); }); register();`, runnable: true },
+    { source: `test('another test', () => { register(); });`, runnable: false },
+    { source: 'function unused() { register(); }', runnable: false },
+    { source: '// register();', runnable: false },
+    { source: `const example = 'register();';`, runnable: false },
+  ];
+  for (const { source, runnable } of fixtures) {
+    expect(journeyRegistered(`${imported}\n${source}`, moduleSpecifier), source).toBe(runnable);
+  }
+  expect(journeyRegistered(imported, moduleSpecifier)).toBe(false);
+  expect(journeyRegistered(`${imported} register();`, './journeys/other.ts')).toBe(false);
+  expect(journeyRegistered(`import type { register } from '${moduleSpecifier}'; register();`, moduleSpecifier)).toBe(false);
+});
+
 test('proof titles in a table must be registered by that table’s test loop', () => {
   const source = `
     const unused = [{ title: 'an unused journey' }];
@@ -320,6 +477,60 @@ test('proof titles in a table must be registered by that table’s test loop', (
   expect(namedTestExists(source.replace('choices: [{', "['title']: 'another title', choices: [{"), 'a reader chooses an edition')).toBe(false);
   expect(namedTestExists(source.replace('test(journey.title', 'it(journey.title'), 'a reader chooses a format')).toBe(true);
   expect(namedTestExists(source.replace('async () => {}', 'async () => { test.skip(true); }'), 'a reader chooses a format')).toBe(false);
+  expect(namedTestExists(`test.beforeEach(() => { test.skip(); }); ${source}`, 'a reader chooses a format')).toBe(false);
+  expect(namedTestExists(source.replace('test(journey.title', 'test.skip(journey.title'), 'a reader chooses a format')).toBe(false);
+  expect(namedTestExists(source.replace('async () => {}', "{ tag: '@launch' }, async () => {}"), 'a reader chooses a format')).toBe(true);
+  expect(namedTestExists(source.replace('async () => {}', "{ tag: '@launch' }, async () => { test.fixme(true); }"), 'a reader chooses a format')).toBe(false);
+});
+
+test('launch outcomes retain landed proofs, the recipe reading name and all five new Zone rows', () => {
+  const rows = (kind: (typeof kinds)[number], capability: string) =>
+    launchCoverage.filter(row => row.kind === kind && row.capability === capability);
+  const recipeHub = rows('recipes', 'Work hub and reading');
+  expect(recipeHub).toHaveLength(1);
+  expect(recipeHub[0]!.api).toEqual({ missing: 'L21', reason: undefined });
+  expect(recipeHub[0]!.browser).toEqual({ missing: 'L21', reason: undefined });
+  expect(rows('recipes', 'Work hub and edition choice')).toHaveLength(0);
+  expect(rows('zone', 'Publication')[0]!.browser).toMatchObject({
+    test: 'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
+    evidence: 'Retries an interrupted publish with one key, verifies the original receipt and cuts, and checks anonymous readers retain the published page through later private drafts.',
+  });
+
+  const provedRows = [
+    ['anime', 'Work hub and edition choice', 'tests/qa/integration/anime-manga-hub.test.ts', 'apps/web/tests/anime-manga-hub.e2e.ts'],
+    ['manga', 'Work hub and edition choice', 'tests/qa/integration/anime-manga-hub.test.ts', 'apps/web/tests/anime-manga-hub.e2e.ts'],
+    ['manga', 'Collection tracking and progress', 'tests/qa/integration/typed-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
+    ['manga', 'Continue progress across devices', 'tests/qa/integration/typed-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
+    ['games', 'Collection tracking and progress', 'tests/qa/integration/game-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
+    ['games', 'Continue progress across devices', 'tests/qa/integration/game-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
+    ['recipes', 'Exchange recipes', 'tests/qa/integration/recipe-structure.test.ts', 'apps/web/tests/recipe-exchange.e2e.ts'],
+    ['zone', 'Navigation and theme', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
+    ['zone', 'Publish after editor revocation', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
+    ['zone', 'Home rendering', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
+    ['zone', 'Lifecycle', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
+    ['zone', 'Attach a Realm', 'tests/qa/integration/zone-realm-attachment.test.ts', 'apps/web/tests/zone-realm-attachment.e2e.ts'],
+    ['zone', 'List attached Zones', 'tests/qa/integration/zone-realm-attachment.test.ts', 'apps/web/tests/zone-realm-attachment.e2e.ts'],
+    ['zone', 'Withdraw a Realm attachment', 'tests/qa/integration/zone-realm-attachment.test.ts', 'apps/web/tests/zone-realm-attachment.e2e.ts'],
+  ] as const;
+  for (const [kind, capability, apiFile, browserFile] of provedRows) {
+    const matches = rows(kind, capability);
+    expect(matches, `${kind} / ${capability}`).toHaveLength(1);
+    expect(matches[0]!.api).toMatchObject({ file: apiFile });
+    expect(matches[0]!.browser).toMatchObject({ file: browserFile });
+    for (const proof of [matches[0]!.api, matches[0]!.browser]) {
+      expect(proofMissing(proof), `${kind} / ${capability}`).toBe(false);
+      if (!proofMissing(proof)) expect(proof.evidence?.trim().length).toBeGreaterThan(0);
+    }
+  }
+
+  const provedPairs = launchCoverage.filter(row => !proofMissing(row.api) && !proofMissing(row.browser));
+  const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
+  const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
+  expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
+    .toEqual({ rows: 55, provedPairs: 39, missingRows: 16, missingProofs: 25 });
+  expect(Object.fromEntries([...missingItems].map(item => [item,
+    missingRows.filter(row => missingForRow(row).includes(item)).length,
+  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 10, L26: 0, gap: 2 });
 });
 
 test('every launch kind and hard case has a coverage row', () => {

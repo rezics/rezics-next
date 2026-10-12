@@ -339,7 +339,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Replays a lost Main publication acknowledgement as one receipt with its original page, route, navigation and theme revision cuts.'),
     browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
       'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
-      'Retries an interrupted publish with one key and checks anonymous readers see the published page and later replacement.'),
+      'Retries an interrupted publish with one key, verifies the original receipt and cuts, and checks anonymous readers retain the published page through later private drafts.'),
   },
   {
     kind: 'zone',
@@ -536,7 +536,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Writes played progress through Main, rejects a later same-reader request with a cached version as stale, rereads the saved state, completes from the current version and undoes completion.'),
     browser: browser('apps/web/tests/tracking-media.e2e.ts',
       'game progress resumes across required and extra routes and a partless game on another device',
-      'Phone and desktop share required-route and partless-game progress, reject stale writes after desktop completion and propagate reset on phone reload while the extra route remains untouched.'),
+      'Phone and desktop share required-route and partless-game progress, reject stale writes after desktop completion, reset the required route on desktop and propagate the partless reset on phone reload while the extra route stays untouched.'),
   },
   {
     kind: 'anime',
