@@ -29,6 +29,9 @@ import type { MediaStack } from './media-support.ts';
 type MediaStackStarter = typeof import('./media-support.ts').startMediaStack;
 
 const workAxis = 'unrelatedWorks' satisfies keyof CorpusDimensions;
+const shelfAxis = 'readerShelfEntries' satisfies keyof CorpusDimensions;
+type GrowthAxis = typeof workAxis | typeof shelfAxis;
+type Operation = 'status-shelf' | 'reader-state';
 const scales = [4, 16, 64] as const;
 const serviceName = 'library-growth-cost';
 const readerName = 'Library growth measurement reader';
@@ -37,6 +40,9 @@ type RestoredContext = {
   stack: MediaStack;
   readerToken: string;
   readerAgent: string;
+  seededReaderToken: string;
+  seededReaderAgent: string;
+  seededShelfWorks: string[];
   targetWork: string;
   fusekiUrl: string;
 };
@@ -127,19 +133,22 @@ const shelfCost = {
   unclassifiedFetches: 0,
 } satisfies Omit<WorkCostContract, 'growth'>;
 
-function costContract(maxima: Omit<WorkCostContract, 'growth'>): WorkCostContract {
+function costContract(maxima: Omit<WorkCostContract, 'growth'>, axis: GrowthAxis, operation: Operation): WorkCostContract {
+  // Own-shelf card hydration grows with P up to the 40-candidate window cap; the
+  // indexed seek is O(log N + P). A single Work and unrelated data stay constant.
+  const growthClass = axis === shelfAxis && operation === 'status-shelf' ? 'linear' : 'constant';
   return {
     ...maxima,
     growth: {
-      fusekiRequests: { class: 'constant', dimension: 'mainCalls' },
-      fusekiSentBytes: { class: 'constant', dimension: 'mainCalls' },
-      fusekiReceivedBytes: { class: 'constant', dimension: 'mainCalls' },
-      postgresStatements: { class: 'constant', dimension: 'mainCalls' },
+      fusekiRequests: { class: growthClass, dimension: 'mainCalls' },
+      fusekiSentBytes: { class: growthClass, dimension: 'mainCalls' },
+      fusekiReceivedBytes: { class: growthClass, dimension: 'mainCalls' },
+      postgresStatements: { class: growthClass, dimension: 'mainCalls' },
     },
   };
 }
 
-test('Reader library shelf and Work status reads stay constant as unrelated Works grow', async () => {
+test('Reader library shelf and Work status costs follow unrelated Work and own-shelf growth contracts', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run through goalctl integration QA');
@@ -151,6 +160,16 @@ test('Reader library shelf and Work status reads stay constant as unrelated Work
 
   const retained = readRetainedSeed();
   expect(retained.cuts.map((cut) => cut.manifest.dimensions[workAxis])).toEqual(scales);
+  expect(retained.cuts.map((cut) => cut.manifest.dimensions[shelfAxis])).toEqual(scales);
+  expect(retained.cuts.map((cut) => cut.manifest.id)).toEqual([
+    'work-profile-b4c931e2c592dfc0',
+    'work-profile-a5c8fd99b1e0dae0',
+    'work-profile-d03a2add833ca7e7',
+  ]);
+  for (const cut of retained.cuts) {
+    expect(cut.population.shelfWorks).toHaveLength(cut.manifest.dimensions[shelfAxis]!);
+    expect(new Set(cut.population.shelfWorks).size).toBe(cut.population.shelfWorks.length);
+  }
   const sink = startWorkProfileSink({ settleMs: 25 });
   startTelemetry(serviceName, {
     ...process.env,
@@ -164,7 +183,8 @@ test('Reader library shelf and Work status reads stay constant as unrelated Work
   const targets: string[] = [];
   const profiles: Array<{
     scale: number;
-    operation: 'status-shelf' | 'reader-state';
+    axis: GrowthAxis;
+    operation: Operation;
     profile: WorkProfile;
   }> = [];
   const driver = createCorpusBackupDriver({
@@ -180,6 +200,7 @@ test('Reader library shelf and Work status reads stay constant as unrelated Work
       try {
         if (!activeCut) throw new Error('No active retained Work-profile checkpoint');
         const target = activeCut.works[0]!;
+        expect(activeCut.population.shelfWorks).toContain(target.work);
         const author = await stack.member(seedAuthorName, { stable: true, verified: true });
         const authorApi = seedApi(stack, author.token);
         const selected = await authorApi.read(seedSelection(target.mainVersion));
@@ -214,6 +235,9 @@ test('Reader library shelf and Work status reads stay constant as unrelated Work
           stack,
           readerToken: reader.token,
           readerAgent: agent.agent,
+          seededReaderToken: author.token,
+          seededReaderAgent: activeCut.population.actor,
+          seededShelfWorks: activeCut.population.shelfWorks,
           targetWork: target.work,
           fusekiUrl: input.apps.FUSEKI_URL!,
         });
@@ -270,67 +294,89 @@ test('Reader library shelf and Work status reads stay constant as unrelated Work
       expect(calibration.result).toMatchObject({ profile: 'work-read-v1', id: context.targetWork });
       sink.clear();
 
-      const actingSubject = encodeURIComponent(context.readerAgent);
-      const requests = [
-        {
-          operation: 'status-shelf' as const,
-          path: `/v1/me/shelves/status/reading/works?actingSubject=${actingSubject}&sort=added&order=desc&limit=${STATUS_SHELF_COST.pageSize}`,
-        },
-        {
-          operation: 'reader-state' as const,
-          path: `/v1/works/${context.targetWork.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
-        },
-      ];
-      for (const request of requests) {
-        const { result, profile } = await profileRead(
-          context,
-          sink,
-          request.path,
-          context.readerToken,
-        );
-        if (request.operation === 'status-shelf') {
-          const shelf = result as { items: Array<{ work: string; status: string }> };
-          expect(shelf.items).toHaveLength(1);
-          expect(shelf.items[0]).toMatchObject({ work: context.targetWork, status: 'reading' });
-        } else {
-          expect(result).toMatchObject({
-            work: context.targetWork,
-            status: { status: 'reading' },
-          });
-        }
+      for (const axis of [workAxis, shelfAxis]) {
+        const ownShelf = axis === shelfAxis;
+        const size = cut.manifest.dimensions[axis]!;
+        const actingSubject = encodeURIComponent(ownShelf ? context.seededReaderAgent : context.readerAgent);
+        const token = ownShelf ? context.seededReaderToken : context.readerToken;
+        const requests = [
+          {
+            operation: 'status-shelf' as const,
+            path: `/v1/me/shelves/status/reading/works?actingSubject=${actingSubject}&sort=added&order=desc&limit=${STATUS_SHELF_COST.pageSize}`,
+          },
+          {
+            operation: 'reader-state' as const,
+            path: `/v1/works/${context.targetWork.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
+          },
+        ];
+        for (const request of requests) {
+          const { result, profile } = await profileRead(context, sink, request.path, token);
+          if (request.operation === 'status-shelf') {
+            const shelf = result as { items: Array<{ work: string; status: string }> };
+            expect(shelf.items).toHaveLength(ownShelf ? Math.min(size, STATUS_SHELF_COST.pageSize) : 1);
+            expect(new Set(shelf.items.map(item => item.work)).size).toBe(shelf.items.length);
+            for (const item of shelf.items) {
+              expect(item.status).toBe('reading');
+              expect(ownShelf ? context.seededShelfWorks : [context.targetWork]).toContain(item.work);
+            }
+          } else {
+            expect(result).toMatchObject({
+              work: context.targetWork,
+              status: { status: 'reading' },
+            });
+          }
 
-        // assertWorkCostAtScales consumes a WorkProfile dimension. Use its marker
-        // for the retained checkpoint size; mainCalls itself was checked above.
-        profiles.push({
-          scale,
-          operation: request.operation,
-          profile: { ...profile, mainCalls: scale },
-        });
-        console.log('Library growth counters', {
-          dimension: workAxis,
-          size: scale,
-          operation: request.operation,
-          fusekiRequests: profile.fusekiRequests,
-          fusekiSentBytes: profile.fusekiSentBytes,
-          fusekiReceivedBytes: profile.fusekiReceivedBytes,
-          postgresStatements: profile.postgresStatements,
-        });
-        sink.clear();
+          // assertWorkCostAtScales consumes a WorkProfile dimension. Use its marker
+          // for the retained checkpoint size; mainCalls itself was checked above.
+          profiles.push({
+            scale: size,
+            axis,
+            operation: request.operation,
+            profile: { ...profile, mainCalls: size },
+          });
+          console.log('Library growth counters', {
+            dimension: axis,
+            size,
+            operation: request.operation,
+            fusekiRequests: profile.fusekiRequests,
+            fusekiSentBytes: profile.fusekiSentBytes,
+            fusekiReceivedBytes: profile.fusekiReceivedBytes,
+            postgresStatements: profile.postgresStatements,
+          });
+          sink.clear();
+        }
       }
       await driver.stop(target);
     }
 
     const failures: string[] = [];
-    for (const operation of ['status-shelf', 'reader-state'] as const) {
-      const maxima = operation === 'status-shelf' ? shelfCost : readerCost;
-      const group = profiles
-        .filter((item) => item.operation === operation)
-        .sort((a, b) => a.scale - b.scale)
-        .map((item) => item.profile);
-      try {
-        assertWorkCostAtScales(group, costContract(maxima), `library-${operation}-unrelated-works`);
-      } catch (error) {
-        failures.push(error instanceof Error ? error.message : String(error));
+    for (const axis of [workAxis, shelfAxis]) {
+      for (const operation of ['status-shelf', 'reader-state'] as const) {
+        const maxima = operation === 'status-shelf' ? shelfCost : readerCost;
+        const group = profiles
+          .filter((item) => item.operation === operation && item.axis === axis)
+          .sort((a, b) => a.scale - b.scale)
+          .map((item) => item.profile);
+        try {
+          assertWorkCostAtScales(group, costContract(maxima, axis, operation), `library-${operation}-${axis}`);
+          console.log('Library growth verdict', { dimension: axis, operation, verdict: 'pass' });
+        } catch (error) {
+          const owner = operation === 'status-shelf'
+            ? 'Main library/read.ts::readStatusShelf and shelf-page.ts::readShelfPage; Content library/status.ts::sortedPage'
+            : 'Main library/read.ts::readReaderStates';
+          const failure = `${operation} by ${axis}, owner ${owner}: ${error instanceof Error ? error.message : String(error)}`;
+          console.log('Library growth verdict', { dimension: axis, operation, verdict: 'fail', failure });
+          failures.push(failure);
+        }
+        for (const counter of ['fusekiRequests', 'fusekiSentBytes', 'fusekiReceivedBytes', 'postgresStatements'] as const) {
+          const ratio = (from: number, to: number) => {
+            const smaller = group[from]![counter], larger = group[to]![counter];
+            return smaller === null || larger === null ? null : smaller === 0
+              ? larger === 0 ? 1 : 'Infinity' : larger / smaller;
+          };
+          console.log('Library growth ratios', { dimension: axis, operation, counter,
+            ratio16To4: ratio(0, 1), ratio64To16: ratio(1, 2), ratio64To4: ratio(0, 2) });
+        }
       }
     }
     if (failures.length) throw new Error(failures.join('\n'));
