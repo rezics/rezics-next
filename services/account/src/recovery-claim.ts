@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { hashPassword } from 'better-auth/crypto';
+import { createEmailVerificationToken } from 'better-auth/api';
 import type { Pool, PoolClient } from 'pg';
 import { enqueueAccountEmail, type AccountLocale } from './email.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
@@ -16,6 +17,7 @@ export class AccountRecoveryRateLimited extends Error {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const codePattern = /^[A-Za-z0-9_-]{43}$/;
 export const RECOVERY_GENERATION_CLAIM = 'rezics_account_recovery_generation';
+export const VERIFICATION_USER_ID_CLAIM = 'rezics_account_verification_user_id';
 
 type RecoveryPolicy = { id: string; guardian_user_id: string | null; code_hash: string | null;
   generation: string; recovered_at: Date | null; guardian_invitation_id: string | null };
@@ -404,10 +406,19 @@ async function claimView(db: Pool | PoolClient, claim: RecoveryClaim,
 }
 
 /** User JWTs are bound to the current Account credential generation. */
-export async function currentRecoveryGeneration(pool: Pool, userId: string): Promise<string> {
+export async function currentRecoveryGeneration(pool: Pool | PoolClient, userId: string): Promise<string> {
   const result = await pool.query<{ generation: string }>(`SELECT generation FROM
     public.rezics_account_recovery_policy WHERE id = $1`, [userId]);
   return result.rows[0]?.generation ?? '0';
+}
+
+/** Stateless mailbox proofs must name the identity even after its address is released. */
+export async function createAccountVerificationToken(pool: Pool | PoolClient, secret: string,
+  user: { id: string; email: string }): Promise<string> {
+  return createEmailVerificationToken(secret, user.email, undefined, 1800, {
+    [VERIFICATION_USER_ID_CLAIM]: user.id,
+    [RECOVERY_GENERATION_CLAIM]: await currentRecoveryGeneration(pool, user.id),
+  });
 }
 
 export async function recoveryBasisActive(client: PoolClient,

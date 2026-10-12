@@ -5,7 +5,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { defineRequestState, getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook } from '@better-auth/core/context';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthMiddleware, createEmailVerificationToken, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware } from 'better-auth/api';
 import { jwtVerify } from 'jose';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
@@ -16,7 +16,8 @@ import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
 import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
 import { signingKeyOptions } from './signing-keys.ts';
 import { dynamicRegistrationScopes, providerScopes, resourceScopes } from './oauth-scopes.ts';
-import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
+import { createAccountVerificationToken, currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM,
+  VERIFICATION_USER_ID_CLAIM } from './recovery-claim.ts';
 import type { AccountEmail } from './email.ts';
 import { afterPasskeyAssertion, languageForSignupEmail, localeField, markEmailChangeStep,
   passkeyRelyingParty, recipientLocale, takeSignupRequestLocale } from './account-settings.ts';
@@ -247,15 +248,17 @@ export function accountAuthOptions(config: AccountConfig) {
       }
       if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
         // Email verification links are stateless JWTs, so deleting verification
-        // rows cannot revoke them. Bind new links to the same recovery generation.
+        // rows cannot revoke them. Bind them to the immutable identity as well
+        // as its recovery generation, including rejecting unbound legacy links.
         const verified = await jwtVerify(ctx.query.token, new TextEncoder().encode(config.secret),
           { algorithms: ['HS256'] }).catch(() => null);
         // Let the provider keep its normal invalid/expired-link redirects.
         const user = typeof verified?.payload.email === 'string'
           ? (await config.pool.query<{ id: string }>('SELECT id FROM public."user" WHERE email = $1',
             [verified.payload.email])).rows[0] : undefined;
-        if (user && (verified!.payload[RECOVERY_GENERATION_CLAIM] ?? '0')
-          !== await currentRecoveryGeneration(config.pool, user.id)) {
+        if (user && (verified!.payload[VERIFICATION_USER_ID_CLAIM] !== user.id
+          || (verified!.payload[RECOVERY_GENERATION_CLAIM] ?? '0')
+            !== await currentRecoveryGeneration(config.pool, user.id))) {
           // This hook precedes the provider's origin middleware. Redirect only
           // to this issuer; never let an invalidated link become an open redirect.
           if (typeof ctx.query.callbackURL === 'string') {
@@ -390,8 +393,7 @@ export function accountAuthOptions(config: AccountConfig) {
         // just as the provider already queues user.create.after hooks.
         await queueAfterTransactionHook(async () => {
           const bound = new URL(url);
-          bound.searchParams.set('token', await createEmailVerificationToken(config.secret, user.email,
-            undefined, 1800, { [RECOVERY_GENERATION_CLAIM]: await currentRecoveryGeneration(config.pool, user.id) }));
+          bound.searchParams.set('token', await createAccountVerificationToken(config.pool, config.secret, user));
           await config.email!.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(bound.toString(), 'verified'),
             purpose: 'verify', locale: await languageForSignupEmail(config.pool, user, request) })
             .catch(() => console.error('Account email intent unavailable'));

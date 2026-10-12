@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createEmailVerificationToken } from 'better-auth/api';
 import type { Pool, PoolClient } from 'pg';
 import { recipientLocale } from './account-settings.ts';
 import { AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { operatorRole, requireOperator, rolePermits, writeAudit, type OperatorPermission, type OperatorRole } from './operators.ts';
 import { accountLocale, enqueueAccountEmail, type AccountLocale } from './email.ts';
+import { createAccountVerificationToken } from './recovery-claim.ts';
 
 export const adminActions = ['suspend', 'unsuspend', 'revoke-sessions', 'require-password-reset',
   'resend-verification', 'add-note'] as const;
@@ -112,7 +112,7 @@ async function performUserAction(db: PoolClient, auth: AccountAuth, actorId: str
   } else if (body.action === 'add-note') {
     await db.query('INSERT INTO rezics_account_operator_note (user_id, author_id, body) VALUES ($1, $2, $3)', [userId, actorId, body.note!.trim()]);
   } else if (body.action === 'resend-verification' && !before.emailVerified) {
-    const token = await createEmailVerificationToken(String(auth.options.secret), before.email, undefined, 1800);
+    const token = await createAccountVerificationToken(db, String(auth.options.secret), { id: userId, email: before.email });
     const url = new URL('/api/auth/verify-email', String(auth.options.baseURL));
     url.searchParams.set('token', token); url.searchParams.set('callbackURL', '/');
     await enqueueAccountEmail(db, String(auth.options.secret), { userId, to: before.email,
