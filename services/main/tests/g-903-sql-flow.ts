@@ -211,7 +211,7 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
   };
   const flows = requests.flatMap(request => [...union(...request.arguments?.map(argumentValue) ?? [])]
     .map(source => ({ source, request: location(request) })));
-  if (process.env.G903_SQL_FLOW_PROFILE === '1')
+  if (process.env.SQL_REQUEST_FLOW_PROFILE === '1')
     process.stderr.write(`SQL flow propagation: ${files.length} files, ${nodes.length} nodes, ${rounds} rounds\n`);
   return [...new Map(flows.map(flow => [`${flow.source}\0${flow.request}`, flow])).values()];
 }
@@ -237,7 +237,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const files = input.paths.map(path => project.program.getSourceFile(path)!);
     const compiled = performance.now();
     const result = sqlRequestFlows(project, files);
-    if (process.env.G903_SQL_FLOW_PROFILE === '1') process.stderr.write(`SQL flow timing (ms): compile=${Math.round(compiled - started)}, scan=${Math.round(performance.now() - compiled)}\n`);
+    if (process.env.SQL_REQUEST_FLOW_PROFILE === '1') process.stderr.write(`SQL flow timing (ms): compile=${Math.round(compiled - started)}, scan=${Math.round(performance.now() - compiled)}\n`);
     process.stdout.write(JSON.stringify(result));
   } finally { api.close(); }
 }

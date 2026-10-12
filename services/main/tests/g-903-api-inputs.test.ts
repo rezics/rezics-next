@@ -12,7 +12,7 @@ async function flows(root: string, paths: string[], files?: Record<string, strin
     new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
   ]);
   if (status !== 0) throw new Error(`SQL flow compiler failed: ${error}`);
-  if (Bun.env.G903_SQL_FLOW_PROFILE === '1') console.info(error.trim());
+  if (Bun.env.SQL_REQUEST_FLOW_PROFILE === '1') console.info(error.trim());
   return JSON.parse(output);
 }
 
