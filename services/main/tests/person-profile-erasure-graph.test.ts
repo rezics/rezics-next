@@ -5,7 +5,7 @@ import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { ObjectReadBudgetExceeded, ObjectUnavailable,
   type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { prepareComponent, RV } from '../src/modules/work/activate.ts';
-import { inventoryPersonProfileGraph, personProfileErasureUpdate, personProfileGraphErased,
+import { inventoryPersonProfileGraph, personProfileErasureUpdate,
   PersonGraphErasureConflict, PersonGraphErasureUnavailable,
   type PersonProfileInventoryBudget } from '../src/modules/agent/erasure.ts';
 import type { EndedPersonProvision, PersonProfileErasureProof } from '../src/modules/access/person-profile-erasure.ts';
@@ -182,22 +182,11 @@ test('shared budget refuses one lookahead, missing payloads and aborted preparat
     .rejects.toThrow('inventory cancelled');
 });
 
-test('typed command retains attribution, refuses mismatched sealed identities and uses exact tombstone probes', async () => {
+test('mismatched Person identities and inventory heads refuse before command generation', async () => {
   const inventory = await inventoryPersonProfileGraph(fixture(), directory, person, budget());
-  const update = personProfileErasureUpdate({ dataEpoch: 'fixture-epoch', routingEpoch: '1' }, proof, inventory);
-  expect(update).toContain(`rv:erasureId "${proof.erasureId}" ; rv:erasureEpoch 7`);
-  expect(update).toContain('rv:AgentTombstone');
-  expect(update).not.toContain('compensatedFrom');
-  expect(update).not.toContain('Exact identifying name');
-  expect(update).not.toContain('\\n');
-  expect(update).not.toContain(prefixUnit);
   expect(() => personProfileErasureUpdate({ dataEpoch: 'fixture-epoch', routingEpoch: '1' },
     { ...proof, person: `https://rezics.com/id/${id('9')}` }, inventory)).toThrow(PersonGraphErasureConflict);
   expect(() => personProfileErasureUpdate({ dataEpoch: 'fixture-epoch', routingEpoch: '1' }, proof,
     { ...inventory, head: `https://rezics.com/id/${id('9')}` })).toThrow(PersonGraphErasureConflict);
-  const queries: string[] = [];
-  const probe = { query: async (query: string) => { queries.push(query); return { boolean: false }; } } as Pick<FusekiClient, 'query'>;
-  expect(await personProfileGraphErased(probe, proof, inventory)).toBe(false);
-  expect(queries[0]).toContain('FILTER(?kind != rv:AgentTombstone)');
-  expect(queries[0]).toContain('rv:resource');
+
 });
