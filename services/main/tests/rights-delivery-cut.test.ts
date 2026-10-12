@@ -20,9 +20,26 @@ let stack: MediaStack;
 beforeAll(async () => { stack = await startMediaStack('rights-delivery-cut'); }, 120_000);
 afterAll(async () => { await stack?.stop(); }, 60_000);
 
+type Statement = { query: unknown; parameters: unknown };
+function record<T extends Pool | PoolClient>(source: T, statements: Statement[]): T {
+  return new Proxy(source, {
+    get(target, property) {
+      if (property === 'query') return (...args: unknown[]) => {
+        statements.push({ query: args[0], parameters: args[1] });
+        return Reflect.apply(target.query, target, args);
+      };
+      if (property === 'connect' && 'connect' in target) {
+        return async () => record(await (target as Pool).connect(), statements);
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 async function fixture(identity: { provider: string | null; namespace: string | null } = {
   provider: null, namespace: null,
-}, privateTarget = false) {
+}, privateTarget = false, originalContribution = false) {
   const member = await stack.member(`delivery-${randomUUID()}`);
   const work = privateTarget ? await stack.privateWork(member.actor, 'Private delivery target')
     : await stack.publicWork(member.actor, ['en'], 'Delivery target');
@@ -39,13 +56,15 @@ async function fixture(identity: { provider: string | null; namespace: string | 
   const text = `Exact Content bytes ${randomUUID()}`;
   await member.grant(`content:draft:${work.work}`, 'content.draft');
   const draft = await member.send('POST', '/v1/content-drafts', {
-    profile: 'content-public-domain-text-v1', resourceId: work.work,
+    ...(originalContribution ? { profile: 'content-text-v1' }
+      : { profile: 'content-public-domain-text-v1', assessmentId: head.assessmentId,
+        source: { provider: 'gutenberg', identifier: '1',
+          url: 'https://www.gutenberg.org/ebooks/1', byteDigest: 'a'.repeat(64),
+          retrievedAt: '2026-10-12T00:00:00.000Z' } }),
+    resourceId: work.work,
     variantId: `urn:rezics:variant:${randomUUID()}`,
     language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
     expectedHead: null, body: text, actingSubject: member.actor,
-    assessmentId: head.assessmentId, source: { provider: 'gutenberg', identifier: '1',
-      url: 'https://www.gutenberg.org/ebooks/1', byteDigest: 'a'.repeat(64),
-      retrievedAt: '2026-10-12T00:00:00.000Z' },
   });
   if (draft.status !== 201) throw new Error(`Delivery fixture draft failed: ${await draft.text()}`);
   const { revisionId } = await draft.json() as { revisionId: string };
@@ -53,6 +72,9 @@ async function fixture(identity: { provider: string | null; namespace: string | 
   if (exact?.status !== 'available') throw new Error('Delivery fixture draft bytes are unavailable');
   const serializedJson = exact.serializedJson;
   const target = { resourceId: work.work, assessmentId: head.assessmentId, rights };
+  const deliveredTarget = { ...target, assessmentId: exact.reference.provenance.kind === 'admitted-public-domain-v1'
+    && typeof exact.reference.provenance.rightsAssessmentId === 'string'
+    ? exact.reference.provenance.rightsAssessmentId : null };
   const moveRights = async (outcome: 'supported' | 'not_supported' = 'supported') => {
     head = await rights.assess(authority.principal, { ...input, outcome,
       expectedAssessment: head.assessmentId, idempotencyKey: randomUUID() });
@@ -80,7 +102,7 @@ async function fixture(identity: { provider: string | null; namespace: string | 
       return result;
     });
     try {
-      const cut = await withDeliveryCut(target,
+      const cut = await withDeliveryCut(deliveredTarget,
         () => stack.access.canReadWork(member.principal, member.actor, work.work), async () => {
         attempts++;
         const response = await member.send('GET',
@@ -109,7 +131,7 @@ async function fixture(identity: { provider: string | null; namespace: string | 
         ? problem(404, 'revision_unavailable', 'Revision is unavailable') : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
     } finally { interceptor.mockRestore(); }
   };
-  return { target, text, serializedJson, revisionId, hold, moveRights, deliver, input, authority, member,
+  return { target, deliveredTarget, text, serializedJson, revisionId, hold, moveRights, deliver, input, authority, member,
     attempts: () => attempts };
 }
 
@@ -204,13 +226,13 @@ test.each([
   expect(f.attempts()).toBe(3);
 });
 
-test('the none token changes when a first Work/body assessment appears', async () => {
+test('the no-assessment token stays constant when a first Work/body assessment appears', async () => {
   const member = await stack.member(`unassessed-${randomUUID()}`);
   const work = await stack.publicWork(member.actor, ['en'], 'Unassessed delivery');
   const f = await fixture();
   const target = { ...f.target, resourceId: work.work, assessmentId: null };
   const before = await target.rights.deliveryCutSnapshot(target.resourceId, null);
-  expect(before.assessmentHead).toBeNull();
+  expect(before.assessmentHead).toBe('no-assessment');
   let attempts = 0;
   const result = await withDeliveryCut(target, async () => true, async () => {
     if (++attempts === 1) await target.rights.assess(f.authority.principal, { ...f.input,
@@ -218,8 +240,28 @@ test('the none token changes when a first Work/body assessment appears', async (
       expectedAssessment: null, idempotencyKey: randomUUID() });
     return attempts;
   }, async value => value);
-  expect(result).toEqual({ status: 'stable', value: 2 });
-  expect((await target.rights.deliveryCutSnapshot(target.resourceId, null)).assessmentHead).not.toBeNull();
+  expect(result).toEqual({ status: 'stable', value: 1 });
+  expect((await target.rights.deliveryCutSnapshot(target.resourceId, null)).assessmentHead).toBe('no-assessment');
+});
+
+test('original contribution delivers despite another Gutenberg assessment moving during every query', async () => {
+  const f = await fixture({ provider: 'gutenberg', namespace: null }, false, true);
+  expect(f.deliveredTarget.assessmentId).toBeNull();
+  // The old fallback replayed both queries and then withheld the contribution.
+  for (let delivery = 0; delivery < 2; delivery++) {
+    const response = await f.deliver(async () => { await f.moveRights('not_supported'); });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ serializedJson: f.serializedJson });
+    expect(f.attempts()).toBe(delivery + 1);
+  }
+});
+
+test('a null assessment reference still refuses movement of its own preservation hold', async () => {
+  const f = await fixture({ provider: 'gutenberg', namespace: null }, false, true);
+  const response = await f.deliver(async () => { await f.hold(); });
+  expect(response.status).toBe(503);
+  await withheld(response, f.text);
+  expect(f.attempts()).toBe(1);
 });
 
 test('the cut follows the exact material rather than another head on the same Work', async () => {
@@ -366,21 +408,7 @@ test('a single head movement replays the full callback and returns only the fres
 
 test('all snapshot statements cost one indexed read per store, independent of movement and 1,000 unrelated holds', async () => {
   const f = await fixture();
-  type Statement = { query: unknown; parameters: unknown };
   const content: Statement[] = [], access: Statement[] = [];
-  const record = <T extends Pool | PoolClient>(source: T, statements: Statement[]): T => new Proxy(source, {
-    get(target, property) {
-      if (property === 'query') return (...args: unknown[]) => {
-        statements.push({ query: args[0], parameters: args[1] });
-        return Reflect.apply(target.query, target, args);
-      };
-      if (property === 'connect' && 'connect' in target) {
-        return async () => record(await (target as Pool).connect(), statements);
-      }
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
   // Only the snapshot store uses these proxies. Movement commands and plan
   // inspection use the original stores, so their work cannot pollute the cut.
   // meterPool counts every pool AND checked-out client statement, with no SQL filter.
@@ -444,6 +472,60 @@ test('all snapshot statements cost one indexed read per store, independent of mo
     } finally { await client.query('ROLLBACK'); client.release(); }
   }
 }, 420_000);
+
+test('snapshot rows examined stay constant for null and exact references beside 1, 50 and 500 quotation materials', async () => {
+  const f = await fixture();
+  const content: Statement[] = [], access: Statement[] = [];
+  const measured = new RightsStore(record(stack.contentPool, content), record(stack.accessPool, access));
+  type Plan = { 'Node Type': string; 'Actual Rows': number; 'Actual Loops': number;
+    'Rows Removed by Filter'?: number; 'Rows Removed by Join Filter'?: number;
+    'Rows Removed by Index Recheck'?: number; Plans?: Plan[] };
+  const examined = (node: Plan): number => {
+    expect(node['Node Type']).not.toMatch(/Seq Scan|Bitmap/);
+    return (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)
+      + (node['Rows Removed by Join Filter'] ?? 0) + (node['Rows Removed by Index Recheck'] ?? 0))
+      * node['Actual Loops'] + (node.Plans ?? []).reduce((sum, child) => sum + examined(child), 0);
+  };
+  const cost = async (pool: Pool, statements: Statement[]) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL enable_seqscan = off');
+      let rows = 0;
+      for (const { query, parameters } of statements) {
+        if (typeof query !== 'string' || !Array.isArray(parameters)) throw new Error('Expected recorded snapshot SQL');
+        const result = await client.query<{ 'QUERY PLAN': { Plan: Plan }[] }>(
+          `EXPLAIN (ANALYZE, FORMAT JSON) ${query}`, parameters);
+        rows += examined(result.rows[0]!['QUERY PLAN'][0]!.Plan);
+      }
+      return rows;
+    } finally { await client.query('ROLLBACK'); client.release(); }
+  };
+  let materials = 0, quotationReference: string | null = null;
+  const baseline = new Map<string | null, { content: number; access: number }>();
+  for (const size of [1, 50, 500]) {
+    for (; materials < size; materials++) {
+      const quotation = await f.target.rights.assess(f.authority.principal, { ...f.input,
+        material: { ...publicDomainWorkMaterial(f.target.resourceId), provider: `quotation-${materials}` },
+        useKind: 'quotation', expectedAssessment: null, idempotencyKey: randomUUID() });
+      quotationReference ??= quotation.assessmentId;
+    }
+    for (const assessmentId of [null, f.target.assessmentId, quotationReference]) {
+      content.length = 0; access.length = 0;
+      const snapshot = await measured.deliveryCutSnapshot(f.target.resourceId, assessmentId);
+      expect(snapshot.assessmentHead).toBe(assessmentId === null ? 'no-assessment'
+        : assessmentId === f.target.assessmentId ? f.target.assessmentId : null);
+      expect(content).toHaveLength(assessmentId === null ? 0 : 1);
+      expect(access).toHaveLength(1);
+      const rows = { content: await cost(stack.contentPool, content), access: await cost(stack.accessPool, access) };
+      // Count all plan nodes, including rejected candidates, rather than LIMIT's output.
+      expect(rows.content).toBeLessThanOrEqual(12);
+      expect(rows.access).toBeLessThanOrEqual(1);
+      if (size === 1) baseline.set(assessmentId, rows);
+      expect(rows).toEqual(baseline.get(assessmentId)!);
+    }
+  }
+}, 120_000);
 
 test('held and missing owners fail closed before the callback; owner failures after work discard bytes', async () => {
   const f = await fixture();

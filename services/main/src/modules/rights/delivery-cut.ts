@@ -1,6 +1,7 @@
 import { RightsUnavailable, type RightsStore } from './store.ts';
 
 export interface DeliveryCutSnapshot {
+  /** Exact material head; null if missing, or 'no-assessment' without a reference. */
   assessmentHead: string | null;
   preservationVersion: string;
   held: boolean;
@@ -8,7 +9,7 @@ export interface DeliveryCutSnapshot {
 
 export interface DeliveryCutTarget {
   resourceId: string;
-  /** Assessment carried by the delivered revision, or null for unassessed material. */
+  /** Delivered revision's own assessment; null uses a constant without a Rights read. */
   assessmentId: string | null;
   rights?: Pick<RightsStore, 'deliveryCutSnapshot'>;
 }

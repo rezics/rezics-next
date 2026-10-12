@@ -161,8 +161,7 @@ function validMaterial(material: MaterialScope): boolean {
     && (material.scopeKind !== 'wiki_evidence' || agentPattern.test(material.wikiEvidenceId ?? ''));
 }
 
-/** Admission and delivery follow the same exact material/use identity. A null
- * reference probes for the first assessment so absence cannot hide new policy. */
+/** Admission and delivery follow the same exact material/use identity. */
 function publicDomainAssessmentSelection(work = '$1', assessment = '$2'): string {
   return `SELECT h.assessment_id::text AS assessment_head, a.basis, a.outcome
     FROM rights.material m
@@ -172,8 +171,8 @@ function publicDomainAssessmentSelection(work = '$1', assessment = '$2'): string
     JOIN rights.use_assessment a ON a.id = h.assessment_id
     WHERE m.scope_kind = 'work' AND m.work_id = ${work}
       AND m.component = 'body' AND m.expression_kind = 'expression'
-      AND (${assessment}::uuid IS NULL OR m.id = (
-        SELECT material_id FROM rights.use_assessment WHERE id = ${assessment}::uuid))
+      AND m.id = (
+        SELECT material_id FROM rights.use_assessment WHERE id = ${assessment}::uuid)
     LIMIT 1`;
 }
 
@@ -192,20 +191,23 @@ function supportedPublicDomainHead(row: { assessment_head: string; basis: string
 export class RightsStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
 
-  /** Fresh autocommit snapshots: one indexed statement per owner, no hold scan. */
+  /** Fresh autocommit snapshots: one indexed statement per applicable owner.
+   * Original contributions have no Rights reference; unrelated assessments
+   * cannot change their token or add work to their delivery. */
   async deliveryCutSnapshot(resourceId: string, assessmentId: string | null): Promise<DeliveryCutSnapshot> {
     if (!agentPattern.test(resourceId) || (assessmentId !== null && !/^[0-9a-f-]{36}$/i.test(assessmentId))) {
       throw new RightsInvalid('invalid delivery target');
     }
     try {
       const [assessment, preservation] = await Promise.all([
-        this.content.query<{ assessment_head: string }>(publicDomainAssessmentSelection(),
-          [resourceId, assessmentId]),
+        assessmentId === null ? Promise.resolve({ rows: [] })
+          : this.content.query<{ assessment_head: string }>(publicDomainAssessmentSelection(),
+            [resourceId, assessmentId]),
         this.access.query<{ version: string; held: boolean }>(`SELECT version::text,
           active_holds > 0 AS held FROM access.governance_preservation_delivery_head
           WHERE target_resource = $1`, [resourceId]),
       ]);
-      return { assessmentHead: assessment.rows[0]?.assessment_head ?? null,
+      return { assessmentHead: assessmentId === null ? 'no-assessment' : assessment.rows[0]?.assessment_head ?? null,
         preservationVersion: preservation.rows[0]?.version ?? '0',
         held: preservation.rows[0]?.held ?? false };
     } catch { throw new RightsUnavailable('delivery cut is unavailable'); }
