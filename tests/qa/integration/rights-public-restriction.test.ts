@@ -500,10 +500,12 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
           .toMatchObject({ address: counterDeclaration.address, phone: counterDeclaration.phone });
         const claimantCounterStep = claimantAfterCounter.items.find(step => step.id === counter.stepId);
         const affectedCounterStep = affectedAfterCounter.items.find(step => step.id === counter.stepId);
-        expect(affectedCounterStep?.occurredAt).toEqual(expect.any(String));
-        expect(claimantCounterStep).toMatchObject({ statement: counterStatement, occurredAt: expect.any(String) });
-        expect(new Date(claimantCounterStep!.occurredAt).getTime()).toBe(
-          new Date(affectedCounterStep!.occurredAt).getTime());
+        const claimantAt = claimantCounterStep!.occurredAt;
+        const affectedAt = affectedCounterStep!.occurredAt;
+        expect(typeof claimantAt).toBe('string');
+        expect(typeof affectedAt).toBe('string');
+        expect(claimantCounterStep).toMatchObject({ statement: counterStatement });
+        expect(new Date(claimantAt).getTime()).toBe(new Date(affectedAt).getTime());
         expect(claimantCounterStep?.declarations).not.toHaveProperty('address');
         expect(claimantCounterStep?.declarations).not.toHaveProperty('phone');
         expect(affectedAfterCounter.notice).toMatchObject({ statement: item.statement, contactEmail: null });
