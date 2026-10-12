@@ -191,7 +191,7 @@ async function snapshot(fixture: Fixture) {
     journal: (await pool.query(`SELECT id, erasure_epoch, operation_id, request_digest, kind, authority,
       principal_id, admission_id, authority_epoch, suppression_status, suppressed_at
       FROM relay.erasure WHERE id = $1`, [fixture.erasureId])).rows[0],
-    targets: (await pool.query(`SELECT erasure_id,ordinal,owner,target_kind,target_ref FROM relay.erasure_target
+    targets: (await pool.query(`SELECT * FROM relay.erasure_target
       WHERE erasure_id = $1 ORDER BY ordinal`,
       [fixture.erasureId])).rows,
     tombstones: (await pool.query(`SELECT revision_id, erasure_id, erasure_epoch FROM content.revision_erasure
@@ -505,7 +505,14 @@ test('the same-key replay clears an old entry and never reports success while a 
   expect(replayed.report.erasureEpoch).toBe(cleared.epoch);
   expect(replayed.report.targets.every(target => target.completionState === 'completed'
     && target.completionEvidenceRef && target.completedAt)).toBe(true);
-  await expectCleared(cleared, clearedBefore);
+  const prior = JSON.parse(clearedBefore);
+  const current = JSON.parse(await snapshot(cleared));
+  expect(current.targets.map(({ erasure_id, ordinal, owner, target_kind, target_ref }: Record<string, unknown>) =>
+    ({ erasure_id, ordinal, owner, target_kind, target_ref }))).toEqual(prior.targets.map(
+      ({ erasure_id, ordinal, owner, target_kind, target_ref }: Record<string, unknown>) =>
+        ({ erasure_id, ordinal, owner, target_kind, target_ref })));
+  // Live completion deliberately advances target evidence; source remediation must preserve the entire row.
+  await expectCleared(cleared, JSON.stringify({ ...prior, targets: current.targets }));
 
   const held = await oldErasure(env);
   const holdId = randomUUID();
@@ -577,4 +584,24 @@ test('a single entry is remediated on demand by id', async () => {
     cleared: fixture.revisions });
   await expectCleared(fixture, before);
   await expect(remediateErasedContentEntry(env.service, graph, randomUUID())).rejects.toThrow('unavailable');
+}, 60_000);
+
+test('journal snapshots observe every completion field on direct remediation paths', async () => {
+  for (const state of ['failed', 'completed'] as const) {
+    const fixture = await oldErasure(env);
+    const before = await snapshot(fixture);
+    await env.pool.query(`UPDATE relay.erasure_target SET completion_state=$2,
+      completion_reason_code=CASE WHEN $2='failed' THEN 'owner_unavailable' END,
+      completion_evidence_ref=CASE WHEN $2='completed' THEN $3 END,
+      completed_at=CASE WHEN $2='completed' THEN clock_timestamp() END
+      WHERE erasure_id=$1`, [fixture.erasureId, state, manifestDigest]);
+    expect(await snapshot(fixture)).not.toBe(before);
+    const retained = JSON.parse(await snapshot(fixture)).targets;
+    expect(retained).toEqual((await env.pool.query(`SELECT * FROM relay.erasure_target
+      WHERE erasure_id=$1 ORDER BY ordinal`, [fixture.erasureId])).rows.map(row =>
+      JSON.parse(JSON.stringify(row))));
+    const completedBefore = await snapshot(fixture);
+    expect((await remediateErasedContentEntry(env.service, graph, fixture.erasureId)).outcome).toBe('cleared');
+    await expectCleared(fixture, completedBefore);
+  }
 }, 60_000);

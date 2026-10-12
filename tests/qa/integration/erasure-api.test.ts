@@ -237,7 +237,7 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     const accepted = await call('POST', '/v1/erasures', account.tokenA, request([erased]), key);
     expect(accepted.status).toBe(200);
     const report = await accepted.json() as Report;
-    expect(report).toMatchObject({ stage: 'inventory_complete', suppression: 'suppressed',
+    expect(report).toMatchObject({ stage: 'reconciling', suppression: 'suppressed',
       destruction: 'retained', replayed: false,
       targets: [{ owner: 'content', kind: 'content_revision', ref: erased }] });
     const dispositions = new Map(report.dispositions.map(entry => [entry.domain, entry]));
@@ -281,7 +281,7 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     const resumed = await call('POST', '/v1/erasures', account.tokenA, request([erased]), key);
     expect(resumed.status).toBe(200);
     expect(await resumed.json()).toMatchObject({ erasureId: report.erasureId,
-      stage: 'inventory_complete', destruction: 'retained', replayed: true });
+      stage: 'reconciling', destruction: 'retained', replayed: true });
     const changed = await call('POST', '/v1/erasures', account.tokenA, request([kept]), key);
     expect(changed.status).toBe(409);
     expect(await status(kept)).toBe('available');
@@ -301,7 +301,7 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     // Exact read belongs to the requesting principal only.
     const read = await call('GET', `/v1/erasures/${report.erasureId}`, account.tokenA);
     expect(read.status).toBe(200);
-    expect(await read.json()).toMatchObject({ erasureId: report.erasureId, stage: 'inventory_complete' });
+    expect(await read.json()).toMatchObject({ erasureId: report.erasureId, stage: 'reconciling' });
     expect((await call('GET', `/v1/erasures/${report.erasureId}`, account.tokenB)).status).toBe(404);
     expect((await call('GET', `/v1/erasures/${randomUUID()}`, account.tokenA)).status).toBe(404);
 
