@@ -60,6 +60,9 @@ final class SearchDeltaJournal {
     private record Qualification(String epoch, String generation, long ordinal,
                                  long luceneGeneration, long population, String sequence) {}
     private static final Map<DatasetGraph, Qualification> qualified = new WeakHashMap<>();
+    // The entrypoint's uncertainty marker, like command health, is fixed for this JVM.
+    static final boolean textIndexUncertain = java.nio.file.Files.exists(java.nio.file.Path.of(
+        System.getenv().getOrDefault("FUSEKI_BASE", "."), "databases/rezics/lucene.uncertain"));
     /** Publication and capture reuse the qualification owner's monitor. Never
      * acquire the whole-command dataset monitor from a read. */
     static Object publicationMonitor() { return qualified; }
@@ -72,6 +75,7 @@ final class SearchDeltaJournal {
         private final boolean ownsTransaction;
         private final Map<String, Object> cut;
         private final Map<String, Object> qualification;
+        private final Map<String, Object> evidence;
         private boolean closed;
 
         private ReadCapture(DatasetGraph data, Runnable begin, boolean ownsTransaction) throws IOException {
@@ -95,7 +99,8 @@ final class SearchDeltaJournal {
                             "sequence", position.sequence().toString(), "generation", position.textGeneration().getURI(),
                             "luceneGeneration", Long.toString(generation));
                     Qualification baseline = qualified.get(data);
-                    qualification = Boolean.TRUE.equals(cut.get("available")) && baseline != null
+                    boolean uncertain = textIndexUncertain;
+                    qualification = !uncertain && Boolean.TRUE.equals(cut.get("available")) && baseline != null
                         && baseline.epoch().equals(cut.get("dataEpoch"))
                         && baseline.generation().equals(cut.get("generation"))
                         && baseline.luceneGeneration() == generation && baseline.ordinal() == ordinal(data)
@@ -103,6 +108,24 @@ final class SearchDeltaJournal {
                             "sequence", cut.get("sequence"), "luceneGeneration", Long.toString(generation),
                             "ordinal", Long.toString(baseline.ordinal()), "qualifiedPopulation", Long.toString(baseline.population()))
                         : Map.of("available", false);
+                    Map<String, Object> capturedEvidence = new LinkedHashMap<>(cut);
+                    capturedEvidence.remove("available");
+                    capturedEvidence.put("version", 1);
+                    capturedEvidence.put("qualified", qualification.get("available"));
+                    capturedEvidence.put("textIndexUncertain", uncertain);
+                    Node head = one(data, GRAPH, STATE, ORDINAL);
+                    if (head != null && head.isLiteral() && head.getLiteralLexicalForm().matches("(0|[1-9][0-9]*)")) {
+                        String number = head.getLiteralLexicalForm();
+                        capturedEvidence.put("ordinal", number);
+                        Node write = "0".equals(number) ? literal("0")
+                            : one(data, GRAPH, uri("urn:rezics:search:delta:" + number), WRITE_EPOCH);
+                        if (write != null && write.isLiteral() && write.getLiteralLexicalForm().matches("(0|[1-9][0-9]*)"))
+                            capturedEvidence.put("writeEpoch", write.getLiteralLexicalForm());
+                    }
+                    if (!Boolean.TRUE.equals(qualification.get("available")))
+                        capturedEvidence.put("reason", uncertain ? "text-index-uncertain"
+                            : !Boolean.TRUE.equals(cut.get("available")) ? "cut-unavailable" : "generation-unqualified");
+                    evidence = Map.copyOf(capturedEvidence);
                     reader = opened;
                     captured.set(this);
                 } catch (IOException | RuntimeException failure) {
@@ -115,6 +138,7 @@ final class SearchDeltaJournal {
         DirectoryReader reader() { return reader; }
         Map<String, Object> cut() { return cut; }
         Map<String, Object> qualification() { return qualification; }
+        Map<String, Object> evidence() { return evidence; }
         @Override public void close() throws IOException {
             if (closed) return;
             closed = true;
@@ -843,8 +867,8 @@ final class SearchDeltaJournal {
             }
             if (!reset && uri(CommandPolicy.CURRENT).equals(graph) && (action == TextQuadAction.ADD || action == TextQuadAction.DELETE)
                 && (uri(RV + "contentPublicationHead").equals(predicate) || uri(RV + "publicSearchEligibilityHead").equals(predicate))) {
-                // A source-head-only write must not preserve an older text qualification.
-                // Touch its bounded derived units so append fences stale text until relay.
+                // Touch bounded derived units so append removes withdrawn
+                // candidates or fences a replacement before publishing its head.
                 var units = data.find(PUBLIC, Node.ANY, uri(RV + "variant"), subject);
                 try {
                     int count = 0;
@@ -930,15 +954,25 @@ final class SearchDeltaJournal {
     static void append(DatasetGraph data, Capture capture, long completedWriteEpoch, long deadline) {
         long budget = Math.min(deadline, capture.deadline);
         TemplateIndexService.workScopeBudget(budget);
-        List<Change> changes = capture.changes();
         Set<String> staleHeads = new LinkedHashSet<>();
         Map<String, String> retainedSources = new LinkedHashMap<>();
         Map<String, String> retainedBodies = new LinkedHashMap<>();
-        if (!capture.reset) for (Node unit : capture.headTouchedUnits) if (!capture.publicTouchedUnits.contains(unit) && staleContentHeads(data, unit)) {
-            staleHeads.add(unit.getURI());
-            retainedSources.put(unit.getURI(), data.contains(GRAPH, STATE, ORDINAL, Node.ANY) ? latestContentSource(data, unit) : null);
-            retainedBodies.put(unit.getURI(), data.contains(GRAPH, STATE, ORDINAL, Node.ANY) ? latestContentBodyDigest(data, unit) : null);
+        if (!capture.reset) for (Node unit : capture.headTouchedUnits) {
+            TemplateIndexService.workScopeBudget(budget);
+            if (!staleContentHeads(data, unit)) continue;
+            Node variant = one(data, PUBLIC, unit, uri(RV + "variant"));
+            // Removing either source head withdraws just this candidate. A
+            // replacement still needs its existing source-integrity fence.
+            if (!data.contains(uri(CommandPolicy.CURRENT), variant, uri(RV + "contentPublicationHead"), Node.ANY)
+                || !data.contains(uri(CommandPolicy.CURRENT), variant, uri(RV + "publicSearchEligibilityHead"), Node.ANY)) {
+                capture.observed().deleteAny(PUBLIC, unit, Node.ANY, Node.ANY);
+            } else if (!capture.publicTouchedUnits.contains(unit)) {
+                staleHeads.add(unit.getURI());
+                retainedSources.put(unit.getURI(), data.contains(GRAPH, STATE, ORDINAL, Node.ANY) ? latestContentSource(data, unit) : null);
+                retainedBodies.put(unit.getURI(), data.contains(GRAPH, STATE, ORDINAL, Node.ANY) ? latestContentBodyDigest(data, unit) : null);
+            }
         }
+        List<Change> changes = capture.changes();
         for (Node slot : capture.realmOwners) {
             TemplateIndexService.workScopeBudget(budget);
             if (data.contains(uri(CommandPolicy.CURRENT), slot, RDF.type.asNode(), uri(RV + "RealmPublicationSlot"))

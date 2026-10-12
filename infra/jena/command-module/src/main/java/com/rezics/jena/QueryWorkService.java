@@ -12,10 +12,60 @@ import org.apache.jena.sparql.exec.QueryExecResult;
 
 /** Native reads use the same request-local work owner as commands. */
 final class QueryWorkService extends SPARQL_QueryDataset {
+    static final String READ_CUT_HEADER = "X-Rezics-Read-Cut";
+    static final String REQUIRE_QUALIFIED_HEADER = "X-Rezics-Require-Qualified-Read";
+    static final int MAX_READ_CUT_BYTES = 2048;
+
+    /** Evidence is bounded even if a damaged control graph contains oversized IRIs. */
+    static org.apache.jena.atlas.json.JsonObject readCutHeader(java.util.Map<String, Object> evidence) {
+        if (Boolean.TRUE.equals(evidence.get("qualified"))
+            && !evidence.keySet().containsAll(java.util.List.of("dataEpoch", "sequence", "generation",
+                "luceneGeneration", "ordinal", "writeEpoch")))
+            return unavailableHeader("cut-evidence-unavailable");
+        var header = new org.apache.jena.atlas.json.JsonObject();
+        for (var entry : evidence.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof Boolean flag) header.put(entry.getKey(), flag);
+            else if (value instanceof Integer number) header.put(entry.getKey(), number);
+            else if (value instanceof String string && string.length() <= 256
+                && string.chars().allMatch(character -> character >= 32 && character <= 126))
+                header.put(entry.getKey(), string);
+            else return unavailableHeader("cut-evidence-unavailable");
+        }
+        return org.apache.jena.atlas.json.JSON.toStringFlat(header).length() <= MAX_READ_CUT_BYTES ? header : unavailableHeader("cut-evidence-unavailable");
+    }
+
+    private static org.apache.jena.atlas.json.JsonObject unavailableHeader(String reason) {
+        var header = new org.apache.jena.atlas.json.JsonObject();
+        header.put("version", 1); header.put("qualified", false);
+        header.put("textIndexUncertain", SearchDeltaJournal.textIndexUncertain);
+        header.put("reason", reason);
+        return header;
+    }
+
+    private static void unavailable(HttpAction action) throws java.io.IOException {
+        action.getResponse().setStatus(503);
+        action.getResponse().setContentType("application/json; charset=utf-8");
+        var payload = new org.apache.jena.atlas.json.JsonObject();
+        payload.put("status", "unavailable");
+        org.apache.jena.atlas.json.JSON.write(action.getResponse().getOutputStream(), payload);
+    }
+
     @Override protected void execute(String queryString, HttpAction action) {
         try (CommandWork work = new CommandWork()) {
+            String require = action.getRequest().getHeader(REQUIRE_QUALIFIED_HEADER);
+            if (require != null && !require.equalsIgnoreCase("true") && !require.equalsIgnoreCase("false")) {
+                ServletOps.errorBadRequest("Qualified read header must be true or false"); return;
+            }
+            boolean requireQualified = "true".equalsIgnoreCase(require);
             var data = action.getDataService().getDataset();
             if (SearchDeltaJournal.lucene(data) == null) {
+                action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(unavailableHeader("text-index-unavailable")));
+                if (requireQualified) {
+                    try { unavailable(action); }
+                    catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+                    return;
+                }
                 super.execute(queryString, action); return;
             }
             Query query;
@@ -32,6 +82,11 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             try (var capture = SearchDeltaJournal.captureRead(data, () -> {
                 action.beginRead(); began[0] = true;
             })) {
+                var evidence = readCutHeader(capture.evidence());
+                action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(evidence));
+                if (requireQualified && !evidence.get("qualified").getAsBoolean().value()) {
+                    unavailable(action); return;
+                }
                 var selected = decideDataset(action, query, "native captured query");
                 Query effective = selected.getRight() == null ? query : selected.getRight();
                 try (QueryExec queryExec = createQueryExec(action, effective, selected.getLeft())) {
@@ -39,6 +94,12 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                     sendResults(action, result, query.getPrologue());
                 }
             } catch (java.io.IOException unavailable) {
+                if (requireQualified && !action.getResponse().isCommitted()) {
+                    action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(unavailableHeader("committed-reader-unavailable")));
+                    try { unavailable(action); }
+                    catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+                    return;
+                }
                 ServletOps.errorOccurred("Committed text reader unavailable");
             } catch (QueryParseException invalid) {
                 action.abortSilent();
