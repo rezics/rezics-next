@@ -20,7 +20,7 @@ import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 import { searchPageAuthors } from './result-cards.ts';
 import { matchesSearchText, SEARCH_FIELD_COST, type FieldMatch } from './fields.ts';
-import { fillPrefixWalkPage, validatePrefixWalkResponse, type PrefixWalkEntry,
+import { prefixWalkRequest, prefixWalkExaminedLimit, prefixWalkCursor, validatePrefixWalkResponse, type PrefixWalkEntry,
   type PrefixWalkRequest, type PrefixWalkResponse } from './prefix-walk.ts';
 import { withSearchGraphSnapshot } from './snapshot.ts';
 
@@ -179,8 +179,13 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
     let generation: string | undefined;
     const walks: Array<{ request: PrefixWalkRequest; response: PrefixWalkResponse }> = [];
     // Language selects card presentation, as before; matching spans all selected languages.
-    const page = await fillPrefixWalkPage({ prefix: input.prefix, language: null,
-      pageSize: SEARCH_FIELD_COST.typeaheadItems }, async walkRequest => {
+    const initial = prefixWalkRequest({ prefix: input.prefix, language: null,
+      pageSize: SEARCH_FIELD_COST.typeaheadItems });
+    const cap = prefixWalkExaminedLimit(initial.pageSize);
+    const entries: PrefixWalkEntry[] = [];
+    let cursor = initial.cursor, more = false;
+    do {
+      const walkRequest = { ...initial, cursor, pageSize: Math.min(initial.pageSize, cap - entries.length) };
       let native: unknown;
       try { native = await env.fuseki.prefixWalk(walkRequest); }
       catch (error) {
@@ -195,27 +200,27 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
       const response = validatePrefixWalkResponse(native, walkRequest);
       walks.push({ request: walkRequest, response });
       generation = response.generation;
-      // Candidate identities, their matched fields, facets and all cards share
-      // one selected dependency set, including across native walk batches.
-      const previouslyDelivered = new Set(deliveredMainVersions);
-      const visible = await session.selection(`typeahead-presentation:${JSON.stringify(response.entries)}`, async probe => {
-        const candidates = await queryTypeaheadCandidates(env, input.prefix, response.entries, work.sourceAuthorNames, probe);
-        const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
-          total: candidates.length, results: candidates });
-        const seen = new Set(previouslyDelivered);
-        return { ...relation, results: response.entries.flatMap(entry => {
-          if (seen.has(entry.mainVersion)) return [];
-          const row = relation.results.find(match => match.mainVersion === entry.mainVersion
-            && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
-          if (!row) return [];
-          seen.add(entry.mainVersion);
-          return [row];
-        }) };
-      }, relation => relation.results);
-      if (!visible.results.length) {
-        accepted.clear();
-        return response;
-      }
+      entries.push(...response.entries);
+      cursor = response.cursor; more = response.more;
+    } while (more && entries.length < cap);
+    // Candidate identities, their matched fields, facets and all cards share
+    // one selected dependency set, including across native walk batches.
+    const previouslyDelivered = new Set(deliveredMainVersions);
+    const visible = await session.selection(`typeahead-presentation:${JSON.stringify(entries)}`, async probe => {
+      const candidates = await queryTypeaheadCandidates(env, input.prefix, entries, work.sourceAuthorNames, probe);
+      const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
+        total: candidates.length, results: candidates });
+      const seen = new Set(previouslyDelivered);
+      return { ...relation, results: entries.flatMap(entry => {
+        if (seen.has(entry.mainVersion)) return [];
+        const row = relation.results.find(match => match.mainVersion === entry.mainVersion
+          && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
+        if (!row) return [];
+        seen.add(entry.mainVersion);
+        return [row];
+      }) };
+    }, relation => relation.results);
+    if (visible.results.length) {
       const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session);
       const summaries = await session.summaries(visible.results.map(row => row.work), true);
       const authorWorks = [...new Set(visible.results.map(row => row.work))];
@@ -237,12 +242,22 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
             matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
             matchedLanguage: row.matchedLanguage }]] : [];
       }));
-      return response;
-    }, async entry => {
-      const item = accepted.get(`${entry.mainVersion}\n${entry.matchUnit}\n${entry.matchedField}`) ?? null;
-      if (item) deliveredMainVersions.add(entry.mainVersion);
-      return item;
-    });
+    }
+    const items: TypeaheadItem[] = [];
+    let examined = 0;
+    for (const entry of entries) {
+      examined++;
+      if (entry.rejected || deliveredMainVersions.has(entry.mainVersion)) continue;
+      const item = accepted.get(`${entry.mainVersion}\n${entry.matchUnit}\n${entry.matchedField}`);
+      if (!item) continue;
+      deliveredMainVersions.add(entry.mainVersion); items.push(item);
+      if (items.length === initial.pageSize) break;
+    }
+    const hasMore = examined < entries.length || more;
+    // A filled page consumes only through its tenth accepted entry. The native
+    // tail already hydrated here remains available to a subsequent walk.
+    cursor = hasMore ? prefixWalkCursor(initial, generation!, entries[examined - 1]!.key) : null;
+    const page = { items, hasMore, cursor };
     // Reopen this exact bounded prefix traversal, including its empty/tail
     // relation. Native commit generations and cursors can advance after an
     // unrelated writer; the selected entries and continuation presence cannot.
