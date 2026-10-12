@@ -228,7 +228,7 @@ export class GovernanceStore {
   }
 
   private async realmBasis(target: EvidenceTarget): Promise<RealmTargetBasis | null> {
-    if (target.owner !== 'graph' || target.component !== 'record') return null;
+    if (target.owner !== 'graph') return null;
     if (!this.heads.realmBasis) throw new GovernanceUnavailable('Realm target classification is unavailable');
     return this.heads.realmBasis(target);
   }
@@ -1311,7 +1311,7 @@ export class GovernanceStore {
             throw new GovernanceUnavailable('participation target has no confirmed owner');
           }
           const result =
-            this.effects && !['participation', 'capability'].includes(row.effect)
+            this.effects
               ? await this.effects.apply(
                   `governance-moderation:${decisionId}`,
                   ordinal,
