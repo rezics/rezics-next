@@ -12,7 +12,7 @@ export const animeFormatNames = [
 
 /**
  * The official Anime Zone (`/z/anime`): browse by format and status, and by publication year,
- * using the shared browse sort. Cards and work pages state recorded format, year, episode count and status.
+ * newest first. A card and the work page state the recorded format, year, episode count and status.
  */
 export default defineZonePackage({
   slug: 'anime',

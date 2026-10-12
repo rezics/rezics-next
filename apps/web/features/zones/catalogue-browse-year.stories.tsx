@@ -79,7 +79,7 @@ const meta = {
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByLabelText('Publication year')).toHaveValue('1995');
-    await expect(canvas.getByRole('link', { name: 'All years' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Newest years' })).toBeVisible();
     await expect(canvas.getByRole('status')).toHaveTextContent(
       args.secondPage ? '35 results' : '20+ results',
     );

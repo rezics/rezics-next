@@ -22,7 +22,7 @@ test('the catalogue year and existing Conditions go together to Zone browse', ()
 });
 
 test('the all-years directory uses the same read; a selected year wins over the directory flag', () => {
-  expect(catalogueBrowseQuery({ years: '1' })).toEqual({ publicationYear: '1-9999' });
+  expect(catalogueBrowseQuery({ years: '1' })).toEqual({ publicationYear: '1-9999', publicationYearOrder: 'descending' });
   expect(catalogueBrowseQuery({ year: '2001', years: '1' })).toEqual({ publicationYear: '2001' });
   expect(catalogueBrowseQuery({ year: '10000' })).toEqual({});
   expect(catalogueBrowseQuery({})).toEqual({});

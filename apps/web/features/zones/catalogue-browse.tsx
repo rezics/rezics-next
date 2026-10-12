@@ -5,11 +5,12 @@ import type { BrowseModel } from './browse-view.ts';
 import { catalogueYearParam } from './catalogue-year.ts';
 
 // Year, format and status belong to the same API read and its continuation.
-export function catalogueBrowseQuery(search: Record<string, string | string[] | undefined>) {
+export function catalogueBrowseQuery(search: Record<string, string | string[] | undefined>):
+  ReturnType<typeof mainBrowseQuery> & { publicationYear?: string; publicationYearOrder?: 'descending' } {
   const year = catalogueYearParam(search.year);
   return { ...mainBrowseQuery(parseBrowseState(search)),
     ...year !== null ? { publicationYear: String(year) }
-      : directoryParam(search.years) ? { publicationYear: '1-9999' } : {} };
+      : directoryParam(search.years) ? { publicationYear: '1-9999', publicationYearOrder: 'descending' as const } : {} };
 }
 
 function withFlags(href: string, year: number | null, directory: boolean): string {

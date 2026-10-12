@@ -116,3 +116,107 @@ test('shared Query admission refuses invalid, unsupported and duplicate publicat
     ).toThrow(QueryRejected);
   }
 });
+
+const reference = (index: number) =>
+  `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+const term = (value: string) => ({ value });
+function browseSession(count = 310, firstMatch = 300, cursor?: string) {
+  const entries = Array.from({ length: count }, (_, index) => ({
+    work: reference(index),
+    adoptedOrder: String(count - index),
+    words: null,
+    updatedAt: null,
+  }));
+  const batches: number[] = [];
+  const session = {
+    options: { limit: 20, cursor },
+    position: { dataEpoch: 'epoch', sequence: '1' },
+    checkDeadline: () => {},
+    observeDependency: () => {},
+    realm: async () => ({ visibility: 'public', realmRevision: reference(999) }),
+    query: async (sparql: string) => {
+      const ids = [...sparql.matchAll(/<(https:\/\/rezics\.com\/id\/[^>]+)>/g)]
+        .map((match) => match[1]!)
+        .filter((value) => entries.some((entry) => entry.work === value));
+      if (sparql.includes('?evidence'))
+        return [...new Set(ids)]
+          .filter((work) => Number(work.slice(-12)) >= firstMatch)
+          .map((work) => {
+            const year = sparql.match(new RegExp(`\\(<${work}> (\\d+)\\)`))?.[1];
+            return {
+              work: term(work),
+              head: term(reference(991)),
+              main: term(reference(992)),
+              evidence: term(reference(993)),
+              revisionEpoch: term('epoch'),
+              sequence: term('1'),
+              ...(year ? { directoryYear: term(year) } : {}),
+            };
+          });
+      if (sparql.includes('SELECT ?work ?type'))
+        return ids.map((work) => ({ work: term(work), type: term('https://schema.org/Book') }));
+      if (sparql.includes('SELECT ?work ?head')) return ids.map((work) => ({ work: term(work) }));
+      return [];
+    },
+    summaries: async (ids: string[]) =>
+      ids.map((work) => ({
+        status: 'available',
+        disclosure: 'public',
+        type: 'work',
+        name: { value: work, language: 'en', direction: 'ltr', basis: 'requested' },
+        avatar: { kind: 'fallback', policy: 'test', key: work, resourceType: 'work' },
+      })),
+    deps: {
+      zoneBrowse: {
+        current: async () => true,
+        batch: async (_realm: string, _sort: string, after: { key: string | null } | null) => {
+          const rows = entries
+            .filter((entry) => !after || Number(entry.adoptedOrder) < Number(after.key))
+            .slice(0, 64);
+          batches.push(rows.length);
+          return rows;
+        },
+      },
+      discovery: { active: async () => ({ stale: false }), workTerms: async () => [] },
+    },
+  } as unknown as WorkReadSession;
+  return { session, batches };
+}
+
+test('a year match beyond member 300 remains reachable after an empty bounded page', async () => {
+  const firstFixture = browseSession();
+  const first = await readZoneBrowse(firstFixture.session, realm, { publicationYear: '1995' });
+  expect(first.items).toEqual([]);
+  expect(first.matches).toEqual({ value: 0, kind: 'lower-bound' });
+  expect(first.nextCursor).toBeTruthy();
+  expect(firstFixture.batches).toEqual([64, 64, 64, 64]);
+  const second = await readZoneBrowse(browseSession(310, 300, first.nextCursor!).session, realm, {
+    publicationYear: '1995',
+  });
+  expect(second.items.map((item) => item.id)).toEqual(
+    Array.from({ length: 10 }, (_, index) => reference(300 + index)),
+  );
+  expect(second.matches).toEqual({ value: 10, kind: 'exact' });
+  expect(second.nextCursor).toBeNull();
+});
+
+test('the all-years browse follows publication-year keys rather than adoption order', async () => {
+  const { session } = browseSession(10, 0);
+  session.deps.templateSeek = {
+    keys: async () => [],
+    candidates: async () => ({
+      more: false,
+      rows: [
+        { id: reference(5), key: '7976' },
+        { id: reference(4), key: '8005' },
+      ],
+    }),
+  } as never;
+  const page = await readZoneBrowse(session, realm, {
+    publicationYear: '1-9999',
+    publicationYearOrder: 'descending',
+  });
+  expect(page.items.map((item) => item.id)).toEqual([reference(5), reference(4)]);
+  expect(page.matches).toEqual({ value: 2, kind: 'exact' });
+  expect(page.query.publicationYearOrder).toBe('descending');
+});

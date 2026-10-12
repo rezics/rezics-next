@@ -6,6 +6,10 @@ import type { BrowseAfter, BrowseEntry } from '../zone-browse/store.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
 import { compileQuery, QueryRejected } from '../query/compile.ts';
 import { publicationYearBoundsError } from '../query/year-fact.ts';
+import { FIRST_PUBLICATION_GRAPH, FIRST_PUBLICATION_PREDICATE, FIRST_PUBLICATION_ANCHOR,
+  FIRST_PUBLICATION_TYPE, publicationYearFromKey } from '../query/year-fact.ts';
+import { acceptedStatementPattern } from '../statement/subject-read.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
@@ -97,9 +101,13 @@ export function filterDocument(filter: BrowseFilter): { all: Condition[] } {
 /** GET is an adapter to the same admission as POST /v1/query, before any read session exists. */
 export function compileZoneBrowse(realm: string, query: Query): ReturnType<typeof compileQuery> {
   const controls = ['language', 'limit', 'cursor', 'q', 'sort', 'type', 'concept', 'excludeConcept',
-    'status', 'excludeStatus', 'length', 'publicationYear'];
+    'status', 'excludeStatus', 'length', 'publicationYear', 'publicationYearOrder'];
   if (Object.keys(query).some(key => !controls.includes(key))) {
     throw new QueryRejected('unsupported_query_shape', 'Zone browse parameter has no admitted Facet');
+  }
+  if (query.publicationYearOrder !== undefined
+    && (query.publicationYearOrder !== 'descending' || query.publicationYear === undefined)) {
+    throw new QueryRejected('invalid_query', 'Publication-year order needs a publication-year filter');
   }
   if (query.publicationYear !== undefined) {
     const [from, to = from] = query.publicationYear.split('-').map(Number);
@@ -109,30 +117,41 @@ export function compileZoneBrowse(realm: string, query: Query): ReturnType<typeo
     }
   }
   const text = query.q?.trim();
-  return compileQuery({ profile: 'filter-document-v2', context: { realm }, scope: { kind: 'realm', realm },
+  const plan = compileQuery({ profile: 'filter-document-v2', context: { realm }, scope: { kind: 'realm', realm },
     filter: filterDocument(browseFilter(query)), ...(text ? { text: { phrase: text } } : {}),
     sort: query.sort ?? (text ? 'relevance' : 'newest'),
     page: { size: query.limit ?? ZONE_BROWSE_COST.pageSize, continuation: query.cursor } });
+  if (query.publicationYearOrder !== undefined && plan.template === 'zone-browse') {
+    return { ...plan, request: { ...plan.request, publicationYearOrder: query.publicationYearOrder } };
+  }
+  return plan;
 }
 
-/** Same active, globally accepted date-published facts as work-publication-years.
- * EXISTS keeps multiple Statements for a Work from duplicating its browse row. */
-function publicationYearFilter(value: string | undefined): string {
+function publicationDates(prefix: string): string {
+  // The acceptance owner binds decision aliases. Namespace them so the Realm's
+  // publication decision cannot accidentally correlate with Statement acceptance.
+  const accepted = acceptedStatementPattern(GLOBAL_CLASSIFICATION_CONTEXT, false)
+    .replace(/\?([A-Za-z]\w*)/g, (_, variable: string) => `?${prefix}${variable}`);
+  return `GRAPH ${iri(GRAPHS.current)} {
+    ?${prefix}statement a rdf:Statement ; rdf:subject ?work ; rdf:predicate schema:datePublished ;
+      rdf:object ?${prefix}published ; rv:statementState rv:Active ; rv:head ?${prefix}head .
+    OPTIONAL { ?${prefix}statement rv:meaningKey ?${prefix}key }
+  } ${accepted}
+  FILTER(DATATYPE(?${prefix}published) IN (<http://www.w3.org/2001/XMLSchema#gYear>,
+    <http://www.w3.org/2001/XMLSchema#date>, <http://www.w3.org/2001/XMLSchema#dateTime>))`;
+}
+
+/** The acceptance owner decides both exact and qualified-fact support. EXISTS
+ * keeps multiple Statements for a Work from duplicating its browse row. */
+function publicationYearFilter(value: string | undefined, directory = false): string {
   if (value === undefined) return '';
   const [from, to = from] = value.split('-').map(Number);
   return `FILTER EXISTS {
-    GRAPH ${iri(GRAPHS.current)} {
-      ?yearStatement a rdf:Statement ; rdf:subject ?work ; rdf:predicate schema:datePublished ;
-        rdf:object ?published ; rv:statementState rv:Active ; rv:head ?yearHead .
-      ?yearSlot a rv:DecisionSlot ; rv:decisionTarget ?yearStatement ; rv:targetKind rv:StatementTarget ;
-        rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ?yearDecision .
-    }
-    GRAPH ${iri(GRAPHS.revisions)} {
-      ?yearDecision a rv:StatementDecision ; rv:component ?yearSlot ; rv:outcome rv:Accepted .
-    }
-    FILTER(DATATYPE(?published) IN (<http://www.w3.org/2001/XMLSchema#gYear>,
-      <http://www.w3.org/2001/XMLSchema#date>, <http://www.w3.org/2001/XMLSchema#dateTime>))
-    FILTER(YEAR(?published) >= ${from} && YEAR(?published) <= ${to})
+    ${publicationDates('year')}
+    FILTER(YEAR(?yearpublished) >= ${from} && YEAR(?yearpublished) <= ${to})
+    ${directory ? `FILTER(YEAR(?yearpublished) = ?directoryYear)
+      FILTER NOT EXISTS { ${publicationDates('laterYear')}
+        FILTER(YEAR(?laterYearpublished) > ?directoryYear && YEAR(?laterYearpublished) <= ${to}) }` : ''}
   }`;
 }
 
@@ -208,22 +227,26 @@ async function readTags(session: WorkReadSession, realm: string, works: readonly
 }
 
 async function readBrowseBatch(session: WorkReadSession, realm: string, ids: string[],
-  filter: BrowseFilter, entries?: Map<string, BrowseEntry>, publicationYear?: string) {
+  filter: BrowseFilter, entries?: Map<string, BrowseEntry>, publicationYear?: string,
+  directoryYears?: ReadonlyMap<string, number>) {
   if (!ids.length) return { candidates: [] as BrowseCandidate[], tags: 'unavailable' as const,
     rows: new Map<string, ReadRow>(), summaries: new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>() };
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
-    ?sequence ?status WHERE {
-    VALUES ?work { ${ids.map(iri).join(" ")} }
+    ?sequence ?status ?directoryYear WHERE {
+    ${directoryYears ? `VALUES (?work ?directoryYear) { ${ids.map(work =>
+      `(${iri(work)} ${directoryYears.get(work)})`).join(' ')} }`
+      : `VALUES ?work { ${ids.map(iri).join(' ')} }`}
     { ${zoneAdoption(realm, session.options.language)} }
     BIND(?selection AS ?evidence)
     GRAPH ${iri(GRAPHS.revisions)} { ?evidence rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
     GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head . OPTIONAL { ?work rv:completionStatus ?status } }
     ${publicWork('?work', '?main')}
-    ${publicationYearFilter(publicationYear)}
+    ${publicationYearFilter(publicationYear, !!directoryYears)}
   } LIMIT ${ids.length + 1}`, ids.length);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence || !row.revisionEpoch
     || !/^\d+$/.test(row.sequence?.value ?? '')
-    || row.status && !(serialStatuses as readonly string[]).includes(row.status.value))
+    || row.status && !(serialStatuses as readonly string[]).includes(row.status.value)
+    || directoryYears && Number(row.directoryYear?.value) !== directoryYears.get(row.work?.value ?? ''))
     || new Set(rows.map(row => row.work!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Zone browse candidates are ambiguous');
   }
@@ -276,8 +299,10 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const appliedSort = sort === 'relevance' ? 'newest' : sort;
   const filter = browseFilter(query);
   const limit = session.options.limit ?? ZONE_BROWSE_COST.pageSize;
-  const binding = ['zone-browse-v3', realm, text, sort, filterDocument(filter), session.options.language ?? null];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position, appliedSort === 'newest');
+  const directory = plan.request.publicationYearOrder === 'descending';
+  const binding = ['zone-browse-v3', realm, text, sort, filterDocument(filter), session.options.language ?? null,
+    ...directory ? ['publication-year-descending'] : []];
+  const cursor = decodeReadCursor(session.options.cursor, binding, session.position, appliedSort === 'newest' && !directory);
   let prior: { after: BrowseAfter | null; current: boolean; visible: number } = { after: null, current: true, visible: 0 };
   if (cursor) {
     try {
@@ -293,8 +318,8 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const examined: BrowseCandidate[] = [], page: BrowseCandidate[] = [];
   let tags: 'current' | 'stale' | 'unavailable' = 'unavailable';
   let after = prior.after, more = false;
-  const evaluate = async (ids: string[], entries?: Map<string, BrowseEntry>) => {
-    const batch = await readBrowseBatch(session, realm, ids, filter, entries, plan.request.publicationYear);
+  const evaluate = async (ids: string[], entries?: Map<string, BrowseEntry>, years?: ReadonlyMap<string, number>) => {
+    const batch = await readBrowseBatch(session, realm, ids, filter, entries, plan.request.publicationYear, years);
     tags = batch.tags;
     for (const [work, row] of batch.rows) rows.set(work, row);
     for (const [work, summary] of batch.summaries) summaries.set(work, summary);
@@ -304,24 +329,45 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     return { candidates: batch.candidates, found };
   };
   const projection = session.deps.zoneBrowse;
-  if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
-  let current = prior.current && await projection.current(session.position);
+  const yearIndex = session.deps.templateSeek;
+  const yearKeys = [{ graph: FIRST_PUBLICATION_GRAPH, predicate: FIRST_PUBLICATION_PREDICATE,
+    anchor: FIRST_PUBLICATION_ANCHOR, type: FIRST_PUBLICATION_TYPE }];
+  if (!directory && !projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
+  if (directory) {
+    if (!yearIndex) throw new WorkReadUnavailable('Publication-year directory is unavailable');
+    const basis = await yearIndex.keys(session.position.dataEpoch, yearKeys);
+    session.observeDependency('zone-publication-year-directory', basis,
+      () => yearIndex.keys(session.position.dataEpoch, yearKeys));
+  }
+  let current = prior.current && (directory || await projection!.current(session.position));
   for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
-    const entries = await projection.batch(realm, appliedSort, after, session.position);
-    if (!entries.length) { more = false; break; }
-    const batch = await evaluate(entries.map(item => item.work), new Map(entries.map(item => [item.work, item])));
+    const yearPage = directory ? await yearIndex!.candidates(session.position.dataEpoch, yearKeys,
+      after ? { id: after.work, key: after.key! } : null, ZONE_BROWSE_COST.batchRows,
+      { fromYear: Number(filter.publicationYear!.min), toYear: Number(filter.publicationYear!.max) },
+      ZONE_BROWSE_COST.batchRows + 1) : null;
+    const entries = directory ? null : await projection!.batch(realm, appliedSort, after, session.position);
+    const traversal = yearPage ? yearPage.rows.map(row => ({ work: row.id, key: row.key }))
+      : entries!.map(entry => ({ work: entry.work, key: appliedSort === 'newest' ? entry.adoptedOrder : entry.updatedAt }));
+    if (!traversal.length) { more = yearPage?.more ?? false; break; }
+    const years = yearPage ? new Map<string, number>() : undefined;
+    if (years) for (const row of yearPage!.rows) {
+      if (!years.has(row.id)) years.set(row.id, publicationYearFromKey(row.key));
+    }
+    const batch = await evaluate([...new Set(traversal.map(item => item.work))],
+      entries ? new Map(entries.map(item => [item.work, item])) : undefined, years);
     const candidates = new Map(batch.candidates.map(item => [item.work, item]));
-    for (const [index, entry] of entries.entries()) {
-      const candidate = candidates.get(entry.work);
+    for (const [index, entry] of traversal.entries()) {
+      const candidate = !directory || Number(rows.get(entry.work)?.directoryYear?.value) === publicationYearFromKey(entry.key!)
+        ? candidates.get(entry.work) : undefined;
       if (candidate && batch.found.has(entry.work) && page.length === limit) { more = true; break; }
       if (candidate) examined.push(candidate);
       if (candidate && batch.found.has(entry.work)) page.push(candidate);
-      after = { work: entry.work, key: appliedSort === 'newest' ? entry.adoptedOrder : entry.updatedAt };
-      more = index + 1 < entries.length || entries.length === ZONE_BROWSE_COST.batchRows;
+      after = entry;
+      more = index + 1 < traversal.length || (yearPage ? yearPage.more : traversal.length === ZONE_BROWSE_COST.batchRows);
     }
     if (!more || page.length === limit) break;
   }
-  current = current && await projection.current(session.position);
+  current = current && (directory || await projection!.current(session.position));
   const counts = browseCandidates(examined, filter, text, appliedSort).facets;
   const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
@@ -365,6 +411,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   return { profile: 'zone-browse-v1' as const, realm,
     query: { text, sort, appliedSort, textMatch: text ? 'title' as const : 'none' as const,
       ...plan.request.publicationYear !== undefined ? { publicationYear: plan.request.publicationYear } : {},
+      ...directory ? { publicationYearOrder: 'descending' as const } : {},
       filter: filterDocument(filter) }, facets: { ...counts, concept }, tags,
     matches: { value: visible, kind: complete ? 'exact' as const : 'lower-bound' as const },
     window: { scanned: examined.length, complete }, ...pageResult(session, items, next) };

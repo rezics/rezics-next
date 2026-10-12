@@ -10,7 +10,7 @@ export const mangaFormatNames = [
 
 /**
  * The official Manga Zone (`/z/manga`): browse by format and status, and by publication year,
- * using the shared browse sort. Cards and work pages state recorded format, year, volume count and status.
+ * newest first. A card and the work page state the recorded format, year, volume count and status.
  */
 export default defineZonePackage({
   slug: 'manga',
