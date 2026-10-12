@@ -50,6 +50,15 @@ export function episodeProgressWhere(read: Standing, total: number | null, t: Co
   return place.kind === 'unnamed' ? t.someWatched : t.lastWatched({ place: place.label });
 }
 
+export function episodeProgressCompletion(read: Standing, total: number | null) {
+  const allWatched = total !== null && total > 0 && read.through?.number === total;
+  return {
+    percent: total !== null && total > 0 && read.through
+      ? allWatched ? 100 : Math.min(99, Math.round((read.through.number / total) * 100)) : null,
+    allWatched,
+  };
+}
+
 /**
  * Where the reader stands in a series' episodes, and the ways to move: mark the next one in a tap,
  * jump to any by number, and keep a special apart from the main run. Everything shown is Main's;
@@ -84,6 +93,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   const read = standing.data;
   if (!read) return null;
   const total = totalOf(read);
+  const completion = episodeProgressCompletion(read, total);
   const typedNumber = /^[1-9]\d*$/.test(typed.trim()) ? Number(typed.trim()) : null;
 
   async function select(episode: Episode) {
@@ -100,13 +110,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     setSaving(false);
     if (!written.ok) { setFailed(true); return; }
     setSelected(now => (now?.episode.occurrence === episode.occurrence ? { episode, mark: written.data } : now));
-    // The next episode marked moves the run on at once; Main is read again either way, and settles it.
-    const after = read!.mains.items[episode.number];
-    if (completed && episode.occurrence === read!.next?.occurrence && (after || read!.mains.next === null)) {
-      const extendsRun = episode.number === (read!.through?.number ?? 0) + 1;
-      setStanding({ ok: true, data: { ...read!, through: extendsRun ? episode : read!.through, next: after ?? null,
-        furthest: { occurrence: episode.occurrence, label: episode.label } } });
-    }
+    // Re-prove the prefix after every mark or unmark; a write says nothing about other occurrences.
     setReload(count => count + 1);
   }
 
@@ -130,8 +134,8 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
 
     <div className="grid gap-2">
       <p className="font-medium text-base" data-where>{episodeProgressWhere(read, total, t)}</p>
-      {total !== null && read.through
-        ? <Progress value={Math.round((read.through.number / total) * 100)} aria-label={t.episodes} /> : null}
+      {completion.percent !== null
+        ? <Progress value={completion.percent} aria-label={t.episodes} /> : null}
     </div>
 
     {read.next ? <div className="grid gap-2" data-next>
@@ -139,7 +143,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
       <div><Button type="button" className="min-h-11 w-full sm:w-auto" disabled={saving}
         onClick={() => void write(read.next!, true)}>
         <CheckIcon aria-hidden="true" />{saving ? t.episodeSaving : t.markNext({ number: String(read.next.number) })}</Button></div>
-    </div> : read.through ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allWatched}</p> : null}
+    </div> : completion.allWatched ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allWatched}</p> : null}
 
     <form className="flex items-end gap-2 sm:max-w-sm" onSubmit={event => { event.preventDefault(); void jump(); }}>
       <Field className="min-w-0 flex-1 gap-1">

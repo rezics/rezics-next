@@ -9,6 +9,8 @@ import type { EpisodeApi, EpisodeGroup, EpisodePart } from './episode-api.ts';
 
 /** A series' page walk is bounded, so a number far past the end is refused instead of read forever. */
 export const MAX_PAGES = 100;
+/** Per-occurrence proof must not make loading a long completed series unbounded. */
+export const MAX_COMPLETION_READS = 200;
 
 export interface Episode extends EpisodePart {
   structure: string;
@@ -34,7 +36,7 @@ export interface Standing {
   structure: string;
   mains: Walk;
   specials: { label: string | null; walk: Walk }[];
-  /** The last main episode of the run watched from the first; null when the first is not. */
+  /** The last main episode of a proved run; null when the first is not completed or proof is bounded. */
   through: Episode | null;
   /** The episode to continue from: the one after the furthest completed, or after that run when none is. */
   next: Episode | null;
@@ -100,28 +102,20 @@ async function finished(api: EpisodeApi, episode: Episode): Promise<boolean> {
 }
 
 /**
- * How many episodes are finished from the first on. The finished ones are taken to be a run, which is
- * what marking the next episode over and over leaves: pages are read while their last episode is
- * finished, and inside the first page that is not, the run's end is found by halving.
+ * Prove every occurrence before the first gap. Sparse marks and unmarks make page endpoints and
+ * binary search unsafe. Null means the read budget ended before the gap or the series end was known.
  */
-async function runLength(api: EpisodeApi, walk: Walk): Promise<number> {
-  if (!walk.items.length || !await finished(api, walk.items[0]!)) return 0;
-  let known = 1;
+async function runLength(api: EpisodeApi, walk: Walk): Promise<number | null> {
+  let known = 0;
   for (;;) {
-    const end = walk.items.length;
-    if (known < end && await finished(api, walk.items[end - 1]!)) {
-      known = end;
-      if (await advance(api, walk)) continue;
-      return known;
+    if (known === walk.items.length) {
+      if (walk.next === null) return known;
+      if (known >= MAX_COMPLETION_READS || !await advance(api, walk)) return null;
+      continue;
     }
-    if (known === end) return known;
-    let low = known;
-    let high = end - 1;
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2);
-      if (await finished(api, walk.items[middle - 1]!)) low = middle; else high = middle - 1;
-    }
-    return low;
+    if (known >= MAX_COMPLETION_READS) return null;
+    if (!await finished(api, walk.items[known]!)) return known;
+    known++;
   }
 }
 
@@ -143,7 +137,7 @@ export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<
     const present = specials.filter(entry => entry.walk.items.length);
     if (!mains.items.length && !present.length) return { ok: true, data: null };
     const length = await runLength(api, mains);
-    let next: Episode | null = mains.items[length] ?? null;
+    let next: Episode | null = mains.items[length ?? 0] ?? null;
     let furthest: EpisodePart | null = null;
     const resumed = await api.resume(work);
     if (resumed.ok && resumed.data) {
@@ -157,7 +151,8 @@ export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<
         furthest = { occurrence: stopped.occurrence, label: stopped.label };
       }
     }
-    return { ok: true, data: { structure, mains, specials: present, through: mains.items[length - 1] ?? null, next, furthest } };
+    return { ok: true, data: { structure, mains, specials: present,
+      through: length === null ? null : mains.items[length - 1] ?? null, next, furthest } };
   } catch {
     return { ok: false, failure: 'unavailable' };
   }

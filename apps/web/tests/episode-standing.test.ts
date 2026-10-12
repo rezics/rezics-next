@@ -31,13 +31,13 @@ describe('where the reader stands in a series', () => {
     expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(1);
   });
 
-  test('episode 7 finished continues from episode 8, found by halving', async () => {
+  test('episode 7 finished continues from episode 8 after proving every earlier occurrence', async () => {
     const memory = store(12, 2);
     finish(memory, 1, 2, 3, 4, 5, 6, 7);
     const read = await standing(memory);
     expect(read.through?.number).toBe(7);
     expect(read.next?.number).toBe(8);
-    expect(memory.calls.filter(call => call.startsWith('progress')).length).toBeLessThanOrEqual(6);
+    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(8);
   });
 
   test('a special finished does not move the main run', async () => {
