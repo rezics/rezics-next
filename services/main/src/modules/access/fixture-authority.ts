@@ -3,6 +3,18 @@ import type { Pool, PoolClient } from 'pg';
 
 type Sql = Pick<Pool | PoolClient, 'query'>;
 
+/** Fixture identities enter through Access, under its recovery fence. The caller
+ * supplies a transaction so an interrupted setup cannot leave half an identity. */
+export async function registerFixtureIdentity(client: PoolClient, input: {
+  principalId: string; issuer: string; subject: string; actor: string;
+}): Promise<void> {
+  await recoveryOpen(client);
+  await client.query(
+    'INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+    [input.principalId, input.issuer, input.subject]);
+  await client.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [input.actor]);
+}
+
 /** Fixture mandate and grant duration, always read with clock_timestamp().
  * Seed sessions use 8 hours. Dataset administration uses 7 days because an
  * import outlasts a seed session. Web-auth agent control uses infinity
