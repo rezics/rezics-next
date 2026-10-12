@@ -10,6 +10,7 @@ import {
   loadHiddenIdReads,
   loadOpenApi,
   registeredHiddenIdOperations,
+  registeredHiddenIdReads,
   registeredHiddenIdWrites,
   type HiddenIdClassification,
   type OpenApiDocument,
@@ -182,6 +183,7 @@ test('the committed inventory matches the public contract and registered reads h
   expect(committed.filter((entry) => entry.status === 'registered').map((entry) => entry.operation)).toEqual(
     [...registeredHiddenIdOperations],
   );
-  expect(committed.filter((entry) => entry.status === 'registered' && entry.operation.startsWith('POST '))
+  expect(committed.filter((entry) => entry.status === 'registered' && entry.operation.startsWith('POST ')
+    && !registeredHiddenIdReads.some((operation) => operation === entry.operation))
     .map((entry) => entry.operation)).toEqual([...registeredHiddenIdWrites]);
 });

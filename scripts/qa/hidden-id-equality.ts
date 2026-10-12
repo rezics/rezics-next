@@ -32,13 +32,13 @@ export const registeredHiddenIdReads = [
   'GET /v1/works/{id}/realizations',
   'GET /v1/works/{id}/releases',
   'GET /v1/works/{id}/source-support',
+  'POST /v1/recipes/{id}/file-imports',
 ] as const;
 
 /** Writes have their own outcome proofs; they do not run in the read-only equality fixture.
  * About-posts covers hidden/absent targets (404) and hidden/absent openers (ordinary posting). */
 export const registeredHiddenIdWrites = [
   'POST /v1/realms/{realm}/about-posts',
-  'POST /v1/recipes/{id}/file-imports',
 ] as const;
 /** Parent-output equality, proved at the owner tier in realm-reply-threads,
  * realm-reply-profile and realm-reply-parent-disclosure tests. These cases
