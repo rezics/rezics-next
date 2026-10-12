@@ -9,7 +9,7 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import {
-  configureDisclosure, configureDisclosureAncestrySource, DisclosureUnavailable,
+  captureDisclosure, configureDisclosure, configureDisclosureAncestrySource, DisclosureUnavailable,
   resolveDisclosureSelections, type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureTarget,
 } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
@@ -37,6 +37,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
     realmParent: true, preparation: true, approval: true, placement: 'current', parentHead: head,
     generation: '0', enforcementCut: fixtureDisclosureCut.enforcementCut, available: true, hydrate: () => {},
     privateRealm: false, member: true, proof: 'membership:1', restrictedContentRevision: null as string | null,
+    ancestryRealm: realm,
     reviewGrain: null as null | 'work' | 'realization' | 'release' | 'occurrence' | 'resource' };
   const sources: FeedSource[] = Array.from({ length: 6 }, (_, index) => ({
     id: native(10 + index), sequence: String(index + 1), kind: index % 2 === 0 ? 'discussion' : 'work',
@@ -53,7 +54,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
         query.includes(`<${realm}>`) ? [{ space: binding(native(3)), realmRevision: binding(head),
           disclosure: binding(`${RV}${state.privateRealm ? 'Private' : 'Public'}`) }] : [] } };
       if (query.includes('SELECT ?resource ?head')) return { results: { bindings:
-        [work, realm].filter(id => query.includes(`<${id}>`)).map(id => ({ resource: binding(id), head: binding(state.parentHead) })) } };
+        [work, realm, native(4)].filter(id => query.includes(`<${id}>`)).map(id => ({ resource: binding(id), head: binding(state.parentHead) })) } };
       if (query.includes('SELECT DISTINCT ?id ?sequence ?kind ?target')) {
         state.hydrate();
         return { results: { bindings: sources.filter(source => query.includes(`<${source.id}>`)).map(source => ({
@@ -86,7 +87,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
       status: state.ancestry && (!source?.realm || state.approval && state.preparation) ? 'complete' : 'unavailable',
       parents: direct ? [] : source?.realm && state.realmParent
         ? [...(state.reviewGrain === 'resource' ? [] : [{ owner: 'graph' as const, kind: 'work' as const, resource: work, head, relationshipBasis: basis }]),
-          { owner: 'graph', kind: 'realm', resource: realm, head, relationshipBasis: basis }]
+          { owner: 'graph', kind: 'realm', resource: state.ancestryRealm, head, relationshipBasis: basis }]
         : [{ owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis }],
     };
   };
@@ -231,6 +232,17 @@ export function closedFeedCases(actor: ClosedFeedReader) {
       owner.state[key] = false;
       await expect(captureClosedRealmFeedSources(owner.session, owner.sources)).rejects.toBeInstanceOf(DisclosureUnavailable);
     }
+  });
+  test(`closed-feed-${actor}: valid open Realm B ancestry cannot authorize Realm A identity or attribution`, async () => {
+    const owner = closedFeedOwner(actor);
+    owner.state.ancestryRealm = native(4);
+    owner.state.closed = true;
+    const source = owner.sources[0]!;
+    const selections = await resolveDisclosureSelections(owner.session.deps.environment, closedRealmFeedTargets(source));
+    expect(selections.every(selection => selection.ancestry.parents.some(parent => parent.resource === native(4)))).toBe(true);
+    const cuts = await captureDisclosure(owner.session.deps.environment, selections, owner.session.viewer, 'feed');
+    expect(cuts.map(cut => cut.decision)).toEqual(['visible', 'visible']);
+    await expect(captureClosedRealmFeedSources(owner.session, [source])).rejects.toThrow('Feed Realm ancestry differs');
   });
   test(`closed-feed-${actor}: changed placement, approval, preparation, parent and recovery discard captured hydration`, async () => {
     for (const change of ['placement', 'approval', 'preparation', 'parent', 'recovery', 'enforcement'] as const) {
