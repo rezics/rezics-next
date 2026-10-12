@@ -3,6 +3,109 @@ import { accountFixture } from './account-fixture.ts';
 import { cookies, recoveryProof } from './recovery-fixture.ts';
 import type { Pool } from 'pg';
 import { authenticationBody, withRecoveryAuthentication } from '../src/recovery-auth.ts';
+import { symmetricDecrypt } from 'better-auth/crypto';
+import { createOTP } from '@better-auth/utils/otp';
+import { createCookieGetter } from 'better-auth/cookies';
+import { createInternalContext } from 'better-call';
+
+for (const scheme of ['https', 'http']) for (const reverse of [false, true]) {
+  test(`${scheme} challenge attribution and recovery lock follow B with both names in ${reverse ? 'reverse' : 'forward'} order`, async () => {
+    const issuer = `${scheme}://issuer.test`;
+    const f = await accountFixture({ baseURL: issuer, requireEmailVerification: false });
+    const request: typeof f.request = (path, body, cookie, extra = {}) =>
+      f.request(path, body, cookie, { ...extra, origin: issuer });
+    let resume = () => {};
+    let pending: Promise<Response> | undefined;
+    let recovering: Promise<Response> | undefined;
+    const context = await f.auth.$context;
+    const consume = context.internalAdapter.consumeVerificationValue;
+    try {
+      const signup = async (email: string) => {
+        const password = 'correct horse battery staple';
+        const response = await request('/api/auth/sign-up/email', { email, name: 'Cookie selection', password });
+        expect(response.status).toBe(200);
+        const { user } = await response.json() as { user: { id: string } };
+        return { email, password, id: user.id, cookie: cookies(response) };
+      };
+      const a = await signup('cookie-a@example.test');
+      const b = await signup('cookie-b@example.test');
+      const guardian = await signup('cookie-guardian@example.test');
+      const proof = await recoveryProof({ ...f, request }, b, guardian);
+      for (const member of [a, b]) {
+        expect((await request('/api/auth/two-factor/enable', { password: member.password }, member.cookie)).status).toBe(200);
+        const secret = await symmetricDecrypt({ key: f.secret,
+          data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+        expect((await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, member.cookie)).status).toBe(200);
+      }
+      const challenge = async (member: typeof a) => {
+        const response = await request('/api/auth/sign-in/email', { email: member.email, password: member.password });
+        expect(await response.json()).toMatchObject({ twoFactorRedirect: true });
+        return cookies(response).split('; ').find(value => value.startsWith(`${exact}=`))!;
+      };
+      const exact = createCookieGetter(f.auth.options)('two_factor').name;
+      const other = exact.startsWith('__Secure-') ? 'better-auth.two_factor' : '__Secure-better-auth.two_factor';
+      const aChallenge = (await challenge(a)).replace(exact, other);
+      const bChallenge = await challenge(b);
+      const pairs = [aChallenge, bChallenge];
+      if (reverse) pairs.reverse();
+      const both = pairs.join('; ');
+      expect((await request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, both)).status).toBe(401);
+      const failures = async () => (await f.pool.query(`SELECT user_id FROM rezics_account_security_event
+        WHERE action = 'sign_in_failed' AND user_id IN ($1, $2) ORDER BY occurred_at, id`, [a.id, b.id])).rows;
+      expect(await failures()).toEqual([{ user_id: b.id }]);
+
+      // Repeated exact values choose the first even when its signature is bad.
+      expect((await request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, `invalid=unused; ${bChallenge}; ${aChallenge.replace(other, exact)}`)).status).toBe(401);
+      expect(await failures()).toEqual([{ user_id: b.id }, { user_id: b.id }]);
+      const repeated = new Headers({ origin: issuer, 'content-type': 'application/json' });
+      repeated.append('cookie', bChallenge);
+      repeated.append('cookie', aChallenge.replace(other, exact));
+      const native = await createInternalContext({ headers: repeated }, { options: { method: 'POST' } });
+      expect(await native.getSignedCookie(exact, f.secret)).toBeFalsy();
+      expect((await fetch(`${f.baseURL}/api/auth/two-factor/verify-totp`, {
+        method: 'POST', headers: repeated, body: '{"code":"invalid"}',
+      })).status).toBe(401);
+      expect(await failures()).toHaveLength(2);
+
+      const nativeChallenge = await createInternalContext({ headers: new Headers({ cookie: bChallenge }) }, { options: { method: 'GET' } });
+      const identifier = await nativeChallenge.getSignedCookie(exact, f.secret);
+      expect(typeof identifier).toBe('string');
+      let entered = () => {};
+      const paused = new Promise<'paused'>(resolve => { entered = () => resolve('paused'); });
+      const released = new Promise<void>(resolve => { resume = resolve; });
+      context.internalAdapter.consumeVerificationValue = async value => {
+        if (value === identifier) { entered(); await released; }
+        return consume(value);
+      };
+      const secret = await symmetricDecrypt({ key: f.secret,
+        data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [b.id])).rows[0].secret });
+      pending = request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, both);
+      expect(await Promise.race([paused, pending.then(() => 'finished' as const)])).toBe('paused');
+      recovering = proof.activate();
+      let waiting = 0;
+      const until = Date.now() + 1500;
+      do {
+        waiting = (await f.pool.query(`SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'
+            AND query LIKE '%rezics_account_recovery_policy%'`)).rows[0].n;
+        if (!waiting) await Bun.sleep(10);
+      } while (!waiting && Date.now() < until);
+      expect(waiting).toBe(1);
+      expect((await f.pool.query('SELECT generation FROM rezics_account_recovery_policy WHERE id = $1', [b.id])).rows[0].generation).toBe('0');
+      resume();
+      const verified = await pending;
+      expect(verified.status).toBe(200);
+      expect((await recovering).status).toBe(200);
+      expect(await (await request('/api/auth/get-session', undefined, cookies(verified))).json()).toBeNull();
+      expect((await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, both)).status).toBe(403);
+    } finally {
+      resume();
+      await Promise.allSettled([pending, recovering]);
+      context.internalAdapter.consumeVerificationValue = consume;
+      await f.close();
+    }
+  }, 60_000);
+}
 
 test('form sign-in cannot admit an old-password session after recovery during verification', async () => {
   const f = await accountFixture();

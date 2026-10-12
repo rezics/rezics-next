@@ -1,6 +1,63 @@
 import { expect, test } from 'bun:test';
 import { authenticationSubject, authenticationSubjectRule } from '../src/authentication-subject.ts';
 import type { Pool } from 'pg';
+import { createHMAC } from '@better-auth/utils/hmac';
+import { createInternalContext } from 'better-call';
+import { createCookieGetter } from 'better-auth/cookies';
+
+const signingSecret = 'cookie-selection-secret-at-least-32-characters';
+const signed = async (value: string) => encodeURIComponent(`${value}.${await createHMAC('SHA-256', 'base64').sign(signingSecret, value)}`);
+
+for (const scheme of ['https', 'http']) for (const reverse of [false, true]) {
+  test(`${scheme} two-factor subject selects the issuer name in ${reverse ? 'reverse' : 'forward'} order`, async () => {
+    const options = { baseURL: `${scheme}://issuer.test`, secret: signingSecret };
+    const exact = createCookieGetter(options)('two_factor').name;
+    const other = exact.startsWith('__Secure-') ? 'better-auth.two_factor' : '__Secure-better-auth.two_factor';
+    const pairs = [`${other}=${await signed('challenge-A')}`, `${exact}=${await signed('challenge-B')}`];
+    if (reverse) pairs.reverse();
+    const request = new Request('http://transport.test/api/auth/two-factor/verify-totp', {
+      method: 'POST', headers: { cookie: pairs.join('; ') }, body: '{"code":"invalid"}',
+    });
+    const pool = { query: async (_sql: string, values: string[]) => ({ rows: [{ value: values[0] === 'challenge-B' ? 'B' : 'A',
+      createdAt: new Date(), expiresAt: new Date(Date.now() + 60_000) }] }) } as unknown as Pool;
+    expect(await authenticationSubject(pool, request, async () => null, signingSecret, options))
+      .toMatchObject({ userId: 'B', target: 'challenge-B' });
+  });
+}
+
+for (const kind of ['two_factor', 'better-auth-passkey', 'trust_device'] as const) {
+  for (const header of ['duplicates', 'quoted', 'repeated-header', 'repeated-header-separated', 'invalid-first'] as const) {
+    test(`${kind} ${header} selection matches the provider`, async () => {
+      const options = { baseURL: 'https://issuer.test', secret: signingSecret };
+      const exact = createCookieGetter(options)(kind).name;
+      const first = kind === 'trust_device' ? 'token!challenge-B' : 'challenge-B';
+      const headers = new Headers();
+      if (header === 'repeated-header' || header === 'repeated-header-separated') {
+        headers.append('cookie', `${exact}=${await signed(first)}${header === 'repeated-header-separated' ? ';' : ''}`);
+        headers.append('cookie', `${exact}=${await signed('challenge-A')}`);
+      } else headers.set('cookie', header === 'quoted' ? ` ${exact} = "${await signed(first)}" `
+        : `${exact}=${header === 'invalid-first' ? 'invalid' : await signed(first)}; ${exact}=${await signed('challenge-A')}`);
+      const provider = await createInternalContext({ headers }, { options: { method: 'GET' } });
+      const expected = await provider.getSignedCookie(exact, signingSecret);
+      const path = kind === 'two_factor' ? '/api/auth/two-factor/verify-totp'
+        : kind === 'trust_device' ? '/api/auth/sign-in/email' : '/api/auth/passkey/verify-registration';
+      const request = new Request(`http://transport.test${path}`, { method: 'POST', headers,
+        body: '{"email":"b@example.test"}' });
+      const queried: string[] = [];
+      const epoch = new Date();
+      const pool = { query: async (sql: string, values: string[]) => {
+        if (!sql.includes('verification')) return { rows: [{ id: 'B' }] };
+        queried.push(values[0]!);
+        return { rows: [{ value: 'B', createdAt: epoch, expiresAt: new Date(Date.now() + 60_000) }] };
+      } } as unknown as Pool;
+      const subject = await authenticationSubject(pool, request, async () => kind === 'better-auth-passkey'
+        ? { user: { id: 'B' }, session: { id: 'session-B' } } : null, signingSecret, options);
+      expect(queried).toEqual(expected ? [kind === 'trust_device' ? expected.split('!')[1]! : expected] : []);
+      if (kind === 'two_factor') expect(subject.userId).toBe(expected ? 'B' : undefined);
+      else expect(kind === 'trust_device' ? subject.trustCreatedAt : subject.verificationCreatedAt).toEqual(expected ? epoch : undefined);
+    });
+  }
+}
 
 // Every provider class has one subject rule, shared by activity and wrappers.
 for (const [path, rule] of [
