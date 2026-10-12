@@ -18,12 +18,14 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
   const gate = (await client.query(`SELECT authority_epoch::text FROM access.scope_gate
     WHERE id = $1 AND open AND dispatch_open FOR SHARE`, [`governance:realm:${realm}`])).rows[0];
   const identity = (await client.query(`SELECT p.id,p.enforcement_epoch::text,r.id AS representation,
-    r.generation::text,s.generation::text AS subject_generation FROM access.principal p
+    r.generation::text,s.generation::text AS subject_generation,recovery.generation::text AS recovery_generation
+    FROM access.principal p
     JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
       AND r.active AND r.valid_until > clock_timestamp()
     JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
+    JOIN access.recovery_fence recovery ON recovery.id AND recovery.open
     WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-    ORDER BY r.id LIMIT 1 FOR SHARE OF p,r,s`, [principal.issuer, principal.subject, actor])).rows[0];
+    ORDER BY r.id LIMIT 1 FOR SHARE OF p,r,s,recovery`, [principal.issuer, principal.subject, actor])).rows[0];
   if (!identity) throw new AdmissionDenied('Realm actor is unavailable');
   const settings = (await client.query<{ visibility: RealmVisibility; review_mode: RealmReviewMode;
     who_may_submit: string; history: string }>(`SELECT visibility,review_mode,who_may_submit,history

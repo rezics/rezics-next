@@ -132,6 +132,9 @@ test('a member cannot read pre-admission history after the owner grant expires d
   expect(reviews).toBe(1);
   expect(await h.access.realmHistoryFloor(h.principal,h.actor,h.realm)).toEqual({ dataEpoch: 'epoch', sequence: '10' });
   expect(await h.access.realmReadProof(h.principal,h.actor,h.realm)).not.toBe(before);
+  const memberOnly = await h.access.realmReadProof(h.principal,h.actor,h.realm);
+  await advanceFixtureAuthorityGeneration(pool,'recovery_fence','true');
+  expect(await h.access.realmReadProof(h.principal,h.actor,h.realm)).not.toBe(memberOnly);
   expect(await visibleRealmReply(content,h.access,env,h.realm,reply,h.principal,h.actor)).toBeNull();
   expect(reviews).toBe(1);
 });

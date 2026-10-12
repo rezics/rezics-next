@@ -23,7 +23,7 @@ export async function setFixtureGrantDeadline(pool: Pool, grantId: string, milli
 
 /** Advance a fixture authority episode while preserving its live deadline. */
 export async function advanceFixtureAuthorityGeneration(pool: Pool,
-  table: 'principal' | 'representation' | 'authority_subject' | 'permission_grant' | 'scope_gate', id: string): Promise<void> {
+  table: 'principal' | 'representation' | 'authority_subject' | 'permission_grant' | 'scope_gate' | 'recovery_fence', id: string): Promise<void> {
   const generation = table === 'principal' ? 'enforcement_epoch' : table === 'scope_gate' ? 'authority_epoch' : 'generation';
   await pool.query(`UPDATE access.${table} SET ${generation} = ${generation} + 1 WHERE id = $1`, [id]);
 }
