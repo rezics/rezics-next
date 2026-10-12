@@ -77,6 +77,24 @@ visibility from join rules and history visibility.
   admission. An unlisted person keeps a working profile but leaves people search
   and suggestions.
 
+## Closing a Realm
+
+Maintainer, 2026-10-12. A Realm is closed by the platform, not by its owner.
+
+- The platform can take a whole Realm out of public reach as a moderation or
+  rights effect and can restore it. This is the takedown channel for a
+  community, and it is the only closing channel for now.
+- An owner cannot close or delete a Realm at will. A community is also its
+  members' and their posts'; other community platforms take the same position.
+  An owner-initiated closure may be added later and does not conflict with the
+  platform's channel.
+- Making a Realm private is a separate question, open for discussion. The
+  visibility settings described above are unchanged by this decision.
+
+The mechanism (what each reader sees in a closed Realm, how the effect reaches
+its threads, replies and attached Zones, what the directory search enforces) is
+written with its implementation.
+
 ## Mounted routes and disclosure
 
 Zone navigation mounts bind routes to current Resources. A Work mount resolves

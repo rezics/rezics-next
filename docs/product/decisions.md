@@ -98,6 +98,12 @@ Maintainer, 2026-10-09.
 
 55. <a id="decision-55"></a>[Platform imports and user contributions](../contracts/source-lifecycle.md#platform-imports-and-user-contributions): platform imports publish what the source licenses (facts only when unknown), marked with source and licence, never the source's user posts; covers are imported credited to their rights holder and come down on complaint; users answer for what they enter, and the tools only prompt for its source.
 
+## Realm closure
+
+Maintainer, 2026-10-12.
+
+56. <a id="decision-56"></a>[Closing a Realm](../contracts/space.md#closing-a-realm): the platform closes and restores a Realm as a takedown; an owner cannot close one at will; making a Realm private is a separate, open question.
+
 Settled research, also adopted on 2026-09-29:
 
 - R30: [URLs and SEO](urls-and-seo.md).
