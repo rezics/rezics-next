@@ -15,7 +15,7 @@ async function waitForBlockedQuery(f: Fixture, statements: string[]) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const blocked = await f.pool.query(`SELECT 1 FROM pg_stat_activity
       WHERE datname = current_database() AND wait_event_type = 'Lock'
-        AND query LIKE ANY($1::text[]) AND cardinality(pg_blocking_pids(pid)) > 0`,
+        AND query ILIKE ANY($1::text[]) AND cardinality(pg_blocking_pids(pid)) > 0`,
     [statements.map(statement => `%${statement}%`)]);
     if (blocked.rowCount) return;
     await Bun.sleep(5);
@@ -73,7 +73,8 @@ for (const first of ['verification', 'operator-note'] as const) {
       const secondRequest = first === 'verification' ? note() : verify();
       pending.push(secondRequest);
       await waitForBlockedQuery(f, first === 'verification'
-        ? ['rezics_account_security', 'rezics_account_operator_note'] : ['FOR UPDATE', 'FOR SHARE']);
+        ? ['rezics_account_security', 'rezics_account_operator_note']
+        : ['rezics_account_security', 'insert into "session"']);
       resumed.resolve();
       const [firstResponse, secondResponse] = await Promise.all(pending);
       const verified = first === 'verification' ? firstResponse! : secondResponse!;
@@ -90,6 +91,60 @@ for (const first of ['verification', 'operator-note'] as const) {
     } finally {
       resumed.resolve();
       await Promise.allSettled(pending);
+      restore();
+      await f.close();
+    }
+  }, 60_000);
+}
+
+for (const operation of ['recovery-activation', 'age-hold', 'deletion'] as const) {
+  test(`${operation} locks security before holding the user identity`, async () => {
+    const f = await accountFixture({ accessDeletionFence: async () => {} });
+    const paused = Promise.withResolvers<void>();
+    const resumed = Promise.withResolvers<void>();
+    let pending: Promise<Response> | undefined;
+    let restore = () => {};
+    try {
+      const member = await f.signup('lock-order-member@example.test');
+      const proof = operation === 'recovery-activation'
+        ? await recoveryProof(f, member, await f.signup('lock-order-guardian@example.test')) : undefined;
+      const query = Client.prototype.query;
+      const spy = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+        const result = Reflect.apply(query, this, args);
+        if (typeof args[0] === 'string' && /FROM (?:public\.)?"user"/.test(args[0])
+          && args[0].includes('FOR UPDATE')) {
+          return result.then(async (value: unknown) => {
+            // Observe the real lock, before any later password/security trigger runs.
+            paused.resolve();
+            await resumed.promise;
+            return value;
+          });
+        }
+        return result;
+      });
+      restore = () => spy.mockRestore();
+      pending = operation === 'recovery-activation' ? proof!.activate()
+        : operation === 'age-hold' ? f.request('/api/account/content-preferences', {
+          expectedRevision: 0, birthDate: '2020-01-01', country: 'US',
+        }, member.cookie)
+        : f.request('/api/auth/delete-user', { password: member.password }, member.cookie);
+      await paused.promise;
+      await expect(f.pool.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR UPDATE NOWAIT',
+        [member.id])).rejects.toMatchObject({ code: '55P03' });
+      resumed.resolve();
+      expect((await pending).status).toBe(200);
+      if (operation === 'recovery-activation') {
+        expect((await f.pool.query('SELECT generation FROM rezics_account_recovery_policy WHERE id = $1',
+          [member.id])).rows[0].generation).toBe('1');
+      } else if (operation === 'age-hold') {
+        expect((await f.pool.query('SELECT suspension_code FROM rezics_account_security WHERE user_id = $1',
+          [member.id])).rows[0].suspension_code).toBe('age_requirement');
+      } else {
+        expect((await f.pool.query('SELECT id FROM "user" WHERE id = $1', [member.id])).rows).toEqual([]);
+      }
+    } finally {
+      resumed.resolve();
+      await pending;
       restore();
       await f.close();
     }
