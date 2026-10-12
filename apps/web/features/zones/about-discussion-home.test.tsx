@@ -89,7 +89,8 @@ for (const home of ['package', 'fallback', 'standalone published', 'standalone u
   test(`${home} home renders its page without invoking the discussion helper`, async () => {
     let content: string;
     if (home === 'package') {
-      currentView.pkg = { slots: { home: () => createElement('h1', null, 'Package home') } } as RealmView['pkg'];
+      currentView.pkg = { slug: 'harbor', css: '',
+        slots: { home: () => createElement('h1', null, 'Package home') } };
       content = 'Package home';
     } else if (home === 'fallback') {
       content = messages.emptyHomeTitle;
@@ -97,7 +98,7 @@ for (const home of ['package', 'fallback', 'standalone published', 'standalone u
       attached = false;
       if (home === 'standalone published') {
         publication.home = { document: fromPlainText('Published Harbor home', 'blocks'),
-          blocks: [], showcases: [], showcaseData: { slides: [], sources: [], slideMedia: [] } };
+          blocks: [], showcases: [], showcaseData: { slides: [], slideMedia: [] } };
         content = 'Published Harbor home';
       } else content = 'Harbor field guide';
     }
