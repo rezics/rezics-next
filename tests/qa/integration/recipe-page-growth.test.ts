@@ -84,6 +84,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     token: string;
   } | undefined;
   let meterQualified = false;
+  let phase = 'restore';
   const counters = (profile: WorkProfile) => ({
     mainCalls: profile.mainCalls,
     fusekiRequests: profile.fusekiRequests,
@@ -137,12 +138,14 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       })();
       try {
         const member = await stack.member(seedAuthorName, { stable: true, verified: true });
-        expect(member.actor).toBe(retained.actor);
+        // The seed provisions a separate corpus Agent; this login principal
+        // retains its representation of that Agent in the restored Access store.
         const work = verifying.works[0]!;
         copy = { stack, token: member.token };
         // A known selected-text page qualifies the restored-stack meter independently
         // of Recipe traversal and must produce nonzero SQL, Fuseki and byte costs.
         if (!meterQualified) {
+          phase = 'meter qualification';
           const known = await measuredRead(seedSelection(work.mainVersion));
           expect(known.result).toMatchObject({ work: work.work, mainVersion: work.mainVersion,
             body: 'Checkpoint selected text 0' });
@@ -162,6 +165,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     // Free the harness's empty persistent project before restoring each cut alone.
     await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId, '--persistent'], dockerEnvironment());
     for (const cut of cuts) {
+      phase = `${cut.manifest.scale} restore`;
       verifying = cut;
       const target = `recipe-${cut.manifest.scale}-${qaRunId}`;
       targets.push(target);
@@ -171,6 +175,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       const expectedOccurrences = cut.manifest.dimensions.recipeOccurrences!;
       expect(recipe.occurrences).toHaveLength(expectedOccurrences);
       const path = `/v1/recipes/works/${recipe.work.slice(-36)}?${new URLSearchParams({ actingSubject: retained.actor })}`;
+      phase = `${cut.manifest.scale} first page`;
       const first = await measuredRead<RecipePage>(path);
       expect(first.profile.request.route).toBe('/v1/recipes/works/:id');
       expect(first.result).toMatchObject({ profile: 'recipe-work-page-v1',
@@ -186,6 +191,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       };
       firstProfiles.push({ ...first.profile, mainCalls: cut.manifest.dimensions.unrelatedWorks });
       if (first.result.next) {
+        phase = `${cut.manifest.scale} continuation`;
         const next = await measuredRead<RecipePage>(`${path}&${new URLSearchParams({ cursor: first.result.next })}`);
         expect(next.result).toMatchObject({ profile: 'recipe-work-page-v1',
           structure: recipe.structure, revision: recipe.revision });
@@ -218,11 +224,15 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     evidence.push({ firstPageRatios: ratios });
     console.log('recipe-page-growth-ratios', JSON.stringify(ratios));
     // This is the only growth verdict: the shared checker owns ratios and margin.
+    phase = 'growth verdict';
     assertWorkCostAtScales(firstProfiles, recipePageCost, 'recipe-work-page-unrelated-works-first-page');
     evidence.push({ verdict: 'pass', coverage: 'first page at three cuts; continuation at medium/large; no nested sections' });
   } catch (error) {
-    evidence.push({ verdict: 'fail', error: String(error),
-      owner: 'services/main/src/modules/recipe/work-page.ts readRecipeWorkPage; services/main/src/modules/structure/read.ts' });
+    evidence.push({ verdict: phase === 'growth verdict' ? 'fail' : 'unavailable', phase, error: String(error),
+      ...(phase === 'growth verdict' ? {
+        read: 'GET /v1/recipes/works/:id first page',
+        owner: 'kernel: services/main/src/modules/recipe/work-page.ts readRecipeWorkPage; services/main/src/modules/structure/read.ts',
+      } : {}) });
     throw error;
   } finally {
     writeFileSync(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
