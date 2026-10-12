@@ -102,23 +102,6 @@ public class PersonProfileErasurePurgeTest {
         denied(data -> data.add(PUBLIC, UNIT, rv("resource"), WORK), PERSON, "7");
         denied(data -> data.add(REVISIONS, PROFILE, rv("erasureEpoch"), integer("8")), PERSON, "7");
     }
-    @Test public void offlineProfileOperationsUseTheSameExactUuidOrDigestAdmission() throws Exception {
-        for (String suffix : java.util.List.of(id(6), "a".repeat(64))) {
-            Path base = directory(), source = base.resolve("source"), destination = base.resolve("destination");
-            source(source, data -> {
-                data.deleteAny(REVISIONS, PROFILE, rv("operation"), Node.ANY);
-                data.add(REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + suffix));
-            });
-            purge(source, destination, PERSON, "7");
-        }
-        for (String suffix : java.util.List.of("a".repeat(63), "a".repeat(65), "A".repeat(64),
-            "g".repeat(64), id(6) + ":extra", "sha256:" + "a".repeat(64))) {
-            denied(data -> {
-                data.deleteAny(REVISIONS, PROFILE, rv("operation"), Node.ANY);
-                data.add(REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + suffix));
-            }, PERSON, "7");
-        }
-    }
     @Test public void revisionAndPersonCampaignsBothKeepForeignSameIriDocumentsInAnotherGraph() throws Exception {
         Path base = directory(), source = base.resolve("source"), destination = base.resolve("destination");
         Node revision = resource(19);

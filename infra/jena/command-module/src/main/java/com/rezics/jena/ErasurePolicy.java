@@ -318,9 +318,7 @@ final class ErasurePolicy {
         } else if (!revision.getURI().matches(PERSON_TARGET)
             || !data.contains(REVISIONS, revision, RDF.type.asNode(), rv("AgentPublicProfileRevision"))
             || model == null || !Set.of(rvModel("agent-profile-address-v1"), rvModel("agent-profile-v1"), rvModel("agent-profile-v2")).contains(model)
-            || operation == null || !operation.isURI()
-            || !(operation.getURI().matches("urn:rezics:operation:agent-profile:" + UUID)
-                || operation.getURI().matches("urn:rezics:operation:agent-profile:[0-9a-f]{64}"))) return false;
+            || operation == null || !operation.isURI() || !operation.getURI().matches("urn:rezics:operation:agent-profile:" + UUID)) return false;
         Set<Node> allowedTypes = revision.getURI().matches(PROVISION_TARGET)
             ? Set.of(rv("RevisionAnchor"), ERASED)
             : Set.of(rv("RevisionAnchor"), rv("AgentPublicProfileRevision"), ERASED);
