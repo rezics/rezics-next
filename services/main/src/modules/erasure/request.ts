@@ -118,7 +118,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
     const custody = await commandCustodyErasureTargets(publicationClient,
       journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`), budget);
     for (const target of custody.filter(target => !target.payloadAbsent)) {
-      const source = await graph.receiptCustody?.readCommitted(target.receipt, budget, publicationClient);
+      const source = await graph.receiptCustody?.readCommitted(target.receipt, budget);
       if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
         throw new ContentErasureStale('command custody is unavailable for erasure');
       }
@@ -215,7 +215,10 @@ async function selectingHomeTargets(graph: WorkActivationEnvironment, resourceId
   if (!rows || rows.some(row => row.revision?.type !== 'uri'
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(row.revision.value)
     || row.owner?.type !== 'uri' || row.owner.value !== resourceId
-    || row.owned?.value !== 'true' || !['true', 'false'].includes(row.erased?.value ?? ''))) {
+    || row.owned?.type !== 'literal' || row.owned.datatype !== 'http://www.w3.org/2001/XMLSchema#boolean'
+    || row.owned.value !== 'true' || row.erased?.type !== 'literal'
+    || row.erased.datatype !== 'http://www.w3.org/2001/XMLSchema#boolean'
+    || !['true', 'false'].includes(row.erased.value))) {
     throw new ContentErasureInvalid('Home erasure targets are unavailable');
   }
   const targets = rows.map(row => ({ kind: 'semantic_revision' as const, ref: row.revision!.value.slice(-36) }));
@@ -425,6 +428,8 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
   erasureId: string | null, publicationClient: PoolClient):
   Promise<{ erasureId: string; replayed: boolean; finish: () => Promise<void> }> {
   const operationId = `erasure:${registered.id}`, requestDigest = registered.requestDigest;
+  // A competing same-key caller may have journaled while this caller waited for publication.
+  erasureId = await findErasureByOperation(service.relay, operationId);
   let finish: (() => Promise<void>) | undefined;
   let replayed = Boolean(erasureId);
   let finished = false;
@@ -447,7 +452,7 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
       if (!graph.receiptCustody || !graph.workObjects || target.payloadAbsent || target.erasureId) {
         throw new ContentErasureStale('command custody is unavailable for erasure');
       }
-      const source = await graph.receiptCustody.readCommitted(target.receipt, budget, publicationClient);
+      const source = await graph.receiptCustody.readCommitted(target.receipt, budget);
       if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
         throw new ContentErasureStale('command custody is unavailable for erasure');
       }
@@ -505,7 +510,7 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
           }, budget);
         }, publicationClient);
       if (guarded.held) throw new MediaFenced('media is retained under a preservation hold');
-      // Both owner pools are free here. A new hold can still refuse object deletion.
+      // Media committed while the shared publication and preservation fence remains held.
       await markErasureSuppressed(service.relay, erasureId!);
       finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, true, publicationClient, true);
       finished = true;

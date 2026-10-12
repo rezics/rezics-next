@@ -247,6 +247,27 @@ test('home publication fences identity, complete inventory, durable journal, sup
   });
 }, 15_000);
 
+test('concurrent same-key callers refresh retained intent after waiting for the home fence', async () => {
+  await fixture(async f => {
+    f.graph.homes.push(resource());
+    const publisher = await f.publicationPool.connect();
+    await publisher.query('BEGIN');
+    await lockPreservationTarget(publisher, f.document);
+    const first = f.call(), second = f.call();
+    try {
+      await f.observation.firstAttempt.promise;
+      await publisher.query('COMMIT');
+      const results = await Promise.all([first, second]);
+      expect(new Set(results.map(result => result.report.erasureId)).size).toBe(1);
+      expect(new Set(results.map(result => result.report.erasureEpoch)).size).toBe(1);
+      expect(results.map(result => result.replayed).sort()).toEqual([false, true]);
+      expect(results.every(result => result.report.targets.every(target => target.completionState === 'completed'))).toBe(true);
+      expect((await f.pool.query('SELECT id FROM relay.erasure')).rows).toHaveLength(1);
+      expect(f.graph.commands).toHaveLength(1);
+    } finally { await publisher.query('ROLLBACK'); publisher.release(); await Promise.allSettled([first, second]); }
+  });
+});
+
 test('same-key retry reacquires the home fence and durably covers a newly selecting cut before suppression', async () => {
   await fixture(async f => {
     f.graph.homes.push(resource());
