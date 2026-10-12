@@ -18,7 +18,7 @@ function pause() {
 async function issuerFixture(issuer: string) {
   const f = await accountFixture({ baseURL: issuer, requireEmailVerification: false });
   const request: typeof f.request = (path, body, cookie, extra = {}) =>
-    f.request(path, body, cookie, { ...extra, origin: new URL(issuer).origin });
+    f.request(path, body, cookie, { origin: new URL(issuer).origin, ...extra });
   const signup = async (email: string): Promise<RecoveryMember> => {
     const password = 'correct horse battery staple';
     const created = await request('/api/auth/sign-up/email', { email, password, name: 'Subject race' });
