@@ -221,9 +221,13 @@ test.each([
     await sequenceContentEvents(nativeContent);
   };
   await record(creation, 'content.reply.created', 'reply.create', 'succeeded');
+  const actor = native(), rootRevision = native();
+  await nativeContent.query(`INSERT INTO content.reply_author
+    (reply,variant_id,author,root_target,root_revision,operation_id) VALUES($1,$2,$3,$4,$5,$6)`,
+  [item.reply, variant, actor, item.work, rootRevision, creation]);
   await nativeContent.query(`INSERT INTO content.reply
     (id,variant_id,author,root_target,root_revision,operation_id) VALUES($1,$2,$3,$4,$5,$6)`,
-  [item.reply, variant, native(), item.work, native(), creation]);
+  [item.reply, variant, actor, item.work, rootRevision, creation]);
   await access.query('UPDATE access.realm_thread_checkpoint SET content_sequence=8 WHERE data_epoch=$1', [epoch]);
   const { session } = reader('8', '3');
   session.deps.realmReplyThreads = new RealmReplyThreadStore(nativeContent, access);
