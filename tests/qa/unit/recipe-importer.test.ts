@@ -36,7 +36,9 @@ test('RECIPE03: structured PropertyValue quantities retain exact values and unre
 test('RECIPE03: free text instructions and unknown quantities remain source text', () => {
   const result = importRecipe({ recipeIngredient: ['a handful of herbs'],
     recipeInstructions: 'Taste and adjust as needed.' }, 'source-observation');
-  expect(result.ingredients[0]?.qualifier).toMatchObject({ amountLexical: 'a handful of herbs',
+  expect(result.ingredients[0]?.qualifier.amountLexical).toBeUndefined();
+  expect(result.ingredients[0]?.qualifier.amount).toBeUndefined();
+  expect(result.ingredients[0]?.qualifier).toMatchObject({
     parseStatus: 'unparsed', originalText: { value: 'a handful of herbs', language: 'en' } });
   expect(result.steps[0]).toMatchObject({ text: 'Taste and adjust as needed.',
     sourceKey: 'source-observation#/recipeInstructions/0' });
