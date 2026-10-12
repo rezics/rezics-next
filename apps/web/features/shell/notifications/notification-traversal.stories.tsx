@@ -246,5 +246,7 @@ export const InvalidCursorRestartsFiltered: Story = {
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'Saved' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('link', { name: 'Watching' })).toHaveAttribute('aria-current', 'page');
+    await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
+    await waitFor(() => expect(args.calls).toContain('mark:1:200'));
   },
 };
