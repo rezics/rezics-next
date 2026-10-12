@@ -1,12 +1,55 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { createEmailVerificationToken } from 'better-auth/api';
+import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
 import { bootstrapOperators } from '../src/operators.ts';
 import { accountFixture } from './account-fixture.ts';
 import { cookies, recoveryProof } from './recovery-fixture.ts';
 
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
+
+for (const initialOwner of ['original', 'absent'] as const) {
+  test(`verification rejects replacement registered after admission saw ${initialOwner}`, async () => {
+    const f = await accountFixture();
+    let resume = () => {};
+    try {
+      const email = 'admission-race@example.test';
+      const body = { email, name: 'Original', password: 'original sufficiently long password' };
+      expect((await f.request('/api/auth/sign-up/email', body)).status).toBe(200);
+      await f.email.drain();
+      const retained = link(f.messages.at(-1)!.text);
+      const originalId = (await f.pool.query('SELECT id FROM "user" WHERE email = $1', [email])).rows[0].id;
+      const releaseAddress = () => f.pool.query('UPDATE "user" SET email = $2 WHERE id = $1',
+        [originalId, 'moved@example.test']);
+      if (initialOwner === 'absent') await releaseAddress();
+      const context = await f.auth.$context;
+      const before = context.options.hooks!.before!;
+      const paused = Promise.withResolvers<void>();
+      const resumed = Promise.withResolvers<void>();
+      resume = () => resumed.resolve();
+      context.options.hooks!.before = createAuthMiddleware(async ctx => {
+        const result = await before(ctx);
+        if (ctx.path === '/verify-email' && ctx.query?.token === new URL(retained).searchParams.get('token')) {
+          paused.resolve();
+          await resumed.promise;
+        }
+        return result;
+      });
+      const pending = f.request(retained);
+      await paused.promise;
+      if (initialOwner === 'original') await releaseAddress();
+      expect((await f.request('/api/auth/sign-up/email', { ...body, name: 'Replacement' })).status).toBe(200);
+      const replacementId = (await f.pool.query('SELECT id FROM "user" WHERE email = $1', [email])).rows[0].id;
+      resume();
+      const rejected = await pending;
+      expect((await f.pool.query('SELECT "emailVerified" FROM "user" WHERE id = $1', [replacementId]))
+        .rows[0].emailVerified).toBe(false);
+      expect((await f.pool.query('SELECT id FROM "session" WHERE "userId" = $1', [replacementId])).rows).toEqual([]);
+      expect(cookies(rejected)).toBe('');
+      expect(new URL(rejected.headers.get('location')!, f.baseURL).searchParams.get('error')).toBe('INVALID_TOKEN');
+    } finally { resume(); await f.close(); }
+  }, 60_000);
+}
 
 async function resendByOperator(f: Fixture, userId: string, cookie: string) {
   const resent = await f.request(`/api/account/admin/users/${userId}/actions`, {
