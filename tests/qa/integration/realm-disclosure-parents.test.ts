@@ -116,7 +116,11 @@ async function restriction(
   expect(confirmed.operation.status, JSON.stringify(confirmed.operation)).toBe('completed');
   return async () => {
     await claim();
+    const targets = await Promise.all(input.targets.map(async target => ({
+      ...target, expectedHead: await heads.current(target),
+    })));
     const restored = await store.decide(principal, { ...input, outcome: 'restore',
+      targets,
       expectedGeneration: confirmed.caseGeneration, reversesDecisionId: accepted.decisionId,
       idempotencyKey: randomUUID() }, true);
     const released = await store.resumeDecision(principal, f.actor, restored.decisionId);
