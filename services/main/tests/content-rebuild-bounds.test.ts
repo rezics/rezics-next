@@ -23,6 +23,120 @@ const literal = (value: string) => ({ type: 'literal', value });
 const integer = (value: string) => ({ type: 'literal', value, datatype: XSD_INTEGER });
 
 type ProofField = readonly [string, string | undefined, 'uri' | 'literal'];
+type ProofRow = Record<string, { type: string; value: string }>;
+type ReceiptTriple = readonly [string, string, string];
+const receiptPredicates: Record<string, string> = {
+  rOutcome: 'outcome', rReason: 'reason', rRequestDigest: 'requestDigest',
+  rAdmissionId: 'admissionId', rAuthorityEpoch: 'authorityEpoch', rScope: 'admittedScope',
+  rActor: 'actingSubject', rPreparation: 'contentPreparation', rRevision: 'contentRevision',
+  rVariant: 'variant', rResource: 'resource', rByteDigest: 'byteDigest',
+  rOwnerEpoch: 'ownerDataEpoch', rOwnerSequence: 'ownerSequence', rExpectedHead: 'expectedHead',
+  rDataset: 'datasetId', rDataEpoch: 'dataEpoch', rSequence: 'sequence',
+  rDecision: 'publicationDecision', rPublication: 'publicationDecision',
+  rRightsBasis: 'rightsBasis', rAssessment: 'rightsAssessment', rDisclosure: 'disclosure',
+  rEligibility: 'eligibilityDecision',
+};
+
+function optionalGroups(sparql: string): string[][] {
+  const tokens = sparql.match(/#[^\n]*|<[^>]*>|"(?:\\.|[^"\\])*"|\?[\w]+|[\w:-]+|[^\s]/g) ?? [];
+  const starts: number[] = [], groups: { start: number; tokens: string[] }[] = [];
+  for (const [index, token] of tokens.entries()) {
+    if (token.startsWith('#')) continue;
+    if (token === '{') starts.push(index);
+    else if (token === '}') {
+      const start = starts.pop();
+      if (start === undefined) throw new Error('Unbalanced query group');
+      if (tokens[start - 1] === 'OPTIONAL') groups.push({ start, tokens: tokens.slice(start + 1, index) });
+    }
+  }
+  if (starts.length) throw new Error('Unbalanced query group');
+  return groups.sort((left, right) => left.start - right.start).map(group => group.tokens);
+}
+
+function receiptTriples(group: readonly string[]): ReceiptTriple[] {
+  const triples: ReceiptTriple[] = [];
+  for (let index = 0; index < group.length; index++) {
+    if (group[index] !== 'GRAPH' || group[index + 1] !== '<urn:rezics:graph:receipts>') continue;
+    if (group[index + 2] !== '{') throw new Error('Missing receipt graph group');
+    index += 3;
+    while (group[index] !== '}') {
+      const subject = group[index++]!;
+      do {
+        const predicate = group[index++]!, object = group[index++]!;
+        triples.push([subject, predicate, object]);
+        if (group[index] !== ';') break;
+        index++;
+      } while (index < group.length);
+      if (group[index] === '.') index++;
+      if (index >= group.length) throw new Error('Unclosed receipt graph group');
+    }
+  }
+  return triples;
+}
+
+function assertReceiptJoinsBound(query: string, kind: 'publication' | 'eligibility'): void {
+  const groups = optionalGroups(query).filter(group => group.includes('?receipt'));
+  expect(groups.length).toBeGreaterThan(2);
+  for (const group of groups) {
+    expect(receiptTriples(group)).toContainEqual(['?receipt', `rv:${kind}Decision`, `?${kind}`]);
+  }
+}
+
+// Evaluate the emitted receipt GRAPH patterns as sequential OPTIONAL joins.
+// Receipts form a separate graph: a VALUES decision does not invent its receipt.
+function joinReceiptProofs(query: string, kind: 'publication' | 'eligibility', allRows: ProofRow[],
+  missingReceipt: FixtureOptions['missingReceipt'], joinedReceipts: string[]): ProofRow[] {
+  const groups = optionalGroups(query).filter(group => group.includes('?receipt'));
+  const graph = allRows.filter((_, index) => missingReceipt?.kind !== kind || missingReceipt.index !== index)
+    .map(row => {
+      const facts = new Map<string, ProofRow[string]>([
+        ['a', binding(`${RV}OperationReceipt`)], [`rv:${kind}Decision`, row[kind]!],
+      ]);
+      for (const [field, predicate] of Object.entries(receiptPredicates)) {
+        if (row[field]) facts.set(`rv:${predicate}`, row[field]!);
+      }
+      return { receipt: row.receipt!, facts };
+    });
+  const asked = valuesIds(query, kind);
+  return allRows.filter(row => asked.includes(row[kind]!.value)).map(row => {
+    let solutions: ProofRow[] = [{ [kind]: row[kind]! }];
+    for (const group of groups) {
+      const triples = receiptTriples(group);
+      solutions = solutions.flatMap(solution => {
+        const matches = graph.flatMap(({ receipt, facts }) => {
+          const next = { ...solution };
+          for (const [subject, predicate, object] of triples) {
+            const fact = facts.get(predicate);
+            if (!fact || subject !== '?receipt') return [];
+            if (next.receipt && next.receipt.value !== receipt.value) return [];
+            next.receipt = receipt;
+            if (object.startsWith('?')) {
+              const variable = object.slice(1);
+              if (next[variable] && JSON.stringify(next[variable]) !== JSON.stringify(fact)) return [];
+              next[variable] = fact;
+            } else if (fact.value !== (object === 'rv:Succeeded' ? `${RV}Succeeded`
+              : object === 'rv:OperationReceipt' ? `${RV}OperationReceipt` : object)) return [];
+          }
+          if (group.includes('?receiptType')) next.receiptType = integer('1');
+          joinedReceipts.push(receipt.value);
+          return [next];
+        });
+        return matches.length ? matches : [solution];
+      });
+    }
+    const result = { ...row };
+    for (const variable of ['receipt', 'receiptType', ...Object.keys(row).filter(key => /^r[A-Z]/.test(key)
+      && !key.endsWith('Count'))]) {
+      const values = new Map(solutions.flatMap(solution => solution[variable]
+        ? [[JSON.stringify(solution[variable]), solution[variable]!] as const] : []));
+      result[`${variable}Count`] = integer(String(values.size));
+      const value = values.values().next().value;
+      if (value) result[variable] = value;
+      else delete result[variable];
+    }
+    return result;
+  });
+}
 
 function proofRow(idField: 'publication' | 'eligibility', id: string, receipt: string,
   fields: readonly ProofField[]) {
@@ -67,11 +181,13 @@ interface FixtureOptions {
   missingHead?: number;
   population?: string;
   timeoutOn?: string;
+  missingReceipt?: { kind: 'publication' | 'eligibility'; index: number };
+  unrelatedReceipt?: boolean;
 }
 
 function verifyFixture(options: FixtureOptions = {}) {
   const count = options.count ?? 1;
-  const records = Array.from({ length: count }, (_, index) => {
+  const records = Array.from({ length: count + (options.unrelatedReceipt ? 1 : 0) }, (_, index) => {
     const variant = variantId(index);
     const revision = `urn:rezics:content:revision:${revisionId(index)}`;
     const publicationAdmissionId = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
@@ -92,6 +208,8 @@ function verifyFixture(options: FixtureOptions = {}) {
       digest: 'd'.repeat(64), text: `body ${index}` };
   });
   const queries: string[] = [];
+  const joinedReceipts: string[] = [];
+  const proofRows: { kind: 'publication' | 'eligibility'; rows: ProofRow[] }[] = [];
   const fuseki = { async query(sparql: string): Promise<SparqlResult> {
     queries.push(sparql);
     if (options.timeoutOn && sparql.includes(options.timeoutOn)) {
@@ -104,7 +222,7 @@ function verifyFixture(options: FixtureOptions = {}) {
       generation: binding(generation),
     }] } };
     if (sparql.includes('COUNT(DISTINCT ?resource) AS ?resourceCount')) {
-      const rows = page(records, afterLiteral(sparql, 'variant'));
+      const rows = page(records.slice(0, count), afterLiteral(sparql, 'variant'));
       return { results: { bindings: rows.map(row => {
         const hasEligibilityHead = row.id !== variantId(options.missingHead ?? -1);
         return { variant: binding(row.variant), resourceCount: integer('1'), resource: binding(row.resource),
@@ -114,9 +232,7 @@ function verifyFixture(options: FixtureOptions = {}) {
       }) } };
     }
     if (sparql.includes('SELECT ?eligibility')) {
-      const asked = valuesIds(sparql, 'eligibility');
-      const rows = records.filter(row => asked.includes(row.eligibility));
-      return { results: { bindings: rows.map(row => proofRow('eligibility', row.eligibility,
+      const allRows = records.map(row => proofRow('eligibility', row.eligibility,
         row.eligibilityReceipt, [
           ['dComponent', row.variant, 'uri'], ['dVariant', row.variant, 'uri'],
           ['dResource', row.resource, 'uri'], ['dPublication', row.decision, 'uri'],
@@ -137,12 +253,13 @@ function verifyFixture(options: FixtureOptions = {}) {
           ['rDisclosure', `${RV}Public`, 'uri'], ['rDataset', DATASET, 'uri'],
           ['rDataEpoch', graphEpoch, 'literal'], ['rSequence', '2', 'literal'],
           ['rEligibility', row.eligibility, 'uri'],
-        ])) } };
+        ]));
+      const rows = joinReceiptProofs(sparql, 'eligibility', allRows, options.missingReceipt, joinedReceipts);
+      proofRows.push({ kind: 'eligibility', rows });
+      return { results: { bindings: rows } };
     }
     if (sparql.includes('SELECT ?publication')) {
-      const asked = valuesIds(sparql, 'publication');
-      const rows = records.filter(row => asked.includes(row.decision));
-      return { results: { bindings: rows.map(row => proofRow('publication', row.decision,
+      const allRows = records.map(row => proofRow('publication', row.decision,
         row.publicationReceipt, [
           ['dComponent', row.variant, 'uri'], ['dResource', row.resource, 'uri'],
           ['dRevision', row.revision, 'uri'], ['dDigest', row.digest, 'literal'],
@@ -162,10 +279,13 @@ function verifyFixture(options: FixtureOptions = {}) {
           ['rExpectedHead', 'urn:rezics:none', 'uri'], ['rDataset', DATASET, 'uri'],
           ['rDataEpoch', graphEpoch, 'literal'], ['rSequence', '1', 'literal'],
           ['rDecision', row.decision, 'uri'],
-        ])) } };
+        ]));
+      const rows = joinReceiptProofs(sparql, 'publication', allRows, options.missingReceipt, joinedReceipts);
+      proofRows.push({ kind: 'publication', rows });
+      return { results: { bindings: rows } };
     }
     if (sparql.includes('SELECT ?unit ?body')) {
-      const rows = page(records.map(row => ({ ...row, id: row.unit })), afterLiteral(sparql, 'unit'));
+      const rows = page(records.slice(0, count).map(row => ({ ...row, id: row.unit })), afterLiteral(sparql, 'unit'));
       return { results: { bindings: rows.map(row => ({ unit: binding(row.unit), body: binding(row.text, 'en'),
         resource: binding(row.resource), variant: binding(row.variant), revision: binding(row.revision),
         decision: binding(row.decision), eligibility: binding(row.eligibility) })) } };
@@ -189,7 +309,7 @@ function verifyFixture(options: FixtureOptions = {}) {
   const run = verifyQuarantinedContentIndex({ fuseki,
     lineage: { dataEpoch: graphEpoch, routingEpoch: graphEpoch }, objectDirectory: '' },
   content, cursor, { id: graphEpoch, cut: position, consumer: 'content-rebuild.fixture' });
-  return { run, queries };
+  return { run, queries, proofRows, joinedReceipts, unrelated: options.unrelatedReceipt ? records.at(-1) : undefined };
 }
 
 test('rebuild verification pages variants and binds each receipt join', async () => {
@@ -215,18 +335,15 @@ test('rebuild verification pages variants and binds each receipt join', async ()
     expect(proofs.map(query => valuesIds(query, variable).length)).toEqual([CONTENT_REBUILD_PAGE, 1]);
     for (const query of proofs) {
       expect(query).toContain(`VALUES ?${variable}`);
-      // A publication receipt uses a predicate list to exclude eligibility
-      // receipts that also name the publication. Check the shared subject's
-      // binding inside the receipt graph, independent of triple shorthand.
-      const receiptBinding = query.match(/OPTIONAL \{ GRAPH <urn:rezics:graph:receipts> \{ \?receipt ([^}]*)\} \}/)?.[1];
-      expect(receiptBinding).toBeDefined();
-      expect(receiptBinding).toMatch(new RegExp(`(?:^|;\\s*)rv:${receiptPredicate} \\?${variable}(?:\\s*[;.]|\\s*$)`));
+      assertReceiptJoinsBound(query, variable);
+      const receiptBinding = receiptTriples(optionalGroups(query)
+        .find(group => group.includes('?receipt'))!);
+      expect(receiptBinding).toContainEqual(['?receipt', `rv:${receiptPredicate}`, `?${variable}`]);
       if (variable === 'publication') {
-        expect(receiptBinding).toContain('a rv:OperationReceipt');
-        expect(receiptBinding).toContain('rv:outcome rv:Succeeded');
-        expect(receiptBinding).toContain('rv:contentRevision ?publicationRevision');
+        expect(receiptBinding).toContainEqual(['?receipt', 'a', 'rv:OperationReceipt']);
+        expect(receiptBinding).toContainEqual(['?receipt', 'rv:outcome', 'rv:Succeeded']);
+        expect(receiptBinding).toContainEqual(['?receipt', 'rv:contentRevision', '?publicationRevision']);
       }
-      expect(query).toContain('FILTER(BOUND(?receipt))');
       expect(query).not.toContain(`LIMIT ${50_001}`);
     }
   }
@@ -237,6 +354,28 @@ test('rebuild verification pages variants and binds each receipt join', async ()
     && !query.includes('VALUES ?publication') && !query.includes('VALUES ?eligibility'))).toBe(false);
   expect(CONTENT_REBUILD_READ_BUDGET_MS).toBeLessThan(10_000);
 });
+
+for (const kind of ['publication', 'eligibility'] as const) {
+  test(`a missing ${kind} receipt cannot join unrelated receipts`, async () => {
+    const fixture = verifyFixture({ missingReceipt: { kind, index: 0 }, unrelatedReceipt: true });
+    await expect(fixture.run).rejects.toThrow(ContentRebuildUnavailable);
+    const rows = fixture.proofRows.find(proof => proof.kind === kind)!.rows;
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.receiptCount).toEqual(integer('0'));
+    expect(row.receiptTypeCount).toEqual(integer('0'));
+    expect(row.receipt).toBeUndefined();
+    for (const [field, value] of Object.entries(row).filter(([field]) => /^r[A-Z]/.test(field))) {
+      expect(field.endsWith('Count')).toBe(true);
+      expect(value).toEqual(integer('0'));
+    }
+    expect(fixture.joinedReceipts).not.toContain(fixture.unrelated!.publicationReceipt);
+    expect(fixture.joinedReceipts).not.toContain(fixture.unrelated!.eligibilityReceipt);
+    for (const query of fixture.queries.filter(query => query.includes(`SELECT ?${kind}`))) {
+      assertReceiptJoinsBound(query, kind);
+    }
+  });
+}
 
 test('a variant with no public head still fails the rebuild', async () => {
   const { run } = verifyFixture({ missingHead: 0 });
