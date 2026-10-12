@@ -12,14 +12,10 @@ import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from '../erasure/authority.ts';
-import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold, verifyErasure,
+import { reconcileRestoredErasures, releaseErasureRestoreHold, verifyErasure,
   type RestoredOwners } from '../erasure/reconcile.ts';
-import { ErasureAuthorityCoverageConflict } from '../erasure/authority.ts';
 import { ErasureNotFound, ErasureUnavailable, sha256 } from '../erasure/journal.ts';
 import { remediateErasedContentEntry, type ErasureService } from '../erasure/request.ts';
-import { GraphErasureConflict, GraphErasureUnavailable } from '../erasure/graph.ts';
-import { AccountDeletionJournalConflict } from '../outbox/account-deletion-journal.ts';
-import { RecoveryCoverageHeadConflict } from '../outbox/recovery-coverage-head.ts';
 import { assertReleasedErasuresCurrent } from '../erasure/reconcile.ts';
 import { captureReleaseBasis, proveReleaseTransition, readBindings, readErasuresRecord,
   recordQualification, recordRelease, requireQualification }
@@ -49,12 +45,9 @@ import { reconcileRelayGap as rebuildRelayGap, RelayGapConflict, RelayGapInvalid
 import { reconcileRetentionGc as collectUnreferencedObjects, readRetentionGcView,
   RetentionGcConflict, type RetentionGcView } from './retention-gc.ts';
 
-/** Refusals that settle a restore as held; any other error is an interruption. */
-function isDefinitiveRefusal(error: unknown): error is Error {
-  return error instanceof ErasureRestoreHold || error instanceof ErasureAuthorityCoverageConflict
-    || error instanceof ErasureUnavailable || error instanceof GraphErasureConflict
-    || error instanceof GraphErasureUnavailable
-    || error instanceof AccountDeletionJournalConflict || error instanceof RecoveryCoverageHeadConflict;
+function restoreInterruption(error: unknown, message: string): RestoreInterrupted | undefined {
+  if (!isRestoreTransientFailure(error)) return undefined;
+  return error instanceof RestoreInterrupted ? error : new RestoreInterrupted(message, { cause: error });
 }
 
 export class OwnerOperationConflict extends Error {}
@@ -386,14 +379,18 @@ export class OwnerOperations {
         } catch (error) {
           // Classify the entire pass before any permanent hold, including opened
           // completion and the final outcome write. Wrappers retain owner causes.
-          if (isRestoreTransientFailure(error) || error instanceof RestoreInterrupted) {
-            const message = error instanceof RestoreInterrupted ? error.message
-              : 'restore owner completion was interrupted';
-            if (!(error instanceof RestoreInterrupted)) error = new RestoreInterrupted(message, { cause: error });
-            throw new OwnerOperationUnavailable(message, { cause: error });
+          const interruption = restoreInterruption(error, 'restore owner completion was interrupted');
+          if (interruption) {
+            throw new OwnerOperationUnavailable(interruption.message, { cause: interruption });
           }
-          if (!(error instanceof RestoreLineageConflict)) throw error;
-          await this.settleRestoreOutcome(client, row.id, coverage, generation, error);
+          const failure = error instanceof Error ? error
+            : new Error('restore owner completion failed', { cause: error });
+          try { await this.settleRestoreOutcome(client, row.id, coverage, generation, failure); }
+          catch (settlementError) {
+            const interrupted = restoreInterruption(settlementError, 'restore outcome settlement was interrupted');
+            if (interrupted) throw new OwnerOperationUnavailable(interrupted.message, { cause: interrupted });
+            throw settlementError;
+          }
           return await this.reconciliation(client, row.id, replayed) as RestoreReconciliationView;
         }
       } finally {
@@ -404,25 +401,25 @@ export class OwnerOperations {
   }
 
   private async settleRestoreOutcome(client: PoolClient, id: string, coverage: RecoveryCoverage,
-    generation: string | null, conflict?: RestoreLineageConflict): Promise<void> {
+    generation: string | null, failure?: Error): Promise<void> {
     if (!coverage.content || !coverage.objects) {
       throw new OwnerOperationInvalid('signed restore coverage lacks owner evidence');
     }
     await client.query('BEGIN');
     try {
-      if (conflict) {
-        const owner = /Account/.test(conflict.message) ? 'account'
-          : /Access/.test(conflict.message) ? 'access'
-          : /Content/.test(conflict.message) ? 'content'
-          : /relay|handoff|coverage head|erasure/i.test(conflict.message) ? 'relay'
-          : /object/i.test(conflict.message) ? 'object' : 'graph';
+      if (failure) {
+        const owner = /Account/.test(failure.message) ? 'account'
+          : /Access/.test(failure.message) ? 'access'
+          : /Content/.test(failure.message) ? 'content'
+          : /relay|handoff|coverage head|erasure/i.test(failure.message) ? 'relay'
+          : /object/i.test(failure.message) ? 'object' : 'graph';
         await client.query(`INSERT INTO relay.owner_reconciliation_item
           (reconciliation_id, ordinal, owner, item_kind, item_ref, disposition)
           VALUES ($1,1,$2,'receipt','urn:rezics:dataset:product',$3)`,
-        [id, owner, /unavailable|missing/i.test(conflict.message) ? 'unavailable'
-          : /corrupt/i.test(conflict.message) ? 'corrupt' : 'conflict']);
+        [id, owner, /unavailable|missing/i.test(failure.message) ? 'unavailable'
+          : /corrupt/i.test(failure.message) ? 'corrupt' : 'conflict']);
         await client.query(`UPDATE relay.owner_reconciliation SET state = 'held',
-          hold_reason = $2 WHERE id = $1`, [id, conflict.message.slice(0, 500)]);
+          hold_reason = $2 WHERE id = $1`, [id, failure.message.slice(0, 500)]);
       } else {
         const verified = await client.query<{ generation: string }>(
           'SELECT generation::text FROM relay.recovery_coverage_head WHERE consumer = $1',
@@ -458,7 +455,11 @@ export class OwnerOperations {
           WHERE id = $1`, [id, generation, outcome]);
       }
       await client.query('COMMIT');
-    } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      const interruption = restoreInterruption(error, 'restore outcome settlement was interrupted');
+      throw interruption ?? error;
+    }
   }
 
   /** The restored owners with the held-erasure configuration bound to one captured Access generation. */
@@ -503,7 +504,6 @@ export class OwnerOperations {
     baseEnvelope: string, operationId: string, outerId: string, resume: boolean, clients: RestoredReleaseClients,
     releaseGraph: () => Promise<void>): Promise<void> {
     const { graphRelease } = clients;
-    let committed = resume;
     try {
       const restored = this.restoredOwners(resources, erasures, graphRelease, clients.fenceGeneration);
       let current: RecoveryCoverage;
@@ -569,7 +569,6 @@ export class OwnerOperations {
         await recordQualification(clients.relayClient, erasures.authority.hmacKey, outerId, record,
           clients.fenceGeneration, graphRelease, restored.ownerRestore);
         await clients.commitQualification();
-        committed = true;
       }
       const record = await readErasuresRecord(clients.relayClient, erasuresOperation);
       if (!record) throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
@@ -593,12 +592,8 @@ export class OwnerOperations {
         clients.fenceGeneration, graphRelease, createHash('sha256').update(erasures.authority.sealedCoverage)
           .digest('hex'), transition, restored.ownerRestore);
     } catch (error) {
-      // Once the qualification is durable, only a definitive refusal settles
-      // the operation as held; an owner interruption leaves it resumable.
-      if (!committed || error instanceof RestoreLineageConflict || error instanceof RestoreInterrupted
-        || isDefinitiveRefusal(error)) throw error;
-      throw new RestoreInterrupted(`restore release interrupted: ${
-        error instanceof Error ? error.message : 'owner outcome is unavailable'}`, { cause: error });
+      const interruption = restoreInterruption(error, 'restore release was interrupted');
+      throw interruption ?? error;
     }
   }
 
@@ -642,23 +637,16 @@ export class OwnerOperations {
       if (current.nativeAccessErasure && baseEnvelope !== erasures.authority.sealedCoverage)
         restored.ownerRestore = ownerRestoreEvidence(baseEnvelope,
         erasures.authority.sealedCoverage, current);
-      try {
-        // Mandatory: authority, deletion journal and the full erased closure, no bypass.
-        await assertReleasedErasuresCurrent(this.relay, restored, record.id, captured, erasures.authority,
-          { relayClient: client, accessClient, graphRelease }, outerId);
-      } catch (error) {
-        if (error instanceof RestoreLineageConflict) throw error;
-        if (isDefinitiveRefusal(error)) {
-          throw new RestoreLineageConflict(error.message, { cause: error });
-        }
-        throw error;
-      }
+      // Mandatory: authority, deletion journal and the full erased closure, no bypass.
+      await assertReleasedErasuresCurrent(this.relay, restored, record.id, captured, erasures.authority,
+        { relayClient: client, accessClient, graphRelease }, outerId);
       await client.query('COMMIT');
       await accessClient.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       await accessClient.query('ROLLBACK').catch(() => undefined);
-      throw error;
+      const interruption = restoreInterruption(error, 'restore completion was interrupted');
+      throw interruption ?? error;
     } finally { accessClient.release(); }
   }
 

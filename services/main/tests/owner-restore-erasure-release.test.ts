@@ -638,7 +638,9 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, c
         await clients.relayClient.query('SELECT 1 /* retained qualification */');
         await clients.commitQualification();
         durable = true; qualifications++;
-        throw new RestoreInterrupted('stopped after durable qualification');
+        throw new RestoreInterrupted('stopped after durable qualification', {
+          cause: Object.assign(new Error('owner connection interrupted'), { code: 'ECONNRESET' }),
+        });
       };
       await expect(attempt()).rejects.toBeInstanceOf(OwnerOperationUnavailable);
       expect(row).toMatchObject({ state: 'running', hold_reason: null });
@@ -797,6 +799,52 @@ for (const status of [503, 400, 404]) {
     } finally {
       network.mockRestore(); await server.stop(true); owner.stop(); run.stop();
     }
+  });
+}
+
+for (const status of [400, 503] as const) {
+  test(`qualified release-proof HTTP ${status} follows the shared failure contract`, async () => {
+    const run = fixture();
+    const owner = outerRestore(run);
+    const query = run.fuseki.query.bind(run.fuseki);
+    const failure = new FusekiHttpError(`Fuseki query returned ${status}`, status,
+      status === 503 ? 'Service Unavailable' : 'Bad Request');
+    let armed = false, proofReads = 0;
+    const proof = spyOn(run.fuseki, 'query').mockImplementation(async sparql => {
+      if (armed && sparql.includes('rv:OperationReceipt')) {
+        proofReads++;
+        throw failure;
+      }
+      return query(sparql);
+    });
+    try {
+      await owner.qualify();
+      armed = true;
+      if (status === 400) {
+        expect(await owner.attempt()).toMatchObject({ state: 'held', disposition: 'conflict', replayed: true });
+        expect(owner.row).toMatchObject({ state: 'held', hold_reason: failure.message });
+        expect(proofReads).toBe(1);
+        expect(run.fuseki.held).toBe(false);
+        expect(run.access.open).toBe(false);
+        const commands = run.fuseki.commands.length;
+        armed = false;
+        expect(await owner.attempt()).toMatchObject({ state: 'held', disposition: 'conflict', replayed: true });
+        expect(proofReads).toBe(1);
+        expect(run.fuseki.commands).toHaveLength(commands);
+      } else {
+        await expectRestoreInterrupted(owner.attempt, failure);
+        expect(proofReads).toBe(1);
+        expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+        expect(run.fuseki.held).toBe(false);
+        expect(run.access.open).toBe(false);
+        armed = false;
+        expect(await owner.attempt()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
+        expect(owner.row.state).toBe('reconciled');
+        expect(run.access.open).toBe(true);
+        expect(run.fuseki.commands).toHaveLength(1);
+      }
+      expect(owner.qualifications).toBe(1);
+    } finally { proof.mockRestore(); owner.stop(); run.stop(); }
   });
 }
 

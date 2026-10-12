@@ -41,13 +41,17 @@ export function isOwnerTransientFailure(error: unknown): boolean {
           '40001',
           '40P01',
           '53300',
+          '55P03',
           'ECONNRESET',
           'ECONNREFUSED',
           'ETIMEDOUT',
           'EPIPE',
+          'EAI_AGAIN',
+          'ENOTFOUND',
         ].includes(failure.code))
     )
       return true;
+    if (typeof failure.code === 'string' && failure.code.startsWith('UND_ERR_')) return true;
     if (
       failure.name === 'Error' &&
       failure.code === undefined &&

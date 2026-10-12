@@ -16,7 +16,7 @@ import {
 } from '../restore.ts';
 import { RecoveryBudget } from '../recovery-set.ts';
 import { FusekiHttpError } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { isRestoreTransientFailure } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { isRestoreTransientFailure, RestoreInterrupted } from '../../../services/main/src/modules/work/restore-lineage.ts';
 
 const dataEpoch = '00000000-0000-4000-8000-000000000051';
 const routingEpoch = '00000000-0000-4000-8000-000000000052';
@@ -43,7 +43,7 @@ function restored(
     ownerLogins?: { role: string; enabled: boolean }[];
     membership?: { statuses?: unknown[]; preparations?: unknown[] };
     afterLogin?: () => void;
-    loginReadbackFailure?: boolean;
+    loginReadbackFailure?: boolean | Error;
   } = {},
 ) {
   const events: string[] = [];
@@ -114,7 +114,8 @@ function restored(
           }
           expect(query).toContain('FROM pg_roles');
           events.push('observe-owner-logins');
-          if (options.loginReadbackFailure) throw new Error('pg_roles readback unavailable');
+          if (options.loginReadbackFailure) throw options.loginReadbackFailure === true
+            ? new Error('pg_roles readback unavailable') : options.loginReadbackFailure;
           return {
             rows:
               options.ownerLogins ??
@@ -492,6 +493,33 @@ test('a pg_roles query failure preserves the committed LOGIN fact', async () => 
     servingVerified: false,
     targetStopped: true,
   });
+  expect(fixture.events.slice(-3)).toEqual([
+    'enable-owner-logins',
+    'observe-owner-logins',
+    'stop-target',
+  ]);
+});
+
+test('a transient pg_roles readback failure keeps its shared classification after LOGIN commits', async () => {
+  const original = Object.assign(new Error('pg_roles connection reset'), { code: 'ECONNRESET' });
+  const fixture = restored({ loginReadbackFailure: original });
+  let failure: unknown;
+  try {
+    await fixture.finishAndVerify();
+  } catch (error) {
+    failure = error;
+    recordRestoreFailure(fixture.proof, error, () => fixture.events.push('stop-target'));
+  }
+
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toContain('LOGIN enabled, pg_roles readback failed');
+  const causes: unknown[] = [];
+  for (let cause: unknown = failure; cause instanceof Error; cause = cause.cause) causes.push(cause);
+  expect(causes.some(cause => cause instanceof RestoreInterrupted)).toBe(true);
+  expect(causes).toContain(original);
+  expect(isRestoreTransientFailure(failure)).toBe(true);
+  expect(fixture.proof).toMatchObject({ state: 'released', loginEnabled: true, servingVerified: false,
+    targetStopped: true });
   expect(fixture.events.slice(-3)).toEqual([
     'enable-owner-logins',
     'observe-owner-logins',

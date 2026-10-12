@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { isOwnerTransientFailure } from '../../services/main/src/infrastructure/owner-failure.ts';
 import { openRecoveryPayload } from '../../services/account/src/recovery-envelope.ts';
 import {
   assertDeletionRecoverySet,
@@ -14,6 +15,7 @@ import { assertPgRecoveryFrontier } from '../../services/main/src/modules/work/p
 import { normalizeStoredMembership } from '../../services/main/src/modules/structure/membership-normalize.ts';
 import {
   cutoverRestoredGraphLineage,
+  RestoreInterrupted,
   type RecoveryCoverage,
 } from '../../services/main/src/modules/work/restore-lineage.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../services/main/src/modules/work/activate.ts';
@@ -270,7 +272,9 @@ export async function finishOperatorRestore<Context extends OperatorRestoreRelea
       );
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`LOGIN enabled, pg_roles readback failed: ${detail}`, { cause: error });
+      const message = `LOGIN enabled, pg_roles readback failed: ${detail}`;
+      if (isOwnerTransientFailure(error)) throw new RestoreInterrupted(message, { cause: error });
+      throw new Error(message, { cause: error });
     }
     const enabled = new Set(
       logins.rows.filter((role) => role.rolcanlogin).map((role) => role.rolname),

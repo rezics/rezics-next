@@ -186,7 +186,8 @@ test('one owner completion boundary classifies every phase before permanent sett
     (caught) => caught.range.byteOffset.start > boundary.range.byteOffset.start &&
       caught.range.byteOffset.end <= boundary.range.byteOffset.end,
   ).sort((a, b) => b.range.byteOffset.start - a.range.byteOffset.start);
-  const handler = handlers[0]!;
+  const handler = handlers.find(caught =>
+    caught.text.includes("restoreInterruption(error, 'restore owner completion was interrupted')"));
   expect(handler).toBeDefined();
   const body = Buffer.from(boundary.text).subarray(
     0, handler.range.byteOffset.start - boundary.range.byteOffset.start,
@@ -200,15 +201,26 @@ test('one owner completion boundary classifies every phase before permanent sett
   ]) expect(body).toContain(call);
   // Moving classification to a lower helper leaves another phase unprotected.
   expect(rawAstMatches(['--pattern', 'isRestoreTransientFailure($$$ARGS)'], files)).toHaveLength(1);
-  expect(handler.text).toMatch(/if\s*\(isRestoreTransientFailure\(error\)/);
+  expect(handler.text).toContain("restoreInterruption(error, 'restore owner completion was interrupted')");
   expect(handler.text).toContain('throw new OwnerOperationUnavailable(');
-  const classify = handler.text.indexOf('isRestoreTransientFailure(error)');
+  const classify = handler.text.indexOf('restoreInterruption(error');
   const unavailable = handler.text.indexOf('throw new OwnerOperationUnavailable(');
-  const mismatch = handler.text.indexOf('error instanceof RestoreLineageConflict');
   const settle = handler.text.indexOf('this.settleRestoreOutcome(');
   expect(classify).toBeLessThan(unavailable);
-  expect(unavailable).toBeLessThan(mismatch);
-  expect(mismatch).toBeLessThan(settle);
+  expect(unavailable).toBeLessThan(settle);
+  for (const name of ['settleRestoreOutcome', 'releaseRetainedErasures', 'completeReleasedRestore']) {
+    const method = methods.find(candidate => new RegExp(`\\basync\\s+${name}\\s*\\(`).test(candidate.text));
+    expect(method).toBeDefined();
+    expect(method!.text).toContain('restoreInterruption(error');
+  }
+});
+
+test('operator LOGIN readback classifies transport failures through the shared owner policy', () => {
+  const catches = rawAstMatches(['--kind', 'catch_clause'], ['scripts/ops/restore.ts']);
+  const login = catches.find(caught => caught.text.includes('LOGIN enabled, pg_roles readback failed'));
+  expect(login).toBeDefined();
+  expect(login!.text).toContain('isOwnerTransientFailure(error)');
+  expect(login!.text).toContain('new RestoreInterrupted(message, { cause: error })');
 });
 
 test('the AST guard detects cause loss without matching an outer catch variable', () => {
@@ -298,16 +310,52 @@ test('restore and relay use one cycle-safe evidence classifier', () => {
   }))).toBe(true);
 });
 
-for (const message of DRIVER_TRANSPORT_FAILURES) {
-  test(`shared classifier recognizes exact uncoded pg transport message: ${message}`, () => {
-    const original = new Error(message);
-    expect(isRelayTransientFailure(original)).toBe(true);
-    expect(isRelayTransientFailure(new RestoreLineageConflict('owner comparison unavailable', {
-      cause: original,
-    }))).toBe(true);
-    expect(isRelayTransientFailure(new ErasureRestoreHold('erasure evidence unavailable', {
-      cause: original,
-    }))).toBe(true);
+const transientContractRows: { name: string; failure: () => Error }[] = [
+  ...['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'ENOTFOUND'].map(code => ({
+    name: code, failure: () => Object.assign(new Error('socket transport failed'), { code }),
+  })),
+  ...['UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_OTHER'].map(code => ({
+    name: code, failure: () => Object.assign(new Error('Undici transport failed'), { code }),
+  })),
+  ...['08000', '08006', '57P01', '57P02', '57P03', '40001', '40P01', '53300', '55P03'].map(code => ({
+    name: `SQLSTATE ${code}`, failure: () => Object.assign(new Error('PostgreSQL owner failure'), { code }),
+  })),
+  { name: 'TimeoutError', failure: () => new DOMException('deadline exceeded', 'TimeoutError') },
+  ...[408, 429, 500, 502, 503, 504].map(status => ({
+    name: `HTTP ${status}`, failure: () => Object.assign(new Error(`Fuseki returned ${status}`), { status }),
+  })),
+  { name: 'CommandOutcomeUnknown', failure: () => new CommandOutcomeUnknown('receipt is absent') },
+  ...DRIVER_TRANSPORT_FAILURES.map(message => ({ name: `pg message ${message}`, failure: () => new Error(message) })),
+];
+
+for (const row of transientContractRows) {
+  test(`shared classifier accepts transient contract row: ${row.name}`, () => {
+    const failure = row.failure();
+    expect(isRestoreTransientFailure(failure)).toBe(true);
+    expect(isRestoreTransientFailure(new RestoreLineageConflict('restore hold', { cause: failure }))).toBe(true);
+    expect(isRestoreTransientFailure(new ErasureRestoreHold('erasure refusal', { cause: failure }))).toBe(true);
+  });
+}
+
+const nonTransientContractRows: { name: string; failure: () => Error }[] = [
+  ...[400, 401, 403, 404, 409, 422].map(status => ({
+    name: `HTTP ${status}`, failure: () => Object.assign(new Error(`Fuseki returned ${status}`), { status }),
+  })),
+  ...['23505', '42P01'].map(code => ({
+    name: `SQLSTATE ${code}`, failure: () => Object.assign(new Error('PostgreSQL statement failed'), { code }),
+  })),
+  { name: 'plain Error', failure: () => new Error('owner operation failed') },
+  { name: 'AbortError without timeout cause', failure: () => {
+    const error = new Error('caller cancelled the read'); error.name = 'AbortError'; return error;
+  } },
+];
+
+for (const row of nonTransientContractRows) {
+  test(`shared classifier rejects non-transient contract row: ${row.name}`, () => {
+    const failure = row.failure();
+    expect(isRestoreTransientFailure(failure)).toBe(false);
+    expect(isRestoreTransientFailure(new RestoreLineageConflict('restore hold', { cause: failure }))).toBe(false);
+    expect(isRestoreTransientFailure(new ErasureRestoreHold('erasure refusal', { cause: failure }))).toBe(false);
   });
 }
 
