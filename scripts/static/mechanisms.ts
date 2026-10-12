@@ -78,6 +78,7 @@ export const mechanisms = [
       'semantic-disclosure.ts#readReferenceDisclosure',
       'composition.ts#composeAccess',
       'work-edit-authority.ts#withWorkEditAuthority',
+      'person-profile-erasure.ts#withPersonProfileErasureAuthority',
     ],
     ownedState: ['access.scope_gate', 'access.representation', 'access.permission_grant', 'access.policy'],
     protectedEffects: ['write scope gate', 'write representation', 'write permission grant', 'write access policy'],
