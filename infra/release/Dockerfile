@@ -15,6 +15,7 @@ COPY --from=dependencies --chown=bun:bun /app/node_modules ./node_modules
 COPY --from=dependencies --chown=bun:bun /app/services ./services
 COPY --from=dependencies --chown=bun:bun /app/packages ./packages
 COPY --from=dependencies --chown=bun:bun /app/generated ./generated
+COPY --from=dependencies --chown=bun:bun /app/model/compiler ./model/compiler
 COPY --from=dependencies --chown=bun:bun /app/scripts ./scripts
 COPY --from=dependencies --chown=bun:bun /app/apps ./apps
 COPY --from=dependencies --chown=bun:bun /app/infra/release ./infra/release
