@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import type { MainClient } from '../../feed/types.ts';
 import { setUnread, setUnreadGeneration, useUnread } from '../unread.ts';
-import { governance, inboxWindow, invitationNotice, NOW } from './fixtures.ts';
+import { governance, inboxWindow, invitationNotice, NOW, streamId } from './fixtures.ts';
 import { NotificationsView } from './notifications-view.tsx';
 import type { NotificationWindow, StreamItem } from './window.ts';
 
@@ -30,7 +30,7 @@ function windowOf(items: StreamItem[], generation = '1', head = items.at(-1)?.se
 }
 const page = (window: NotificationWindow, reset = false) => answer({
   ...window, profile: 'notification-stream-page-v1', reset });
-const notice = (sequence: number) => governance(sequence, 'proposal-revised', 'manual');
+const notice = (sequence: number) => governance(sequence, 'proposal-revised', 'manual', { proposal: 1000 + sequence });
 
 function scripted(options: {
   page: (query: Query) => Answer | Promise<Answer>;
@@ -87,6 +87,9 @@ type Story = StoryObj<typeof meta>;
 const base = { now: NOW, avatarQuery: '' };
 const resetPage = () => page(windowOf([notice(1)], '2'), true);
 const seedNewBadge = () => setUnread({ count: 5, overflow: false, generation: '2' });
+const resetVisible = (canvas: ReturnType<typeof within>) => waitFor(() =>
+  expect(canvas.getByRole('link', { name: 'A correction was revised' }))
+    .toHaveAttribute('href', `/en/proposals/${streamId(1001)}?revision=2`));
 
 export const MarkAllOpeningHead: Story = {
   args: (() => ({ ...base, initial: windowOf([notice(100)], '1', '100', 'older-anchor'),
@@ -114,7 +117,7 @@ export const LateMarkAfterReset: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(canvas.getAllByRole('listitem')).toHaveLength(1));
+    await resetVisible(canvas);
     seedNewBadge();
     await args.release!();
     await expect(canvas.getByText('Unread')).toBeVisible();
@@ -140,7 +143,7 @@ export const LateCountAfterReset: Story = {
     await readLink(canvas);
     await waitFor(() => expect(args.calls).toContain('count'));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(canvas.getByText('Unread')).toBeVisible());
+    await resetVisible(canvas);
     seedNewBadge();
     await args.release!();
     await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
@@ -157,7 +160,7 @@ export const LateReadAfterReset: Story = {
     const canvas = within(canvasElement);
     await readLink(canvas);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(canvas.getByText('Unread')).toBeVisible());
+    await resetVisible(canvas);
     seedNewBadge();
     await args.release!();
     await expect(args.calls).not.toContain('count');
@@ -176,7 +179,7 @@ export const LateTriageAfterReset: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(canvas.getByText('Unread')).toBeVisible());
+    await resetVisible(canvas);
     await args.release!();
     await expect(canvas.queryByText('Saved.')).toBeNull();
     await expect(canvas.getByRole('button', { name: 'Save' })).toBeEnabled();
@@ -213,7 +216,8 @@ export const OlderGenerationPage: Story = {
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(args.calls).toHaveLength(1));
+    await waitFor(() => expect(canvas.getByRole('link', { name: 'A correction was revised' }))
+      .toHaveAttribute('href', `/en/proposals/${streamId(1002)}?revision=2`));
     const replacement = canvas.getByRole('link', { name: 'A correction was revised' }).getAttribute('href');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     seedNewBadge();
