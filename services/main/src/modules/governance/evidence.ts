@@ -16,9 +16,20 @@ import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, Gover
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const graphAnchor = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}(?:-agent-revision)?$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const graphTargetKinds = ['https://schema.org/CreativeWork', ...[
-  'Realm', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure',
-].map(kind => `${RV}${kind}`)];
+/** Primary kinds admitted by graph report/summary owners. Descriptive Work
+ * types refine CreativeWork and do not introduce another owner. Kinds without
+ * a target command profile keep their Access-owned restriction behaviour. */
+export const governanceGraphKinds = {
+  Work: 'https://schema.org/CreativeWork',
+  Occurrence: 'https://schema.org/ListItem',
+  Concept: 'http://www.w3.org/2004/02/skos/core#Concept',
+  ...Object.fromEntries([
+    'Realm', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure', 'Release', 'FixedRelease',
+    'TextContribution', 'Realization', 'Collection', 'SemanticContext', 'Character', 'Role',
+    'SemanticDefinition', 'Projection', 'Post',
+  ].map(kind => [kind, `${RV}${kind}`])),
+} as const;
+export const governanceGraphTargetKinds = Object.values(governanceGraphKinds);
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
   return uuid.test(id) ? id : null;
@@ -330,12 +341,12 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
         // classify the resource. Missing or competing kinds cannot admit a fallback.
         const rows = (await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT DISTINCT ?kind ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-            VALUES ?kind { ${graphTargetKinds.map(kind => `<${kind}>`).join(' ')} }
+            VALUES ?kind { ${governanceGraphTargetKinds.map(kind => `<${kind}>`).join(' ')} }
             ${iri(target.resource)} a ?kind .
-            OPTIONAL { ${iri(target.resource)} rv:head ?head }
+            OPTIONAL { FILTER(?kind = rv:Realm) ${iri(target.resource)} rv:head ?head }
           } } LIMIT 2`, 2048)).results?.bindings ?? [];
         if (rows.length !== 1 || rows[0]?.kind?.type !== 'uri'
-          || !graphTargetKinds.includes(rows[0].kind.value)) {
+          || !governanceGraphTargetKinds.includes(rows[0].kind.value)) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
         }
         const row = rows[0]!;
