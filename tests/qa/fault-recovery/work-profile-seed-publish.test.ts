@@ -17,7 +17,7 @@ test('unrelated public Work growth from the retained small cut never refuses pub
   expect(manifest.dimensions.unrelatedWorks).toBe(4);
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through goalctl');
-  await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', runId, '--persistent'], dockerEnvironment());
+  await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', runId], dockerEnvironment());
   let stack: MediaStack | undefined;
   const target = `seed-publish-${runId}`;
   const started = performance.now();
