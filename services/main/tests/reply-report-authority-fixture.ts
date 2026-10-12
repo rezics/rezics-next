@@ -219,6 +219,10 @@ async function createReplyReportFixture(
       const query = raw.replace(/\s+/g, ' ').trim();
       if (/ASK \{ GRAPH <urn:rezics:graph:control>/.test(query) && query.includes('rv:restoreHold'))
         return { boolean: query.includes(epoch) };
+      if (query.includes('ASK { GRAPH <urn:rezics:graph:current>')
+        && query.includes('a rv:Realm ; rv:realmState rv:Active ; rv:space ?space')) {
+        return { boolean: [...realmSpaces.keys()].some(realm => query.includes(`<${realm}>`)) };
+      }
       if (/SELECT \?epoch \?sequence WHERE/.test(query)) return bindings([position()]);
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head')) {
         if (!query.includes(`<${work}>`)) return bindings([position()]);
