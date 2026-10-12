@@ -143,7 +143,7 @@ export async function mediaVisibility(
   env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[],
   viewer: Viewer,
-  probes: readonly MediaVisibilityProbe[],
+  probes: readonly MediaVisibilityProbe[] = targets.map(target => ({ reference: target.resource, exactUse: false })),
 ) {
   const gate = (env as MediaEnvironment)[gateOwner];
   if (!gate) return targets.map(() => true);

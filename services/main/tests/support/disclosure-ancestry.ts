@@ -27,6 +27,8 @@ export function configureFixtureDisclosureAncestry(env: WorkActivationEnvironmen
       targetRevision: target.revision ?? null,
       token: createHash('sha256').update(JSON.stringify([target, parent])).digest('hex'),
       dataEpoch: env.lineage.dataEpoch,
+      ...(target.occurrence ? { owner: target.occurrence.owner, kind: target.occurrence.kind,
+        resource: target.occurrence.resource, revision: target.occurrence.revision } : {}),
     };
     selected.set(relationshipBasis.token, target);
     return { resource: target.resource, resourceKind: 'other', relationshipBasis,
