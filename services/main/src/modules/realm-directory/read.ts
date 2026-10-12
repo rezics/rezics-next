@@ -7,6 +7,7 @@ import { pageResult, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { realmDirectoryItem } from './contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
+import { DisclosureUnavailable, hasDisclosure } from '../disclosure/read.ts';
 import type { RealmDirectorySort } from './index.ts';
 export type { RealmDirectorySort } from './index.ts';
 export { searchText } from './source.ts';
@@ -43,23 +44,50 @@ export async function readRealmDirectory(session: WorkReadSession,
   const index = session.deps.access.realmDirectory;
   if (!index) throw new WorkReadUnavailable('Realm directory index is unavailable');
   const page = await index.page(session, { sort: input.sort, q: query, topic: input.topic });
-  const modes = page.rows.length ? await session.query(`SELECT ?realm ?mode WHERE {
-    VALUES ?realm { ${page.rows.map(row => iri(row.realm)).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm .
+  // The projection is a source page, not current disclosure authority. Keep its
+  // opaque continuation even when the current owner omits every candidate.
+  if (page.rows.length && !hasDisclosure(session.deps.environment)) throw new WorkReadUnavailable('Realm disclosure is unavailable');
+  const readBasis = () => page.rows.length ? session.query(`SELECT ?realm ?space ?head ?mode WHERE {
+    VALUES (?realm ?space) { ${page.rows.map(row => `(${iri(row.realm)} ${iri(row.space)})`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:head ?head .
+      ?space a rv:Space ; rv:realmCapability ?realm .
       OPTIONAL { ?realm rv:reviewMode ?mode } }
-  } LIMIT ${page.rows.length + 1}`, page.rows.length + 1) : [];
+  } LIMIT ${page.rows.length + 1}`, page.rows.length + 1) : Promise.resolve([]);
+  const modes = await readBasis();
   if (modes.length !== page.rows.length || new Set(modes.map(row => row.realm?.value)).size !== modes.length) {
     throw new WorkReadMoved('Realm review policy changed');
   }
+  const basisByRealm = new Map(modes.map(row => [row.realm?.value, row]));
+  if (page.rows.some(row => basisByRealm.get(row.realm)?.space?.value !== row.space
+    || !basisByRealm.get(row.realm)?.head?.value)) throw new WorkReadUnavailable('Realm identity is incomplete');
+  const targets = page.rows.map(row => ({ owner: 'graph' as const, resource: row.realm,
+    component: 'record' as const, revision: basisByRealm.get(row.realm)!.head!.value }));
+  const classify = async () => {
+    if (!targets.length) return [];
+    try {
+      const decisions = await session.disclosure(targets, 'search');
+      if (decisions.length !== targets.length || decisions.some(value => !['visible', 'tombstone', 'hidden'].includes(value))) {
+        throw new DisclosureUnavailable('Realm disclosure is incomplete');
+      }
+      return decisions;
+    }
+    catch (cause) {
+      if (cause instanceof DisclosureUnavailable) throw new WorkReadUnavailable('Realm disclosure is unavailable', { cause });
+      throw cause;
+    }
+  };
+  const opening = await classify();
+  const candidates = page.rows.filter((_, ordinal) => opening[ordinal] === 'visible');
   const modeByRealm = new Map(modes.map(row => [row.realm!.value, row.mode?.value ?? 'mandatory']));
-  const names = await session.deps.environment.addresses?.currents(page.rows.map(row => row.space)).catch(() => new Map());
+  const names = await session.deps.environment.addresses?.currents(candidates.map(row => row.space)).catch(() => new Map());
   if ([...modeByRealm.values()].some(mode => !['mandatory', 'trusted-members', 'open'].includes(mode))) {
     throw new WorkReadUnavailable('Realm review policy is invalid');
   }
-  const summaries = await session.summaries(page.rows.map(row => row.realm));
+  const summaries = await session.summaries(candidates.map(row => row.realm));
   const summaryById = new Map(summaries.map(summary => [summary.reference, summary]));
-  const items: Item[] = page.rows.map(candidate => {
+  const items: Item[] = candidates.flatMap(candidate => {
     const summary = summaryById.get(candidate.realm);
+    if (summary?.status === 'unavailable') return [];
     if (summary?.status !== 'available' || summary.type !== 'realm' || summary.disclosure !== 'public') {
       throw new WorkReadMoved('Realm visibility changed');
     }
@@ -72,7 +100,7 @@ export async function readRealmDirectory(session: WorkReadSession,
         && summary.avatar.basis.context === DEFAULT_MEDIA_CONTEXT
         ? summary.avatar : fallbackAvatar('realm', candidate.realm)
       : profile ? fallbackAvatar('realm', candidate.realm) : summary.avatar;
-    return { id: candidate.realm, space: candidate.space,
+    return [{ id: candidate.realm, space: candidate.space,
       handle: names?.get(`space\0${candidate.space}`)?.key ?? null,
       reviewMode: modeByRealm.get(candidate.realm)! as Item['reviewMode'],
       name: profile ? localized(profile, session.displayLanguages, 'name') : summary.name,
@@ -80,11 +108,21 @@ export async function readRealmDirectory(session: WorkReadSession,
       membership: { count: profile?.count.kind === 'exact'
         ? { kind: 'exact', value: Number(candidate.count_value), revision: candidate.count_revision }
         : profile?.count ?? { kind: 'unknown', value: null } },
-      links: { realm: `/v1/realms/${candidate.realm.slice(-36)}` } };
+      links: { realm: `/v1/realms/${candidate.realm.slice(-36)}` } }];
   });
   // The SQL page is a coherent published snapshot. A later publish does not
   // invalidate a first page; continuation cursors still bind that source cut.
   await index.fence(page.position, input.sort === 'growing', session.options.cursor ? page.sourcePosition : undefined);
-  return { profile: 'realm-directory-v1' as const, topic, ...pageResult(session, items, page.next),
+  const finalBasis = await readBasis();
+  if (finalBasis.length !== modes.length || new Set(finalBasis.map(row => row.realm?.value)).size !== modes.length
+    || finalBasis.some(row => {
+      const prior = basisByRealm.get(row.realm?.value);
+      return !prior || row.space?.value !== prior.space?.value || row.head?.value !== prior.head?.value
+        || row.mode?.value !== prior.mode?.value;
+    })) throw new WorkReadMoved('Realm identity changed');
+  const final = await classify();
+  const visible = new Set(page.rows.filter((_, ordinal) => opening[ordinal] === 'visible'
+    && final[ordinal] === 'visible').map(row => row.realm));
+  return { profile: 'realm-directory-v1' as const, topic, ...pageResult(session, items.filter(item => visible.has(item.id)), page.next),
     sourcePosition: page.sourcePosition };
 }

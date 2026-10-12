@@ -115,13 +115,14 @@ async function createWork(): Promise<Work & { contribution: string; publicationD
 }
 async function place(body: string, parent?: Reply): Promise<Reply> {
   const id = native(), variantId = `urn:rezics:variant:${randomUUID()}`;
-  await grant(manager, `content:draft:${id}`, 'content.draft');
+  // Member reply drafts and identities require the provisioned Person's
+  // baseline proof. Delegated organization grants cannot replace that author.
   const saved = await json<{ revisionId: string; revisionDigest: string }>(await call('POST',
-    '/v1/member-reply-drafts', manager, { profile: 'member-reply-draft-v1', reply: id, variantId,
+    '/v1/member-reply-drafts', member, { profile: 'member-reply-draft-v1', reply: id, variantId,
       rootTarget: work.work, rootRevision: work.workRevision, originRealm: realm.realm,
-      language: 'en', direction: 'ltr', expectedHead: null, body, actingSubject: manager.actor }), 201);
-  await json(await call('POST', '/v1/realm-replies', manager, { profile: 'realm-reply-identity-v1',
-    reply: id, variantId, revisionId: saved.revisionId, author: manager.actor, rootTarget: work.work,
+      language: 'en', direction: 'ltr', expectedHead: null, body, actingSubject: member.actor }), 201);
+  await json(await call('POST', '/v1/realm-replies', member, { profile: 'realm-reply-identity-v1',
+    reply: id, variantId, revisionId: saved.revisionId, author: member.actor, rootTarget: work.work,
     rootRevision: work.workRevision, parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null,
     contextRevision: null }), 201);
   const review = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', manager,
@@ -265,7 +266,6 @@ beforeAll(async () => {
       mainVersion: work.mainVersion, contribution: original.contribution, publicationDecision: original.publicationDecision,
       expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: manager.actor }), 201);
   selection = adopted.selection;
-  await grant(manager, `reply:create:${work.work}`, 'reply.create');
   await grant(manager, `work:read:${work.work}`, 'work.read');
   await grant(manager, `review:decide:${realm.realm}`, 'review.decide');
   await grant(manager, `reply:place:${realm.realm}`, 'reply.place');

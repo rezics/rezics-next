@@ -8,7 +8,7 @@ import { configureDisclosure, configureDisclosurePool, discloseInventory, Disclo
   from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../src/modules/suitability/policy.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { WorkReadSession, WorkReadMissing, WorkReadUnavailable, WorkReadInvalid,
+import { WorkReadSession, WorkReadMissing, WorkReadUnavailable, WorkReadInvalid, WorkReadMoved,
   decodeReadCursor, type ReadRow } from '../src/modules/work/read-session.ts';
 import { readRealmBasis, readRealmHeader, readRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
 import { readRealmWorks } from '../src/modules/realm-reads/read-works.ts';
@@ -16,6 +16,8 @@ import { readRealmDecision } from '../src/modules/realm-reads/public-decision-in
 import { readRealmZone } from '../src/modules/realm-reads/read-zone.ts';
 import { readRealmThreads, readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
+import { RealmReplyContentStore, RealmReplyUnavailable, REALM_REPLY_EVIDENCE_COST,
+  type CurrentPlacementEvidenceInput } from '../src/modules/realm-reply/content-store.ts';
 import { RealmDirectoryIndex, type DirectoryRow } from '../src/modules/realm-directory/index.ts';
 import { readRealmDirectory } from '../src/modules/realm-directory/read.ts';
 import { discloseNotifications } from '../src/modules/disclosure/notifications.ts';
@@ -254,8 +256,8 @@ function directoryOwner(ids: string[]) {
     access: { ...owner.session.deps.access, realmDirectory } }, owner.session.request,
   owner.session.options, owner.session.position);
   session.summaries = owner.session.summaries;
-  owner.rows(sparql => sparql.includes('SELECT ?realm ?mode') ? records.filter(row => sparql.includes(`<${row.realm}>`))
-    .map(row => ({ realm: binding(row.realm), mode: binding('open') })) : []);
+  owner.rows(sparql => sparql.includes('SELECT ?realm ?space ?head ?mode') ? records.filter(row => sparql.includes(`<${row.realm}>`))
+    .map(row => ({ realm: binding(row.realm), space: binding(row.space), head: binding(head), mode: binding('open') })) : []);
   return { ...owner, session };
 }
 
@@ -298,6 +300,57 @@ test('narrow-search-restriction: directory classifies search visibility even whe
   owner.reader.decision = (target, channel) => target.resource === realm && channel === 'search' ? 'hidden' : 'visible';
   expect((await readRealmDirectory(owner.session, { sort: 'members' })).items.map(item => item.id)).toEqual([native(4001)]);
   expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
+});
+
+test('directory-final-fence: closure during profile hydration omits the item and its count', async () => {
+  const owner = directoryOwner([realm, native(4001)]);
+  owner.session.summaries = async ids => { owner.close(); return ids.map(summary); };
+  const page = await readRealmDirectory(owner.session, { sort: 'members' });
+  expect(page.items.map(item => item.id)).toEqual([native(4001)]);
+});
+
+test('directory-hidden-cut: restoring during hydration cannot revive an opening hidden candidate', async () => {
+  const owner = directoryOwner([realm, native(4001)]);
+  owner.close();
+  owner.session.summaries = async ids => { owner.restore(); return ids.map(summary); };
+  expect((await readRealmDirectory(owner.session, { sort: 'members' })).items.map(item => item.id)).toEqual([native(4001)]);
+});
+
+test('directory-disclosure-unavailable: failed opening and final owner reads return unavailable without a page', async () => {
+  const owner = directoryOwner([realm]);
+  owner.reader.unavailable = true;
+  await expectUnavailable(readRealmDirectory(owner.session, { sort: 'members' }));
+  owner.reader.unavailable = false;
+  owner.session.summaries = async ids => { owner.reader.unavailable = true; return ids.map(summary); };
+  await expectUnavailable(readRealmDirectory(owner.session, { sort: 'members' }));
+});
+
+test('directory-missing-reader: current indexed candidates need a composed disclosure owner', async () => {
+  const owner = directoryOwner([realm]);
+  configureDisclosure(owner.session.deps.environment, null);
+  await expectUnavailable(readRealmDirectory(owner.session, { sort: 'members' }));
+});
+
+test('directory-incomplete-disclosure: a shortened owner result cannot produce an exact empty page', async () => {
+  const owner = directoryOwner([realm]);
+  owner.reader.read = async () => [];
+  await expectUnavailable(readRealmDirectory(owner.session, { sort: 'members' }));
+});
+
+test('directory-current-identity: a projected Realm needs its current reciprocal Space and head', async () => {
+  const owner = directoryOwner([realm]);
+  owner.rows(query => query.includes('SELECT ?realm ?space ?head ?mode')
+    ? [{ realm: binding(realm), space: binding(native(4001)), head: binding(head), mode: binding('open') }] : []);
+  await expectUnavailable(readRealmDirectory(owner.session, { sort: 'members' }));
+});
+
+test('directory-moved-identity: a changed Realm head during hydration discards the page', async () => {
+  const owner = directoryOwner([realm]);
+  let currentHead = head;
+  owner.rows(query => query.includes('SELECT ?realm ?space ?head ?mode')
+    ? [{ realm: binding(realm), space: binding(native(1000)), head: binding(currentHead), mode: binding('open') }] : []);
+  owner.session.summaries = async ids => { currentHead = native(4001); return ids.map(summary); };
+  await expect(readRealmDirectory(owner.session, { sort: 'members' })).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('directory-continuation-opacity: native continuation encrypts identity, ranking and source position and binds the query', async () => {
@@ -425,4 +478,100 @@ test('restored-realm-search: restoring the Realm keeps an independent Work fence
   expect((await owner.read()).results).toEqual([]);
   owner.reader.decision = () => 'visible';
   expect((await owner.read()).results).toEqual(initial.results);
+});
+function placementEvidenceOwner(size = 1) {
+  const heads: CurrentPlacementEvidenceInput[] = Array.from({ length: size }, (_, index) => ({
+    realm, reply: native(7000 + index), revisionId: native(8000 + index).slice(-36),
+    reviewDecisionId: native(9000 + index).slice(-36), preparationId: `prepare:${index}`,
+  }));
+  const complete = heads.map((head, ordinal) => ({ ordinal, realm: head.realm, reply: head.reply,
+    revision: head.revisionId, review: head.reviewDecisionId, preparation: head.preparationId,
+    origin: ordinal % 2 === 0 ? realm : null, author: native(20), root: work, root_revision: native(30),
+    variant: `urn:rezics:variant:${ordinal}`, revision_digest: 'a'.repeat(64),
+    data_epoch: native(40).slice(-36), sequence: String(ordinal + 1),
+  }));
+  let rows: Record<string, unknown>[] = complete;
+  const calls: { sql: string; requested: unknown[] }[] = [];
+  const pool = { query: async (sql: string, values: unknown[]) => {
+    calls.push({ sql, requested: JSON.parse(values[0] as string) as unknown[] });
+    return { rows, rowCount: rows.length };
+  } } as unknown as Pool;
+  return { heads, complete, calls, store: new RealmReplyContentStore(pool),
+    rows: (next: Record<string, unknown>[]) => { rows = next; } };
+}
+
+test('placement-evidence-bounds: exact current approvals retain root and receipt position in one ordered 64-target owner read', async () => {
+  const owner = placementEvidenceOwner(REALM_REPLY_EVIDENCE_COST.batch);
+  const evidence = await owner.store.currentPlacementEvidence(owner.heads);
+  expect(evidence).toHaveLength(64);
+  expect(owner.calls).toHaveLength(1);
+  expect(owner.calls[0]!.requested).toHaveLength(64);
+  expect(evidence.map(item => item.reply)).toEqual(owner.heads.map(head => head.reply));
+  expect(evidence[0]).toEqual({ ...owner.heads[0]!, originRealm: realm, author: native(20),
+    variantId: 'urn:rezics:variant:0', revisionDigest: 'a'.repeat(64),
+    rootTarget: work, rootRevision: native(30),
+    ownerPosition: { owner: 'content', dataEpoch: native(40).slice(-36), sequence: '1' } });
+  expect(evidence[1]!.originRealm).toBeNull();
+  await expect(owner.store.currentPlacementEvidence([...owner.heads, owner.heads[0]!])).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  expect(owner.calls).toHaveLength(1);
+  expect(await owner.store.currentPlacementEvidence([])).toEqual([]);
+  expect(owner.calls).toHaveLength(1);
+});
+
+test('placement-evidence-invalid-selection: exact review and preparation are mandatory before any owner read', async () => {
+  const owner = placementEvidenceOwner();
+  for (const malformed of [{ reviewDecisionId: '' }, { preparationId: '' }, { preparationId: 'bad preparation' },
+    { preparationId: 'x'.repeat(201) }, { revisionId: 'unknown' }, { realm: 'request-context' }]) {
+    await expect(owner.store.currentPlacementEvidence([{ ...owner.heads[0]!, ...malformed }])).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  }
+  expect(owner.calls).toHaveLength(0);
+});
+
+test('placement-evidence-incomplete: omitted or duplicated owner ordinals fail the whole batch', async () => {
+  const owner = placementEvidenceOwner(2);
+  for (const rows of [[owner.complete[0]!], [owner.complete[0]!, owner.complete[0]!],
+    [owner.complete[1]!, owner.complete[0]!], [...owner.complete, owner.complete[1]!]]) {
+    owner.rows(rows);
+    await expect(owner.store.currentPlacementEvidence(owner.heads)).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  }
+});
+
+test('placement-evidence-moved-binding: another reply, Realm, revision, approval or preparation cannot authorize these targets', async () => {
+  const owner = placementEvidenceOwner();
+  for (const changed of [{ reply: native(9991) }, { realm: native(9992) }, { revision: native(9993).slice(-36) },
+    { review: native(9994).slice(-36) }, { preparation: 'other-prepare' }, { origin: native(9995) },
+    { root: 'invalid-root' }, { root_revision: 'invalid-pinned-root' }, { author: 'invalid-author' },
+    { variant: '' }, { variant: 'x'.repeat(301) }, { revision_digest: 'invalid-digest' }]) {
+    owner.rows([{ ...owner.complete[0]!, ...changed }]);
+    await expect(owner.store.currentPlacementEvidence(owner.heads)).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  }
+});
+
+test('placement-evidence-unsettled-receipt: absent, corrupt or unassigned owner positions cannot supply source evidence', async () => {
+  const owner = placementEvidenceOwner();
+  for (const receipt of [{ data_epoch: null, sequence: null }, { data_epoch: 'unknown', sequence: '1' },
+    { sequence: '0' }, { sequence: '-1' }, { sequence: '1.5' }]) {
+    owner.rows([{ ...owner.complete[0]!, ...receipt }]);
+    await expect(owner.store.currentPlacementEvidence(owner.heads)).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  }
+});
+
+test('placement-evidence-owner-recovery: current approval removal is unavailable and later exact owner recovery is read again', async () => {
+  const owner = placementEvidenceOwner();
+  const initial = await owner.store.currentPlacementEvidence(owner.heads);
+  owner.rows([]);
+  await expect(owner.store.currentPlacementEvidence(owner.heads)).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  owner.rows(owner.complete);
+  expect(await owner.store.currentPlacementEvidence(owner.heads)).toEqual(initial);
+  expect(owner.calls).toHaveLength(3);
+  const unavailable = new RealmReplyContentStore({ query: async () => { throw new Error('owner disconnected'); } } as unknown as Pool);
+  await expect(unavailable.currentPlacementEvidence(owner.heads)).rejects.toBeInstanceOf(RealmReplyUnavailable);
+});
+
+test('current-review-compatibility: ordinary approval callers retain optional review and preparation semantics', async () => {
+  const owner = placementEvidenceOwner();
+  owner.rows([{ ordinal: 0 }]);
+  const { realm, reply, revisionId } = owner.heads[0]!;
+  expect(await owner.store.currentReviews([{ realm, reply, revisionId }])).toEqual(new Set([0]));
+  expect(owner.calls).toHaveLength(1);
 });

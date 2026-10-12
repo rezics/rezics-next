@@ -37,6 +37,23 @@ export interface PlacementInput {
   realm: string; reply: string; revisionId: string; revisionDigest: string;
   reviewDecisionId: string | null; expectedHead: string | null;
 }
+export interface CurrentPlacementEvidenceInput {
+  realm: string; reply: string; revisionId: string; reviewDecisionId: string; preparationId: string;
+}
+export interface CurrentPlacementEvidence extends CurrentPlacementEvidenceInput {
+  variantId: string; revisionDigest: string;
+  originRealm: string | null; author: string; rootTarget: string; rootRevision: string;
+  ownerPosition: ContentPosition;
+}
+export const REALM_REPLY_EVIDENCE_COST = { batch: 64, ownerStatements: 1 } as const;
+type CurrentReviewHead = { realm: string; reply: string; revisionId: string;
+  reviewDecisionId?: string; preparationId?: string };
+interface CurrentReviewRow {
+  ordinal: number; realm: string; reply: string; revision: string; review: string; preparation: string;
+  origin: string | null; author: string; root: string; root_revision: string;
+  variant: string; revision_digest: string;
+  data_epoch: string | null; sequence: string | null;
+}
 export interface ReplyIdentity extends ReplyIdentityInput { replayed: boolean }
 export interface ReviewDecision {
   decisionId: string; realm: string; reply: string; revisionId: string;
@@ -386,21 +403,62 @@ export class RealmReplyContentStore {
   }
 
   /** Feed batches retain each root's 64-reference probe; no per-reply owner call. */
-  async currentReviews(heads: readonly { realm: string; reply: string; revisionId: string;
-    reviewDecisionId?: string; preparationId?: string }[]): Promise<Set<number>> {
+  async currentReviews(heads: readonly CurrentReviewHead[]): Promise<Set<number>> {
     if (heads.length > 8 * 64 || heads.some(h => !native.test(h.realm) || !native.test(h.reply)
       || !uuid.test(h.revisionId) || h.reviewDecisionId && !uuid.test(h.reviewDecisionId)))
       throw new RealmReplyInvalid('invalid feed approval batch');
     if (!heads.length) return new Set();
-    const rows = await this.pool.query<{ ordinal: number }>(`WITH requested AS (
+    return new Set((await this.currentReviewRows(heads)).map(row => row.ordinal));
+  }
+
+  /** Exact Content approval/preparation evidence for an owning disclosure source.
+   * The graph owner still proves the current slot/placement and parent heads.
+   * A Realm string or an unplaced draft never supplies that graph proof. */
+  async currentPlacementEvidence(heads: readonly CurrentPlacementEvidenceInput[]): Promise<CurrentPlacementEvidence[]> {
+    if (heads.length > REALM_REPLY_EVIDENCE_COST.batch || heads.some(head => !head || !native.test(head.realm)
+      || !native.test(head.reply) || !uuid.test(head.revisionId) || !uuid.test(head.reviewDecisionId)
+      || typeof head.preparationId !== 'string' || !/^[A-Za-z0-9:_./-]{1,200}$/.test(head.preparationId))) {
+      throw new RealmReplyUnavailable('Reply placement evidence is invalid');
+    }
+    if (!heads.length) return [];
+    let rows: CurrentReviewRow[];
+    try { rows = await this.currentReviewRows(heads, true); }
+    catch { throw new RealmReplyUnavailable('Reply placement evidence owner is unavailable'); }
+    if (rows.length !== heads.length || rows.some((row, index) => {
+      const head = heads[index]!;
+      return row.ordinal !== index || row.reply !== head.reply || row.realm !== head.realm
+        || row.revision !== head.revisionId || row.review !== head.reviewDecisionId
+        || row.preparation !== head.preparationId || row.origin !== null && row.origin !== head.realm
+        || typeof row.variant !== 'string' || !row.variant || row.variant.length > 300 || row.variant.includes('\0')
+        || !digest.test(row.revision_digest)
+        || !native.test(row.author) || !native.test(row.root) || !native.test(row.root_revision)
+        || !uuid.test(row.data_epoch ?? '') || !/^[1-9][0-9]*$/.test(row.sequence ?? '');
+    })) throw new RealmReplyUnavailable('Reply placement evidence is incomplete');
+    return rows.map(row => ({ realm: row.realm, reply: row.reply, revisionId: row.revision,
+      variantId: row.variant, revisionDigest: row.revision_digest,
+      reviewDecisionId: row.review, preparationId: row.preparation, originRealm: row.origin,
+      author: row.author, rootTarget: row.root, rootRevision: row.root_revision,
+      ownerPosition: { owner: 'content', dataEpoch: row.data_epoch!, sequence: row.sequence! } }));
+  }
+
+  private async currentReviewRows(heads: readonly CurrentReviewHead[], evidence = false): Promise<CurrentReviewRow[]> {
+    const rows = await this.pool.query<CurrentReviewRow>(`WITH requested AS (
       SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(ordinal int, reply text, realm text,
         revision text, review text, preparation text))
-SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
+SELECT x.ordinal${evidence ? `, p.id AS reply, d.realm, d.revision_id::text AS revision,
+        d.id::text AS review, prepared.operation_id AS preparation, p.origin_realm AS origin,
+        p.author, p.root_target AS root, p.root_revision, p.variant_id AS variant, r.byte_digest AS revision_digest,
+        receipt.data_epoch::text, receipt.sequence::text` : ''}
+      FROM requested x JOIN content.reply p ON p.id = x.reply
       JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
         AND head.body->>'deleted' = 'false'
       JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
       JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
+      ${evidence ? `JOIN content.realm_placement_preparation prepared ON prepared.operation_id = x.preparation
+        JOIN content.receipt receipt ON receipt.operation_id = prepared.operation_id
+          AND receipt.action = 'publication.prepare' AND receipt.outcome = 'succeeded'
+          AND receipt.variant_id = prepared.variant_id AND receipt.revision_id = prepared.revision_id` : ''}
       WHERE p.id = x.reply AND d.realm = x.realm AND d.revision_id = x.revision::uuid AND d.outcome = 'approved'
         -- Origin and exact review share one current owner read. A Realm-local
         -- reply can never be disclosed through another Realm's placement.
@@ -416,9 +474,10 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
             AND publication.status = 'active' AND publication.pin_active))
         AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later
           WHERE later.supersedes = d.id)
+      ${evidence ? `ORDER BY x.ordinal LIMIT ${heads.length + 1}` : ''}
       `, [JSON.stringify(heads.map((h, ordinal) => ({ ordinal, reply: h.reply, realm: h.realm,
         revision: h.revisionId, review: h.reviewDecisionId ?? null, preparation: h.preparationId ?? null })))]);
-    return new Set(rows.rows.map(row => row.ordinal));
+    return rows.rows;
   }
 
   /** Live keyset page, at most 32 visible comments and one lookahead row.
