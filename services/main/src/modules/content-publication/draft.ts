@@ -58,7 +58,7 @@ export async function sealContentDraftAdmission(content: ContentCore,
   return terminalProof(admission, result);
 }
 
-export interface ContentTarget { type: string; zone: string | null }
+export interface ContentTarget { type: string; zone: string | null; readOnly?: true }
 export const CONTENT_TARGET_COST = { graphReads: 1, types: 64, graphBytes: 262_144 } as const;
 
 function contentTypeTerm(type: string): string {
@@ -102,6 +102,8 @@ export function contentTargetGuard(resourceId: string, target?: ContentTarget): 
   return `${iri(resourceId)} a ${target ? contentTypeTerm(target.type) : '?contentTargetType'} .
     ${target ? '' : `VALUES ?contentTargetType { ${admittedContentTypes().map(contentTypeTerm).join(' ')} }`}
     ${contentTargetStateGuard(resourceId)}
+    FILTER NOT EXISTS { ${iri(resourceId)} a <https://rezics.com/vocab/Zone> ;
+      <https://rezics.com/vocab/homeDocument> ?allocatedHomeDocument }
     ${target?.zone ? `FILTER NOT EXISTS { ${iri(resourceId)} a ?otherOwner .
       VALUES ?otherOwner { ${workContentTypes().map(contentTypeTerm).join(' ')}
         <https://schema.org/Organization> } }` : target ? `FILTER NOT EXISTS {
@@ -116,14 +118,15 @@ export function contentTargetGuard(resourceId: string, target?: ContentTarget): 
 export async function resolveContentTarget(env: WorkActivationEnvironment,
   resourceId: string): Promise<ContentTarget> {
   const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-    SELECT DISTINCT ?type ?zone WHERE {
+    SELECT DISTINCT ?type ?zone ?allocatedHomeDocument WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} { { ${iri(resourceId)} a ?type .
         VALUES ?type { ${admittedContentTypes().map(contentTypeTerm).join(' ')} }
         FILTER(?type != rv:ZoneHomeDocument)
-        ${contentTargetStateGuard(resourceId)} }
+        ${contentTargetStateGuard(resourceId)}
+        OPTIONAL { FILTER(?type = rv:Zone) ${iri(resourceId)} rv:homeDocument ?allocatedHomeDocument } }
         UNION { ?zone a rv:Zone ; rv:homeDocument ${iri(resourceId)} ;
           rv:zoneState rv:Active ; rv:space ?homeSpace ; rv:zoneHead ?homeZoneHead .
           FILTER NOT EXISTS { ${iri(resourceId)} a ?foreignOwner . FILTER(?foreignOwner != rv:ZoneHomeDocument) }
@@ -153,7 +156,8 @@ export async function resolveContentTarget(env: WorkActivationEnvironment,
       : workBase && types.includes(workBase) ? workBase
         : workType ?? (types.includes('https://schema.org/Organization')
           ? 'https://schema.org/Organization' : types.sort()[0]!);
-  return { type, zone: zone ? resourceId : null };
+  return { type, zone: zone ? resourceId : null,
+    ...(zone && rows.some(row => row.allocatedHomeDocument) ? { readOnly: true as const } : {}) };
 }
 
 export type ContentReadAuthority = Pick<AccessAdmissionRegistry, 'canReadWork'>
@@ -269,6 +273,7 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
     publicDomain ? { rightsAssessmentId: publicDomain.assessmentId, source: publicDomain.source } : undefined);
   const target = await resolveContentTarget(env, input.resourceId);
   const principal = await account.verify(request, [target.zone ? 'zone:edit' : 'work:edit']);
+  if (target.readOnly) throw new ContentDraftDenied('Home variants require the owning document identity');
   if (target.zone && input.publicDomain) throw new ContentConflict('public-domain assessment requires a Work');
   await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile, notes !== undefined, target);
   if (target.zone) await withZoneContentAuthority(env, access, principal, input.actingSubject,

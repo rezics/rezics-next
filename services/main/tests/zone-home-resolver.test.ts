@@ -7,7 +7,7 @@ import { WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-ses
 import { RV } from '../src/modules/work/activate.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
-import { zoneHomeTargetFixture, zoneHomeTargetCell as cell } from './support/zone-home-target.ts';
+import { zoneHomeTargetFixture, zoneHomeTargetCell as cell, zoneHomeTargetId as id } from './support/zone-home-target.ts';
 
 test('home command identity uses the native published P/H grain without Content hydration', async () => {
   const h = zoneHomeTargetFixture();
@@ -101,6 +101,51 @@ test('public home summary remains public for a signed reader and keeps its /e/ a
   expect(batch.summaries[0]).toMatchObject({ reference: h.resource, status: 'available',
     type: 'resource', base: 'resource', work: null, disclosure: 'public', address: { prefix: '/e/' } });
   expect(h.policyTargets.flat().filter(target => target.component === 'record')).toHaveLength(3);
+});
+
+test('an anonymous home probe that observes a new restriction withholds the signed-in summary', async () => {
+  const h = publishedResolver();
+  h.session.principal = h.principal;
+  h.session.options.actingSubject = h.author;
+  h.session.viewer = { ...ANONYMOUS_VIEWER, signedIn: true };
+  let probes = 0;
+  configureDisclosure(h.env, { read: async targets => {
+    probes++;
+    return targets.map(() => probes === 3 ? 'hidden' : 'visible');
+  } });
+  const batch = await targetSummaries(h.session, [h.resource]);
+  expect(probes).toBe(3);
+  expect(batch.summaries).toEqual([{ reference: h.resource, status: 'unavailable' }]);
+});
+
+test('64 published homes fit the enclosing 160-call budget through real summary hydration', async () => {
+  const h = publishedResolver();
+  const homes = Array.from({ length: 64 }, () => ({ resource: id(), zone: id(), space: id(), revision: id() }));
+  let calls = 0, visibilityCalls = 0;
+  const original = h.env.fuseki.query.bind(h.env.fuseki);
+  h.env.fuseki.query = async (query, bytes) => {
+    if (++calls > 160) throw new Error('Summary read exceeded 160 graph calls');
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: homes.map(home => ({
+      epoch: cell(h.env.lineage.dataEpoch), sequence: cell('9'), r: cell(home.resource), type: cell('resource'),
+      homeZone: cell(home.zone), head: cell(home.revision), public: cell('false'), erased: cell('false'),
+      hasCurrentIdentity: cell('true'), label: { ...cell('Home'), 'xml:lang': 'en' },
+    })) } };
+    if (query.includes('?target ?kind ?space ?realm ?disclosure')) {
+      visibilityCalls++;
+      return { results: { bindings: homes.map(home => ({ target: cell(home.zone), kind: cell('space'),
+        space: cell(home.space), disclosure: cell(`${RV}Public`), zoneDisclosure: cell(`${RV}Public`) })) } };
+    }
+    // Point-read emulation keeps this regression falsifying the old per-home path.
+    if (query.includes('?kind ?space ?realm ?disclosure')) {
+      visibilityCalls++;
+      return { results: { bindings: [{ kind: cell('space'), space: cell(h.space), disclosure: cell(`${RV}Public`) }] } };
+    }
+    return original(query, bytes);
+  };
+  const batch = await targetSummaries(h.session, homes.map(home => home.resource));
+  expect(batch.summaries.filter(summary => summary.status === 'available')).toHaveLength(64);
+  expect(visibilityCalls).toBe(2);
+  expect(calls).toBeLessThan(160);
 });
 
 test('native home visibility follows its publication owner rather than a copied Zone disclosure flag', async () => {

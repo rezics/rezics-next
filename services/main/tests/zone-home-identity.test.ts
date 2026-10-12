@@ -122,6 +122,13 @@ test('legacy Zone-owned Content retains its original resolution without rewritin
   }
 });
 
+test('legacy Z remains readable but its draft target is read-only once P is allocated', async () => {
+  const zone = id(), page = id();
+  const target = await resolveContentTarget(environment([{ type: cell(zoneType), allocatedHomeDocument: cell(page) }]).env, zone);
+  expect(target).toEqual({ type: zoneType, zone, readOnly: true });
+  expect(contentTargetGuard(zone, target)).toContain('homeDocument> ?allocatedHomeDocument');
+});
+
 function publicationProof(legacy = false) {
   const zone = id(), page = legacy ? zone : id(), homeRevision = id(), revision = id();
   const admissionId = randomUUID(), contentRevision = randomUUID();

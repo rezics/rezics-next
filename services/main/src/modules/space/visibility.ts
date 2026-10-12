@@ -50,7 +50,45 @@ export async function readResourceVisibility(env: WorkActivationEnvironment, tar
   } LIMIT 2`, VISIBILITY_COST.bytes)).results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1) throw new Error('Resource visibility is ambiguous');
-  const row = rows[0]!;
+  return visibilityFromRow(rows[0]!, target, reader);
+}
+
+/** Exact home-Zone inventory: one graph statement for up to 256 identities.
+ * Policy interpretation is shared with point reads, including Realm authority. */
+export async function readZoneVisibilities(env: WorkActivationEnvironment, targets: readonly string[],
+  reader: VisibilityReader = {}) {
+  const requested = new Set(targets);
+  if (targets.length > 256 || requested.size !== targets.length
+    || targets.some(target => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target))) {
+    throw new Error('Zone visibility inventory is invalid');
+  }
+  const visible = new Map<string, Awaited<ReturnType<typeof visibilityFromRow>>>();
+  if (!targets.length) return visible;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT
+    ?target ?kind ?space ?realm ?disclosure ?zoneDisclosure ?listing ?history ?admission WHERE {
+    VALUES ?target { ${targets.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.current)} {
+      ?target a rv:Zone ; rv:zoneState rv:Active ; rv:space ?space ; rv:disclosure ?zoneDisclosure .
+      ?space a rv:Space ; rv:disclosure ?disclosure . BIND("space" AS ?kind)
+      OPTIONAL { ?space rv:listing ?listing }
+      OPTIONAL { ?space rv:realmCapability ?realm . ?realm rv:realmState rv:Active .
+        OPTIONAL { ?realm rv:historyVisibility ?history }
+        OPTIONAL { ?realm rv:admissionMode ?admission } }
+    }
+  } LIMIT ${targets.length + 1}`, 262_144)).results?.bindings ?? [];
+  if (rows.length > targets.length || rows.some(row => !row.target || !requested.has(row.target.value))
+    || new Set(rows.map(row => row.target!.value)).size !== rows.length) {
+    throw new Error('Zone visibility inventory is ambiguous');
+  }
+  for (const row of rows) visible.set(row.target!.value, await visibilityFromRow(row, row.target!.value, reader));
+  return visible;
+}
+
+async function visibilityFromRow(row: Record<string, { value: string } | undefined>, target: string,
+  reader: VisibilityReader) {
   const agent = row.kind?.value === 'agent';
   if (!agent && (!row.space || !row.disclosure)) throw new Error('Space visibility is incomplete');
   const disclosure = row.disclosure?.value ?? `${RV}Public`;

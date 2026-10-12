@@ -41,3 +41,17 @@ test('legacy presentation normalization still detects a changed structural theme
   expect(status(legacy, compact)).toBe('behind');
   expect(status(compact, legacy)).toBe('behind');
 });
+
+test('published document status compares the saved P selection rather than the owning Zone', () => {
+  const homeDocument = iri(7), config = { ...configuration(undefined), homeDocument };
+  const saved = { zone, ...metadata, configuration: config } as Parameters<typeof zoneSavedPublicationStatus>[0];
+  const published = { ...metadata, disclosure: 'public', configuration: config,
+    bundle: { homeDocument, routesRevision: navigationRevision, navigationRevision,
+      pages: [{ page: homeDocument, variantId: selection.variantId, revisionId: selection.revisionId }] } } as
+    Parameters<typeof zoneSavedPublicationStatus>[1];
+  expect(zoneSavedPublicationStatus(saved, published, selection)).toBe('live');
+  expect(zoneSavedPublicationStatus(saved, published, { ...selection,
+    revisionId: '00000000-0000-4000-8000-000000000008' })).toBe('behind');
+  published.bundle!.pages[0]!.page = zone;
+  expect(zoneSavedPublicationStatus(saved, published, selection)).toBe('behind');
+});

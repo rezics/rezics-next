@@ -90,11 +90,12 @@ function retainedCut() {
   } } as unknown as PoolClient;
 
   const graphQueries: string[] = [];
+  const homeSelections: Record<string, { type: string; value: string }>[] = [];
   const fuseki = { query: async (sql: string) => {
     graphQueries.push(sql);
     const binding = (value: string) => ({ type: 'uri', value });
     if (sql.includes('SELECT ?graph WHERE')) return { results: { bindings: [{ graph: binding(reference.graph) }] } };
-    if (sql.includes('SELECT ?home ?resource')) return { results: { bindings: [] } };
+    if (sql.includes('SELECT ?home ?resource')) return { results: { bindings: homeSelections } };
     if (sql.includes('SELECT ?graph ?subject')) return { results: { bindings: [{
       graph: binding(reference.graph), subject: binding(reference.subject), predicate: binding(reference.predicate),
       object: binding(reference.object), ...(reference.byteDigest ? { digest: binding(reference.byteDigest) } : {}),
@@ -116,7 +117,7 @@ function retainedCut() {
       JSON.stringify(sealRecoveryPayload(coverage, key, 'graph-recovery-coverage')), key, 'graph-recovery-coverage');
   };
   const erase = () => { state.erased = true; reference.byteDigest = null; };
-  return { state, reference, pool, fuseki, proof, capture, erase, graphQueries };
+  return { state, reference, pool, fuseki, proof, capture, erase, graphQueries, homeSelections };
 }
 
 test('Content capture after erasure uses the immutable owner digest without suppressed graph rows', async () => {
@@ -228,4 +229,21 @@ test('home anchors recover through exact retained binding pins; removing or tamp
   const cut = retainedCut();
   cut.reference.byteDigest = 'f'.repeat(64);
   await expect(cut.capture()).rejects.toThrow();
+});
+
+test('production recovery inventory refuses a missing home binding even when its Content pin is retained', async () => {
+  const cut = retainedCut();
+  const resource = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
+  const fields = { home: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001', resource,
+    count: '1', binding: cut.reference.subject, page: resource,
+    variant: 'urn:rezics:variant:00000000-0000-4000-8000-000000000003',
+    contentRevision: cut.reference.object, digest: cut.state.byteDigest,
+    publication: 'https://rezics.com/id/00000000-0000-4000-8000-000000000004', publicationResource: resource };
+  cut.homeSelections.push(Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, { type: 'uri', value }])));
+  const coverage = await cut.capture();
+  await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, coverage, cut.proof)).resolves.toBeUndefined();
+  delete cut.homeSelections[0]!.binding;
+  await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, coverage, cut.proof))
+    .rejects.toThrow('reference shape differs');
+  expect(cut.reference.byteDigest).toBe(cut.state.byteDigest);
 });

@@ -16,6 +16,7 @@ import { suppressGraphContentRevisions } from '../../../services/main/src/module
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import { resolveContentTarget } from '../../../services/main/src/modules/content-publication/draft.ts';
+import { WorkMaintainers } from '../../../services/main/src/modules/work/maintainers.ts';
 import { readZoneConfiguration, readZoneSitePublicationReceipt, type ZoneSitePublicationReceipt } from '../../../services/main/src/modules/zone/configuration.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
@@ -33,7 +34,7 @@ async function fixture(reserve = true, erasure = false) {
   const relay = erasure ? new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 1 }) : undefined;
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
-    try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
+    try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = ANY($1::text[])', [[f.account.a.id, f.account.b.id]]); }
     finally { await accountPool.end(); }
     f.account.tokenA = await f.account.tokenFor(f.account.a);
     const provisioned = await new AgentProvisioning(f.accessPool, f.env).provision(f.account.verifier,
@@ -303,6 +304,8 @@ test('lazy allocation and a new P variant preserve legacy Zone Content identity 
     expect(await f.core.owningResourceForRevision(replacement.revisionId)).toBe(document);
     expect(await f.core.owningResourceForRevision(legacy.revisionId)).toBe(f.zone);
     expect(await resolveContentTarget(f.env, f.zone)).toMatchObject({ zone: f.zone });
+    const rejected = await f.call('POST', '/v1/content-drafts', f.draftBody(f.zone, 'New legacy-owned variant'));
+    expect(rejected.status).toBe(403);
     const retained = await f.json<{ reference: { resourceId: string }; serializedJson: string }>(await f.exact(legacy.revisionId, true), 200);
     expect(retained.serializedJson).toBe(original.serializedJson);
     expect(retained.reference.resourceId).toBe(f.zone);
@@ -321,7 +324,19 @@ test('Zone authority cannot substitute for a Work maintainer or Content grant', 
   try {
     const work = await f.json<{ work: string }>(await f.call('POST', '/v1/works',
       await f.authoredBody({ profile: 'metadata-only-v1', title: 'Separate Work authority', language: 'en', actingSubject: f.actor })), 201);
-    await f.accessPool.query('DELETE FROM access.work_maintainer WHERE work = $1 AND agent = $2', [work.work, f.actor]);
+    const token = await f.account.tokenFor(f.account.b);
+    const replacement = await new AgentProvisioning(f.accessPool, f.env).provision(f.account.verifier,
+      new Request('http://main.local/v1/agents', { headers: { authorization: `Bearer ${token}` } }),
+      { kind: 'person', displayName: 'Independent Work maintainer' }, randomUUID());
+    expect(replacement.state).toBe('active');
+    const principal = await f.account.verifier.verify(new Request('http://main.local', {
+      headers: { authorization: `Bearer ${f.account.tokenA}` },
+    }), ['work:edit']);
+    const maintainers = new WorkMaintainers(f.accessPool, f.env);
+    const transferred = await maintainers.change(principal, { work: work.work, actingSubject: f.actor,
+      target: replacement.agent, action: 'transfer', expectedGeneration: '0' }, randomUUID());
+    expect(transferred).toMatchObject({ generation: '1', owner: replacement.agent, maintainers: [replacement.agent] });
+    expect(await maintainers.read(work.work)).toMatchObject({ owner: replacement.agent, maintainers: [replacement.agent] });
     await f.grant(`zone:edit:${work.work}`, 'zone.edit');
     expect((await f.call('POST', '/v1/content-drafts', f.draftBody(work.work))).status).toBe(403);
     expect((await f.save('Authorized Zone home')).page).toBe(f.homeDocument);

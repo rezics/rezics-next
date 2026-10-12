@@ -27,7 +27,7 @@ import { UNASSESSED } from '../suitability/policy.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { identityCanonical, canonicalAddresses } from '../address/canonical.ts';
 import { readSummaryPages, SUMMARY_PAGE_COST } from './summary-pages.ts';
-import { readResourceVisibility, VISIBILITY_COST } from '../space/visibility.ts';
+import { readZoneVisibilities } from '../space/visibility.ts';
 
 export { direction } from '../display-language/select.ts';
 
@@ -611,17 +611,17 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const homeZones = [...new Set([...homes.values()].map(row => row.homeZone!))];
   const readHomeVisibility = async () => {
     const visible = new Map<string, boolean>();
-    for (const zone of homeZones) {
-      const visibility = await readResourceVisibility(env, zone, {
-        realmReadProof: reader.realmReadProof ? async realm => {
-          countPageAccess(); return reader.realmReadProof!(realm);
-        } : undefined,
-        zoneReadable: reader.canReadSemantic ? async resource => {
-          countPageAccess(); return reader.canReadSemantic!(resource);
-        } : undefined,
-      });
-      cost.graphQueries += VISIBILITY_COST.graphReads;
-      if (visibility?.readable) visible.set(zone, visibility.visibility === 'public');
+    const visibility = await readZoneVisibilities(env, homeZones, {
+      realmReadProof: reader.realmReadProof ? async realm => {
+        countPageAccess(); return reader.realmReadProof!(realm);
+      } : undefined,
+      zoneReadable: reader.canReadSemantic ? async resource => {
+        countPageAccess(); return reader.canReadSemantic!(resource);
+      } : undefined,
+    });
+    if (homeZones.length) cost.graphQueries++;
+    for (const [zone, policy] of visibility) {
+      if (policy.readable) visible.set(zone, policy.visibility === 'public');
     }
     return visible;
   };
@@ -838,7 +838,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   if (reader.viewer?.signedIn && publicHomes.length) {
     const probe = await discloseInventory(env, publicHomes.map(([reference]) => targets[nameIndexes.get(reference)!]!),
       ANONYMOUS_VIEWER, input.channel ?? 'summary', client);
-    publicHomes.forEach(([reference], index) => anonymousHomes.set(reference, probe[index]!));
+    publicHomes.forEach(([reference], index) => {
+      anonymousHomes.set(reference, probe[index]!);
+      if (probe[index] !== 'visible') readable.delete(reference);
+    });
     if (hasDisclosure(env)) {
       cost.accessQueries += Math.ceil(publicHomes.length / MAX_SUMMARY_BATCH);
       cost.graphQueries += Math.ceil(publicHomes.length / DISCLOSURE_COST.batch);

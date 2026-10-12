@@ -97,7 +97,7 @@ export function zoneSavedPublicationStatus(
 ): 'private' | 'live' | 'behind' {
   const bundle = published.bundle;
   if (published.disclosure !== 'public' || !bundle) return 'private';
-  const page = bundle.pages.find(page => page.page === saved.zone);
+  const page = bundle.pages.find(page => page.page === (saved.configuration.homeDocument ?? saved.zone));
   if (!page || page.variantId !== selection.variantId || page.revisionId !== selection.revisionId
     || bundle.navigationRevision !== selection.navigationRevision
     || bundle.routesRevision !== selection.navigationRevision) return 'behind';

@@ -30,6 +30,9 @@ export function zoneHomeTargetFixture() {
       queries.push(query);
       if (query.includes('SELECT DISTINCT ?zone ?head ?typed')) return { results: { bindings: ownerRows } };
       if (query.includes('SELECT DISTINCT ?receipt ?siteRevision')) return { results: { bindings: cutRows } };
+      if (query.includes('?target ?kind ?space ?realm ?disclosure')) return { results: {
+        bindings: visibilityRows.map(row => ({ ...row, target: zoneHomeTargetCell(zone) })),
+      } };
       if (query.includes('?kind ?space ?realm ?disclosure')) return { results: { bindings: visibilityRows } };
       if (query.includes('SELECT ?zone ?revision ?routesRevision')) return { results: { bindings: rows } };
       if (query.includes('SELECT ?target WHERE')) return { results: { bindings: [] } };
