@@ -207,7 +207,7 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
   // bounded, while every Person effect and principal deactivation remain atomic.
   let more: boolean;
   do {
-    const result = (await client.query<{ count: string; retired: number; released: number }>(`WITH batch AS MATERIALIZED (
+    const result = (await client.query<{ count: string; retired: number; released: number }>(`/* account_deletion_person_effect_step */ WITH batch AS MATERIALIZED (
       SELECT agent_id, ctid FROM access.account_deletion_progress_agent
       WHERE operation_id = $1 AND effect = 'end' AND NOT completed ORDER BY agent_id LIMIT $2
     ), locks AS MATERIALIZED (
@@ -291,4 +291,3 @@ export async function continueAccountDeletionAgents(client: PoolClient, principa
   if (!progress) return null;
   return { operationId: progress.operation_id, pending: (await applyAccountDeletionAgents(client, principal, progress)).pending };
 }
-

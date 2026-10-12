@@ -36,6 +36,9 @@ CREATE TABLE access.account_deletion_classification_frontier (
 CREATE INDEX account_deletion_classification_frontier_subject
     ON access.account_deletion_classification_frontier (agent_id);
 
+-- Index planning is part of the read budget, including when a small relation
+-- would otherwise get a cached sequential scan. Function settings are scoped
+-- to these owner operations and restore the caller's planner settings.
 -- Seek only live mandates, never retained controller history. The owner drains
 -- this index in bounded pages in the same transaction as principal deactivation.
 -- Authority proofs continue to retain the original representation rows.
@@ -53,7 +56,7 @@ INSERT INTO access.live_principal_controller
     JOIN access.principal p ON p.id = r.principal_id AND p.active
     WHERE r.active AND r.action = 'agent.control';
 
-CREATE FUNCTION access.sync_live_principal_controller() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION access.sync_live_principal_controller() RETURNS trigger LANGUAGE plpgsql SET enable_seqscan = off AS $$
 BEGIN
     IF NEW.action <> 'agent.control' THEN RETURN NEW; END IF;
     IF NEW.active AND EXISTS (SELECT 1 FROM access.principal WHERE id = NEW.principal_id AND active) THEN
@@ -73,7 +76,7 @@ CREATE INDEX account_deletion_continuity_recovery ON access.protected_change_act
 CREATE FUNCTION access.account_deletion_remaining_controllers(
     controlled text, deleting uuid, operation text)
 RETURNS TABLE (remaining integer, controller_rows integer)
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE SET enable_seqscan = off AS $$
     WITH below AS MATERIALIZED (
         SELECT principal_id FROM access.live_principal_controller
         WHERE subject_id = controlled AND principal_id < deleting
@@ -102,7 +105,7 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION access.agent_controller_count(controlled text) RETURNS integer
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE SET enable_seqscan = off AS $$
     WITH principals AS MATERIALIZED (
         SELECT representation_id FROM access.live_principal_controller
         WHERE subject_id = controlled ORDER BY principal_id, representation_id LIMIT 17
@@ -117,7 +120,7 @@ $$;
 -- A cut is not fenced. If an ordinary controller change makes it affected
 -- between steps, wake precisely that subject rather than replaying old levels.
 CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS void
-LANGUAGE sql AS $$
+LANGUAGE sql SET enable_seqscan = off AS $$
     WITH principals AS MATERIALIZED (
         SELECT principal_id FROM access.live_principal_controller WHERE subject_id = controlled
             ORDER BY principal_id, representation_id LIMIT 17
@@ -151,7 +154,7 @@ LANGUAGE sql AS $$
 $$;
 
 CREATE FUNCTION access.wake_account_deletion_frontier() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql SET enable_seqscan = off AS $$
 DECLARE controlled text;
 BEGIN
     IF TG_TABLE_NAME = 'authority_subject' THEN
@@ -178,7 +181,7 @@ CREATE TRIGGER authority_subject_wake_account_deletion_frontier AFTER UPDATE OF 
 
 -- A deleted live mandate wakes only connected open operations, through point
 -- lookups after bounded live-controller ranges, even with many unrelated erasures.
-CREATE FUNCTION access.guard_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION access.guard_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql SET enable_seqscan = off AS $$
 BEGIN
     IF EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
         JOIN access.account_deletion_progress p ON p.operation_id = a.operation_id
@@ -190,7 +193,7 @@ END $$;
 CREATE TRIGGER live_principal_controller_guard BEFORE DELETE ON access.live_principal_controller
     FOR EACH ROW EXECUTE FUNCTION access.guard_removed_principal_controller();
 
-CREATE FUNCTION access.wake_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION access.wake_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql SET enable_seqscan = off AS $$
 BEGIN
     PERFORM access.queue_account_deletion_candidate(OLD.subject_id);
     RETURN OLD;
@@ -199,7 +202,7 @@ CREATE TRIGGER live_principal_controller_removed AFTER DELETE ON access.live_pri
     FOR EACH ROW EXECUTE FUNCTION access.wake_removed_principal_controller();
 
 CREATE FUNCTION access.retire_principal_controller_page(deleting uuid, budget integer)
-RETURNS integer LANGUAGE sql AS $$
+RETURNS integer LANGUAGE sql SET enable_seqscan = off AS $$
     WITH page AS MATERIALIZED (
         SELECT representation_id, ctid FROM access.live_principal_controller WHERE principal_id = deleting
         ORDER BY representation_id LIMIT least(budget, 256)
@@ -212,7 +215,7 @@ $$;
 -- Ordinary fences already have a 256-subject owner budget. The large deletion
 -- owner drains its own mandate index before this update. The trigger never
 -- replays an unbounded mandate inventory because an unrelated erasure is open.
-CREATE FUNCTION access.principal_live_controller_transition() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION access.principal_live_controller_transition() RETURNS trigger LANGUAGE plpgsql SET enable_seqscan = off AS $$
 DECLARE inventory integer;
 BEGIN
     IF NEW.active = OLD.active THEN RETURN NEW; END IF;
@@ -239,7 +242,7 @@ END $$;
 CREATE TRIGGER principal_z_live_controller_transition BEFORE UPDATE OF active ON access.principal
     FOR EACH ROW EXECUTE FUNCTION access.principal_live_controller_transition();
 
-CREATE OR REPLACE FUNCTION access.fence_account_deletion_control() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION access.fence_account_deletion_control() RETURNS trigger LANGUAGE plpgsql SET enable_seqscan = off AS $$
 DECLARE subjects text[];
 BEGIN
     IF TG_TABLE_NAME = 'principal' THEN
