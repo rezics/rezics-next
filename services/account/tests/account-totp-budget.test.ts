@@ -12,7 +12,10 @@ function userBudgetKey(secret: string, userId: string) {
 }
 
 async function expireUserBudget(f: Awaited<ReturnType<typeof accountFixture>>, userId: string) {
-  await f.pool.query("UPDATE rezics_account_rate_limit SET started_at = now() - interval '301 seconds' WHERE key = $1",
+  // A paused admission uses its transaction's clock. Expire before that
+  // snapshot too, independent of how long enrollment takes on a loaded host.
+  await f.pool.query(`UPDATE rezics_account_rate_limit SET started_at =
+    (SELECT min(xact_start) FROM pg_stat_activity WHERE datname = current_database()) - interval '301 seconds' WHERE key = $1`,
     [userBudgetKey(f.secret, userId)]);
 }
 
