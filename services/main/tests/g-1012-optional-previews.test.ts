@@ -74,7 +74,7 @@ test('G1012: an ambiguous Agent name is withheld without discarding unrelated cr
   ] });
   const names = await namedDiscoveryCredits(reader, [credit(id(1)), credit(id(2))], 20, true);
   expect(names.has(id(1))).toBe(false);
-  expect(names.get(id(2))).toEqual({ displayName: 'Healthy', handle: null,
+  expect(names.get(id(2))).toEqual({ identityStatus: 'active', displayName: 'Healthy', handle: null,
     address: { prefix: '/a/', key: uuidToSid(id(2).slice(-36)), suffixSource: '' } });
   await expect(namedDiscoveryCredits(reader, [credit(id(1)), credit(id(2))])).rejects.toBeInstanceOf(WorkReadUnavailable);
   const handles = session({ query: async () => [
@@ -87,7 +87,7 @@ test('G1012: an ambiguous Agent name is withheld without discarding unrelated cr
   } } } });
   const named = await namedDiscoveryCredits(handles, [credit(id(1)), credit(id(2))], 20, true);
   expect(named.has(id(1))).toBe(false);
-  expect(named.get(id(2))).toEqual({ displayName: 'Healthy', handle: 'healthy',
+  expect(named.get(id(2))).toEqual({ identityStatus: 'active', displayName: 'Healthy', handle: 'healthy',
     address: { prefix: '/@', key: 'healthy', suffixSource: '' } });
 });
 

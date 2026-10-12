@@ -85,4 +85,5 @@ export const integrationGateFiles = [
   'services/main/tests/content-eligibility-state.integration.test.ts',
   'services/main/tests/zone-resource-page-budget.integration.test.ts',
   'services/account/tests/account-deletion-agents.integration.test.ts',
+  'services/main/tests/account-deletion-person-avatar.test.ts',
 ] as const;

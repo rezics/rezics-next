@@ -19,7 +19,7 @@ const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0
 const work = id(1), deleted = id(2), live = id(3), privateAgent = id(4), missing = id(5);
 const term = (value: string) => ({ value, type: 'literal' });
 const proof: DeletedPersonAttributionProof = { accountErasureId: id(8), erasureId: id(9), erasureEpoch: '12' };
-const neutral = { identityStatus: 'deleted', displayName: 'Deleted author', handle: null };
+const neutral = { identityStatus: 'deleted', displayName: 'Deleted author', handle: null } as const;
 const credit = (agent: string, n = 10): ProjectedCredit => ({ id: id(n), role: 'author',
   participantKind: 'agent', provider: null, key: null, ordinal: null, agent, displayName: null, handle: null });
 
@@ -94,6 +94,7 @@ test('native credit, discovery, search, resource and feed readers retain deleted
   expect(named.get(deleted)).toEqual(neutral);
   expect(named.has(privateAgent)).toBe(false);
   const cardCredit = namedAuthorCredit(credit(deleted), named.get(deleted)!);
+  if (!cardCredit) throw new Error('Deleted author card is unavailable');
   expect(cardCredit).toMatchObject({ agent: deleted, ...neutral });
   expect(Value.Check(discoveryCredit, cardCredit)).toBe(true);
   const unavailable = new Set<string>();

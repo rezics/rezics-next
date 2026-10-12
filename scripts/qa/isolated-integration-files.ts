@@ -201,6 +201,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/post-lifecycle.test.ts',
   // Raw protection probes invalidate the membership completion proof, so later Recipe writers need a fresh project.
   'tests/qa/integration/g-829-public-reads.test.ts',
+  // Person avatar delivery toggles the global Access recovery hold and ends its Account authority.
+  'services/main/tests/account-deletion-person-avatar.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
