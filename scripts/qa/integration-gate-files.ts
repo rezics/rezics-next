@@ -12,6 +12,7 @@ export const integrationGateFiles = [
   'services/account/tests/oauth-backchannel.integration.test.ts',
   'services/main/tests/access.integration.test.ts',
   'services/main/tests/account-assertion.integration.test.ts',
+  'services/main/tests/account-deletion-person-agent.test.ts',
   'services/main/tests/acting-context.integration.test.ts',
   'services/main/tests/represented-work-proof.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
