@@ -177,13 +177,15 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
   }
   return async () => {
     await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
-    const hasCustody = await relayTransaction(service.relay, async retentionClient => {
+    // Publication takes Access before Relay. Release this Access lookup before
+    // taking Relay so a competing publication can finish its journal reads.
+    const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
+      journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
+    await relayTransaction(service.relay, async retentionClient => {
       await ensureRetentionDomain(service.relay, { label: CONTENT_LIVE_DOMAIN, owner: 'content',
         store: 'postgresql', custody: 'live' }, retentionClient);
       await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
         store: 'postgresql_wal', custody: 'live' }, retentionClient);
-      const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
-        journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
       if (hasCustody) {
         for (const [store, label] of [['postgresql', 'access:postgresql:live'],
           ['postgresql_wal', 'access:postgresql-wal:live']] as const) {
@@ -203,7 +205,6 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
       ] as const) {
         await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason }, retentionClient);
       }
-      return hasCustody;
     });
     await recordErasureInventory(service.relay, erasureId,
       { owners: hasCustody ? ['content', 'graph', 'access'] : ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,

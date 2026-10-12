@@ -165,12 +165,12 @@ class Graph extends FusekiClient {
 }
 const resourceIri = (id: string) => `https://rezics.com/id/${id}`;
 
-async function fixture(run: (f: Awaited<ReturnType<typeof environment>>) => Promise<void>) {
+async function fixture(run: (f: Awaited<ReturnType<typeof environment>>) => Promise<void>, connections = 2) {
   const name = `erasure_completion_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE DATABASE ${name} TEMPLATE erasure_completion_template`);
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
-  const relay = boundedPool({ ...cluster!.connection, database: name, max: 2 });
-  const accessPool = boundedPool({ ...cluster!.connection, database: name, max: 2 });
+  const relay = boundedPool({ ...cluster!.connection, database: name, max: connections });
+  const accessPool = boundedPool({ ...cluster!.connection, database: name, max: connections });
   const objectDirectory = join(directory, name);
   mkdirSync(objectDirectory);
   try { await run(await environment(pool, objectDirectory, relay, accessPool)); }
@@ -460,6 +460,84 @@ test('P4 a foreign Content tombstone refuses journal replay before object deleti
     expect((await readErasure(f.pool, entry.erasureId)).targets.every(target => target.completionState === 'pending')).toBe(true);
   });
 });
+
+test('completion and a concurrent publication finish with separate single-connection Access and Relay pools', async () => {
+  await fixture(async f => {
+    const firstOwner = resource(), secondOwner = resource();
+    const contribution = f.contribution(firstOwner);
+    const firstInput = f.input(firstOwner, [contribution.id]);
+    const secondInput = f.input(secondOwner, [await f.draft(secondOwner)]);
+    let startSecond!: () => void, enteredPublication!: () => void, resumePublication!: () => void;
+    const start = new Promise<void>(resolve => { startSecond = resolve; });
+    const publicationEntered = new Promise<void>(resolve => { enteredPublication = resolve; });
+    const publicationResume = new Promise<void>(resolve => { resumePublication = resolve; });
+    let secondHasAccess = false, publicationPaused = false, finishing = false, publicationResumed = false;
+    const resume = () => { publicationResumed = true; resumePublication(); };
+    const relay = new Proxy(f.relay, { get(target, property) {
+      if (property === 'connect') return async () => {
+        const client = await target.connect();
+        // In the regressed order A owns Relay before B asks for its journal read.
+        if (finishing && !publicationResumed) resume();
+        return client;
+      };
+      if (property === 'query') return async (sql: string, values?: unknown[]) => {
+        if (secondHasAccess && !publicationPaused && sql.includes('WHERE operation_id = $1')) {
+          publicationPaused = true;
+          enteredPublication();
+          await publicationResume;
+        }
+        return target.query(sql, values);
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const preservationAccess = new Proxy(f.accessPool, { get(target, property) {
+      if (property === 'connect') return async () => {
+        const client = await target.connect();
+        return new Proxy(client, { get(connection, method) {
+          if (method === 'query') return async (sql: string, values?: unknown[]) => {
+            const result = await connection.query(sql, values);
+            if (sql.includes('pg_advisory_xact_lock') && values?.[0] === secondOwner) secondHasAccess = true;
+            return result;
+          };
+          const value = Reflect.get(connection, method, connection);
+          return typeof value === 'function' ? value.bind(connection) : value;
+        } });
+      };
+      if (property === 'query') return async (sql: string, values?: unknown[]) => {
+        // In the safe order A waits for Access while B can still read Relay.
+        if (finishing && !publicationResumed && sql.includes('FROM access.command_custody')) resume();
+        return target.query(sql, values);
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const service = new ErasureService(relay, f.pool, preservationAccess, f.objects.namespace);
+    const account = { verify: async () => ({ issuer: 'fixture', subject: 'fixture' }) } as never;
+    const call = (input: ContentErasureInput) => requestContentErasure(service, f.env, account, f.access as never,
+      new Request('http://localhost/v1/erasures'), input);
+    const record = f.access.recordGraphOutcome;
+    f.access.recordGraphOutcome = async (id, terminal) => {
+      if (!finishing) {
+        startSecond();
+        await publicationEntered;
+        finishing = true;
+      }
+      return record(id, terminal);
+    };
+    const first = call(firstInput), second = start.then(() => call(secondInput));
+    try {
+      const outcomes = await Promise.allSettled([first, second]);
+      expect(publicationPaused).toBe(true);
+      expect(outcomes.map(outcome => outcome.status)).toEqual(['fulfilled', 'fulfilled']);
+      for (const outcome of outcomes) {
+        if (outcome.status === 'fulfilled') expect(outcome.value.report.stage).toBe('reconciling');
+      }
+      expect((await f.pool.query('SELECT live_completion_pending FROM relay.erasure ORDER BY erasure_epoch')).rows)
+        .toEqual([{ live_completion_pending: false }, { live_completion_pending: false }]);
+    } finally { startSecond(); resume(); }
+  }, 1);
+}, 20_000);
 
 test('P4 pending recovery finishes sealing and inventory after all target flags committed', async () => {
   await fixture(async f => {
