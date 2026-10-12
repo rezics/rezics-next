@@ -297,11 +297,16 @@ export class DisclosureStore implements DisclosureReader {
             EXISTS (SELECT 1 FROM realm_candidates realm CROSS JOIN LATERAL (
               SELECT 1 FROM access.governance_enforcement e
               JOIN access.moderation_decision d ON d.id = e.decision_id
+              JOIN access.moderation_decision_target t ON t.decision_id = e.decision_id
+                AND t.ordinal = e.decision_ordinal
               WHERE e.owner = 'graph' AND e.resource = realm.resource
                 AND e.state = 'restricted' AND e.component = 'record'
                 AND e.revision IS NULL AND e.effect = 'disclosure' AND e.context = $3::text
                 AND e.authority_scope_id = 'governance:platform' AND d.authority_kind = 'platform'
                 AND d.authority_scope_id = 'governance:platform' AND d.context = $3::text
+                AND t.owner = 'graph' AND t.resource = realm.resource AND t.component = 'record'
+                AND t.locator IS NULL AND t.scope_kind = 'component'
+                AND t.revision IS NULL AND t.effect = 'disclosure'
               LIMIT 1) matched WHERE realm.ordinal = wanted.ordinal) AS "realmClosed",
             CASE WHEN wanted."nameOwner" IS NULL THEN true
               ELSE COALESCE(n.visible AND n.open, false) END AS "nameVisible",
