@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { defaultPreferences, type HomeExclusion } from '../src/modules/feed/personal.ts';
 import { RankingHomeTrendingReader, TRENDING_COST, type TrendingQuery } from '../src/modules/feed/trending.ts';
 import type { RankingCheckpoint, ReadRankingProjection } from '../src/modules/rankings/projection.ts';
@@ -59,6 +60,8 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
         label: { ...literal(`Title ${work}`), 'xml:lang': 'en' }, erased: literal('false') }));
     } else if (query.includes('SELECT ?work ?head') && query.includes('rv:descriptiveMetadataHead')) {
       rows = values(query, 'work').map(work => ({ work: uri(work) }));
+    } else if (query.includes('SELECT ?resource ?head WHERE')) {
+      rows = values(query, 'resource').map(resource => ({ resource: uri(resource), head: uri(head) }));
     } else if (query.includes('SELECT ?work ?type')) {
       rows = values(query, 'work').map(work => ({ work: uri(work), type: uri('https://schema.org/CreativeWork') }));
     } else if (query.includes('SELECT DISTINCT ?work ?realm ?actor ?language ?zone')) {
@@ -71,8 +74,10 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
   };
   const environment = { fuseki: graph, objectDirectory: '.temp/trending-refill',
     lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' } };
-  configureDisclosure(environment, { read: async targets => targets.map(target =>
-    rejection === 'denied' && rejects.has(target.resource) ? 'hidden' : 'visible') });
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    rejection === 'denied' && rejects.has(target.resource) ? 'hidden' : 'visible')));
+  configureFixtureDisclosureAncestry(environment, target => target.work ? { resource: target.work, head,
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const projection = {
     current: async () => ({ ...state.checkpoint }),
     capture: async (...args: Parameters<ReadRankingProjection['capture']>) => {

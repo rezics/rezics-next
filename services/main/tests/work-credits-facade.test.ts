@@ -6,6 +6,7 @@ import {
   type SparqlResult, type TemplateQueryEnvelope,
 } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { template } from '../src/modules/query/templates/work-credits.schema.ts';
 import { creditSeekKey, type SeekCandidate } from '../src/modules/query/seek-index.ts';
 import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
@@ -58,6 +59,11 @@ function fixture() {
   class Graph extends FusekiClient {
     override async query(query: string): Promise<SparqlResult> {
       meter(); state.queries.push(query);
+      if (query.includes('SELECT ?resource ?head WHERE')) {
+        const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+          [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => iri[1]!));
+        return { results: { bindings: resources.map(resource => ({ resource: uri(resource), head: uri(head) })) } };
+      }
       if (query.includes('SELECT ?epoch ?sequence WHERE'))
         return { results: { bindings: [{ epoch: literal('epoch'), sequence: literal(state.sequence) }] } };
       if (query.includes('SELECT ?root ?main ?head ?mainHead ?public')) {
@@ -134,7 +140,9 @@ function fixture() {
     } },
   } as unknown as MainWorkDependencies;
   const app = createMainApp(graph, deps);
-  configureDisclosure(deps.environment, { read: async targets => targets.map(() => state.visible ? 'visible' : 'hidden') });
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => state.visible ? 'visible' : 'hidden')));
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work ? { resource: target.work, head,
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const call = (method: 'GET' | 'POST', options: Options = {}) => {
     const headers = { ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
       ...(options.authenticated ? { authorization: 'Bearer reader' } : {}),

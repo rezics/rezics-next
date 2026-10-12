@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { configureDisclosure, type DisclosureDecision } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { readRealmAboutThread } from '../src/modules/realm-reply/thread-read.ts';
 import { realmAboutThread, REALM_ABOUT_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
@@ -105,6 +106,9 @@ function fixture(s: Scenario = {}) {
             ...(s.malformed === 'placement-parent' ? { parent: bind(ref(30)) } : {}) }];
           if (s.malformed === 'placement-count') rows.push(rows[0]!);
           if (s.malformed === 'placement-field') delete rows[0]!.review;
+        } else if (sql.includes('SELECT ?resource ?head WHERE')) {
+          rows = [...sql.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+            [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => ({ resource: bind(iri[1]!), head: bind(currentRoot) })));
         } else if (sql.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
           rows = [about, realm].filter(id => sql.includes(`<${id}>`)).map(id => ({ work: bind(id), head: bind(currentRoot) }));
         } else if (sql.includes('AS ?hasCurrentIdentity')) {
@@ -125,7 +129,7 @@ function fixture(s: Scenario = {}) {
       } },
     },
   } as unknown as MainWorkDependencies;
-  configureDisclosure(deps.environment, { read: async (targets, _viewer, channel) => {
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async (targets, _viewer, channel) => {
     calls.disclosure++;
     if (s.unavailable === 'disclosure') throw new Error('disclosure owner lost');
     const result: DisclosureDecision[] = targets.map(target =>
@@ -134,7 +138,9 @@ function fixture(s: Scenario = {}) {
         || target.owner === 'content' && s.hiddenThread ? 'hidden' : 'visible');
     if (s.malformed === 'disclosure-count' && channel === 'thread') result.pop();
     return result;
-  } });
+  }));
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work ? { resource: target.work, head: currentRoot,
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const request = new Request(`http://main.test/v1/realms/${realm.slice(-36)}/about-thread?about=${encodeURIComponent(about)}`);
   const session = new WorkReadSession(deps, request, s.admitted ? { actingSubject: author } : {},
     { dataEpoch: 'epoch', sequence: '9' });

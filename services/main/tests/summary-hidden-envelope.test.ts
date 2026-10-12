@@ -4,6 +4,7 @@ import { Elysia } from 'elysia';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import { publicSummaryCost, resourceRoutes } from '../src/routes/resources.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
@@ -24,6 +25,10 @@ function app() {
     if (query.includes('ASK')) return { boolean: true };
     if (query.includes('SELECT ?epoch ?sequence WHERE')) {
       return { results: { bindings: [{ epoch: term('epoch'), sequence: term('7') }] } };
+    }
+    if (query.includes('SELECT ?resource ?head WHERE')) {
+      return { results: { bindings: [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => ({ resource: uri(iri[1]!), head: uri(iri[1]!) }))) } };
     }
     if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) {
       const control = { epoch: term('epoch'), sequence: term('7') };
@@ -46,12 +51,14 @@ function app() {
     if (!sql.includes('requested AS')) throw new Error('Unexpected disclosure statement');
     const targets = JSON.parse(String(args?.[0])) as Array<{ ordinal: number; resource: string }>;
     return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true,
-      restricted: target.resource === hidden, assessments: [],
+      restricted: target.resource === hidden, realmClosed: false, assessments: [], ...fixtureDisclosureCut,
       nameVisible: true, publicNameVisible: true })) };
   } } as unknown as Pool;
   const environment = { fuseki: graph, objectDirectory: '.temp/summary-hidden-envelope',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
+  configureFixtureDisclosureAncestry(environment, target => target.work ? { resource: target.work, head: target.work,
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const work = {
     environment,
     account: { verify: async () => ({ issuer: 'account', subject: 'reader' }) },
