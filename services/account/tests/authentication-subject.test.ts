@@ -5,10 +5,30 @@ import { createInternalContext, serializeSignedCookie } from 'better-call';
 import { createCookieGetter } from 'better-auth/cookies';
 import { authenticationCookies } from '../src/authentication-cookies.ts';
 import { readdirSync, readFileSync } from 'node:fs';
+import { betterAuth } from 'better-auth';
+import { twoFactor } from 'better-auth/plugins';
+import { passkey } from '@better-auth/passkey';
 
 const signingSecret = 'cookie-selection-secret-at-least-32-characters';
 const signed = async (value: string) =>
   (await serializeSignedCookie('fixture', value, signingSecret)).slice('fixture='.length);
+
+for (const scheme of ['http', 'https', 'HTTPS'])
+  for (const reverse of [false, true])
+    for (const kind of ['two_factor', 'better-auth-passkey', 'trust_device'] as const)
+      test(`P08/P16/P17 initialized ${scheme} ${kind} uses provider issuer normalization (${reverse})`, async () => {
+        const auth = betterAuth({ baseURL: `${scheme}://issuer.test`, secret: signingSecret,
+          plugins: [twoFactor(), passkey()] });
+        const context = await auth.$context;
+        const exact = context.createAuthCookie(kind).name;
+        const other = exact.startsWith('__Secure-') ? exact.slice('__Secure-'.length) : `__Secure-${exact}`;
+        const pairs = [`${other}=${await signed('A')}`, `${exact}=${await signed('B')}`];
+        if (reverse) pairs.reverse();
+        const headers = new Headers({ cookie: pairs.join('; ') });
+        const provider = await createInternalContext({ headers }, { options: { method: 'GET' } });
+        expect(await provider.getSignedCookie(exact, context.secret)).toBe('B');
+        expect(await (await authenticationCookies(headers, auth.options)).signed(kind)).toBe('B');
+      });
 
 for (const scheme of ['https', 'http'])
   for (const reverse of [false, true])
