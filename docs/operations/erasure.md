@@ -28,6 +28,21 @@ The [quickstart](installation.md) exercises logical text deletion using its
 their own copy inventory. An erased RevisionRef remains erased or unavailable;
 it must never resolve to replacement bytes.
 
+## Live copies and retained recovery copies
+
+The [trust-ops retention policy](../goals/trust-ops/GOAL.md) requires immediate
+suppression and deletion from active stores within 30 days. Live erasure must remove
+raw payload bytes from the affected owner rows and exact objects, including
+media originals, derived objects and quarantine copies. Preserve historical
+receipt identities, original digests and positions; an erased RevisionRef never
+resolves to replacement bytes. Denied reads or an `erased` lifecycle flag alone
+do not prove byte destruction.
+
+Backups must age out within 90 days. Retained PostgreSQL WAL shares that 90-day
+recovery ceiling: deleting a live row does not remove its older payload from a
+base backup or WAL. These are retention obligations, not evidence that a
+deployment has configured or completed sanitization, destruction or expiry.
+
 ## Backups and completion
 
 Keep a restored cut offline until the separately recoverable erasure and
@@ -40,4 +55,9 @@ The [fixture erasure drill](../../tests/qa/fault-recovery/erasure-restore.test.t
 and [offline graph purge drill](../../tests/qa/fault-recovery/erasure-graph-purge.test.ts)
 qualify their exercised cuts. OPS10 still needs a production storage and media
 destruction campaign; neither logical deletion nor a fixture rebuild proves it.
+OPS11 restore evidence covers only the cuts qualified against the independently
+retained current journal; an old journal bundled with an old backup cannot prove
+that later erasures were replayed. Retained journal replay must remove restored
+live payloads and objects and verify their absence before release. A saved
+completion flag is insufficient if a restore has replanted bytes.
 Use the [recovery runbook](recovery.md) for stopped owner copies and reactivation.

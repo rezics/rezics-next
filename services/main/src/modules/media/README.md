@@ -57,9 +57,10 @@ from the retained creation event and checks its current public configuration,
 slide schedule and reader-visible Work in one bounded check.
 
 Interrupted transforms retry under the existing lease protocol. Byte persistence
-holds the asset/source fence through settlement, so an erasure sweep cannot
-finish before a late put recreates bytes. Unpublished bytes after a crash stay
-inside the same asset namespace and follow its existing erasure sweep. Live
+holds the asset/source fence through settlement. Physical erasure must use that
+fence so a late put cannot recreate deleted bytes. Unpublished bytes after a
+crash stay inside the asset namespace; bounded physical inventory must include
+them even when no representation row committed. Live
 source availability, staff restrictions and exact-copy suppression remain the
 delivery authority even after a rendition has settled. The integration test is
 [media-rendition.test.ts](../../../../../tests/qa/integration/media-rendition.test.ts).
@@ -114,7 +115,7 @@ check at request time. Valid replacements become deliverable immediately; NSFW a
 | Reserve upload | `POST /v1/media/uploads` | `media.upload.reserve` | 1 Access register and claim, 1 PG transaction (4–6 rows) |
 | Upload status | `GET /v1/media/uploads/{upload}` | Read only | 1 Account verification, 1 Access principal read, 1 indexed PG upload/original lookup |
 | Activate bytes | `PUT /v1/media/uploads/{upload}/bytes` | `media.upload.settle`, then `draft.save` | ≤ 8 MiB read once; 2 object creates and 1 read-back; 2 PG transactions; ≤ 4 CAS attempts |
-| Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erasure updates the asset's representations |
+| Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erased lifecycle marks representations unavailable, without deleting objects |
 | Avatar selection CAS | `PUT /v1/resources/{resource}/avatar` | `media.selection.change` | 1 summary read, 1 Access admission, 1 PG transaction |
 | Showcase art/trailer CAS | `PUT /v1/resources/{work}/showcase/{art\|trailer}` | `media.selection.change` | 1 target summary read, 1 avatar Access admission, 1 PG transaction; an image adds one bounded object inspection and the rendition request |
 | Zone campaign art | `POST /v1/zones/{id}/campaign-art` | `media.use.create` | 1 Zone/Realm graph probe, 1 Zone editor Access admission, 1 PG transaction, 1 bounded object inspection and ≤12 rendition requests |
@@ -313,9 +314,19 @@ holds still prevent erasure. All MediaStore receipts use `advanceContentSequence
   its receipt.
 - **Activated original with no asset revision.** Reconcile with
   `saveDraft` under operation `media-asset-revision:<upload>`.
-- **Erasure.** After the state becomes erased, a sweep marks representations
-  `erased` and deletes the asset namespace plus quarantine keys. Asset revisions
-  follow the Content erasure procedure.
+- **Erasure.** The asset state command marks representations `erased`; it does
+  not delete object bytes. Physical deletion belongs to the journal-bound
+  [Content erasure procedure](../../../../../docs/operations/erasure.md), with
+  erasure admission on each asset resource. An attachment grants no authority
+  to erase its asset. Namespace erasure requires the request to explicitly
+  include every retained asset revision, checked through the variant index
+  with at most 65 rows. Incomplete selection or an oversized closure is refused
+  before mutation, without trimming or paging an erased item. Inventory must
+  cover originals, derived objects, quarantine copies and namespace orphans
+  within the 64-revision, 64-indexed-unit and 256-journal-target bounds.
+  Completion requires verified object absence; lifecycle state alone is not
+  destruction evidence. Retained copies and journal-first restore follow the
+  same procedure.
 - **Content projection.** The relay acknowledges `media.*` events. It must also
   skip text projection for a `media-set-v1` publication.
 - **Orphans.** Expired reservations are reclaimed through
