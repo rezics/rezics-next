@@ -87,6 +87,7 @@ function assertCorpus() {
     expect(qualifier.amountLexical).toBe(row.lexical);
     expect(display.ingredientName(qualifier)).toBe(row.name);
     if (qualifier.textParts) {
+      if (row.lexical === undefined) throw new Error('A parsed corpus row must name its exact quantity substring');
       const { amount, name } = qualifier.textParts;
       expect(qualifier.originalText.value.slice(amount.start, amount.end)).toBe(row.lexical);
       expect(qualifier.originalText.value.slice(name.start, name.end)).toBe(row.name);
