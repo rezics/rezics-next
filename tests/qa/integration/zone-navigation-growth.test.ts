@@ -5,9 +5,8 @@ import { flushTelemetryTraces, shutdownTelemetry, startTelemetry }
   from '../../../packages/observability/src/runtime.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { root, dockerEnvironment, stream } from '../../../scripts/fixture/stack.ts';
-import { createCorpusBackupDriver, type CorpusRestoreSmokeInput }
+import type { CorpusRestoreSmokeInput }
   from '../../../scripts/load/corpus-backup-driver.ts';
-import { restoreWorkProfileCorpus } from '../../../scripts/load/work-profile-corpus.ts';
 import {
   assertWorkCostAtScales,
   profileRequest,
@@ -16,17 +15,8 @@ import {
   type WorkCostField,
   type WorkProfile,
 } from '../support/work-profile.ts';
-import {
-  readRetainedSeed,
-  seedApi,
-  seedAuthorName,
-  seedCensus,
-  seedDirectory,
-  seedSelection,
-  type RetainedSeedCut,
-} from '../support/seed-checkpoints.ts';
-import { startMediaStack, type MediaStack } from './media-support.ts';
-import { ZONE_ROUTE_COST } from '../../../services/main/src/modules/zone/route-cost.ts';
+import type { RetainedSeedCut } from '../support/seed-checkpoints.ts';
+import type { MediaStack } from './media-support.ts';
 
 type ScaledProfile = WorkProfile & { unrelatedWorks: number };
 
@@ -96,6 +86,7 @@ async function openRestoredStack(input: CorpusRestoreSmokeInput): Promise<MediaS
   const previous = new Map(Object.keys(env).map((key) => [key, Bun.env[key]]));
   Object.assign(Bun.env, env);
   try {
+    const { startMediaStack } = await import('./media-support.ts');
     return await startMediaStack('zone-navigation-' + input.target, {
       library: true,
       ownerUrls: {
@@ -146,6 +137,19 @@ async function profileRead(
 }
 
 test('Zone navigation reads stay within their cost class as unrelated Works grow', async () => {
+  const sink = startWorkProfileSink();
+  // pg must load after the SDK installs its instrumentation hooks.
+  startTelemetry('main', {
+    ...process.env,
+    ...sink.env,
+    OTEL_SERVICE_NAME: 'main',
+    OTEL_TRACES_SAMPLER_ARG: '1',
+  });
+  const { createCorpusBackupDriver } = await import('../../../scripts/load/corpus-backup-driver.ts');
+  const { restoreWorkProfileCorpus } = await import('../../../scripts/load/work-profile-corpus.ts');
+  const { readRetainedSeed, seedApi, seedAuthorName, seedCensus, seedDirectory } =
+    await import('../support/seed-checkpoints.ts');
+  const { ZONE_ROUTE_COST } = await import('../../../services/main/src/modules/zone/route-cost.ts');
   const retained = readRetainedSeed();
   expect(retained.cuts.map((cut) => cut.manifest.dimensions.unrelatedWorks)).toEqual([4, 16, 64]);
 
@@ -155,19 +159,11 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
   const qaStackDir = join(root, '.temp', 'stack', 'rezics-qa-' + qaRunId);
   expect(readEnv(join(qaStackDir, 'compose.env')).REZICS_STACK_STORAGE).toBe('persistent');
 
-  const sink = startWorkProfileSink();
   const smokeCopies = new Map<string, RestoredMeasurement>();
   const targets: string[] = [];
   const routeProfiles: ScaledProfile[] = [];
   const presentationProfiles: ScaledProfile[] = [];
   let verifying: RetainedSeedCut | undefined;
-
-  startTelemetry('main', {
-    ...process.env,
-    ...sink.env,
-    OTEL_SERVICE_NAME: 'main',
-    OTEL_TRACES_SAMPLER_ARG: '1',
-  });
 
   const driver = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId,
@@ -223,7 +219,8 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
       if (!restored) throw new Error('The retained checkpoint smoke read did not keep its restored stack open');
 
       if (index === 0) {
-        const knownReadPath = seedSelection(cut.works[0]!.mainVersion);
+        const knownReadPath = '/v1/zones/' + short(cut.population.zone.id)
+          + '/routes?path=' + encodeURIComponent('/' + cut.population.zone.mounts[0]!.segment);
         const probe = await profileRead(sink, restored, knownReadPath, scale);
         const wiring = measuredCounters(probe.profile);
         console.log('Zone navigation meter wiring probe', JSON.stringify({
@@ -233,7 +230,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
         }));
         if ((probe.profile.postgresStatements ?? 0) <= 0 || (probe.profile.fusekiRequests ?? 0) <= 0) {
           throw new Error(
-            'Work profile meter wiring probe failed: the known public Work selection read must report positive postgresStatements and fusekiRequests',
+            'Work profile meter wiring probe failed: the known Zone page read must report positive postgresStatements and fusekiRequests',
           );
         }
       }
