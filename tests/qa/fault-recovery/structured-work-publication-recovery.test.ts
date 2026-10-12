@@ -11,6 +11,7 @@ import { readWorkStructurePublicationReceipt, workStructurePublicationDigest,
   type WorkStructurePublicationInput } from '../../../services/main/src/modules/work/structured-publication.ts';
 import { strongRevokeWorkPrincipal } from '../../../services/main/src/modules/work/strong-revoke.ts';
 import { publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
+import { foregroundCounted } from '../integration/support/query-cost-meter.ts';
 
 test('WORK10: publication settlement, withdrawal replay and restore holds keep one terminal public state', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
@@ -61,7 +62,9 @@ test('WORK10: publication settlement, withdrawal replay and restore holds keep o
           phase?: 'occurrence-discovery') => {
           try { return await target.query(sparql, maxResponseBytes, phase); }
           catch (error) {
-            publicationTrace.push(`query failed: ${error instanceof Error ? error.message : String(error)}`);
+            if (foregroundCounted()) {
+              publicationTrace.push(`query failed: ${error instanceof Error ? error.message : String(error)}`);
+            }
             throw error;
           }
         };

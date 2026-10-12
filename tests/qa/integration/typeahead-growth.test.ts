@@ -22,6 +22,7 @@ import { metadataDigest, type MetadataIntent }
   from '../../../services/main/src/modules/work/metadata-schema.ts';
 import { mainSelectionDigest, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 interface GrowthRead {
   fieldRows: number[];
@@ -66,7 +67,7 @@ class GrowthFuseki extends FusekiClient {
 
   private capture(): void {
     const budget = fusekiReadBudget.getStore();
-    if (!this.read || !budget?.diagnostics) return;
+    if (!this.read || !budget?.diagnostics || !foregroundCounted()) return;
     this.read.diagnostics = snapshotFusekiReadDiagnostics(budget);
     for (const call of budget.diagnostics.history) {
       if (this.observed.has(call)) continue;
@@ -81,7 +82,7 @@ class GrowthFuseki extends FusekiClient {
 
   override async query(...args: Parameters<FusekiClient['query']>): Promise<SparqlResult> {
     const result = await super.query(...args);
-    if (this.read && fusekiReadBudget.getStore()
+    if (this.read && foregroundCounted() && fusekiReadBudget.getStore()
       && args[0].includes('?field ?text ?state') && args[0].includes('CONTAINS')) {
       this.read.fieldRows.push(result.results?.bindings.length ?? 0);
     }
@@ -102,7 +103,7 @@ class GrowthFuseki extends FusekiClient {
   }
 }
 
-test('SEARCH18: public typeahead native examination stays bounded at 16/64/256 Works without scanning names', async () => {
+test('SEARCH18: public typeahead native work follows population before prefix cutover and the page after it', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
