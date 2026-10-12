@@ -6,6 +6,10 @@ import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts
 import { personProfileErasureUpdate, personProfileGraphErased,
   type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
 import type { PersonProfileErasureProof } from '../src/modules/access/person-profile-erasure.ts';
+import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
+import { outboxEventHandlers } from '../src/modules/erasure/outbox-event.ts';
+import { readMainOutboxEnvelope, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
 import { DATASET, GRAPHS, RV } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -33,6 +37,27 @@ const inventory: PersonProfileGraphInventory = { person, provisionId: uuid(2), h
     { revision: head, manifest: null }], objects: [`sha256:${'a'.repeat(64)}`, `sha256:${'b'.repeat(64)}`],
   units: [{ graph: publicGraph, unit: directUnit }], authorUnits: [prefixEntry, authorUnit],
   creditedWorks: [work] };
+const eventPlaceholder = 'urn:rezics:event:person-fixture-placeholder';
+const receiptPlaceholder = graphErasureReceipt(proof.erasureId);
+const handler = outboxEventHandlers[0]!;
+
+async function eventQueryTemplates(): Promise<{ relay: string; facts: string }> {
+  const graph = new FusekiClient('http://unused.invalid');
+  const captured: string[] = [];
+  const stop = new Error('query captured');
+  graph.query = async query => { captured.push(query); throw stop; };
+  const batch: MainOutboxBatch = { ...lineage, batchId: 'urn:rezics:outbox:fixture',
+    sequence: '2', eventIds: [eventPlaceholder] };
+  try { await readMainOutboxEnvelope(graph, batch, eventPlaceholder, () => handler); }
+  catch (error) { if (error !== stop) throw error; }
+  const fields: Record<string, string> = { receipt: receiptPlaceholder, outcome: `${RV}Succeeded`,
+    epoch: lineage.dataEpoch, sequence: '2', digest: 'a'.repeat(64) };
+  try { await handler.read({ fuseki: graph, batch, eventId: eventPlaceholder,
+    value: name => fields[name], ordinal: 0 }); }
+  catch (error) { if (error !== stop) throw error; }
+  expect(captured).toHaveLength(2);
+  return { relay: captured[0]!, facts: captured[1]! };
+}
 
 // ARQ executes the exact TypeScript command and completion query. Native
 // typed-footprint admission is a separate step; this test proves their RDF effect.
@@ -64,6 +89,13 @@ test('Person command and completion query execute against retained TDB2 data', a
       update: personProfileErasureUpdate(lineage, proof, targets), completion,
     }));
   }
+  const queries = await eventQueryTemplates();
+  for (const count of [0, 1, 2]) {
+    const creditedWorks = [work, resource(14)].slice(0, count);
+    writeFileSync(join(build, `events-${count}.json`), JSON.stringify({ ...queries,
+      update: personProfileErasureUpdate(lineage, proof, { ...inventory, creditedWorks }),
+      expectedReceipt: receiptPlaceholder, works: creditedWorks }));
+  }
   writeFileSync(join(build, 'fixture.trig'), `@prefix rv: <${RV}> .
 @prefix schema: <https://schema.org/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:routingEpoch "1" ; rv:sequence 1 . }
@@ -94,6 +126,8 @@ test('Person command and completion query execute against retained TDB2 data', a
   writeFileSync(join(java, 'PersonProfileCallerContractTest.java'), `package com.rezics.jena;
 import static org.junit.Assert.*;
 import java.nio.file.*;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.apache.jena.atlas.json.*;
 import org.apache.jena.graph.*;
@@ -123,6 +157,12 @@ public class PersonProfileCallerContractTest {
   private static boolean complete(Dataset data,JsonObject body){
     data.begin(ReadWrite.READ);try(var query=QueryExecutionFactory.create(body.get("completion").getAsString().value(),data)){return query.execAsk();}
     finally{data.end();}
+  }
+  private static JsonObject select(Dataset data,String query){
+    try(var execution=QueryExecutionFactory.create(query,data)){
+      var output=new ByteArrayOutputStream();ResultSetFormatter.outputAsJSON(output,execution.execSelect());
+      return JSON.parse(output.toString(StandardCharsets.UTF_8));
+    }
   }
   private void refused(String name) throws Exception {
     var data=fixture();try {var before=snapshot(data);var command=body(name);
@@ -158,6 +198,36 @@ public class PersonProfileCallerContractTest {
       assertTrue(complete(data,command));
     }finally {data.close();}
   }
+  private void eventContract(int count) throws Exception {
+    var data=fixture();try {var command=body("events-"+count);
+      if(count==0)execute(data,"DELETE WHERE { GRAPH <${GRAPHS.current}> { <${credit}> ?p ?o } }");
+      if(count==2)execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> { <${resource(15)}> a rv:NativeAgentCredit ; rv:agent <${person}> ; rv:work <${resource(14)}> . <${resource(14)}> a <https://schema.org/CreativeWork> } }");
+      execute(data,command.get("update").getAsString().value());
+      var quads=snapshot(data);Node outbox=iri("${GRAPHS.outbox}"),receipts=iri("${GRAPHS.receipts}");
+      Node receipt=iri(command.get("expectedReceipt").getAsString().value());
+      assertTrue("Person event must use the relay's canonical graph erasure receipt",quads.contains(new Quad(receipts,receipt,RDF.type.asNode(),rv("OperationReceipt"))));
+      Set<Node> expectedWorks=new HashSet<>();for(var value:command.get("works").getAsArray())expectedWorks.add(iri(value.getAsString().value()));
+      Set<Node> receiptWorks=new HashSet<>();for(Quad q:quads)if(q.getGraph().equals(receipts)&&q.getSubject().equals(receipt)&&q.getPredicate().equals(rv("work")))receiptWorks.add(q.getObject());
+      assertEquals("terminal receipt retains the exact affected Work set",expectedWorks,receiptWorks);
+      Node batch=quads.stream().filter(q->q.getGraph().equals(outbox)&&q.getPredicate().equals(RDF.type.asNode())&&q.getObject().equals(rv("OutboxBatch"))).findFirst().orElseThrow().getSubject();
+      List<Node> events=quads.stream().filter(q->q.getGraph().equals(outbox)&&q.getSubject().equals(batch)&&q.getPredicate().equals(rv("event"))).map(Quad::getObject).sorted(Comparator.comparing(Node::getURI)).toList();
+      assertEquals("one event per affected Work, or one Person-only event",Math.max(1,count),events.size());
+      assertEquals(Math.max(1,count),Integer.parseInt(quads.stream().filter(q->q.getGraph().equals(outbox)&&q.getSubject().equals(batch)&&q.getPredicate().equals(rv("eventCount"))).findFirst().orElseThrow().getObject().getLiteralLexicalForm()));
+      var result=new JsonObject();result.put("batchId",batch.getURI());var ids=new JsonArray();var rows=new JsonArray();Set<Node> eventWorks=new HashSet<>();
+      data.begin(ReadWrite.READ);try {for(Node event:events){
+        Set<Node> works=new HashSet<>();for(Quad q:quads)if(q.getGraph().equals(outbox)&&q.getSubject().equals(event)&&q.getPredicate().equals(rv("work")))works.add(q.getObject());
+        assertEquals(count==0?0:1,works.size());eventWorks.addAll(works);ids.add(event.getURI());
+        var row=new JsonObject();row.put("id",event.getURI());
+        row.put("relay",select(data,command.get("relay").getAsString().value().replace("${eventPlaceholder}",event.getURI())));
+        row.put("facts",select(data,command.get("facts").getAsString().value().replace("${eventPlaceholder}",event.getURI())));rows.add(row);
+      }}finally{data.end();}
+      assertEquals(expectedWorks,eventWorks);result.put("eventIds",ids);result.put("events",rows);
+      Files.writeString(Path.of("events-"+count+"-result.json"),result.toString());
+    }finally{data.close();}
+  }
+  @Test public void personOnlyEventUsesCanonicalReceipt() throws Exception {eventContract(0);}
+  @Test public void singleWorkEventMatchesItsReceipt() throws Exception {eventContract(1);}
+  @Test public void multipleWorksEachHaveOneMatchingEvent() throws Exception {eventContract(2);}
 }
 `);
   const name = `rezics-person-profile-native-${Date.now()}`;
@@ -173,7 +243,27 @@ public class PersonProfileCallerContractTest {
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 4, Failures: 0, Errors: 0');
+    expect(result.stdout).toContain('Tests run: 7, Failures: 0, Errors: 0');
+    for (const count of [0, 1, 2]) {
+      const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
+        batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];
+      };
+      const batch: MainOutboxBatch = { ...lineage, batchId: actual.batchId, sequence: '2', eventIds: actual.eventIds };
+      for (const event of actual.events) {
+        const graph = new FusekiClient('http://unused.invalid');
+        graph.query = async query => {
+          if (query === queries.relay.replaceAll(eventPlaceholder, event.id)) return event.relay;
+          if (query === queries.facts.replaceAll(eventPlaceholder, event.id)) return event.facts;
+          throw new Error(`Unexpected relay query: ${query}`);
+        };
+        const delivered = await readMainOutboxEnvelope(graph, batch, event.id, () => handler)
+          .catch((error: unknown) => { throw new Error(`Person ${count}-Work event relay proof failed`, { cause: error }); });
+        expect(delivered.data.receipt.id).toBe(receiptPlaceholder);
+        expect(delivered.data.receipt.systemProof).toEqual({ kind: 'relay-erasure',
+          erasureId: proof.erasureId, erasureEpoch: proof.erasureEpoch });
+      }
+      console.log(`Person graph event relay proof passed for ${count} credited Works`);
+    }
   } finally {
     spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000,
       env: preserveReapEnvironment(process.env) });
