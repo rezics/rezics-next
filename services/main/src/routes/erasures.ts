@@ -1,15 +1,21 @@
 import { Elysia, t } from 'elysia';
+import { logWorkerFault } from '@rezics/observability/log';
+import { ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { ContentErasureGraphRequired, ContentErasureInvalid, ContentErasureStale,
   MAX_CONTENT_ERASURE_TARGETS } from '../modules/erasure/content.ts';
 import { ErasureConflict, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
+  ErasurePreflightUnsupported, MAX_ERASURE_TARGETS, MAX_ERASURE_DISPOSITIONS,
   type ErasureReport } from '../modules/erasure/journal.ts';
 import { ErasureDenied, ErasureNotApplied, readRequestedErasure,
   requestContentErasure } from '../modules/erasure/request.ts';
 import { GraphErasureConflict, GraphErasureUnavailable } from '../modules/erasure/graph.ts';
+import { MediaErasureUnsupported } from '../modules/media/erasure.ts';
+import { MediaFenced, MediaStale, MediaUnavailable } from '../modules/media/store.ts';
 import { DESTRUCTION_STATUSES, DISPOSITION_DESTRUCTION, DISPOSITION_SUPPRESSION,
   ERASURE_DEFERRED_REASON,
-  ERASURE_KINDS, ERASURE_STAGES, RETENTION_CUSTODY, RETENTION_OWNERS, RETENTION_STORES,
+  ERASURE_KINDS, ERASURE_STAGES, ERASURE_TARGET_COMPLETION_STATES,
+  RETENTION_CUSTODY, RETENTION_OWNERS, RETENTION_STORES,
   SUPPRESSION_STATUSES } from '../modules/erasure/schema.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -34,25 +40,37 @@ const erasureResult = t.Object({ profile: t.Literal('erasure-v1'), erasureId: gr
   stage: literals(ERASURE_STAGES), suppression: literals(SUPPRESSION_STATUSES),
   destruction: literals(DESTRUCTION_STATUSES), blockedReason: t.Nullable(t.String()),
   requestedAt: instant, suppressedAt: t.Nullable(instant), verifiedAt: t.Nullable(instant),
-  targets: t.Array(t.Object({ owner: t.String(), kind: t.String(), ref: t.String() }), { maxItems: 256 }),
+  targets: t.Array(t.Object({ owner: t.String(), kind: t.String(), ref: t.String(),
+    completionState: literals(ERASURE_TARGET_COMPLETION_STATES), completedAt: t.Nullable(instant) }),
+  { maxItems: MAX_ERASURE_TARGETS }),
   dispositions: t.Array(t.Object({ domain: t.String(), owner: literals(RETENTION_OWNERS),
     store: literals(RETENTION_STORES), custody: literals(RETENTION_CUSTODY),
     suppression: literals(DISPOSITION_SUPPRESSION), destruction: literals(DISPOSITION_DESTRUCTION),
     retainedUntil: t.Nullable(instant), reason: t.Nullable(t.String()),
-    evidenceDigest: t.Nullable(digest) }), { maxItems: 64 }),
+    evidenceDigest: t.Nullable(digest) }), { maxItems: MAX_ERASURE_DISPOSITIONS }),
   replayed: t.Boolean() });
 
 function result(report: ErasureReport, replayed: boolean): Response {
   return Response.json({ profile: 'erasure-v1', erasureId: report.erasureId,
     erasureEpoch: report.erasureEpoch, kind: report.kind, stage: report.stage,
     suppression: report.suppression, destruction: report.destruction,
-    blockedReason: report.stage === 'blocked' ? ERASURE_DEFERRED_REASON : report.blockedReason, requestedAt: report.requestedAt,
+    blockedReason: report.stage === 'blocked' || report.blockedReason !== null ? ERASURE_DEFERRED_REASON : null,
+    requestedAt: report.requestedAt,
     suppressedAt: report.suppressedAt, verifiedAt: report.verifiedAt,
-    targets: report.targets.map(({ owner, kind, ref }) => ({ owner, kind, ref })),
-    dispositions: report.stage === 'blocked' ? [] : report.dispositions, replayed }, { headers: { 'cache-control': 'no-store' } });
+    targets: report.targets.map(({ owner, kind, ref, completionState, completedAt }) =>
+      ({ owner, kind, ref, completionState, completedAt })),
+    // Hold bases and per-target diagnostic evidence remain in the owner journal.
+    dispositions: report.stage === 'blocked' ? [] : report.dispositions.map(disposition => ({ ...disposition,
+      reason: disposition.reason === null ? null : 'Copy destruction requires verification' })),
+    replayed }, { headers: { 'cache-control': 'no-store' } });
 }
 
 function erasureError(error: unknown): Response {
+  if (error instanceof ErasurePreflightUnsupported || error instanceof MediaErasureUnsupported) {
+    logWorkerFault('main.erasure.inventory_unsupported', error);
+    return problem(409, 'erasure_inventory_unsupported',
+      'Erasure targets cannot be completely inventoried within supported limits');
+  }
   if (error instanceof ContentErasureInvalid || error instanceof ErasureInvalid) {
     return problem(400, 'invalid_erasure', 'Erasure targets are unavailable or invalid');
   }
@@ -61,9 +79,10 @@ function erasureError(error: unknown): Response {
   if (error instanceof ErasureConflict) {
     return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');
   }
-  if (error instanceof ErasureStale || error instanceof ContentErasureStale) {
+  if (error instanceof ErasureStale || error instanceof ContentErasureStale || error instanceof MediaStale) {
     return problem(409, 'erasure_target_stale', 'A target is already erased or changed');
   }
+  if (error instanceof MediaFenced) return problem(409, 'erasure_deferred', ERASURE_DEFERRED_REASON);
   if (error instanceof ContentErasureGraphRequired) {
     return problem(409, 'graph_suppression_unavailable', 'Published Content needs graph suppression');
   }
@@ -74,7 +93,10 @@ function erasureError(error: unknown): Response {
     return problem(503, 'graph_suppression_unavailable', 'Graph suppression is unavailable');
   }
   if (error instanceof ErasureNotApplied) return problem(409, 'erasure_not_applied', 'Erasure was cancelled');
-  if (error instanceof ErasureUnavailable) return problem(503, 'erasure_unavailable', 'Erasure owner is unavailable');
+  if (error instanceof ErasureUnavailable || error instanceof ObjectUnavailable || error instanceof MediaUnavailable) {
+    logWorkerFault('main.erasure.incomplete', error);
+    return problem(503, 'erasure_incomplete', 'Erasure completion could not be verified');
+  }
   return commandError(error);
 }
 

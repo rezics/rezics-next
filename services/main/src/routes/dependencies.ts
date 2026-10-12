@@ -259,7 +259,8 @@ export interface MainWorkDependencies {
     explicitSemanticRead?(principal: import('../modules/access/admission.ts').VerifiedPrincipal,
       actingSubject: string, resource: string): Promise<boolean>;
   };
-  /** Relay erasure journal and Content owner; absent means erasure is unavailable. */
+  /** Existing Relay, Content and Access owners plus the Media namespace factory.
+   * Graph and ReceiptCustody dependencies are supplied by the work environment. */
   erasures?: ErasureService;
   realmReplies?: RealmReplyStore;
   realmReplyThreads?: import('../modules/realm-reply/thread-store.ts').RealmReplyThreadStore;
