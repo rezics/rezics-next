@@ -6,7 +6,8 @@ import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../src/modules/
 import { captureHomeDocumentEvidence, homeDocumentVisibilityReader,
   capturePublishedHomeEvidence, governanceNoticeParticipants,
   type HomeDocumentEvidenceCut } from '../src/modules/governance/composition.ts';
-import { GovernanceDenied, GovernanceUnavailable } from '../src/modules/governance/store.ts';
+import { GLOBAL_CONTEXT, GovernanceDenied, GovernanceStore, GovernanceUnavailable,
+  type ReportInput } from '../src/modules/governance/store.ts';
 import { publicReportOwners, reportAddress } from '../src/modules/public-report/owners.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { Pool } from 'pg';
@@ -240,3 +241,57 @@ test('condition 3: home rights-notice affected parties come from the owning Spac
       scopeKind: 'exact_revision', expectedHead: h.revision, effect: 'disclosure' }, null, 10))
     .toEqual([h.author]);
 });
+
+function privateHomeReport(owner: 'graph' | 'content', kind: ReportInput['kind']) {
+  const h = published();
+  h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
+  h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
+  h.registry.canReadSemanticResource = async (_principal, _actor, resource) => resource === h.zone;
+  const target = { owner, resource: h.resource, component: owner === 'graph' ? 'record' as const : 'body' as const,
+    revision: owner === 'graph' ? h.revision : h.selections[0]!.revisionId, locator: null };
+  let transactions = 0, captures = 0;
+  const pool = { connect: async () => {
+    const transaction = ++transactions;
+    return { release() {}, query: async (sql: string) => {
+      if (sql === 'BEGIN' && transaction > 1) throw new GovernanceUnavailable('Accepted evidence reached its owner write boundary');
+      return { rows: sql.includes('access.recovery_fence') ? [{ open: true }] : [] };
+    } };
+  } } as unknown as Pool;
+  const store = new GovernanceStore(pool, { capture: async (_caller, _actor, selection) => {
+    captures++;
+    const evidence = await capturePublishedHomeEvidence(h.env, h.core, h.registry, principal, h.author, selection);
+    if (!evidence) throw new Error('Home fixture lost its owner');
+    return evidence;
+  } }, { current: async () => h.revision }, { current: async () => null });
+  const input: ReportInput = { kind, actingSubject: h.author,
+    authority: { kind: 'platform', scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
+    target, disclosure: 'private', reasonCode: 'copyright', statement: 'Review this exact published cut.',
+    evidence: [target], idempotencyKey: randomUUID(), ...(kind === 'rights_complaint' ? { complaint: {
+      process: 'dmca_512' as const, claimantKind: 'rights_holder' as const, claimantName: 'Author',
+      claimantContact: null, claimedWork: 'Published home document', claimedRight: 'copyright' as const,
+      noticeDigest: 'd'.repeat(64), noticeReceivedAt: '2026-10-12T06:00:00.000Z',
+    } } : {}) };
+  return { store, input, transactions: () => transactions, captures: () => captures };
+}
+
+for (const owner of ['graph', 'content'] as const) {
+  for (const kind of ['content_report', 'rights_complaint'] as const) {
+    test(`private ${owner} home evidence enters ${kind} admission with private case disclosure`, async () => {
+      const h = privateHomeReport(owner, kind);
+      await expect(h.store.submitReport(principal, h.input))
+        .rejects.toThrow('Accepted evidence reached its owner write boundary');
+      expect(h.captures()).toBe(1);
+      expect(h.transactions()).toBe(2);
+    });
+    for (const disclosure of ['parties', 'public_summary'] as const) {
+      // Case admission currently preserves private reply evidence but omits the private home provenance guard.
+      test.failing(`private ${owner} home evidence refuses ${disclosure} ${kind} case disclosure`, async () => {
+        const h = privateHomeReport(owner, kind);
+        await expect(h.store.submitReport(principal, { ...h.input, disclosure }))
+          .rejects.toThrow('Private home evidence requires private case disclosure');
+        expect(h.captures()).toBe(1);
+        expect(h.transactions()).toBe(1);
+      });
+    }
+  }
+}

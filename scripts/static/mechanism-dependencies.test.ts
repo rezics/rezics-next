@@ -175,6 +175,7 @@ test("the mechanism map's import surface is its entry-point files and named adap
       'services/main/src/modules/rights/store.ts',
     ],
     'governance-restriction': [
+      'services/main/src/modules/governance/composition.ts',
       'services/main/src/modules/governance/rules.ts',
       'services/main/src/modules/governance/schema.ts',
       'services/main/src/modules/governance/store.ts',

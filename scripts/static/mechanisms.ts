@@ -33,7 +33,8 @@ export const mechanisms = [
   {
     id: 'governance-restriction',
     owner: 'services/main/src/modules/governance',
-    entryPoints: ['store.ts#GovernanceStore', 'schema.ts#governanceEnforcement', 'rules.ts#GovernanceRules'],
+    entryPoints: ['store.ts#GovernanceStore', 'schema.ts#governanceEnforcement', 'rules.ts#GovernanceRules',
+      'composition.ts#capturePublishedHomeEvidence'],
     ownedState: ['access.governance_enforcement'],
     protectedEffects: ['write enforcement fence', 'advance fence epoch'],
     allowedAdapters: ['enforcement-read'],

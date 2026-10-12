@@ -85,10 +85,6 @@
   },
   {
     "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/governance/composition.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
     "imported": "services/main/src/modules/governance/evidence.ts"
   },
   {

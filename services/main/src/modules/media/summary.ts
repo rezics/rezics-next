@@ -27,6 +27,7 @@ import { UNASSESSED } from '../suitability/policy.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { identityCanonical, canonicalAddresses } from '../address/canonical.ts';
 import { readSummaryPages, SUMMARY_PAGE_COST } from './summary-pages.ts';
+import { readResourceVisibility, VISIBILITY_COST } from '../space/visibility.ts';
 
 export { direction } from '../display-language/select.ts';
 
@@ -127,7 +128,7 @@ export type SummaryMedia = {
     Promise<Awaited<ReturnType<MediaStore['avatarRows']>> | null>;
 };
 
-interface GraphRow { post?: boolean; type: ResourceType; work: string | null; head: string | null;
+interface GraphRow { homeZone?: string; post?: boolean; type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string>; localizedName?: LocalizedText;
   profileAvatarSelections?: Set<string>;
   /** The subject and sorted frames a projection names. */
@@ -260,7 +261,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post ${proveAbsence ? '?hasCurrentIdentity' : ''} WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?homeZone ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post ${proveAbsence ? '?hasCurrentIdentity' : ''} WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       ${proveAbsence && resources.length ? `VALUES ?r { ${resources.map(iri).join(' ')} }
@@ -304,7 +305,20 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
             rv:definitionHead ?definitionHead . BIND("relation-definition" AS ?type) }
           UNION { ?r a rv:Projection ; rv:projectionOf ?projectionSubject ; rv:frame ?projectionFrame ;
             rv:projectionHead ?projectionHead . BIND("projection" AS ?type) }
-          UNION { ?r rv:semanticHead ?semanticHead . BIND("resource" AS ?type) }
+          UNION { ?r a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head .
+            ?homeZone a rv:Zone ; rv:zoneState rv:Active ; rv:homeDocument ?r ; rv:sitePublicationHead ?homeSite .
+            FILTER NOT EXISTS { ?otherHomeZone rv:homeDocument ?r . FILTER(?otherHomeZone != ?homeZone) }
+            FILTER EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+              ?head a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?r .
+              ?homeSite a rv:ZoneRevision ; rv:component ?homeZone ; rv:homeDocument ?r ;
+                rv:homeRevision ?head ; rv:sitePublicationReceipt ?homeReceipt .
+            } GRAPH ${iri(GRAPHS.receipts)} {
+              ?homeReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+                rv:structureOwner ?homeZone ; rv:homeDocument ?r ; rv:homeRevision ?head .
+            } }
+            BIND("resource" AS ?type)
+            OPTIONAL { ?homeZone rdfs:label ?label } }
+          UNION { ?r rv:semanticHead ?semanticHead . FILTER NOT EXISTS { ?r a rv:ZoneHomeDocument } BIND("resource" AS ?type) }
           UNION { ?r a rv:Post ; rv:head ?head ; rdfs:label ?label .
             BIND(true AS ?post) BIND("resource" AS ?type) }
         } }
@@ -337,7 +351,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:protectionHead ?protection } }, false)
           || EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:ErasedRevision } }
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r ?headPredicate ?resourceHead .
-            VALUES ?headPredicate { rv:head rv:releaseHead rv:semanticHead rv:projectionHead } }
+            VALUES ?headPredicate { rv:head rv:releaseHead rv:semanticHead rv:projectionHead rv:homeDocumentHead } }
             GRAPH ${iri(GRAPHS.revisions)} { ?resourceHead a rv:ErasedRevision } }
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:structure ?erasedStructure .
             ?erasedStructure rv:structureHead ?structureRevision }
@@ -390,10 +404,17 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     }
     const type = binding.type.value as ResourceType;
     const previous = rows.get(reference);
+    if (previous && (previous.homeZone || binding.homeZone)
+      && (previous.type !== type || previous.work !== null || binding.work
+        || previous.head !== binding.head?.value || previous.homeZone
+        && binding.homeZone && previous.homeZone !== binding.homeZone.value)) {
+      ambiguous.add(reference); continue;
+    }
     if (previous && typePriority.indexOf(previous.type) < typePriority.indexOf(type)) continue;
     const row: GraphRow = previous?.type === type ? previous : { type,
       work: binding.work?.value ?? null, head: binding.head?.value ?? null,
       public: binding.public?.value === 'true', labels: new Map() };
+    row.homeZone ??= binding.homeZone?.value;
     row.post = row.post || binding.post?.value === 'true';
     const label = binding.label;
     const tag = (label as { 'xml:lang'?: string } | undefined)?.['xml:lang'];
@@ -509,8 +530,8 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       ? { nameOwnerResolved: true as const } : {};
   const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
-    return { owner: 'graph' as const, resource: reference, component: 'name' as const,
-      revision: reference === row?.work ? row.head : null, work: row?.work,
+    return { owner: 'graph' as const, resource: reference, component: row?.homeZone ? 'record' as const : 'name' as const,
+      revision: row?.homeZone || reference === row?.work ? row?.head : null, work: row?.work,
       workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
       ...settledNameOwner(reference, row) };
   });
@@ -527,6 +548,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const restricted = new Map<string, string>();
   const special = new Map<string, GraphRow>();
   const pages = new Map<string, GraphRow>();
+  const homes = new Map<string, GraphRow>();
   const projections = new Map<string, GraphRow>();
   for (const reference of unique) {
     const row = graph.rows.get(reference);
@@ -536,6 +558,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       if (!input.projectionPart && row.projection?.frames.size) projections.set(reference, row);
       continue;
     }
+    if (row.homeZone) { homes.set(reference, row); continue; }
     if (row.post) {
       if (!selectName(row.labels, null)) continue;
       if (row.public) readable.set(reference, row);
@@ -582,6 +605,31 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   if (pages.size) cost.graphQueries++;
   for (const [reference, isPublic] of pageVisibility) {
     const row = pages.get(reference)!;
+    row.public = isPublic;
+    readable.set(reference, row);
+  }
+  const homeZones = [...new Set([...homes.values()].map(row => row.homeZone!))];
+  const readHomeVisibility = async () => {
+    const visible = new Map<string, boolean>();
+    for (const zone of homeZones) {
+      const visibility = await readResourceVisibility(env, zone, {
+        realmReadProof: reader.realmReadProof ? async realm => {
+          countPageAccess(); return reader.realmReadProof!(realm);
+        } : undefined,
+        zoneReadable: reader.canReadSemantic ? async resource => {
+          countPageAccess(); return reader.canReadSemantic!(resource);
+        } : undefined,
+      });
+      cost.graphQueries += VISIBILITY_COST.graphReads;
+      if (visibility?.readable) visible.set(zone, visibility.visibility === 'public');
+    }
+    return visible;
+  };
+  const homeVisibility = await readHomeVisibility();
+  for (const [reference, row] of homes) {
+    const isPublic = homeVisibility.get(row.homeZone!);
+    if (isPublic === undefined) continue;
+    if (!row.labels.size) row.labels.set('und', reference.slice(-8));
     row.public = isPublic;
     readable.set(reference, row);
   }
@@ -727,6 +775,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     // a public summary/cache policy based on a now-private page.
     if (fencedPages.get(reference) !== isPublic) readable.delete(reference);
   }
+  const fencedHomes = await readHomeVisibility();
+  for (const [reference, row] of homes) {
+    if (fencedHomes.get(row.homeZone!) !== homeVisibility.get(row.homeZone!)) readable.delete(reference);
+  }
   if (reader.visibleRecords) {
     const visible = await reader.visibleRecords([...readable.keys()]);
     for (const reference of readable.keys()) if (!visible.has(reference)) readable.delete(reference);
@@ -740,8 +792,8 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   for (const [reference, row] of entries) {
     if (row.head && row.work && reference === row.work) workRevisions.set(reference, row.head);
     nameIndexes.set(reference, targets.length);
-    targets.push({ owner: 'graph', resource: reference, component: 'name',
-      revision: reference === row.work ? row.head : null, work: row.work,
+    targets.push({ owner: 'graph', resource: reference, component: row.homeZone ? 'record' : 'name',
+      revision: row.homeZone || reference === row.work ? row.head : null, work: row.work,
       workRevision: row.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
       ...settledNameOwner(reference, row) });
     const asset = avatars.get(reference)?.asset;
@@ -780,8 +832,21 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Agent graph flags cannot make a controller's private name public. Reuse
   // the anonymous name decision from the final exact-target owner snapshot;
   // viewer delivery and public classification share its current authority cut.
+  // Home names use the document record policy, outside the paired name probe.
+  const publicHomes = entries.filter(([reference, row]) => readable.has(reference) && row.homeZone && row.public);
+  const anonymousHomes = new Map<string, DisclosureDecision>();
+  if (reader.viewer?.signedIn && publicHomes.length) {
+    const probe = await discloseInventory(env, publicHomes.map(([reference]) => targets[nameIndexes.get(reference)!]!),
+      ANONYMOUS_VIEWER, input.channel ?? 'summary', client);
+    publicHomes.forEach(([reference], index) => anonymousHomes.set(reference, probe[index]!));
+    if (hasDisclosure(env)) {
+      cost.accessQueries += Math.ceil(publicHomes.length / MAX_SUMMARY_BATCH);
+      cost.graphQueries += Math.ceil(publicHomes.length / DISCLOSURE_COST.batch);
+    }
+  }
   const nameIsPublic = (reference: string) => !hasDisclosure(env) || !reader.viewer?.signedIn
-    || final.anonymousNames[nameIndexes.get(reference)!] === 'visible';
+    || (graph.rows.get(reference)?.homeZone ? anonymousHomes.get(reference)
+      : final.anonymousNames[nameIndexes.get(reference)!]) === 'visible';
   const projectionSummaries = await readProjectionSummaries(env, reader, input, projections, graph.generation, cost, client);
   const summaries = input.resources.map((reference): ResourceSummary => {
     const projection = projectionSummaries.get(reference);
