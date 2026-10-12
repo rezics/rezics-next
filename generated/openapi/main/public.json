@@ -191287,6 +191287,24 @@
                     "targets": {
                       "items": {
                         "properties": {
+                          "completedAt": {
+                            "~elyTyp": 7,
+                            "format": "date-time",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "completionState": {
+                            "enum": [
+                              "pending",
+                              "failed",
+                              "completed",
+                              "legacy"
+                            ],
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string"
                           },
@@ -191300,7 +191318,9 @@
                         "required": [
                           "owner",
                           "kind",
-                          "ref"
+                          "ref",
+                          "completionState",
+                          "completedAt"
                         ],
                         "type": "object"
                       },
@@ -191980,6 +192000,24 @@
                     "targets": {
                       "items": {
                         "properties": {
+                          "completedAt": {
+                            "~elyTyp": 7,
+                            "format": "date-time",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "completionState": {
+                            "enum": [
+                              "pending",
+                              "failed",
+                              "completed",
+                              "legacy"
+                            ],
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string"
                           },
@@ -191993,7 +192031,9 @@
                         "required": [
                           "owner",
                           "kind",
-                          "ref"
+                          "ref",
+                          "completionState",
+                          "completedAt"
                         ],
                         "type": "object"
                       },
