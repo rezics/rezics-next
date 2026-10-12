@@ -288,17 +288,40 @@ test('parts, connections and editions read from Main for the franchise records',
   );
 });
 
+test('franchise connections retain the selected volumes and parts level', async ({ page }) => {
+  test.setTimeout(420_000);
+  const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
+  if (!path) throw new Error('The isolated QA web-auth fixture is required');
+  const { member } = JSON.parse(readFileSync(path, 'utf8')) as {
+    member: { email: string; password: string };
+  };
+  await signInAtAccounts(
+    page,
+    localizedPath(`${resourceHref('/w/', uuid(catalogue.sao.bunko.work))}/connections`, 'en'),
+    member,
+  );
+  const franchises = page.locator('#franchises');
+  await expect(franchises.getByRole('list', { name: 'Series' }).getByRole('listitem')).toHaveCount(
+    4,
+  );
+  await franchises.getByRole('link', { name: 'Volumes and parts' }).click();
+  await expect(page).toHaveURL(/grain=parts#franchises$/);
+  await expect(franchises.getByRole('link', { name: 'Volumes and parts' })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+});
+
 test.fixme(
-  'franchise connections retain the selected volumes and parts level',
+  'franchise member parts render after changing grain through client navigation',
   {
     annotation: {
       type: 'cause',
       description:
-        'GrainSwitch is unchanged from main: its client navigation keeps the old URL and Series while RSC navigation is pending beyond the assertion window. The shared navigation path was present when the switch was introduced on October 1.',
+        'Franchise member parts remain pending during RSC client navigation. The active grain-switch test verifies the URL and selected state separately.',
     },
   },
   async ({ page }) => {
-    test.setTimeout(420_000);
     const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
     if (!path) throw new Error('The isolated QA web-auth fixture is required');
     const { member } = JSON.parse(readFileSync(path, 'utf8')) as {
@@ -314,11 +337,6 @@ test.fixme(
       franchises.getByRole('list', { name: 'Series' }).getByRole('listitem'),
     ).toHaveCount(4);
     await franchises.getByRole('link', { name: 'Volumes and parts' }).click();
-    await expect(page).toHaveURL(/grain=parts#franchises$/);
-    await expect(franchises.getByRole('link', { name: 'Volumes and parts' })).toHaveAttribute(
-      'aria-current',
-      'true',
-    );
     await expect(franchises.getByText('Sword Art Online, Vol. 1')).toBeVisible();
     await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
   },

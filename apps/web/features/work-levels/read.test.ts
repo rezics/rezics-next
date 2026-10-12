@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { renderToReadableStream } from 'react-dom/server';
 import * as fixture from './fixtures.ts';
 import type { Loaded } from './types.ts';
@@ -8,6 +8,7 @@ import { ACCESS_COOKIE, SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { relationRows } from './relation-rows.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { resourceHref } from '../address/path.ts';
+import { serverFetch } from '../api/server-fetch.ts';
 
 const originalHeaders = { ...(await import('next/headers')) };
 const originalTransport = { ...(await import('../api/server-read.ts')) };
@@ -22,6 +23,8 @@ let expired = false;
 let actingSubject: string | undefined;
 let answer: (operation: Operation, query: Query) => Answer;
 let collectionCalls = 0;
+let pageDeadline: number | undefined;
+let stallParts = false;
 const requests: { path: string; authorization: string | null; status: number }[] = [];
 const sessionKey = '01944100-0000-7000-8000-000000000999';
 // Main rejects this bearer as expired; the public reads must never carry it.
@@ -51,45 +54,54 @@ await mock.module('next/headers', () => ({
 // transport answers fixture data, including a rejected expired session lookup.
 await mock.module('../api/server-read.ts', () => ({
   ...originalTransport,
-  serverRead: async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    const authorization = new Headers(init?.headers).get('authorization');
-    const respond = (data: unknown, status = 200) => {
-      requests.push({ path: url.pathname, authorization, status });
-      return Response.json(data, { status });
-    };
-    if (url.pathname === '/v1/me/session-agent') {
-      expect(authorization).toBe(`Bearer ${expired ? expiredToken : 'current-token'}`);
-      expect(new Headers(init?.headers).get('x-session-key')).toBe(sessionKey);
-      if (expired) return respond({ error: 'expired' }, 401);
-      const agent = {
-        eligible: Boolean(actingSubject),
-        actingSubject: actingSubject ?? null,
-        revision: null,
-      };
-      return respond({ sessionAgent: agent, mainAgent: agent, initialActingSubject: null });
-    }
-    if (expired && authorization) return respond({ error: 'expired' }, 401);
-    if (url.pathname === '/v1/me/person-preferences') return respond({ contentLanguages: [] });
-    if (url.pathname === '/v1/resources/summaries')
-      return respond({ summaries: [...fixture.names.values()] });
-    if (url.pathname.startsWith('/v1/collections/')) {
-      collectionCalls += 1;
-      return respond({ collection: fixture.iri('900'), occurrences: [], next: null });
-    }
-    const match = url.pathname.match(/^\/v1\/resources\/([^/]+)\/(parts|wholes|relations)$/);
-    if (!match) throw new Error(`Unexpected Main request: ${url.pathname}`);
-    const operation = match[2] as Operation;
-    const query: Query = {
-      actingSubject: url.searchParams.get('actingSubject') ?? undefined,
-      after: url.searchParams.get('after') ?? undefined,
-      limit: url.searchParams.has('limit') ? Number(url.searchParams.get('limit')) : undefined,
-      ...(operation === 'parts' ? { parent: url.searchParams.get('parent') ?? undefined } : {}),
-    };
-    calls.push({ operation, resource: decodeURIComponent(match[1]!), query });
-    const result = answer(operation, query);
-    return respond(result.error ?? result.data, result.error?.status ?? 200);
-  },
+  serverRead: (input: RequestInfo | URL, init?: RequestInit) =>
+    serverFetch(input, init, {
+      deadlineAt: pageDeadline,
+      fetch: async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        const authorization = new Headers(init?.headers).get('authorization');
+        const respond = (data: unknown, status = 200) => {
+          requests.push({ path: url.pathname, authorization, status });
+          return Response.json(data, { status });
+        };
+        if (url.pathname === '/v1/me/session-agent') {
+          expect(authorization).toBe(`Bearer ${expired ? expiredToken : 'current-token'}`);
+          expect(new Headers(init?.headers).get('x-session-key')).toBe(sessionKey);
+          if (expired) return respond({ error: 'expired' }, 401);
+          const agent = {
+            eligible: Boolean(actingSubject),
+            actingSubject: actingSubject ?? null,
+            revision: null,
+          };
+          return respond({ sessionAgent: agent, mainAgent: agent, initialActingSubject: null });
+        }
+        if (expired && authorization) return respond({ error: 'expired' }, 401);
+        if (url.pathname === '/v1/me/person-preferences') return respond({ contentLanguages: [] });
+        if (url.pathname === '/v1/resources/summaries') {
+          const body = JSON.parse(String(init?.body)) as { resources: string[] };
+          return respond({
+            summaries: body.resources.flatMap((reference) => fixture.names.get(reference) ?? []),
+          });
+        }
+        if (url.pathname.startsWith('/v1/collections/')) {
+          collectionCalls += 1;
+          return respond({ collection: fixture.iri('900'), occurrences: [], next: null });
+        }
+        const match = url.pathname.match(/^\/v1\/resources\/([^/]+)\/(parts|wholes|relations)$/);
+        if (!match) throw new Error(`Unexpected Main request: ${url.pathname}`);
+        const operation = match[2] as Operation;
+        const query: Query = {
+          actingSubject: url.searchParams.get('actingSubject') ?? undefined,
+          after: url.searchParams.get('after') ?? undefined,
+          limit: url.searchParams.has('limit') ? Number(url.searchParams.get('limit')) : undefined,
+          ...(operation === 'parts' ? { parent: url.searchParams.get('parent') ?? undefined } : {}),
+        };
+        calls.push({ operation, resource: decodeURIComponent(match[1]!), query });
+        if (operation === 'parts' && stallParts) return new Promise<Response>(() => {});
+        const result = answer(operation, query);
+        return respond(result.error ?? result.data, result.error?.status ?? 200);
+      },
+    }),
 }));
 await mock.module('../tracking/series-progress-panel.tsx', () => ({
   ...originalTracking,
@@ -109,6 +121,7 @@ afterAll(async () => {
 
 const { readParts, readWholes, readRelations, readCollectionMembers } = await import('./read.ts');
 const { Parts } = await import('../work-page/hub-sections.tsx');
+const { ConnectionsPage } = await import('./pages.tsx');
 const reads: Record<
   Operation,
   (
@@ -141,11 +154,17 @@ beforeEach(() => {
   signedIn = false;
   expired = false;
   actingSubject = undefined;
+  pageDeadline = undefined;
+  stallParts = false;
   answer = (operation) => ({ data: pages[operation], error: null });
 });
 
 async function hub(workRef: string) {
   const tree = await Parts({ id: fixture.current, workRef, locale: 'en', messages: messages.en });
+  return markupOf(tree);
+}
+
+async function markupOf(tree: ReactNode) {
   const errors: unknown[] = [];
   const stream = await renderToReadableStream(tree, {
     onError: (error) => {
@@ -200,7 +219,144 @@ for (const visitor of visitors)
         ]);
         assertPublicTransport(visitor);
       });
+
+    test('renders distinct continuation pages for parts, wholes and relations', async () => {
+      signedIn = visitor.signedIn;
+      expired = visitor.expired;
+      answer = (operation, query) => {
+        const second = query.after === `${operation}-page-2`;
+        const next = second ? null : `${operation}-page-2`;
+        if (operation === 'parts')
+          return {
+            data: {
+              ...pages.parts,
+              parts: [pages.parts.parts[second ? 1 : 0]!],
+              next,
+            },
+            error: null,
+          };
+        if (operation === 'wholes')
+          return {
+            data: {
+              ...pages.wholes,
+              wholes: [{ ...pages.wholes.wholes[0]!, work: fixture.iri(second ? '300' : '200') }],
+              next,
+            },
+            error: null,
+          };
+        const entry = pages.relations.items[1]!;
+        const target = fixture.summary(
+          fixture.iri(second ? '401' : '400'),
+          second ? 'Second-page relation' : 'First-page relation',
+        );
+        return {
+          data: {
+            ...pages.relations,
+            items: [
+              {
+                ...entry,
+                rendering: {
+                  ...entry.rendering!,
+                  projections: entry.rendering!.projections.map((projection) => ({
+                    ...projection,
+                    arguments: [
+                      {
+                        role: projection.toRole,
+                        type: 'resource',
+                        value: { kind: 'resource', ref: target.reference },
+                      },
+                    ],
+                  })),
+                },
+                counterparts: [target],
+              },
+            ],
+            next,
+          },
+          error: null,
+        };
+      };
+      const renderPage = (second: boolean) =>
+        ConnectionsPage({
+          id: fixture.current,
+          workRef: 'anime-series',
+          locale: 'en',
+          pageMessages: messages.en,
+          query: {
+            grain: 'series',
+            ...(second
+              ? {
+                  partsAfter: 'parts-page-2',
+                  wholesAfter: 'wholes-page-2',
+                  relationsAfter: 'relations-page-2',
+                }
+              : {}),
+          },
+        }).then(markupOf);
+      const first = await renderPage(false);
+      for (const cursor of ['parts', 'wholes', 'relations'])
+        expect(first).toContain(`${cursor}After=${cursor}-page-2`);
+      expect(first).toContain('A Certain Magical Index NT 1');
+      expect(first).toContain('First-page relation');
+      const second = await renderPage(true);
+      expect(second).toContain('A Certain Magical Index NT 22');
+      expect(second).toContain('とある魔術の禁書目録');
+      expect(second).toContain('Second-page relation');
+      expect(second).not.toContain('A Certain Magical Index NT 1');
+      expect(second).not.toContain('First-page relation');
+      // The named whole's link changes independently from the parts and relations.
+      expect(first).toContain(
+        localizedPath(resourceHref('/w/', fixture.iri('200').slice(-36)), 'en'),
+      );
+      expect(second).not.toContain(
+        localizedPath(resourceHref('/w/', fixture.iri('200').slice(-36)), 'en'),
+      );
+      expect(second).toContain(
+        localizedPath(resourceHref('/w/', fixture.iri('300').slice(-36)), 'en'),
+      );
+      expect(
+        calls
+          .slice(-3)
+          .map((call) => [call.operation, call.query.after])
+          .sort(),
+      ).toEqual([
+        ['parts', 'parts-page-2'],
+        ['relations', 'relations-page-2'],
+        ['wholes', 'wholes-page-2'],
+      ]);
+      assertPublicTransport(visitor);
+    });
   });
+
+for (const surface of ['hub', 'connections'] as const) {
+  test(`${surface} names disclosed wholes before a stalled parts read exhausts the page deadline`, async () => {
+    // The real transport consumes a residual page budget; abort-ignoring parts
+    // must not postpone the successful whole's dependent summary request.
+    pageDeadline = Date.now() + 200;
+    stallParts = true;
+    const markup =
+      surface === 'hub'
+        ? await hub('anime-series')
+        : await markupOf(
+            await ConnectionsPage({
+              id: fixture.current,
+              workRef: 'anime-series',
+              locale: 'en',
+              pageMessages: messages.en,
+              query: { grain: 'series' },
+            }),
+          );
+    expect(markup).toContain('Part of');
+    const wholeList = markup.match(
+      /<ul[^>]*aria-label="Wholes that contain this Work"[^]*?<\/ul>/,
+    )?.[0];
+    expect(wholeList).toContain('A Certain Magical Index');
+    expect(wholeList).toContain(
+      localizedPath(resourceHref('/w/', fixture.iri('200').slice(-36)), 'en'),
+    );
+    expect(requests.some((request) => request.path === '/v1/resources/summaries')).toBe(true);
+  });
+}
 
 test('an eligible Agent is forwarded to all public reads and keeps personal progress', async () => {
   signedIn = true;
