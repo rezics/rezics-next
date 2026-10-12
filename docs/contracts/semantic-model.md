@@ -39,6 +39,17 @@ zero-based position in `items`; `pointer` is a JSON pointer inside that submitte
 item, such as `/properties/3/value/ref`; `reference` is the exact value supplied
 there. Use these coordinates to locate the input that needs correction.
 
+Both routes validate the entire submitted component before checking references.
+Every diagnostic-producing position (`properties[*].value.ref`, definition
+`successor` and `roles[*].members[*]`) requires a native identity: the literal
+`https://rezics.com/id/` followed by a lowercase UUID in `8-4-4-4-12` hexadecimal
+groups. Thus the echoed reference is exactly 58 ASCII bytes. The route envelopes
+accept nested JSON, but malformed, over-long and non-native references fail the
+earlier component validation without a reference lookup or echo. Resource values
+return the generic HTTP 400 `invalid_semantic_value` problem; definition
+successors and role members return the generic HTTP 400 `invalid_semantic_change`
+problem.
+
 When several references are unavailable, the response reports the first in
 submitted item order, then field order. Resource properties follow their
 submitted array order. Definition fields check `successor` before `roles`, then
@@ -53,7 +64,8 @@ caller-supplied field inside the item, retains the generic problem without
 these fields.
 
 A hidden target and an absent target produce byte-identical problem bodies
-for identical submitted input. The three diagnostic fields echo only the
+for identical submitted input. Response headers also match, except for the date,
+request ID and trace ID. The three diagnostic fields echo only the
 caller's input; they disclose no label, policy, existence, owner, revision or
 server-discovered conflict reference. Unavailable-reference refusals from
 relation, lexicon, rating and work-authority operations retain their existing

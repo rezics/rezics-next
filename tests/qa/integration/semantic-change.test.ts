@@ -10,6 +10,12 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { SemanticStageStore } from '../../../services/main/src/modules/semantic/staging.ts';
 
+// Compare the complete response surface, including any future rate-limit headers.
+const volatileHeaders = new Set(['date', 'request-id', 'x-request-id', 'trace-id', 'x-trace-id']);
+const comparableHeaders = (response: Response) => Object.fromEntries(
+  [...response.headers].filter(([name]) => !volatileHeaders.has(name)),
+);
+
 const RV = 'https://rezics.com/vocab/';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
 type Write = { component: string; revision: string; predecessor: string | null; receipt: string; replayed: boolean;
@@ -32,7 +38,7 @@ const values = {
   zero: { kind: 'integer', lexical: '0' },
 } as const;
 
-test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, exact read, denial, stale and references', async () => {
+test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, exact read, denial, stale and hidden/absent body and header equality', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `semantic-${randomUUID()}`));
   try {
@@ -220,7 +226,7 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
       const response = await change(edit(moved.revision, privileged, [{ predicate: 'https://schema.org/knows',
         value: { kind: 'resource', ref } }]));
       const text = await response.text();
-      return { status: response.status, body: JSON.parse(text), text };
+      return { status: response.status, body: JSON.parse(text), text, headers: comparableHeaders(response) };
     }));
     for (const [index, ref] of [hidden.component, missing].entries()) {
       expect(refused[index]!.status).toBe(422);
@@ -236,6 +242,7 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
       const absent = await change(edit(moved.revision, privileged, [{ predicate: 'https://schema.org/knows',
         value: { kind: 'resource', ref: hidden.component } }]));
       expect(absent.status).toBe(refused[0]!.status);
+      expect(comparableHeaders(absent)).toEqual(refused[0]!.headers);
       expect(await absent.text()).toBe(refused[0]!.text);
     } finally {
       await f.nativeFuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
@@ -283,7 +290,7 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
   } finally { await f.close(); }
 }, 180_000);
 
-test('Bulk semantic reference refusals echo only the first submitted reference and preserve hidden/absent equality', async () => {
+test('Bulk semantic reference refusals echo only the first submitted reference and preserve hidden/absent body and complete header equality', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `semantic-bulk-${randomUUID()}`));
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
@@ -317,6 +324,7 @@ test('Bulk semantic reference refusals echo only the first submitted reference a
     }));
     const refused = await bulk(body);
     expect(refused.status).toBe(422);
+    const hiddenHeaders = comparableHeaders(refused);
     const hiddenText = await refused.text();
     expect(JSON.parse(hiddenText)).toEqual({ type: 'https://rezics.com/problems/unavailable_reference',
       title: 'Semantic change is not admitted', status: 422, code: 'unavailable_reference',
@@ -326,6 +334,7 @@ test('Bulk semantic reference refusals echo only the first submitted reference a
       expect((await f.env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden.component)} ?p ?o } }`)).boolean).toBe(false);
       const absent = await bulk(body);
       expect(absent.status).toBe(422);
+      expect(comparableHeaders(absent)).toEqual(hiddenHeaders);
       expect(await absent.text()).toBe(hiddenText);
     } finally {
       await f.nativeFuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {

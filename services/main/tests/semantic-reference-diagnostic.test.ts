@@ -23,6 +23,12 @@ const problem = (itemIndex: number, pointer: string, reference: string) => ({
   status: 422, code: 'unavailable_reference', itemIndex, pointer, reference,
 });
 
+// Compare the complete response surface, including any future rate-limit headers.
+const volatileHeaders = new Set(['date', 'request-id', 'x-request-id', 'trace-id', 'x-trace-id']);
+const comparableHeaders = (response: Response) => Object.fromEntries(
+  [...response.headers].filter(([name]) => !volatileHeaders.has(name)),
+);
+
 class ReferenceGraph extends FusekiClient {
   override async query(query: string): Promise<SparqlResult> {
     if (query.includes('ASK')) return { boolean: true };
@@ -101,22 +107,56 @@ test('Bulk role diagnostics preserve the submitted role and member positions', a
 });
 
 for (const bulk of [true, false]) {
-  test(`${bulk ? 'Bulk' : 'Single'} hidden and absent references have byte-identical full diagnostic bodies`, async () => {
+  test(`${bulk ? 'Bulk' : 'Single'} hidden and absent references have identical complete response headers and byte-identical diagnostic bodies`, async () => {
     const ref = id(90), state = resource([property(ref)]);
     const absent = fixture(), hidden = fixture([], [ref]);
     const absentResponse = await absent.app.handle(request([state], bulk));
     const hiddenResponse = await hidden.app.handle(request([state], bulk));
     expect(absentResponse.status).toBe(422);
     expect(hiddenResponse.status).toBe(422);
+    expect(comparableHeaders(hiddenResponse)).toEqual(comparableHeaders(absentResponse));
     const absentText = await absentResponse.text(), hiddenText = await hiddenResponse.text();
     expect(hiddenText).toBe(absentText);
     // Exact keys also prevent disclosure of labels, ownership, policies, revisions
     // or other server data in either response.
     expect(JSON.parse(hiddenText)).toEqual(problem(0, '/properties/0/value/ref', ref));
+    expect(new TextEncoder().encode(JSON.parse(hiddenText).reference)).toHaveLength(58);
     expect(hidden.reads).toEqual(absent.reads);
     expect(hidden.admissions()).toBe(0);
     expect(absent.admissions()).toBe(0);
   });
+
+  for (const [inputKind, invalidReference] of [
+    ['malformed', 'https://rezics.com/id/not-a-uuid'],
+    ['over-long', `${id(90)}${'x'.repeat(4096)}`],
+    ['non-native IRI', 'https://example.org/id/00000000-0000-4000-8000-000000000090'],
+  ] as const) {
+    const positions = [
+      { name: 'resource property', state: resource([property(id(2)), property(invalidReference)]),
+        code: 'invalid_semantic_value', title: 'Semantic value is invalid' },
+      { name: 'definition successor', state: { component: 'definition', kind: 'property', lifecycle: 'retired',
+        successor: invalidReference, roles: [] },
+        code: 'invalid_semantic_change', title: 'Semantic change does not match its profile' },
+      { name: 'role member', state: { component: 'definition', kind: 'relation', lifecycle: 'active',
+        successor: null, roles: [role('participant', [id(2), invalidReference])] },
+        code: 'invalid_semantic_change', title: 'Semantic change does not match its profile' },
+    ];
+    for (const position of positions) {
+      test(`${bulk ? 'Bulk' : 'Single'} ${inputKind} ${position.name} is rejected before reference lookup with a generic body and no echo`, async () => {
+        const f = fixture([id(2)]);
+        const response = await f.app.handle(request([position.state], bulk));
+        expect(response.status).toBe(400);
+        const text = await response.text();
+        expect(JSON.parse(text)).toEqual({ type: `https://rezics.com/problems/${position.code}`,
+          title: position.title, status: 400, code: position.code });
+        expect(text).not.toContain(invalidReference);
+        // Even the preceding valid reference is never looked up: the whole item
+        // must pass its profile before any diagnostic or admission can run.
+        expect(f.reads).toEqual([]);
+        expect(f.admissions()).toBe(0);
+      });
+    }
+  }
 
   test(`${bulk ? 'Bulk' : 'Single'} available references proceed to Access registration`, async () => {
     const first = id(90), second = id(10), f = fixture([first, second]);
