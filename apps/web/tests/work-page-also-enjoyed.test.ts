@@ -75,6 +75,7 @@ describe('Readers also enjoyed', () => {
       end: false,
     });
     expect(pagingOf({ ...wide, offset: 760 })).toMatchObject({ page: 1, start: false, end: false });
+    // ast-grep-ignore: no-cursor-arithmetic -- This offset is a scroll-geometry boundary, not an API continuation.
     expect(pagingOf({ ...wide, offset: wide.scrollWidth - wide.width })).toMatchObject({
       page: 2,
       end: true,

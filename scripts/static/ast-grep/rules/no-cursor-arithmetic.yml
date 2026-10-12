@@ -8,12 +8,6 @@ files:
   - apps/web/**/*.ts
 severity: error
 message: Forward API continuations unchanged; do not derive seek positions with arithmetic.
-ignores:
-  - apps/web/features/api/**
-  - apps/web/features/library/import-api.ts
-  # Continuation conformance oracle: these templates are independent expected
-  # request tokens, not product code manufacturing a continuation.
-  - apps/web/features/zone-editor/navigation-read.test.ts
 utils:
   wrapped-seek-member:
     any:
@@ -76,12 +70,8 @@ rule:
                 kind: arguments
                 inside:
                   any:
-                    - pattern: $API.get($$$ARGS)
-                    - pattern: $API.post($$$ARGS)
-                    - pattern: $API.put($$$ARGS)
-                    - pattern: $API.patch($$$ARGS)
-                    - pattern: $API.delete($$$ARGS)
-                    - pattern: new URLSearchParams($$$ARGS)
+                    - kind: call_expression
+                    - kind: new_expression
                 stopBy: end
 
 ---
@@ -91,12 +81,6 @@ files:
   - apps/web/**/*.tsx
 severity: error
 message: Forward API continuations unchanged; do not derive seek positions with arithmetic.
-ignores:
-  - apps/web/features/api/**
-  - apps/web/features/library/import-api.ts
-  # Continuation conformance oracle: these templates are independent expected
-  # request tokens, not product code manufacturing a continuation.
-  - apps/web/features/zone-editor/navigation-read.test.ts
 utils:
   wrapped-seek-member:
     any:
@@ -159,10 +143,6 @@ rule:
                 kind: arguments
                 inside:
                   any:
-                    - pattern: $API.get($$$ARGS)
-                    - pattern: $API.post($$$ARGS)
-                    - pattern: $API.put($$$ARGS)
-                    - pattern: $API.patch($$$ARGS)
-                    - pattern: $API.delete($$$ARGS)
-                    - pattern: new URLSearchParams($$$ARGS)
+                    - kind: call_expression
+                    - kind: new_expression
                 stopBy: end

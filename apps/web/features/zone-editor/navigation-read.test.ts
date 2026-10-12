@@ -185,6 +185,7 @@ describe('complete authorized preview navigation', () => {
     expect(fake.calls).toHaveLength(count);
     expect(fake.calls[0]).toEqual({ revision: null, query: { actingSubject: actor, limit: NAV_PAGE_SIZE } });
     expect(fake.calls.slice(1)).toEqual(Array.from({ length: count - 1 }, (_, index) => ({
+      // ast-grep-ignore: no-cursor-arithmetic -- Independent expected tokens verify the consumer forwards the fixture owner's continuation.
       revision: navigationRevision.slice(-36), query: { actingSubject: actor, limit: NAV_PAGE_SIZE, after: `cursor-${index + 1}` },
     })));
     expect(fake.collectionNames()).toBe(count * NAV_PAGE_SIZE);
@@ -194,6 +195,7 @@ describe('complete authorized preview navigation', () => {
   test('the editor burst still exposes a cursor rather than claiming completion', async () => {
     const fake = fakeMain(request => ({ data: page(pageIndex(request), NAV_LOAD_BATCH + 1), error: null }));
     const result = await loadZoneNavigation(fake.main, zoneId, actor);
+    // ast-grep-ignore: no-cursor-arithmetic -- Independent expected token verifies the editor exposes the fixture owner's unfinished continuation.
     expect(result).toMatchObject({ ok: true, data: { complete: false, after: `cursor-${NAV_LOAD_BATCH}` } });
     expect(fake.calls).toHaveLength(NAV_LOAD_BATCH);
   });

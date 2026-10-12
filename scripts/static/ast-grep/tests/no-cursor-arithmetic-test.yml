@@ -47,6 +47,10 @@ invalid:
   - "api.get({ query: { continuation: `page-${index}` } });"
   - "api.get({ cursor: index - 1 });"
   - "new URLSearchParams({ after: `${offset + 8}` });"
+  - "api.follows({ cursor: index + \"-next\" });"
+  - "api.following({ after: `page-${index}` });"
+  - "readPage({ before: index - 1, offset: index * size, continuation: `page-${index}` });"
+  - "api.follows({ cursor: token }); api.follows({ cursor: index + \"-next\" });"
 
 ---
 id: no-cursor-arithmetic-tsx
@@ -98,3 +102,7 @@ invalid:
   - "api.get({ query: { continuation: `page-${index}` } });"
   - "api.get({ cursor: index - 1 });"
   - "new URLSearchParams({ after: `${offset + 8}` });"
+  - "api.follows({ cursor: index + \"-next\" });"
+  - "api.following({ after: `page-${index}` });"
+  - "readPage({ before: index - 1, offset: index * size, continuation: `page-${index}` });"
+  - "api.follows({ cursor: token }); api.follows({ cursor: index + \"-next\" });"
