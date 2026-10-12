@@ -135,3 +135,30 @@ seconds, before replay. Allow about 10 minutes for the full public graph and
 read `elapsedMs` for the run that actually finished. Search stays closed until
 the `activated` line; `GET /rezics/command?deltaSince=-1` then answers
 `available:true`.
+
+## After a rebuild: let the projections catch up before a refresh
+
+`task search:rebuild` activates the text generation and, with it, qualifies the
+native prefix directory (`GET /rezics/command` then reports
+`prefixWalkAvailable:true`). The projections that read the index and the retained
+relay (public search, the feed, Zone browse, Content) are then behind the graph
+and need Account, Main and the relay RUNNING to catch up. Public search answers
+only when `GET /health/search-ready` answers 200; on the shared development
+stack the catch-up took about two and a half minutes.
+
+Start Account, Main and the Main relay and wait for `/health/search-ready`
+before anything depends on search, in particular before `task dev:refresh`. A
+refresh started straight after the rebuild fails at `approve-zones` or
+`record-success` (a 503, then a timeout) because search is not ready; on that
+failure the refresh stops Account, Main and the relay, which also stops the
+catch-up, and the next attempt fails the same way. The sequence that worked:
+
+1. `task search:rebuild` with writers stopped (above).
+2. `task dev:refresh` once: it stages the backend and may fail its last steps.
+3. Start Account, Main and the Main relay by hand and wait for
+   `/health/search-ready` to answer 200.
+4. `task dev:refresh` again: it passes.
+
+Whether the refresh itself should wait for search readiness before
+`approve-zones` is a change in `scripts/dev`, not a document rule; until it does,
+start the stack and wait before refreshing.
